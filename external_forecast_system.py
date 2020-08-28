@@ -30,7 +30,7 @@ from demand_utilities.sector_reporter_v2 import SectorReporter
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
-    VERSION_ID = "v2-1"
+    VERSION_ID = "v2-2"
     __version__ = VERSION_ID
 
     # defines all non-year columns
@@ -191,7 +191,7 @@ class ExternalForecastSystem:
             alternate_worker_growth_assumption_file: str = None,
             alternate_population_split_file: str = None,
             distribution_method: str = "Furness",
-            distribution_location: str = "Y:/EFS/inputs/distributions",
+            distribution_location: str = efs_consts.DEFAULT_DIST_LOCATION,
             distributions: dict = efs_consts.EFS_RUN_DISTRIBUTIONS_DICT,
             purposes_needed: List[int] = efs_consts.PURPOSES_NEEDED_DEFAULT,
             soc_needed: List[int] = efs_consts.SOC_NEEDED_DEFAULT,
@@ -945,20 +945,17 @@ class ExternalForecastSystem:
         if distribution_method == "furness":
             print("Generating distributions...")
             final_distribution_dictionary = self.distribute_dataframe(
-                    production_dataframe=converted_productions,
-                    attraction_weights_dataframe=converted_attractions,
-                    mode_split_dataframe=hb_mode_split,
-                    zone_areatype_lookup=zone_areatype_lookup,
-                    required_purposes=purposes_needed,
-                    required_soc=soc_needed,
-                    required_ns=ns_needed,
-                    required_car_availabilities=car_availabilities_needed,
-                    required_modes=modes_needed,
-                    required_times=times_needed,
-                    year_string_list=year_list,
-                    distribution_dataframe_dict=distributions,
-                    distribution_file_location=distribution_location
-                    )
+                productions=converted_productions,
+                attraction_weights=converted_attractions,
+                mode_split_dataframe=hb_mode_split,
+                zone_areatype_lookup=zone_areatype_lookup,
+                required_purposes=purposes_needed, required_soc=soc_needed,
+                required_ns=ns_needed,
+                required_car_availabilities=car_availabilities_needed,
+                required_modes=modes_needed, required_times=times_needed,
+                year_string_list=year_list,
+                distribution_dataframe_dict=distributions,
+                distribution_file_location=distribution_location)
             print("Distributions generated!")
             last_time = current_time
             current_time = time.time()
@@ -1004,6 +1001,8 @@ class ExternalForecastSystem:
 
         ### OUTPUTS ###
         ## TODO: Properly integrate this
+
+        # TODO: Integrate output file setup into init!
         if (outputting_files):
             if (output_location != None):
                 print("Saving files to: " + output_location)
@@ -1044,6 +1043,7 @@ class ExternalForecastSystem:
                 if not os.path.exists(path):
                     os.mkdir(path)
 
+                # TODO: Integrate into furnessing!
                 path = path + "/"
                 for key, distribution in final_distribution_dictionary.items():
                     print("Saving distribution: " + key)
@@ -1777,8 +1777,8 @@ class ExternalForecastSystem:
         return reattached_dataframe
 
     def distribute_dataframe(self,
-                             production_dataframe: pd.DataFrame,
-                             attraction_weights_dataframe: pd.DataFrame,
+                             productions: pd.DataFrame,
+                             attraction_weights: pd.DataFrame,
                              mode_split_dataframe: pd.DataFrame,
                              zone_areatype_lookup : pd.DataFrame,
                              required_purposes: List[int],
@@ -1790,6 +1790,7 @@ class ExternalForecastSystem:
                              year_string_list: List[str],
                              distribution_dataframe_dict: dict,
                              distribution_file_location: str,
+                             trip_origin: str = 'hb',
                              number_of_iterations: int = 1,
                              replace_zero_values: bool = True,
                              constrain_on_production: bool = True,
@@ -1799,8 +1800,9 @@ class ExternalForecastSystem:
         """
         #TODO
         """
-        production_dataframe = production_dataframe.copy()
-        attraction_weights_dataframe = attraction_weights_dataframe.copy()
+        # TODO: Output files while it runs, instead of at the end!
+        productions = productions.copy()
+        attraction_weights = attraction_weights.copy()
         mode_split_dataframe = mode_split_dataframe.copy()
         zone_areatype_lookup = zone_areatype_lookup.copy()
         final_distribution_dictionary = {}
@@ -1812,6 +1814,7 @@ class ExternalForecastSystem:
             on="area_type_id",
         ).rename(columns={"norms_2015_zone_id": "p_zone"}).drop_duplicates()
 
+        # TODO: What is this meant to do?
         # make table wide to long
         # mode_split_dataframe = mode_split_dataframe.copy().melt(
         #     id_vars=['area_type_id', 'car_availability_id', 'purpose_id'],
@@ -1820,6 +1823,12 @@ class ExternalForecastSystem:
         #     )
         # mode_split_dataframe.to_csv(r'F:\EFS\EFS_Full\inputs\default\traveller_type\hb_mode_split.csv', index=False)
 
+        # TODO: Move mode out to nested loops
+        # TODO: Move inside of all nested loops into function
+        # TODO: Tidy this up
+        # TODO: Generate distribution_dataframe path based on segmentation
+        #  and file location given
+        # TODO: Figure out whats happening with time periods??
         for year in year_string_list:
             for purpose in required_purposes:
 
@@ -1840,93 +1849,60 @@ class ExternalForecastSystem:
                         )
                         distribution_dataframe = pd.read_csv(dist_path)
 
-                            # make table long
-                        # distribution_dataframe_tp = pd.melt(
                         distribution_dataframe = pd.melt(
-                            distribution_dataframe, id_vars=['norms_zone_id'], var_name='a_zone', value_name='dt'
+                            distribution_dataframe,
+                            id_vars=['norms_zone_id'],
+                            var_name='a_zone',
+                            value_name='dt'
                             )
-                        # distribution_dataframe_list.append(distribution_dataframe_tp)
-                        # distribution_dataframe = pd.concat(distribution_dataframe_list)
 
                         distribution_dataframe = distribution_dataframe.rename(
-                            columns = {
+                            columns={
                                "norms_zone_id": "p_zone",
                                "dt": "seed_values"
                                }
                             )
+
                         # convert column object to int
                         distribution_dataframe['a_zone'] = distribution_dataframe['a_zone'].astype(int)
                         distribution_dataframe = distribution_dataframe.groupby(
-                            by = ["p_zone", "a_zone"],
-                            as_index = False
-                            ).sum()
+                            by=["p_zone", "a_zone"],
+                            as_index=False
+                        ).sum()
 
-                        # distribution_dataframe = distribution_dataframe[[
-                        #         "p_zone",
-                        #         "a_zone",
-                        #         "dt"
-                        #         ]]
-                        # print()
+                        if self.use_zone_id_subset:
+                            zone_subset = [259, 267, 268, 270, 275, 1171, 1173]
+                            distribution_dataframe = get_data_subset(
+                                distribution_dataframe, 'p_zone', zone_subset)
+                            distribution_dataframe = get_data_subset(
+                                distribution_dataframe, 'a_zone', zone_subset)
 
-                        # TODO:
-                        #  @@MSP / TY - NEED TO REMOVE FROM FINAL VERSION!!
-
-                        distribution_dataframe = distribution_dataframe[distribution_dataframe['p_zone'].isin([259,267,268,270,275,1171,1173])]
-                        distribution_dataframe = distribution_dataframe[distribution_dataframe['a_zone'].isin([259,267,268,270,275,1171,1173])]
-
-                        if purpose in (1,2):
-                            production_input = production_dataframe[
-                                (production_dataframe["purpose_id"] == purpose)
-                                &
-                                (production_dataframe["car_availability_id"] == car_availability)
-                                &
-                                (production_dataframe["soc"] == str(segment))
-            #                                   &
-            #                                   (production_dataframe["mode_id"] == mode)
-            #                                   &
-            #                                   (production_dataframe["time_period_id"] == time)
-                            ][
-                                [
-                                    "model_zone_id",
-                                    str(year)
-                                    ]
-                            ].rename(
-                                    columns = {
-                                        str(year): "production_forecast"
-                                        }
-                                    )
+                        # Generate productions input
+                        if purpose in [1, 2]:
+                            segment_mask = (
+                                (productions["purpose_id"] == purpose)
+                                & (productions["car_availability_id"] == car_availability)
+                                & (productions["soc"] == str(segment))
+                            )
                         else:
-                            production_input = production_dataframe[
-                                (production_dataframe["purpose_id"] == purpose)
-                                &
-                                (production_dataframe["car_availability_id"] == car_availability)
-                                &
-                                (production_dataframe["ns"] == str(segment))
-                              ][
-                                [
-                                    "model_zone_id",
-                                    str(year)
-                                    ]
-                            ].rename(
-                                    columns = {
-                                        str(year): "production_forecast"
-                                        }
-                                    )
+                            segment_mask = (
+                                (productions["purpose_id"] == purpose)
+                                & (productions["car_availability_id"] == car_availability)
+                                & (productions["ns"] == str(segment))
+                            )
 
-                        attraction_input = attraction_weights_dataframe[
-                        attraction_weights_dataframe["purpose_id"] == purpose
-                            ][
-                                [
-                                    "model_zone_id",
-                                    str(year)                                    ]
-                                ].rename(
-                                columns = {
-                                str(year): "attraction_forecast"
-                                }
-                                )
+                        production_input = productions[segment_mask][
+                            ["model_zone_id", str(year)]
+                        ].rename(columns={str(year): "production_forecast"})
 
-                        print()
-                        target_percentage = 0.7 if use_zone_id_subset else 0.9
+                        # Generate attractions input
+                        mask = attraction_weights["purpose_id"] == purpose
+                        attraction_input = attraction_weights[mask][
+                            ["model_zone_id", str(year)]
+                        ].rename(columns={str(year): "attraction_forecast"})
+
+                        # Furness the productions and attractions
+                        target_percentage = 0.7 if self.use_zone_id_subset else 0.9
                         final_distribution = self.furness_process.run(
                             production_dataframe=production_input,
                             attraction_dataframe=attraction_input,
@@ -1939,172 +1915,57 @@ class ExternalForecastSystem:
                             target_percentage=target_percentage
                         )
 
-
                         final_distribution["purpose_id"] = purpose
                         final_distribution["car_availability_id"] = car_availability
-                        final_distribution["soc_id"] = "none"
-                        final_distribution["ns_id"] = "none"
-            #                           final_distribution["mode_id"] = mode
-            #                           final_distribution["time_period_id"] = time
-                        if purpose in (1,2):
-                            final_distribution["soc_id"] = segment
-                            final_distribution_all_mode_dict = (
-                             "hb_pa"
-                             +
-                             "_yr"
-                             +
-                             str(year)
-                             +
-                             "_p"
-                             +
-                             str(purpose)
-                             +
-                             "_soc"
-                             +
-                             str(segment)
-                             +
-                             "_ca"
-                             +
-                             str(car_availability)
-                              +
-                              # "_24hr"
-                              # +
-                              ".csv"
-                              )
-
-                        else:
-                            final_distribution["ns_id"] = segment
-                            final_distribution_all_mode_dict = (
-                             "hb_pa"
-                             +
-                             "_yr"
-                             +
-                             str(year)
-                             +
-                             "_p"
-                             +
-                             str(purpose)
-                             +
-                             "_ns"
-                             +
-                             str(segment)
-                             +
-                             "_ca"
-                             +
-                             str(car_availability)
-                              +
-                              # "_24hr"
-                              # +
-                              ".csv"
-                              )
 
                         # tfn mode split
                         final_distribution = final_distribution.merge(
                             mode_split_dataframe,
-                            on = [
-                                "p_zone",
-                                "purpose_id",
-                                "car_availability_id"
-                                ]
-                            )
+                            on=["p_zone", "purpose_id", "car_availability_id"]
+                        )
+
                         # calculate dt by mode
-                        final_distribution["dt"] = final_distribution["dt"] * final_distribution[str(year)]
+                        final_distribution["dt"] = (
+                                final_distribution["dt"]
+                                *
+                                final_distribution[str(year)])
+
                         final_distribution = final_distribution[[
                             "p_zone",
                             "a_zone",
-                            "purpose_id",
-                            "car_availability_id",
                             "mode_id",
-                            "soc_id",
-                            "ns_id",
                             "dt"
-                            ]]
-                        # .rename(columns={
-                        #         "purpose_id": "p",
-                        #         "car_availability_id": "ca",
-                        #         "mode_id": "m",
-                        #         "soc_id": "soc",
-                        #         "ns_id": "ns",
-                        #         "dt": "trips"
-                        #         })
+                         ]]
 
-                        #output all modes demand for NHB
-                        # final_distribution_all_mode = final_distribution.copy()
-                        final_distribution_all_mode_path = "C:/Users/Sneezy/Desktop/EFS/output/forArrivals/"
-                        final_distribution.to_csv(final_distribution_all_mode_path +
-                                                  final_distribution_all_mode_dict,
-                                                  index=False)
+                        # Rename to the common output names
+                        final_distribution = final_distribution.rename(columns={
+                            "mode_id": "m",
+                            "dt": "trips"
+                        })
+
+                        # TODO: output all modes together for NHB??
 
                         # loop over required modes
                         for mode in required_modes:
-                            final_distribution_mode = final_distribution[final_distribution["mode_id"] == mode]
-                            if purpose in [1, 2]:
-                                # final_distribution_mode["soc_id"] = segment
-                                dict_string = (
-                                        "hb_pa"
-                                        +
-                                        "_yr"
-                                        +
-                                        str(year)
-                                        +
-                                        "_p"
-                                        +
-                                        str(purpose)
-                                        +
-                                        "_m"
-                                        +
-                                        str(mode)
-                                        +
-                                        "_soc"
-                                        +
-                                        str(segment)
-                                        +
-                                        "_ca"
-                                        +
-                                        str(car_availability)
-                #                                    +
-                #                                    "_time"
-                #                                    +
-                #                                    str(time)
-                                        # +
-                                        # "_24hr"
-                                        )
-                            else:
-                                # final_distribution_mode["ns_id"] = segment
-                                dict_string = (
-                                        "hb_pa"
-                                        +
-                                        "_yr"
-                                        +
-                                        str(year)
-                                        +
-                                        "_p"
-                                        +
-                                        str(purpose)
-                                        +
-                                        "_m"
-                                        +
-                                        str(mode)
-                                        +
-                                        "_ns"
-                                        +
-                                        str(segment)
-                                        +
-                                        "_ca"
-                                        +
-                                        str(car_availability)
-                #                                    +
-                #                                    "_time"
-                #                                    +
-                #                                    str(time)
-                                        # +
-                                        # "_24hr"
-                                        )
+                            mask = (final_distribution["m"] == mode)
+                            final_distribution_mode = final_distribution[mask]
+                            final_distribution_mode = final_distribution_mode[[
+                                'p_zone', 'a_zone', 'trips'
+                            ]]
+
+                            dict_string = get_dist_name(
+                                str(trip_origin),
+                                str(year),
+                                str(purpose),
+                                str(mode),
+                                str(segment),
+                                str(car_availability)
+                            )
 
                             final_distribution_dictionary[dict_string] = final_distribution_mode
 
                             print("Distribution " + dict_string + " complete!")
-                            if (first_iteration == True):
+                            if first_iteration:
                                 car_availability_dataframe = final_distribution_mode
                                 first_iteration = False
                             else:
@@ -2168,6 +2029,39 @@ def get_data_subset(orig_data: pd.DataFrame,
     return orig_data.loc[subset_mask]
 
 
+# TODO: Move this to utils
+def get_dist_name(trip_origin: str,
+                  year: str,
+                  purpose: str,
+                  mode: str,
+                  segment: str,
+                  car_availability: str,
+                  tp: str = None
+                  ) -> str:
+    """
+    Generates the distribution name
+    """
+    seg_name = "soc" if purpose in ['1', '2'] else "ns"
+
+    name_parts = [
+        trip_origin,
+        "pa",
+        "yr" + year,
+        "p" + purpose,
+        "m" + mode,
+        seg_name + segment,
+        "ca" + car_availability
+    ]
+
+    if tp is not None:
+        name_parts += [
+            "time" + tp,
+            "24hr"
+        ]
+
+    return '_'.join(name_parts)
+
+
 def safe_read_csv(file_path: str,
                   **kwargs
                   ) -> pd.DataFrame:
@@ -2200,7 +2094,7 @@ def main():
     efs.run(
         constraint_source="Default",
         desired_zoning="norms_2015",
-        output_location="C:/Users/Sneezy/Desktop/EFS/output"
+        output_location="C:/Users/Sneezy/Desktop/EFS/"
     )
 
 
