@@ -4,34 +4,32 @@ Created on Mon Nov 25 09:50:07 2019
 
 @author: Sneezy
 """
-
-from functools import reduce
-from typing import List
-import datetime
+# Built-ins
 import os
 import sys
 import time
+import datetime
+from typing import List
 
+# External libs
 import numpy as np
 import pandas as pd
 
+# self imports
 import efs_constants as efs_consts
-
 from efs_constrainer import ExternalForecastSystemConstrainer
 from efs_pop_generator import ExternalForecastSystemPopulationGenerator
 from efs_worker_generator import ExternalForecastSystemWorkerGenerator
 from furness_process import FurnessProcess
 from zone_translator import ZoneTranslator
 
-sys.path.append("../../../../NorMITs Utilities/Python")
-sys.path.append("../../../../NorMITs Utilities")
-sys.path.append("C:/Users/Sneezy/Desktop/GitHub/Normits-Utils")
-import nu_error_management as err_check
-from nu_sector_reporter_v2 import SectorReporter
+from demand_utilities import tms_utils as du
+from demand_utilities import error_management as err_check
+from demand_utilities.sector_reporter_v2 import SectorReporter
 
 
 class ExternalForecastSystem:
-    # ## Constants ## #
+    # ## Class Constants ## #
     VERSION_ID = "v2-1"
     __version__ = VERSION_ID
 
@@ -75,6 +73,8 @@ class ExternalForecastSystem:
         """
         #TODO
         """
+        self.use_zone_id_subset = use_zone_id_subset
+
         print("Initiating External Forecast System...")
         begin_time = time.time()
         current_time = begin_time
@@ -123,40 +123,40 @@ class ExternalForecastSystem:
 
         # Production and attraction files
         file_path = os.path.join(input_file_home, production_trip_rates_file)
-        self.default_production_trip_rates = safe_read_csv(file_path)
+        self.production_trip_rates = safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, hb_mode_split_file)
-        self.default_hb_mode_split = safe_read_csv(file_path)
+        self.hb_mode_split = safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, hb_mode_time_split_file)
-        self.default_hb_mode_time_split = safe_read_csv(file_path)
+        self.hb_mode_time_split = safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, split_handler_file)
-        self.default_split_handler = safe_read_csv(file_path)
+        self.split_handler = safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, traveller_types_file)
-        self.default_traveller_types = safe_read_csv(file_path)
+        self.traveller_types = safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, attraction_weights_file)
-        self.default_attraction_weights = safe_read_csv(file_path)
+        self.attraction_weights = safe_read_csv(file_path)
 
         # Zone and area files
-        self.default_value_zoning = value_zoning
+        self.value_zoning = value_zoning
 
         file_path = os.path.join(input_file_home, value_zones_file)
-        self.default_value_zones = safe_read_csv(file_path)
+        self.value_zones = safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, area_types_file)
-        self.default_area_types = safe_read_csv(file_path)
+        self.area_types = safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, area_grouping_file)
-        self.default_area_grouping = safe_read_csv(file_path)
+        self.area_grouping = safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, msoa_area_types_file)
-        self.default_msoa_area_types = safe_read_csv(file_path)
+        self.msoa_area_types = safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, zone_areatype_lookup_file)
-        self.default_zone_areatype_lookup = safe_read_csv(file_path)
+        self.zone_areatype_lookup = safe_read_csv(file_path)
 
         if use_zone_id_subset:
             print("WARNING: Not using all of the input data. "
@@ -181,7 +181,7 @@ class ExternalForecastSystem:
 
     def run(self,
             base_year: int = 2018,
-            future_years: List[int] = [2033, 2035, 2050],
+            future_years: List[int] = efs_consts.FUTURE_YEARS_DEFAULT,
             desired_zoning: str = "MSOA",
             alternate_population_base_year_file: str = None,
             alternate_households_base_year_file: str = None,
@@ -192,61 +192,19 @@ class ExternalForecastSystem:
             alternate_population_split_file: str = None,
             distribution_method: str = "Furness",
             distribution_location: str = "Y:/EFS/inputs/distributions",
-            distributions: dict = efs_consts.EFS_RUN_DISTRIBUTIONS_DICT_SYSTRA,
-            # levels: purpose, car availability, mode, time
-            purposes_needed: List[int] = [
-                1,
-                2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8,
-            ],
-            soc_needed: List[int] = [
-                0,
-                1,
-                2,
-                3,
-            ],
-            ns_needed: List[int] = [
-                1,
-                2,
-                3,
-                4,
-                5,
-            ],
-            car_availabilities_needed: List[int] = [
-                1,
-                2,
-            ],
-            modes_needed: List[int] = [
-                    1,
-                    2,
-                    3,
-                    5,
-                    6,
-                    ],
-            times_needed: List[int] = [
-                1,
-                2,
-                3,
-                4,
-            ],
+            distributions: dict = efs_consts.EFS_RUN_DISTRIBUTIONS_DICT,
+            purposes_needed: List[int] = efs_consts.PURPOSES_NEEDED_DEFAULT,
+            soc_needed: List[int] = efs_consts.SOC_NEEDED_DEFAULT,
+            ns_needed: List[int] = efs_consts.NS_NEEDED_DEFAULT,
+            car_availabilities_needed: List[int] = efs_consts.CA_NEEDED_DEFAULT,
+            modes_needed: List[int] = efs_consts.MODES_NEEDED_DEFAULT,
+            times_needed: List[int] = efs_consts.TIMES_NEEDED_DEFAULT,
             development_log_file: str = None,
             development_log_split_file: str = None,
             minimum_development_certainty: str = "MTL",
             integrating_development_log: bool = False,
             population_metric: str = "Households",  # Households, Population
-            constraint_required: List[bool] = [
-                True,  # initial population metric constraint
-                True,  # post-development constraint
-                True,  # secondary post-development constraint used for matching HH pop
-                False,  # initial worker metric constraint
-                False,  # secondary worker metric constraint
-                False,  # final trip based constraint
-            ],
+            constraint_required: List[bool] = efs_consts.CONSTRAINT_REQUIRED_DEFAULT,
             constraint_method: str = "Percentage",  # Percentage, Average
             constraint_area: str = "Designated",  # Zone, Designated, All
             constraint_on: str = "Growth",  # Growth, All
@@ -493,13 +451,7 @@ class ExternalForecastSystem:
         population_metric = population_metric.lower()
         minimum_development_certainty = minimum_development_certainty.upper()
 
-        year_string_list = [
-            str(base_year)
-        ]
-
-        year_string_list.extend(
-            [str(i) for i in future_years]
-        )
+        year_list = [str(x) for x in [base_year] + future_years]
 
         # Development Log Checks
         if (integrating_development_log and
@@ -507,45 +459,27 @@ class ExternalForecastSystem:
              development_log_split_file is None
              )):
             print("If integrating development log then both a development "
-                  + "log and development log split file need to be provided, "
-                  + "ending process.")
+                  "log and development log split file need to be provided. "
+                  "Ending process.")
             exit(1)
 
         # Distribute column names into more specific variables
-        base_year_population_columns = self.column_dictionary["base_year_population"]
-        base_year_households_columns = self.column_dictionary["base_year_households"]
+        base_year_pop_cols = self.column_dictionary["base_year_population"]
+        base_year_hh_cols = self.column_dictionary["base_year_households"]
+        base_year_workers_cols = self.column_dictionary["base_year_workers"]
 
-        base_year_workers_columns = self.column_dictionary["base_year_workers"]
+        pop_cols = self.column_dictionary["population"] + year_list
+        pop_ratio_cols = self.column_dictionary["population_ratio"] + year_list
 
-        population_columns = self.column_dictionary["population"]
-        population_columns.extend(year_string_list)
+        hh_cols = self.column_dictionary["households"] + year_list
+        hh_occupancy_cols = self.column_dictionary["housing_occupancy"] + year_list
 
-        households_columns = self.column_dictionary["households"]
-        households_columns.extend(year_string_list)
+        emp_cols = self.column_dictionary["employment"] + year_list
+        emp_ratio_cols = self.column_dictionary["employment_ratio"] + year_list
 
-        housing_occupancy_columns = self.column_dictionary["housing_occupancy"]
-        housing_occupancy_columns.extend(year_string_list)
-
-        employment_columns = self.column_dictionary["employment"]
-        employment_columns.extend(year_string_list)
-
-        population_ratio_columns = self.column_dictionary["population_ratio"]
-        population_ratio_columns.extend(year_string_list)
-
-        production_trip_columns = self.column_dictionary["production_trips"]
-        production_trip_columns.extend(year_string_list)
-
-        mode_split_columns = self.column_dictionary["mode_split"]
-        mode_split_columns.extend(year_string_list)
-
-        # mode_time_split_columns = self.column_dictionary["mode_time_split"]
-        # mode_time_split_columns.extend(year_string_list)
-
-        employment_ratio_columns = self.column_dictionary["employment_ratio"]
-        employment_ratio_columns.extend(year_string_list)
-
-        attraction_weight_columns = self.column_dictionary["attraction_weights"]
-        attraction_weight_columns.extend(year_string_list)
+        production_trip_cols = self.column_dictionary["production_trips"] + year_list
+        mode_split_cols = self.column_dictionary["mode_split"] + year_list
+        attraction_weight_cols = self.column_dictionary["attraction_weights"] + year_list
 
         print("No known errors in the inputs!")
         last_time = current_time
@@ -568,8 +502,9 @@ class ExternalForecastSystem:
 
             print("Need to integrate alternative assumptions.")
             print("Integrating alternate assumptions...")
-            ## ALTERNATE ASSUMPTION INTEGRATION ##
+            # # ALTERNATE ASSUMPTION INTEGRATION # #
 
+            # TODO: Missing inputs - this probably won't work
             integrated_assumptions = self.integrate_alternate_assumptions(
                 alternate_population_base_year_file,
                 alternate_households_base_year_file,
@@ -577,41 +512,41 @@ class ExternalForecastSystem:
                 alternate_population_growth_assumption_file,
                 alternate_households_growth_assumption_file,
                 alternate_worker_growth_assumption_file,
-                base_year_population_columns,
-                base_year_workers_columns,
-                population_columns,
-                employment_columns
+                base_year_pop_cols,
+                base_year_workers_cols,
+                pop_cols,
+                emp_cols
             )
 
-            population_values = integrated_assumptions[0][base_year_population_columns]
-            households_values = integrated_assumptions[1][base_year_households_columns]
-            worker_values = integrated_assumptions[2][base_year_workers_columns]
-            population_growth = integrated_assumptions[3][population_columns]
-            households_growth = integrated_assumptions[4][households_columns]
-            worker_growth = integrated_assumptions[5][employment_columns]
+            population_values = integrated_assumptions[0][base_year_pop_cols]
+            households_values = integrated_assumptions[1][base_year_hh_cols]
+            worker_values = integrated_assumptions[2][base_year_workers_cols]
+            population_growth = integrated_assumptions[3][pop_cols]
+            households_growth = integrated_assumptions[4][hh_cols]
+            worker_growth = integrated_assumptions[5][emp_cols]
 
             # TODO: Remove self references and integrate into alternate assumptions
             # TODO: Alternate population split read in
-            population_split = self.future_population_ratio[population_ratio_columns].copy()
-            housing_type_split = self.housing_type_split[housing_occupancy_columns].copy()
-            housing_occupancy = self.housing_occupancy[housing_occupancy_columns].copy()
-            hb_mode_split = self.default_hb_mode_split[mode_split_columns].copy()
-            msoa_area_types = self.default_msoa_area_types.copy()
-            zone_areatype_lookup = self.default_zone_areatype_lookup.copy()
-            worker_split = self.worker_splits[employment_ratio_columns].copy()
+            population_split = self.future_population_ratio[pop_ratio_cols].copy()
+            housing_type_split = self.housing_type_split[hh_occupancy_cols].copy()
+            housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
+            hb_mode_split = self.hb_mode_split[mode_split_cols].copy()
+            msoa_area_types = self.msoa_area_types.copy()
+            zone_areatype_lookup = self.zone_areatype_lookup.copy()
+            worker_split = self.worker_splits[emp_ratio_cols].copy()
 
-            trip_rates = self.default_production_trip_rates[production_trip_columns].copy().rename(
-                columns = {
-                        "traveller_type": "traveller_type_id",
-                        "area_type": "area_type_id"
-                        }
-                )
+            trip_rates = self.production_trip_rates[
+                production_trip_cols
+            ].copy().rename(
+                # Rename to cols names used in code
+                columns={
+                    "traveller_type": "traveller_type_id",
+                    "area_type": "area_type_id",
+                    "p": "purpose_id"
+                }
+            )
 
-            # TODO: Get rid of old Mode-time split code
-            # hb_mode_time_split = self.default_hb_mode_time_split[mode_time_split_columns].copy()
-            # split_handler = self.default_split_handler.copy()
-
-            car_association = self.default_traveller_types[[
+            car_association = self.traveller_types[[
                 "cars", "traveller_type"
             ]].copy().rename(columns={"traveller_type": "traveller_type_id"})
 
@@ -619,7 +554,7 @@ class ExternalForecastSystem:
             no_car_mask = (car_association["cars"] == 0)
 
             car_association[no_car_mask]["car_availability_id"] = 1
-            car_association[not (no_car_mask)]["car_availability_id"] = 2
+            car_association[-no_car_mask]["car_availability_id"] = 2
 
             print("Integrated alternate assumptions!")
             last_time = current_time
@@ -630,43 +565,22 @@ class ExternalForecastSystem:
             # # COPY OVER VALUES # #
             print("No need to integrate alternative assumptions.")
             print("Reading in default values...")
-            population_values = self.population_values[
-                base_year_population_columns
-            ].copy()
-            population_growth = self.population_growth[
-                population_columns
-            ].copy()
-            population_split = self.future_population_ratio[
-                population_ratio_columns
-            ].copy()
+            population_values = self.population_values[base_year_pop_cols].copy()
+            population_growth = self.population_growth[pop_cols].copy()
+            population_split = self.future_population_ratio[pop_ratio_cols].copy()
 
-            households_values = self.households_values[
-                base_year_households_columns
-            ].copy()
-            households_growth = self.households_growth[
-                households_columns
-            ].copy()
-            housing_type_split = self.housing_type_split[
-                housing_occupancy_columns
-            ].copy()
-            housing_occupancy = self.housing_occupancy[
-                housing_occupancy_columns
-            ].copy()
+            households_values = self.households_values[base_year_hh_cols].copy()
+            households_growth = self.households_growth[hh_cols].copy()
+            housing_type_split = self.housing_type_split[hh_occupancy_cols].copy()
+            housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
 
-            worker_values = self.worker_values[
-                base_year_workers_columns
-            ].copy()
-            worker_growth = self.worker_growth[
-                employment_columns
-            ].copy()
-            worker_split = self.worker_splits[
-                employment_ratio_columns
-            ].copy()
+            worker_values = self.worker_values[base_year_workers_cols].copy()
+            worker_growth = self.worker_growth[emp_cols].copy()
+            worker_split = self.worker_splits[emp_ratio_cols].copy()
 
-            trip_rates = self.default_production_trip_rates[
-                production_trip_columns
-            ].copy().rename(
-                # Rename to names used in code
+            # Need to rename cols to names used in code
+            trip_rates = self.production_trip_rates[production_trip_cols].copy()
+            trip_rates = trip_rates.rename(
                 columns={
                     "traveller_type": "traveller_type_id",
                     "area_type": "area_type_id",
@@ -674,20 +588,20 @@ class ExternalForecastSystem:
                 }
             )
 
-            hb_mode_split = self.default_hb_mode_split[
-                    mode_split_columns
-            ].copy()
-            msoa_area_types = self.default_msoa_area_types.copy()
-            zone_areatype_lookup = self.default_zone_areatype_lookup.copy()
+            hb_mode_split = self.hb_mode_split[mode_split_cols].copy()
+            msoa_area_types = self.msoa_area_types.copy()
+            zone_areatype_lookup = self.zone_areatype_lookup.copy()
 
-            # make norms_2015_AreaType_Lookup table
-
+            # TODO: make norms_2015_AreaType_Lookup table
             zone_areatype_lookup = zone_areatype_lookup.merge(
                 msoa_area_types,
                 left_on="msoa_zone_id",
                 right_on="model_zone_id"
             )
-            zone_areatype_lookup = zone_areatype_lookup.groupby(['norms_2015_zone_id','area_type_id']).size().to_frame('count').reset_index()
+            zone_areatype_lookup = zone_areatype_lookup.groupby(
+                ['norms_2015_zone_id', 'area_type_id']
+            ).size().to_frame('count').reset_index()
+
             zone_areatype_lookup = zone_areatype_lookup.sort_values(
                 by=['count', 'area_type_id'],
                 ascending=[False, True]
@@ -698,34 +612,25 @@ class ExternalForecastSystem:
             ]].sort_values('norms_2015_zone_id')
 
             # zone_areatype_lookup.sort_values('norms_2015_zone_id').to_csv(lookup_location + "norms_2015_AreaType_Lookup.csv", index=False)
-
             # .rename(
-            #             columns = {
-            #                 "area_type": "area_type_id",
-            #                 "ca": "car_availability_id",
-            #                 "p": "purpose_id",
-            #                 "m1": "1",
-            #                 "m2": "2",
-            #                 "m3": "3",
-            #                 "m5": "5",
-            #                 "m6": "6",
-            #                 }
-            #             )
+            #     columns = {
+            #         "area_type": "area_type_id",
+            #         "ca": "car_availability_id",
+            #         "p": "purpose_id",
+            #         "m1": "1",
+            #         "m2": "2",
+            #         "m3": "3",
+            #         "m5": "5",
+            #         "m6": "6",
+            #         }
+            #     )
 
-            attraction_weights = self.default_attraction_weights[
-                    attraction_weight_columns
-                    ].copy()
+            attraction_weights = self.attraction_weights[attraction_weight_cols].copy()
 
-            # OLD mode_time_split code
-            # hb_mode_time_split = self.default_hb_mode_time_split[
-            #         mode_time_split_columns
-            #         ].copy()
-            # split_handler = self.default_split_handler.copy()
-
-            car_association = self.default_traveller_types[[
+            car_association = self.traveller_types[[
                     "cars",
                     "traveller_type"
-                    ]].copy().rename(columns={"traveller_type": "traveller_type_id"})
+            ]].copy().rename(columns={"traveller_type": "traveller_type_id"})
 
             car_association["car_availability_id"] = 0
             no_car_mask = (car_association["cars"] == "0")
@@ -757,25 +662,25 @@ class ExternalForecastSystem:
         if constraint_source == "default":
             print("Constraint 'default' selected, retrieving constraint "
                   + "data...")
-            population_constraint = self.population_constraint[population_columns].copy()
+            population_constraint = self.population_constraint[pop_cols].copy()
             population_constraint = self.efs_constrainer.convert_constraint_off_base_year(
                 population_constraint,
                 str(base_year),
-                year_string_list
+                year_list
             )
 
-            households_constraint = self.households_constraint[households_columns].copy()
+            households_constraint = self.households_constraint[hh_cols].copy()
             households_constraint = self.efs_constrainer.convert_constraint_off_base_year(
                 households_constraint,
                 str(base_year),
-                year_string_list
+                year_list
             )
 
-            worker_constraint = self.worker_constraint[employment_columns].copy()
+            worker_constraint = self.worker_constraint[emp_cols].copy()
             worker_constraint = self.efs_constrainer.convert_constraint_off_base_year(
                 worker_constraint,
                 str(base_year),
-                year_string_list
+                year_list
             )
 
             print("Constraint retrieved!")
@@ -787,46 +692,46 @@ class ExternalForecastSystem:
         elif constraint_source == "grown base":
             print("Constraint 'grown base' source selected, growing given "
                   + "base by default growth factors...")
-            population_constraint = self.population_growth[population_columns].copy()
+            population_constraint = self.population_growth[pop_cols].copy()
 
             population_constraint = self.convert_growth_off_base_year(
                 population_constraint,
                 str(base_year),
-                year_string_list
+                year_list
             )
             population_constraint = self.get_grown_values(
                 population_values,
                 population_constraint,
                 "base_year_population",
-                year_string_list
+                year_list
             )
 
-            households_constraint = self.households_growth[households_columns].copy()
+            households_constraint = self.households_growth[hh_cols].copy()
 
             households_constraint = self.convert_growth_off_base_year(
                 households_constraint,
                 str(base_year),
-                year_string_list
+                year_list
             )
             households_constraint = self.get_grown_values(
                 households_values,
                 households_constraint,
                 "base_year_households",
-                year_string_list
+                year_list
             )
 
-            worker_constraint = self.worker_growth[employment_columns].copy()
+            worker_constraint = self.worker_growth[emp_cols].copy()
 
             worker_constraint = self.convert_growth_off_base_year(
                 worker_constraint,
                 str(base_year),
-                year_string_list
+                year_list
             )
             worker_constraint = self.get_grown_values(
                 worker_values,
                 worker_constraint,
                 "base_year_workers",
-                year_string_list
+                year_list
             )
             print("Constraint generated!")
             last_time = current_time
@@ -863,9 +768,9 @@ class ExternalForecastSystem:
             constraint_area=constraint_area,
             constraint_on=constraint_on,
             constraint_source=constraint_source,
-            designated_area=self.default_area_grouping.copy(),
+            designated_area=self.area_grouping.copy(),
             base_year_string=str(base_year),
-            model_years=year_string_list
+            model_years=year_list
         )
         print("Population generated!")
         last_time = current_time
@@ -889,9 +794,9 @@ class ExternalForecastSystem:
             constraint_area=constraint_area,
             constraint_on=constraint_on,
             constraint_source=constraint_source,
-            designated_area=self.default_area_grouping.copy(),
+            designated_area=self.area_grouping.copy(),
             base_year_string=str(base_year),
-            model_years=year_string_list
+            model_years=year_list
         )
 
         print("Workers generated!")
@@ -904,15 +809,15 @@ class ExternalForecastSystem:
         print("Generating production...")
         production_trips = self.production_generation(
             final_population,
-            self.default_area_types,
+            self.area_types,
             trip_rates,
             car_association,
-            year_string_list
+            year_list
         )
 
         production_trips = self.convert_to_average_weekday(
             production_trips,
-            year_string_list
+            year_list
         )
 
         print("Productions generated!")
@@ -923,18 +828,6 @@ class ExternalForecastSystem:
 
         print("Skipping mode-time splits...")
         split_production_trips = production_trips
-
-        # print("Applying time-mode splits...")
-        # split_production_trips = self.mode_time_split_application(
-        #         production_trips,
-        #         hb_mode_time_split,
-        #         year_string_list
-        #         )
-        # print("Time-mode splits applied!")
-        # last_time = current_time
-        # current_time = time.time()
-        # print("Time-mode splitting took: %.2f seconds" %
-        #       (current_time - last_time))
 
         print("Convert traveller type id to car availability id...")
         required_columns = [
@@ -948,7 +841,7 @@ class ExternalForecastSystem:
         ca_production_trips = self.generate_car_availability(
             split_production_trips,
             car_association,
-            year_string_list,
+            year_list,
             required_columns
         )
 
@@ -958,32 +851,12 @@ class ExternalForecastSystem:
         print("Car availability conversion took: %.2f seconds" %
               (current_time - last_time))
 
-        # print("Reattaching mode-time split IDs to productions...")
-        # required_columns = [
-        #     "model_zone_id",
-        #     "purpose_id",
-        #     "car_availability_id",
-        #     "mode_id",
-        #     "time_period_id"]
-        #
-        # ca_production_trips = self.reattach_mode_time_ids(
-        #     ca_production_trips,
-        #     split_handler,
-        #     year_string_list,
-        #     required_columns)
-        #
-        # print("Reattached mode-time split IDs to productions!")
-        # last_time = current_time
-        # current_time = time.time()
-        # print("Reattachment of mode-time split IDs took: %.2f seconds" %
-        #       (current_time - last_time))
-
         # ## ATTRACTION GENERATION & MATCHING ## #
         print("Generating attractions...")
         attraction_dataframe = self.attraction_generation(
             final_workers,
             attraction_weights,
-            year_string_list
+            year_list
         )
         print("Attractions generated!")
         last_time = current_time
@@ -994,7 +867,7 @@ class ExternalForecastSystem:
         print("Generating attraction weights...")
         attraction_weights = self.generate_attraction_weights(
             attraction_dataframe,
-            year_string_list
+            year_list
         )
 
         print("Attraction weights generated!")
@@ -1008,7 +881,7 @@ class ExternalForecastSystem:
         # attraction_dataframe = self.match_attractions_to_productions(
         #    attraction_weights,
         #    production_trips,
-        #    year_string_list
+        #    year_list
         # )
         # print("Attractions matched!")
         # last_time = current_time
@@ -1017,9 +890,9 @@ class ExternalForecastSystem:
         #       (current_time - last_time))
 
         # ## ZONE TRANSLATION ## #
-        if desired_zoning != self.default_value_zoning:
+        if desired_zoning != self.value_zoning:
             print("Need to translate zones.")
-            print("Translating from: " + self.default_value_zoning)
+            print("Translating from: " + self.value_zoning)
             print("Translating to: " + desired_zoning)
             # read in translation dataframe
             path = "Y:/EFS/inputs/default/zone_translation"
@@ -1029,23 +902,21 @@ class ExternalForecastSystem:
             converted_productions = self.zone_translator.run(
                 ca_production_trips,
                 translation_dataframe,
-                self.default_value_zoning,
+                self.value_zoning,
                 desired_zoning,
-                non_split_columns = [
+                non_split_columns=[
                         "model_zone_id",
                         "purpose_id",
                         "car_availability_id",
                         "soc",
                         "ns"
-                        # "mode_id",
-                        # "time_period_id"
                         ]
             )
 
             converted_pure_attractions = self.zone_translator.run(
                 attraction_dataframe,
                 translation_dataframe,
-                self.default_value_zoning,
+                self.value_zoning,
                 desired_zoning,
                 non_split_columns=["model_zone_id", "purpose_id"]
             )
@@ -1053,7 +924,7 @@ class ExternalForecastSystem:
             converted_attractions = self.zone_translator.run(
                 attraction_weights,
                 translation_dataframe,
-                self.default_value_zoning,
+                self.value_zoning,
                 desired_zoning,
                 non_split_columns=["model_zone_id", "purpose_id"]
             )
@@ -1084,8 +955,7 @@ class ExternalForecastSystem:
                     required_car_availabilities=car_availabilities_needed,
                     required_modes=modes_needed,
                     required_times=times_needed,
-                    # year_string_list=future_years,
-                    year_string_list=year_string_list,
+                    year_string_list=year_list,
                     distribution_dataframe_dict=distributions,
                     distribution_file_location=distribution_location
                     )
@@ -1101,7 +971,7 @@ class ExternalForecastSystem:
         # ## SECTOR TOTALS ## #
         sector_totals = self.sector_reporter.calculate_sector_totals(
                 converted_productions,
-                grouping_metric_columns = year_string_list,
+                grouping_metric_columns = year_list,
                 zone_system_name = "norms_2015",
                 zone_system_file = "Y:/EFS/inputs/default/norms_2015.csv",
                 sector_grouping_file = "Y:/EFS/inputs/default/zone_translation/tfn_level_one_sectors_norms_grouping.csv"
@@ -1110,19 +980,11 @@ class ExternalForecastSystem:
         pm_sector_total_dictionary = {}
 
         for purpose in purposes_needed:
-            # for mode in modes_needed:
-            #     mask = (
-            #         (converted_productions["purpose_id"] == purpose)
-            #         &
-            #         (converted_productions["mode_id"] == mode)
-            #     )
-            #
-            #     pm_productions = converted_productions[mask].copy()
             pm_productions = converted_productions.copy()
 
             pm_sector_totals = self.sector_reporter.calculate_sector_totals(
                 pm_productions,
-                grouping_metric_columns=year_string_list,
+                grouping_metric_columns=year_list,
                 zone_system_name="norms_2015",
                 zone_system_file="Y:/EFS/inputs/default/norms_2015.csv",
                 sector_grouping_file="Y:/EFS/inputs/default/zone_translation/tfn_level_one_sectors_norms_grouping.csv"
@@ -1972,22 +1834,11 @@ class ExternalForecastSystem:
                     first_iteration = True
                     for car_availability in required_car_availabilities:
                         # for tp in required_times:
-                        distribution_dataframe = pd.read_csv(
-                        # distribution_dataframe_tp = pd.read_csv(
-                            distribution_file_location
-                            +
-                            (distribution_dataframe_dict
-                             [purpose]
-                             [segment]
-                             [car_availability]
-                             # [mode]
-                             # [time]
-                             )
-                                # + str(tp)
-                            # + ".csv"
-                            )
-
-                        print()
+                        dist_path = os.path.join(
+                            distribution_file_location,
+                            distribution_dataframe_dict[purpose][segment][car_availability]
+                        )
+                        distribution_dataframe = pd.read_csv(dist_path)
 
                             # make table long
                         # distribution_dataframe_tp = pd.melt(
@@ -2075,6 +1926,7 @@ class ExternalForecastSystem:
                                 )
 
                         print()
+                        target_percentage = 0.7 if use_zone_id_subset else 0.9
                         final_distribution = self.furness_process.run(
                             production_dataframe=production_input,
                             attraction_dataframe=attraction_input,
@@ -2083,7 +1935,8 @@ class ExternalForecastSystem:
                             replace_zero_values=replace_zero_values,
                             constrain_on_production=constrain_on_production,
                             constrain_on_attraction=constrain_on_attraction,
-                            zero_replacement_value=zero_replacement_value
+                            zero_replacement_value=zero_replacement_value,
+                            target_percentage=target_percentage
                         )
 
 
@@ -2281,9 +2134,9 @@ class ExternalForecastSystem:
         self.worker_constraint = get_data_subset(self.worker_constraint)
         self.worker_splits = get_data_subset(self.worker_splits)
 
-        self.default_value_zones = get_data_subset(self.default_value_zones)
-        self.default_area_types = get_data_subset(self.default_area_types)
-        self.default_area_grouping = get_data_subset(self.default_area_grouping)
+        self.value_zones = get_data_subset(self.value_zones)
+        self.area_types = get_data_subset(self.area_types)
+        self.area_grouping = get_data_subset(self.area_grouping)
 
 
 # TODO: Move this into utils

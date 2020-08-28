@@ -643,7 +643,7 @@ class ExternalForecastSystem:
         """
         ### TIME SET UP ###
         if distributions is None:
-            distributions = efs_consts.EFS_RUN_DISTRIBUTIONS_DICT_SYSTRA
+            distributions = efs_consts.EFS_RUN_DISTRIBUTIONS_DICT
 
         begin_time = time.time()
         current_time = begin_time
@@ -783,9 +783,9 @@ class ExternalForecastSystem:
             hb_mode_split = self.default_hb_mode_split[mode_split_columns].copy() 
             msoa_area_types = self.default_msoa_area_types.copy()            
             zone_areatype_lookup = self.default_zone_areatype_lookup.copy()
-            # hb_mode_time_split = self.default_hb_mode_time_split[mode_time_split_columns].copy()
+            # hb_mode_time_split = self.hb_mode_time_split[mode_time_split_columns].copy()
             worker_split = self.default_worker_splits[employment_ratio_columns].copy()
-            # split_handler = self.default_split_handler.copy()
+            # split_handler = self.split_handler.copy()
             
             car_association = self.default_traveller_types[[
                     "cars",
@@ -895,13 +895,13 @@ class ExternalForecastSystem:
             #                 }
             #             )
                         
-            # hb_mode_time_split = self.default_hb_mode_time_split[
+            # hb_mode_time_split = self.hb_mode_time_split[
             #         mode_time_split_columns
             #         ].copy()
             attraction_weights = self.default_attraction_weights[
                     attraction_weight_columns
                     ].copy()
-            # split_handler = self.default_split_handler.copy()
+            # split_handler = self.split_handler.copy()
             
             car_association = self.default_traveller_types[[
                     "cars",
