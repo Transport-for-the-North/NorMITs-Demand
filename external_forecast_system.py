@@ -17,10 +17,10 @@ import pandas as pd
 
 # self imports
 import efs_constants as efs_consts
+import furness_process as fp
 from efs_constrainer import ExternalForecastSystemConstrainer
 from efs_pop_generator import ExternalForecastSystemPopulationGenerator
 from efs_worker_generator import ExternalForecastSystemWorkerGenerator
-from furness_process import FurnessProcess
 from zone_translator import ZoneTranslator
 
 from demand_utilities import tms_utils as du
@@ -167,7 +167,6 @@ class ExternalForecastSystem:
         self.efs_constrainer = ExternalForecastSystemConstrainer()
         self.efs_pop_generator = ExternalForecastSystemPopulationGenerator()
         self.efs_worker_generator = ExternalForecastSystemWorkerGenerator()
-        self.furness_process = FurnessProcess()
 
         # support utilities tools
         self.sector_reporter = SectorReporter()
@@ -503,8 +502,6 @@ class ExternalForecastSystem:
             print("Need to integrate alternative assumptions.")
             print("Integrating alternate assumptions...")
             # # ALTERNATE ASSUMPTION INTEGRATION # #
-
-            # TODO: Missing inputs - this probably won't work
             integrated_assumptions = self.integrate_alternate_assumptions(
                 alternate_population_base_year_file,
                 alternate_households_base_year_file,
@@ -513,9 +510,7 @@ class ExternalForecastSystem:
                 alternate_households_growth_assumption_file,
                 alternate_worker_growth_assumption_file,
                 base_year_pop_cols,
-                base_year_workers_cols,
-                pop_cols,
-                emp_cols
+                base_year_hh_cols
             )
 
             population_values = integrated_assumptions[0][base_year_pop_cols]
@@ -1151,50 +1146,46 @@ class ExternalForecastSystem:
             # TODO: Store output files into local storage (class storage)
 
     def integrate_alternate_assumptions(self,
-                                        alternate_population_base_year_file: str,
-                                        alternate_households_base_year_file: str,
-                                        alternate_worker_base_year_file: str,
-                                        alternate_population_growth_assumption_file: str,
-                                        alternate_households_growth_assumption_file: str,
-                                        alternate_worker_growth_assumption_file: str,
+                                        alt_population_base_year_file: str,
+                                        alt_households_base_year_file: str,
+                                        alt_worker_base_year_file: str,
+                                        alt_population_growth_assumption_file: str,
+                                        alt_households_growth_assumption_file: str,
+                                        alt_worker_growth_assumption_file: str,
                                         base_year_population_columns: List[str],
-                                        base_year_households_columns: List[str],
-                                        base_year_workers_columns: List[str],
-                                        population_columns: List[str],
-                                        households_columns: List[str],
-                                        employment_columns: List[str]
+                                        base_year_households_columns: List[str]
                                         ) -> List[pd.DataFrame]:
         """
         # TODO
         """
-        # ## READ IN ALTERNATE ASSSUMPTIONS ## #
-        if alternate_population_base_year_file is not None:
-            alternate_population_base_year = pd.read_csv(alternate_population_base_year_file)
+        # ## READ IN ALTERNATE ASSUMPTIONS ## #
+        if alt_population_base_year_file is not None:
+            alternate_population_base_year = pd.read_csv(alt_population_base_year_file)
         else:
             alternate_population_base_year = self.population_values.copy()
 
-        if alternate_households_base_year_file is not None:
-            alternate_households_base_year = pd.read_csv(alternate_households_base_year_file)
+        if alt_households_base_year_file is not None:
+            alternate_households_base_year = pd.read_csv(alt_households_base_year_file)
         else:
             alternate_households_base_year = self.households_values.copy()
 
-        if alternate_worker_base_year_file is not None:
-            alternate_worker_base_year = pd.read_csv(alternate_worker_base_year_file)
+        if alt_worker_base_year_file is not None:
+            alternate_worker_base_year = pd.read_csv(alt_worker_base_year_file)
         else:
             alternate_worker_base_year = self.worker_values.copy()
 
-        if alternate_population_growth_assumption_file is not None:
-            alternate_population_growth = pd.read_csv(alternate_population_growth_assumption_file)
+        if alt_population_growth_assumption_file is not None:
+            alternate_population_growth = pd.read_csv(alt_population_growth_assumption_file)
         else:
             alternate_population_growth = self.population_growth.copy()
 
-        if alternate_households_growth_assumption_file is not None:
-            alternate_households_growth = pd.read_csv(alternate_households_growth_assumption_file)
+        if alt_households_growth_assumption_file is not None:
+            alternate_households_growth = pd.read_csv(alt_households_growth_assumption_file)
         else:
             alternate_households_growth = self.households_growth.copy()
 
-        if alternate_worker_growth_assumption_file is not None:
-            alternate_worker_growth = pd.read_csv(alternate_worker_growth_assumption_file)
+        if alt_worker_growth_assumption_file is not None:
+            alternate_worker_growth = pd.read_csv(alt_worker_growth_assumption_file)
         else:
             alternate_worker_growth = self.worker_growth.copy()
 
@@ -1203,7 +1194,7 @@ class ExternalForecastSystem:
 
         ### COMBINE BASE & ALTERNATE ASSUMPTIONS ###
         # alternate population base
-        if alternate_population_base_year_file is not None:
+        if alt_population_base_year_file is not None:
             alternate_population_base_year_zones = alternate_population_base_year["model_zone_id"].values
             default_population_values = self.population_values[base_year_population_columns].copy()
             default_population_values.loc[
@@ -1214,7 +1205,7 @@ class ExternalForecastSystem:
             alternate_population_base_year = default_population_values
 
         # alternate households base
-        if alternate_households_base_year_file is not None:
+        if alt_households_base_year_file is not None:
             alternate_households_base_year_zones = alternate_households_base_year["model_zone_id"].values
             default_households_values = self.households_values[base_year_households_columns].copy()
             default_households_values.loc[
@@ -1225,8 +1216,8 @@ class ExternalForecastSystem:
             alternate_households_base_year = default_households_values
 
         # alternate worker base
-        if alternate_worker_base_year_file is not None:
-            alternate_worker_base_year = pd.read_csv(alternate_worker_base_year_file)
+        if alt_worker_base_year_file is not None:
+            alternate_worker_base_year = pd.read_csv(alt_worker_base_year_file)
             alternate_worker_base_year_zones = alternate_worker_base_year["model_zone_id"].values
             default_worker_values = self.worker_values[base_year_population_columns].copy()
             default_worker_values.loc[
@@ -1237,8 +1228,8 @@ class ExternalForecastSystem:
             alternate_worker_base_year = default_worker_values
 
         # alternate population growth
-        if alternate_population_growth_assumption_file is not None:
-            alternate_population_growth = pd.read_csv(alternate_population_growth_assumption_file)
+        if alt_population_growth_assumption_file is not None:
+            alternate_population_growth = pd.read_csv(alt_population_growth_assumption_file)
             alternate_population_growth_zones = alternate_population_growth["model_zone_id"].values
             columns = alternate_population_growth.columns[1:].values
 
@@ -1282,12 +1273,11 @@ class ExternalForecastSystem:
                                 year: default_population_growth.columns[-1]
                         ] + difference
 
-
             alternate_population_growth = default_population_growth
 
         # alternate households growth
-        if alternate_households_growth_assumption_file is not None:
-            alternate_households_growth = pd.read_csv(alternate_households_growth_assumption_file)
+        if alt_households_growth_assumption_file is not None:
+            alternate_households_growth = pd.read_csv(alt_households_growth_assumption_file)
             alternate_households_growth_zones = alternate_households_growth["model_zone_id"].values
             columns = alternate_households_growth.columns[1:].values
 
@@ -1322,7 +1312,7 @@ class ExternalForecastSystem:
                         year + "_difference"
                     ] = difference
 
-                    if (pd.notna(difference)):
+                    if pd.notna(difference):
                         default_households_growth.loc[
                             default_households_growth["model_zone_id"] == zone,
                             year: default_households_growth.columns[-1]
@@ -1334,8 +1324,8 @@ class ExternalForecastSystem:
             alternate_households_growth = default_households_growth
 
         # alternate worker growth
-        if alternate_worker_growth_assumption_file is not None:
-            alternate_worker_growth = pd.read_csv(alternate_worker_growth_assumption_file)
+        if alt_worker_growth_assumption_file is not None:
+            alternate_worker_growth = pd.read_csv(alt_worker_growth_assumption_file)
             alternate_worker_growth_zones = alternate_worker_growth["model_zone_id"].values
             columns = alternate_worker_growth.columns[1:].values
 
@@ -1780,7 +1770,7 @@ class ExternalForecastSystem:
                              productions: pd.DataFrame,
                              attraction_weights: pd.DataFrame,
                              mode_split_dataframe: pd.DataFrame,
-                             zone_areatype_lookup : pd.DataFrame,
+                             zone_areatype_lookup: pd.DataFrame,
                              required_purposes: List[int],
                              required_soc: List[int],
                              required_ns: List[int],
@@ -1826,7 +1816,7 @@ class ExternalForecastSystem:
         # TODO: Move mode out to nested loops
         # TODO: Move inside of all nested loops into function
         # TODO: Tidy this up
-        # TODO: Generate distribution_dataframe path based on segmentation
+        # TODO: Generate synth_dists path based on segmentation
         #  and file location given
         # TODO: Figure out whats happening with time periods??
         for year in year_string_list:
@@ -1847,35 +1837,31 @@ class ExternalForecastSystem:
                             distribution_file_location,
                             distribution_dataframe_dict[purpose][segment][car_availability]
                         )
-                        distribution_dataframe = pd.read_csv(dist_path)
 
-                        distribution_dataframe = pd.melt(
-                            distribution_dataframe,
+                        # Convert from wide to long format
+                        # (needed for furnessing)
+                        synth_dists = pd.read_csv(dist_path)
+                        synth_dists = pd.melt(
+                            synth_dists,
                             id_vars=['norms_zone_id'],
                             var_name='a_zone',
-                            value_name='dt'
-                            )
-
-                        distribution_dataframe = distribution_dataframe.rename(
-                            columns={
-                               "norms_zone_id": "p_zone",
-                               "dt": "seed_values"
-                               }
-                            )
+                            value_name='seed_values'
+                        ).rename(
+                            columns={"norms_zone_id": "p_zone"})
 
                         # convert column object to int
-                        distribution_dataframe['a_zone'] = distribution_dataframe['a_zone'].astype(int)
-                        distribution_dataframe = distribution_dataframe.groupby(
+                        synth_dists['a_zone'] = synth_dists['a_zone'].astype(int)
+                        synth_dists = synth_dists.groupby(
                             by=["p_zone", "a_zone"],
                             as_index=False
                         ).sum()
 
                         if self.use_zone_id_subset:
                             zone_subset = [259, 267, 268, 270, 275, 1171, 1173]
-                            distribution_dataframe = get_data_subset(
-                                distribution_dataframe, 'p_zone', zone_subset)
-                            distribution_dataframe = get_data_subset(
-                                distribution_dataframe, 'a_zone', zone_subset)
+                            synth_dists = get_data_subset(
+                                synth_dists, 'p_zone', zone_subset)
+                            synth_dists = get_data_subset(
+                                synth_dists, 'a_zone', zone_subset)
 
                         # Generate productions input
                         if purpose in [1, 2]:
@@ -1903,17 +1889,16 @@ class ExternalForecastSystem:
 
                         # Furness the productions and attractions
                         target_percentage = 0.7 if self.use_zone_id_subset else 0.9
-                        final_distribution = self.furness_process.run(
-                            production_dataframe=production_input,
-                            attraction_dataframe=attraction_input,
-                            distribution_dataframe=distribution_dataframe,
+                        final_distribution = fp.furness(
+                            productions=production_input,
+                            attractions=attraction_input,
+                            distributions=synth_dists,
                             number_of_iterations=number_of_iterations,
                             replace_zero_values=replace_zero_values,
                             constrain_on_production=constrain_on_production,
                             constrain_on_attraction=constrain_on_attraction,
                             zero_replacement_value=zero_replacement_value,
-                            target_percentage=target_percentage
-                        )
+                            target_percentage=target_percentage)
 
                         final_distribution["purpose_id"] = purpose
                         final_distribution["car_availability_id"] = car_availability
@@ -2094,7 +2079,7 @@ def main():
     efs.run(
         constraint_source="Default",
         desired_zoning="norms_2015",
-        output_location="C:/Users/Sneezy/Desktop/EFS/"
+        output_location="C:/Users/Sneezy/Desktop/NorMITs_Demand/"
     )
 
 
