@@ -5,19 +5,21 @@ Created on Wed Jun 17 11:50:10 2020
 @author: tyu2
 """
 
-# import os
 # import sys
+
+import os
 
 import numpy as np
 import pandas as pd
 
+import pa_to_od as pa2od
 from demand_utilities import tms_utils as dut
 
 # distribution files location
 home_path = 'Y:/EFS/'
 lookup_path = home_path + 'inputs/default/import/'
 import_path = home_path + 'inputs/default/tp_pa/'
-pa_export_path = "C:/Users/Sneezy/Desktop/NorMITs_Demand/"
+pa_export_path = "C:/Users/Sneezy/Desktop/NorMITs_Demand/nhb_dev"
 nhb_production_location = home_path + 'inputs/distributions/'
 
 model_name = 'norms'
@@ -26,13 +28,13 @@ model_name = 'norms'
 # needed lists
 purposes_needed = [
             1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            # 7,
-            8,
+            # 2,
+            # 3,
+            # 4,
+            # 5,
+            # 6,
+            # # 7,
+            # 8,
             ]
 modes_needed = [
             1,
@@ -75,7 +77,7 @@ car_availabilities_needed = [
             2,
             ]
 year_string_list = [
-            # 2018,
+            2018,
             2033,
             ]
 
@@ -135,6 +137,7 @@ year_string_list = [
 
 #     return(init_params)
 
+
 def build_tp_pa(
         # init_params,
                 model_name,
@@ -154,19 +157,23 @@ def build_tp_pa(
                 # arrivals = True,
                 # arrival_export = None,
                 write = True):
-    
+
+    # loop Init
     matrix_totals_dictionary = {}
+    out_tp_pa_dir = os.path.join(pa_export, 'PA Matrices')
+    dut.create_folder(out_tp_pa_dir, chDir=False)
     
     for year in year_string_list:
+        print("\nYear: %s" % str(year))
         for purpose in required_purposes:
             # TODO: How to allocate tp to NHB            
             if purpose in (12, 13, 14, 15, 16, 18):
                 trip_origin = 'nhb'
                 print('NHB run')
                 model_zone = 'o_zone'
-                tp_split = pd.read_csv(
+                tp_split = pd.read_csv(os.path.join(
                     pa_import + 'export_nhb_productions_norms.csv'
-                ).rename({
+                )).rename({
                     'norms_zone_id': 'p_zone',
                     'p': 'purpose_id',
                     'm': 'mode_id',
@@ -180,122 +187,117 @@ def build_tp_pa(
                 
                 trip_origin = 'hb'
                 print('HB run')
-                tp_split = pd.read_csv(
-                            pa_import + 'export_productions_norms.csv'
-                            ).rename(columns = {
-                                    'norms_zone_id':'p_zone',
-                                    'p': 'purpose_id',
-                                    'm': 'mode_id',
-                                    'soc': 'soc_id',
-                                    'ns': 'ns_id',
-                                    'ca': 'car_availability_id'
-                                        }
-                                    )
+                tp_split = pd.read_csv(os.path.join(
+                    pa_import + 'export_productions_norms.csv'
+                )).rename(
+                    columns={
+                        'norms_zone_id': 'p_zone',
+                        'p': 'purpose_id',
+                        'm': 'mode_id',
+                        'soc': 'soc_id',
+                        'ns': 'ns_id',
+                        'ca': 'car_availability_id'
+                    }
+                )
                 model_zone = 'p_zone'                
             else:                                
                 required_segments = ns_needed
                 segment_text = "_ns"
                 trip_origin = 'hb'
                 print('HB run')
-                tp_split = pd.read_csv(
+                tp_split = pd.read_csv(os.path.join(
                     pa_import + 'export_productions_norms.csv'
-                ).rename(
+                )).rename(
                     columns={
-                        'purpose': 'purpose_id',
-                        'mode': 'mode_id',
-                        'employment_type': 'soc_id',
-                        'age': 'ns_id',
-                        'car_availability': 'car_availability_id'}
+                        'norms_zone_id': 'p_zone',
+                        'p': 'purpose_id',
+                        'm': 'mode_id',
+                        'soc': 'soc_id',
+                        'ns': 'ns_id',
+                        'ca': 'car_availability_id'
+                    }
                 )
                 model_zone = 'p_zone'                
 
-            for mode in required_modes:                
-                for segment in required_segments:                
+            for mode in required_modes:
+                print("\tMode: %s" % str(mode))
+                for segment in required_segments:
+                    print("\t\tSegment: %s" % str(segment))
                     for car_availability in required_car_availabilities:
-                        productions = pd.read_csv(pa_export_path + "24hr PA Matrices/"
-                                                  + 
-                                                  "hb_pa"
-                                                  +
-                                                  "_yr"
-                                                  +
-                                                  str(year)
-                                                  +
-                                                  "_p"
-                                                  +
-                                                  str(purpose)
-                                                  +
-                                                  "_m"
-                                                  +
-                                                  str(mode)
-                                                  +
-                                                  segment_text
-                                                  +
-                                                  str(segment)
-                                                  +
-                                                  "_ca"
-                                                  +
-                                                  str(car_availability)
-                                                  +
-                                                  ".csv"
-                                                  ) 
-   
-                        tp_pa_path = (pa_export + 'PA Matrices/' + trip_origin + '_pa_yr' + str(year))
-                    
+                        productions_fname = get_dist_name(
+                            'hb',
+                            'pa',
+                            str(year),
+                            str(purpose),
+                            str(mode),
+                            str(segment),
+                            str(car_availability),
+                            csv=True
+                        )
+                        productions = pd.read_csv(os.path.join(
+                            pa_export_path,
+                            "24hr PA Matrices",
+                            productions_fname
+                        ))
+
                         matrix_totals = []
-                        compile_params = {}
-                        #     for ds in distribution_segments:
-                        #         calib_params.update({ds:init_params[ds][tp_pa]})
-                        #         print(calib_params)
                         tp_split['p_zone'] = tp_split['p_zone'].astype(int)
                         productions['purpose_id'] = purpose
                         productions['mode_id'] = mode
+                        productions['car_availability_id'] = car_availability
                         if purpose in [1, 2]:
-                            productions['soc_id'] = segment
+                            productions['soc_id'] = str(segment)
                             productions['ns_id'] = 'none'
                         else:
                             productions['soc_id'] = 'none'
-                            productions['ns_id'] = segment
-                        
-                        print(tp_split)
-                        print()
-                        print(productions)
-                        print()
-                        p_subset = tp_split.copy()
-                        p_subset = productions.merge(
-                            p_subset,
-                            on=['p_zone',
-                                'purpose_id',
-                                'mode_id',
-                                'soc_id',
-                                'ns_id',
-                                'car_availability_id']
-                        )
+                            productions['ns_id'] = str(segment)
 
-                        # This won't work if there are duplicates
-                        p_totals = p_subset.reindex(
-                            [model_zone, 'trips'], axis=1).groupby(
-                                model_zone).sum().reset_index()
-                        p_totals = p_totals.rename(columns={'trips':'p_totals'})
-                        tp_totals = p_subset.reindex(
-                            [model_zone,
-                             'tp',
-                             'trips'], axis=1).groupby(
-                                 [model_zone, 'tp']).sum().reset_index()
-                        time_splits = tp_totals.merge(p_totals,
-                                                      how='left',
-                                                      on=[model_zone])
-                        time_splits['time_split'] = (time_splits['trips']/
-                                    time_splits['p_totals'])
-                        time_splits = time_splits.drop(['p_totals'], axis=1)
+                        # Total productions in each zone
+                        p_totals = productions.reindex(
+                            [model_zone, 'trips'],
+                            axis=1
+                        ).groupby(model_zone).sum().reset_index()
+                        p_totals = p_totals.rename(columns={'trips': 'p_totals'})
+
+                        # Total tp split productions in each zone
+                        tp_totals = tp_split.reindex(
+                            [model_zone, 'tp', 'trips'],
+                            axis=1
+                        ).groupby(
+                             [model_zone, 'tp']).sum().reset_index()
+
+                        # Calculate the time split factors for each zone
+                        time_splits = pd.merge(
+                            tp_totals,
+                            p_totals,
+                            how='left',
+                            on=[model_zone])
+                        # mask = time_splits['p_zone'].isin([259, 267, 268, 270, 275])
+
+                        unq_zone = time_splits[model_zone].drop_duplicates()
+                        for zone in unq_zone:
+                            zone_mask = (time_splits[model_zone] == zone)
+                            time_splits.loc[zone_mask, 'time_split'] = (
+                                time_splits[zone_mask]['trips'].values
+                                /
+                                time_splits[zone_mask]['trips'].sum()
+                            )
+                        time_splits = time_splits.reindex(
+                            [model_zone, 'tp', 'time_split'],
+                            axis=1
+                        )
                         
                         # Apply time period
                         unq_time = time_splits['tp'].drop_duplicates()           
                         for time in unq_time:
-                            print('tp' + str(time))
+                            # print('tp' + str(time))
                             time_factors = time_splits.loc[time_splits['tp'] == time]           
-                            gb_tp = productions.merge(time_factors,
-                                                            # how='left',
-                                                      on=[model_zone])
+                            gb_tp = pd.merge(
+                                productions,
+                                time_factors,
+                                on=[model_zone]
+                            ).rename(columns={'trips': 'dt'})
+
                             gb_tp['dt'] = gb_tp['dt'] * gb_tp['time_split']
                             gb_tp = gb_tp.groupby([
                                 "p_zone",
@@ -306,7 +308,8 @@ def build_tp_pa(
                                 "soc_id",
                                 "ns_id",
                                 "tp"
-                                ])["dt"].sum().reset_index()
+                            ])["dt"].sum().reset_index()
+
                                 # productions = productions.drop([model_zone,'trips','time_split'], axis=1)
                                 
                                 # gb_tp = all_zone_ph * time_factors
@@ -317,28 +320,33 @@ def build_tp_pa(
                                 #     arrivals_mat = pd.DataFrame(all_zone_ph[model_zone])
                                 #     arrivals_mat['arrivals'] = arrivals_np
                                     
-                                #     arrivals_write_path = nup.build_path(arrivals_path,
+                                #     arrivals_write_path = dut.build_path(arrivals_path,
                                 #                                          calib_params,
                                 #                                          tp=time)
                     
-                            # Build write paths
-                            out_tp_pa_path = tp_pa_path + (
-                                                '_p' + str(purpose)
-                                                +
-                                                '_m' + str(mode)
-                                                +
-                                                str(segment_text) + str(segment) 
-                                                + 
-                                                '_ca' + str(car_availability)
-                                                )
-                            out_tp_pa = out_tp_pa_path
-                            if time:
-                                out_tp_pa_path += ('_tp' + str(time))
-                            out_tp_pa_path += '.csv'
-                    
-                            print(out_tp_pa_path)
-                    
-                            compile_params.update({'hb_export_path':out_tp_pa_path})
+                            # Build write path
+                            tp_pa_name = get_dist_name(
+                                str(trip_origin),
+                                'pa',
+                                str(year),
+                                str(purpose),
+                                str(mode),
+                                str(segment),
+                                str(car_availability),
+                                tp=str(time)
+                            )
+                            tp_pa_fname = tp_pa_name + '.csv'
+                            out_tp_pa_path = os.path.join(
+                                out_tp_pa_dir,
+                                tp_pa_fname
+                            )
+
+                            # Convert table from long to wide format
+                            gb_tp = gb_tp.pivot_table(
+                                index='p_zone',
+                                columns='a_zone',
+                                values='dt'
+                            )
                     
                             if write:
                                 # Define write path
@@ -348,20 +356,17 @@ def build_tp_pa(
                                         #                      columns=all_zone_ph[
                                         #                              'p_zone']).reset_index()
                     
-                                    gb_tp.to_csv(out_tp_pa_path,
-                                                      index=False)
+                                    gb_tp.to_csv(out_tp_pa_path)
                                     
                                     # if arrivals:
                                     #     # Write arrivals anyway
                                     #     arrivals_mat.to_csv(arrivals_write_path,
                                     #                         index=False)
-                            matrix_totals.append(gb_tp)                           
-                            gb_tp = gb_tp.iloc[0:0]
+                            matrix_totals.append(gb_tp)
                             
-                            matrix_totals_dictionary[out_tp_pa] = matrix_totals                           
-           
-    # matrix_totals_dict = matrix_totals
-    return(matrix_totals_dictionary)
+                            matrix_totals_dictionary[tp_pa_name] = matrix_totals
+
+    return matrix_totals_dictionary
 
 def build_od(pa_matrix_dictionary,
              lookup_folder,
@@ -817,6 +822,42 @@ def nhb_furness(
                             print(("NHB Distribution " + final_nhb_distribution_dict + " complete!"))
 
 
+# TODO: Import from original efs
+def get_dist_name(trip_origin: str,
+                  matrix_format: str,
+                  year: str,
+                  purpose: str,
+                  mode: str,
+                  segment: str,
+                  car_availability: str,
+                  tp: str = None,
+                  csv: bool = False
+                  ) -> str:
+    """
+    Generates the distribution name
+    """
+    seg_name = "soc" if purpose in ['1', '2'] else "ns"
+
+    name_parts = [
+        trip_origin,
+        matrix_format,
+        "yr" + year,
+        "p" + purpose,
+        "m" + mode,
+        seg_name + segment,
+        "ca" + car_availability
+    ]
+
+    if tp is not None:
+        name_parts += ["tp" + tp]
+
+    final_name = '_'.join(name_parts)
+    if csv:
+        final_name += '.csv'
+
+    return final_name
+
+
 def main():
     # init_params = get_init_params(
     #     import_path,
@@ -824,6 +865,22 @@ def main():
     #     distribution_type = 'hb',
     #     mode_subset = None,
     #     purpose_subset = None)
+
+    # TODO: Integrate into TMS
+    # output = pa2od.build_tp_pa(
+    #     file_drive='Y:/',
+    #     model_name='norms',
+    #     iteration='iter1',
+    #     distribution_segments=['p', 'm'],
+    #     internal_input='efs',
+    #     external_input='efs',
+    #     normits_tool='demand',
+    #     write_modes=[1, 2, 3, 5, 6],
+    #     arrivals=False,
+    #     export_24hr=False,
+    #     arrival_export=None,
+    #     write=True
+    # )
 
     matrix_totals = build_tp_pa(
         # init_params,

@@ -10,9 +10,10 @@ import warnings
 import pandas as pd
 import numpy as np # Here we go
 
-import matrix_processing as mp
+# TODO: Integrate TMS properly
+# import matrix_processing as mp
 
-import utils as nup # Folder management, reindexing, optimisation
+from demand_utilities import tms_utils as dut  # Folder management, reindexing, optimisation
 
 _default_lookup_folder = 'Y:/NorMITs Synthesiser/import/phi_factors'
 
@@ -47,11 +48,13 @@ def init(movements, # TBC
     return(None)
 """
 
+
 def path_config(file_drive,
                 model_name,
                 iteration,
                 internal_input,
-                external_input):
+                external_input,
+                normits_tool='synthesiser'):
     
     
     """
@@ -77,9 +80,18 @@ def path_config(file_drive,
     [1] exports:
         Paths to all Synthesiser output parameters
     """
+    # TODO: Properly integrate this once TMS is merged into NorMITs Demand
+    # Choose the NorMITs Tool Name
+    if normits_tool == 'synthesiser':
+        normits_tool_name = 'NorMITs Synthesiser'
+    elif normits_tool == 'demand':
+        normits_tool_name = 'NorMITs Demand'
+    else:
+        raise ValueError("'%s' is not a valid normits_tool."
+                         % str(normits_tool))
 
     # Set base dir
-    home_path = os.path.join(file_drive, 'NorMITs Synthesiser')
+    home_path = os.path.join(file_drive, normits_tool_name)
 
     # Set synth import folder
     import_path = os.path.join(home_path, 'import')
@@ -110,41 +122,57 @@ def path_config(file_drive,
 
     # Raise user warning if no productions by this name
     if not os.path.exists(p_import_path):
-        warnings.warn('No productions in folder.' +
-                      'Check path or run production model')
+        warnings.warn('No productions in folder. '
+                      'Check path or run production model.')
 
     # Create project folders
     distribution_path = os.path.join(model_path, 'Distribution Outputs')
-    nup.create_folder(distribution_path, chDir=False)
-
-    fusion_path = os.path.join(model_path, 'Fusion Outputs')
-    nup.create_folder(fusion_path, chDir=False)
-
-    summary_matrix_import = os.path.join(distribution_path, '24hr PA Distributions')
+    dut.create_folder(distribution_path, chDir=False)
 
     external_import = os.path.join(distribution_path,
                                    'External Distributions')
 
+    # Set synthetic imports
+    summary_matrix_import = os.path.join(distribution_path, '24hr PA Distributions')
+
     synth_pa_export = os.path.join(distribution_path, 'PA Matrices')
-    nup.create_folder(synth_pa_export, chDir=False)
+    dut.create_folder(synth_pa_export, chDir=False)
 
     synth_pa_export_24 = os.path.join(distribution_path, 'PA Matrices 24hr')
-    nup.create_folder(synth_pa_export_24, chDir=False)
+    dut.create_folder(synth_pa_export_24, chDir=False)
 
     synth_od_export = os.path.join(distribution_path, 'OD Matrices')
-    nup.create_folder(synth_od_export, chDir=False)
+    dut.create_folder(synth_od_export, chDir=False)
 
     # Set fusion exports
+    fusion_path = os.path.join(model_path, 'Fusion Outputs')
+    dut.create_folder(fusion_path, chDir=False)
+
     fusion_summary_import = os.path.join(fusion_path, '24hr Fusion PA Distributions')
 
     fusion_pa_export = os.path.join(fusion_path, 'Fusion PA Matrices')
-    nup.create_folder(fusion_pa_export, chDir=False)
+    dut.create_folder(fusion_pa_export, chDir=False)
 
     fusion_pa_export_24 = os.path.join(fusion_path, 'Fusion PA Matrices 24hr')
-    nup.create_folder(fusion_pa_export_24, chDir=False)
+    dut.create_folder(fusion_pa_export_24, chDir=False)
 
     fusion_od_export = os.path.join(fusion_path, 'Fusion OD Matrices')
-    nup.create_folder(fusion_od_export, chDir=False)
+    dut.create_folder(fusion_od_export, chDir=False)
+
+    # TODO: Properly integrate EFS into this code
+    # set efs exports
+    # efs_path = os.path.join(model_path, 'EFS Outputs')
+    #
+    # efs_summary_import = os.path.join(efs_path, '24hr PA Distributions')
+    #
+    # efs_pa_export = os.path.join(efs_path, 'PA Matrices')
+    # dut.create_folder(efs_pa_export, chDir=False)
+    #
+    # efs_pa_export_24 = os.path.join(efs_path, 'PA Matrices 24hr')
+    # dut.create_folder(efs_pa_export_24, chDir=False)
+    #
+    # efs_od_export = os.path.join(efs_path, 'OD Matrices')
+    # dut.create_folder(efs_od_export, chDir=False)
 
     if internal_input == 'synthetic':
         internal_import = summary_matrix_import
@@ -158,6 +186,15 @@ def path_config(file_drive,
         pa_export = fusion_pa_export
         pa_export_24 = fusion_pa_export_24
         od_export = fusion_od_export
+    # elif internal_input == 'efs':
+    #     internal_import = efs_summary_import
+    #     print('Picking up from efs internal')
+    #     pa_export = efs_pa_export
+    #     pa_export_24 = efs_pa_export_24
+    #     od_export = efs_od_export
+    else:
+        raise ValueError("%s is not a valid internal_input value."
+                         % str(internal_input))
 
     # Compile into import and export
     imports = {'imports': import_path,
@@ -170,7 +207,16 @@ def path_config(file_drive,
 
     exports = {'pa': pa_export,
                'pa_24': pa_export_24,
-               'od':od_export}
+               'od': od_export}
+
+    io = imports.copy()
+    io.update(exports)
+
+    for k, v in io.items():
+        print(k, '\t', v)
+        print(os.path.exists(v))
+        print()
+    exit()
 
     return imports, exports
 
@@ -179,17 +225,19 @@ def path_config(file_drive,
 # TODO: Object layer
 # TODO: All writes as square format - for speed
 
-def build_tp_pa(file_drive = _default_file_drive,
-                model_name = _default_model_name,
-                iteration = _default_iteration,
-                distribution_segments = ['p', 'm'],
-                internal_input = 'synthetic',
-                external_input = 'synthetic',
-                write_modes = [1,2,3,5,6],
-                arrivals = False,
-                export_24hr = False,
-                arrival_export = None,
-                write = True):
+
+def build_tp_pa(file_drive=_default_file_drive,
+                model_name=_default_model_name,
+                iteration=_default_iteration,
+                distribution_segments=['p', 'm'],
+                internal_input='synthetic',
+                external_input='synthetic',
+                normits_tool='synthesiser',
+                write_modes=[1, 2, 3, 5, 6],
+                arrivals=False,
+                export_24hr=False,
+                arrival_export=None,
+                write=True):
 
     """
     internal_input = 'fusion' or 'synthetic'
@@ -201,12 +249,13 @@ def build_tp_pa(file_drive = _default_file_drive,
                         model_name,
                         iteration,
                         internal_input,
-                        external_input)
+                        external_input,
+                        normits_tool)
     i_paths = paths[0]
     o_paths = paths[1]
 
     # Get init params
-    init_params = nup.get_init_params(i_paths['lookups'],
+    init_params = dut.get_init_params(i_paths['lookups'],
                                       distribution_type='hb',
                                       model_name=model_name,
                                       mode_subset=write_modes,
@@ -216,8 +265,7 @@ def build_tp_pa(file_drive = _default_file_drive,
     productions = pd.read_csv(i_paths['production_import'])
     model_zone = [x for x in list(productions) if model_name.lower() in x][0]
 
-    unq_purpose = init_params['p'].drop_duplicates(
-            ).reset_index(drop=True)
+    unq_purpose = init_params['p'].drop_duplicates().reset_index(drop=True)
 
     # Set import folders
     internal_dir = os.listdir(i_paths['internal'])
@@ -329,7 +377,7 @@ def build_tp_pa(file_drive = _default_file_drive,
         # Export 24hr here if required.
         if export_24hr:
             if write:
-                write_path_24 = nup.build_path(tp_pa_path,
+                write_path_24 = dut.build_path(tp_pa_path,
                                                calib_params)
                 
                 if calib_params['m'] in write_modes:
@@ -381,12 +429,12 @@ def build_tp_pa(file_drive = _default_file_drive,
                     arrivals_mat = pd.DataFrame(all_zone_ph[model_zone])
                     arrivals_mat['arrivals'] = arrivals_np
                 
-                    arrivals_write_path = nup.build_path(arrivals_path,
+                    arrivals_write_path = dut.build_path(arrivals_path,
                                                          calib_params,
                                                          tp=time)
 
                 # Build write paths
-                tp_write_path = nup.build_path(tp_pa_path,
+                tp_write_path = dut.build_path(tp_pa_path,
                                                calib_params,
                                                tp=time)
                 print(tp_write_path)
@@ -439,7 +487,7 @@ def build_od(file_drive = _default_file_drive,
     o_paths = paths[1]
 
     # Get init params
-    init_params = nup.get_init_params(i_paths['lookups'],
+    init_params = dut.get_init_params(i_paths['lookups'],
                                       distribution_type='hb',
                                       model_name=model_name,
                                       mode_subset=export_modes,
@@ -1345,8 +1393,8 @@ def tp_pa_to_od(mainland_gb_pa,
     total_od_to_productions = od_from['dt'].sum()
     print('total od to productions' + str(total_od_to_productions))
 
-    od_from = nup.optimise_data_types(od_from)
-    od_to = nup.optimise_data_types(od_to)
+    od_from = dut.optimise_data_types(od_from)
+    od_to = dut.optimise_data_types(od_to)
 
     arrival_cols = ['o_zone', 'purpose', 'mode', 'time', 'dt']
     arrivals = od_to.reindex(arrival_cols, axis=1).groupby(
@@ -1463,7 +1511,7 @@ def resplit_24hr_pa(model_lookup_path,
 
         print(list(ph_dat))
         # Optimise data types
-        # ph_dat = nup.optimise_data_types(ph_dat)
+        # ph_dat = dut.optimise_data_types(ph_dat)
 
         merge_placeholder.append(ph_dat)
         del(ph_dat)

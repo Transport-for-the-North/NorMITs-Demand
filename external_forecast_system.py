@@ -2047,7 +2047,8 @@ def get_dist_name(trip_origin: str,
                   mode: str,
                   segment: str,
                   car_availability: str,
-                  tp: str = None
+                  tp: str = None,
+                  csv: bool = False
                   ) -> str:
     """
     Generates the distribution name
@@ -2065,12 +2066,13 @@ def get_dist_name(trip_origin: str,
     ]
 
     if tp is not None:
-        name_parts += [
-            "time" + tp,
-            "24hr"
-        ]
+        name_parts += ["tp" + tp]
 
-    return '_'.join(name_parts)
+    final_name = '_'.join(name_parts)
+    if csv:
+        final_name += '.csv'
+
+    return final_name
 
 
 def safe_read_csv(file_path: str,
