@@ -11,11 +11,13 @@ Created on Wed Jun 17 11:50:10 2020
 import numpy as np
 import pandas as pd
 
+from demand_utilities import tms_utils as dut
+
 # distribution files location
 home_path = 'Y:/EFS/'
 lookup_path = home_path + 'inputs/default/import/'
 import_path = home_path + 'inputs/default/tp_pa/'
-export_path = "C:/Users/Sneezy/Desktop/EFS/current_outputs/"
+pa_export_path = "C:/Users/Sneezy/Desktop/NorMITs_Demand/"
 nhb_production_location = home_path + 'inputs/distributions/'
 
 model_name = 'norms'
@@ -158,20 +160,20 @@ def build_tp_pa(
     for year in year_string_list:
         for purpose in required_purposes:
             # TODO: How to allocate tp to NHB            
-            if purpose in (12,13,14,15,16,18):
+            if purpose in (12, 13, 14, 15, 16, 18):
                 trip_origin = 'nhb'
                 print('NHB run')
                 model_zone = 'o_zone'
                 tp_split = pd.read_csv(
                     pa_import + 'export_nhb_productions_norms.csv'
-                    ).rename({
-                        'norms_zone_id':'p_zone',
-                        'p': 'purpose_id',
-                        'm': 'mode_id',
-                        'soc': 'soc_id',
-                        'ns': 'ns_id',
-                        'ca': 'car_availability_id'
-                        })
+                ).rename({
+                    'norms_zone_id': 'p_zone',
+                    'p': 'purpose_id',
+                    'm': 'mode_id',
+                    'soc': 'soc_id',
+                    'ns': 'ns_id',
+                    'ca': 'car_availability_id'
+                    })
             elif purpose in (1,2):
                 required_segments = soc_needed
                 segment_text = "_soc"
@@ -196,22 +198,21 @@ def build_tp_pa(
                 trip_origin = 'hb'
                 print('HB run')
                 tp_split = pd.read_csv(
-                            pa_import + 'export_productions_norms.csv'
-                            ).rename(columns = {
-                                    'norms_zone_id':'p_zone',
-                                    'p': 'purpose_id',
-                                    'm': 'mode_id',
-                                    'soc': 'soc_id',
-                                    'ns': 'ns_id',
-                                    'ca': 'car_availability_id'
-                                        }
-                                    )
+                    pa_import + 'export_productions_norms.csv'
+                ).rename(
+                    columns={
+                        'purpose': 'purpose_id',
+                        'mode': 'mode_id',
+                        'employment_type': 'soc_id',
+                        'age': 'ns_id',
+                        'car_availability': 'car_availability_id'}
+                )
                 model_zone = 'p_zone'                
 
             for mode in required_modes:                
                 for segment in required_segments:                
                     for car_availability in required_car_availabilities:
-                        productions = pd.read_csv(export_path + "PA Matrices 24hr/"
+                        productions = pd.read_csv(pa_export_path + "24hr PA Matrices/"
                                                   + 
                                                   "hb_pa"
                                                   +
@@ -221,7 +222,7 @@ def build_tp_pa(
                                                   +
                                                   "_p"
                                                   +
-                                                  str(purpose)                                    
+                                                  str(purpose)
                                                   +
                                                   "_m"
                                                   +
@@ -230,7 +231,7 @@ def build_tp_pa(
                                                   segment_text
                                                   +
                                                   str(segment)
-                                                  +                                    
+                                                  +
                                                   "_ca"
                                                   +
                                                   str(car_availability)
@@ -246,16 +247,29 @@ def build_tp_pa(
                         #         calib_params.update({ds:init_params[ds][tp_pa]})
                         #         print(calib_params)
                         tp_split['p_zone'] = tp_split['p_zone'].astype(int)
-                        productions['soc_id'] = productions['soc_id'].astype(str)
-                        productions['ns_id'] = productions['ns_id'].astype(str)
+                        productions['purpose_id'] = purpose
+                        productions['mode_id'] = mode
+                        if purpose in [1, 2]:
+                            productions['soc_id'] = segment
+                            productions['ns_id'] = 'none'
+                        else:
+                            productions['soc_id'] = 'none'
+                            productions['ns_id'] = segment
                         
-                        # print(tp_split.dtypes)
-                        # print(productions.dtypes)
+                        print(tp_split)
+                        print()
+                        print(productions)
+                        print()
                         p_subset = tp_split.copy()
-                        p_subset = productions.merge(p_subset,on=[
-                                'p_zone', 'purpose_id', 'mode_id', 'soc_id', 'ns_id', 'car_availability_id'      
-                                ]
-                                )
+                        p_subset = productions.merge(
+                            p_subset,
+                            on=['p_zone',
+                                'purpose_id',
+                                'mode_id',
+                                'soc_id',
+                                'ns_id',
+                                'car_availability_id']
+                        )
 
                         # This won't work if there are duplicates
                         p_totals = p_subset.reindex(
@@ -324,7 +338,7 @@ def build_tp_pa(
                     
                             print(out_tp_pa_path)
                     
-                            compile_params.update({'export_path':out_tp_pa_path})
+                            compile_params.update({'hb_export_path':out_tp_pa_path})
                     
                             if write:
                                 # Define write path
@@ -635,86 +649,71 @@ def nhb_furness(
     for year in year_string_list:
         for purpose in required_nhb_purposes:
             for mode in required_nhb_modes:
-             # select needed nhb_production
+                # select needed nhb_production
                 nhb_production = production_dictionary[year]
                 nhb_production = nhb_production.loc[nhb_production["nhb_p"] == purpose]
                 nhb_production = nhb_production.loc[nhb_production["nhb_m"] == mode]
                 
-                #read in nhb_distribution
-                nhb_distribution = pd.read_csv(
+                # read in nhb_dist
+                nhb_dist = pd.read_csv(
                     nhb_distribution_file_location
                     +
-                    ("PA Matrices 24hr/nhb_pa_p"
-                     +
-                     str(purpose)
-                     +
-                     "_m"
-                     +
-                     str(mode)
-                     +
-                     ".csv"
-                        ))
-                # wide to long
-                nhb_distribution = nhb_distribution.melt(
-                id_vars=['o_zone'], 
-                var_name='d_zone', value_name='seed_values'
+                    ("24hr PA Matrices/nhb_pa_p%s_m%s.csv" %
+                     (str(purpose), str(mode)))
+                )
+
+                # convert from wide to long format
+                nhb_dist = nhb_dist.melt(
+                    id_vars=['o_zone'],
+                    var_name='d_zone', value_name='seed_values'
                 )
     
-                nhb_distribution['d_zone'] = nhb_distribution['d_zone'].astype(int)   
+                nhb_dist['d_zone'] = nhb_dist['d_zone'].astype(int)
                  
-                #TODO
-                ## @@MSP / TY - NEED TO REMOVE FROM FINAL VERSION!!                                         
-                nhb_distribution = nhb_distribution[nhb_distribution['o_zone'].isin([259,267,268,270,275,1171,1173])]
-                nhb_distribution = nhb_distribution[nhb_distribution['d_zone'].isin([259,267,268,270,275,1171,1173])]                        
+                # TODO
+                #  @@MSP / TY - NEED TO REMOVE FROM FINAL VERSION!!
+                nhb_dist = nhb_dist[nhb_dist['o_zone'].isin([259, 267, 268, 270, 275, 1171, 1173])]
+                nhb_dist = nhb_dist[nhb_dist['d_zone'].isin([259, 267, 268, 270, 275, 1171, 1173])]
                  
                 # set distribution zones for checks             
-                nhb_distribution_zones = set(
-                    nhb_distribution[
-                        "o_zone"
-                        ].tolist()
-                    )
+                nhb_distribution_zones = set(nhb_dist["o_zone"].tolist())
+
                 # set production zones for checks                          
-                nhb_production_zones = set(                
-                    nhb_production[
-                        "a_zone"
-                        ].tolist()
-                    )
+                nhb_production_zones = set(nhb_production["a_zone"].tolist())
                
-                if (replace_zero_values):                
+                if replace_zero_values:
                     # fill zero values
-                    nhb_distribution.loc[
-                        nhb_distribution["seed_values"] == 0,
-                        "seed_values"
-                        ] = zero_replacement_value
+                    nhb_dist.loc[nhb_dist["seed_values"] == 0, "seed_values"] = \
+                        zero_replacement_value
                 
                 # divide seed values by total on p_zone to get percentages
-                nhb_distribution_total = nhb_distribution.groupby(
-                    "o_zone")["seed_values"].sum().reset_index().rename(columns={
-                        "seed_values": "seed_total"
-                            })
-                nhb_distribution = nhb_distribution.merge(nhb_distribution_total, on=
-                                                          "o_zone")
-                nhb_distribution["seed_values"] = nhb_distribution["seed_values"] / nhb_distribution["seed_total"]
+                nhb_dist_total = nhb_dist.groupby(
+                    "o_zone"
+                )["seed_values"].sum().reset_index().rename(
+                    columns={"seed_values": "seed_total"}
+                )
+                nhb_dist = nhb_dist.merge(nhb_dist_total, on="o_zone")
+                nhb_dist["seed_values"] = nhb_dist["seed_values"] / nhb_dist["seed_total"]
                      
                 # for zone in nhb_distribution_zones:
                 #     # divide seed values by total on p_zone to get
                 #     # percentages
-                #     zone_mask = (nhb_distribution["o_zone"] == zone)
-                #     nhb_distribution.loc[
+                #     zone_mask = (nhb_dist["o_zone"] == zone)
+                #     nhb_dist.loc[
                 #             zone_mask,
                 #             "seed_values"
                 #         ] = (
-                #             nhb_distribution[
+                #             nhb_dist[
                 #                     zone_mask
                 #                     ]["seed_values"].values
                 #             /
-                #             nhb_distribution[
+                #             nhb_dist[
                 #                     zone_mask
                 #                     ]["seed_values"].sum()
                 #             )
-                 # grouped = nhb_distribution.groupby("o_zone")["seed_values"].sum().reset_index()  
+                 # grouped = nhb_dist.groupby("o_zone")["seed_values"].sum().reset_index()
                             
-                nhb_furnessed_frame = nhb_distribution.merge(
+                nhb_furnessed_frame = nhb_dist.merge(
                     nhb_production, left_on="o_zone", right_on="a_zone")
                 # calculate NHB distribution  
                 nhb_furnessed_frame["dt"] = nhb_furnessed_frame["seed_values"] * nhb_furnessed_frame["nhb_dt"]
@@ -817,9 +816,6 @@ def nhb_furness(
                             final_nhb_distribution.to_csv(nhb_distribution_output_location + final_nhb_distribution_dict, index=False)
                             print(("NHB Distribution " + final_nhb_distribution_dict + " complete!"))
 
-                        
-    return () 
-
 
 def main():
     # init_params = get_init_params(
@@ -840,20 +836,20 @@ def main():
         required_car_availabilities = car_availabilities_needed,
         year_string_list = year_string_list,
         # distribution_segments = ['p', 'm'],
-        # internal_import = export_path + 'summaries',
-        # external_import = export_path + 'external',
+        # internal_import = hb_export_path + 'summaries',
+        # external_import = hb_export_path + 'external',
         pa_import = import_path,
-        pa_export = export_path,
+        pa_export = pa_export_path,
         write_modes = [1,2,3,5,6],
         # arrivals = True,
-        # arrival_export = (export_path + 'arrival_export' + '/arrivals'),
+        # arrival_export = (hb_export_path + 'arrival_export' + '/arrivals'),
         write = True)
     print('Transposed HB PA to tp PA')
 
     phi_factors = build_od(
         pa_matrix_dictionary = matrix_totals,
         lookup_folder = lookup_path,
-        od_export = export_path + "OD Matrices/",
+        od_export =pa_export_path + "OD Matrices/",
         aggregate_to_wday = True
         )
 
@@ -865,7 +861,7 @@ def main():
         required_car_availabilities = car_availabilities_needed,
         year_string_list = year_string_list,
         # distribution_dataframe_dict = distributions,
-        nhb_production_file_location = export_path + "forArrivals/",
+        nhb_production_file_location =pa_export_path + "forArrivals/",
         )
 
     final_nhb_distribution = nhb_furness(
@@ -877,10 +873,11 @@ def main():
         required_ns = ns_needed,
         year_string_list = year_string_list,
         nhb_distribution_file_location = nhb_production_location,
-        nhb_distribution_output_location = export_path + "OD Matrices 24hr/",
+        nhb_distribution_output_location =pa_export_path + "OD Matrices 24hr/",
         zero_replacement_value = 0.01,
         replace_zero_values = True
         )
 
-if __name__ =='__main__':
+
+if __name__ == '__main__':
     main()

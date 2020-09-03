@@ -127,16 +127,12 @@ def furness(productions: pd.DataFrame,
                 )
         )
 
-    # if we need to replace zero values
     if replace_zero_values:
-        # fill zero values
         zero_seed_mask = (distributions["seed_values"] == 0)
         distributions.loc[zero_seed_mask, "seed_values"] = zero_replacement_value
 
-    # for each zone
+    # Get percentage of productions in each p_zone
     for zone in distribution_zones:
-        # divide seed values by total on p_zone to get
-        # percentages
         zone_mask = (distributions["p_zone"] == zone)
         distributions.loc[zone_mask, "seed_values"] = (
                 distributions[zone_mask]["seed_values"].values
@@ -144,30 +140,25 @@ def furness(productions: pd.DataFrame,
                 distributions[zone_mask]["seed_values"].sum()
         )
 
-    # set up furnessed_frame and first_iteration flag
+    # Loop Init
     furnessed_frame = distributions.copy()
-
     furnessed_frame["production_forecast"] = 0
     furnessed_frame["attraction_forecast"] = 0
 
     for zone in production_zones:
-        # Copy the production values for this zone into furnessed frame
-        p_zone_mask = furnessed_frame["p_zone"] == zone
+        # Copy the production values into furnessed_frame
+        p_zone_mask = (furnessed_frame["p_zone"] == zone)
         furnessed_frame.loc[p_zone_mask, "production_forecast"] = (
-            productions[
-                productions["model_zone_id"] == zone
-                ][
+            productions[productions["model_zone_id"] == zone][
                 "production_forecast"
             ].values[0]
         )
 
-        # Copy the attraction values for this zone into furnessed frame
+        # Copy the attraction values into furnessed_frame
         a_zone_mask = (furnessed_frame["a_zone"] == zone)
         furnessed_frame.loc[a_zone_mask, "attraction_forecast"] = (
-            attractions[
-                attractions["model_zone_id"] == zone
-                ][
-                "attraction_forecast"
+            attractions[attractions["model_zone_id"] == zone][
+            "attraction_forecast"
             ].values[0]
         )
 
@@ -190,6 +181,9 @@ def furness(productions: pd.DataFrame,
         /
         2
     )
+
+    # print(furnessed_frame)
+    # exit()
 
     # Calculate the total production of each zone
     production_zone_total = furnessed_frame[["p_zone", "dt"]].groupby(

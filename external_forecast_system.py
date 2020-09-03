@@ -223,7 +223,7 @@ class ExternalForecastSystem:
         Parameters
         ----------
         base_year:
-            This is the base year used for rebalancing growth and constraint
+            This is the base year used for re-balancing growth and constraint
             metrics. Used throughout the program.
             Default input is: 2018
             Possible input is any integer between 2011 to 2051.
@@ -323,6 +323,19 @@ class ExternalForecastSystem:
             Default input is: [1, 2, 3, 4, 5, 6, 7, 8]
             Possible input is a list containing integers corresponding to the
             purpose IDs.
+
+        soc_needed:
+            TODO: What is soc/ns in words?
+            What soc are needed on distribution.
+            Default input is: [0, 1, 2, 3]
+            Possible input is a list containing integers corresponding to the
+            soc IDs.
+
+        ns_needed:
+            What ns are needed on distribution.
+            Default input is: [1, 2, 3, 4, 5]
+            Possible input is a list containing integers corresponding to the
+            ns IDs.
 
         car_availabilities_needed:
             What car availabilities are needed on distribution.
@@ -498,7 +511,6 @@ class ExternalForecastSystem:
 
         # Integrate alternate inputs if given
         if all(x is not None for x in alternate_inputs):
-
             print("Need to integrate alternative assumptions.")
             print("Integrating alternate assumptions...")
             # # ALTERNATE ASSUMPTION INTEGRATION # #
@@ -508,10 +520,8 @@ class ExternalForecastSystem:
                 alternate_worker_base_year_file,
                 alternate_population_growth_assumption_file,
                 alternate_households_growth_assumption_file,
-                alternate_worker_growth_assumption_file,
-                base_year_pop_cols,
-                base_year_hh_cols
-            )
+                alternate_worker_growth_assumption_file, base_year_pop_cols,
+                base_year_hh_cols)
 
             population_values = integrated_assumptions[0][base_year_pop_cols]
             households_values = integrated_assumptions[1][base_year_hh_cols]
@@ -686,7 +696,7 @@ class ExternalForecastSystem:
 
         elif constraint_source == "grown base":
             print("Constraint 'grown base' source selected, growing given "
-                  + "base by default growth factors...")
+                  "base by default growth factors...")
             population_constraint = self.population_growth[pop_cols].copy()
 
             population_constraint = self.convert_growth_off_base_year(
@@ -694,12 +704,10 @@ class ExternalForecastSystem:
                 str(base_year),
                 year_list
             )
-            population_constraint = self.get_grown_values(
-                population_values,
-                population_constraint,
-                "base_year_population",
-                year_list
-            )
+            population_constraint = self.get_grown_values(population_values,
+                                                          population_constraint,
+                                                          "base_year_population",
+                                                          year_list)
 
             households_constraint = self.households_growth[hh_cols].copy()
 
@@ -708,12 +716,10 @@ class ExternalForecastSystem:
                 str(base_year),
                 year_list
             )
-            households_constraint = self.get_grown_values(
-                households_values,
-                households_constraint,
-                "base_year_households",
-                year_list
-            )
+            households_constraint = self.get_grown_values(households_values,
+                                                          households_constraint,
+                                                          "base_year_households",
+                                                          year_list)
 
             worker_constraint = self.worker_growth[emp_cols].copy()
 
@@ -722,12 +728,10 @@ class ExternalForecastSystem:
                 str(base_year),
                 year_list
             )
-            worker_constraint = self.get_grown_values(
-                worker_values,
-                worker_constraint,
-                "base_year_workers",
-                year_list
-            )
+            worker_constraint = self.get_grown_values(worker_values,
+                                                      worker_constraint,
+                                                      "base_year_workers",
+                                                      year_list)
             print("Constraint generated!")
             last_time = current_time
             current_time = time.time()
@@ -802,13 +806,11 @@ class ExternalForecastSystem:
 
         # ## PRODUCTION GENERATION ## #
         print("Generating production...")
-        production_trips = self.production_generation(
-            final_population,
-            self.area_types,
-            trip_rates,
-            car_association,
-            year_list
-        )
+        production_trips = self.production_generation(final_population,
+                                                      self.area_types,
+                                                      trip_rates,
+                                                      car_association,
+                                                      year_list)
 
         production_trips = self.convert_to_average_weekday(
             production_trips,
@@ -821,9 +823,6 @@ class ExternalForecastSystem:
         print("Production generation took: %.2f seconds" %
               (current_time - last_time))
 
-        print("Skipping mode-time splits...")
-        split_production_trips = production_trips
-
         print("Convert traveller type id to car availability id...")
         required_columns = [
             "model_zone_id",
@@ -832,9 +831,8 @@ class ExternalForecastSystem:
             "soc",
             "ns"
         ]
-
         ca_production_trips = self.generate_car_availability(
-            split_production_trips,
+            production_trips,
             car_association,
             year_list,
             required_columns
@@ -1146,150 +1144,154 @@ class ExternalForecastSystem:
             # TODO: Store output files into local storage (class storage)
 
     def integrate_alternate_assumptions(self,
-                                        alt_population_base_year_file: str,
+                                        alt_pop_base_year_file: str,
                                         alt_households_base_year_file: str,
                                         alt_worker_base_year_file: str,
-                                        alt_population_growth_assumption_file: str,
-                                        alt_households_growth_assumption_file: str,
-                                        alt_worker_growth_assumption_file: str,
-                                        base_year_population_columns: List[str],
-                                        base_year_households_columns: List[str]
+                                        alt_pop_growth_file: str,
+                                        alt_households_growth_file: str,
+                                        alt_worker_growth_file: str,
+                                        base_year_pop_cols: List[str],
+                                        base_year_households_cols: List[str]
                                         ) -> List[pd.DataFrame]:
         """
         # TODO
         """
         # ## READ IN ALTERNATE ASSUMPTIONS ## #
-        if alt_population_base_year_file is not None:
-            alternate_population_base_year = pd.read_csv(alt_population_base_year_file)
+        if alt_pop_base_year_file is not None:
+            alt_pop_base_year = pd.read_csv(alt_pop_base_year_file)
         else:
-            alternate_population_base_year = self.population_values.copy()
+            alt_pop_base_year = self.population_values.copy()
 
         if alt_households_base_year_file is not None:
-            alternate_households_base_year = pd.read_csv(alt_households_base_year_file)
+            alt_households_base_year = pd.read_csv(alt_households_base_year_file)
         else:
-            alternate_households_base_year = self.households_values.copy()
+            alt_households_base_year = self.households_values.copy()
 
         if alt_worker_base_year_file is not None:
-            alternate_worker_base_year = pd.read_csv(alt_worker_base_year_file)
+            alt_worker_base_year = pd.read_csv(alt_worker_base_year_file)
         else:
-            alternate_worker_base_year = self.worker_values.copy()
+            alt_worker_base_year = self.worker_values.copy()
 
-        if alt_population_growth_assumption_file is not None:
-            alternate_population_growth = pd.read_csv(alt_population_growth_assumption_file)
+        if alt_pop_growth_file is not None:
+            alt_pop_growth = pd.read_csv(alt_pop_growth_file)
         else:
-            alternate_population_growth = self.population_growth.copy()
+            alt_pop_growth = self.population_growth.copy()
 
-        if alt_households_growth_assumption_file is not None:
-            alternate_households_growth = pd.read_csv(alt_households_growth_assumption_file)
+        if alt_households_growth_file is not None:
+            alt_households_growth = pd.read_csv(alt_households_growth_file)
         else:
-            alternate_households_growth = self.households_growth.copy()
+            alt_households_growth = self.households_growth.copy()
 
-        if alt_worker_growth_assumption_file is not None:
-            alternate_worker_growth = pd.read_csv(alt_worker_growth_assumption_file)
+        if alt_worker_growth_file is not None:
+            alt_worker_growth = pd.read_csv(alt_worker_growth_file)
         else:
-            alternate_worker_growth = self.worker_growth.copy()
+            alt_worker_growth = self.worker_growth.copy()
 
-        ### ZONE TRANSLATION OF ALTERNATE ASSUMPTIONS ###
+        # ## ZONE TRANSLATION OF ALTERNATE ASSUMPTIONS ## #
         # TODO: Maybe allow zone translation, maybe requiring sticking to base
 
-        ### COMBINE BASE & ALTERNATE ASSUMPTIONS ###
-        # alternate population base
-        if alt_population_base_year_file is not None:
-            alternate_population_base_year_zones = alternate_population_base_year["model_zone_id"].values
-            default_population_values = self.population_values[base_year_population_columns].copy()
-            default_population_values.loc[
-                default_population_values["model_zone_id"].isin(alternate_population_base_year_zones),
-                "base_year_population"
-            ] = alternate_population_base_year["base_year_population"].values
+        # ## COMBINE BASE & ALTERNATE ASSUMPTIONS ## #
+        # integrate alternate population base
+        if alt_pop_base_year_file is not None:
+            default_pop_vals = self.population_values[base_year_pop_cols].copy()
 
-            alternate_population_base_year = default_population_values
+            # Create a mask of the overlaps
+            mask = (default_pop_vals["model_zone_id"].isin(
+                alt_pop_base_year["model_zone_id"].values
+            ))
+
+            # Copy alt data into default where they overlap
+            default_pop_vals.loc[
+                mask, "base_year_population"
+            ] = alt_pop_base_year["base_year_population"].values
+
+            alt_pop_base_year = default_pop_vals
 
         # alternate households base
         if alt_households_base_year_file is not None:
-            alternate_households_base_year_zones = alternate_households_base_year["model_zone_id"].values
-            default_households_values = self.households_values[base_year_households_columns].copy()
-            default_households_values.loc[
-                default_households_values["model_zone_id"].isin(alternate_households_base_year_zones),
-                "base_year_population"
-            ] = alternate_households_base_year["base_year_households"].values
+            default_households_values = self.households_values[base_year_households_cols].copy()
 
-            alternate_households_base_year = default_households_values
+            # Create a mask of the overlaps
+            mask = (default_households_values["model_zone_id"].isin(
+                alt_households_base_year["model_zone_id"].values
+            ))
+
+            # Copy alt data into default where they overlap
+            default_households_values.loc[
+                mask,
+                "base_year_population"
+            ] = alt_households_base_year["base_year_households"].values
+
+            alt_households_base_year = default_households_values
 
         # alternate worker base
         if alt_worker_base_year_file is not None:
-            alternate_worker_base_year = pd.read_csv(alt_worker_base_year_file)
-            alternate_worker_base_year_zones = alternate_worker_base_year["model_zone_id"].values
-            default_worker_values = self.worker_values[base_year_population_columns].copy()
+            alt_worker_base_year = pd.read_csv(alt_worker_base_year_file)
+            alternate_worker_base_year_zones = alt_worker_base_year["model_zone_id"].values
+            default_worker_values = self.worker_values[base_year_pop_cols].copy()
             default_worker_values.loc[
                 default_worker_values["model_zone_id"].isin(alternate_worker_base_year_zones),
                 "base_year_population"
-            ] = alternate_worker_base_year["base_year_workers"].values
+            ] = alt_worker_base_year["base_year_workers"].values
 
-            alternate_worker_base_year = default_worker_values
+            alt_worker_base_year = default_worker_values
 
         # alternate population growth
-        if alt_population_growth_assumption_file is not None:
-            alternate_population_growth = pd.read_csv(alt_population_growth_assumption_file)
-            alternate_population_growth_zones = alternate_population_growth["model_zone_id"].values
-            columns = alternate_population_growth.columns[1:].values
+        if alt_pop_growth_file is not None:
+            alt_pop_growth_zones = alt_pop_growth["model_zone_id"].values
+            columns = alt_pop_growth.columns[1:].values
 
             # replacing missing values
-            alternate_population_growth = alternate_population_growth.replace(
-                '*',
-                alternate_population_growth.replace(['*'], [None])
-            )
+            alt_pop_growth = alt_pop_growth.replace('*', None)
 
             for year in columns:
-                alternate_population_growth[year] = alternate_population_growth[year].astype(float)
-                alternate_population_growth[year + "_difference"] = None
+                alt_pop_growth[year] = alt_pop_growth[year].astype(float)
+                alt_pop_growth[year + "_difference"] = None
 
-            default_population_growth = self.population_growth.copy()
+            default_pop_growth = self.population_growth.copy()
 
-            for zone in alternate_population_growth_zones:
+            for zone in alt_pop_growth_zones:
                 for year in columns:
-                    default_value = default_population_growth.loc[
-                        default_population_growth["model_zone_id"] == zone,
+                    default_value = default_pop_growth.loc[
+                        default_pop_growth["model_zone_id"] == zone,
                         year
                     ].values[0]
 
-                    new_value = alternate_population_growth.loc[
-                        alternate_population_growth["model_zone_id"] == zone,
+                    new_value = alt_pop_growth.loc[
+                        alt_pop_growth["model_zone_id"] == zone,
                         year
                     ].values[0]
 
                     difference = new_value - default_value
 
-                    alternate_population_growth.loc[
-                        alternate_population_growth["model_zone_id"] == zone,
+                    alt_pop_growth.loc[
+                        alt_pop_growth["model_zone_id"] == zone,
                         year + "_difference"
                     ] = difference
 
                     if pd.notna(difference):
-                        default_population_growth.loc[
-                            default_population_growth["model_zone_id"] == zone,
-                            year: default_population_growth.columns[-1]
-                        ] = default_population_growth.loc[
-                                default_population_growth["model_zone_id"] == zone,
-                                year: default_population_growth.columns[-1]
+                        default_pop_growth.loc[
+                            default_pop_growth["model_zone_id"] == zone,
+                            year: default_pop_growth.columns[-1]
+                        ] = default_pop_growth.loc[
+                            default_pop_growth["model_zone_id"] == zone,
+                            year: default_pop_growth.columns[-1]
                         ] + difference
 
-            alternate_population_growth = default_population_growth
+            alt_pop_growth = default_pop_growth
 
         # alternate households growth
-        if alt_households_growth_assumption_file is not None:
-            alternate_households_growth = pd.read_csv(alt_households_growth_assumption_file)
-            alternate_households_growth_zones = alternate_households_growth["model_zone_id"].values
-            columns = alternate_households_growth.columns[1:].values
+        if alt_households_growth_file is not None:
+            alt_households_growth = pd.read_csv(alt_households_growth_file)
+            alternate_households_growth_zones = alt_households_growth["model_zone_id"].values
+            columns = alt_households_growth.columns[1:].values
 
             # replacing missing values
-            alternate_households_growth = alternate_households_growth.replace(
-                '*',
-                alternate_households_growth.replace(['*'], [None])
-            )
+            alt_households_growth = alt_households_growth.replace('*', None)
 
             for year in columns:
-                alternate_households_growth[year] = alternate_households_growth[year].astype(float)
-                alternate_households_growth[year + "_difference"] = None
+                alt_households_growth[year] = alt_households_growth[year].astype(float)
+                alt_households_growth[year + "_difference"] = None
 
             default_households_growth = self.households_growth.copy()
 
@@ -1300,15 +1302,15 @@ class ExternalForecastSystem:
                         year
                     ].values[0]
 
-                    new_value = alternate_households_growth.loc[
-                        alternate_households_growth["model_zone_id"] == zone,
+                    new_value = alt_households_growth.loc[
+                        alt_households_growth["model_zone_id"] == zone,
                         year
                     ].values[0]
 
                     difference = new_value - default_value
 
-                    alternate_households_growth.loc[
-                        alternate_households_growth["model_zone_id"] == zone,
+                    alt_households_growth.loc[
+                        alt_households_growth["model_zone_id"] == zone,
                         year + "_difference"
                     ] = difference
 
@@ -1317,27 +1319,24 @@ class ExternalForecastSystem:
                             default_households_growth["model_zone_id"] == zone,
                             year: default_households_growth.columns[-1]
                         ] = default_households_growth.loc[
-                                default_households_growth["model_zone_id"] == zone,
-                                year: default_households_growth.columns[-1]
-                            ] + difference
+                            default_households_growth["model_zone_id"] == zone,
+                            year: default_households_growth.columns[-1]
+                        ] + difference
 
-            alternate_households_growth = default_households_growth
+            alt_households_growth = default_households_growth
 
         # alternate worker growth
-        if alt_worker_growth_assumption_file is not None:
-            alternate_worker_growth = pd.read_csv(alt_worker_growth_assumption_file)
-            alternate_worker_growth_zones = alternate_worker_growth["model_zone_id"].values
-            columns = alternate_worker_growth.columns[1:].values
+        if alt_worker_growth_file is not None:
+            alt_worker_growth = pd.read_csv(alt_worker_growth_file)
+            alternate_worker_growth_zones = alt_worker_growth["model_zone_id"].values
+            columns = alt_worker_growth.columns[1:].values
 
             # replacing missing values
-            alternate_worker_growth = alternate_worker_growth.replace(
-                '*',
-                alternate_worker_growth.replace(['*'], [None])
-            )
+            alt_worker_growth = alt_worker_growth.replace('*', None)
 
             for year in columns:
-                alternate_worker_growth[year] = alternate_worker_growth[year].astype(float)
-                alternate_worker_growth[year + "_difference"] = None
+                alt_worker_growth[year] = alt_worker_growth[year].astype(float)
+                alt_worker_growth[year + "_difference"] = None
 
             default_worker_growth = self.worker_growth.copy()
 
@@ -1348,15 +1347,15 @@ class ExternalForecastSystem:
                         year
                     ].values[0]
 
-                    new_value = alternate_worker_growth.loc[
-                        alternate_worker_growth["model_zone_id"] == zone,
+                    new_value = alt_worker_growth.loc[
+                        alt_worker_growth["model_zone_id"] == zone,
                         year
                     ].values[0]
 
                     difference = new_value - default_value
 
-                    alternate_worker_growth.loc[
-                        alternate_worker_growth["model_zone_id"] == zone,
+                    alt_worker_growth.loc[
+                        alt_worker_growth["model_zone_id"] == zone,
                         year + "_difference"
                     ] = difference
 
@@ -1365,19 +1364,19 @@ class ExternalForecastSystem:
                             default_worker_growth["model_zone_id"] == zone,
                             year: default_worker_growth.columns[-1]
                         ] = default_worker_growth.loc[
-                                default_worker_growth["model_zone_id"] == zone,
-                                year: default_worker_growth.columns[-1]
-                            ] + difference
+                            default_worker_growth["model_zone_id"] == zone,
+                            year: default_worker_growth.columns[-1]
+                        ] + difference
 
-            alternate_population_growth = default_population_growth
+            alt_worker_growth = default_worker_growth
 
         return [
-            alternate_population_base_year,
-            alternate_households_base_year,
-            alternate_worker_base_year,
-            alternate_population_growth,
-            alternate_households_growth,
-            alternate_worker_growth
+            alt_pop_base_year,
+            alt_households_base_year,
+            alt_worker_base_year,
+            alt_pop_growth,
+            alt_households_growth,
+            alt_worker_growth
         ]
 
     def convert_growth_off_base_year(self,
@@ -1386,43 +1385,72 @@ class ExternalForecastSystem:
                                      all_years: List[str]
                                      ) -> pd.DataFrame:
         """
-        #TODO
+        Converts the multiplicative growth value of each all_years to be
+        based off of the base year.
+
+        Parameters
+        ----------
+        growth_dataframe:
+            The starting dataframe containing the growth values of all_years
+            and base_year
+
+        base_year:
+            The new base year to base all the all_years growth off of.
+
+        all_years:
+            The years in growth_dataframe to convert to be based off of
+            base_year growth
+
+        Returns
+        -------
+        converted_growth_dataframe:
+            The original growth dataframe with all growth values converted
+
         """
         growth_dataframe = growth_dataframe.copy()
-        growth_dataframe.loc[:, all_years] = growth_dataframe.apply(
-            lambda x,
-                   columns_required=all_years,
-                   base_year=base_year:
-                        x[columns_required] / x[base_year],
-            axis=1)
+        for year in all_years:
+            growth_dataframe.loc[:, year] = (
+                growth_dataframe.loc[:, year]
+                /
+                growth_dataframe.loc[:, base_year]
+            )
 
         return growth_dataframe
 
     def get_grown_values(self,
                          base_year_dataframe: pd.DataFrame,
                          growth_dataframe: pd.DataFrame,
-                         base_year_string: str,
+                         base_year: str,
                          all_years: List[str]
                          ) -> pd.DataFrame:
         """
-        #TODO
+
+        Parameters
+        ----------
+        base_year_dataframe
+        growth_dataframe
+        base_year
+        all_years
+
+        Returns
+        -------
+
         """
         base_year_dataframe = base_year_dataframe.copy()
         growth_dataframe = growth_dataframe.copy()
 
         # CREATE GROWN DATAFRAME
-        grown_dataframe = base_year_dataframe.merge(
+        grown_dataframe = pd.merge(
+            base_year_dataframe,
             growth_dataframe,
             on="model_zone_id"
         )
-
-        grown_dataframe.loc[:, all_years] = grown_dataframe.apply(
-            lambda x,
-                   columns_required=all_years,
-                   base_year=base_year_string:
-                        (x[columns_required] - 1) * x[base_year],
-            axis=1)
-
+        for year in all_years:
+            growth_dataframe.loc[:, year] = (
+                growth_dataframe.loc[:, year] - 1
+                *
+                growth_dataframe.loc[:, base_year]
+            )
         return grown_dataframe
 
     def growth_recombination(self,
@@ -1437,12 +1465,12 @@ class ExternalForecastSystem:
 
         ## combine together dataframe columns to give full future values
         ## f.e. base year will get 0 + base_year_population
-        metric_dataframe.loc[:, all_years] = metric_dataframe.apply(
-            lambda x,
-                   columns_required=all_years,
-                   metric_column=metric_column_name:
-                        x[columns_required] + x[metric_column_name],
-            axis=1)
+        for year in all_years:
+            metric_dataframe.loc[:, year] = (
+                metric_dataframe.loc[:, year]
+                +
+                metric_dataframe.loc[:, metric_column_name]
+            )
 
         ## drop the unnecessary metric column
         metric_dataframe = metric_dataframe.drop(
@@ -1485,15 +1513,13 @@ class ExternalForecastSystem:
         )
 
         for year in year_list:
-            segmented_dataframe.loc[:, year] = segmented_dataframe.apply(
-                lambda x,
-                       columns_required=year,
-                       year_spl=year + "_spl":
-                            x[year] * x[year_spl],
-                axis=1)
+            segmented_dataframe.loc[:, year] = (
+                segmented_dataframe.loc[:, year]
+                /
+                segmented_dataframe.loc[:, year + "_spl"]
+            )
 
         split_names = [s + "_spl" for s in year_list]
-
         segmented_dataframe = segmented_dataframe.drop(
             labels=split_names,
             axis=1
@@ -1502,44 +1528,39 @@ class ExternalForecastSystem:
         return segmented_dataframe
 
     def production_generation(self,
-                              population_dataframe: pd.DataFrame,
-                              area_type_dataframe: pd.DataFrame,
-                              trip_rate_dataframe: pd.DataFrame,
-                              car_association_dataframe: pd.DataFrame,
+                              population: pd.DataFrame,
+                              area_type: pd.DataFrame,
+                              trip_rate: pd.DataFrame,
+                              car_association: pd.DataFrame,
                               year_list: List[str]
                               ) -> pd.DataFrame:
         """
         #TODO
         """
-        population_dataframe = population_dataframe.copy()
-        area_type_dataframe = area_type_dataframe.copy()
-        trip_rate_dataframe = trip_rate_dataframe.copy()
-        car_association_dataframe = car_association_dataframe.copy()
+        population = population.copy()
+        area_type = area_type.copy()
+        trip_rate = trip_rate.copy()
+        car_association = car_association.copy()
 
         # Multiple Population zones belong to each MSOA area  type
-        population_dataframe = pd.merge(
-            population_dataframe,
-            area_type_dataframe,
+        population = pd.merge(
+            population,
+            area_type,
             on=["model_zone_id"]
         )
 
-        # Get the trip rates of each traveller in an area
-        trip_dataframe = pd.merge(
-            population_dataframe,
-            trip_rate_dataframe,
+        # Calculate the trips of each traveller in an area, based on
+        # their trip rates
+        trips = pd.merge(
+            population,
+            trip_rate,
             on=["traveller_type_id", "area_type_id"],
-            suffixes=("", "_trips")
+            suffixes=("", "_trip_rate")
         )
-
         for year in year_list:
-            trip_dataframe.loc[:, year] = (
-                trip_dataframe[year]
-                *
-                trip_dataframe[year + "_trips"]
-            )
+            trips.loc[:, year] = trips[year] * trips[year + "_trip_rate"]
 
         # Extract just the needed columns
-
         group_by_cols = [
             "model_zone_id",
             "purpose_id",
@@ -1550,14 +1571,14 @@ class ExternalForecastSystem:
         ]
         needed_columns = group_by_cols.copy()
         needed_columns.extend(year_list)
-        trip_dataframe = trip_dataframe[needed_columns]
+        trips = trips[needed_columns]
 
-        trip_dataframe = trip_dataframe.groupby(
+        productions = trips.groupby(
             by=group_by_cols,
             as_index=False
         ).sum()
 
-        return trip_dataframe
+        return productions
 
     def mode_time_split_application(self,
                                     production_dataframe: pd.DataFrame,
@@ -1712,8 +1733,11 @@ class ExternalForecastSystem:
         """
         #TODO
 
-        Where the traveller type has no cars indicated as available, set car availability to 1
-        Where the traveller type has 1+ cars indicated as available, set car availability to 2
+        Where the traveller type has no cars indicated as available,
+        set car availability to 1
+
+        Where the traveller type has 1+ cars indicated as available,
+        set car availability to 2
         """
         traveller_based_dataframe = traveller_based_dataframe.copy()
         car_availability = car_availability.copy()
@@ -1804,7 +1828,7 @@ class ExternalForecastSystem:
             on="area_type_id",
         ).rename(columns={"norms_2015_zone_id": "p_zone"}).drop_duplicates()
 
-        # TODO: What is this meant to do?
+        # TODO: Is this still needed?
         # make table wide to long
         # mode_split_dataframe = mode_split_dataframe.copy().melt(
         #     id_vars=['area_type_id', 'car_availability_id', 'purpose_id'],
@@ -1813,12 +1837,12 @@ class ExternalForecastSystem:
         #     )
         # mode_split_dataframe.to_csv(r'F:\EFS\EFS_Full\inputs\default\traveller_type\hb_mode_split.csv', index=False)
 
+        # TODO: Move inside of all nested loops into function (stops the
+        #  indentation from making difficult to read code)
         # TODO: Move mode out to nested loops
-        # TODO: Move inside of all nested loops into function
         # TODO: Tidy this up
         # TODO: Generate synth_dists path based on segmentation
         #  and file location given
-        # TODO: Figure out whats happening with time periods??
         for year in year_string_list:
             for purpose in required_purposes:
 
@@ -1928,7 +1952,7 @@ class ExternalForecastSystem:
                             "dt": "trips"
                         })
 
-                        # TODO: output all modes together for NHB??
+                        # TODO: Make sure this works for NHB trips too
 
                         # loop over required modes
                         for mode in required_modes:
@@ -1940,6 +1964,7 @@ class ExternalForecastSystem:
 
                             dict_string = get_dist_name(
                                 str(trip_origin),
+                                'pa',
                                 str(year),
                                 str(purpose),
                                 str(mode),
@@ -2016,6 +2041,7 @@ def get_data_subset(orig_data: pd.DataFrame,
 
 # TODO: Move this to utils
 def get_dist_name(trip_origin: str,
+                  matrix_format: str,
                   year: str,
                   purpose: str,
                   mode: str,
@@ -2030,7 +2056,7 @@ def get_dist_name(trip_origin: str,
 
     name_parts = [
         trip_origin,
-        "pa",
+        matrix_format,
         "yr" + year,
         "p" + purpose,
         "m" + mode,
