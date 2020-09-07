@@ -9,6 +9,8 @@ Created on Wed Jun 17 11:50:10 2020
 
 import os
 
+from typing import List
+
 import numpy as np
 import pandas as pd
 
@@ -17,10 +19,10 @@ from demand_utilities import tms_utils as dut
 
 # distribution files location
 home_path = 'Y:/EFS/'
-lookup_path = home_path + 'inputs/default/import/'
-import_path = home_path + 'inputs/default/tp_pa/'
+lookup_path = os.path.join(home_path, 'import')
+import_path = os.path.join(home_path, 'inputs/default/tp_pa')
 pa_export_path = "C:/Users/Sneezy/Desktop/NorMITs_Demand/nhb_dev"
-nhb_production_location = home_path + 'inputs/distributions/'
+nhb_production_location = os.path.join(home_path, 'inputs/distributions')
 
 model_name = 'norms'
 
@@ -77,7 +79,7 @@ car_availabilities_needed = [
             2,
             ]
 year_string_list = [
-            2018,
+            # 2018,
             2033,
             ]
 
@@ -172,7 +174,7 @@ def build_tp_pa(
                 print('NHB run')
                 model_zone = 'o_zone'
                 tp_split = pd.read_csv(os.path.join(
-                    pa_import + 'export_nhb_productions_norms.csv'
+                    pa_import, 'export_nhb_productions_norms.csv'
                 )).rename({
                     'norms_zone_id': 'p_zone',
                     'p': 'purpose_id',
@@ -181,14 +183,14 @@ def build_tp_pa(
                     'ns': 'ns_id',
                     'ca': 'car_availability_id'
                     })
-            elif purpose in (1,2):
+            elif purpose in [1, 2]:
                 required_segments = soc_needed
                 segment_text = "_soc"
                 
                 trip_origin = 'hb'
                 print('HB run')
                 tp_split = pd.read_csv(os.path.join(
-                    pa_import + 'export_productions_norms.csv'
+                    pa_import, 'export_productions_norms.csv'
                 )).rename(
                     columns={
                         'norms_zone_id': 'p_zone',
@@ -206,7 +208,7 @@ def build_tp_pa(
                 trip_origin = 'hb'
                 print('HB run')
                 tp_split = pd.read_csv(os.path.join(
-                    pa_import + 'export_productions_norms.csv'
+                    pa_import, 'export_productions_norms.csv'
                 )).rename(
                     columns={
                         'norms_zone_id': 'p_zone',
@@ -272,7 +274,6 @@ def build_tp_pa(
                             p_totals,
                             how='left',
                             on=[model_zone])
-                        # mask = time_splits['p_zone'].isin([259, 267, 268, 270, 275])
 
                         unq_zone = time_splits[model_zone].drop_duplicates()
                         for zone in unq_zone:
@@ -309,20 +310,6 @@ def build_tp_pa(
                                 "ns_id",
                                 "tp"
                             ])["dt"].sum().reset_index()
-
-                                # productions = productions.drop([model_zone,'trips','time_split'], axis=1)
-                                
-                                # gb_tp = all_zone_ph * time_factors
-                            # compile_params.update({'gb_tp':gb_tp.sum()})    
-                    
-                                # if arrivals:
-                                #     arrivals_np = gb_tp.sum(axis=0)
-                                #     arrivals_mat = pd.DataFrame(all_zone_ph[model_zone])
-                                #     arrivals_mat['arrivals'] = arrivals_np
-                                    
-                                #     arrivals_write_path = dut.build_path(arrivals_path,
-                                #                                          calib_params,
-                                #                                          tp=time)
                     
                             # Build write path
                             tp_pa_name = get_dist_name(
@@ -340,33 +327,25 @@ def build_tp_pa(
                                 out_tp_pa_dir,
                                 tp_pa_fname
                             )
-
-                            # Convert table from long to wide format
-                            gb_tp = gb_tp.pivot_table(
-                                index='p_zone',
-                                columns='a_zone',
-                                values='dt'
-                            )
                     
                             if write:
                                 # Define write path
                                 if mode in write_modes:
-                                        # productions = pd.DataFrame(productions,
-                                        #                      index=all_zone_ph['p_zone'],
-                                        #                      columns=all_zone_ph[
-                                        #                              'p_zone']).reset_index()
-                    
-                                    gb_tp.to_csv(out_tp_pa_path)
-                                    
-                                    # if arrivals:
-                                    #     # Write arrivals anyway
-                                    #     arrivals_mat.to_csv(arrivals_write_path,
-                                    #                         index=False)
+
+                                    # Convert table from long to wide format
+                                    # And save
+                                    gb_tp.pivot_table(
+                                        index='p_zone',
+                                        columns='a_zone',
+                                        values='dt'
+                                    ).to_csv(out_tp_pa_path)
+
+                            # TODO: Can do this better with collections
                             matrix_totals.append(gb_tp)
-                            
                             matrix_totals_dictionary[tp_pa_name] = matrix_totals
 
     return matrix_totals_dictionary
+
 
 def build_od(pa_matrix_dictionary,
              lookup_folder,
@@ -388,18 +367,22 @@ def build_od(pa_matrix_dictionary,
     aggregate_to_wday:
         Boolean to aggregate to weekday or not.
 
-    Returns:
+    Returns
     ----------
     period_time_splits:
         DataFrame containing time split factors for pa to od.
     """
-    period_time_splits = pd.read_csv(lookup_folder + "IphiHDHD_Final.csv")
+    period_time_splits = pd.read_csv(os.path.join(lookup_folder,
+                                                  "IphiHDHD_Final.csv"))
+
+    # 6_fhp_tp
+    # drop weekend tps (5/6)
     # Audit new totals
     if aggregate_to_wday:
         # TODO: This could be a lot easier
 
         # Define target times
-        target_times = [1,2,3,4]
+        target_times = [1, 2, 3, 4]
 
         # Filter time from home to target
         period_time_splits = period_time_splits[
@@ -458,7 +441,7 @@ def build_od(pa_matrix_dictionary,
 
     # Audit new totals
     from_cols = ['purpose_from_home', 'time_from_home', 'direction_factor']
-    wday_from_totals = period_time_splits.reindex(from_cols,axis=1)
+    wday_from_totals = period_time_splits.reindex(from_cols, axis=1)
     from_cols.remove('direction_factor')
     wday_from_totals = wday_from_totals.groupby(
             from_cols).sum().reset_index()
@@ -468,14 +451,16 @@ def build_od(pa_matrix_dictionary,
           ' drop trips')
     print(wday_from_totals['direction_factor'].drop_duplicates())
     
-    #read in pa matrix
+    # read in pa matrix
     for key in pa_matrix_dictionary:
         pa_matrix_list = pa_matrix_dictionary[key]
         for pa_matrix in pa_matrix_list:
             
-            od_matrix = pa_matrix.merge(period_time_splits, 
-                                        left_on=["tp", "purpose_id"],
-                                        right_on=["time_from_home", "purpose_from_home"])
+            od_matrix = pd.merge(pa_matrix,
+                                 period_time_splits,
+                                 left_on=["tp", "purpose_id"],
+                                 right_on=["time_from_home", "purpose_from_home"]
+            )
             od_matrix["demand_to_home"] = od_matrix["dt"] * od_matrix["direction_factor"]
             od_matrix = od_matrix.groupby([
                                 "p_zone",
@@ -489,24 +474,31 @@ def build_od(pa_matrix_dictionary,
                                 "time_from_home",
                                 "purpose_to_home",
                                 "time_to_home"                                
-                                ])["dt","demand_to_home"].sum().reset_index().rename(columns={                                    
+                                ])["dt", "demand_to_home"].sum().reset_index().rename(columns={
                                     "dt": "demand_from_home"
                                     })
-            out_od_matrix = key[-21:]                        
-            od_matrix.to_csv(od_export + "hb_od_" + out_od_matrix, index=False)
-            print("HB OD for " + out_od_matrix + " complete!")
-                                    
-                                
-    return()
 
-def nhb_production_dataframe(
-                         required_purposes,
-                         required_soc,
-                         required_ns,
-                         required_car_availabilities,
-                         year_string_list,
-                         nhb_production_file_location,
-                         ):
+            # Convert the name from PA to OD
+            name_parts = get_dist_name_parts(key)
+            name_parts[1] = 'od'
+            tp_od_name = get_dist_name(*name_parts, csv=True)
+
+            # print(od_matrix)
+            # exit()
+
+            od_matrix.to_csv(os.path.join(od_export, tp_od_name),
+                             index=False)
+            print("HB OD for " + tp_od_name + " complete!")
+
+
+def nhb_production_dataframe(required_purposes,
+                             required_soc,
+                             required_ns,
+                             required_car_availabilities,
+                             year_string_list,
+                             nhb_production_file_location,
+                             lookup_folder,
+                             ):
     """
     This function builds NHB productions by
     aggregates HB distribution from EFS output to destination 
@@ -516,7 +508,7 @@ def nhb_production_dataframe(
     required lists:
         to loop over TfN segments
 
-    Returns:
+    Returns
     ----------
     nhb_production_dictionary:
         Dictionary containing NHB productions by year
@@ -526,12 +518,14 @@ def nhb_production_dataframe(
     nhb_production_dataframe_list = []
     nhb_production_dictionary = {}
     #read in nhb trip rates
-    nhb_trip_rate_dataframe = pd.read_csv(nhb_production_file_location + "IgammaNMHM.csv").rename(
-                    columns = {
-                            "p": "purpose_id",
-                            "m": "mode_id"
-                            }
-                    )
+    nhb_trip_rate_dataframe = pd.read_csv(
+        os.path.join(lookup_folder, "IgammaNMHM.csv")
+    ).rename(
+        columns={
+            "p": "purpose_id",
+            "m": "mode_id"
+        }
+    )
     # loop over by year, purpose, soc/ns, car availability
     for year in year_string_list:
         for purpose in required_purposes:                
@@ -858,6 +852,41 @@ def get_dist_name(trip_origin: str,
     return final_name
 
 
+# TODO: copy over to original EFS
+def get_dist_name_parts(dist_name: str) -> List[str]:
+    """
+    Splits a full dist name into its individual components
+
+
+    Parameters
+    ----------
+    dist_name:
+        The dist name to parse
+
+    Returns
+    -------
+    name_parts:
+        dist_name split into parts. Returns in the following order:
+        [trip_origin, matrix_format, year, purpose, mode, segment, ca, tp]
+    """
+    if dist_name[-4:] == '.csv':
+        dist_name = dist_name[:-4]
+
+    name_parts = dist_name.split('_')
+
+    # TODO: Can this be done smarter
+    return [
+        name_parts[0],
+        name_parts[1],
+        name_parts[2][-4:],
+        name_parts[3][-1:],
+        name_parts[4][-1:],
+        name_parts[5][-1:],
+        name_parts[6][-1:],
+        name_parts[7][-1:],
+    ]
+
+
 def main():
     # init_params = get_init_params(
     #     import_path,
@@ -883,57 +912,55 @@ def main():
     # )
 
     matrix_totals = build_tp_pa(
-        # init_params,
         model_name,
-        # productions = pa_distribution,
-        required_purposes = purposes_needed,
-        required_modes = modes_needed,
-        required_soc = soc_needed,
-        required_ns = ns_needed,
-        required_car_availabilities = car_availabilities_needed,
-        year_string_list = year_string_list,
-        # distribution_segments = ['p', 'm'],
-        # internal_import = hb_export_path + 'summaries',
-        # external_import = hb_export_path + 'external',
-        pa_import = import_path,
-        pa_export = pa_export_path,
-        write_modes = [1,2,3,5,6],
-        # arrivals = True,
-        # arrival_export = (hb_export_path + 'arrival_export' + '/arrivals'),
-        write = True)
+        required_purposes=purposes_needed,
+        required_modes=modes_needed,
+        required_soc=soc_needed,
+        required_ns=ns_needed,
+        required_car_availabilities=car_availabilities_needed,
+        year_string_list=year_string_list,
+        pa_import=import_path,
+        pa_export=pa_export_path,
+        write_modes=[1, 2, 3, 5, 6],
+        write=True
+    )
     print('Transposed HB PA to tp PA')
 
-    phi_factors = build_od(
-        pa_matrix_dictionary = matrix_totals,
-        lookup_folder = lookup_path,
-        od_export =pa_export_path + "OD Matrices/",
-        aggregate_to_wday = True
-        )
+    build_od(
+        pa_matrix_dictionary=matrix_totals,
+        lookup_folder=lookup_path,
+        od_export=os.path.join(pa_export_path, "OD Matrices"),
+        aggregate_to_wday=True
+    )
+    print('Transposed HB tp PA to OD')
 
     nhb_production_dictionary = nhb_production_dataframe(
         # nhb_trip_rate_dataframe = nhb_trip_rate_file,
-        required_purposes = purposes_needed,
-        required_soc = soc_needed,
-        required_ns = ns_needed,
-        required_car_availabilities = car_availabilities_needed,
-        year_string_list = year_string_list,
+        required_purposes=purposes_needed,
+        required_soc=soc_needed,
+        required_ns=ns_needed,
+        required_car_availabilities=car_availabilities_needed,
+        year_string_list=year_string_list,
         # distribution_dataframe_dict = distributions,
-        nhb_production_file_location =pa_export_path + "forArrivals/",
-        )
+        nhb_production_file_location=os.path.join(pa_export_path, "forArrivals"),
+        lookup_folder=lookup_path
+    )
+    print('Generated NHB productions')
 
-    final_nhb_distribution = nhb_furness(
-        production_dictionary =  nhb_production_dictionary,
-        required_nhb_purposes = nhb_purpose_needed,
-        required_nhb_modes = nhb_mode_needed,
-        required_car_availabilities = car_availabilities_needed,
-        required_soc = soc_needed,
-        required_ns = ns_needed,
-        year_string_list = year_string_list,
-        nhb_distribution_file_location = nhb_production_location,
-        nhb_distribution_output_location =pa_export_path + "OD Matrices 24hr/",
-        zero_replacement_value = 0.01,
-        replace_zero_values = True
-        )
+    nhb_furness(
+        production_dictionary=nhb_production_dictionary,
+        required_nhb_purposes=nhb_purpose_needed,
+        required_nhb_modes=nhb_mode_needed,
+        required_car_availabilities=car_availabilities_needed,
+        required_soc=soc_needed,
+        required_ns=ns_needed,
+        year_string_list=year_string_list,
+        nhb_distribution_file_location=nhb_production_location,
+        nhb_distribution_output_location=os.path.join(pa_export_path, " 24hr OD Matrices"),
+        zero_replacement_value=0.01,
+        replace_zero_values=True
+    )
+    print("Furnessed NHB Productions")
 
 
 if __name__ == '__main__':
