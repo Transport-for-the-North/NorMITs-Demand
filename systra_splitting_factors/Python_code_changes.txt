@@ -1,0 +1,63 @@
+Params_dir = params_dir (lower case)
+InputDemList = full_file_list
+split_factor = all_splitting_factors
+sel_split_fac = current_splitting_factors
+
+sector_area_zone: change the factor column in Cube to be output as "area_flag" instead
+
+The don't need the rename in this line 
+split_factor = split_factor.merge(sec_area_zone, how='left', on=['Origin', 'Destination']).rename(columns = {"Factor_x": "Factor"})
+Splitting factors need a mode_id column also.
+
+Can the section listing the files, years, ca classes, modes and purposes go at the top with the input/output file locations please? 
+Just means it's not hidden down in the middle of the code if it needs changing. 
+
+Can we call it current_file_list?
+We should check if the total number of files is what we would expect given the dimensions we then loop over. 
+
+And can we calculate df_year_ca_mode in on step? 
+Or if not at least do 
+current_file_list= fnmatch.filter(InputDemList, '*'+ year +'*')
+current_file_list= fnmatch.filter(current_file_list, '*car_availability'+ str(CA) +'*')
+etc...
+
+Do you need to specify the columns you want if you want all of them?
+sel_split_fac = split_factor.loc[(split_factor['Car Availability'] == CA) & (split_factor['Factor_y'] == 5)][[
+                        'Origin', 'Destination', 'Purpose', 'Car Availability', 'FHPeriod', 'THPeriod', 'Factor']]             
+
+dem_in = input_demand
+grouped = grouped_demand (though depending on the amount of RAM being used we could reuse input_demand - let's not for now though)
+
+group_purpose() = group_demand_by_purpose()
+In group_purpose() can we have the new column, currently called "Purpose" being called "uc_id"
+We should probably create a small csv file that has a lookup between the purpose_id and uc_id columns - then we can do a join here
+This is better than having the numbers hardcoded - if the purpose numbering changes then it's easier to update. 
+
+split_extrnal() = extract_internal_demand() - as it's really getting the internal demand. 
+
+should also be extract_internal_demand(df, area_flag_df) - i.e. directly pass the area flag table that you're joining on to the function. 
+I'm intrigued this works without it - one of the joys of Python - C# wouldn't let you do this...
+
+With the merge, I don't think you need to specify which columns you want if you want all of them.
+And "factor" will become "area_flag".
+
+We should check this with some areas where the flag !=5 - just to make sure it is behaving as expected. 
+
+int_dem = internal_demand
+
+adjust_split_factor(df) - should also pass it the df of splitting factors as an argument.
+
+df - can we reduce the number of columns to just those we need and rename where appropriate. 
+Origin, Destination, Purpose (becomes uc_id above), Car Availability, mode_id, FHPeriod, THPeriod, 
+original_splitting_factor (currently factor), 
+demand_splitting_factor (currently factor_y),
+adjustment_factor (currently adj_fac)
+
+Why so many NANs? Where does purpose 1 go?
+
+updated_split = updated_splitting_factors
+out_split = output_splitting_factors 
+
+Do we want to put in a maximum and minimum adjustment factor to ensure the splitting factors don't change too much? 
+For now, lets add caps of 0.5 and 2, but via variables set at the top of the script so we can change them easily. 
+
