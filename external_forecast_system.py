@@ -1039,15 +1039,15 @@ class ExternalForecastSystem:
                 # TODO: Integrate into furnessing!
                 path = path + "/"
                 for key, distribution in final_distribution_dictionary.items():
-                    print("Saving distribution: " + key)
-                    distribution.to_csv(
-                        path
-                        +
-                        key
-                        +
-                        ".csv",
-                        index=False
-                    )
+                    key = str(key)
+                    out_path = os.path.join(path, key + '.csv')
+
+                    # Output in wide format
+                    distribution.pivot_table(
+                        index='p_zone',
+                        columns='a_zone',
+                        values='trips'
+                    ).to_csv(out_path)
                     print("Saved distribution: " + key)
 
                 final_population.to_csv(

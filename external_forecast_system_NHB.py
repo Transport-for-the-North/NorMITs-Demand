@@ -78,271 +78,232 @@ car_availabilities_needed = [
             1,
             2,
             ]
-year_string_list = [
+years_needed = [
             # 2018,
             2033,
             ]
 
-# def get_init_params(path,
-#                     distribution_type = 'hb',
-#                     model_name = None,
-#                     mode_subset = None,
-#                     purpose_subset = None):
-#     """
-#     This function imports beta values for deriving distributions from
-#     a given path. Chunk exists as a filename in the target folder.
 
-#     Parameters
-#     ----------
-#     path:
-#         Path to folder containing containing required beta values.
+def _build_tp_pa_internal(trip_origin,
+                          year,
+                          purpose,
+                          mode,
+                          segment,
+                          car_availability,
+                          model_zone,
+                          tp_split,
+                          output_dir):
+    """
+    The internals of build_tp_pa(). Useful for making the code more
+    readable due to the number of nested loops needed
 
-#     distribution_type = hb:
-#         Distribution type. Takes hb or nhb.
+    Returns
+    -------
 
-#     model_name:
-#         Name of model. For pathing to new lookups.
+    """
+    # Init return value
+    matrix_totals_dictionary = dict()
 
-#     chunk:
-#         Number of chunk to take if importing by chunks. This is designed to
-#         make it easy to multi-process in future, and can be used to run
-#         distributions in parralell IDEs now.
+    # ## Read in productions ## #
+    productions_fname = get_dist_name(
+        'hb',
+        'pa',
+        str(year),
+        str(purpose),
+        str(mode),
+        str(segment),
+        str(car_availability),
+        csv=True
+    )
+    productions = pd.read_csv(os.path.join(
+        pa_export_path,
+        "24hr PA Matrices",
+        productions_fname
+    ))
 
-#     Returns:
-#     ----------
-#     initial_betas:
-#         DataFrame containing target betas for distibution.
-#     """
+    y_zone = 'a_zone' if model_zone == 'p_zone' else 'd_zone'
+    productions = productions.melt(
+        id_vars=[model_zone],
+        var_name=y_zone,
+        value_name='trips'
+    )
 
-#     if model_name is None:
-#         path = (path +
-#                 # '/' +
-#                 'init_params_' +
-#                 distribution_type +
-#                 '.csv')
-#     else:
-#         path = (path +
-#                 # '/' +
-#                 model_name.lower() +
-#                 '_init_params_' +
-#                 distribution_type +
-#                 '.csv')
+    # ## Add in production columns ready for merge ## #
+    productions['purpose_id'] = purpose
+    productions['mode_id'] = mode
+    productions['car_availability_id'] = car_availability
+    if purpose in [1, 2]:
+        productions['soc_id'] = str(segment)
+        productions['ns_id'] = 'none'
+    else:
+        productions['soc_id'] = 'none'
+        productions['ns_id'] = str(segment)
 
-#     init_params = pd.read_csv(path)
+    # ## Narrow tp_split down to just the segment here ## #
+    segment_id = 'soc_id' if purpose in [1, 2] else 'ns_id'
+    segmentation_mask = (
+        (tp_split['purpose_id'] == purpose)
+        & (tp_split['mode_id'] == mode)
+        & (tp_split[segment_id] == str(segment))
+        & (tp_split['car_availability_id'] == car_availability)
+    )
+    tp_split = tp_split.loc[segmentation_mask]
 
-#     if mode_subset:
-#         init_params = init_params[
-#                 init_params['m'].isin(mode_subset)]
-#     if purpose_subset:
-#         init_params = init_params[
-#                 init_params['p'].isin(purpose_subset)]
+    # ## Calculate the time split factors for each zone ## #
+    # Total tp-split productions in each zone
+    tp_totals = tp_split.reindex(
+        [model_zone, 'tp', 'trips'],
+        axis=1
+    ).groupby([model_zone, 'tp']).sum().reset_index()
 
-#     return(init_params)
+    # Calculate tp-split factors
+    unq_zone = tp_totals[model_zone].drop_duplicates()
+    for zone in unq_zone:
+        zone_mask = (tp_totals[model_zone] == zone)
+        tp_totals.loc[zone_mask, 'time_split'] = (
+            tp_totals[zone_mask]['trips'].values
+            /
+            tp_totals[zone_mask]['trips'].sum()
+        )
+    time_splits = tp_totals.reindex(
+        [model_zone, 'tp', 'time_split'],
+        axis=1
+    )
+
+    # ## Apply tp-split factors to total productions ## #
+    unq_time = time_splits['tp'].drop_duplicates()
+    for time in unq_time:
+        time_factors = time_splits.loc[time_splits['tp'] == time]
+        gb_tp = pd.merge(
+            productions,
+            time_factors,
+            on=[model_zone]
+        ).rename(columns={'trips': 'dt'})
+
+        gb_tp['dt'] = gb_tp['dt'] * gb_tp['time_split']
+        gb_tp = gb_tp.groupby([
+            "p_zone",
+            "a_zone",
+            "purpose_id",
+            "car_availability_id",
+            "mode_id",
+            "soc_id",
+            "ns_id",
+            "tp"
+        ])["dt"].sum().reset_index()
+
+        # Build write path
+        tp_pa_name = get_dist_name(
+            str(trip_origin),
+            'pa',
+            str(year),
+            str(purpose),
+            str(mode),
+            str(segment),
+            str(car_availability),
+            tp=str(time)
+        )
+        tp_pa_fname = tp_pa_name + '.csv'
+        out_tp_pa_path = os.path.join(
+            output_dir,
+            tp_pa_fname
+        )
+
+        # Convert table from long to wide format
+        # And save
+        gb_tp.pivot_table(
+            index='p_zone',
+            columns='a_zone',
+            values='dt'
+        ).to_csv(out_tp_pa_path)
+
+        matrix_totals_dictionary[tp_pa_name] = gb_tp
+
+    return matrix_totals_dictionary
 
 
-def build_tp_pa(
-        # init_params,
-                model_name,
-                # productions,
-                pa_import,
+def build_tp_pa(pa_import,
                 pa_export,                
                 required_purposes,
                 required_modes,
                 required_soc,
                 required_ns,
                 required_car_availabilities,
-                year_string_list,
-                # distribution_segments,
-                # internal_import,
-                # external_import,
-                write_modes = [1,2,3,5,6],
-                # arrivals = True,
-                # arrival_export = None,
-                write = True):
+                year_string_list):
 
     # loop Init
     matrix_totals_dictionary = {}
     out_tp_pa_dir = os.path.join(pa_export, 'PA Matrices')
     dut.create_folder(out_tp_pa_dir, chDir=False)
-    
+
+    # For every: Year, purpose, mode, segment, ca
     for year in year_string_list:
         print("\nYear: %s" % str(year))
         for purpose in required_purposes:
-            # TODO: How to allocate tp to NHB            
+
+            # Purpose specific set-up
+            # Do it here to avoid repeats in inner loops
             if purpose in (12, 13, 14, 15, 16, 18):
-                trip_origin = 'nhb'
+                # TODO: How to allocate tp to NHB
                 print('NHB run')
+                trip_origin = 'nhb'
+                required_segments = list()
                 model_zone = 'o_zone'
-                tp_split = pd.read_csv(os.path.join(
-                    pa_import, 'export_nhb_productions_norms.csv'
-                )).rename({
+                tp_split_fname = 'export_nhb_productions_norms.csv'
+                tp_split_path = os.path.join(pa_import, tp_split_fname)
+
+            elif purpose in (1, 2, 3, 4, 5, 6, 7, 8):
+                print('HB run')
+                trip_origin = 'hb'
+                model_zone = 'p_zone'
+                tp_split_fname = 'export_productions_norms.csv'
+                tp_split_path = os.path.join(pa_import, tp_split_fname)
+                if purpose in [1, 2]:
+                    required_segments = required_soc
+                else:
+                    required_segments = required_ns
+
+            else:
+                raise ValueError("%s is not a valid purpose."
+                                 % str(purpose))
+
+            # TODO: @Chris: is this the correct time split file to use?
+            #  Should use TMS base year tp PA as seed?
+            #  For example - TMS pa_to_od uses:
+            #  Y:\NorMITs Synthesiser\Noham\iter8a\Production Outputs/hb_productions_noham.csv
+
+            # Read in the seed values for tp splits
+            tp_split = pd.read_csv(tp_split_path).rename(
+                columns={
                     'norms_zone_id': 'p_zone',
                     'p': 'purpose_id',
                     'm': 'mode_id',
                     'soc': 'soc_id',
                     'ns': 'ns_id',
                     'ca': 'car_availability_id'
-                    })
-            elif purpose in [1, 2]:
-                required_segments = soc_needed
-                segment_text = "_soc"
-                
-                trip_origin = 'hb'
-                print('HB run')
-                tp_split = pd.read_csv(os.path.join(
-                    pa_import, 'export_productions_norms.csv'
-                )).rename(
-                    columns={
-                        'norms_zone_id': 'p_zone',
-                        'p': 'purpose_id',
-                        'm': 'mode_id',
-                        'soc': 'soc_id',
-                        'ns': 'ns_id',
-                        'ca': 'car_availability_id'
-                    }
-                )
-                model_zone = 'p_zone'                
-            else:                                
-                required_segments = ns_needed
-                segment_text = "_ns"
-                trip_origin = 'hb'
-                print('HB run')
-                tp_split = pd.read_csv(os.path.join(
-                    pa_import, 'export_productions_norms.csv'
-                )).rename(
-                    columns={
-                        'norms_zone_id': 'p_zone',
-                        'p': 'purpose_id',
-                        'm': 'mode_id',
-                        'soc': 'soc_id',
-                        'ns': 'ns_id',
-                        'ca': 'car_availability_id'
-                    }
-                )
-                model_zone = 'p_zone'                
+                }
+            )
+            tp_split['p_zone'] = tp_split['p_zone'].astype(int)
 
+            matrix_totals_dictionary = dict()
             for mode in required_modes:
                 print("\tMode: %s" % str(mode))
                 for segment in required_segments:
                     print("\t\tSegment: %s" % str(segment))
                     for car_availability in required_car_availabilities:
-                        productions_fname = get_dist_name(
-                            'hb',
-                            'pa',
-                            str(year),
-                            str(purpose),
-                            str(mode),
-                            str(segment),
-                            str(car_availability),
-                            csv=True
+                        matrix_totals = _build_tp_pa_internal(
+                            trip_origin,
+                            year,
+                            purpose,
+                            mode,
+                            segment,
+                            car_availability,
+                            model_zone,
+                            tp_split,
+                            out_tp_pa_dir
                         )
-                        productions = pd.read_csv(os.path.join(
-                            pa_export_path,
-                            "24hr PA Matrices",
-                            productions_fname
-                        ))
 
-                        matrix_totals = []
-                        tp_split['p_zone'] = tp_split['p_zone'].astype(int)
-                        productions['purpose_id'] = purpose
-                        productions['mode_id'] = mode
-                        productions['car_availability_id'] = car_availability
-                        if purpose in [1, 2]:
-                            productions['soc_id'] = str(segment)
-                            productions['ns_id'] = 'none'
-                        else:
-                            productions['soc_id'] = 'none'
-                            productions['ns_id'] = str(segment)
-
-                        # Total productions in each zone
-                        p_totals = productions.reindex(
-                            [model_zone, 'trips'],
-                            axis=1
-                        ).groupby(model_zone).sum().reset_index()
-                        p_totals = p_totals.rename(columns={'trips': 'p_totals'})
-
-                        # Total tp split productions in each zone
-                        tp_totals = tp_split.reindex(
-                            [model_zone, 'tp', 'trips'],
-                            axis=1
-                        ).groupby(
-                             [model_zone, 'tp']).sum().reset_index()
-
-                        # Calculate the time split factors for each zone
-                        time_splits = pd.merge(
-                            tp_totals,
-                            p_totals,
-                            how='left',
-                            on=[model_zone])
-
-                        unq_zone = time_splits[model_zone].drop_duplicates()
-                        for zone in unq_zone:
-                            zone_mask = (time_splits[model_zone] == zone)
-                            time_splits.loc[zone_mask, 'time_split'] = (
-                                time_splits[zone_mask]['trips'].values
-                                /
-                                time_splits[zone_mask]['trips'].sum()
-                            )
-                        time_splits = time_splits.reindex(
-                            [model_zone, 'tp', 'time_split'],
-                            axis=1
-                        )
-                        
-                        # Apply time period
-                        unq_time = time_splits['tp'].drop_duplicates()           
-                        for time in unq_time:
-                            # print('tp' + str(time))
-                            time_factors = time_splits.loc[time_splits['tp'] == time]           
-                            gb_tp = pd.merge(
-                                productions,
-                                time_factors,
-                                on=[model_zone]
-                            ).rename(columns={'trips': 'dt'})
-
-                            gb_tp['dt'] = gb_tp['dt'] * gb_tp['time_split']
-                            gb_tp = gb_tp.groupby([
-                                "p_zone",
-                                "a_zone",
-                                "purpose_id",
-                                "car_availability_id",
-                                "mode_id",
-                                "soc_id",
-                                "ns_id",
-                                "tp"
-                            ])["dt"].sum().reset_index()
-                    
-                            # Build write path
-                            tp_pa_name = get_dist_name(
-                                str(trip_origin),
-                                'pa',
-                                str(year),
-                                str(purpose),
-                                str(mode),
-                                str(segment),
-                                str(car_availability),
-                                tp=str(time)
-                            )
-                            tp_pa_fname = tp_pa_name + '.csv'
-                            out_tp_pa_path = os.path.join(
-                                out_tp_pa_dir,
-                                tp_pa_fname
-                            )
-                    
-                            if write:
-                                # Define write path
-                                if mode in write_modes:
-
-                                    # Convert table from long to wide format
-                                    # And save
-                                    gb_tp.pivot_table(
-                                        index='p_zone',
-                                        columns='a_zone',
-                                        values='dt'
-                                    ).to_csv(out_tp_pa_path)
-
-                            # TODO: Can do this better with collections
-                            matrix_totals.append(gb_tp)
-                            matrix_totals_dictionary[tp_pa_name] = matrix_totals
+                        matrix_totals_dictionary.update(matrix_totals)
 
     return matrix_totals_dictionary
 
@@ -350,33 +311,17 @@ def build_tp_pa(
 def build_od(pa_matrix_dictionary,
              lookup_folder,
              od_export,
-             aggregate_to_wday = True
-                           ):
+             aggregate_to_wday=True):
     """
-    This function imports time period split factors from a given path.
-
-    Parameters
-    ----------
-    mode:
-        Target mode as single integer
-
-    phi_type:
-        Takes one of ['fhp_tp', 'fhp_24hr' 'p_tp']. From home purpose & time period
-        or from home and to home purpose & time period
-
-    aggregate_to_wday:
-        Boolean to aggregate to weekday or not.
-
-    Returns
-    ----------
-    period_time_splits:
-        DataFrame containing time split factors for pa to od.
+    This function imports time period split factors from a given path.W
     """
     period_time_splits = pd.read_csv(os.path.join(lookup_folder,
                                                   "IphiHDHD_Final.csv"))
 
-    # 6_fhp_tp
-    # drop weekend tps (5/6)
+    # TODO:
+    #  6_fhp_tp
+    #  drop weekend tps (5/6)
+
     # Audit new totals
     if aggregate_to_wday:
         # TODO: This could be a lot easier
@@ -420,11 +365,8 @@ def build_od(pa_matrix_dictionary,
             # Loop to get new factors
             for tfh in unq_tfh:
                 time_sub = purpose_frame.copy()
-                time_sub = time_sub[
-                        time_sub[
-                                'time_from_home']==tfh]
-                time_sub = time_sub[
-                        time_sub['time_to_home'].isin(target_times)]
+                time_sub = time_sub[time_sub['time_from_home'] == tfh]
+                time_sub = time_sub[time_sub['time_to_home'].isin(target_times)]
                 
                 new_total = time_sub['direction_factor'].sum()
                 
@@ -452,43 +394,38 @@ def build_od(pa_matrix_dictionary,
     print(wday_from_totals['direction_factor'].drop_duplicates())
     
     # read in pa matrix
-    for key in pa_matrix_dictionary:
-        pa_matrix_list = pa_matrix_dictionary[key]
-        for pa_matrix in pa_matrix_list:
+    for key, pa_matrix in pa_matrix_dictionary.items():
             
-            od_matrix = pd.merge(pa_matrix,
-                                 period_time_splits,
-                                 left_on=["tp", "purpose_id"],
-                                 right_on=["time_from_home", "purpose_from_home"]
-            )
-            od_matrix["demand_to_home"] = od_matrix["dt"] * od_matrix["direction_factor"]
-            od_matrix = od_matrix.groupby([
-                                "p_zone",
-                                "a_zone",
-                                "purpose_id",
-                                "car_availability_id",
-                                "mode_id",
-                                "soc_id",
-                                "ns_id",
-                                "purpose_from_home",
-                                "time_from_home",
-                                "purpose_to_home",
-                                "time_to_home"                                
-                                ])["dt", "demand_to_home"].sum().reset_index().rename(columns={
-                                    "dt": "demand_from_home"
-                                    })
+        od_matrix = pd.merge(
+            pa_matrix,
+            period_time_splits,
+            left_on=["tp", "purpose_id"],
+            right_on=["time_from_home", "purpose_from_home"]
+        )
+        od_matrix["demand_to_home"] = od_matrix["dt"] * od_matrix["direction_factor"]
+        od_matrix = od_matrix.groupby([
+            "p_zone",
+            "a_zone",
+            "purpose_id",
+            "car_availability_id",
+            "mode_id",
+            "soc_id",
+            "ns_id",
+            "purpose_from_home",
+            "time_from_home",
+            "purpose_to_home",
+            "time_to_home"
+        ])["dt", "demand_to_home"].sum().reset_index().rename(
+            columns={"dt": "demand_from_home"}
+        )
 
-            # Convert the name from PA to OD
-            name_parts = get_dist_name_parts(key)
-            name_parts[1] = 'od'
-            tp_od_name = get_dist_name(*name_parts, csv=True)
+        # Convert the name from PA to OD
+        name_parts = get_dist_name_parts(key)
+        name_parts[1] = 'od'
+        tp_od_name = get_dist_name(*name_parts, csv=True)
 
-            # print(od_matrix)
-            # exit()
-
-            od_matrix.to_csv(os.path.join(od_export, tp_od_name),
-                             index=False)
-            print("HB OD for " + tp_od_name + " complete!")
+        od_matrix.to_csv(os.path.join(od_export, tp_od_name), index=False)
+        print("HB OD for " + tp_od_name + " complete!")
 
 
 def nhb_production_dataframe(required_purposes,
@@ -912,17 +849,14 @@ def main():
     # )
 
     matrix_totals = build_tp_pa(
-        model_name,
         required_purposes=purposes_needed,
         required_modes=modes_needed,
         required_soc=soc_needed,
         required_ns=ns_needed,
         required_car_availabilities=car_availabilities_needed,
-        year_string_list=year_string_list,
+        year_string_list=years_needed,
         pa_import=import_path,
-        pa_export=pa_export_path,
-        write_modes=[1, 2, 3, 5, 6],
-        write=True
+        pa_export=pa_export_path
     )
     print('Transposed HB PA to tp PA')
 
@@ -940,7 +874,7 @@ def main():
         required_soc=soc_needed,
         required_ns=ns_needed,
         required_car_availabilities=car_availabilities_needed,
-        year_string_list=year_string_list,
+        year_string_list=years_needed,
         # distribution_dataframe_dict = distributions,
         nhb_production_file_location=os.path.join(pa_export_path, "forArrivals"),
         lookup_folder=lookup_path
@@ -954,7 +888,7 @@ def main():
         required_car_availabilities=car_availabilities_needed,
         required_soc=soc_needed,
         required_ns=ns_needed,
-        year_string_list=year_string_list,
+        year_string_list=years_needed,
         nhb_distribution_file_location=nhb_production_location,
         nhb_distribution_output_location=os.path.join(pa_export_path, " 24hr OD Matrices"),
         zero_replacement_value=0.01,
