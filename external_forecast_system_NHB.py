@@ -19,15 +19,15 @@ import pa_to_od as pa2od
 from demand_utilities import tms_utils as dut
 
 # distribution files location
-home_path = 'Y:/EFS/'
+home_path = 'Y:/NorMITs Demand/'
 lookup_path = os.path.join(home_path, 'import')
 import_path = os.path.join(home_path, 'inputs/default/tp_pa')
-pa_export_path = "C:/Users/Sneezy/Desktop/NorMITs_Demand/nhb_dev"
-nhb_production_location = os.path.join(home_path, 'inputs/distributions')
+pa_export_path = "C:/Users/Sneezy/Desktop/NorMITs Demand/nhb_dev"
+# nhb_production_location = os.path.join(home_path, 'inputs/distributions')
 
 MODEL_NAME = 'norms'
 
-_default_tms_lookup_folder = 'Y:/NorMITs Synthesiser/import/phi_factors'
+_default_lookup_folder = 'Y:/NorMITs Demand/import/phi_factors'
 
 
 # needed lists
@@ -484,7 +484,7 @@ def build_od(pa_import,
              required_ns,
              required_car_availabilities,
              year_string_list,
-             lookup_folder=_default_tms_lookup_folder,
+             lookup_folder=_default_lookup_folder,
              phi_type='fhp_tp',
              aggregate_to_wday=True,
              echo=True):
@@ -520,53 +520,23 @@ def build_od(pa_import,
     return matrix_totals
 
 
-
-    # # TODO: Merge with TMS properly
-    # # read in pa matrix
-    # for key, pa_matrix in pa_matrix_dictionary.items():
-    #
-    #     od_matrix = pd.merge(
-    #         pa_matrix,
-    #         period_time_splits,
-    #         left_on=["tp", "purpose_id"],
-    #         right_on=["time_from_home", "purpose_from_home"]
-    #     )
-    #     od_matrix["demand_to_home"] = od_matrix["dt"] * od_matrix["direction_factor"]
-    #     od_matrix = od_matrix.groupby([
-    #         "p_zone",
-    #         "a_zone",
-    #         "purpose_id",
-    #         "car_availability_id",
-    #         "mode_id",
-    #         "soc_id",
-    #         "ns_id",
-    #         "purpose_from_home",
-    #         "time_from_home",
-    #         "time_to_home"
-    #     ])["dt", "demand_to_home"].sum().reset_index().rename(
-    #         columns={"dt": "demand_from_home"}
-    #     )
-    #
-    #     # Convert the name from PA to OD
-    #     name_parts = get_dist_name_parts(key)
-    #     name_parts[1] = 'od'
-    #     tp_od_name = get_dist_name(*name_parts, csv=True)
-    #
-    #     od_matrix.to_csv(os.path.join(od_export, tp_od_name), index=False)
-    #     # print("HB OD for " + tp_od_name + " complete!")
-
-
-def nhb_production_dataframe(required_purposes,
+def nhb_production_dataframe(hb_pa_import,
+                             nhb_export,
+                             model_name,
+                             required_purposes,
+                             required_modes,
                              required_soc,
                              required_ns,
                              required_car_availabilities,
                              year_string_list,
-                             nhb_production_file_location,
                              lookup_folder,
+                             nhb_export_fname = 'internal_nhb_productions.csv'
                              ):
     """
     This function builds NHB productions by
-    aggregates HB distribution from EFS output to destination 
+    aggregates HB distribution from EFS output to destination
+
+    TODO: Does this need updating to use the TMS method?
 
     Parameters
     ----------
@@ -578,103 +548,112 @@ def nhb_production_dataframe(required_purposes,
     nhb_production_dictionary:
         Dictionary containing NHB productions by year
     """
-    
-    required_segments = []
-    nhb_production_dataframe_list = []
+    # Init
+    yearly_nhb_productions = []
     nhb_production_dictionary = {}
-    #read in nhb trip rates
-    nhb_trip_rate_dataframe = pd.read_csv(
+    model_zone_col = model_name.lower() + '_zone_id'
+
+    # Get nhb trip rates
+    nhb_trip_rates = pd.read_csv(
         os.path.join(lookup_folder, "IgammaNMHM.csv")
     ).rename(
-        columns={
-            "p": "purpose_id",
-            "m": "mode_id"
-        }
+        columns={"p": "purpose_id", "m": "mode_id"}
     )
-    # loop over by year, purpose, soc/ns, car availability
+
+    # For every: Year, purpose, mode, segment, ca
     for year in year_string_list:
-        for purpose in required_purposes:                
-            if purpose in (1,2):
-                required_segments = required_soc
-                segment_text = "_soc"
-            else:
-                required_segments = required_ns
-                segment_text = "_ns"
+        for purpose in required_purposes:
+            required_segments = required_soc if purpose in (1,2) else required_ns
+            # TODO: Add in Mode loop
+            mode = 6
             for segment in required_segments:                
                 for car_availability in required_car_availabilities:
-                    nhb_production_dist = (
-                    "hb_pa_yr" 
-                    + 
-                    str(year) 
-                    + 
-                    "_p" 
-                    + 
-                    str(purpose) 
-                    + 
-                    segment_text 
-                    + 
-                    str(segment)
-                    +
-                    "_ca"
-                    +
-                    str(car_availability) 
-                    + 
-                    ".csv"
+                    hb_dist = get_dist_name(
+                        'hb',
+                        'pa',
+                        str(year),
+                        str(purpose),
+                        str(mode),
+                        str(segment),
+                        str(car_availability),
+                        csv=True
                     )
-                    #read in HB distributions
-                    nhb_production_dataframe = pd.read_csv(nhb_production_file_location 
-                                                             + 
-                                                             nhb_production_dist                                                              
-                                                             )
-                    # Aggregates to destinations                                                            
-                    nhb_production_dataframe = nhb_production_dataframe.groupby([
+
+                    # Seed the nhb productions with hb values
+                    hb_productions = pd.read_csv(
+                        os.path.join(hb_pa_import, hb_dist)
+                    )
+                    hb_productions = expand_distribution(
+                        hb_productions,
+                        year,
+                        purpose,
+                        mode,
+                        segment,
+                        car_availability,
+                        id_vars='p_zone',
+                        var_name='a_zone',
+                        value_name='trips'
+                    )
+
+                    # Aggregate to destinations
+                    nhb_productions = hb_productions.groupby([
                         "a_zone",
                         "purpose_id",
                         "mode_id",
                         "car_availability_id",
                         "soc_id",
                         "ns_id"
-                        ])["dt"].sum().reset_index()
+                    ])["trips"].sum().reset_index()
+
                     # join nhb trip rates
-                    nhb_production_dataframe = nhb_trip_rate_dataframe.merge(
-                        nhb_production_dataframe,                    
-                    # nhb_production_dataframe = nhb_production_dataframe.merge(
-                    #     nhb_trip_rate_dataframe, 
-                        on = [
-                            "purpose_id",
-                            "mode_id"                         
-                            ]
-                        )
+                    nhb_productions = nhb_trip_rates.merge(
+                        nhb_productions,
+                        on=["purpose_id", "mode_id"]
+                    )
+
                     # Calculate NHB productions
-                    nhb_production_dataframe["nhb_dt"] = nhb_production_dataframe["dt"] * nhb_production_dataframe["nhb_trip_rate"]
+                    nhb_productions["nhb_dt"] = nhb_productions["trips"] * nhb_productions["nhb_trip_rate"]
 
                     # aggregate nhb_p 11_12    
-                    nhb_production_dataframe.loc[nhb_production_dataframe["nhb_p"]==11, "nhb_p"] = 12
-                    # change = nhb_production_dataframe[nhb_production_dataframe['nhb_p']==11].copy()
-                    # change['nhb_p'] = 12
-                    # no_change = nhb_production_dataframe[nhb_production_dataframe['nhb_p']!=11].copy()
-                    # nhb_production_dataframe = pd.concat([change, no_change], sort=True)
-                    nhb_production_dataframe = nhb_production_dataframe.groupby([
+                    nhb_productions.loc[nhb_productions["nhb_p"] == 11, "nhb_p"] = 12
+
+                    # Remove hb purpose and mode by aggregation
+                    nhb_productions = nhb_productions.groupby([
                         "a_zone",
                         "nhb_p",
                         "nhb_m",
                         "car_availability_id",
                         "soc_id",
                         "ns_id"
-                        ])["nhb_dt"].sum().reset_index()
+                    ])["nhb_dt"].sum().reset_index()
 
-                    nhb_production_dataframe_list.append(nhb_production_dataframe)
-                    print("NHB Productions for " + nhb_production_dist + " complete!")
-        # concatenate purpose, soc/ns, car availability 
-        nhb_productions_all = pd.concat(nhb_production_dataframe_list)
-        nhb_production_dataframe_list.clear()
-        # aggregate to mode and purpose
-        nhb_productions_all = nhb_productions_all.groupby(["a_zone", "nhb_p", "nhb_m"])["nhb_dt"].sum().reset_index()
+                    yearly_nhb_productions.append(nhb_productions)
+
+        # Aggregate all productions for this year
+        print("INFO: NHB Productions for yr%d complete!" % year)
+        yr_nhb_productions = pd.concat(yearly_nhb_productions)
+        yearly_nhb_productions.clear()
+
+        # Aggregate productions up to p/m level
+        yr_nhb_productions = yr_nhb_productions.groupby(
+            ["a_zone", "nhb_p", "nhb_m"]
+        )["nhb_dt"].sum().reset_index()
+
+        # Rename cols and output to file
+        yr_nhb_productions.rename(
+            columns={
+                'a_zone': 'p_zone',
+                'nhb_p': 'p',
+                'nhb_m': 'm',
+                'nhb_dt': 'trips'
+            }
+        ).to_csv(os.path.join(nhb_export, nhb_export_fname), index=False)
+
         # save to dictionary by year
-        nhb_production_dictionary[year] = nhb_productions_all
-        nhb_productions_all = nhb_productions_all.iloc[0:0]
+        nhb_production_dictionary[year] = yr_nhb_productions
    
-    return(nhb_production_dictionary)
+    return nhb_production_dictionary
+
                         
 def nhb_furness(
             production_dictionary,                    
@@ -999,12 +978,50 @@ def generate_calib_params(year,
     }
 
 
+def expand_distribution(dist,
+                        year,
+                        purpose,
+                        mode,
+                        segment,
+                        car_availability,
+                        id_vars='p_zone',
+                        var_name='a_zone',
+                        value_name='trips'):
+    """
+    Returns a converted distribution  - converted from wide to long
+    format, adding in a column for each segmentation
+    """
+    dist = dist.copy()
+
+    # Convert from wide to long
+    dist = dist.melt(
+        id_vars=id_vars,
+        var_name=var_name,
+        value_name=value_name
+    )
+
+    # Add new columns
+    dist['year'] = year
+    dist['purpose_id'] = purpose
+    dist['mode_id'] = mode
+    dist['car_availability_id'] = car_availability
+
+    if purpose in [1, 2]:
+        dist['soc_id'] = segment
+        dist['ns_id'] = 'none'
+    else:
+        dist['soc_id'] = 'none'
+        dist['ns_id'] = segment
+
+    return dist
+
+
 def main():
     # TODO: Integrate into TMS and EFS proper
 
     run_build_tp_pa = False
-    run_build_od = True
-    run_nhb_production = False
+    run_build_od = False
+    run_nhb_production = True
     run_nhb_furness = False
 
     echo = False
@@ -1040,14 +1057,15 @@ def main():
 
     if run_nhb_production:
         nhb_production_dictionary = nhb_production_dataframe(
-            # nhb_trip_rate_dataframe = nhb_trip_rate_file,
+            hb_pa_import=os.path.join(pa_export_path, "24hr PA Matrices"),
+            nhb_export=os.path.join(pa_export_path, "Productions"),
+            model_name=MODEL_NAME,
             required_purposes=purposes_needed,
+            required_modes=modes_needed,
             required_soc=soc_needed,
             required_ns=ns_needed,
             required_car_availabilities=car_availabilities_needed,
             year_string_list=years_needed,
-            # distribution_dataframe_dict = distributions,
-            nhb_production_file_location=os.path.join(pa_export_path, "forArrivals"),
             lookup_folder=lookup_path
         )
         print('Generated NHB productions')
@@ -1061,7 +1079,7 @@ def main():
             required_soc=soc_needed,
             required_ns=ns_needed,
             year_string_list=years_needed,
-            nhb_distribution_file_location=nhb_production_location,
+            nhb_distribution_file_location=nhb_production_location, # Need to make nhb production outputs
             nhb_distribution_output_location=os.path.join(pa_export_path, " 24hr OD Matrices"),
             zero_replacement_value=0.01,
             replace_zero_values=True
