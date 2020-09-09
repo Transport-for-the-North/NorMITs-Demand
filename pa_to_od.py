@@ -1532,10 +1532,12 @@ def resplit_24hr_pa(model_lookup_path,
 
     return(internal_pa)
 
+
 def get_time_period_splits(mode = None,
                            phi_type = None,
                            aggregate_to_wday = True,
-                           lookup_folder = _default_lookup_folder):
+                           lookup_folder = _default_lookup_folder,
+                           echo=True):
     """
     This function imports time period split factors from a given path.
 
@@ -1572,9 +1574,9 @@ def get_time_period_splits(mode = None,
         print('Defaulting to the first' + folder_contents[0])
 
     elif len(folder_contents) == 0:
-        print('No dedicated phis')
         folder_contents = ['IphiHDHD_Final.csv']
-        print('Defaulting to CTripEnd params ' + folder_contents[0])
+        print('No dedicated phis. Defaulting to '
+              'CTripEnd params ' + folder_contents[0])
 
     # Import period time splits
     period_time_splits = pd.read_csv(lookup_folder + '/' + folder_contents[0])
@@ -1647,9 +1649,54 @@ def get_time_period_splits(mode = None,
     wday_from_totals = wday_from_totals.groupby(
             from_cols).sum().reset_index()
 
-    # TODO: Proper error handle
-    print('From-To split factors - should return 1s or conversion will' +
-          ' drop trips')
-    print(wday_from_totals['direction_factor'].drop_duplicates())
+    wday_totals = wday_from_totals['direction_factor'].drop_duplicates()
+    for v in wday_totals.tolist():
+        if not v > 0.999:
+            raise ValueError('From-To split factors. A value of less than 1 '
+                             'was returned, indicating the conversion has '
+                             'dropped trips. Value returned: %f' % v)
 
-    return(period_time_splits)
+    return period_time_splits
+
+
+# TODO: copy over to TMS
+def simplify_time_period_splits(time_period_splits: pd.DataFrame):
+    """
+    Simplifies time_period_splits to a case where the purpose_from_home
+    is always the same as the purpose_to_home
+
+    Parameters
+    ----------
+    time_period_splits:
+        A time_period_splits dataframe extracted using get_time_period_splits()
+
+    Returns
+    -------
+    time_period_splits only where the purpose_from_home
+    is the same as purpose_to_home
+    """
+    time_period_splits = time_period_splits.copy()
+
+    # Problem column doesn't exist in this case
+    if 'purpose_to_home' not in time_period_splits.columns:
+        return time_period_splits
+
+    # Build a mask where purposes match
+    unq_purpose = time_period_splits['purpose_from_home'].drop_duplicates()
+    keep_rows = np.array([False] * len(time_period_splits))
+    for p in unq_purpose:
+        purpose_mask = (
+            (time_period_splits['purpose_from_home'] == p)
+            & (time_period_splits['purpose_to_home'] == p)
+        )
+        keep_rows = keep_rows | purpose_mask
+
+    time_period_splits = time_period_splits.loc[keep_rows]
+
+    # Filter down to just the needed col and return
+    needed_cols = [
+        'purpose_from_home',
+        'time_from_home',
+        'time_to_home',
+        'direction_factor']
+    return time_period_splits.reindex(needed_cols, axis='columns')
