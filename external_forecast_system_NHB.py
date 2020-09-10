@@ -13,10 +13,11 @@ returned from Systra phase 2 contract
 
 import os
 
-from typing import List
-
 import numpy as np
 import pandas as pd
+import itertools
+
+from typing import List
 
 import pa_to_od as pa2od
 import efs_constants as consts
@@ -27,7 +28,7 @@ from demand_utilities import tms_utils as dut
 home_path = 'Y:/NorMITs Demand/'
 lookup_path = os.path.join(home_path, 'import')
 import_path = os.path.join(home_path, 'inputs/default/tp_pa')
-pa_export_path = "C:/Users/Sneezy/Desktop/NorMITs Demand/nhb_dev"
+export_path = "C:/Users/Sneezy/Desktop/NorMITs Demand/nhb_dev"
 seed_distributions_path = os.path.join(home_path,
                                        'inputs',
                                        'distributions',
@@ -38,21 +39,17 @@ MODEL_NAME = 'norms'
 
 _default_lookup_folder = 'Y:/NorMITs Demand/import/phi_factors'
 
-years_needed = [
-            # 2018,
-            2033,
-            ]
 
-
-def _build_tp_pa_internal(trip_origin,
+def _build_tp_pa_internal(pa_import,
+                          pa_export,
+                          trip_origin,
                           year,
                           purpose,
                           mode,
                           segment,
                           car_availability,
                           model_zone,
-                          tp_split,
-                          output_dir):
+                          tp_split):
     """
     The internals of build_tp_pa(). Useful for making the code more
     readable due to the number of nested loops needed
@@ -75,11 +72,7 @@ def _build_tp_pa_internal(trip_origin,
         str(car_availability),
         csv=True
     )
-    productions = pd.read_csv(os.path.join(
-        pa_export_path,
-        "24hr PA Matrices",
-        productions_fname
-    ))
+    productions = pd.read_csv(os.path.join(pa_import, productions_fname))
 
     y_zone = 'a_zone' if model_zone == 'p_zone' else 'd_zone'
     productions = productions.melt(
@@ -133,7 +126,7 @@ def _build_tp_pa_internal(trip_origin,
     # ## Apply tp-split factors to total productions ## #
     unq_time = time_splits['tp'].drop_duplicates()
     for time in unq_time:
-        # Need to do a left join, and set any missing vals to zero. Ensures
+        # Need to do a left join, and set any missing vals. Ensures
         # zones don't go missing if there's an issue with tp_split input
         # NOTE: tp3 is missing for p2, m1, soc0, ca1
         time_factors = time_splits.loc[time_splits['tp'] == time]
@@ -144,6 +137,7 @@ def _build_tp_pa_internal(trip_origin,
             how='left'
         ).rename(columns={'trips': 'dt'})
         gb_tp['time_split'] = gb_tp['time_split'].fillna(0)
+        gb_tp['tp'] = gb_tp['tp'].fillna(time).astype(int)
 
         gb_tp['dt'] = gb_tp['dt'] * gb_tp['time_split']
         gb_tp = gb_tp.groupby([
@@ -170,7 +164,7 @@ def _build_tp_pa_internal(trip_origin,
         )
         tp_pa_fname = tp_pa_name + '.csv'
         out_tp_pa_path = os.path.join(
-            output_dir,
+            pa_export,
             tp_pa_fname
         )
 
@@ -188,8 +182,9 @@ def _build_tp_pa_internal(trip_origin,
     return matrix_totals_dictionary
 
 
-def build_tp_pa(pa_import,
-                pa_export,                
+def build_tp_pa(tp_import,
+                pa_import,
+                pa_export,
                 required_purposes,
                 required_modes,
                 required_soc,
@@ -199,8 +194,6 @@ def build_tp_pa(pa_import,
 
     # loop Init
     matrix_totals_dictionary = {}
-    out_tp_pa_dir = os.path.join(pa_export, 'PA Matrices')
-    dut.create_folder(out_tp_pa_dir, chDir=False)
 
     # For every: Year, purpose, mode, segment, ca
     for year in year_string_list:
@@ -217,14 +210,14 @@ def build_tp_pa(pa_import,
                 required_segments = list()
                 model_zone = 'o_zone'
                 tp_split_fname = 'export_nhb_productions_norms.csv'
-                tp_split_path = os.path.join(pa_import, tp_split_fname)
+                tp_split_path = os.path.join(tp_import, tp_split_fname)
 
             elif purpose in (1, 2, 3, 4, 5, 6, 7, 8):
                 print('\tHB run')
                 trip_origin = 'hb'
                 model_zone = 'p_zone'
                 tp_split_fname = 'export_productions_norms.csv'
-                tp_split_path = os.path.join(pa_import, tp_split_fname)
+                tp_split_path = os.path.join(tp_import, tp_split_fname)
                 if purpose in [1, 2]:
                     required_segments = required_soc
                 else:
@@ -258,6 +251,8 @@ def build_tp_pa(pa_import,
                 for segment in required_segments:
                     for car_availability in required_car_availabilities:
                         matrix_totals = _build_tp_pa_internal(
+                            pa_import,
+                            pa_export,
                             trip_origin,
                             year,
                             purpose,
@@ -265,9 +260,7 @@ def build_tp_pa(pa_import,
                             segment,
                             car_availability,
                             model_zone,
-                            tp_split,
-                            out_tp_pa_dir
-                        )
+                            tp_split)
 
                         matrix_totals_dictionary.update(matrix_totals)
 
@@ -346,9 +339,9 @@ def _build_od_internal(pa_import,
 
         # Transpose to flip P & A
         frh_base = frh_dist[tp_frh].copy()
-        print(frh_base.shape)
-        print(calib_params)
-        print(tp_frh)
+        # print(frh_base.shape)
+        # print(calib_params)
+        # print(tp_frh)
         frh_base = frh_base.values.T
 
         toh_dists = {}
@@ -362,7 +355,7 @@ def _build_od_internal(pa_import,
             # Cast phi toh
             phi_mat = np.broadcast_to(phi_toh,
                                       (len(frh_base),
-                                       len(frh_base))) # Workaround len([0])
+                                       len(frh_base)))
             tp_toh_mat = frh_base * phi_mat
             toh_dists.update({tp_toh: tp_toh_mat})
         frh_ph.update({tp_frh: toh_dists})
@@ -568,7 +561,7 @@ def nhb_production(hb_pa_import,
                    required_car_availabilities,
                    year_string_list,
                    lookup_folder,
-                   nhb_export_fname='internal_nhb_productions.csv'):
+                   nhb_productions_fname='internal_nhb_productions.csv'):
     """
     This function builds NHB productions by
     aggregates HB distribution from EFS output to destination
@@ -616,6 +609,7 @@ def nhb_production(hb_pa_import,
             )
             yearly_nhb_productions.append(nhb_productions)
 
+        # ## Output the yearly productions ## #
         # Aggregate all productions for this year
         print("INFO: NHB Productions for yr%d complete!" % year)
         yr_nhb_productions = pd.concat(yearly_nhb_productions)
@@ -631,21 +625,29 @@ def nhb_production(hb_pa_import,
             }
         )
 
-        # # Aggregate productions up to p/m level
-        # yr_nhb_productions = yr_nhb_productions.groupby(
-        #     ["a_zone", "nhb_p", "nhb_m"]
-        # )["nhb_dt"].sum().reset_index()
+        # Create year fname
+        nhb_productions_fname = '_'.join(
+            ["yr" + str(year), nhb_productions_fname]
+        )
+
+        # Output disaggregated
+        da_fname = add_fname_suffix(nhb_productions_fname, '_disaggregated')
+        yr_nhb_productions.to_csv(
+            os.path.join(nhb_export, da_fname),
+            index=False
+        )
+
+        # Aggregate productions up to p/m level
+        yr_nhb_productions = yr_nhb_productions.groupby(
+            ["p_zone", "p", "m"]
+        )["trips"].sum().reset_index()
 
         # Rename cols and output to file
-        # Output at a less aggregated level
-        yr_nhb_productions.rename(
-            columns={
-                'a_zone': 'p_zone',
-                'nhb_p': 'p',
-                'nhb_m': 'm',
-                'nhb_dt': 'trips'
-            }
-        ).to_csv(os.path.join(nhb_export, nhb_export_fname), index=False)
+        # Output at p/m aggregation
+        yr_nhb_productions.to_csv(
+            os.path.join(nhb_export, nhb_productions_fname),
+            index=False
+        )
 
         # save to dictionary by year
         nhb_production_dictionary[year] = yr_nhb_productions
@@ -653,136 +655,144 @@ def nhb_production(hb_pa_import,
     return nhb_production_dictionary
 
                         
-def nhb_furness(seed_nhb_dist_dir,
+def nhb_furness(p_import,
+                seed_nhb_dist_dir,
                 od_export,
                 required_purposes,
                 required_modes,
                 year_string_list,
                 replace_zero_vals,
                 zero_infill,
-                production_dictionary,
+                nhb_productions_fname='internal_nhb_productions.csv',
                 use_zone_id_subset=False):
 
     """
     Provides a one-iteration Furness constrained on production
     with options whether to replace zero values on the seed
 
-    Parameters
-    ----------
-    nhb_production_dictionary:
-        Dictionary containing NHB productions by year
-    
-    required lists:
-        to loop over TfN segments
+    Essentially distributes the Productions based on the seed nhb dist
+    TODO: Actually add in some furnessing
 
-    Output:
+    Return:
     ----------
-    final_nhb_distribution with the columns
-    "o_zone", "d_zone", "nhb_p", "nhb_m",
-    "car_availability_id", "soc_id", "ns_id", "dt"
-
+    None
     """
-    for year in year_string_list:
-        for purpose in required_purposes:
-            for mode in required_modes:
-                # select needed nhb_productions
-                nhb_productions = production_dictionary[year]
-                nhb_productions = nhb_productions.loc[nhb_productions["p"] == purpose]
-                nhb_productions = nhb_productions.loc[nhb_productions["m"] == mode]
+    # TODO: Add in file exists checks
 
-                # read in nhb_seeds
-                nhb_seeds = pd.read_csv(os.path.join(
-                    seed_nhb_dist_dir,
-                    ("nhb_pa_p%s_m%s.csv" %
-                     (str(purpose), str(mode)))
-                ))
+    # For every year, purpose, mode
+    yr_p_m_iter = itertools.product(year_string_list,
+                                    required_purposes,
+                                    required_modes)
+    for year, purpose, mode in yr_p_m_iter:
+        # ## Read in Files ## #
+        # Create year fname
+        year_p_fname = '_'.join(
+            ["yr" + str(year), nhb_productions_fname]
+        )
 
-                # convert from wide to long format
-                nhb_seeds = nhb_seeds.melt(
-                    id_vars=['p_zone'],
-                    var_name='a_zone',
-                    value_name='seed_vals'
-                )
+        # Read in productions
+        p_path = os.path.join(p_import, year_p_fname)
+        productions = pd.read_csv(p_path)
 
-                # For some reason - readiong both from filwe mihr fix
-                nhb_seeds['a_zone'] = nhb_seeds['a_zone'].astype(float).astype(int)
-                nhb_productions['p_zone'] = nhb_productions['p_zone'].astype(int)
+        # select needed productions
+        productions = productions.loc[productions["p"] == purpose]
+        productions = productions.loc[productions["m"] == mode]
 
-                if use_zone_id_subset:
-                    zone_subset = [259, 267, 268, 270, 275, 1171, 1173]
-                    # zone_subset = [str(x) for x in zone_subset]
-                    nhb_seeds = base_efs.get_data_subset(
-                        nhb_seeds, 'p_zone', zone_subset)
-                    nhb_seeds = base_efs.get_data_subset(
-                        nhb_seeds, 'a_zone', zone_subset)
+        # read in nhb_seeds
+        seed_fname = get_dist_name(
+            'nhb',
+            'pa',
+            purpose=str(purpose),
+            mode=str(mode),
+            csv=True
+        )
+        nhb_seeds = pd.read_csv(os.path.join(seed_nhb_dist_dir, seed_fname))
 
-                # Check the productions and seed zones match
-                p_zones = set(nhb_productions["p_zone"].tolist())
-                seed_zones = set(nhb_seeds["p_zone"].tolist())
-                if p_zones != seed_zones:
-                    raise ValueError("Production and seed attraction zones "
-                                     "do not match.")
+        # convert from wide to long format
+        nhb_seeds = nhb_seeds.melt(
+            id_vars=['p_zone'],
+            var_name='a_zone',
+            value_name='seed_vals'
+        )
 
-                # Infill zero values
-                if replace_zero_vals:
-                    mask = (nhb_seeds["seed_vals"] == 0)
-                    nhb_seeds.loc[mask, "seed_vals"] = zero_infill
+        # Need to make sure they are the correct types
+        nhb_seeds['a_zone'] = nhb_seeds['a_zone'].astype(float).astype(int)
+        productions['p_zone'] = productions['p_zone'].astype(int)
 
-                # Calculate seed factors by zone
-                # (The sum of zone seed factors should equal 1)
-                unq_zone = nhb_seeds['p_zone'].drop_duplicates()
-                for zone in unq_zone:
-                    zone_mask = (nhb_seeds['p_zone'] == zone)
-                    nhb_seeds.loc[zone_mask, 'seed_factor'] = (
-                            nhb_seeds[zone_mask]['seed_vals'].values
-                            /
-                            nhb_seeds[zone_mask]['seed_vals'].sum()
-                    )
-                nhb_seeds = nhb_seeds.reindex(
-                    ['p_zone', 'a_zone', 'seed_factor'],
-                    axis=1
-                )
+        if use_zone_id_subset:
+            zone_subset = [259, 267, 268, 270, 275, 1171, 1173]
+            nhb_seeds = base_efs.get_data_subset(
+                nhb_seeds, 'p_zone', zone_subset)
+            nhb_seeds = base_efs.get_data_subset(
+                nhb_seeds, 'a_zone', zone_subset)
 
-                # Use the seed factors to Init P-A trips
-                init_pa = pd.merge(
-                    nhb_seeds,
-                    nhb_productions,
-                    on=["p_zone"])
-                init_pa["trips"] = init_pa["seed_factor"] * init_pa["trips"]
+        # Check the productions and seed zones match
+        p_zones = set(productions["p_zone"].tolist())
+        seed_zones = set(nhb_seeds["p_zone"].tolist())
+        if p_zones != seed_zones:
+            raise ValueError("Production and seed attraction zones "
+                             "do not match.")
 
-                # TODO: Some actual furnessing should happen here!
-                final_pa = init_pa
+        # Infill zero values
+        if replace_zero_vals:
+            mask = (nhb_seeds["seed_vals"] == 0)
+            nhb_seeds.loc[mask, "seed_vals"] = zero_infill
 
-                # ## Output the furnessed PA matrix to file ## #
-                # Generate path
-                nhb_dist_fname = get_dist_name(
-                    'nhb',
-                    'od',
-                    str(year),
-                    str(purpose),
-                    str(mode),
-                    csv=True
-                )
-                out_path = os.path.join(od_export, nhb_dist_fname)
+        # Calculate seed factors by zone
+        # (The sum of zone seed factors should equal 1)
+        unq_zone = nhb_seeds['p_zone'].drop_duplicates()
+        for zone in unq_zone:
+            zone_mask = (nhb_seeds['p_zone'] == zone)
+            nhb_seeds.loc[zone_mask, 'seed_factor'] = (
+                    nhb_seeds[zone_mask]['seed_vals'].values
+                    /
+                    nhb_seeds[zone_mask]['seed_vals'].sum()
+            )
+        nhb_seeds = nhb_seeds.reindex(
+            ['p_zone', 'a_zone', 'seed_factor'],
+            axis=1
+        )
 
-                # Convert from long to wide format and output
-                # TODO: Generate output name based on model name
-                final_pa.rename(
-                    columns={'p_zone': 'norms_zone_id'}
-                ).pivot_table(
-                    index='norms_zone_id',
-                    columns='a_zone',
-                    values='trips'
-                ).to_csv(out_path)
-                print("NHB Distribution %s complete!" % nhb_dist_fname)
+        # Use the seed factors to Init P-A trips
+        init_pa = pd.merge(
+            nhb_seeds,
+            productions,
+            on=["p_zone"])
+        init_pa["trips"] = init_pa["seed_factor"] * init_pa["trips"]
+
+        # TODO: Some actual furnessing should happen here!
+        final_pa = init_pa
+
+        # ## Output the furnessed PA matrix to file ## #
+        # Generate path
+        nhb_dist_fname = get_dist_name(
+            'nhb',
+            'od',
+            str(year),
+            str(purpose),
+            str(mode),
+            csv=True
+        )
+        out_path = os.path.join(od_export, nhb_dist_fname)
+
+        # Convert from long to wide format and output
+        # TODO: Generate output name based on model name
+        final_pa.rename(
+            columns={'p_zone': 'norms_zone_id'}
+        ).pivot_table(
+            index='norms_zone_id',
+            columns='a_zone',
+            values='trips'
+        ).to_csv(out_path)
+        print("NHB Distribution %s complete!" % nhb_dist_fname)
 
 
 # TODO: Import from original efs
 def get_dist_name(trip_origin: str,
                   matrix_format: str,
-                  year: str,
-                  purpose: str,
-                  mode: str,
+                  year: str = None,
+                  purpose: str = None,
+                  mode: str = None,
                   segment: str = None,
                   car_availability: str = None,
                   tp: str = None,
@@ -795,12 +805,18 @@ def get_dist_name(trip_origin: str,
     name_parts = [
         trip_origin,
         matrix_format,
-        "yr" + year,
-        "p" + purpose,
-        "m" + mode
     ]
 
     # Optionally add the extra segmentation
+    if year is not None:
+        name_parts += ["yr" + year]
+
+    if purpose is not None:
+        name_parts += ["p" + purpose]
+
+    if mode is not None:
+        name_parts += ["m" + mode]
+
     if segment is not None:
         seg_name = "soc" if purpose in ['1', '2'] else "ns"
         name_parts += [seg_name + segment]
@@ -811,6 +827,7 @@ def get_dist_name(trip_origin: str,
     if tp is not None:
         name_parts += ["tp" + tp]
 
+    # Create name string
     final_name = '_'.join(name_parts)
 
     # Optionally add on the csv if needed
@@ -972,12 +989,37 @@ def segmentation_loop_generator(p_list,
                             )
 
 
+def add_fname_suffix(fname: str, suffix: str):
+    """
+    Adds suffix to fname - in front of the file type extension
+
+    Parameters
+    ----------
+    fname:
+        The fname to be added to - must have a file type extension
+        e.g. .csv
+    suffix:
+        The string to add between the end of the fname and the file
+        type extension
+
+    Returns
+    -------
+    new_fname:
+        fname with suffix added
+
+    """
+    f_type = '.' + fname.split('.')[-1]
+    new_fname = '.'.join(fname.split('.')[:-1])
+    new_fname += suffix + f_type
+    return new_fname
+
+
 def main():
     # TODO: Integrate into TMS and EFS proper
 
     # Say what to run
-    run_build_tp_pa = True
-    run_build_od = True
+    run_build_tp_pa = False
+    run_build_od = False
     run_nhb_production = True
     run_nhb_furness = True
 
@@ -985,60 +1027,67 @@ def main():
     # How much should we print?
     echo = False
 
+    # TODO: Create output folders
+    # dut.create_folder(pa_export, chDir=False)
+
     if run_build_tp_pa:
-        build_tp_pa(
-            required_purposes=consts.PURPOSES_NEEDED,
-            required_modes=consts.MODES_NEEDED,
-            required_soc=consts.SOC_NEEDED,
-            required_ns=consts.NS_NEEDED,
-            required_car_availabilities=consts.CA_NEEDED,
-            year_string_list=years_needed,
-            pa_import=import_path,
-            pa_export=pa_export_path
-        )
-        print('Transposed HB PA to tp PA')
+        build_tp_pa(tp_import=import_path,
+                    pa_import=os.path.join(export_path, '24hr PA Matrices'),
+                    pa_export=os.path.join(export_path, 'PA Matrices'),
+                    required_purposes=consts.PURPOSES_NEEDED,
+                    required_modes=consts.MODES_NEEDED,
+                    required_soc=consts.SOC_NEEDED,
+                    required_ns=consts.NS_NEEDED,
+                    required_car_availabilities=consts.CA_NEEDED,
+                    year_string_list=consts.NHB_FUTURE_YEARS)
+        print('Transposed HB PA to tp PA\n')
 
     if run_build_od:
         build_od(
-            pa_import=os.path.join(pa_export_path, "PA Matrices"),
-            od_export=os.path.join(pa_export_path, "OD Matrices"),
+            pa_import=os.path.join(export_path, "PA Matrices"),
+            od_export=os.path.join(export_path, "OD Matrices"),
             required_purposes=consts.PURPOSES_NEEDED,
             required_modes=consts.MODES_NEEDED,
             required_soc=consts.SOC_NEEDED,
             required_ns=consts.NS_NEEDED,
             required_car_availabilities=consts.CA_NEEDED,
-            year_string_list=years_needed,
+            year_string_list=consts.NHB_FUTURE_YEARS,
             phi_type='fhp_tp',
             aggregate_to_wday=True,
             echo=echo
         )
-        print('Transposed HB tp PA to OD')
+        print('Transposed HB tp PA to OD\n')
+
+    # TODO: Create 24hr OD for HB
 
     if run_nhb_production:
-        nhb_production_dictionary = nhb_production(
-            hb_pa_import=os.path.join(pa_export_path, "24hr PA Matrices"),
-            nhb_export=os.path.join(pa_export_path, "Productions"),
+        nhb_production(
+            hb_pa_import=os.path.join(export_path, "24hr PA Matrices"),
+            nhb_export=os.path.join(export_path, "Productions"),
             model_name=MODEL_NAME,
             required_purposes=consts.PURPOSES_NEEDED,
             required_modes=consts.NHB_MODES_NEEDED,
             required_soc=consts.SOC_NEEDED,
             required_ns=consts.NS_NEEDED,
             required_car_availabilities=consts.CA_NEEDED,
-            year_string_list=years_needed,
+            year_string_list=consts.NHB_FUTURE_YEARS,
             lookup_folder=lookup_path)
-        print('Generated NHB productions')
+        print('Generated NHB productions\n')
 
     if run_nhb_furness:
-        nhb_furness(seed_nhb_dist_dir=seed_distributions_path,
-                    od_export=os.path.join(pa_export_path, "24hr OD Matrices"),
-                    required_purposes=consts.NHB_PURPOSES_NEEDED,
-                    required_modes=consts.NHB_MODES_NEEDED,
-                    year_string_list=years_needed, # fix this
-                    replace_zero_vals=True,
-                    zero_infill=0.01,
-                    production_dictionary=nhb_production_dictionary,
-                    use_zone_id_subset=True)
-        print("Furnessed NHB Productions")
+        nhb_furness(
+            p_import=os.path.join(export_path, "Productions"),
+            seed_nhb_dist_dir=seed_distributions_path,
+            od_export=os.path.join(export_path, "24hr OD Matrices"),
+            required_purposes=consts.NHB_PURPOSES_NEEDED,
+            required_modes=consts.NHB_MODES_NEEDED,
+            year_string_list=consts.NHB_FUTURE_YEARS,
+            replace_zero_vals=True,
+            zero_infill=0.01,
+            use_zone_id_subset=True)
+        print('"Furnessed" NHB Productions\n')
+
+    # TODO: Create tp-OD for NHB
 
 
 if __name__ == '__main__':
