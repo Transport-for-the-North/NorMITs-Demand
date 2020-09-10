@@ -256,7 +256,7 @@ EFS_RUN_DISTRIBUTIONS_DICT = {
     },
 }
 
-FUTURE_YEARS_DEFAULT = [2033, 2035, 2050]
+FUTURE_YEARS = [2033, 2035, 2050]
 DEFAULT_DIST_LOCATION = os.path.join(
     "Y:/",
     "EFS",
@@ -274,12 +274,19 @@ CONSTRAINT_REQUIRED_DEFAULT = [
     False,  # final trip based constraint
 ]
 
-PURPOSES_NEEDED_DEFAULT = [1] #, 2, 3, 4, 5, 6, 7, 8]
-SOC_NEEDED_DEFAULT = [0, 1, 2, 3]
-NS_NEEDED_DEFAULT = [1, 2, 3, 4, 5]
-CA_NEEDED_DEFAULT = [1, 2]
-MODES_NEEDED_DEFAULT = [1, 2, 3, 5, 6]
-TIMES_NEEDED_DEFAULT = [1, 2, 3, 4]
+# HB consts
+PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]
+MODES_NEEDED = [1, 2, 3, 5, 6]
+SOC_NEEDED = [0, 1, 2, 3]
+NS_NEEDED = [1, 2, 3, 4, 5]
+CA_NEEDED = [1, 2]
+TIMES_NEEDED = [1, 2, 3, 4]
+
+# NHB consts
+NHB_PURPOSES_NEEDED = [12, 13, 14, 15, 16, 18]
+# NHB_MODES_NEEDED = [1, 2, 3, 5, 6]
+NHB_MODES_NEEDED = [6]  # Currently only has seed dists for m6
+NHB_FUTURE_YEARS = [2033]   # Only this year during testing
 
 
 

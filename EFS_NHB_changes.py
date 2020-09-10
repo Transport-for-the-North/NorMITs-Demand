@@ -2392,16 +2392,7 @@ class ExternalForecastSystem:
                                 )
                                     
                         print()
-                        final_distribution = self.furness_process.run(
-                            production_dataframe=production_input,
-                            attraction_dataframe=attraction_input,
-                            distribution_dataframe=distribution_dataframe,
-                            number_of_iterations=number_of_iterations,
-                            replace_zero_values=replace_zero_values,
-                            constrain_on_production=constrain_on_production,
-                            constrain_on_attraction=constrain_on_attraction,
-                            zero_replacement_value=zero_replacement_value
-                            )
+                        final_distribution = self.furness_process.run()
 
 
                         final_distribution["purpose_id"] = purpose

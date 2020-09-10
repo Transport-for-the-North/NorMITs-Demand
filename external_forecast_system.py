@@ -180,7 +180,7 @@ class ExternalForecastSystem:
 
     def run(self,
             base_year: int = 2018,
-            future_years: List[int] = efs_consts.FUTURE_YEARS_DEFAULT,
+            future_years: List[int] = efs_consts.FUTURE_YEARS,
             desired_zoning: str = "MSOA",
             alternate_population_base_year_file: str = None,
             alternate_households_base_year_file: str = None,
@@ -190,14 +190,14 @@ class ExternalForecastSystem:
             alternate_worker_growth_assumption_file: str = None,
             alternate_population_split_file: str = None,
             distribution_method: str = "Furness",
-            distribution_location: str = efs_consts.DEFAULT_DIST_LOCATION,
+            seed_dist_location: str = efs_consts.DEFAULT_DIST_LOCATION,
             distributions: dict = efs_consts.EFS_RUN_DISTRIBUTIONS_DICT,
-            purposes_needed: List[int] = efs_consts.PURPOSES_NEEDED_DEFAULT,
-            soc_needed: List[int] = efs_consts.SOC_NEEDED_DEFAULT,
-            ns_needed: List[int] = efs_consts.NS_NEEDED_DEFAULT,
-            car_availabilities_needed: List[int] = efs_consts.CA_NEEDED_DEFAULT,
-            modes_needed: List[int] = efs_consts.MODES_NEEDED_DEFAULT,
-            times_needed: List[int] = efs_consts.TIMES_NEEDED_DEFAULT,
+            purposes_needed: List[int] = efs_consts.PURPOSES_NEEDED,
+            soc_needed: List[int] = efs_consts.SOC_NEEDED,
+            ns_needed: List[int] = efs_consts.NS_NEEDED,
+            car_availabilities_needed: List[int] = efs_consts.CA_NEEDED,
+            modes_needed: List[int] = efs_consts.MODES_NEEDED,
+            times_needed: List[int] = efs_consts.TIMES_NEEDED,
             development_log_file: str = None,
             development_log_split_file: str = None,
             minimum_development_certainty: str = "MTL",
@@ -300,7 +300,7 @@ class ExternalForecastSystem:
             Default input is: "Furness".
             Possible inputs are: "Furness".
 
-        distribution_location:
+        seed_dist_location:
             The primary location for all the distributions.
             Default input is: "Y:/EFS/inputs/distributions".
             Possible input is any file location folder.
@@ -948,7 +948,7 @@ class ExternalForecastSystem:
                 required_modes=modes_needed, required_times=times_needed,
                 year_string_list=year_list,
                 distribution_dataframe_dict=distributions,
-                distribution_file_location=distribution_location)
+                distribution_file_location=seed_dist_location)
             print("Distributions generated!")
             last_time = current_time
             current_time = time.time()
@@ -1113,7 +1113,7 @@ class ExternalForecastSystem:
                     "Alternate Workers Growth File: " + str(alternate_worker_growth_assumption_file) + "\n",
                     "Alternate Population Split File: " + str(alternate_population_split_file) + "\n",
                     "Distribution Method: " + distribution_method + "\n",
-                    "Distribution Location: " + distribution_location + "\n",
+                    "Distribution Location: " + seed_dist_location + "\n",
                     "Purposes Used: " + str(purposes_needed) + "\n",
                     "Car Availabilities Used: " + str(car_availabilities_needed) + "\n",
                     "Modes Used: " + str(modes_needed) + "\n",
@@ -2104,11 +2104,8 @@ def safe_read_csv(file_path: str,
 
 def main():
     efs = ExternalForecastSystem(use_zone_id_subset=True)
-    efs.run(
-        constraint_source="Default",
-        desired_zoning="norms_2015",
-        output_location="C:/Users/Sneezy/Desktop/NorMITs_Demand/"
-    )
+    efs.run(desired_zoning="norms_2015", constraint_source="Default",
+            output_location="C:/Users/Sneezy/Desktop/NorMITs Demand/")
 
 
 if __name__ == '__main__':
