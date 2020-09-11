@@ -25,6 +25,39 @@ import efs_constants as efs_consts
 from old_tms.utils import *
 
 
+def get_model_name(mode: int) -> str:
+    """
+    Returns a string of the model name based on the mode given.
+
+    Parameters
+    ----------
+    mode:
+        Mode of transport
+
+    Returns
+    -------
+    model_name:
+        model name string
+    """
+    mode_to_name = {
+        1: None,
+        2: None,
+        3: 'noham',
+        4: None,
+        5: None,
+        6: 'norms'
+    }
+
+    if mode not in mode_to_name:
+        raise ValueError("'%s' is not a valid mode." % str(mode))
+
+    if mode_to_name[mode] is None:
+        raise ValueError("'%s' is a valid mode, but a model name does not "
+                         "exist for it." % str(mode))
+
+    return mode_to_name[mode]
+
+
 def add_fname_suffix(fname: str, suffix: str):
     """
     Adds suffix to fname - in front of the file type extension

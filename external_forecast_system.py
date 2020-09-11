@@ -2011,8 +2011,9 @@ class ExternalForecastSystem:
 
 
 def main():
-    efs = ExternalForecastSystem(use_zone_id_subset=True)
-    efs.run(desired_zoning="norms_2015", constraint_source="Default",
+    efs = ExternalForecastSystem(use_zone_id_subset=False)
+    efs.run(desired_zoning="norms_2015",
+            constraint_source="Default",
             output_location="C:/Users/Sneezy/Desktop/NorMITs Demand/")
 
 
