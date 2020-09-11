@@ -22,8 +22,7 @@ from typing import List
 import pa_to_od as pa2od
 import efs_constants as consts
 import external_forecast_system as base_efs
-from demand_utilities import tms_utils as dut
-from demand_utilities import efs_utils as due
+from demand_utilities import utils as du
 
 # Global paths
 home_path = 'Y:/NorMITs Demand/'
@@ -54,14 +53,14 @@ def _build_tp_pa_internal(pa_import,
                           tp_split):
     """
     The internals of build_tp_pa(). Useful for making the code more
-    readable due to the number of nested loops needed
+    readable du to the number of nested loops needed
 
     Returns
     -------
 
     """
     # ## Read in 24hr matrix ## #
-    productions_fname = due.get_dist_name(
+    productions_fname = du.get_dist_name(
         trip_origin,
         matrix_format,
         str(year),
@@ -75,7 +74,7 @@ def _build_tp_pa_internal(pa_import,
 
     # Convert from wide to long format
     y_zone = 'a_zone' if model_zone == 'p_zone' else 'd_zone'
-    pa_24hr = due.expand_distribution(
+    pa_24hr = du.expand_distribution(
         pa_24hr,
         year,
         purpose,
@@ -89,7 +88,7 @@ def _build_tp_pa_internal(pa_import,
 
     # ## Narrow tp_split down to just the segment here ## #
     segment_id = 'soc_id' if purpose in [1, 2] else 'ns_id'
-    segmentation_mask = due.get_segmentation_mask(
+    segmentation_mask = du.get_segmentation_mask(
         tp_split,
         col_vals={
             'purpose_id': purpose,
@@ -152,7 +151,7 @@ def _build_tp_pa_internal(pa_import,
         gb_tp = gb_tp.groupby(seg_cols)["dt"].sum().reset_index()
 
         # Build write path
-        tp_pa_name = due.get_dist_name(
+        tp_pa_name = du.get_dist_name(
             str(trip_origin),
             'pa',
             str(year),
@@ -337,13 +336,13 @@ def _build_od_internal(pa_import,
                        echo=True):
     """
     The internals of build_od(). Useful for making the code more
-    readable due to the number of nested loops needed
+    readable du to the number of nested loops needed
 
     TODO: merge with TMS - NOTE:
     All this code below has been mostly copied from TMS pa_to_od.py
     function of the same name. A few filenames etc have been changed
     to make sure it properly works with NorMITs demand files (This is
-    due to NorMITs demand needing moving in entirety over to the Y drive)
+    du to NorMITs demand needing moving in entirety over to the Y drive)
 
     Returns
     -------
@@ -363,8 +362,7 @@ def _build_od_internal(pa_import,
         mode,
         phi_type,
         aggregate_to_wday=aggregate_to_wday,
-        lookup_folder=lookup_folder,
-        echo=echo)
+        lookup_folder=lookup_folder)
     phi_factors = pa2od.simplify_time_period_splits(phi_factors)
     phi_factors = phi_factors[phi_factors['purpose_from_home'] == purpose]
 
@@ -393,7 +391,7 @@ def _build_od_internal(pa_import,
     # ## Build to_home matrices from the from_home PA ## #
     frh_ph = {}
     for tp_frh in tps:
-        dut.print_w_toggle('From from_h ' + str(tp_frh), echo=echo)
+        du.print_w_toggle('From from_h ' + str(tp_frh), echo=echo)
         frh_int = int(tp_frh.replace('tp', ''))
         phi_frh = phi_factors[phi_factors['time_from_home'] == frh_int]
 
@@ -407,7 +405,7 @@ def _build_od_internal(pa_import,
         toh_dists = {}
         for tp_toh in tps:
             # Get phi
-            dut.print_w_toggle('\tBuilding to_h ' + str(tp_toh), echo=echo)
+            du.print_w_toggle('\tBuilding to_h ' + str(tp_toh), echo=echo)
             toh_int = int(tp_toh.replace('tp', ''))
             phi_toh = phi_frh[phi_frh['time_to_home'] == toh_int]
             phi_toh = phi_toh['direction_factor']
@@ -474,10 +472,10 @@ def _build_od_internal(pa_import,
         output_od = output_from + output_to
         output_od_name = output_name.replace('pa', 'od')
 
-        dut.print_w_toggle('Exporting ' + output_from_name, echo=echo)
-        dut.print_w_toggle('& ' + output_to_name, echo=echo)
-        dut.print_w_toggle('& ' + output_od_name, echo=echo)
-        dut.print_w_toggle('To ' + od_export, echo=echo)
+        du.print_w_toggle('Exporting ' + output_from_name, echo=echo)
+        du.print_w_toggle('& ' + output_to_name, echo=echo)
+        du.print_w_toggle('& ' + output_od_name, echo=echo)
+        du.print_w_toggle('To ' + od_export, echo=echo)
 
         # Output from_home, to_home and full OD matrices
         output_from_path = os.path.join(od_export, output_from_name)
@@ -489,7 +487,7 @@ def _build_od_internal(pa_import,
 
         matrix_totals.append([output_name, from_total, to_total])
 
-    dist_name = due.get_dist_name_from_calib_params('hb', 'od', calib_params)
+    dist_name = du.get_dist_name_from_calib_params('hb', 'od', calib_params)
     print("INFO: OD Matrices for %s written to file." % dist_name)
     return matrix_totals
 
@@ -517,7 +515,7 @@ def build_od(pa_import,
             for mode in required_modes:
                 for segment in required_segments:
                     for ca in required_car_availabilities:
-                        calib_params = due.generate_calib_params(
+                        calib_params = du.generate_calib_params(
                             year,
                             purpose,
                             mode,
@@ -547,9 +545,9 @@ def _nhb_production_internal(hb_pa_import,
                              car_availability):
     """
       The internals of nhb_production(). Useful for making the code more
-      readable due to the number of nested loops needed
+      readable du to the number of nested loops needed
     """
-    hb_dist = due.get_dist_name(
+    hb_dist = du.get_dist_name(
         'hb',
         'pa',
         str(year),
@@ -564,7 +562,7 @@ def _nhb_production_internal(hb_pa_import,
     hb_productions = pd.read_csv(
         os.path.join(hb_pa_import, hb_dist)
     )
-    hb_productions = due.expand_distribution(
+    hb_productions = du.expand_distribution(
         hb_productions,
         year,
         purpose,
@@ -653,11 +651,11 @@ def nhb_production(hb_pa_import,
 
     # For every: Year, purpose, mode, segment, ca
     for year in year_string_list:
-        loop_gen = due.segmentation_loop_generator(required_purposes,
-                                                   required_modes,
-                                                   required_soc,
-                                                   required_ns,
-                                                   required_car_availabilities)
+        loop_gen = du.segmentation_loop_generator(required_purposes,
+                                                  required_modes,
+                                                  required_soc,
+                                                  required_ns,
+                                                  required_car_availabilities)
         for purpose, mode, segment, car_availability in loop_gen:
             nhb_productions = _nhb_production_internal(
                 hb_pa_import,
@@ -692,7 +690,7 @@ def nhb_production(hb_pa_import,
         )
 
         # Output disaggregated
-        da_fname = due.add_fname_suffix(nhb_productions_fname, '_disaggregated')
+        da_fname = du.add_fname_suffix(nhb_productions_fname, '_disaggregated')
         yr_nhb_productions.to_csv(
             os.path.join(nhb_export, da_fname),
             index=False
@@ -760,7 +758,7 @@ def nhb_furness(p_import,
         productions = productions.loc[productions["m"] == mode]
 
         # read in nhb_seeds
-        seed_fname = due.get_dist_name(
+        seed_fname = du.get_dist_name(
             'nhb',
             'pa',
             purpose=str(purpose),
@@ -826,7 +824,7 @@ def nhb_furness(p_import,
 
         # ## Output the furnessed PA matrix to file ## #
         # Generate path
-        nhb_dist_fname = due.get_dist_name(
+        nhb_dist_fname = du.get_dist_name(
             'nhb',
             'od',
             str(year),
@@ -853,17 +851,17 @@ def main():
 
     # Say what to run
     run_build_tp_pa = False
-    run_build_od = False
+    run_build_od = True
     run_nhb_production = False
     run_nhb_furness = False
-    run_nhb_build_tp_pa = True
+    run_nhb_build_tp_pa = False
 
     # TODO: Properly integrate this
     # How much should we print?
     echo = False
 
     # TODO: Create output folders
-    # dut.create_folder(pa_export, chDir=False)
+    # du.create_folder(pa_export, chDir=False)
 
     if run_build_tp_pa:
         build_tp_pa(tp_import=import_path,

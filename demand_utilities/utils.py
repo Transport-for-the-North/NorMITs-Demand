@@ -21,6 +21,9 @@ from typing import Iterable
 
 import efs_constants as efs_consts
 
+# Can call tms pa_to_od.py functions from here
+from old_tms.utils import *
+
 
 def add_fname_suffix(fname: str, suffix: str):
     """
