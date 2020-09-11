@@ -22,6 +22,8 @@ NS_P = [3, 4, 5, 6, 7, 8]
 ALL_HB_P = [1, 2, 3, 4, 5, 6, 7, 8]
 ALL_NHB_P = [12, 13, 14, 15, 16, 18]
 
+VALID_MATRIX_FORMATS = ['pa', 'od']
+
 EFS_COLUMN_DICTIONARY = {
     "base_year_population": [
         "model_zone_id",

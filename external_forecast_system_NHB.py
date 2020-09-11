@@ -43,6 +43,7 @@ _default_lookup_folder = 'Y:/NorMITs Demand/import/phi_factors'
 def _build_tp_pa_internal(pa_import,
                           pa_export,
                           trip_origin,
+                          matrix_format,
                           year,
                           purpose,
                           mode,
@@ -58,13 +59,10 @@ def _build_tp_pa_internal(pa_import,
     -------
 
     """
-    # Init return value
-    matrix_totals_dictionary = dict()
-
-    # ## Read in productions ## #
+    # ## Read in 24hr matrix ## #
     productions_fname = get_dist_name(
-        'hb',
-        'pa',
+        trip_origin,
+        matrix_format,
         str(year),
         str(purpose),
         str(mode),
@@ -72,58 +70,52 @@ def _build_tp_pa_internal(pa_import,
         str(car_availability),
         csv=True
     )
-    productions = pd.read_csv(os.path.join(pa_import, productions_fname))
+    pa_24hr = pd.read_csv(os.path.join(pa_import, productions_fname))
 
+    # Convert from wide to long format
     y_zone = 'a_zone' if model_zone == 'p_zone' else 'd_zone'
-    productions = productions.melt(
-        id_vars=[model_zone],
+    pa_24hr = expand_distribution(
+        pa_24hr,
+        year,
+        purpose,
+        mode,
+        segment,
+        car_availability,
+        id_vars=model_zone,
         var_name=y_zone,
         value_name='trips'
     )
 
-    # ## Add in production columns ready for merge ## #
-    productions['purpose_id'] = purpose
-    productions['mode_id'] = mode
-    productions['car_availability_id'] = car_availability
-    if purpose in [1, 2]:
-        productions['soc_id'] = str(segment)
-        productions['ns_id'] = 'none'
-    else:
-        productions['soc_id'] = 'none'
-        productions['ns_id'] = str(segment)
-
     # ## Narrow tp_split down to just the segment here ## #
     segment_id = 'soc_id' if purpose in [1, 2] else 'ns_id'
-    segmentation_mask = (
-        (tp_split['purpose_id'] == purpose)
-        & (tp_split['mode_id'] == mode)
-        & (tp_split[segment_id] == str(segment))
-        & (tp_split['car_availability_id'] == car_availability)
+    segmentation_mask = get_segmentation_mask(
+        tp_split,
+        col_vals={
+            'purpose_id': purpose,
+            'mode_id': mode,
+            segment_id: str(segment),
+            'car_availability_id': car_availability,
+        },
+        ignore_missing_cols=True
     )
     tp_split = tp_split.loc[segmentation_mask]
+    tp_split = tp_split.reindex([model_zone, 'tp', 'trips'], axis=1)
 
     # ## Calculate the time split factors for each zone ## #
-    # Total tp-split productions in each zone
-    tp_totals = tp_split.reindex(
-        [model_zone, 'tp', 'trips'],
-        axis=1
-    ).groupby([model_zone, 'tp']).sum().reset_index()
-
-    # Calculate tp-split factors
-    unq_zone = tp_totals[model_zone].drop_duplicates()
+    unq_zone = tp_split[model_zone].drop_duplicates()
     for zone in unq_zone:
-        zone_mask = (tp_totals[model_zone] == zone)
-        tp_totals.loc[zone_mask, 'time_split'] = (
-            tp_totals[zone_mask]['trips'].values
-            /
-            tp_totals[zone_mask]['trips'].sum()
+        zone_mask = (tp_split[model_zone] == zone)
+        tp_split.loc[zone_mask, 'time_split'] = (
+                tp_split[zone_mask]['trips'].values
+                /
+                tp_split[zone_mask]['trips'].sum()
         )
-    time_splits = tp_totals.reindex(
+    time_splits = tp_split.reindex(
         [model_zone, 'tp', 'time_split'],
         axis=1
     )
 
-    # ## Apply tp-split factors to total productions ## #
+    # ## Apply tp-split factors to total pa_24hr ## #
     unq_time = time_splits['tp'].drop_duplicates()
     for time in unq_time:
         # Need to do a left join, and set any missing vals. Ensures
@@ -131,7 +123,7 @@ def _build_tp_pa_internal(pa_import,
         # NOTE: tp3 is missing for p2, m1, soc0, ca1
         time_factors = time_splits.loc[time_splits['tp'] == time]
         gb_tp = pd.merge(
-            productions,
+            pa_24hr,
             time_factors,
             on=[model_zone],
             how='left'
@@ -139,17 +131,24 @@ def _build_tp_pa_internal(pa_import,
         gb_tp['time_split'] = gb_tp['time_split'].fillna(0)
         gb_tp['tp'] = gb_tp['tp'].fillna(time).astype(int)
 
+        # Calculate the number of trips for this time_period
         gb_tp['dt'] = gb_tp['dt'] * gb_tp['time_split']
-        gb_tp = gb_tp.groupby([
-            "p_zone",
-            "a_zone",
+
+        # ## Aggregate back up to our segmentation ## #
+        all_seg_cols = [
+            model_zone,
+            y_zone,
             "purpose_id",
-            "car_availability_id",
             "mode_id",
             "soc_id",
             "ns_id",
+            "car_availability_id",
             "tp"
-        ])["dt"].sum().reset_index()
+        ]
+
+        # Get rid of cols we're not using
+        seg_cols = [x for x in all_seg_cols if x in gb_tp.columns]
+        gb_tp = gb_tp.groupby(seg_cols)["dt"].sum().reset_index()
 
         # Build write path
         tp_pa_name = get_dist_name(
@@ -170,30 +169,87 @@ def _build_tp_pa_internal(pa_import,
 
         # Convert table from long to wide format and save
         gb_tp.rename(
-            columns={'p_zone': 'norms_zone_id'}
+            columns={model_zone: 'norms_zone_id'}
         ).pivot_table(
             index='norms_zone_id',
-            columns='a_zone',
+            columns=y_zone,
             values='dt'
         ).to_csv(out_tp_pa_path)
 
-        matrix_totals_dictionary[tp_pa_name] = gb_tp
 
-    return matrix_totals_dictionary
+def build_tp_pa(tp_import: str,
+                pa_import: str,
+                pa_export: str,
+                year_string_list: str,
+                required_purposes: List[int],
+                required_modes: List[int],
+                required_soc: List[int] = None,
+                required_ns: List[int] = None,
+                required_ca: List[int] = None,
+                matrix_format: str = 'pa'
+                ) -> None:
+    """
+    Converts the 24hr matrices in pa_import into time_period segmented
+    matrices - outputting to pa_export
 
+    Parameters
+    ----------
+    tp_import:
+        Path to the dir containing the seed values to use for splitting
+        pa_import matrices by tp
 
-def build_tp_pa(tp_import,
-                pa_import,
-                pa_export,
-                required_purposes,
-                required_modes,
-                required_soc,
-                required_ns,
-                required_car_availabilities,
-                year_string_list):
+    pa_import:
+        Path to the dir containing the 24hr matrices
 
-    # loop Init
-    matrix_totals_dictionary = {}
+    pa_export:
+        Path to the dir to export the tp split matrices
+
+    year_string_list:
+        A list of which years of 24hr Matrices to convert.
+
+    required_purposes:
+        A list of which purposes of 24hr Matrices to convert.
+
+    required_modes:
+        A list of which modes of 24hr Matrices to convert.
+
+    required_soc:
+        A list of which soc of 24hr Matrices to convert.
+
+    required_ns:
+        A list of which ns of 24hr Matrices to convert.
+
+    required_ca:
+        A list of which car availabilities of 24hr Matrices to convert.
+
+    matrix_format:
+        Which format the matrix is in. Either 'pa' or 'od'
+
+    Returns
+    -------
+        None
+
+    """
+    # Arg init
+    if matrix_format not in consts.VALID_MATRIX_FORMATS:
+        raise ValueError("'%s' is not a valid matrix format."
+                         % str(matrix_format))
+
+    # TODO: Infer these arguments based on pa_import
+    #  Along with yr, p, m
+    required_soc = [None] if required_soc is None else required_soc
+    required_ns = [None] if required_ns is None else required_ns
+    required_ca = [None] if required_ca is None else required_ca
+
+    # Loop Init
+    if matrix_format == 'pa':
+        model_zone = 'p_zone'
+    elif matrix_format == 'od':
+        model_zone = 'o_zone'
+    else:
+        # Shouldn't be able to get here
+        raise ValueError("'%s' seems to be a valid matrix format, "
+                         "but build_tp_pa() cannot handle it. Sorry :(")
 
     # For every: Year, purpose, mode, segment, ca
     for year in year_string_list:
@@ -203,19 +259,17 @@ def build_tp_pa(tp_import,
 
             # Purpose specific set-up
             # Do it here to avoid repeats in inner loops
-            if purpose in (12, 13, 14, 15, 16, 18):
+            if purpose in consts.ALL_NHB_P:
                 # TODO: How to allocate tp to NHB
                 print('\tNHB run')
                 trip_origin = 'nhb'
-                required_segments = list()
-                model_zone = 'o_zone'
+                required_segments = [None]
                 tp_split_fname = 'export_nhb_productions_norms.csv'
                 tp_split_path = os.path.join(tp_import, tp_split_fname)
 
-            elif purpose in (1, 2, 3, 4, 5, 6, 7, 8):
+            elif purpose in consts.ALL_HB_P:
                 print('\tHB run')
                 trip_origin = 'hb'
-                model_zone = 'p_zone'
                 tp_split_fname = 'export_productions_norms.csv'
                 tp_split_path = os.path.join(tp_import, tp_split_fname)
                 if purpose in [1, 2]:
@@ -235,36 +289,41 @@ def build_tp_pa(tp_import,
             # Read in the seed values for tp splits
             tp_split = pd.read_csv(tp_split_path).rename(
                 columns={
-                    'norms_zone_id': 'p_zone',
+                    'norms_zone_id': model_zone,
                     'p': 'purpose_id',
                     'm': 'mode_id',
                     'soc': 'soc_id',
                     'ns': 'ns_id',
-                    'ca': 'car_availability_id'
+                    'ca': 'car_availability_id',
+                    'time': 'tp'
                 }
             )
-            tp_split['p_zone'] = tp_split['p_zone'].astype(int)
+            tp_split[model_zone] = tp_split[model_zone].astype(int)
 
-            matrix_totals_dictionary = dict()
+            # Compile aggregate to p/m if NHB
+            if trip_origin == 'nhb':
+                tp_split = tp_split.groupby(
+                    [model_zone, 'purpose_id', 'mode_id', 'tp']
+                )['trips'].sum().reset_index()
+
             for mode in required_modes:
                 print("\t\tMode: %s" % str(mode))
                 for segment in required_segments:
-                    for car_availability in required_car_availabilities:
-                        matrix_totals = _build_tp_pa_internal(
+                    for car_availability in required_ca:
+                        _build_tp_pa_internal(
                             pa_import,
                             pa_export,
                             trip_origin,
+                            matrix_format,
                             year,
                             purpose,
                             mode,
                             segment,
                             car_availability,
                             model_zone,
-                            tp_split)
-
-                        matrix_totals_dictionary.update(matrix_totals)
-
-    return matrix_totals_dictionary
+                            tp_split
+                        )
+    return
 
 
 def _build_od_internal(pa_import,
@@ -787,6 +846,30 @@ def nhb_furness(p_import,
         print("NHB Distribution %s complete!" % nhb_dist_fname)
 
 
+# TODO: Move to efs utils
+def is_none_like(o) -> bool:
+    """
+
+    Parameters
+    ----------
+    o:
+        Object to check
+
+    Returns
+    -------
+    bool:
+        True if o is none-like else False
+    """
+    if o is None:
+        return True
+
+    if isinstance(o, str):
+        if o.lower().strip() == 'none':
+            return True
+
+    return False
+
+
 # TODO: Import from original efs
 def get_dist_name(trip_origin: str,
                   matrix_format: str,
@@ -808,23 +891,23 @@ def get_dist_name(trip_origin: str,
     ]
 
     # Optionally add the extra segmentation
-    if year is not None:
+    if not is_none_like(year):
         name_parts += ["yr" + year]
 
-    if purpose is not None:
+    if not is_none_like(purpose):
         name_parts += ["p" + purpose]
 
-    if mode is not None:
+    if not is_none_like(mode):
         name_parts += ["m" + mode]
 
-    if segment is not None:
+    if not is_none_like(segment) and not is_none_like(purpose):
         seg_name = "soc" if purpose in ['1', '2'] else "ns"
         name_parts += [seg_name + segment]
 
-    if car_availability is not None:
+    if not is_none_like(car_availability):
         name_parts += ["ca" + car_availability]
 
-    if tp is not None:
+    if not is_none_like(tp):
         name_parts += ["tp" + tp]
 
     # Create name string
@@ -919,15 +1002,22 @@ def generate_calib_params(year,
     }
 
 
-def expand_distribution(dist,
-                        year,
-                        purpose,
-                        mode,
-                        segment,
-                        car_availability,
+def expand_distribution(dist: pd.DataFrame,
+                        year: str,
+                        purpose: str,
+                        mode: str,
+                        segment: str = None,
+                        car_availability: str = None,
                         id_vars='p_zone',
                         var_name='a_zone',
-                        value_name='trips'):
+                        value_name='trips',
+                        year_col: str = 'year',
+                        purpose_col: str = 'purpose_id',
+                        mode_col: str = 'mode_id',
+                        soc_col: str = 'soc_id',
+                        ns_col: str = 'ns_id',
+                        ca_col: str = 'car_availability_id'
+                        ) -> pd.DataFrame:
     """
     Returns a converted distribution  - converted from wide to long
     format, adding in a column for each segmentation
@@ -935,24 +1025,33 @@ def expand_distribution(dist,
     dist = dist.copy()
 
     # Convert from wide to long
+    # This way we can avoid the name of the first col
     dist = dist.melt(
-        id_vars=id_vars,
+        id_vars=dist.columns[:1],
         var_name=var_name,
         value_name=value_name
     )
+    id_vars = id_vars[0] if isinstance(id_vars, list) else id_vars
+    dist.columns.values[0] = id_vars
 
     # Add new columns
-    dist['year'] = year
-    dist['purpose_id'] = purpose
-    dist['mode_id'] = mode
-    dist['car_availability_id'] = car_availability
+    dist[purpose_col] = purpose
+    dist[mode_col] = mode
 
-    if purpose in [1, 2]:
-        dist['soc_id'] = segment
-        dist['ns_id'] = 'none'
-    else:
-        dist['soc_id'] = 'none'
-        dist['ns_id'] = segment
+    # Optionally add other columns
+    if not is_none_like(year):
+        dist[year_col] = year
+
+    if not is_none_like(car_availability):
+        dist[ca_col] = car_availability
+
+    if not is_none_like(segment):
+        if purpose in [1, 2]:
+            dist[soc_col] = segment
+            dist[ns_col] = 'none'
+        else:
+            dist[soc_col] = 'none'
+            dist[ns_col] = segment
 
     return dist
 
@@ -988,7 +1087,7 @@ def segmentation_loop_generator(p_list,
                                 tp
                             )
 
-
+# TODO: Move to utils
 def add_fname_suffix(fname: str, suffix: str):
     """
     Adds suffix to fname - in front of the file type extension
@@ -1014,14 +1113,58 @@ def add_fname_suffix(fname: str, suffix: str):
     return new_fname
 
 
+# TODO: Move to utils
+def get_segmentation_mask(df: pd.DataFrame,
+                          col_vals: dict,
+                          ignore_missing_cols=False
+                          ) -> pd.Series:
+    """
+    Creates a mask on df, optionally skipping non-existent columns
+
+    Parameters
+    ----------
+    df:
+        The dataframe to make the mask from.
+
+    col_vals:
+        A dictionary of column names to wanted values.
+
+    ignore_missing_cols:
+        If True, and error will not be raised when a given column in
+        col_val does not exist.
+
+    Returns
+    -------
+    segmentation_mask:
+        A pandas.Series of boolean values
+    """
+    # Init Mask
+    mask = pd.Series([True] * len(df))
+
+    # Narrow down mask
+    for col, val in col_vals.items():
+        # Make sure column exists
+        if col not in df.columns:
+            if ignore_missing_cols:
+                continue
+            else:
+                raise KeyError("'%s' does not exist in DataFrame."
+                               % str(col))
+
+        mask &= (df[col] == val)
+
+    return mask
+
+
 def main():
     # TODO: Integrate into TMS and EFS proper
 
     # Say what to run
-    run_build_tp_pa = False
+    run_build_tp_pa = True
     run_build_od = False
-    run_nhb_production = True
-    run_nhb_furness = True
+    run_nhb_production = False
+    run_nhb_furness = False
+    run_nhb_build_tp_pa = True
 
     # TODO: Properly integrate this
     # How much should we print?
@@ -1034,12 +1177,11 @@ def main():
         build_tp_pa(tp_import=import_path,
                     pa_import=os.path.join(export_path, '24hr PA Matrices'),
                     pa_export=os.path.join(export_path, 'PA Matrices'),
+                    year_string_list=consts.NHB_FUTURE_YEARS,
                     required_purposes=consts.PURPOSES_NEEDED,
                     required_modes=consts.MODES_NEEDED,
                     required_soc=consts.SOC_NEEDED,
-                    required_ns=consts.NS_NEEDED,
-                    required_car_availabilities=consts.CA_NEEDED,
-                    year_string_list=consts.NHB_FUTURE_YEARS)
+                    required_ns=consts.NS_NEEDED, required_ca=consts.CA_NEEDED)
         print('Transposed HB PA to tp PA\n')
 
     if run_build_od:
@@ -1087,7 +1229,15 @@ def main():
             use_zone_id_subset=True)
         print('"Furnessed" NHB Productions\n')
 
-    # TODO: Create tp-OD for NHB
+    if run_nhb_build_tp_pa:
+        build_tp_pa(tp_import=import_path,
+                    pa_import=os.path.join(export_path, '24hr OD Matrices'),
+                    pa_export=os.path.join(export_path, 'OD Matrices'),
+                    matrix_format='od',
+                    year_string_list=consts.NHB_FUTURE_YEARS,
+                    required_purposes=consts.NHB_PURPOSES_NEEDED,
+                    required_modes=consts.NHB_MODES_NEEDED)
+        print('Transposed NHB OD to tp OD\n')
 
 
 if __name__ == '__main__':
