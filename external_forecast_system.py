@@ -23,7 +23,8 @@ from efs_pop_generator import ExternalForecastSystemPopulationGenerator
 from efs_worker_generator import ExternalForecastSystemWorkerGenerator
 from zone_translator import ZoneTranslator
 
-from demand_utilities import tms_utils as du
+from demand_utilities import tms_utils as dut
+from demand_utilities import efs_utils as due
 from demand_utilities import error_management as err_check
 from demand_utilities.sector_reporter_v2 import SectorReporter
 
@@ -81,82 +82,82 @@ class ExternalForecastSystem:
 
         # Read in population files
         file_path = os.path.join(input_file_home, population_value_file)
-        self.population_values = safe_read_csv(file_path)
+        self.population_values = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, population_growth_file)
-        self.population_growth = safe_read_csv(file_path)
+        self.population_growth = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, population_constraint_file)
-        self.population_constraint = safe_read_csv(file_path)
+        self.population_constraint = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, future_population_ratio_file)
-        self.future_population_ratio = safe_read_csv(file_path)
+        self.future_population_ratio = due.safe_read_csv(file_path)
 
         # Households files
         file_path = os.path.join(input_file_home, households_value_file)
-        self.households_values = safe_read_csv(file_path)
+        self.households_values = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, household_growth_file)
-        self.households_growth = safe_read_csv(file_path)
+        self.households_growth = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, households_constraint_file)
-        self.households_constraint = safe_read_csv(file_path)
+        self.households_constraint = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, housing_type_split_file)
-        self.housing_type_split = safe_read_csv(file_path)
+        self.housing_type_split = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, housing_occupancy_file)
-        self.housing_occupancy = safe_read_csv(file_path)
+        self.housing_occupancy = due.safe_read_csv(file_path)
 
         # Worker files
         file_path = os.path.join(input_file_home, worker_value_file)
-        self.worker_values = safe_read_csv(file_path)
+        self.worker_values = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, worker_growth_file)
-        self.worker_growth = safe_read_csv(file_path)
+        self.worker_growth = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, worker_constraint_file)
-        self.worker_constraint = safe_read_csv(file_path)
+        self.worker_constraint = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, worker_ratio_file)
-        self.worker_splits = safe_read_csv(file_path)
+        self.worker_splits = due.safe_read_csv(file_path)
 
         # Production and attraction files
         file_path = os.path.join(input_file_home, production_trip_rates_file)
-        self.production_trip_rates = safe_read_csv(file_path)
+        self.production_trip_rates = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, hb_mode_split_file)
-        self.hb_mode_split = safe_read_csv(file_path)
+        self.hb_mode_split = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, hb_mode_time_split_file)
-        self.hb_mode_time_split = safe_read_csv(file_path)
+        self.hb_mode_time_split = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, split_handler_file)
-        self.split_handler = safe_read_csv(file_path)
+        self.split_handler = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, traveller_types_file)
-        self.traveller_types = safe_read_csv(file_path)
+        self.traveller_types = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, attraction_weights_file)
-        self.attraction_weights = safe_read_csv(file_path)
+        self.attraction_weights = due.safe_read_csv(file_path)
 
         # Zone and area files
         self.value_zoning = value_zoning
 
         file_path = os.path.join(input_file_home, value_zones_file)
-        self.value_zones = safe_read_csv(file_path)
+        self.value_zones = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, area_types_file)
-        self.area_types = safe_read_csv(file_path)
+        self.area_types = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, area_grouping_file)
-        self.area_grouping = safe_read_csv(file_path)
+        self.area_grouping = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, msoa_area_types_file)
-        self.msoa_area_types = safe_read_csv(file_path)
+        self.msoa_area_types = due.safe_read_csv(file_path)
 
         file_path = os.path.join(input_file_home, zone_areatype_lookup_file)
-        self.zone_areatype_lookup = safe_read_csv(file_path)
+        self.zone_areatype_lookup = due.safe_read_csv(file_path)
 
         if use_zone_id_subset:
             print("WARNING: Not using all of the input data. "
@@ -1882,9 +1883,9 @@ class ExternalForecastSystem:
 
                         if self.use_zone_id_subset:
                             zone_subset = [259, 267, 268, 270, 275, 1171, 1173]
-                            synth_dists = get_data_subset(
+                            synth_dists = due.get_data_subset(
                                 synth_dists, 'p_zone', zone_subset)
-                            synth_dists = get_data_subset(
+                            synth_dists = due.get_data_subset(
                                 synth_dists, 'a_zone', zone_subset)
 
                         # Generate productions input
@@ -1962,7 +1963,7 @@ class ExternalForecastSystem:
                                 'p_zone', 'a_zone', 'trips'
                             ]]
 
-                            dict_string = get_dist_name(
+                            dict_string = due.get_dist_name(
                                 str(trip_origin),
                                 'pa',
                                 str(year),
@@ -1989,117 +1990,25 @@ class ExternalForecastSystem:
         """
         Shrink down all inputs. Useful for testing and dev.
         """
-        self.population_values = get_data_subset(self.population_values)
-        self.population_growth = get_data_subset(self.population_growth)
-        self.population_constraint = get_data_subset(self.population_constraint)
-        self.future_population_ratio = get_data_subset(self.future_population_ratio)
+        self.population_values = due.get_data_subset(self.population_values)
+        self.population_growth = due.get_data_subset(self.population_growth)
+        self.population_constraint = due.get_data_subset(self.population_constraint)
+        self.future_population_ratio = due.get_data_subset(self.future_population_ratio)
 
-        self.households_values = get_data_subset(self.households_values)
-        self.households_growth = get_data_subset(self.households_growth)
-        self.households_constraint = get_data_subset(self.households_constraint)
-        self.housing_type_split = get_data_subset(self.housing_type_split)
-        self.housing_occupancy = get_data_subset(self.housing_occupancy)
+        self.households_values = due.get_data_subset(self.households_values)
+        self.households_growth = due.get_data_subset(self.households_growth)
+        self.households_constraint = due.get_data_subset(self.households_constraint)
+        self.housing_type_split = due.get_data_subset(self.housing_type_split)
+        self.housing_occupancy = due.get_data_subset(self.housing_occupancy)
 
-        self.worker_values = get_data_subset(self.worker_values)
-        self.worker_growth = get_data_subset(self.worker_growth)
-        self.worker_constraint = get_data_subset(self.worker_constraint)
-        self.worker_splits = get_data_subset(self.worker_splits)
+        self.worker_values = due.get_data_subset(self.worker_values)
+        self.worker_growth = due.get_data_subset(self.worker_growth)
+        self.worker_constraint = due.get_data_subset(self.worker_constraint)
+        self.worker_splits = due.get_data_subset(self.worker_splits)
 
-        self.value_zones = get_data_subset(self.value_zones)
-        self.area_types = get_data_subset(self.area_types)
-        self.area_grouping = get_data_subset(self.area_grouping)
-
-
-# TODO: Move this into utils
-def get_data_subset(orig_data: pd.DataFrame,
-                    split_col_name: str = 'model_zone_id',
-                    subset_vals: List[object] = efs_consts.DEFAULT_ZONE_SUBSET
-                    ) -> pd.DataFrame:
-    """
-    Returns a subset of the original data - useful for testing and dev
-    
-    Parameters
-    ----------
-    orig_data:
-        The pandas DataFrame containing the starting data
-
-    split_col_name:
-        The column of orig_data we will look for subset_vals in
-
-    subset_vals:
-        The values to look for and keep in split_col_data
-
-    Returns
-    -------
-    subset_data:
-        A smaller version of orig_data
-
-    """
-    subset_mask = orig_data[split_col_name].isin(subset_vals)
-    return orig_data.loc[subset_mask]
-
-
-# TODO: Move this to utils
-def get_dist_name(trip_origin: str,
-                  matrix_format: str,
-                  year: str,
-                  purpose: str,
-                  mode: str,
-                  segment: str,
-                  car_availability: str,
-                  tp: str = None,
-                  csv: bool = False
-                  ) -> str:
-    """
-    Generates the distribution name
-    """
-    seg_name = "soc" if purpose in ['1', '2'] else "ns"
-
-    name_parts = [
-        trip_origin,
-        matrix_format,
-        "yr" + year,
-        "p" + purpose,
-        "m" + mode,
-        seg_name + segment,
-        "ca" + car_availability
-    ]
-
-    if tp is not None:
-        name_parts += ["tp" + tp]
-
-    final_name = '_'.join(name_parts)
-    if csv:
-        final_name += '.csv'
-
-    return final_name
-
-
-def safe_read_csv(file_path: str,
-                  **kwargs
-                  ) -> pd.DataFrame:
-    """
-    Reads in the file and performs some simple file checks
-
-    Parameters
-    ----------
-    file_path:
-        Path to the file to read in
-
-    kwargs:
-        ANy kwargs to pass onto pandas.read_csv()
-
-    Returns
-    -------
-    dataframe:
-        The data from file_path
-    """
-    # TODO: Add any more error checks here
-    # Check file exists
-    if not os.path.exists(file_path):
-        raise IOError("No file exists at %s" % file_path)
-
-    return pd.read_csv(file_path, **kwargs)
+        self.value_zones = due.get_data_subset(self.value_zones)
+        self.area_types = due.get_data_subset(self.area_types)
+        self.area_grouping = due.get_data_subset(self.area_grouping)
 
 
 def main():

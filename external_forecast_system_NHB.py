@@ -23,6 +23,7 @@ import pa_to_od as pa2od
 import efs_constants as consts
 import external_forecast_system as base_efs
 from demand_utilities import tms_utils as dut
+from demand_utilities import efs_utils as due
 
 # Global paths
 home_path = 'Y:/NorMITs Demand/'
@@ -60,7 +61,7 @@ def _build_tp_pa_internal(pa_import,
 
     """
     # ## Read in 24hr matrix ## #
-    productions_fname = get_dist_name(
+    productions_fname = due.get_dist_name(
         trip_origin,
         matrix_format,
         str(year),
@@ -74,7 +75,7 @@ def _build_tp_pa_internal(pa_import,
 
     # Convert from wide to long format
     y_zone = 'a_zone' if model_zone == 'p_zone' else 'd_zone'
-    pa_24hr = expand_distribution(
+    pa_24hr = due.expand_distribution(
         pa_24hr,
         year,
         purpose,
@@ -88,7 +89,7 @@ def _build_tp_pa_internal(pa_import,
 
     # ## Narrow tp_split down to just the segment here ## #
     segment_id = 'soc_id' if purpose in [1, 2] else 'ns_id'
-    segmentation_mask = get_segmentation_mask(
+    segmentation_mask = due.get_segmentation_mask(
         tp_split,
         col_vals={
             'purpose_id': purpose,
@@ -151,7 +152,7 @@ def _build_tp_pa_internal(pa_import,
         gb_tp = gb_tp.groupby(seg_cols)["dt"].sum().reset_index()
 
         # Build write path
-        tp_pa_name = get_dist_name(
+        tp_pa_name = due.get_dist_name(
             str(trip_origin),
             'pa',
             str(year),
@@ -459,6 +460,7 @@ def _build_od_internal(pa_import,
         # ## Gotta fudge the row/column names ## #
         # Add the zone_nums back on
         output_from = pd.DataFrame(output_from).reset_index()
+        # noinspection PyUnboundLocalVariable
         output_from['index'] = zone_nums
         output_from.columns = [model_zone_col] + zone_nums.tolist()
         output_from = output_from.set_index(model_zone_col)
@@ -487,7 +489,7 @@ def _build_od_internal(pa_import,
 
         matrix_totals.append([output_name, from_total, to_total])
 
-    dist_name = get_dist_name_from_calib_params('hb', 'od', calib_params)
+    dist_name = due.get_dist_name_from_calib_params('hb', 'od', calib_params)
     print("INFO: OD Matrices for %s written to file." % dist_name)
     return matrix_totals
 
@@ -515,7 +517,7 @@ def build_od(pa_import,
             for mode in required_modes:
                 for segment in required_segments:
                     for ca in required_car_availabilities:
-                        calib_params = generate_calib_params(
+                        calib_params = due.generate_calib_params(
                             year,
                             purpose,
                             mode,
@@ -547,7 +549,7 @@ def _nhb_production_internal(hb_pa_import,
       The internals of nhb_production(). Useful for making the code more
       readable due to the number of nested loops needed
     """
-    hb_dist = get_dist_name(
+    hb_dist = due.get_dist_name(
         'hb',
         'pa',
         str(year),
@@ -562,7 +564,7 @@ def _nhb_production_internal(hb_pa_import,
     hb_productions = pd.read_csv(
         os.path.join(hb_pa_import, hb_dist)
     )
-    hb_productions = expand_distribution(
+    hb_productions = due.expand_distribution(
         hb_productions,
         year,
         purpose,
@@ -651,11 +653,11 @@ def nhb_production(hb_pa_import,
 
     # For every: Year, purpose, mode, segment, ca
     for year in year_string_list:
-        loop_gen = segmentation_loop_generator(required_purposes,
-                                               required_modes,
-                                               required_soc,
-                                               required_ns,
-                                               required_car_availabilities)
+        loop_gen = due.segmentation_loop_generator(required_purposes,
+                                                   required_modes,
+                                                   required_soc,
+                                                   required_ns,
+                                                   required_car_availabilities)
         for purpose, mode, segment, car_availability in loop_gen:
             nhb_productions = _nhb_production_internal(
                 hb_pa_import,
@@ -690,7 +692,7 @@ def nhb_production(hb_pa_import,
         )
 
         # Output disaggregated
-        da_fname = add_fname_suffix(nhb_productions_fname, '_disaggregated')
+        da_fname = due.add_fname_suffix(nhb_productions_fname, '_disaggregated')
         yr_nhb_productions.to_csv(
             os.path.join(nhb_export, da_fname),
             index=False
@@ -758,7 +760,7 @@ def nhb_furness(p_import,
         productions = productions.loc[productions["m"] == mode]
 
         # read in nhb_seeds
-        seed_fname = get_dist_name(
+        seed_fname = due.get_dist_name(
             'nhb',
             'pa',
             purpose=str(purpose),
@@ -824,7 +826,7 @@ def nhb_furness(p_import,
 
         # ## Output the furnessed PA matrix to file ## #
         # Generate path
-        nhb_dist_fname = get_dist_name(
+        nhb_dist_fname = due.get_dist_name(
             'nhb',
             'od',
             str(year),
@@ -846,321 +848,11 @@ def nhb_furness(p_import,
         print("NHB Distribution %s complete!" % nhb_dist_fname)
 
 
-# TODO: Move to efs utils
-def is_none_like(o) -> bool:
-    """
-
-    Parameters
-    ----------
-    o:
-        Object to check
-
-    Returns
-    -------
-    bool:
-        True if o is none-like else False
-    """
-    if o is None:
-        return True
-
-    if isinstance(o, str):
-        if o.lower().strip() == 'none':
-            return True
-
-    return False
-
-
-# TODO: Import from original efs
-def get_dist_name(trip_origin: str,
-                  matrix_format: str,
-                  year: str = None,
-                  purpose: str = None,
-                  mode: str = None,
-                  segment: str = None,
-                  car_availability: str = None,
-                  tp: str = None,
-                  csv: bool = False
-                  ) -> str:
-    """
-    Generates the distribution name
-    """
-    # Generate the base name
-    name_parts = [
-        trip_origin,
-        matrix_format,
-    ]
-
-    # Optionally add the extra segmentation
-    if not is_none_like(year):
-        name_parts += ["yr" + year]
-
-    if not is_none_like(purpose):
-        name_parts += ["p" + purpose]
-
-    if not is_none_like(mode):
-        name_parts += ["m" + mode]
-
-    if not is_none_like(segment) and not is_none_like(purpose):
-        seg_name = "soc" if purpose in ['1', '2'] else "ns"
-        name_parts += [seg_name + segment]
-
-    if not is_none_like(car_availability):
-        name_parts += ["ca" + car_availability]
-
-    if not is_none_like(tp):
-        name_parts += ["tp" + tp]
-
-    # Create name string
-    final_name = '_'.join(name_parts)
-
-    # Optionally add on the csv if needed
-    if csv:
-        final_name += '.csv'
-
-    return final_name
-
-
-def get_dist_name_from_calib_params(trip_origin: str,
-                                    matrix_format: str,
-                                    calib_params: dict):
-    """
-        Wrapper for get_distribution_name() using calib params
-    """
-    segment_str = 'soc' if calib_params['p'] in [1, 2] else 'ns'
-
-    if 'tp' in calib_params:
-        return get_dist_name(
-            trip_origin,
-            matrix_format,
-            str(calib_params['yr']),
-            str(calib_params['p']),
-            str(calib_params['m']),
-            str(calib_params[segment_str]),
-            str(calib_params['ca']),
-            tp=str(calib_params['tp'])
-        )
-    else:
-        return get_dist_name(
-            trip_origin,
-            matrix_format,
-            str(calib_params['yr']),
-            str(calib_params['p']),
-            str(calib_params['m']),
-            str(calib_params[segment_str]),
-            str(calib_params['ca']),
-        )
-
-
-# TODO: copy over to original EFS
-def get_dist_name_parts(dist_name: str) -> List[str]:
-    """
-    Splits a full dist name into its individual components
-
-
-    Parameters
-    ----------
-    dist_name:
-        The dist name to parse
-
-    Returns
-    -------
-    name_parts:
-        dist_name split into parts. Returns in the following order:
-        [trip_origin, matrix_format, year, purpose, mode, segment, ca, tp]
-    """
-    if dist_name[-4:] == '.csv':
-        dist_name = dist_name[:-4]
-
-    name_parts = dist_name.split('_')
-
-    # TODO: Can this be done smarter
-    return [
-        name_parts[0],
-        name_parts[1],
-        name_parts[2][-4:],
-        name_parts[3][-1:],
-        name_parts[4][-1:],
-        name_parts[5][-1:],
-        name_parts[6][-1:],
-        name_parts[7][-1:],
-    ]
-
-
-# TODO: Copy over to original efs
-def generate_calib_params(year,
-                          purpose,
-                          mode,
-                          segment,
-                          ca):
-    segment_str = 'soc' if purpose in [1, 2] else 'ns'
-    return {
-        'yr': year,
-        'p': purpose,
-        'm': mode,
-        segment_str: segment,
-        'ca': ca
-    }
-
-
-def expand_distribution(dist: pd.DataFrame,
-                        year: str,
-                        purpose: str,
-                        mode: str,
-                        segment: str = None,
-                        car_availability: str = None,
-                        id_vars='p_zone',
-                        var_name='a_zone',
-                        value_name='trips',
-                        year_col: str = 'year',
-                        purpose_col: str = 'purpose_id',
-                        mode_col: str = 'mode_id',
-                        soc_col: str = 'soc_id',
-                        ns_col: str = 'ns_id',
-                        ca_col: str = 'car_availability_id'
-                        ) -> pd.DataFrame:
-    """
-    Returns a converted distribution  - converted from wide to long
-    format, adding in a column for each segmentation
-    """
-    dist = dist.copy()
-
-    # Convert from wide to long
-    # This way we can avoid the name of the first col
-    dist = dist.melt(
-        id_vars=dist.columns[:1],
-        var_name=var_name,
-        value_name=value_name
-    )
-    id_vars = id_vars[0] if isinstance(id_vars, list) else id_vars
-    dist.columns.values[0] = id_vars
-
-    # Add new columns
-    dist[purpose_col] = purpose
-    dist[mode_col] = mode
-
-    # Optionally add other columns
-    if not is_none_like(year):
-        dist[year_col] = year
-
-    if not is_none_like(car_availability):
-        dist[ca_col] = car_availability
-
-    if not is_none_like(segment):
-        if purpose in [1, 2]:
-            dist[soc_col] = segment
-            dist[ns_col] = 'none'
-        else:
-            dist[soc_col] = 'none'
-            dist[ns_col] = segment
-
-    return dist
-
-
-def segmentation_loop_generator(p_list,
-                                m_list,
-                                soc_list,
-                                ns_list,
-                                ca_list,
-                                tp_list=None):
-    """
-    Simple generator to avoid the need for so many nested loops
-    """
-    for purpose in p_list:
-        required_segments = soc_list if purpose in [1, 2] else ns_list
-        for mode in m_list:
-            for segment in required_segments:
-                for car_availability in ca_list:
-                    if tp_list is None:
-                        yield (
-                            purpose,
-                            mode,
-                            segment,
-                            car_availability
-                        )
-                    else:
-                        for tp in tp_list:
-                            yield (
-                                purpose,
-                                mode,
-                                segment,
-                                car_availability,
-                                tp
-                            )
-
-# TODO: Move to utils
-def add_fname_suffix(fname: str, suffix: str):
-    """
-    Adds suffix to fname - in front of the file type extension
-
-    Parameters
-    ----------
-    fname:
-        The fname to be added to - must have a file type extension
-        e.g. .csv
-    suffix:
-        The string to add between the end of the fname and the file
-        type extension
-
-    Returns
-    -------
-    new_fname:
-        fname with suffix added
-
-    """
-    f_type = '.' + fname.split('.')[-1]
-    new_fname = '.'.join(fname.split('.')[:-1])
-    new_fname += suffix + f_type
-    return new_fname
-
-
-# TODO: Move to utils
-def get_segmentation_mask(df: pd.DataFrame,
-                          col_vals: dict,
-                          ignore_missing_cols=False
-                          ) -> pd.Series:
-    """
-    Creates a mask on df, optionally skipping non-existent columns
-
-    Parameters
-    ----------
-    df:
-        The dataframe to make the mask from.
-
-    col_vals:
-        A dictionary of column names to wanted values.
-
-    ignore_missing_cols:
-        If True, and error will not be raised when a given column in
-        col_val does not exist.
-
-    Returns
-    -------
-    segmentation_mask:
-        A pandas.Series of boolean values
-    """
-    # Init Mask
-    mask = pd.Series([True] * len(df))
-
-    # Narrow down mask
-    for col, val in col_vals.items():
-        # Make sure column exists
-        if col not in df.columns:
-            if ignore_missing_cols:
-                continue
-            else:
-                raise KeyError("'%s' does not exist in DataFrame."
-                               % str(col))
-
-        mask &= (df[col] == val)
-
-    return mask
-
-
 def main():
     # TODO: Integrate into TMS and EFS proper
 
     # Say what to run
-    run_build_tp_pa = True
+    run_build_tp_pa = False
     run_build_od = False
     run_nhb_production = False
     run_nhb_furness = False
