@@ -422,3 +422,56 @@ def segmentation_loop_generator(p_list: Iterable[int],
                                 car_availability,
                                 tp
                             )
+
+
+def long_to_wide_out(df: pd.DataFrame,
+                     v_heading: str,
+                     h_heading: str,
+                     values: str,
+                     out_path: str,
+                     echo=True) -> None:
+    """
+    Converts a long format pd.Dataframe, converts it to long and writes
+    as a csv to out_path
+
+    Parameters
+    ----------
+    df:
+        The dataframe to convert and output
+
+    v_heading:
+        Column name of df to be the vertical heading.
+
+    h_heading:
+        Column name of df to be the horizontal heading.
+
+    values:
+        Column name of df to be the values.
+
+    out_path:
+        Where to write the converted matrix.
+
+    echo:
+        Indicates whether to print a log of the process to the terminal.
+
+    Returns
+    -------
+        None
+    """
+    # Get the unique column names
+    unq_zones = df[v_heading].drop_duplicates().reset_index(drop=True).copy()
+
+    # Convert to wide format and write to file
+    wide_mat = df_to_np(
+        df=df,
+        values=values,
+        unq_internal_zones=unq_zones,
+        v_heading=v_heading,
+        h_heading=h_heading,
+        echo=echo
+    )
+    pd.DataFrame(
+        wide_mat,
+        index=unq_zones,
+        columns=unq_zones
+    ).to_csv(out_path)

@@ -19,8 +19,8 @@ import pandas as pd
 import efs_constants as efs_consts
 import furness_process as fp
 from efs_constrainer import ExternalForecastSystemConstrainer
-from efs_pop_generator import ExternalForecastSystemPopulationGenerator
-from efs_worker_generator import ExternalForecastSystemWorkerGenerator
+from efs_production_generator import ExternalForecastSystemPopulationGenerator
+from efs_attraction_generator import ExternalForecastSystemWorkerGenerator
 from zone_translator import ZoneTranslator
 
 from demand_utilities import utils as du
@@ -210,7 +210,8 @@ class ExternalForecastSystem:
             constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
             outputting_files: bool = True,
             performing_sector_totals: bool = True,
-            output_location: str = None
+            output_location: str = None,
+            echo_distribution: bool = True
             ) -> None:
         """
         The main function for the External Forecast System.
@@ -464,6 +465,17 @@ class ExternalForecastSystem:
         minimum_development_certainty = minimum_development_certainty.upper()
 
         year_list = [str(x) for x in [base_year] + future_years]
+
+        # ## OUTPUT SETUP ## #
+        final_out_path = self.generate_output_path(output_location,
+                                                   desired_zoning,
+                                                   population_metric,
+                                                   constraint_method,
+                                                   constraint_area,
+                                                   constraint_on,
+                                                   constraint_source)
+        if not os.path.exists(final_out_path):
+            os.mkdir(final_out_path)
 
         # Development Log Checks
         if (integrating_development_log and
@@ -747,7 +759,7 @@ class ExternalForecastSystem:
 
         # ## POPULATION GENERATION ## #
         print("Generating population...")
-        final_population = self.efs_pop_generator.run(
+        production_trips = self.efs_pop_generator.run(
             population_growth=population_growth,
             population_values=population_values,
             population_constraint=population_constraint,
@@ -757,10 +769,9 @@ class ExternalForecastSystem:
             households_constraint=households_constraint,
             housing_split=housing_type_split,
             housing_occupancy=housing_occupancy,
-            development_log=development_log,
-            development_log_split=development_log_split,
+            d_log=development_log,
+            d_log_split=development_log_split,
             minimum_development_certainty=minimum_development_certainty,
-            integrating_development_log=integrating_development_log,
             population_metric=population_metric,
             constraint_required=constraint_required,
             constraint_method=constraint_method,
@@ -769,61 +780,18 @@ class ExternalForecastSystem:
             constraint_source=constraint_source,
             designated_area=self.area_grouping.copy(),
             base_year_string=str(base_year),
-            model_years=year_list
+            model_years=year_list,
+            out_path=final_out_path,
+            area_types=self.area_types,
+            trip_rates=trip_rates
         )
-        print("Population generated!")
-        last_time = current_time
-        current_time = time.time()
-        print("Population generation took: %.2f seconds" %
-              (current_time - last_time))
-
-        # ## WORKER GENERATION ###
-        print("Generating workers...")
-        final_workers = self.efs_worker_generator.run(
-            worker_growth=worker_growth,
-            worker_values=worker_values,
-            worker_constraint=worker_constraint,
-            worker_split=worker_split,
-            development_log=development_log,
-            development_log_split=development_log_split,
-            minimum_development_certainty=minimum_development_certainty,
-            integrating_development_log=integrating_development_log,
-            constraint_required=constraint_required,
-            constraint_method=constraint_method,
-            constraint_area=constraint_area,
-            constraint_on=constraint_on,
-            constraint_source=constraint_source,
-            designated_area=self.area_grouping.copy(),
-            base_year_string=str(base_year),
-            model_years=year_list
-        )
-
-        print("Workers generated!")
-        last_time = current_time
-        current_time = time.time()
-        print("Worker generation took: %.2f seconds" %
-              (current_time - last_time))
-
-        # ## PRODUCTION GENERATION ## #
-        print("Generating production...")
-        production_trips = self.production_generation(final_population,
-                                                      self.area_types,
-                                                      trip_rates,
-                                                      car_association,
-                                                      year_list)
-
-        production_trips = self.convert_to_average_weekday(
-            production_trips,
-            year_list
-        )
-
         print("Productions generated!")
         last_time = current_time
         current_time = time.time()
         print("Production generation took: %.2f seconds" %
               (current_time - last_time))
 
-        print("Convert traveller type id to car availability id...")
+        print("Converting traveller type id to car availability id...")
         required_columns = [
             "model_zone_id",
             "purpose_id",
@@ -844,19 +812,36 @@ class ExternalForecastSystem:
         print("Car availability conversion took: %.2f seconds" %
               (current_time - last_time))
 
-        # ## ATTRACTION GENERATION & MATCHING ## #
-        print("Generating attractions...")
-        attraction_dataframe = self.attraction_generation(
-            final_workers,
-            attraction_weights,
-            year_list
+        # ## ATTRACTION GENERATION ###
+        print("Generating workers...")
+        attraction_dataframe = self.efs_worker_generator.run(
+            worker_growth=worker_growth,
+            worker_values=worker_values,
+            worker_constraint=worker_constraint,
+            worker_split=worker_split,
+            development_log=development_log,
+            development_log_split=development_log_split,
+            minimum_development_certainty=minimum_development_certainty,
+            integrating_development_log=integrating_development_log,
+            constraint_required=constraint_required,
+            constraint_method=constraint_method,
+            constraint_area=constraint_area,
+            constraint_on=constraint_on,
+            constraint_source=constraint_source,
+            designated_area=self.area_grouping.copy(),
+            base_year_string=str(base_year),
+            model_years=year_list,
+            attraction_weights=attraction_weights,
+            output_path=final_out_path
         )
+
         print("Attractions generated!")
         last_time = current_time
         current_time = time.time()
-        print("Attraction generation took: %.2f seconds" %
+        print("Employment and Attraction generation took: %.2f seconds" %
               (current_time - last_time))
 
+        # ## ATTRACTION WEIGHT GENERATION & MATCHING ## #
         print("Generating attraction weights...")
         attraction_weights = self.generate_attraction_weights(
             attraction_dataframe,
@@ -888,9 +873,9 @@ class ExternalForecastSystem:
             print("Translating from: " + self.value_zoning)
             print("Translating to: " + desired_zoning)
             # read in translation dataframe
-            path = "Y:/EFS/inputs/default/zone_translation"
-            path = os.path.join(path, desired_zoning + ".csv")
-            translation_dataframe = pd.read_csv(path)
+            output_path = "Y:/EFS/inputs/default/zone_translation"
+            output_path = os.path.join(output_path, desired_zoning + ".csv")
+            translation_dataframe = pd.read_csv(output_path)
 
             converted_productions = self.zone_translator.run(
                 ca_production_trips,
@@ -948,7 +933,9 @@ class ExternalForecastSystem:
                 required_modes=modes_needed, required_times=times_needed,
                 year_string_list=year_list,
                 distribution_dataframe_dict=distributions,
-                distribution_file_location=seed_dist_location)
+                distribution_file_location=seed_dist_location,
+                echo=echo_distribution
+            )
             print("Distributions generated!")
             last_time = current_time
             current_time = time.time()
@@ -996,51 +983,14 @@ class ExternalForecastSystem:
         ## TODO: Properly integrate this
 
         # TODO: Integrate output file setup into init!
-        if (outputting_files):
-            if (output_location != None):
+        if outputting_files:
+            if output_location is not None:
                 print("Saving files to: " + output_location)
-                date = datetime.datetime.now()
-                if (constraint_required):
-                    path = (
-                            output_location
-                            + self.VERSION_ID + " "
-                            + "External Forecast System Output"
-                            + " - "
-                            + desired_zoning
-                            + " - "
-                            + date.strftime("%d-%m-%y")
-                            + " - "
-                            + "PM " + population_metric[0]
-                            + " - "
-                            + "CM" + constraint_method[0]
-                            + " - "
-                            + "CA " + constraint_area[0]
-                            + " - "
-                            + "CO " + constraint_on[0]
-                            + " - "
-                            + "CS " + constraint_source[0]
-                    )
-                else:
-                    path = (
-                            output_location
-                            + self.VERSION_ID + " "
-                            + "External Forecast System Output"
-                            + " - "
-                            + desired_zoning
-                            + " - "
-                            + date.strftime("%d-%m-%y")
-                            + " - "
-                            + "PM " + population_metric
-                    )
-
-                if not os.path.exists(path):
-                    os.mkdir(path)
-
                 # TODO: Integrate into furnessing!
-                path = path + "/"
+                final_out_path = final_out_path + "/"
                 for key, distribution in final_distribution_dictionary.items():
                     key = str(key)
-                    out_path = os.path.join(path, key + '.csv')
+                    out_path = os.path.join(final_out_path, key + '.csv')
 
                     # Output in wide format
                     distribution.pivot_table(
@@ -1050,45 +1000,38 @@ class ExternalForecastSystem:
                     ).to_csv(out_path)
                     print("Saved distribution: " + key)
 
-                final_population.to_csv(
-                    path + "EFS_MSOA_population.csv",
-                    index=False
-                )
-
-                final_workers.to_csv(
-                    path + "EFS_MSOA_workers.csv",
-                    index=False
-                )
+                # Pop generation moved
+                # Final workers out moved
 
                 ca_production_trips.to_csv(
-                    path + "MSOA_production_trips.csv",
+                    final_out_path + "MSOA_production_trips.csv",
                     index=False
                 )
 
                 attraction_dataframe.to_csv(
-                    path + "MSOA_attractions.csv",
+                    final_out_path + "MSOA_attractions.csv",
                     index=False
                 )
 
                 converted_productions.to_csv(
-                    path + desired_zoning + "_production_trips.csv",
+                    final_out_path + desired_zoning + "_production_trips.csv",
                     index=False
                 )
 
                 converted_pure_attractions.to_csv(
-                    path + desired_zoning + "_attractions.csv",
+                    final_out_path + desired_zoning + "_attractions.csv",
                     index=False
                 )
 
                 sector_totals.to_csv(
-                    path + desired_zoning + "_sector_totals.csv",
+                    final_out_path + desired_zoning + "_sector_totals.csv",
                     index=False
                 )
 
                 for key, sector_total in pm_sector_total_dictionary.items():
                     print("Saving sector total: " + key)
                     sector_total.to_csv(
-                        path
+                        final_out_path
                         +
                         "sector_total_"
                         +
@@ -1099,7 +1042,7 @@ class ExternalForecastSystem:
                     )
                     print("Saved sector total: " + key)
 
-                explanation_file = open(path + "input_parameters.txt", "w")
+                explanation_file = open(final_out_path + "input_parameters.txt", "w")
 
                 inputs = [
                     "Base Year: " + str(base_year) + "\n",
@@ -1480,20 +1423,6 @@ class ExternalForecastSystem:
 
         return metric_dataframe
 
-    def convert_to_average_weekday(self,
-                                   production_dataframe: pd.DataFrame,
-                                   all_years: List[str]
-                                   ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        output_dataframe = production_dataframe.copy()
-
-        for year in all_years:
-            output_dataframe.loc[:, year] = output_dataframe.loc[:, year] / 5
-
-        return output_dataframe
-
     def segment_dataframe(self,
                           combined_dataframe: pd.DataFrame,
                           split_dataframe: pd.DataFrame,
@@ -1526,59 +1455,6 @@ class ExternalForecastSystem:
         )
 
         return segmented_dataframe
-
-    def production_generation(self,
-                              population: pd.DataFrame,
-                              area_type: pd.DataFrame,
-                              trip_rate: pd.DataFrame,
-                              car_association: pd.DataFrame,
-                              year_list: List[str]
-                              ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        population = population.copy()
-        area_type = area_type.copy()
-        trip_rate = trip_rate.copy()
-        car_association = car_association.copy()
-
-        # Multiple Population zones belong to each MSOA area  type
-        population = pd.merge(
-            population,
-            area_type,
-            on=["model_zone_id"]
-        )
-
-        # Calculate the trips of each traveller in an area, based on
-        # their trip rates
-        trips = pd.merge(
-            population,
-            trip_rate,
-            on=["traveller_type_id", "area_type_id"],
-            suffixes=("", "_trip_rate")
-        )
-        for year in year_list:
-            trips.loc[:, year] = trips[year] * trips[year + "_trip_rate"]
-
-        # Extract just the needed columns
-        group_by_cols = [
-            "model_zone_id",
-            "purpose_id",
-            "traveller_type_id",
-            "soc",
-            "ns",
-            "area_type_id"
-        ]
-        needed_columns = group_by_cols.copy()
-        needed_columns.extend(year_list)
-        trips = trips[needed_columns]
-
-        productions = trips.groupby(
-            by=group_by_cols,
-            as_index=False
-        ).sum()
-
-        return productions
 
     def mode_time_split_application(self,
                                     production_dataframe: pd.DataFrame,
@@ -1790,6 +1666,42 @@ class ExternalForecastSystem:
 
         return reattached_dataframe
 
+    def generate_output_path(self,
+                             output_location,
+                             desired_zoning,
+                             pop_metric,
+                             constraint_method=None,
+                             constraint_area=None,
+                             constraint_on=None,
+                             constraint_source=None
+                             ) -> str:
+        # Init
+        date = datetime.datetime.now()
+
+        # Generate the base name
+        fname_parts = [
+            self.VERSION_ID + " EFS Output",
+            desired_zoning,
+            date.strftime("%d-%m-%y"),
+            "PM " + pop_metric[0]
+        ]
+
+        # Optionally add constraint keys
+        if constraint_method is not None:
+            fname_parts += ["CM" + constraint_method[0]]
+
+        if constraint_area is not None:
+            fname_parts += ["CA" + constraint_area[0]]
+
+        if constraint_on is not None:
+            fname_parts += ["CO" + constraint_on[0]]
+
+        if constraint_source is not None:
+            fname_parts += ["CS" + constraint_source[0]]
+
+        # Build the full path and return
+        return os.path.join(output_location, ' - '.join(fname_parts))
+
     def distribute_dataframe(self,
                              productions: pd.DataFrame,
                              attraction_weights: pd.DataFrame,
@@ -1809,7 +1721,8 @@ class ExternalForecastSystem:
                              replace_zero_values: bool = True,
                              constrain_on_production: bool = True,
                              constrain_on_attraction: bool = True,
-                             zero_replacement_value: float = 0.00001
+                             zero_replacement_value: float = 0.00001,
+                             echo: bool = False
                              ) -> pd.DataFrame:
         """
         #TODO
@@ -1856,6 +1769,8 @@ class ExternalForecastSystem:
                     car_availability_dataframe = pd.DataFrame
                     first_iteration = True
                     for car_availability in required_car_availabilities:
+                        print()
+
                         # for tp in required_times:
                         dist_path = os.path.join(
                             distribution_file_location,
@@ -1922,7 +1837,9 @@ class ExternalForecastSystem:
                             constrain_on_production=constrain_on_production,
                             constrain_on_attraction=constrain_on_attraction,
                             zero_replacement_value=zero_replacement_value,
-                            target_percentage=target_percentage)
+                            target_percentage=target_percentage,
+                            echo=echo
+                        )
 
                         final_distribution["purpose_id"] = purpose
                         final_distribution["car_availability_id"] = car_availability
@@ -2011,10 +1928,11 @@ class ExternalForecastSystem:
 
 
 def main():
-    efs = ExternalForecastSystem(use_zone_id_subset=False)
+    efs = ExternalForecastSystem(use_zone_id_subset=True)
     efs.run(desired_zoning="norms_2015",
             constraint_source="Default",
-            output_location="C:/Users/Sneezy/Desktop/NorMITs Demand/")
+            output_location="C:/Users/Sneezy/Desktop/NorMITs Demand/",
+            echo_distribution=False)
 
 
 if __name__ == '__main__':

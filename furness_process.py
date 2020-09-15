@@ -14,6 +14,8 @@ Utilities.
 import pandas as pd
 import numpy as np
 
+from demand_utilities import utils as du
+
 
 def furness(productions: pd.DataFrame,
             attractions: pd.DataFrame,
@@ -24,7 +26,8 @@ def furness(productions: pd.DataFrame,
             constrain_on_attraction: bool = True,
             zero_replacement_value: float = 0.01,
             target_percentage: float = 0.7,
-            audit_outputs: bool = False
+            audit_outputs: bool = False,
+            echo=True
             ) -> pd.DataFrame:
     """
     Run function for the Furness Process class.
@@ -249,7 +252,7 @@ def furness(productions: pd.DataFrame,
         )
     )
 
-    mean_correct_percentage = (
+    pa_acc = (
         1
         -
         (
@@ -268,20 +271,18 @@ def furness(productions: pd.DataFrame,
         production_zone_total[["p_zone", "production_zone_total"]],
         on="p_zone"
     )
-    print()
     furnessed_frame = pd.merge(
         furnessed_frame,
         attraction_zone_total[["a_zone", "attraction_zone_total"]],
         on="a_zone"
     )
-    print()
 
     # TODO: Refactor this to avoid the code duplication before entering while loop
-    iteration_counter = 1
+    i = 1
 
-    while mean_correct_percentage < target_percentage:
-        print("Current distribution iteration: " + str(iteration_counter))
-        print("Current distribution iteration: " + str(round(mean_correct_percentage, 10)))
+    while pa_acc < target_percentage:
+        du.print_w_toggle("Distribution iteration: %d" % i, echo=echo)
+        du.print_w_toggle("Distribution iteration: %.9f" % pa_acc, echo=echo)
         if constrain_on_production and constrain_on_attraction:
             furnessed_frame["dt"] = (
                 (
@@ -374,7 +375,7 @@ def furness(productions: pd.DataFrame,
                 )
             )
 
-            mean_correct_percentage = (
+            pa_acc = (
                 1
                 -
                 (
@@ -403,7 +404,7 @@ def furness(productions: pd.DataFrame,
                 on="a_zone"
             )
 
-            iteration_counter = iteration_counter + 1
+            i = i + 1
 
     # count iterations
     #### OLD VERSION

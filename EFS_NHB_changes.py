@@ -1043,29 +1043,24 @@ class ExternalForecastSystem:
         ### POPULATION GENERATION ###
         print("Generating population...")
         final_population = self.efs_pop_generator.run(
-                population_growth = population_growth,
-                population_values = population_values,
-                population_constraint = population_constraint,
-                population_split = population_split,
-                households_growth = households_growth,
-                households_values = households_values,
-                households_constraint = households_constraint,
-                housing_split = housing_type_split,
-                housing_occupancy = housing_occupancy,
-                development_log = development_log,
-                development_log_split = development_log_split,
-                minimum_development_certainty = minimum_development_certainty,
-                integrating_development_log = integrating_development_log,
-                population_metric = population_metric,
-                constraint_required = constraint_required,
-                constraint_method = constraint_method,
-                constraint_area = constraint_area,
-                constraint_on = constraint_on,
-                constraint_source = constraint_source,
-                designated_area = self.default_area_grouping.copy(),
-                base_year_string = str(base_year),
-                model_years = year_string_list
-                )
+            population_growth=population_growth,
+            population_values=population_values,
+            population_constraint=population_constraint,
+            population_split=population_split,
+            households_growth=households_growth,
+            households_values=households_values,
+            households_constraint=households_constraint,
+            housing_split=housing_type_split,
+            housing_occupancy=housing_occupancy, d_log=development_log,
+            d_log_split=development_log_split,
+            minimum_development_certainty=minimum_development_certainty,
+            population_metric=population_metric,
+            constraint_required=constraint_required,
+            constraint_method=constraint_method,
+            constraint_area=constraint_area, constraint_on=constraint_on,
+            constraint_source=constraint_source,
+            designated_area=self.default_area_grouping.copy(),
+            base_year_string=str(base_year), model_years=year_string_list)
         print("Population generated!")
         last_time = current_time
         current_time = time.time()
@@ -2392,7 +2387,7 @@ class ExternalForecastSystem:
                                 )
                                     
                         print()
-                        final_distribution = self.furness_process.run()
+                        final_distribution = self.furness_process.run(,
 
 
                         final_distribution["purpose_id"] = purpose

@@ -58,11 +58,11 @@ def _nhb_production_internal(hb_pa_import,
     )
 
     # Seed the nhb productions with hb values
-    hb_productions = pd.read_csv(
+    hb_pa = pd.read_csv(
         os.path.join(hb_pa_import, hb_dist)
     )
-    hb_productions = du.expand_distribution(
-        hb_productions,
+    hb_pa = du.expand_distribution(
+        hb_pa,
         year,
         purpose,
         mode,
@@ -74,7 +74,7 @@ def _nhb_production_internal(hb_pa_import,
     )
 
     # Aggregate to destinations
-    nhb_productions = hb_productions.groupby([
+    nhb_prods = hb_pa.groupby([
         "a_zone",
         "purpose_id",
         "mode_id",
@@ -84,20 +84,18 @@ def _nhb_production_internal(hb_pa_import,
     ])["trips"].sum().reset_index()
 
     # join nhb trip rates
-    nhb_productions = nhb_trip_rates.merge(
-        nhb_productions,
-        on=["purpose_id", "mode_id"]
-    )
+    nhb_prods = pd.merge(nhb_trip_rates,
+                         nhb_prods,
+                         on=["purpose_id", "mode_id"])
 
     # Calculate NHB productions
-    nhb_productions["nhb_dt"] = nhb_productions["trips"] * nhb_productions[
-        "nhb_trip_rate"]
+    nhb_prods["nhb_dt"] = nhb_prods["trips"] * nhb_prods["nhb_trip_rate"]
 
     # aggregate nhb_p 11_12
-    nhb_productions.loc[nhb_productions["nhb_p"] == 11, "nhb_p"] = 12
+    nhb_prods.loc[nhb_prods["nhb_p"] == 11, "nhb_p"] = 12
 
     # Remove hb purpose and mode by aggregation
-    nhb_productions = nhb_productions.groupby([
+    nhb_prods = nhb_prods.groupby([
         "a_zone",
         "nhb_p",
         "nhb_m",
@@ -106,7 +104,7 @@ def _nhb_production_internal(hb_pa_import,
         "ns_id"
     ])["nhb_dt"].sum().reset_index()
 
-    return nhb_productions
+    return nhb_prods
 
 
 def nhb_production(hb_pa_import,
@@ -140,6 +138,7 @@ def nhb_production(hb_pa_import,
     nhb_production_dictionary = dict()
 
     # Get nhb trip rates
+    # Might do the other way - This emits CA segmentation
     nhb_trip_rates = pd.read_csv(
         os.path.join(lookup_folder, "IgammaNMHM.csv")
     ).rename(
@@ -285,9 +284,15 @@ def nhb_furness(p_import,
         # Check the productions and seed zones match
         p_zones = set(productions["p_zone"].tolist())
         seed_zones = set(nhb_seeds["p_zone"].tolist())
-        if p_zones != seed_zones:
-            raise ValueError("Production and seed attraction zones "
-                             "do not match.")
+
+        # Skip check if we're using a subset
+        if use_zone_id_subset:
+            print("WARNING! Using a zone subset. Can't check seed "
+                  "zones are valid!")
+        else:
+            if p_zones != seed_zones:
+                raise ValueError("Production and seed attraction zones "
+                                 "do not match.")
 
         # Infill zero values
         if replace_zero_vals:
@@ -333,13 +338,13 @@ def nhb_furness(p_import,
 
         # Convert from long to wide format and output
         # TODO: Generate output name based on model name
-        final_pa.rename(
-            columns={'p_zone': 'norms_zone_id'}
-        ).pivot_table(
-            index='norms_zone_id',
-            columns='a_zone',
-            values='trips'
-        ).to_csv(out_path)
+        du.long_to_wide_out(
+            final_pa.rename(columns={'p_zone': 'norms_zone_id'}),
+            v_heading='norms_zone_id',
+            h_heading='a_zone',
+            values='trips',
+            out_path=out_path
+        )
         print("NHB Distribution %s complete!" % nhb_dist_fname)
 
 
@@ -349,13 +354,14 @@ def main():
     # Say what to run
     run_build_tp_pa = False
     run_build_od = False
-    run_nhb_production = True
+    run_nhb_production = False
     run_nhb_furness = True
     run_nhb_build_tp_pa = False
 
     # TODO: Properly integrate this
     # How much should we print?
     echo = False
+    use_zone_id_subset = True
 
     # TODO: Create output folders
     # du.create_folder(pa_export, chDir=False)
@@ -414,7 +420,7 @@ def main():
             year_string_list=consts.NHB_FUTURE_YEARS,
             replace_zero_vals=True,
             zero_infill=0.01,
-            use_zone_id_subset=True)
+            use_zone_id_subset=use_zone_id_subset)
         print('"Furnessed" NHB Productions\n')
 
     if run_nhb_build_tp_pa:

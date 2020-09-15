@@ -22,7 +22,30 @@ NS_P = [3, 4, 5, 6, 7, 8]
 ALL_HB_P = [1, 2, 3, 4, 5, 6, 7, 8]
 ALL_NHB_P = [12, 13, 14, 15, 16, 18]
 
+# HB consts
+PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]
+MODES_NEEDED = [1, 2, 3, 5, 6]
+SOC_NEEDED = [0, 1, 2, 3]
+NS_NEEDED = [1, 2, 3, 4, 5]
+CA_NEEDED = [1, 2]
+TIMES_NEEDED = [1, 2, 3, 4]
+
+# NHB consts
+# NHB_PURPOSES_NEEDED = [12, 13, 14, 15, 16, 18]
+print("WARNING! ONLY USING P18 FOR NHB")
+NHB_PURPOSES_NEEDED = [18]
+# NHB_MODES_NEEDED = [1, 2, 3, 5, 6]
+NHB_MODES_NEEDED = [6]  # Currently only has seed dists for m6
+NHB_FUTURE_YEARS = [2033]   # Only this year during testing
+
 VALID_MATRIX_FORMATS = ['pa', 'od']
+
+TAG_CERTAINTY_BOUNDS = {
+    "NC": ["NC"],
+    "MTL": ["NC", "MTL"],
+    "RF": ["NC", "MTL", "RF"],
+    "H": ["NC", "MTL", "RF", "H"]
+}
 
 EFS_COLUMN_DICTIONARY = {
     "base_year_population": [
@@ -274,27 +297,31 @@ DEFAULT_DIST_LOCATION = os.path.join(
 )
 
 CONSTRAINT_REQUIRED_DEFAULT = [
-    True,  # initial population metric constraint
-    True,  # post-development constraint
-    True,  # secondary post-development constraint used for matching HH pop
+    True,   # initial population metric constraint
+    True,   # post-development constraint
+    True,   # secondary post-development constraint used for matching HH pop
     False,  # initial worker metric constraint
     False,  # secondary worker metric constraint
     False,  # final trip based constraint
 ]
 
-# HB consts
-PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]
-MODES_NEEDED = [1, 2, 3, 5, 6]
-SOC_NEEDED = [0, 1, 2, 3]
-NS_NEEDED = [1, 2, 3, 4, 5]
-CA_NEEDED = [1, 2]
-TIMES_NEEDED = [1, 2, 3, 4]
+# ## Attraction Generation ## #
+DEFAULT_ATTRACTION_CONSTRAINTS = [
+    True,   # initial population metric constraint
+    True,   # post-development constraint
+    True,   # secondary post-development constraint used for matching HH pop
+    False,  # initial worker metric constraint
+    False,  # secondary worker metric constraint
+    False,  # final trip based constraint
+]
 
-# NHB consts
-NHB_PURPOSES_NEEDED = [12, 13, 14, 15, 16, 18]
-# NHB_MODES_NEEDED = [1, 2, 3, 5, 6]
-NHB_MODES_NEEDED = [6]  # Currently only has seed dists for m6
-NHB_FUTURE_YEARS = [2033]   # Only this year during testing
+# ## Production Generations ## #
+DEFAULT_PRODUCTION_CONSTRAINTS = [
+    True,   # initial population metric constraint
+    True,   # post-development constraint
+    True,   # secondary post-development constraint used for matching HH pop
+    False   # final trip based constraint
+]
 
 
 

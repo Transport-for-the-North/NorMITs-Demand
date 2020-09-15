@@ -196,13 +196,14 @@ def _build_tp_pa_internal(pa_import,
         )
 
         # Convert table from long to wide format and save
-        gb_tp.rename(
-            columns={model_zone: 'norms_zone_id'}
-        ).pivot_table(
-            index='norms_zone_id',
-            columns=y_zone,
-            values='dt'
-        ).to_csv(out_tp_pa_path)
+        # TODO: Generate header based on mode used
+        du.long_to_wide_out(
+            gb_tp.rename(columns={model_zone: 'norms_zone_id'}),
+            v_heading='norms_zone_id',
+            h_heading=y_zone,
+            values='dt',
+            out_path=out_tp_pa_path
+        )
 
 
 def efs_build_tp_pa(tp_import: str,
@@ -288,7 +289,6 @@ def efs_build_tp_pa(tp_import: str,
             # Purpose specific set-up
             # Do it here to avoid repeats in inner loops
             if purpose in consts.ALL_NHB_P:
-                # TODO: How to allocate tp to NHB
                 print('\tNHB run')
                 trip_origin = 'nhb'
                 required_segments = [None]
@@ -308,11 +308,6 @@ def efs_build_tp_pa(tp_import: str,
             else:
                 raise ValueError("%s is not a valid purpose."
                                  % str(purpose))
-
-            # TODO: @Chris: is this the correct time split file to use?
-            #  Should use TMS base year tp PA as seed?
-            #  For example - TMS pa_to_od uses:
-            #  Y:\NorMITs Synthesiser\Noham\iter8a\Production Outputs/hb_productions_noham.csv
 
             # Read in the seed values for tp splits
             tp_split = pd.read_csv(tp_split_path).rename(
@@ -425,9 +420,6 @@ def _build_od_internal(pa_import,
 
         # Transpose to flip P & A
         frh_base = frh_dist[tp_frh].copy()
-        # print(frh_base.shape)
-        # print(calib_params)
-        # print(tp_frh)
         frh_base = frh_base.values.T
 
         toh_dists = {}
@@ -509,6 +501,11 @@ def _build_od_internal(pa_import,
         output_from_path = os.path.join(od_export, output_from_name)
         output_to_path = os.path.join(od_export, output_to_name)
         output_od_path = os.path.join(od_export, output_od_name)
+
+        # AUditing checks - tidality
+        # OD from = PA
+        # OD to = if it leaves it should come back
+        # OD = 2(PA)
         output_from.to_csv(output_from_path)
         output_to.to_csv(output_to_path)
         output_od.to_csv(output_od_path)
