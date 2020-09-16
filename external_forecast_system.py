@@ -56,7 +56,7 @@ class ExternalForecastSystem:
                  hb_mode_split_file: str = "traveller_type/hb_mode_split.csv",
                  hb_mode_time_split_file: str = "traveller_type/mode_time_split.csv",
                  split_handler_file: str = "traveller_type/mode_time_ids.csv",
-                 traveller_types_file: str = "traveller_type/traveller_types.csv",
+                 traveller_types_file: str = "traveller_type/traveller_type_ids.csv",
                  attraction_weights_file: str = "attractions/future_attraction_weights_i3.csv",
 
                  value_zoning: str = "MSOA",
@@ -1831,7 +1831,7 @@ class ExternalForecastSystem:
                             productions=production_input,
                             attractions=attraction_input,
                             distributions=synth_dists,
-                            number_of_iterations=number_of_iterations,
+                            max_iters=number_of_iterations,
                             replace_zero_values=replace_zero_values,
                             constrain_on_production=constrain_on_production,
                             constrain_on_attraction=constrain_on_attraction,
@@ -1931,7 +1931,7 @@ def main():
     efs.run(desired_zoning="norms_2015",
             constraint_source="Default",
             output_location="E:/NorMITs Demand/",
-            echo_distribution=True)
+            echo_distribution=False)
 
 
 if __name__ == '__main__':

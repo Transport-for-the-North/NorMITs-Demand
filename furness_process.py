@@ -14,18 +14,16 @@ Utilities.
 import pandas as pd
 import numpy as np
 
-from demand_utilities import utils as du
-
-
 def furness(productions: pd.DataFrame,
             attractions: pd.DataFrame,
             distributions: pd.DataFrame,
-            number_of_iterations: int = 1,
+            max_iters: int = 1,
             replace_zero_values: bool = True,
             constrain_on_production: bool = True,
             constrain_on_attraction: bool = True,
             zero_replacement_value: float = 0.01,
             target_percentage: float = 0.7,
+            exit_early_tol: int = 40,
             audit_outputs: bool = False,
             echo=True
             ) -> pd.DataFrame:
@@ -37,6 +35,8 @@ def furness(productions: pd.DataFrame,
     seed, whether to constrain on production or attraction
     or both and what to replace zero values on the seed
     with.
+
+    TODO: Make use of max_iters
 
     Parameters
     ----------
@@ -280,6 +280,8 @@ def furness(productions: pd.DataFrame,
     # TODO: Refactor this to avoid the code duplication before entering while loop
     i = 1
 
+    best_pa_acc = (pa_acc, i)
+
     while pa_acc < target_percentage:
         du.print_w_toggle("Distribution iteration: %d" % i, echo=echo)
         du.print_w_toggle("Distribution iteration: %.9f" % pa_acc, echo=echo)
@@ -404,7 +406,21 @@ def furness(productions: pd.DataFrame,
                 on="a_zone"
             )
 
+            # TODO: Write a log of pa_acc achieved for each distribution
+            #  Warn user when the target cannot be met
+            # Log the best pa_acc achieved
+            if pa_acc > best_pa_acc[0]:
+                best_pa_acc = (pa_acc, i)
+            else:
+                # Exit early if we have been stuck here a while
+                if i - best_pa_acc[1] > exit_early_tol:
+                    print("WARNING: Couldn't reach target accuracy! Exiting "
+                          "furnessing early...")
+                    break
+
+            # TODO: Turn this into a for loop
             i = i + 1
+
 
     # count iterations
     #### OLD VERSION
@@ -530,3 +546,6 @@ def furness(productions: pd.DataFrame,
 
     # return the completed furnessed frame
     return furnessed_frame[["p_zone", "a_zone", "dt"]]
+
+
+from demand_utilities import utils as du
