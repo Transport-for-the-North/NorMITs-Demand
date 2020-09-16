@@ -15,7 +15,7 @@ import pandas as pd
 from demand_utilities import error_management as err_check
 
 
-class ExternalForecastSystemConstrainer:
+class ForecastConstrainer:
     def run(self,
             grown_dataframe: pd.DataFrame,
             constraint_method: str, # percentage, average

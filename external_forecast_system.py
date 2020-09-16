@@ -18,9 +18,9 @@ import pandas as pd
 # self imports
 import efs_constants as efs_consts
 import furness_process as fp
-from efs_constrainer import ExternalForecastSystemConstrainer
-from efs_production_generator import ExternalForecastSystemPopulationGenerator
-from efs_attraction_generator import ExternalForecastSystemWorkerGenerator
+from efs_constrainer import ForecastConstrainer
+from efs_production_generator import EFSProductionGenerator
+from efs_attraction_generator import EFSAttractionGenerator
 from zone_translator import ZoneTranslator
 
 from demand_utilities import utils as du
@@ -30,43 +30,42 @@ from demand_utilities.sector_reporter_v2 import SectorReporter
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
-    VERSION_ID = "v2-2"
-    __version__ = VERSION_ID
+    __version__ = "v2-2"
 
     # defines all non-year columns
     column_dictionary = efs_consts.EFS_COLUMN_DICTIONARY
 
     def __init__(self,
-                 population_value_file: str = "base_year_population.csv",
-                 population_growth_file: str = "future_population_no_splits_growth.csv",
-                 population_constraint_file: str = "future_population_no_splits.csv",
-                 future_population_ratio_file: str = "traveller_type/ntem/ntem_traveller_type_ratio.csv",
+                 population_value_file: str = "population/base_population_2018.csv",
+                 population_growth_file: str = "population/future_population_growth.csv",
+                 population_constraint_file: str = "population/future_population_values.csv",
+                 future_population_ratio_file: str = "traveller_type/traveller_type_splits.csv",
 
-                 households_value_file: str = "base_year_households.csv",
-                 household_growth_file: str = "future_households_growth.csv",
-                 households_constraint_file: str = "future_households.csv",
-                 housing_type_split_file: str = "housing_property_ratio.csv",
-                 housing_occupancy_file: str = "housing_occupancy.csv",
+                 households_value_file: str = "households/base_households_2018.csv",
+                 household_growth_file: str = "households/future_households_growth.csv",
+                 households_constraint_file: str = "households/future_households_values.csv",
+                 housing_type_split_file: str = "households/housing_property_ratio.csv",
+                 housing_occupancy_file: str = "households/housing_occupancy.csv",
 
-                 worker_value_file: str = "base_year_workers.csv",
-                 worker_growth_file: str = "future_workers_growth.csv",
-                 worker_constraint_file: str = "future_workers_constraint_growth.csv",
-                 worker_ratio_file: str = "future_worker_splits.csv",
+                 worker_value_file: str = "employment/base_workers_2018.csv",
+                 worker_growth_file: str = "employment/future_workers_growth.csv",
+                 worker_constraint_file: str = "employment/future_workers_growth_values.csv",
+                 worker_ratio_file: str = "employment/future_worker_splits.csv",
 
-                 production_trip_rates_file: str = "traveller_type/ntem/ntem_hb_trip_rates.csv",
-                 hb_mode_split_file: str = "traveller_type/ntem/ntem_hb_mode_split.csv",
-                 hb_mode_time_split_file: str = "traveller_type/ntem/ntem_mode_time_split.csv",
-                 split_handler_file: str = "traveller_type/ntem/mode_time_splits.csv",
-                 traveller_types_file: str = "traveller_type/ntem/ntem_traveller_types.csv",
+                 production_trip_rates_file: str = "traveller_type/hb_trip_rates.csv",
+                 hb_mode_split_file: str = "traveller_type/hb_mode_split.csv",
+                 hb_mode_time_split_file: str = "traveller_type/mode_time_split.csv",
+                 split_handler_file: str = "traveller_type/mode_time_ids.csv",
+                 traveller_types_file: str = "traveller_type/traveller_types.csv",
                  attraction_weights_file: str = "attractions/future_attraction_weights_i3.csv",
 
                  value_zoning: str = "MSOA",
-                 value_zones_file: str = "msoa_zones.csv",
-                 area_types_file: str = "msoa_area_types.csv",
-                 area_grouping_file: str = "lad_msoa_grouping.csv",
-                 msoa_area_types_file: str = "msoa_area_types.csv",
-                 zone_areatype_lookup_file: str = "norms_2015.csv",
-                 input_file_home: str = "Y:/EFS/inputs/default/",
+                 value_zones_file: str = "zoning/msoa_zones.csv",
+                 area_types_file: str = "zoning/msoa_area_types.csv",
+                 area_grouping_file: str = "zoning/lad_msoa_grouping.csv",
+                 msoa_area_types_file: str = "zoning/msoa_area_types.csv",
+                 zone_areatype_lookup_file: str = "zoning/norms_2015.csv",
+                 input_file_home: str = "Y:/NorMITs Demand/inputs/default/",
 
                  use_zone_id_subset: bool = False
                  ):
@@ -164,9 +163,9 @@ class ExternalForecastSystem:
             self._subset_zone_ids()
 
         # sub-classes
-        self.efs_constrainer = ExternalForecastSystemConstrainer()
-        self.efs_pop_generator = ExternalForecastSystemPopulationGenerator()
-        self.efs_worker_generator = ExternalForecastSystemWorkerGenerator()
+        self.constrainer = ForecastConstrainer()
+        self.production_generator = EFSProductionGenerator()
+        self.attraction_generator = EFSAttractionGenerator()
 
         # support utilities tools
         self.sector_reporter = SectorReporter()
@@ -680,21 +679,21 @@ class ExternalForecastSystem:
             print("Constraint 'default' selected, retrieving constraint "
                   + "data...")
             population_constraint = self.population_constraint[pop_cols].copy()
-            population_constraint = self.efs_constrainer.convert_constraint_off_base_year(
+            population_constraint = self.constrainer.convert_constraint_off_base_year(
                 population_constraint,
                 str(base_year),
                 year_list
             )
 
             households_constraint = self.households_constraint[hh_cols].copy()
-            households_constraint = self.efs_constrainer.convert_constraint_off_base_year(
+            households_constraint = self.constrainer.convert_constraint_off_base_year(
                 households_constraint,
                 str(base_year),
                 year_list
             )
 
             worker_constraint = self.worker_constraint[emp_cols].copy()
-            worker_constraint = self.efs_constrainer.convert_constraint_off_base_year(
+            worker_constraint = self.constrainer.convert_constraint_off_base_year(
                 worker_constraint,
                 str(base_year),
                 year_list
@@ -759,7 +758,7 @@ class ExternalForecastSystem:
 
         # ## POPULATION GENERATION ## #
         print("Generating population...")
-        production_trips = self.efs_pop_generator.run(
+        production_trips = self.production_generator.run(
             population_growth=population_growth,
             population_values=population_values,
             population_constraint=population_constraint,
@@ -814,7 +813,7 @@ class ExternalForecastSystem:
 
         # ## ATTRACTION GENERATION ###
         print("Generating workers...")
-        attraction_dataframe = self.efs_worker_generator.run(
+        attraction_dataframe = self.attraction_generator.run(
             worker_growth=worker_growth,
             worker_values=worker_values,
             worker_constraint=worker_constraint,
@@ -1680,7 +1679,7 @@ class ExternalForecastSystem:
 
         # Generate the base name
         fname_parts = [
-            self.VERSION_ID + " EFS Output",
+            self.__version__ + " EFS Output",
             desired_zoning,
             date.strftime("%d-%m-%y"),
             "PM " + pop_metric[0]
@@ -1827,7 +1826,7 @@ class ExternalForecastSystem:
                         ].rename(columns={str(year): "attraction_forecast"})
 
                         # Furness the productions and attractions
-                        target_percentage = 0.7 if self.use_zone_id_subset else 0.9
+                        target_percentage = 0.7 if self.use_zone_id_subset else 0.975
                         final_distribution = fp.furness(
                             productions=production_input,
                             attractions=attraction_input,
@@ -1928,11 +1927,11 @@ class ExternalForecastSystem:
 
 
 def main():
-    efs = ExternalForecastSystem(use_zone_id_subset=True)
+    efs = ExternalForecastSystem(use_zone_id_subset=False)
     efs.run(desired_zoning="norms_2015",
             constraint_source="Default",
-            output_location="C:/Users/Sneezy/Desktop/NorMITs Demand/",
-            echo_distribution=False)
+            output_location="E:/NorMITs Demand/",
+            echo_distribution=True)
 
 
 if __name__ == '__main__':

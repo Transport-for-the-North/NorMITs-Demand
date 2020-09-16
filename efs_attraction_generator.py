@@ -12,12 +12,12 @@ import pandas as pd
 from typing import List
 
 import efs_constants as consts
-from efs_constrainer import ExternalForecastSystemConstrainer
+from efs_constrainer import ForecastConstrainer
 
 from demand_utilities import error_management as err_check
 
 
-class ExternalForecastSystemWorkerGenerator:
+class EFSAttractionGenerator:
     # infill statics
     POPULATION_INFILL = 0.001
     
@@ -26,7 +26,7 @@ class ExternalForecastSystemWorkerGenerator:
         """
         #TODO
         """
-        self.efs_constrainer = ExternalForecastSystemConstrainer()
+        self.efs_constrainer = ForecastConstrainer()
         self.tag_certainty_bounds = tag_certainty_bounds
     
     def run(self,

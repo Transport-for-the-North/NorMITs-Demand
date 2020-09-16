@@ -18,7 +18,7 @@ import pandas as pd
 
 import efs_constants as efs_consts
 
-from efs_constrainer import ExternalForecastSystemConstrainer
+from efs_constrainer import ForecastConstrainer
 from efs_pop_generator import ExternalForecastSystemPopulationGenerator
 from efs_worker_generator import ExternalForecastSystemWorkerGenerator
 from furness_process import FurnessProcess
@@ -324,7 +324,7 @@ class ExternalForecastSystem:
         self.default_area_grouping = self.default_area_grouping.loc[
             self.default_area_grouping['model_zone_id'].isin([1,2,1055,1056,1057,1058,1059,1060,1061,1062])]
                     
-        self.efs_constrainer = ExternalForecastSystemConstrainer()
+        self.efs_constrainer = ForecastConstrainer()
         self.efs_pop_generator = ExternalForecastSystemPopulationGenerator()
         self.efs_worker_generator = ExternalForecastSystemWorkerGenerator()
         self.furness_process = FurnessProcess()
