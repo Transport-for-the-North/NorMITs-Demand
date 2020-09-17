@@ -25,7 +25,7 @@ from demand_utilities import utils as du
 home_path = 'Y:/NorMITs Demand/'
 lookup_path = os.path.join(home_path, 'import')
 import_path = os.path.join(home_path, 'inputs/default/tp_pa')
-export_path = "C:/Users/Sneezy/Desktop/NorMITs Demand/nhb_dev"
+export_path = "E:/NorMITs Demand/nhb_dev"
 seed_distributions_path = os.path.join(home_path,
                                        'inputs',
                                        'distributions',
@@ -352,16 +352,16 @@ def main():
     # TODO: Integrate into TMS and EFS proper
 
     # Say what to run
-    run_build_tp_pa = False
-    run_build_od = False
-    run_nhb_production = False
+    run_build_tp_pa = True
+    run_build_od = True
+    run_nhb_production = True
     run_nhb_furness = True
-    run_nhb_build_tp_pa = False
+    run_nhb_build_tp_pa = True
 
     # TODO: Properly integrate this
     # How much should we print?
     echo = False
-    use_zone_id_subset = True
+    use_zone_id_subset = False
 
     # TODO: Create output folders
     # du.create_folder(pa_export, chDir=False)

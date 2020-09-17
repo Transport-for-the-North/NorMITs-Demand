@@ -15,18 +15,21 @@ import pandas as pd
 import efs_constants as consts
 from efs_constrainer import ForecastConstrainer
 from demand_utilities import error_management as err_check
+# TODO: Move functions that can be static elsewhere.
+#  Maybe utils?
 
 
 class EFSProductionGenerator:
-    # infill statics
-    POPULATION_INFILL = 0.001
     
-    def __init__(self, tag_certainty_bounds=consts.TAG_CERTAINTY_BOUNDS):
+    def __init__(self,
+                 tag_certainty_bounds=consts.TAG_CERTAINTY_BOUNDS,
+                 population_infill: float = 0.001):
         """
         #TODO
         """
         self.efs_constrainer = ForecastConstrainer()
         self.tag_certainty_bounds = tag_certainty_bounds
+        self.pop_infill = population_infill
     
     def run(self,
             population_growth: pd.DataFrame,
@@ -344,13 +347,10 @@ class EFSProductionGenerator:
             model_years
         )
 
-        print()
         # ## ENSURE WE HAVE NO MINUS POPULATION
         for year in model_years:
-            population.loc[
-                population[year] < 0,
-                year
-            ] = self.POPULATION_INFILL
+            mask = (population[year] < 0)
+            population.loc[mask, year] = self.pop_infill
 
         # ## secondary post-development constraint
         # (used for matching HH pop)
@@ -381,11 +381,9 @@ class EFSProductionGenerator:
         )
 
         # ## RECOMBINING POP
-        final_population = self.growth_recombination(
-            split_population,
-            "base_year_population",
-            model_years
-        )
+        final_population = self.growth_recombination(split_population,
+                                                     "base_year_population",
+                                                     model_years)
 
         final_population.sort_values(
             by=[
@@ -480,12 +478,10 @@ class EFSProductionGenerator:
         
         
         print("Growing population from base year...")
-        grown_population = self.get_grown_values(
-                population_values,
-                population_growth,
-                "base_year_population",
-                year_string_list
-                )
+        grown_population = self.get_grown_values(population_values,
+                                                 population_growth,
+                                                 "base_year_population",
+                                                 year_string_list)
         print("Grown population from base year!")
         
         return grown_population
@@ -508,12 +504,10 @@ class EFSProductionGenerator:
         print("Adjusted households growth to base year!")
         
         print("Growing households from base year...")
-        grown_households = self.get_grown_values(
-                households_values,
-                households_growth,
-                "base_year_households",
-                year_string_list
-                )
+        grown_households = self.get_grown_values(households_values,
+                                                 households_growth,
+                                                 "base_year_households",
+                                                 year_string_list)
         print("Grown households from base year!")
         
         return grown_households
@@ -541,59 +535,78 @@ class EFSProductionGenerator:
         return growth_dataframe
     
     def get_grown_values(self,
-                       base_year_dataframe: pd.DataFrame,
-                       growth_dataframe: pd.DataFrame,
-                       base_year_string: str,
-                       all_years: List[str]
-                       ) -> pd.DataFrame:
+                         base_year_df: pd.DataFrame,
+                         growth_df: pd.DataFrame,
+                         base_year_col: str,
+                         all_year_cols: List[str]
+                         ) -> pd.DataFrame:
         """
         #TODO
         """
-        base_year_dataframe = base_year_dataframe.copy()
-        growth_dataframe = growth_dataframe.copy()
+        base_year_df = base_year_df.copy()
+        growth_df = growth_df.copy()
         
         # CREATE GROWN DATAFRAME
-        grown_dataframe = base_year_dataframe.merge(
-                growth_dataframe,
-                on = "model_zone_id"
-                )
+        grown_df = pd.merge(base_year_df,
+                            growth_df,
+                            on="model_zone_id")
+
+        for year in all_year_cols:
+            grown_df.loc[:, year] = (
+                    (grown_df.loc[:, year] - 1)
+                    *
+                    grown_df.loc[:, base_year_col]
+            )
         
-        grown_dataframe.loc[:, all_years] = grown_dataframe.apply(
-            lambda x,
-            columns_required=all_years,
-            base_year=base_year_string:
-                (x[columns_required] - 1) * x[base_year],
-                axis=1
-        )
-        
-        return grown_dataframe
+        return grown_df
     
     def growth_recombination(self,
-                             metric_dataframe: pd.DataFrame,
-                             metric_column_name: str,
-                             all_years: List[str]
+                             df: pd.DataFrame,
+                             base_year_col: str,
+                             all_year_cols: List[str],
+                             in_place: bool = False,
+                             drop_base_year: bool = True
                              ) -> pd.DataFrame:
         """
-        #TODO
+        Combines the future year and base year column values to give full
+        future year values
+
+         e.g. base year will get 0 + base_year_population
+
+        Parameters
+        ----------
+        df:
+            The dataframe containing the data to be combined
+
+        base_year_col:
+            Which column in df contains the base year data
+
+        all_year_cols:
+            A list of all the growth columns in df to convert
+
+        in_place:
+            Whether to do the combination in_place, or make a copy of
+            df to return
+
+        drop_base_year:
+            Whether to drop the base year column or not before returning.
+
+        Returns
+        -------
+        growth_df:
+            Dataframe with full growth values for all_year_cols.
         """
-        metric_dataframe = metric_dataframe.copy()
-        
-        ## combine together dataframe columns to give full future values
-        ## f.e. base year will get 0 + base_year_population        
-        for year in all_years:
-            metric_dataframe[year] = (
-                    metric_dataframe[year]
-                    +
-                    metric_dataframe[metric_column_name]
-                    )
-        
-        ## drop the unnecessary metric column
-        metric_dataframe = metric_dataframe.drop(
-                labels = metric_column_name,
-                axis = 1
-                )
-        
-        return metric_dataframe
+        if not in_place:
+            df = df.copy()
+
+        for year in all_year_cols:
+            df[year] = df[year] + df[base_year_col]
+
+        if drop_base_year:
+            df = df.drop(labels=base_year_col, axis=1)
+
+        return df
+
     
     def split_housing(self,
                       households_dataframe: pd.DataFrame,

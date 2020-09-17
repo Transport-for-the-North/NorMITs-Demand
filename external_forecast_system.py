@@ -27,6 +27,8 @@ from demand_utilities import utils as du
 from demand_utilities import error_management as err_check
 from demand_utilities.sector_reporter_v2 import SectorReporter
 
+# TODO: Implement multiprocessing
+
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
@@ -750,11 +752,10 @@ class ExternalForecastSystem:
                   (current_time - last_time))
 
         elif constraint_source == "model grown base":
-            print("Constraint 'model grown base' source selected, this will "
-                  + "be created later...")
             households_constraint = None
             population_constraint = None
-            # TODO: Remember to do this
+            raise NotImplementedError("Constraint 'model grown base' selected, "
+                                      "this will be created later...")
 
         # ## POPULATION GENERATION ## #
         print("Generating population...")
@@ -914,7 +915,8 @@ class ExternalForecastSystem:
         else:
             converted_productions = ca_production_trips.copy()
             converted_attractions = attraction_weights.copy()
-        # check point
+
+        # TODO: Save converted productions and attractions to file
         # converted_productions.to_csv("F:/EFS/EFS_Full/check/converted_productions.csv", index=False)
         # converted_attractions.to_csv("F:/EFS/EFS_Full/check/converted_attractions.csv", index=False)
 
@@ -947,15 +949,18 @@ class ExternalForecastSystem:
         # ## SECTOR TOTALS ## #
         sector_totals = self.sector_reporter.calculate_sector_totals(
                 converted_productions,
-                grouping_metric_columns = year_list,
-                zone_system_name = "norms_2015",
-                zone_system_file = "Y:/EFS/inputs/default/norms_2015.csv",
-                sector_grouping_file = "Y:/EFS/inputs/default/zone_translation/tfn_level_one_sectors_norms_grouping.csv"
+                grouping_metric_columns=year_list,
+                zone_system_name="norms_2015",
+                zone_system_file="Y:/EFS/inputs/default/norms_2015.csv",
+                sector_grouping_file="Y:/EFS/inputs/default/zone_translation/tfn_level_one_sectors_norms_grouping.csv"
                 )
 
         pm_sector_total_dictionary = {}
 
         for purpose in purposes_needed:
+            # TODO: Update sector reporter.
+            #  Sector totals don't currently allow this
+
             pm_productions = converted_productions.copy()
 
             pm_sector_totals = self.sector_reporter.calculate_sector_totals(
@@ -978,8 +983,9 @@ class ExternalForecastSystem:
 
             pm_sector_total_dictionary[key_string] = pm_sector_totals
 
-        ### OUTPUTS ###
-        ## TODO: Properly integrate this
+        # ## OUTPUTS ## #
+        # TODO: Properly integrate this
+        # TODO: Tidy up outputs, separate into different files
 
         # TODO: Integrate output file setup into init!
         if outputting_files:
@@ -987,6 +993,8 @@ class ExternalForecastSystem:
                 print("Saving files to: " + output_location)
                 # TODO: Integrate into furnessing!
                 final_out_path = final_out_path + "/"
+
+                # Write distributions to file
                 for key, distribution in final_distribution_dictionary.items():
                     key = str(key)
                     out_path = os.path.join(final_out_path, key + '.csv')
@@ -1321,6 +1329,11 @@ class ExternalForecastSystem:
             alt_worker_growth
         ]
 
+    # TODO: Move these functions to utils as they are copied in multiple places
+    #  convert_growth_off_base_year()
+    #  get_grown_values()
+    #  growth_recombination()
+    #  check nearby functions for same issue
     def convert_growth_off_base_year(self,
                                      growth_dataframe: pd.DataFrame,
                                      base_year: str,
@@ -1389,7 +1402,7 @@ class ExternalForecastSystem:
         )
         for year in all_years:
             growth_dataframe.loc[:, year] = (
-                growth_dataframe.loc[:, year] - 1
+                (growth_dataframe.loc[:, year] - 1)
                 *
                 growth_dataframe.loc[:, base_year]
             )

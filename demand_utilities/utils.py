@@ -352,11 +352,14 @@ def expand_distribution(dist: pd.DataFrame,
                         mode_col: str = 'mode_id',
                         soc_col: str = 'soc_id',
                         ns_col: str = 'ns_id',
-                        ca_col: str = 'car_availability_id'
+                        ca_col: str = 'car_availability_id',
+                        int_conversion: bool = True
                         ) -> pd.DataFrame:
     """
     Returns a converted distribution  - converted from wide to long
     format, adding in a column for each segmentation
+
+    WARNING: This only works with a single id_vars
     """
     dist = dist.copy()
 
@@ -369,6 +372,12 @@ def expand_distribution(dist: pd.DataFrame,
     )
     id_vars = id_vars[0] if isinstance(id_vars, list) else id_vars
     dist.columns.values[0] = id_vars
+
+    # Convert the melted cols to ints
+    # This prevents string/int clashes later
+    if int_conversion:
+        dist[id_vars] = dist[id_vars].astype(int)
+        dist[var_name] = dist[var_name].astype(int)
 
     # Add new columns
     dist[purpose_col] = purpose
@@ -429,7 +438,8 @@ def long_to_wide_out(df: pd.DataFrame,
                      h_heading: str,
                      values: str,
                      out_path: str,
-                     echo=True) -> None:
+                     echo=False
+                     ) -> None:
     """
     Converts a long format pd.Dataframe, converts it to long and writes
     as a csv to out_path
