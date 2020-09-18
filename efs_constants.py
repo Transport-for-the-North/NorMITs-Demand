@@ -21,10 +21,13 @@ SOC_P = [1, 2]
 NS_P = [3, 4, 5, 6, 7, 8]
 ALL_HB_P = [1, 2, 3, 4, 5, 6, 7, 8]
 ALL_NHB_P = [12, 13, 14, 15, 16, 18]
+ALL_MODES = [1, 2, 3, 5, 6]
+
+BASE_YEAR = 2018
+FUTURE_YEARS = [2033, 2035, 2050]
 
 # HB consts
 PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]
-# MODES_NEEDED = [1, 2, 3, 5, 6]
 MODES_NEEDED = [6]
 SOC_NEEDED = [0, 1, 2, 3]
 NS_NEEDED = [1, 2, 3, 4, 5]
@@ -33,9 +36,7 @@ TIMES_NEEDED = [1, 2, 3, 4]
 
 # NHB consts
 NHB_PURPOSES_NEEDED = [12, 13, 14, 15, 16, 18]
-# NHB_MODES_NEEDED = [1, 2, 3, 5, 6]
-NHB_MODES_NEEDED = [6]  # Currently only has seed dists for m6
-NHB_FUTURE_YEARS = [2018, 2033, 2035, 2050]   # Only this year during testing
+NHB_FUTURE_YEARS = [2033, 2035, 2050]
 
 VALID_MATRIX_FORMATS = ['pa', 'od']
 
@@ -286,7 +287,6 @@ EFS_RUN_DISTRIBUTIONS_DICT = {
     },
 }
 
-FUTURE_YEARS = [2033, 2035, 2050]
 # TODO: Move M6 to Norms
 DEFAULT_DIST_LOCATION = os.path.join(
     "Y:/",

@@ -209,7 +209,7 @@ def _build_tp_pa_internal(pa_import,
 def efs_build_tp_pa(tp_import: str,
                     pa_import: str,
                     pa_export: str,
-                    year_string_list: str,
+                    year_string_list: List[str],
                     required_purposes: List[int],
                     required_modes: List[int],
                     required_soc: List[int] = None,
@@ -282,21 +282,16 @@ def efs_build_tp_pa(tp_import: str,
 
     # For every: Year, purpose, mode, segment, ca
     for year in year_string_list:
-        print("\nYear: %s" % str(year))
         for purpose in required_purposes:
-            print("\tPurpose: %s" % str(purpose))
-
             # Purpose specific set-up
             # Do it here to avoid repeats in inner loops
             if purpose in consts.ALL_NHB_P:
-                print('\tNHB run')
                 trip_origin = 'nhb'
                 required_segments = [None]
                 tp_split_fname = 'export_nhb_productions_norms.csv'
                 tp_split_path = os.path.join(tp_import, tp_split_fname)
 
             elif purpose in consts.ALL_HB_P:
-                print('\tHB run')
                 trip_origin = 'hb'
                 tp_split_fname = 'export_productions_norms.csv'
                 tp_split_path = os.path.join(tp_import, tp_split_fname)
@@ -330,7 +325,8 @@ def efs_build_tp_pa(tp_import: str,
                 )['trips'].sum().reset_index()
 
             for mode in required_modes:
-                print("\t\tMode: %s" % str(mode))
+                print("Working on yr%s_p%s_m%s..."
+                      % (str(year), str(purpose), str(mode)))
                 for segment in required_segments:
                     for car_availability in required_ca:
                         _build_tp_pa_internal(

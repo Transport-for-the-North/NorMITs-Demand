@@ -14,7 +14,7 @@ import pandas as pd
 
 import efs_constants as consts
 from efs_constrainer import ForecastConstrainer
-from demand_utilities import error_management as err_check
+from demand_utilities import utils as du
 # TODO: Move functions that can be static elsewhere.
 #  Maybe utils?
 
@@ -111,9 +111,8 @@ class EFSProductionGenerator:
             print("WARNING! No output path given. "
                   "Not writing populations to file.")
         else:
-            population.to_csv(os.path.join(out_path, "EFS_MSOA_population.csv"),
-                              index=False
-            )
+            population.to_csv(os.path.join(out_path, "MSOA_population.csv"),
+                              index=False)
 
         if area_types is None and trip_rates is None:
             return population
@@ -839,3 +838,178 @@ class EFSProductionGenerator:
                 ).sum()
         
         return combined_households
+
+
+def _nhb_production_internal(hb_pa_import,
+                             nhb_trip_rates,
+                             year,
+                             purpose,
+                             mode,
+                             segment,
+                             car_availability):
+    """
+      The internals of nhb_production(). Useful for making the code more
+      readable du to the number of nested loops needed
+    """
+    hb_dist = du.get_dist_name(
+        'hb',
+        'pa',
+        str(year),
+        str(purpose),
+        str(mode),
+        str(segment),
+        str(car_availability),
+        csv=True
+    )
+
+    # Seed the nhb productions with hb values
+    hb_pa = pd.read_csv(
+        os.path.join(hb_pa_import, hb_dist)
+    )
+    hb_pa = du.expand_distribution(
+        hb_pa,
+        year,
+        purpose,
+        mode,
+        segment,
+        car_availability,
+        id_vars='p_zone',
+        var_name='a_zone',
+        value_name='trips'
+    )
+
+    # Aggregate to destinations
+    nhb_prods = hb_pa.groupby([
+        "a_zone",
+        "purpose_id",
+        "mode_id",
+        "car_availability_id",
+        "soc_id",
+        "ns_id"
+    ])["trips"].sum().reset_index()
+
+    # join nhb trip rates
+    nhb_prods = pd.merge(nhb_trip_rates,
+                         nhb_prods,
+                         on=["purpose_id", "mode_id"])
+
+    # Calculate NHB productions
+    nhb_prods["nhb_dt"] = nhb_prods["trips"] * nhb_prods["nhb_trip_rate"]
+
+    # aggregate nhb_p 11_12
+    nhb_prods.loc[nhb_prods["nhb_p"] == 11, "nhb_p"] = 12
+
+    # Remove hb purpose and mode by aggregation
+    nhb_prods = nhb_prods.groupby([
+        "a_zone",
+        "nhb_p",
+        "nhb_m",
+        "car_availability_id",
+        "soc_id",
+        "ns_id"
+    ])["nhb_dt"].sum().reset_index()
+
+    return nhb_prods
+
+
+def nhb_production(hb_pa_import,
+                   nhb_export,
+                   required_purposes,
+                   required_modes,
+                   required_soc,
+                   required_ns,
+                   required_car_availabilities,
+                   year_string_list,
+                   nhb_factor_import,
+                   out_fname='internal_nhb_productions.csv'):
+    """
+    This function builds NHB productions by
+    aggregates HB distribution from EFS output to destination
+
+    TODO: Update to use the TMS method - see backlog
+
+    Parameters
+    ----------
+    required lists:
+        to loop over TfN segments
+
+    Returns
+    ----------
+    nhb_production_dictionary:
+        Dictionary containing NHB productions by year
+    """
+    # Init
+    yearly_nhb_productions = list()
+    nhb_production_dictionary = dict()
+
+    # Get nhb trip rates
+    # Might do the other way - This emits CA segmentation
+    nhb_trip_rates = pd.read_csv(
+        os.path.join(nhb_factor_import, "IgammaNMHM.csv")
+    ).rename(
+        columns={"p": "purpose_id", "m": "mode_id"}
+    )
+
+    # For every: Year, purpose, mode, segment, ca
+    for year in year_string_list:
+        loop_gen = du.segmentation_loop_generator(required_purposes,
+                                                  required_modes,
+                                                  required_soc,
+                                                  required_ns,
+                                                  required_car_availabilities)
+        for purpose, mode, segment, car_availability in loop_gen:
+            nhb_productions = _nhb_production_internal(
+                hb_pa_import,
+                nhb_trip_rates,
+                year,
+                purpose,
+                mode,
+                segment,
+                car_availability
+            )
+            yearly_nhb_productions.append(nhb_productions)
+
+        # ## Output the yearly productions ## #
+        # Aggregate all productions for this year
+        print("INFO: NHB Productions for yr%s complete!" % year)
+        yr_nhb_productions = pd.concat(yearly_nhb_productions)
+        yearly_nhb_productions.clear()
+
+        # Rename columns from NHB perspective
+        yr_nhb_productions = yr_nhb_productions.rename(
+            columns={
+                'a_zone': 'p_zone',
+                'nhb_p': 'p',
+                'nhb_m': 'm',
+                'nhb_dt': 'trips'
+            }
+        )
+
+        # Create year fname
+        nhb_productions_fname = '_'.join(
+            ["yr" + str(year), out_fname]
+        )
+
+        # Output disaggregated
+        da_fname = du.add_fname_suffix(nhb_productions_fname, '_disaggregated')
+        yr_nhb_productions.to_csv(
+            os.path.join(nhb_export, da_fname),
+            index=False
+        )
+
+        # Aggregate productions up to p/m level
+        yr_nhb_productions = yr_nhb_productions.groupby(
+            ["p_zone", "p", "m"]
+        )["trips"].sum().reset_index()
+
+        # Rename cols and output to file
+        # Output at p/m aggregation
+        yr_nhb_productions.to_csv(
+            os.path.join(nhb_export, nhb_productions_fname),
+            index=False
+        )
+
+        # save to dictionary by year
+        nhb_production_dictionary[year] = yr_nhb_productions
+
+    return nhb_production_dictionary

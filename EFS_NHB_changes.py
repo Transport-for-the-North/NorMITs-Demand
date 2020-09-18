@@ -981,7 +981,7 @@ class ExternalForecastSystem:
                   + " seconds."
                   )
             
-        elif (constraint_source == "grown base"):
+        elif constraint_source == "grown base":
             print("Constraint 'grown base' source selected, growing given "
                   + "base by default growth factors...")
             population_constraint = self.default_population_growth[population_columns].copy()
@@ -1033,7 +1033,7 @@ class ExternalForecastSystem:
                   + " seconds."
                   )
             
-        elif (constraint_source == "model grown base"):
+        elif constraint_source == "model grown base":
             print("Constraint 'model grown base' source selected, this will "
                   + "be created later...")
             households_constraint = None
@@ -1043,24 +1043,12 @@ class ExternalForecastSystem:
         ### POPULATION GENERATION ###
         print("Generating population...")
         final_population = self.efs_pop_generator.run(
-            population_growth=population_growth,
-            population_values=population_values,
-            population_constraint=population_constraint,
-            population_split=population_split,
-            households_growth=households_growth,
-            households_values=households_values,
-            households_constraint=households_constraint,
-            housing_split=housing_type_split,
-            housing_occupancy=housing_occupancy, d_log=development_log,
-            d_log_split=development_log_split,
             minimum_development_certainty=minimum_development_certainty,
             population_metric=population_metric,
             constraint_required=constraint_required,
             constraint_method=constraint_method,
             constraint_area=constraint_area, constraint_on=constraint_on,
-            constraint_source=constraint_source,
-            designated_area=self.default_area_grouping.copy(),
-            base_year_string=str(base_year), model_years=year_string_list)
+            constraint_source=constraint_source)
         print("Population generated!")
         last_time = current_time
         current_time = time.time()
@@ -1072,23 +1060,12 @@ class ExternalForecastSystem:
         ### WORKER GENERATION ###
         print("Generating workers...")
         final_workers = self.efs_worker_generator.run(
-                worker_growth = worker_growth,
-                worker_values = worker_values,
-                worker_constraint = worker_constraint,
-                worker_split = worker_split,
-                development_log = development_log,
-                development_log_split = development_log_split,
-                minimum_development_certainty = minimum_development_certainty,
-                integrating_development_log = integrating_development_log,
-                constraint_required = constraint_required,
-                constraint_method = constraint_method,
-                constraint_area = constraint_area,
-                constraint_on = constraint_on,
-                constraint_source = constraint_source,
-                designated_area = self.default_area_grouping.copy(),
-                base_year_string = str(base_year),
-                model_years = year_string_list                
-                )
+            minimum_development_certainty=minimum_development_certainty,
+            integrate_dlog=integrating_development_log,
+            constraint_required=constraint_required,
+            constraint_method=constraint_method,
+            constraint_area=constraint_area, constraint_on=constraint_on,
+            constraint_source=constraint_source)
         print("Workers generated!")
         last_time = current_time
         current_time = time.time()
@@ -2387,10 +2364,10 @@ class ExternalForecastSystem:
                                 )
                                     
                         print()
-                        final_distribution = self.furness_process.run(,
+                        final_distribution = self.furness_process.run(),
 
 
-                        final_distribution["purpose_id"] = purpose
+                                             final_distribution["purpose_id"] = purpose
                         final_distribution["car_availability_id"] = car_availability
                         final_distribution["soc_id"] = "none"
                         final_distribution["ns_id"] = "none"                       

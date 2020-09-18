@@ -27,7 +27,7 @@ from old_tms.utils import *
 
 def get_model_name(mode: int) -> str:
     """
-    Returns a string of the model name based on the mode given.
+    Returns a string of the TfN model name based on the mode given.
 
     Parameters
     ----------
@@ -223,22 +223,22 @@ def get_dist_name_from_calib_params(trip_origin: str,
         return get_dist_name(
             trip_origin,
             matrix_format,
-            str(calib_params['yr']),
-            str(calib_params['p']),
-            str(calib_params['m']),
-            str(calib_params[segment_str]),
-            str(calib_params['ca']),
-            tp=str(calib_params['tp'])
+            str(calib_params.get('yr')),
+            str(calib_params.get('p')),
+            str(calib_params.get('m')),
+            str(calib_params.get(segment_str)),
+            str(calib_params.get('ca')),
+            tp=str(calib_params.get('tp'))
         )
     else:
         return get_dist_name(
             trip_origin,
             matrix_format,
-            str(calib_params['yr']),
-            str(calib_params['p']),
-            str(calib_params['m']),
-            str(calib_params[segment_str]),
-            str(calib_params['ca']),
+            str(calib_params.get('yr')),
+            str(calib_params.get('p')),
+            str(calib_params.get('m')),
+            str(calib_params.get(segment_str)),
+            str(calib_params.get('ca')),
         )
 
 

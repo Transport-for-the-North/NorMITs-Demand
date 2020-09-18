@@ -1,41 +1,50 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Nov 25 09:50:07 2019
+Created on: Mon Nov 25 09:50:07 2019
+Updated on: Fri Sep 18 15:03:24 2020
 
-@author: Sneezy
+Original author: Sneezy
+Last Update Made by: Ben Taylor
+
+File purpose:
+
 """
 # Built-ins
 import os
-import sys
 import time
-import datetime
+import itertools
+
 from typing import List
+from typing import Tuple
 
 # External libs
 import numpy as np
 import pandas as pd
 
 # self imports
-import efs_constants as efs_consts
+import pa_to_od as pa2od
+import efs_constants as consts
 import furness_process as fp
+import efs_production_generator as pm
+import efs_attraction_generator as am
+
 from efs_constrainer import ForecastConstrainer
-from efs_production_generator import EFSProductionGenerator
-from efs_attraction_generator import EFSAttractionGenerator
 from zone_translator import ZoneTranslator
 
 from demand_utilities import utils as du
-from demand_utilities import error_management as err_check
 from demand_utilities.sector_reporter_v2 import SectorReporter
 
 # TODO: Implement multiprocessing
+# TODO: Determine the TfN model name based on the given mode
 
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
-    __version__ = "v2-2"
+    __version__ = "v2_2"
+    _out_dir = "NorMITs Demand"
 
     # defines all non-year columns
-    column_dictionary = efs_consts.EFS_COLUMN_DICTIONARY
+    column_dictionary = consts.EFS_COLUMN_DICTIONARY
 
     def __init__(self,
                  population_value_file: str = "population/base_population_2018.csv",
@@ -166,8 +175,8 @@ class ExternalForecastSystem:
 
         # sub-classes
         self.constrainer = ForecastConstrainer()
-        self.production_generator = EFSProductionGenerator()
-        self.attraction_generator = EFSAttractionGenerator()
+        self.production_generator = pm.EFSProductionGenerator()
+        self.attraction_generator = am.EFSAttractionGenerator()
 
         # support utilities tools
         self.sector_reporter = SectorReporter()
@@ -181,37 +190,36 @@ class ExternalForecastSystem:
 
     def run(self,
             base_year: int = 2018,
-            future_years: List[int] = efs_consts.FUTURE_YEARS,
+            future_years: List[int] = consts.FUTURE_YEARS,
             desired_zoning: str = "MSOA",
-            alternate_population_base_year_file: str = None,
-            alternate_households_base_year_file: str = None,
-            alternate_worker_base_year_file: str = None,
-            alternate_population_growth_assumption_file: str = None,
-            alternate_households_growth_assumption_file: str = None,
-            alternate_worker_growth_assumption_file: str = None,
-            alternate_population_split_file: str = None,
+            alt_pop_base_year_file: str = None,
+            alt_households_base_year_file: str = None,
+            alt_worker_base_year_file: str = None,
+            alt_pop_growth_assumption_file: str = None,
+            alt_households_growth_assumption_file: str = None,
+            alt_worker_growth_assumption_file: str = None,
+            alt_pop_split_file: str = None,  # THIS ISN'T USED ANYWHERE
             distribution_method: str = "Furness",
-            seed_dist_location: str = efs_consts.DEFAULT_DIST_LOCATION,
-            distributions: dict = efs_consts.EFS_RUN_DISTRIBUTIONS_DICT,
-            purposes_needed: List[int] = efs_consts.PURPOSES_NEEDED,
-            soc_needed: List[int] = efs_consts.SOC_NEEDED,
-            ns_needed: List[int] = efs_consts.NS_NEEDED,
-            car_availabilities_needed: List[int] = efs_consts.CA_NEEDED,
-            modes_needed: List[int] = efs_consts.MODES_NEEDED,
-            times_needed: List[int] = efs_consts.TIMES_NEEDED,
-            development_log_file: str = None,
-            development_log_split_file: str = None,
+            seed_dist_location: str = consts.DEFAULT_DIST_LOCATION,
+            distributions: dict = consts.EFS_RUN_DISTRIBUTIONS_DICT,
+            purposes_needed: List[int] = consts.PURPOSES_NEEDED,
+            modes_needed: List[int] = consts.MODES_NEEDED,
+            soc_needed: List[int] = consts.SOC_NEEDED,
+            ns_needed: List[int] = consts.NS_NEEDED,
+            car_availabilities_needed: List[int] = consts.CA_NEEDED,
+            dlog_file: str = None,
+            dlog_split_file: str = None,
             minimum_development_certainty: str = "MTL",
-            integrating_development_log: bool = False,
             population_metric: str = "Households",  # Households, Population
-            constraint_required: List[bool] = efs_consts.CONSTRAINT_REQUIRED_DEFAULT,
+            constraint_required: List[bool] = consts.CONSTRAINT_REQUIRED_DEFAULT,
             constraint_method: str = "Percentage",  # Percentage, Average
             constraint_area: str = "Designated",  # Zone, Designated, All
             constraint_on: str = "Growth",  # Growth, All
             constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
             outputting_files: bool = True,
+            iter_num: int = 0,
             performing_sector_totals: bool = True,
-            output_location: str = None,
+            output_location: str = 'E:/',
             echo_distribution: bool = True
             ) -> None:
         """
@@ -242,7 +250,7 @@ class ExternalForecastSystem:
             Possible input is any string, preferably one that matches to a
             zoning system with a corresponding translation.
 
-        alternate_population_base_year_file:
+        alt_pop_base_year_file:
             A file location (including file suffix) containing an alternate
             population for the base year. This file does not need full
             alternate population metrics, just needs it for the appropriate
@@ -250,7 +258,7 @@ class ExternalForecastSystem:
             Default input is: None.
             Possible input is any string which refers to a file location.
 
-        alternate_households_base_year_file:
+        alt_households_base_year_file:
             A file location (including file suffix) containing an alternate
             number of households for the base year. This file does not need full
             alternate households metrics, just needs it for the appropriate
@@ -258,7 +266,7 @@ class ExternalForecastSystem:
             Default input is: None.
             Possible input is any string which refers to a file location.
 
-        alternate_worker_base_year_file:
+        alt_worker_base_year_file:
             A file location (including file suffix) containing an alternate
             number of workers for the base year. This file does not need full
             alternate worker metrics, just needs it for the appropriate
@@ -266,7 +274,7 @@ class ExternalForecastSystem:
             Default input is: None.
             Possible input is any string which refers to a file location.
 
-        alternate_population_growth_assumption_file:
+        alt_pop_growth_assumption_file:
             A file location (including file suffix) containing an alternate
             population growth for some future years. This file does not need full
             alternate population growth metrics, just needs it for the appropriate
@@ -274,7 +282,7 @@ class ExternalForecastSystem:
             Default input is: None.
             Possible input is any string which refers to a file location.
 
-        alternate_households_growth_assumption_file:
+        alt_households_growth_assumption_file:
             A file location (including file suffix) containing an alternate
             households growth for some future years. This file does not need full
             alternate households growth metrics, just needs it for the appropriate
@@ -282,7 +290,7 @@ class ExternalForecastSystem:
             Default input is: None.
             Possible input is any string which refers to a file location.
 
-        alternate_worker_growth_assumption_file:
+        alt_worker_growth_assumption_file:
             A file location (including file suffix) containing an alternate
             workers growth for some future years. This file does not need full
             alternate worker growth metrics, just needs it for the appropriate
@@ -290,7 +298,7 @@ class ExternalForecastSystem:
             Default input is: None.
             Possible input is any string which refers to a file location.
 
-        alternate_population_split_file:
+        alt_pop_split_file:
             A file location (including file suffix) containing an alternate
             population split file. This *does* require it for every zone as it
             will be used to generate full new segmentation (i.e. NPR segments).
@@ -357,12 +365,12 @@ class ExternalForecastSystem:
             Possible input is a list containing integers corresponding to the
             time period IDs.
 
-        development_log_file:
+        dlog_file:
             A file location for the development log.
             Default input is: None
             Possible input is any file location folder.
 
-        development_log_split_file:
+        dlog_split_file:
             A file location for the housing stock split for the development log.
             Default input is: None
             Possible input is any file location folder.
@@ -373,7 +381,7 @@ class ExternalForecastSystem:
             Default input is: "MTL" # More than likely
             Possible inputs are: "NC", "MTL", "RF", "H"
 
-        integrating_development_log:
+        integrate_dlog:
             Whether the development log is going to be used.
             Default input is: False
             Possible inputs are: True, False
@@ -451,12 +459,11 @@ class ExternalForecastSystem:
             - Include more forms of distribution than just Furness.
             - Use purposes needed / car availabilities needed / modes needed / times needed to reduce the amount of calculations to be done.
         """
-        # ## TIME SET UP ## #
+        # Set up timing
         begin_time = time.time()
         current_time = begin_time
 
-        # ## INPUT CHECKS ## #
-        print("Starting input checks...")
+        # Format inputs
         constraint_method = constraint_method.lower()
         constraint_area = constraint_area.lower()
         constraint_on = constraint_on.lower()
@@ -464,29 +471,60 @@ class ExternalForecastSystem:
         distribution_method = distribution_method.lower()
         population_metric = population_metric.lower()
         minimum_development_certainty = minimum_development_certainty.upper()
+        integrate_dlog = dlog_split_file is not None and dlog_file is not None
+        iter_name = 'iter' + str(iter_num)
+        model_name = du.get_model_name(modes_needed[0])
+
+        if iter_num == 0:
+            Warning("iter_num is set to 0. This is should only be the case"
+                    "during testing.")
+
+        if len(modes_needed) > 1:
+            raise ValueError("Was given more than one mode. EFS cannot run "
+                             "using more than one mode at a time due to "
+                             "different zoning systems for NoHAM and NoRMS "
+                             "etc.")
 
         year_list = [str(x) for x in [base_year] + future_years]
 
-        # ## OUTPUT SETUP ## #
-        final_out_path = self.generate_output_path(output_location,
-                                                   desired_zoning,
-                                                   population_metric,
-                                                   constraint_method,
-                                                   constraint_area,
-                                                   constraint_on,
-                                                   constraint_source)
-        if not os.path.exists(final_out_path):
-            os.mkdir(final_out_path)
+        # ## PREPARE OUTPUTS ## #
+        print("Initialising outputs...")
+        # TODO: Needs to be able to make nested dirs!
+        imports, exports = self.generate_output_paths(output_location,
+                                                      model_name,
+                                                      iter_name)
 
-        # Development Log Checks
-        if (integrating_development_log and
-            (development_log_file is None or
-             development_log_split_file is None
-             )):
-            print("If integrating development log then both a development "
-                  "log and development log split file need to be provided. "
-                  "Ending process.")
-            exit(1)
+        write_input_info(
+            os.path.join(exports['home'], "input_parameters.txt"),
+            base_year,
+            future_years,
+            desired_zoning,
+            alt_pop_base_year_file,
+            alt_households_base_year_file,
+            alt_worker_base_year_file,
+            alt_pop_growth_assumption_file,
+            alt_households_growth_assumption_file,
+            alt_worker_growth_assumption_file,
+            alt_pop_split_file,
+            distribution_method,
+            seed_dist_location,
+            purposes_needed,
+            modes_needed,
+            soc_needed,
+            ns_needed,
+            car_availabilities_needed,
+            integrate_dlog,
+            minimum_development_certainty,
+            population_metric,
+            constraint_required,
+            constraint_method,
+            constraint_area,
+            constraint_on,
+            constraint_source,
+        )
+
+        # ## INPUT CHECKS ## #
+        print("Starting input checks...")
 
         # Distribute column names into more specific variables
         base_year_pop_cols = self.column_dictionary["base_year_population"]
@@ -514,12 +552,12 @@ class ExternalForecastSystem:
 
         # ## GET DATA ## #
         alternate_inputs = [
-            alternate_population_base_year_file,
-            alternate_households_base_year_file,
-            alternate_worker_base_year_file,
-            alternate_population_growth_assumption_file,
-            alternate_households_growth_assumption_file,
-            alternate_worker_growth_assumption_file
+            alt_pop_base_year_file,
+            alt_households_base_year_file,
+            alt_worker_base_year_file,
+            alt_pop_growth_assumption_file,
+            alt_households_growth_assumption_file,
+            alt_worker_growth_assumption_file
         ]
 
         # Integrate alternate inputs if given
@@ -528,12 +566,12 @@ class ExternalForecastSystem:
             print("Integrating alternate assumptions...")
             # # ALTERNATE ASSUMPTION INTEGRATION # #
             integrated_assumptions = self.integrate_alternate_assumptions(
-                alternate_population_base_year_file,
-                alternate_households_base_year_file,
-                alternate_worker_base_year_file,
-                alternate_population_growth_assumption_file,
-                alternate_households_growth_assumption_file,
-                alternate_worker_growth_assumption_file, base_year_pop_cols,
+                alt_pop_base_year_file,
+                alt_households_base_year_file,
+                alt_worker_base_year_file,
+                alt_pop_growth_assumption_file,
+                alt_households_growth_assumption_file,
+                alt_worker_growth_assumption_file, base_year_pop_cols,
                 base_year_hh_cols)
 
             population_values = integrated_assumptions[0][base_year_pop_cols]
@@ -669,9 +707,9 @@ class ExternalForecastSystem:
                   (current_time - last_time))
 
         # ## D-LOG READ-IN
-        if integrating_development_log:
-            development_log = pd.read_csv(development_log_file)
-            development_log_split = pd.read_csv(development_log_split_file)
+        if integrate_dlog:
+            development_log = pd.read_csv(dlog_file)
+            development_log_split = pd.read_csv(dlog_split_file)
         else:
             development_log = None
             development_log_split = None
@@ -781,7 +819,7 @@ class ExternalForecastSystem:
             designated_area=self.area_grouping.copy(),
             base_year_string=str(base_year),
             model_years=year_list,
-            out_path=final_out_path,
+            out_path=exports['productions'],
             area_types=self.area_types,
             trip_rates=trip_rates
         )
@@ -822,7 +860,7 @@ class ExternalForecastSystem:
             development_log=development_log,
             development_log_split=development_log_split,
             minimum_development_certainty=minimum_development_certainty,
-            integrating_development_log=integrating_development_log,
+            integrating_development_log=integrate_dlog,
             constraint_required=constraint_required,
             constraint_method=constraint_method,
             constraint_area=constraint_area,
@@ -832,7 +870,7 @@ class ExternalForecastSystem:
             base_year_string=str(base_year),
             model_years=year_list,
             attraction_weights=attraction_weights,
-            output_path=final_out_path
+            output_path=exports['attractions']
         )
 
         print("Attractions generated!")
@@ -931,7 +969,7 @@ class ExternalForecastSystem:
                 required_purposes=purposes_needed, required_soc=soc_needed,
                 required_ns=ns_needed,
                 required_car_availabilities=car_availabilities_needed,
-                required_modes=modes_needed, required_times=times_needed,
+                required_modes=modes_needed,
                 year_string_list=year_list,
                 distribution_dataframe_dict=distributions,
                 distribution_file_location=seed_dist_location,
@@ -992,12 +1030,11 @@ class ExternalForecastSystem:
             if output_location is not None:
                 print("Saving files to: " + output_location)
                 # TODO: Integrate into furnessing!
-                final_out_path = final_out_path + "/"
 
                 # Write distributions to file
                 for key, distribution in final_distribution_dictionary.items():
                     key = str(key)
-                    out_path = os.path.join(final_out_path, key + '.csv')
+                    out_path = os.path.join(exports['pa_24'], key + '.csv')
 
                     # Output in wide format
                     distribution.pivot_table(
@@ -1010,77 +1047,44 @@ class ExternalForecastSystem:
                 # Pop generation moved
                 # Final workers out moved
 
+                fname = "MSOA_production_trips.csv"
                 ca_production_trips.to_csv(
-                    final_out_path + "MSOA_production_trips.csv",
+                    os.path.join(exports['productions'], fname),
                     index=False
                 )
 
+                fname = "MSOA_attractions.csv"
                 attraction_dataframe.to_csv(
-                    final_out_path + "MSOA_attractions.csv",
+                    os.path.join(exports['attractions'], fname),
                     index=False
                 )
 
+                fname = desired_zoning + "_production_trips.csv"
                 converted_productions.to_csv(
-                    final_out_path + desired_zoning + "_production_trips.csv",
+                    os.path.join(exports['productions'], fname),
                     index=False
                 )
 
+                fname = desired_zoning + "_attractions.csv"
                 converted_pure_attractions.to_csv(
-                    final_out_path + desired_zoning + "_attractions.csv",
+                    os.path.join(exports['attractions'], fname),
                     index=False
                 )
 
+                fname = desired_zoning + "_sector_totals.csv"
                 sector_totals.to_csv(
-                    final_out_path + desired_zoning + "_sector_totals.csv",
+                    os.path.join(exports['sectors'], fname),
                     index=False
                 )
 
                 for key, sector_total in pm_sector_total_dictionary.items():
                     print("Saving sector total: " + key)
+                    fname = "sector_total_%s.csv" % key
                     sector_total.to_csv(
-                        final_out_path
-                        +
-                        "sector_total_"
-                        +
-                        key
-                        +
-                        ".csv",
+                        os.path.join(exports['sectors'], fname),
                         index=False
                     )
                     print("Saved sector total: " + key)
-
-                explanation_file = open(final_out_path + "input_parameters.txt", "w")
-
-                inputs = [
-                    "Base Year: " + str(base_year) + "\n",
-                    "Future Years: " + str(future_years) + "\n",
-                    "Zoning System: " + desired_zoning + "\n",
-                    "Alternate Population Base Year File: " + str(alternate_population_base_year_file) + "\n",
-                    "Alternate Households Base Year File: " + str(alternate_households_base_year_file) + "\n",
-                    "Alternate Workers Base Year File: " + str(alternate_worker_base_year_file) + "\n",
-                    "Alternate Population Growth File: " + str(alternate_population_growth_assumption_file) + "\n",
-                    "Alternate Households Growth File: " + str(alternate_households_growth_assumption_file) + "\n",
-                    "Alternate Workers Growth File: " + str(alternate_worker_growth_assumption_file) + "\n",
-                    "Alternate Population Split File: " + str(alternate_population_split_file) + "\n",
-                    "Distribution Method: " + distribution_method + "\n",
-                    "Distribution Location: " + seed_dist_location + "\n",
-                    "Purposes Used: " + str(purposes_needed) + "\n",
-                    "Car Availabilities Used: " + str(car_availabilities_needed) + "\n",
-                    "Modes Used: " + str(modes_needed) + "\n",
-                    "Times Used: " + str(times_needed) + "\n",
-                    "Development Log Integrated: " + str(False) + "\n",
-                    "Minimum Development Certainty: " + str(minimum_development_certainty) + "\n",
-                    "Population Metric: " + population_metric + "\n",
-                    "Constraints Used On: " + str(constraint_required) + "\n",
-                    "Constraint Method: " + constraint_method + "\n",
-                    "Constraint Area: " + constraint_area + "\n",
-                    "Constraint On: " + constraint_on + "\n",
-                    "Constraint Source: " + constraint_source + "\n"
-                ]
-
-                explanation_file.writelines(inputs)
-                explanation_file.close()
-                # TODO: Store output files into output location
 
             else:
                 print("No output location given. Saving files to local storage "
@@ -1092,6 +1096,117 @@ class ExternalForecastSystem:
                   + "future usage.")
             self.sector_totals = sector_totals
             # TODO: Store output files into local storage (class storage)
+
+    def run_nhb(self,
+                base_year: int = consts.BASE_YEAR,
+                future_years: List[int] = consts.NHB_FUTURE_YEARS,
+                modes_needed: List[int] = consts.MODES_NEEDED,
+                hb_purposes_needed: List[int] = consts.PURPOSES_NEEDED,
+                hb_soc_needed: List[int] = consts.SOC_NEEDED,
+                hb_ns_needed: List[int] = consts.NS_NEEDED,
+                hb_ca_needed: List[int] = consts.CA_NEEDED,
+                nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
+                output_location: str = 'E:/',
+                iter_num: int = 0,
+                use_zone_id_subset: bool = False,
+                echo: bool = True
+                ):
+        # Init
+        all_years = [str(x) for x in [base_year] + future_years]
+        iter_name = 'iter' + str(iter_num)
+        model_name = du.get_model_name(modes_needed[0])
+
+        if iter_num == 0:
+            Warning("iter_num is set to 0. This is should only be the case"
+                    "during testing.")
+
+        if len(modes_needed) > 1:
+            raise ValueError("Was given more than one mode. EFS cannot run "
+                             "using more than one mode at a time due to "
+                             "different zoning systems for NoHAM and NoRMS "
+                             "etc.")
+
+        # Generate paths
+        imports, exports = self.generate_output_paths(
+            output_location=output_location,
+            model_name=model_name,
+            iter_name=iter_name
+        )
+
+        # TODO: Add time print outs
+        # TODO: Change import paths to accept specific dir
+
+        # TODO: Check if tp pa matrices exist first
+        print("Converting HB 24hr PA to time period split PA...")
+        pa2od.efs_build_tp_pa(
+            tp_import=imports['tp_splits'],
+            pa_import=exports['pa_24'],
+            pa_export=exports['pa'],
+            year_string_list=all_years,
+            required_purposes=hb_purposes_needed,
+            required_modes=modes_needed,
+            required_soc=hb_soc_needed,
+            required_ns=hb_ns_needed,
+            required_ca=hb_ca_needed
+        )
+        print('HB time period split PA matrices compiled!\n')
+
+        # TODO: Check if od matrices exist first
+        print('Converting time period split PA to OD...')
+        pa2od.efs_build_od(
+            pa_import=exports['pa'],
+            od_export=exports['od'],
+            required_purposes=hb_purposes_needed,
+            required_modes=modes_needed,
+            required_soc=hb_soc_needed,
+            required_ns=hb_ns_needed,
+            required_car_availabilities=hb_ca_needed,
+            year_string_list=all_years,
+            phi_type='fhp_tp',
+            aggregate_to_wday=True,
+            echo=echo)
+        print('HB OD matrices compiled!\n')
+
+        # TODO: Create 24hr OD for HB
+
+        # TODO: Check if nhb productions exist first
+        print("Generating NHB Productions...")
+        pm.nhb_production(hb_pa_import=exports['pa_24'],
+                          nhb_export=exports['productions'],
+                          required_purposes=hb_purposes_needed,
+                          required_modes=modes_needed,
+                          required_soc=hb_soc_needed, required_ns=hb_ns_needed,
+                          required_car_availabilities=hb_ca_needed,
+                          year_string_list=all_years,
+                          nhb_factor_import=imports['home'])
+        print('NHB productions generated!\n')
+
+        print("Furnessing NHB productions...")
+        # TODO: Check if NHB matrices exist first
+        nhb_furness(
+            p_import=exports['productions'],
+            seed_nhb_dist_dir=imports['seed_dists'],
+            od_export=exports['od_24'],
+            required_purposes=nhb_purposes_needed,
+            required_modes=modes_needed,
+            year_string_list=all_years,
+            replace_zero_vals=True,
+            zero_infill=0.01,
+            use_zone_id_subset=use_zone_id_subset)
+        print('NHB productions "furnessed"\n')
+
+        print("Converting NHB 24hr OD to time period split OD...")
+        pa2od.efs_build_tp_pa(
+            tp_import=imports['tp_splits'],
+            pa_import=exports['od_24'],
+            pa_export=exports['od'],
+            matrix_format='od',
+            year_string_list=all_years,
+            required_purposes=nhb_purposes_needed,
+            required_modes=modes_needed
+        )
+        print('NHB time period split OD matrices compiled!\n')
+        print("NHB run complete!")
 
     def integrate_alternate_assumptions(self,
                                         alt_pop_base_year_file: str,
@@ -1414,7 +1529,7 @@ class ExternalForecastSystem:
                              all_years: List[str]
                              ) -> pd.DataFrame:
         """
-        #TODO
+        #TODO GOt a better version in production_generator
         """
         metric_dataframe = metric_dataframe.copy()
 
@@ -1678,41 +1793,79 @@ class ExternalForecastSystem:
 
         return reattached_dataframe
 
-    def generate_output_path(self,
-                             output_location,
-                             desired_zoning,
-                             pop_metric,
-                             constraint_method=None,
-                             constraint_area=None,
-                             constraint_on=None,
-                             constraint_source=None
-                             ) -> str:
-        # Init
-        date = datetime.datetime.now()
+    def generate_output_paths(self,
+                              output_location: str,
+                              model_name: str,
+                              iter_name: str,
+                              import_location: str = "Y:/"
+                              ) -> Tuple[dict, dict]:
+        """
 
-        # Generate the base name
+        Parameters
+        ----------
+        output_location:
+            The directory to create the new output directory in - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+
+        model_name:
+            TfN model name in use e.g. norms or noham
+
+        iter_name:
+            The name of the iteration being run. Usually of the format iterx,
+            where x is a number, e.g. iter3
+
+        Returns
+        -------
+        imports:
+            Dictionary of import paths with the following keys:
+            imports, lookups, seed_dists, default
+
+        exports:
+            Dictionary of export paths with the following keys:
+            productions, attractions, pa, od, pa_24, od_24, sectors
+
+        """
+        model_name = model_name.lower()
+
+        # ## Generate import paths ## #
+        # Generate import and export paths
+        model_home = os.path.join(import_location, self._out_dir)
+        import_home = os.path.join(model_home, 'import')
+
+        imports = {
+            'home': import_home,
+            'tp_splits': os.path.join(import_home, 'tp_splits'),
+            'lookups': os.path.join(model_home, 'lookup'),
+            'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
+        }
+
+        #  ## Generate export paths ## #
         fname_parts = [
-            self.__version__ + " EFS Output",
-            desired_zoning,
-            date.strftime("%d-%m-%y"),
-            "PM " + pop_metric[0]
+            output_location,
+            self._out_dir,
+            model_name,
+            self.__version__ + "-EFS_Output",
+            iter_name
         ]
+        home_path = os.path.join(*fname_parts)
 
-        # Optionally add constraint keys
-        if constraint_method is not None:
-            fname_parts += ["CM" + constraint_method[0]]
+        exports = {
+            'home': home_path,
+            'productions': os.path.join(home_path, 'Productions'),
+            'attractions': os.path.join(home_path, 'Attractions'),
+            'pa': os.path.join(home_path, 'PA Matrices'),
+            'pa_24': os.path.join(home_path, '24hr PA Matrices'),
+            'od': os.path.join(home_path, 'OD Matrices'),
+            'od_24': os.path.join(home_path, '24hr OD Matrices'),
+            'sectors': os.path.join(home_path, 'Sectors')
+        }
 
-        if constraint_area is not None:
-            fname_parts += ["CA" + constraint_area[0]]
+        # Create paths if they don't exist
+        for _, path in exports.items():
+            du.create_folder(path, chDir=False)
 
-        if constraint_on is not None:
-            fname_parts += ["CO" + constraint_on[0]]
-
-        if constraint_source is not None:
-            fname_parts += ["CS" + constraint_source[0]]
-
-        # Build the full path and return
-        return os.path.join(output_location, ' - '.join(fname_parts))
+        return imports, exports
 
     def distribute_dataframe(self,
                              productions: pd.DataFrame,
@@ -1724,7 +1877,6 @@ class ExternalForecastSystem:
                              required_ns: List[int],
                              required_car_availabilities: List[int],
                              required_modes: List[int],
-                             required_times: List[int],
                              year_string_list: List[str],
                              distribution_dataframe_dict: dict,
                              distribution_file_location: str,
@@ -1938,13 +2090,221 @@ class ExternalForecastSystem:
         self.area_types = du.get_data_subset(self.area_types)
         self.area_grouping = du.get_data_subset(self.area_grouping)
 
+def nhb_furness(p_import,
+                seed_nhb_dist_dir,
+                od_export,
+                required_purposes,
+                required_modes,
+                year_string_list,
+                replace_zero_vals,
+                zero_infill,
+                nhb_productions_fname='internal_nhb_productions.csv',
+                use_zone_id_subset=False):
+
+    """
+    Provides a one-iteration Furness constrained on production
+    with options whether to replace zero values on the seed
+
+    Essentially distributes the Productions based on the seed nhb dist
+    TODO: Actually add in some furnessing
+    TODO: Fully integrate into EFS
+
+    Return:
+    ----------
+    None
+    """
+    # TODO: Add in file exists checks
+
+    # For every year, purpose, mode
+    yr_p_m_iter = itertools.product(year_string_list,
+                                    required_purposes,
+                                    required_modes)
+    for year, purpose, mode in yr_p_m_iter:
+        # ## Read in Files ## #
+        # Create year fname
+        year_p_fname = '_'.join(
+            ["yr" + str(year), nhb_productions_fname]
+        )
+
+        # Read in productions
+        p_path = os.path.join(p_import, year_p_fname)
+        productions = pd.read_csv(p_path)
+
+        # select needed productions
+        productions = productions.loc[productions["p"] == purpose]
+        productions = productions.loc[productions["m"] == mode]
+
+        # read in nhb_seeds
+        seed_fname = du.get_dist_name(
+            'nhb',
+            'pa',
+            purpose=str(purpose),
+            mode=str(mode),
+            csv=True
+        )
+        nhb_seeds = pd.read_csv(os.path.join(seed_nhb_dist_dir, seed_fname))
+
+        # convert from wide to long format
+        nhb_seeds = nhb_seeds.melt(
+            id_vars=['p_zone'],
+            var_name='a_zone',
+            value_name='seed_vals'
+        )
+
+        # Need to make sure they are the correct types
+        nhb_seeds['a_zone'] = nhb_seeds['a_zone'].astype(float).astype(int)
+        productions['p_zone'] = productions['p_zone'].astype(int)
+
+        if use_zone_id_subset:
+            zone_subset = [259, 267, 268, 270, 275, 1171, 1173]
+            nhb_seeds = du.get_data_subset(
+                nhb_seeds, 'p_zone', zone_subset)
+            nhb_seeds = du.get_data_subset(
+                nhb_seeds, 'a_zone', zone_subset)
+
+        # Check the productions and seed zones match
+        p_zones = set(productions["p_zone"].tolist())
+        seed_zones = set(nhb_seeds["p_zone"].tolist())
+
+        # Skip check if we're using a subset
+        if use_zone_id_subset:
+            print("WARNING! Using a zone subset. Can't check seed "
+                  "zones are valid!")
+        else:
+            if p_zones != seed_zones:
+                raise ValueError("Production and seed attraction zones "
+                                 "do not match.")
+
+        # Infill zero values
+        if replace_zero_vals:
+            mask = (nhb_seeds["seed_vals"] == 0)
+            nhb_seeds.loc[mask, "seed_vals"] = zero_infill
+
+        # Calculate seed factors by zone
+        # (The sum of zone seed factors should equal 1)
+        unq_zone = nhb_seeds['p_zone'].drop_duplicates()
+        for zone in unq_zone:
+            zone_mask = (nhb_seeds['p_zone'] == zone)
+            nhb_seeds.loc[zone_mask, 'seed_factor'] = (
+                    nhb_seeds[zone_mask]['seed_vals'].values
+                    /
+                    nhb_seeds[zone_mask]['seed_vals'].sum()
+            )
+        nhb_seeds = nhb_seeds.reindex(
+            ['p_zone', 'a_zone', 'seed_factor'],
+            axis=1
+        )
+
+        # Use the seed factors to Init P-A trips
+        init_pa = pd.merge(
+            nhb_seeds,
+            productions,
+            on=["p_zone"])
+        init_pa["trips"] = init_pa["seed_factor"] * init_pa["trips"]
+
+        # TODO: Some actual furnessing should happen here!
+        final_pa = init_pa
+
+        # ## Output the furnessed PA matrix to file ## #
+        # Generate path
+        nhb_dist_fname = du.get_dist_name(
+            'nhb',
+            'od',
+            str(year),
+            str(purpose),
+            str(mode),
+            csv=True
+        )
+        out_path = os.path.join(od_export, nhb_dist_fname)
+
+        # Convert from long to wide format and output
+        # TODO: Generate output name based on model name
+        du.long_to_wide_out(
+            final_pa.rename(columns={'p_zone': 'norms_zone_id'}),
+            v_heading='norms_zone_id',
+            h_heading='a_zone',
+            values='trips',
+            out_path=out_path
+        )
+        print("NHB Distribution %s complete!" % nhb_dist_fname)
+
+
+def write_input_info(output_path,
+                     base_year: int,
+                     future_years: List[int],
+                     desired_zoning: str,
+                     alt_pop_base_year_file: str,
+                     alt_households_base_year_file: str,
+                     alt_worker_base_year_file: str,
+                     alt_pop_growth_assumption_file: str,
+                     alt_households_growth_assumption_file: str,
+                     alt_worker_growth_assumption_file: str,
+                     alt_pop_split_file: str,
+                     distribution_method: str,
+                     seed_dist_location: str,
+                     purposes_needed: List[int],
+                     modes_needed: List[int],
+                     soc_needed: List[int],
+                     ns_needed: List[int],
+                     car_availabilities_needed: List[int],
+                     integrate_dlog: bool,
+                     minimum_development_certainty: str,
+                     population_metric: str,
+                     constraint_required: List[bool],
+                     constraint_method: str,
+                     constraint_area: str,
+                     constraint_on: str,
+                     constraint_source: str,
+                     ) -> None:
+
+    out_lines = [
+        'Run Date: ' + str(time.strftime('%D').replace('/', '_')),
+        'Start Time: ' + str(time.strftime('%T').replace('/', '_')),
+        "Base Year: " + str(base_year),
+        "Future Years: " + str(future_years),
+        "Zoning System: " + desired_zoning,
+        "Alternate Population Base Year File: " + str(alt_pop_base_year_file),
+        "Alternate Households Base Year File: " + str(alt_households_base_year_file),
+        "Alternate Workers Base Year File: " + str(alt_worker_base_year_file),
+        "Alternate Population Growth File: " + str(alt_pop_growth_assumption_file),
+        "Alternate Households Growth File: " + str(alt_households_growth_assumption_file),
+        "Alternate Workers Growth File: " + str(alt_worker_growth_assumption_file),
+        "Alternate Population Split File: " + str(alt_pop_split_file),
+        "Distribution Method: " + distribution_method,
+        "Seed Distribution Location: " + seed_dist_location,
+        "Purposes Used: " + str(purposes_needed),
+        "Modes Used: " + str(modes_needed),
+        "Soc Used: " + str(soc_needed),
+        "Ns Used: " + str(ns_needed),
+        "Car Availabilities Used: " + str(car_availabilities_needed),
+        "Development Log Integrated: " + str(integrate_dlog),
+        "Minimum Development Certainty: " + str(minimum_development_certainty),
+        "Population Metric: " + population_metric,
+        "Constraints Used On: " + str(constraint_required),
+        "Constraint Method: " + constraint_method,
+        "Constraint Area: " + constraint_area,
+        "Constraint On: " + constraint_on,
+        "Constraint Source: " + constraint_source
+    ]
+    with open(output_path, 'w') as out:
+        out.write('\n'.join(out_lines))
+
 
 def main():
-    efs = ExternalForecastSystem(use_zone_id_subset=False)
+    use_zone_id_subset = False
+    echo = False
+
+    efs = ExternalForecastSystem(use_zone_id_subset=use_zone_id_subset)
     efs.run(desired_zoning="norms_2015",
             constraint_source="Default",
-            output_location="E:/NorMITs Demand/",
-            echo_distribution=False)
+            output_location="E:/",
+            iter_num=1,
+            echo_distribution=echo)
+
+    efs.run_nhb(output_location="E:/",
+                iter_num=1,
+                use_zone_id_subset=use_zone_id_subset,
+                echo=echo)
 
 
 if __name__ == '__main__':

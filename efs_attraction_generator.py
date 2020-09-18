@@ -142,7 +142,7 @@ class EFSAttractionGenerator:
 
         if output_path is not None:
             final_workers.to_csv(
-                os.path.join(output_path, "EFS_MSOA_workers.csv"),
+                os.path.join(output_path, "MSOA_workers.csv"),
                 index=False)
 
         if attraction_weights is None:
