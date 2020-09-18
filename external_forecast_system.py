@@ -1108,7 +1108,11 @@ class ExternalForecastSystem:
                 nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
                 output_location: str = 'E:/',
                 iter_num: int = 0,
-                use_zone_id_subset: bool = False,
+                overwrite_hb_tp_pa: bool = True,
+                overwrite_hb_tp_od: bool = True,
+                overwrite_nhb_productions: bool = True,
+                overwrite_nhb_od: bool = True,
+                overwrite_nhb_tp_od: bool = True,
                 echo: bool = True
                 ):
         # Init
@@ -1137,75 +1141,81 @@ class ExternalForecastSystem:
         # TODO: Change import paths to accept specific dir
 
         # TODO: Check if tp pa matrices exist first
-        print("Converting HB 24hr PA to time period split PA...")
-        pa2od.efs_build_tp_pa(
-            tp_import=imports['tp_splits'],
-            pa_import=exports['pa_24'],
-            pa_export=exports['pa'],
-            year_string_list=all_years,
-            required_purposes=hb_purposes_needed,
-            required_modes=modes_needed,
-            required_soc=hb_soc_needed,
-            required_ns=hb_ns_needed,
-            required_ca=hb_ca_needed
-        )
-        print('HB time period split PA matrices compiled!\n')
+        if overwrite_hb_tp_pa:
+            print("Converting HB 24hr PA to time period split PA...")
+            pa2od.efs_build_tp_pa(
+                tp_import=imports['tp_splits'],
+                pa_import=exports['pa_24'],
+                pa_export=exports['pa'],
+                year_string_list=all_years,
+                required_purposes=hb_purposes_needed,
+                required_modes=modes_needed,
+                required_soc=hb_soc_needed,
+                required_ns=hb_ns_needed,
+                required_ca=hb_ca_needed
+            )
+            print('HB time period split PA matrices compiled!\n')
 
         # TODO: Check if od matrices exist first
-        print('Converting time period split PA to OD...')
-        pa2od.efs_build_od(
-            pa_import=exports['pa'],
-            od_export=exports['od'],
-            required_purposes=hb_purposes_needed,
-            required_modes=modes_needed,
-            required_soc=hb_soc_needed,
-            required_ns=hb_ns_needed,
-            required_car_availabilities=hb_ca_needed,
-            year_string_list=all_years,
-            phi_type='fhp_tp',
-            aggregate_to_wday=True,
-            echo=echo)
-        print('HB OD matrices compiled!\n')
+        if overwrite_hb_tp_od:
+            print('Converting time period split PA to OD...')
+            pa2od.efs_build_od(
+                pa_import=exports['pa'],
+                od_export=exports['od'],
+                required_purposes=hb_purposes_needed,
+                required_modes=modes_needed,
+                required_soc=hb_soc_needed,
+                required_ns=hb_ns_needed,
+                required_car_availabilities=hb_ca_needed,
+                year_string_list=all_years,
+                phi_type='fhp_tp',
+                aggregate_to_wday=True,
+                echo=echo)
+            print('HB OD matrices compiled!\n')
 
         # TODO: Create 24hr OD for HB
 
         # TODO: Check if nhb productions exist first
-        print("Generating NHB Productions...")
-        pm.nhb_production(hb_pa_import=exports['pa_24'],
-                          nhb_export=exports['productions'],
-                          required_purposes=hb_purposes_needed,
-                          required_modes=modes_needed,
-                          required_soc=hb_soc_needed, required_ns=hb_ns_needed,
-                          required_car_availabilities=hb_ca_needed,
-                          year_string_list=all_years,
-                          nhb_factor_import=imports['home'])
-        print('NHB productions generated!\n')
+        if overwrite_nhb_productions:
+            print("Generating NHB Productions...")
+            pm.nhb_production(hb_pa_import=exports['pa_24'],
+                              nhb_export=exports['productions'],
+                              required_purposes=hb_purposes_needed,
+                              required_modes=modes_needed,
+                              required_soc=hb_soc_needed, required_ns=hb_ns_needed,
+                              required_car_availabilities=hb_ca_needed,
+                              year_string_list=all_years,
+                              nhb_factor_import=imports['home'])
+            print('NHB productions generated!\n')
 
-        print("Furnessing NHB productions...")
         # TODO: Check if NHB matrices exist first
-        nhb_furness(
-            p_import=exports['productions'],
-            seed_nhb_dist_dir=imports['seed_dists'],
-            od_export=exports['od_24'],
-            required_purposes=nhb_purposes_needed,
-            required_modes=modes_needed,
-            year_string_list=all_years,
-            replace_zero_vals=True,
-            zero_infill=0.01,
-            use_zone_id_subset=use_zone_id_subset)
-        print('NHB productions "furnessed"\n')
+        if overwrite_nhb_od:
+            print("Furnessing NHB productions...")
+            nhb_furness(
+                p_import=exports['productions'],
+                seed_nhb_dist_dir=imports['seed_dists'],
+                od_export=exports['od_24'],
+                required_purposes=nhb_purposes_needed,
+                required_modes=modes_needed,
+                year_string_list=all_years,
+                replace_zero_vals=True,
+                zero_infill=0.01,
+                use_zone_id_subset=self.use_zone_id_subset)
+            print('NHB productions "furnessed"\n')
 
-        print("Converting NHB 24hr OD to time period split OD...")
-        pa2od.efs_build_tp_pa(
-            tp_import=imports['tp_splits'],
-            pa_import=exports['od_24'],
-            pa_export=exports['od'],
-            matrix_format='od',
-            year_string_list=all_years,
-            required_purposes=nhb_purposes_needed,
-            required_modes=modes_needed
-        )
-        print('NHB time period split OD matrices compiled!\n')
+        if overwrite_nhb_tp_od:
+            print("Converting NHB 24hr OD to time period split OD...")
+            pa2od.efs_build_tp_pa(
+                tp_import=imports['tp_splits'],
+                pa_import=exports['od_24'],
+                pa_export=exports['od'],
+                matrix_format='od',
+                year_string_list=all_years,
+                required_purposes=nhb_purposes_needed,
+                required_modes=modes_needed
+            )
+            print('NHB time period split OD matrices compiled!\n')
+
         print("NHB run complete!")
 
     def integrate_alternate_assumptions(self,
@@ -2090,6 +2100,7 @@ class ExternalForecastSystem:
         self.area_types = du.get_data_subset(self.area_types)
         self.area_grouping = du.get_data_subset(self.area_grouping)
 
+
 def nhb_furness(p_import,
                 seed_nhb_dist_dir,
                 od_export,
@@ -2294,16 +2305,18 @@ def main():
     use_zone_id_subset = False
     echo = False
 
+    iter_num = 2
+    output_location = "E:/"
+
     efs = ExternalForecastSystem(use_zone_id_subset=use_zone_id_subset)
     efs.run(desired_zoning="norms_2015",
             constraint_source="Default",
-            output_location="E:/",
-            iter_num=1,
+            output_location=output_location,
+            iter_num=iter_num,
             echo_distribution=echo)
 
-    efs.run_nhb(output_location="E:/",
-                iter_num=1,
-                use_zone_id_subset=use_zone_id_subset,
+    efs.run_nhb(output_location=output_location,
+                iter_num=iter_num,
                 echo=echo)
 
 
