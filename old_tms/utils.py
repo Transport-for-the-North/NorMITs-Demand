@@ -1703,13 +1703,11 @@ def get_init_params(path,
     init_params = pd.read_csv(path)
 
     if mode_subset:
-        init_params = init_params[
-                init_params['m'].isin(mode_subset)]
+        init_params = init_params[init_params['m'].isin(mode_subset)]
     if purpose_subset:
-        init_params = init_params[
-                init_params['p'].isin(purpose_subset)]
+        init_params = init_params[init_params['p'].isin(purpose_subset)]
 
-    return(init_params)
+    return init_params
 
 
 def get_cjtw(model_lookup_path,

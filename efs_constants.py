@@ -12,8 +12,40 @@ A file of constants to be used.
 Keeps all constants in one place, for all files in the project to refer to,
 and keeps the code more readable.
 """
+import os
 
 # ### Constant Values ### #
+
+# General
+SOC_P = [1, 2]
+NS_P = [3, 4, 5, 6, 7, 8]
+ALL_HB_P = [1, 2, 3, 4, 5, 6, 7, 8]
+ALL_NHB_P = [12, 13, 14, 15, 16, 18]
+ALL_MODES = [1, 2, 3, 5, 6]
+
+BASE_YEAR = 2018
+FUTURE_YEARS = [2033, 2035, 2050]
+
+# HB consts
+PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]
+MODES_NEEDED = [6]
+SOC_NEEDED = [0, 1, 2, 3]
+NS_NEEDED = [1, 2, 3, 4, 5]
+CA_NEEDED = [1, 2]
+TIMES_NEEDED = [1, 2, 3, 4]
+
+# NHB consts
+NHB_PURPOSES_NEEDED = [12, 13, 14, 15, 16, 18]
+NHB_FUTURE_YEARS = [2033, 2035, 2050]
+
+VALID_MATRIX_FORMATS = ['pa', 'od']
+
+TAG_CERTAINTY_BOUNDS = {
+    "NC": ["NC"],
+    "MTL": ["NC", "MTL"],
+    "RF": ["NC", "MTL", "RF"],
+    "H": ["NC", "MTL", "RF", "H"]
+}
 
 EFS_COLUMN_DICTIONARY = {
     "base_year_population": [
@@ -77,7 +109,7 @@ EFS_COLUMN_DICTIONARY = {
 
 # ### Default Values ### #
 
-# TODO: What is this area?
+# What is this area?
 DEFAULT_ZONE_SUBSET = [1, 2, 1055, 1056, 1057, 1058, 1059, 1060, 1061, 1062]
 
 # ### Default Function Arguments ### #
@@ -87,190 +119,209 @@ DEFAULT_ZONE_SUBSET = [1, 2, 1055, 1056, 1057, 1058, 1059, 1060, 1061, 1062]
 EFS_RUN_DISTRIBUTIONS_DICT = {
     1: {
         0: {
-            1: "/PA Matrices 24hr/hb_pa_p1_m6_soc0_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p1_m6_soc0_ca2.csv",
+            1: "hb_pa_p1_m6_soc0_ca1.csv",
+            2: "hb_pa_p1_m6_soc0_ca2.csv",
             },
         1: {
-            1: "/PA Matrices 24hr/hb_pa_p1_m6_soc1_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p1_m6_soc1_ca2.csv",
+            1: "hb_pa_p1_m6_soc1_ca1.csv",
+            2: "hb_pa_p1_m6_soc1_ca2.csv",
             },
         2: {
-            1: "/PA Matrices 24hr/hb_pa_p1_m6_soc2_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p1_m6_soc2_ca2.csv",
+            1: "hb_pa_p1_m6_soc2_ca1.csv",
+            2: "hb_pa_p1_m6_soc2_ca2.csv",
             },
         3: {
-            1: "/PA Matrices 24hr/hb_pa_p1_m6_soc3_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p1_m6_soc3_ca2.csv",
+            1: "hb_pa_p1_m6_soc3_ca1.csv",
+            2: "hb_pa_p1_m6_soc3_ca2.csv",
             },
     },
     2: {
         0: {
-            1: "/PA Matrices 24hr/hb_pa_p2_m6_soc0_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p2_m6_soc0_ca2.csv",
+            1: "hb_pa_p2_m6_soc0_ca1.csv",
+            2: "hb_pa_p2_m6_soc0_ca2.csv",
             },
         1: {
-            1: "/PA Matrices 24hr/hb_pa_p2_m6_soc1_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p2_m6_soc1_ca2.csv",
+            1: "hb_pa_p2_m6_soc1_ca1.csv",
+            2: "hb_pa_p2_m6_soc1_ca2.csv",
             },
         2: {
-            1: "/PA Matrices 24hr/hb_pa_p2_m6_soc2_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p2_m6_soc2_ca2.csv",
+            1: "hb_pa_p2_m6_soc2_ca1.csv",
+            2: "hb_pa_p2_m6_soc2_ca2.csv",
             },
         3: {
-            1: "/PA Matrices 24hr/hb_pa_p2_m6_soc3_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p2_m6_soc3_ca2.csv",
+            1: "hb_pa_p2_m6_soc3_ca1.csv",
+            2: "hb_pa_p2_m6_soc3_ca2.csv",
             },
         },
     3: {
         1: {
-            1: "/PA Matrices 24hr/hb_pa_p3_m6_ns1_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p3_m6_ns1_ca2.csv",
+            1: "hb_pa_p3_m6_ns1_ca1.csv",
+            2: "hb_pa_p3_m6_ns1_ca2.csv",
             },
         2: {
-            1: "/PA Matrices 24hr/hb_pa_p3_m6_ns2_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p3_m6_ns2_ca2.csv",
+            1: "hb_pa_p3_m6_ns2_ca1.csv",
+            2: "hb_pa_p3_m6_ns2_ca2.csv",
             },
         3: {
-            1: "/PA Matrices 24hr/hb_pa_p3_m6_ns3_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p3_m6_ns3_ca2.csv",
+            1: "hb_pa_p3_m6_ns3_ca1.csv",
+            2: "hb_pa_p3_m6_ns3_ca2.csv",
             },
         4: {
-            1: "/PA Matrices 24hr/hb_pa_p3_m6_ns4_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p3_m6_ns4_ca2.csv",
+            1: "hb_pa_p3_m6_ns4_ca1.csv",
+            2: "hb_pa_p3_m6_ns4_ca2.csv",
             },
         5: {
-            1: "/PA Matrices 24hr/hb_pa_p3_m6_ns5_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p3_m6_ns5_ca2.csv",
+            1: "hb_pa_p3_m6_ns5_ca1.csv",
+            2: "hb_pa_p3_m6_ns5_ca2.csv",
             },
         },
     4: {
         1: {
-            1: "/PA Matrices 24hr/hb_pa_p4_m6_ns1_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p4_m6_ns1_ca2.csv",
+            1: "hb_pa_p4_m6_ns1_ca1.csv",
+            2: "hb_pa_p4_m6_ns1_ca2.csv",
             },
         2: {
-            1: "/PA Matrices 24hr/hb_pa_p4_m6_ns2_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p4_m6_ns2_ca2.csv",
+            1: "hb_pa_p4_m6_ns2_ca1.csv",
+            2: "hb_pa_p4_m6_ns2_ca2.csv",
             },
         3: {
-            1: "/PA Matrices 24hr/hb_pa_p4_m6_ns3_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p4_m6_ns3_ca2.csv",
+            1: "hb_pa_p4_m6_ns3_ca1.csv",
+            2: "hb_pa_p4_m6_ns3_ca2.csv",
             },
         4: {
-            1: "/PA Matrices 24hr/hb_pa_p4_m6_ns4_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p4_m6_ns4_ca2.csv",
+            1: "hb_pa_p4_m6_ns4_ca1.csv",
+            2: "hb_pa_p4_m6_ns4_ca2.csv",
             },
         5: {
-            1: "/PA Matrices 24hr/hb_pa_p4_m6_ns5_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p4_m6_ns5_ca2.csv",
+            1: "hb_pa_p4_m6_ns5_ca1.csv",
+            2: "hb_pa_p4_m6_ns5_ca2.csv",
             },
         },
     5: {
         1: {
-            1: "/PA Matrices 24hr/hb_pa_p5_m6_ns1_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p5_m6_ns1_ca2.csv",
+            1: "hb_pa_p5_m6_ns1_ca1.csv",
+            2: "hb_pa_p5_m6_ns1_ca2.csv",
             },
         2: {
-            1: "/PA Matrices 24hr/hb_pa_p5_m6_ns2_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p5_m6_ns2_ca2.csv",
+            1: "hb_pa_p5_m6_ns2_ca1.csv",
+            2: "hb_pa_p5_m6_ns2_ca2.csv",
             },
         3: {
-            1: "/PA Matrices 24hr/hb_pa_p5_m6_ns3_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p5_m6_ns3_ca2.csv",
+            1: "hb_pa_p5_m6_ns3_ca1.csv",
+            2: "hb_pa_p5_m6_ns3_ca2.csv",
             },
         4: {
-            1: "/PA Matrices 24hr/hb_pa_p5_m6_ns4_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p5_m6_ns4_ca2.csv",
+            1: "hb_pa_p5_m6_ns4_ca1.csv",
+            2: "hb_pa_p5_m6_ns4_ca2.csv",
             },
         5: {
-            1: "/PA Matrices 24hr/hb_pa_p5_m6_ns5_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p5_m6_ns5_ca2.csv",
+            1: "hb_pa_p5_m6_ns5_ca1.csv",
+            2: "hb_pa_p5_m6_ns5_ca2.csv",
              },
         },
     6: {
         1: {
-            1: "/PA Matrices 24hr/hb_pa_p6_m6_ns1_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p6_m6_ns1_ca2.csv",
+            1: "hb_pa_p6_m6_ns1_ca1.csv",
+            2: "hb_pa_p6_m6_ns1_ca2.csv",
             },
         2: {
-            1: "/PA Matrices 24hr/hb_pa_p6_m6_ns2_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p6_m6_ns2_ca2.csv",
+            1: "hb_pa_p6_m6_ns2_ca1.csv",
+            2: "hb_pa_p6_m6_ns2_ca2.csv",
             },
         3: {
-            1: "/PA Matrices 24hr/hb_pa_p6_m6_ns3_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p6_m6_ns3_ca2.csv",
+            1: "hb_pa_p6_m6_ns3_ca1.csv",
+            2: "hb_pa_p6_m6_ns3_ca2.csv",
             },
         4: {
-            1: "/PA Matrices 24hr/hb_pa_p6_m6_ns4_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p6_m6_ns4_ca2.csv",
+            1: "hb_pa_p6_m6_ns4_ca1.csv",
+            2: "hb_pa_p6_m6_ns4_ca2.csv",
             },
         5: {
-            1: "/PA Matrices 24hr/hb_pa_p6_m6_ns5_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p6_m6_ns5_ca2.csv",
+            1: "hb_pa_p6_m6_ns5_ca1.csv",
+            2: "hb_pa_p6_m6_ns5_ca2.csv",
              },
         },
     7: {
         1: {
-            1: "/PA Matrices 24hr/hb_pa_p7_m6_ns1_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p7_m6_ns1_ca2.csv",
+            1: "hb_pa_p7_m6_ns1_ca1.csv",
+            2: "hb_pa_p7_m6_ns1_ca2.csv",
             },
         2: {
-            1: "/PA Matrices 24hr/hb_pa_p7_m6_ns2_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p7_m6_ns2_ca2.csv",
+            1: "hb_pa_p7_m6_ns2_ca1.csv",
+            2: "hb_pa_p7_m6_ns2_ca2.csv",
             },
         3: {
-            1: "/PA Matrices 24hr/hb_pa_p7_m6_ns3_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p7_m6_ns3_ca2.csv",
+            1: "hb_pa_p7_m6_ns3_ca1.csv",
+            2: "hb_pa_p7_m6_ns3_ca2.csv",
             },
         4: {
-            1: "/PA Matrices 24hr/hb_pa_p7_m6_ns4_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p7_m6_ns4_ca2.csv",
+            1: "hb_pa_p7_m6_ns4_ca1.csv",
+            2: "hb_pa_p7_m6_ns4_ca2.csv",
             },
         5: {
-            1: "/PA Matrices 24hr/hb_pa_p7_m6_ns5_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p7_m6_ns5_ca2.csv",
+            1: "hb_pa_p7_m6_ns5_ca1.csv",
+            2: "hb_pa_p7_m6_ns5_ca2.csv",
              },
         },
     8: {
         1: {
-            1: "/PA Matrices 24hr/hb_pa_p8_m6_ns1_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p8_m6_ns1_ca2.csv",
+            1: "hb_pa_p8_m6_ns1_ca1.csv",
+            2: "hb_pa_p8_m6_ns1_ca2.csv",
             },
         2: {
-            1: "/PA Matrices 24hr/hb_pa_p8_m6_ns2_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p8_m6_ns2_ca2.csv",
+            1: "hb_pa_p8_m6_ns2_ca1.csv",
+            2: "hb_pa_p8_m6_ns2_ca2.csv",
             },
         3: {
-            1: "/PA Matrices 24hr/hb_pa_p8_m6_ns3_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p8_m6_ns3_ca2.csv",
+            1: "hb_pa_p8_m6_ns3_ca1.csv",
+            2: "hb_pa_p8_m6_ns3_ca2.csv",
             },
         4: {
-            1: "/PA Matrices 24hr/hb_pa_p8_m6_ns4_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p8_m6_ns4_ca2.csv",
+            1: "hb_pa_p8_m6_ns4_ca1.csv",
+            2: "hb_pa_p8_m6_ns4_ca2.csv",
             },
         5: {
-            1: "/PA Matrices 24hr/hb_pa_p8_m6_ns5_ca1.csv",
-            2: "/PA Matrices 24hr/hb_pa_p8_m6_ns5_ca2.csv",
+            1: "hb_pa_p8_m6_ns5_ca1.csv",
+            2: "hb_pa_p8_m6_ns5_ca2.csv",
         },
     },
 }
 
-FUTURE_YEARS_DEFAULT = [2033, 2035, 2050]
+# TODO: Move M6 to Norms
+DEFAULT_DIST_LOCATION = os.path.join(
+    "Y:/",
+    "EFS",
+    "inputs",
+    "distributions",
+    "PA Matrices 24hr"
+)
+
 CONSTRAINT_REQUIRED_DEFAULT = [
-    True,  # initial population metric constraint
-    True,  # post-development constraint
-    True,  # secondary post-development constraint used for matching HH pop
+    True,   # initial population metric constraint
+    True,   # post-development constraint
+    True,   # secondary post-development constraint used for matching HH pop
     False,  # initial worker metric constraint
     False,  # secondary worker metric constraint
     False,  # final trip based constraint
 ]
 
-PURPOSES_NEEDED_DEFAULT = [1, 2, 3, 4, 5, 6, 7, 8]
-SOC_NEEDED_DEFAULT = [0, 1, 2, 3]
-NS_NEEDED_DEFAULT = [1, 2, 3, 4, 5]
-CA_NEEDED_DEFAULT = [1, 2]
-MODES_NEEDED_DEFAULT = [1, 2, 3, 5, 6]
-TIMES_NEEDED_DEFAULT = [1, 2, 3, 4]
+# ## Attraction Generation ## #
+DEFAULT_ATTRACTION_CONSTRAINTS = [
+    True,   # initial population metric constraint
+    True,   # post-development constraint
+    True,   # secondary post-development constraint used for matching HH pop
+    False,  # initial worker metric constraint
+    False,  # secondary worker metric constraint
+    False,  # final trip based constraint
+]
+
+# ## Production Generations ## #
+DEFAULT_PRODUCTION_CONSTRAINTS = [
+    True,   # initial population metric constraint
+    True,   # post-development constraint
+    True,   # secondary post-development constraint used for matching HH pop
+    False   # final trip based constraint
+]
 
 
 

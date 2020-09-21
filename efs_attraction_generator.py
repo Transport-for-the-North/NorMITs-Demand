@@ -5,42 +5,29 @@ Created on Mon Feb  3 14:32:53 2020
 @author: Sneezy
 """
 
-from functools import reduce
-from typing import List
-import sys
-
+import os
 import numpy as np
 import pandas as pd
 
-from efs_constrainer import ExternalForecastSystemConstrainer
-sys.path.append("../../../../NorMITs Utilities/Python")
-sys.path.append("C:/Users/Sneezy/Desktop/Code/S/NorMITs Utilities/Python")
-import nu_error_management as err_check
+from typing import List
+
+import efs_constants as consts
+from efs_constrainer import ForecastConstrainer
+
+from demand_utilities import error_management as err_check
 
 
-class ExternalForecastSystemWorkerGenerator:
+class EFSAttractionGenerator:
     # infill statics
     POPULATION_INFILL = 0.001
     
-    # sub-classes
-    efs_constrainer = None
-    
-    # procedural support
-    webtag_certainty_bounds = dict
-    
     def __init__(self,
-                 webtag_certainty_bounds = {
-                         "NC": ["NC"],
-                         "MTL": ["NC", "MTL"],
-                         "RF": ["NC", "MTL", "RF"],
-                         "H": ["NC", "MTL", "RF", "H"]
-                         }
-                 ):
+                 tag_certainty_bounds=consts.TAG_CERTAINTY_BOUNDS):
         """
         #TODO
         """
-        self.efs_constrainer = ExternalForecastSystemConstrainer()
-        self.webtag_certainty_bounds = webtag_certainty_bounds
+        self.efs_constrainer = ForecastConstrainer()
+        self.tag_certainty_bounds = tag_certainty_bounds
     
     def run(self,
             worker_growth: pd.DataFrame,
@@ -50,26 +37,21 @@ class ExternalForecastSystemWorkerGenerator:
             development_log: pd.DataFrame = None,
             development_log_split: pd.DataFrame = None,
             integrating_development_log: bool = False,
-            minimum_development_certainty: str = "MTL", # "NC", "MTL", "RF", "H"
-            constraint_required: List[bool] = [
-                True,  # initial population metric constraint
-                True,  # post-development constraint
-                True,  # secondary post-development constraint used for matching HH pop
-                False,  # initial worker metric constraint
-                False,  # secondary worker metric constraint
-                False,  # final trip based constraint
-            ],
-            constraint_method: str = "Percentage", # Percentage, Average
-            constraint_area: str = "Designated", # Zone, Designated, All
-            constraint_on: str = "Growth", # Growth, All
-            constraint_source: str = "Grown Base", # Default, Grown Base, Model Grown Base
+            minimum_development_certainty: str = "MTL",  # "NC", "MTL", "RF", "H"
+            constraint_required: List[bool] = consts.DEFAULT_ATTRACTION_CONSTRAINTS,
+            constraint_method: str = "Percentage",  # Percentage, Average
+            constraint_area: str = "Designated",  # Zone, Designated, All
+            constraint_on: str = "Growth",  # Growth, All
+            constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
             designated_area: pd.DataFrame = None,
             base_year_string: str = None,
-            model_years: List[str] = List[None]
-            ):
+            model_years: List[str] = List[None],
+            attraction_weights=None,
+            output_path=None):
         """
         #TODO
-        """        
+        """
+        # TODO: Attractions don't use the D-Log
         if integrating_development_log:
             if development_log is not None:
                 development_log = development_log.copy()
@@ -158,7 +140,61 @@ class ExternalForecastSystemWorkerGenerator:
         )
         print("Recombined workers!")
 
-        return final_workers
+        if output_path is not None:
+            final_workers.to_csv(
+                os.path.join(output_path, "MSOA_workers.csv"),
+                index=False)
+
+        if attraction_weights is None:
+            return final_workers
+
+        print("Workers generated. Converting to attractions...")
+        attractions = self.attraction_generation(
+            final_workers,
+            attraction_weights,
+            model_years
+        )
+
+        return attractions
+
+    def attraction_generation(self,
+                              worker_dataframe: pd.DataFrame,
+                              attraction_weight: pd.DataFrame,
+                              year_list: List[str]
+                              ) -> pd.DataFrame:
+        """
+        #TODO
+        """
+        worker_dataframe = worker_dataframe.copy()
+        attraction_weight = attraction_weight.copy()
+
+        attraction_dataframe = pd.merge(
+            worker_dataframe,
+            attraction_weight,
+            on=["employment_class"],
+            suffixes=("", "_weights")
+        )
+
+        for year in year_list:
+            attraction_dataframe.loc[:, year] = (
+                attraction_dataframe[year]
+                *
+                attraction_dataframe[year + "_weights"]
+            )
+
+        group_by_cols = ["model_zone_id", "purpose_id"]
+        needed_columns = group_by_cols.copy()
+        needed_columns.extend(year_list)
+
+        attraction_dataframe = attraction_dataframe[needed_columns]
+        attraction_dataframe = attraction_dataframe.groupby(
+            by=group_by_cols,
+            as_index=False
+        ).sum()
+
+        return attraction_dataframe
+
+
 
     def worker_grower(self,
                       worker_growth: pd.DataFrame,

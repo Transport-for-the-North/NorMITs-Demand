@@ -18,7 +18,7 @@ def check_values(check_list: List[Any],
         return True
     else:
         if (custom_string == None):
-            raise ValueError("ValueError due to input value " + input_value
+            raise ValueError("ValueError du to input value " + input_value
                          + " not being in acceptable range of "
                          + str(check_list) + ".")
         else:
@@ -35,7 +35,7 @@ def check_type(expected_type: type,
         return True
     else:
         if (custom_string == None):
-            raise TypeError("TypeError due to incorrect input value. "
+            raise TypeError("TypeError du to incorrect input value. "
                             + "Type of input is: " + str(type(input_value)) + ". "
                             + "Expected type: " + str(expected_type) + ".")
         else:

@@ -84,7 +84,8 @@ class SectorReporter:
             Default input is: None. If this default input is used then
             all columns (except "model_zone_id") are selected.
             Possible input is any list of strings.
-            
+            THESE ARE THE COLUMNS WE KEEP
+
         zone_system_name:
             The name of the zone system for this data set.
             Default input is: None. If this default input is used then
@@ -163,21 +164,17 @@ class SectorReporter:
         
         for group in groupings:
             zones = sector_grouping[
-                    sector_grouping["grouping_id"] == group
-                    ]["model_zone_id"].values
+                sector_grouping["grouping_id"] == group
+            ]["model_zone_id"].values
             calculating_dataframe_mask = calculating_dataframe["model_zone_id"].isin(zones)
-            new_grouping_dataframe = pd.DataFrame({
-                    "grouping_id": [group]
-                    })
+            new_grouping_dataframe = pd.DataFrame({"grouping_id": [group]})
     
             for metric in grouping_metric_columns:
                 new_grouping_dataframe[metric] = calculating_dataframe[
-                        calculating_dataframe_mask
-                        ].sum()[metric]
+                    calculating_dataframe_mask
+                ].sum()[metric]
                 
             print(new_grouping_dataframe)
-            sector_totals = sector_totals.append(
-                    new_grouping_dataframe
-                    )
+            sector_totals = sector_totals.append(new_grouping_dataframe)
             
         return sector_totals

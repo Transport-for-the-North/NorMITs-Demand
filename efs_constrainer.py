@@ -12,12 +12,10 @@ import sys
 import numpy as np
 import pandas as pd
 
-sys.path.append("../../../../NorMITs Utilities/Python")
-sys.path.append("C:/Users/Sneezy/Desktop/Code/S/NorMITs Utilities/Python")
-import nu_error_management as err_check
+from demand_utilities import error_management as err_check
 
 
-class ExternalForecastSystemConstrainer:
+class ForecastConstrainer:
     def run(self,
             grown_dataframe: pd.DataFrame,
             constraint_method: str, # percentage, average
