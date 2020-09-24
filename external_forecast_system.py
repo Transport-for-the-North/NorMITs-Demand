@@ -36,6 +36,8 @@ from demand_utilities.sector_reporter_v2 import SectorReporter
 
 # TODO: Implement multiprocessing
 # TODO: Determine the TfN model name based on the given mode
+# TODO: Output a run log instead of printing everything to the terminal.
+# TODO: On error, output a simple error report
 
 
 class ExternalForecastSystem:
@@ -1097,24 +1099,69 @@ class ExternalForecastSystem:
             self.sector_totals = sector_totals
             # TODO: Store output files into local storage (class storage)
 
-    def run_nhb(self,
-                base_year: int = consts.BASE_YEAR,
-                future_years: List[int] = consts.NHB_FUTURE_YEARS,
-                modes_needed: List[int] = consts.MODES_NEEDED,
-                hb_purposes_needed: List[int] = consts.PURPOSES_NEEDED,
-                hb_soc_needed: List[int] = consts.SOC_NEEDED,
-                hb_ns_needed: List[int] = consts.NS_NEEDED,
-                hb_ca_needed: List[int] = consts.CA_NEEDED,
-                nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
-                output_location: str = 'E:/',
-                iter_num: int = 0,
-                overwrite_hb_tp_pa: bool = True,
-                overwrite_hb_tp_od: bool = True,
-                overwrite_nhb_productions: bool = True,
-                overwrite_nhb_od: bool = True,
-                overwrite_nhb_tp_od: bool = True,
-                echo: bool = True
-                ):
+    def hb_pa_to_od(self,
+                    base_year: int = consts.BASE_YEAR,
+                    future_years: List[int] = consts.NHB_FUTURE_YEARS,
+                    modes_needed: List[int] = consts.MODES_NEEDED,
+                    hb_purposes_needed: List[int] = consts.PURPOSES_NEEDED,
+                    hb_soc_needed: List[int] = consts.SOC_NEEDED,
+                    hb_ns_needed: List[int] = consts.NS_NEEDED,
+                    hb_ca_needed: List[int] = consts.CA_NEEDED,
+                    output_location: str = 'E:/',
+                    iter_num: int = 0,
+                    overwrite_hb_tp_pa: bool = True,
+                    overwrite_hb_tp_od: bool = True,
+                    echo: bool = True
+                    ) -> None:
+        """
+        Converts home based PA matrices into time periods split PA matrices,
+        then OD matrices (to_home, from_home, and full OD)
+
+        Parameters
+        ----------
+         base_year:
+            The base year used to produce the HB distributions.
+
+        future_years:
+            The future years used to produce NHB distributions for.
+
+        modes_needed:
+            The mode to generate a NHB distributions for.
+
+        hb_purposes_needed:
+            The home based purposes to use when generating NHB productions.
+
+        hb_soc_needed:
+            The home based soc_ids to use when generating NHB productions.
+
+        hb_ns_needed:
+            The home based ns_ids to use when generating NHB productions.
+
+        hb_ca_needed:
+            The car availability ids to use when generating NHB productions.
+
+        output_location:
+            The directory to create the new output directory in - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+
+        iter_num:
+            The number of the iteration being run.
+
+        # TODO: Update docs once correct functionality exists
+        overwrite_hb_tp_pa:
+            Whether to split home based PA matrices into time periods.
+
+        overwrite_hb_tp_od:
+            Whether to convert time period split PA matrices into OD matrices.
+
+        echo:
+            If True, suppresses some of the non-essential terminal outputs.
+
+        Returns
+        -------
+        None
+        """
         # Init
         all_years = [str(x) for x in [base_year] + future_years]
         iter_name = 'iter' + str(iter_num)
@@ -1136,7 +1183,6 @@ class ExternalForecastSystem:
             model_name=model_name,
             iter_name=iter_name
         )
-
         # TODO: Add time print outs
         # TODO: Change import paths to accept specific dir
 
@@ -1172,8 +1218,103 @@ class ExternalForecastSystem:
                 aggregate_to_wday=True,
                 echo=echo)
             print('HB OD matrices compiled!\n')
+            # TODO: Create 24hr OD for HB
 
-        # TODO: Create 24hr OD for HB
+    def run_nhb(self,
+                base_year: int = consts.BASE_YEAR,
+                future_years: List[int] = consts.NHB_FUTURE_YEARS,
+                modes_needed: List[int] = consts.MODES_NEEDED,
+                hb_purposes_needed: List[int] = consts.PURPOSES_NEEDED,
+                hb_soc_needed: List[int] = consts.SOC_NEEDED,
+                hb_ns_needed: List[int] = consts.NS_NEEDED,
+                hb_ca_needed: List[int] = consts.CA_NEEDED,
+                nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
+                output_location: str = 'E:/',
+                iter_num: int = 0,
+                overwrite_nhb_productions: bool = True,
+                overwrite_nhb_od: bool = True,
+                overwrite_nhb_tp_od: bool = True,
+                ):
+        """
+        Generates NHB distributions based from the time-period split
+        HB distributions
+
+        Performs the following actions:
+            - Generates NHB productions using NHB factors and HB distributions
+            - Furnesses NHB productions Synthesiser distributions as a seed
+
+        Parameters
+        ----------
+        base_year:
+            The base year used to produce the HB distributions.
+
+        future_years:
+            The future years used to produce NHB distributions for.
+
+        modes_needed:
+            The mode to generate a NHB distributions for.
+
+        hb_purposes_needed:
+            The home based purposes to use when generating NHB productions.
+
+        hb_soc_needed:
+            The home based soc_ids to use when generating NHB productions.
+
+        hb_ns_needed:
+            The home based ns_ids to use when generating NHB productions.
+
+        hb_ca_needed:
+            The car availability ids to use when generating NHB productions.
+
+        nhb_purposes_needed:
+            Which NHB purposes to generate NHb distributions for.
+
+        output_location:
+            The directory to create the new output directory in - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+
+        iter_num:
+            The number of the iteration being run.
+
+        # TODO: Update docs once correct functionality exists
+        overwrite_nhb_productions:
+            Whether to generate nhb productions or not.
+
+        overwrite_nhb_od
+            Whether to generate nhb OD matrices or not.
+
+        overwrite_nhb_tp_od
+            Whether to generate nhb tp split OD matrices or not.
+
+        Returns
+        -------
+        None
+        """
+        # Init
+        all_years = [str(x) for x in [base_year] + future_years]
+        iter_name = 'iter' + str(iter_num)
+        model_name = du.get_model_name(modes_needed[0])
+
+        if iter_num == 0:
+            Warning("iter_num is set to 0. This is should only be the case"
+                    "during testing.")
+
+        if len(modes_needed) > 1:
+            raise ValueError("Was given more than one mode. EFS cannot run "
+                             "using more than one mode at a time due to "
+                             "different zoning systems for NoHAM and NoRMS "
+                             "etc.")
+
+        # Generate paths
+        imports, exports = self.generate_output_paths(
+            output_location=output_location,
+            model_name=model_name,
+            iter_name=iter_name
+        )
+
+        # TODO: Add time print outs
+        # TODO: Change import paths to accept specific dir
 
         # TODO: Check if nhb productions exist first
         if overwrite_nhb_productions:
@@ -1825,6 +1966,11 @@ class ExternalForecastSystem:
             The name of the iteration being run. Usually of the format iterx,
             where x is a number, e.g. iter3
 
+        import_location:
+            The directory the import directory exists - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+
         Returns
         -------
         imports:
@@ -2305,19 +2451,31 @@ def main():
     use_zone_id_subset = False
     echo = False
 
-    iter_num = 2
+    iter_num = 0
     output_location = "E:/"
 
     efs = ExternalForecastSystem(use_zone_id_subset=use_zone_id_subset)
-    efs.run(desired_zoning="norms_2015",
-            constraint_source="Default",
-            output_location=output_location,
-            iter_num=iter_num,
-            echo_distribution=echo)
+    # efs.run(desired_zoning="norms_2015",
+    #         constraint_source="Default",
+    #         output_location=output_location,
+    #         iter_num=iter_num,
+    #         echo_distribution=echo)
 
-    efs.run_nhb(output_location=output_location,
-                iter_num=iter_num,
-                echo=echo)
+    efs.hb_pa_to_od(
+        output_location=output_location,
+        iter_num=iter_num,
+        overwrite_hb_tp_pa=False,
+        overwrite_hb_tp_od=False,
+        echo=echo
+    )
+
+    efs.run_nhb(
+        output_location=output_location,
+        iter_num=iter_num,
+        overwrite_nhb_productions=False,
+        overwrite_nhb_od=False,
+        overwrite_nhb_tp_od=False
+    )
 
 
 if __name__ == '__main__':

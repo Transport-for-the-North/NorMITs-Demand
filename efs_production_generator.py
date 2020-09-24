@@ -849,7 +849,7 @@ def _nhb_production_internal(hb_pa_import,
                              car_availability):
     """
       The internals of nhb_production(). Useful for making the code more
-      readable du to the number of nested loops needed
+      readable due to the number of nested loops needed
     """
     hb_dist = du.get_dist_name(
         'hb',
