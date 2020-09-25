@@ -689,7 +689,8 @@ def n_matrix_split(matrix,
 def compile_od(od_folder,
                write_folder,
                compile_param_path,
-               build_factor_pickle=False):
+               build_factor_pickle = False,
+               factor_pickle_path=None):
     """
     Function to compile model format od matrices to a given specification
     """
@@ -741,7 +742,6 @@ def compile_od(od_folder,
 
             ph.append(temp)
 
-        
         if build_factor_pickle:
             compilation_dict = {}
             # Get size of first square matrix
@@ -809,18 +809,22 @@ def compile_od(od_folder,
                 # Write compiled od
                 for key,value in mat.items():
                     print(key)
-                    c_od_out = os.path.join(write_folder,
-                                            key + '.csv')
+                    if key[-4:] == '.csv':
+                        c_od_out = os.path.join(write_folder, key)
+                    else:
+                        c_od_out = os.path.join(write_folder, key + '.csv')
                     print(c_od_out)
                     value.to_csv(c_od_out, index=True)
             if build_factor_pickle:
-                p_path = os.path.join(write_folder,
-                                      'od_compilation_factors.pickle')
+                fname = 'od_compilation_factors.pickle'
+                if factor_pickle_path is None:
+                    p_path = os.path.join(write_folder, fname)
+                else:
+                    p_path = os.path.join(factor_pickle_path, fname)
                 print('Writing factor pickle - might take a while')
                 with open(p_path, 'wb') as handle:
                     pickle.dump(od_pickle, handle,
                                 protocol=pickle.HIGHEST_PROTOCOL)
-
     return(comp_ph)
 
 def compile_pa(pa_folder,

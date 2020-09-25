@@ -181,7 +181,7 @@ def _build_tp_pa_internal(pa_import,
         # Build write path
         tp_pa_name = du.get_dist_name(
             str(trip_origin),
-            'pa',
+            str(matrix_format),
             str(year),
             str(purpose),
             str(mode),
@@ -351,6 +351,7 @@ def _build_od_internal(pa_import,
                        phi_lookup_folder,
                        phi_type,
                        aggregate_to_wday,
+                       full_od_out=False,
                        echo=True):
     """
     The internals of build_od(). Useful for making the code more
@@ -490,7 +491,8 @@ def _build_od_internal(pa_import,
 
         du.print_w_toggle('Exporting ' + output_from_name, echo=echo)
         du.print_w_toggle('& ' + output_to_name, echo=echo)
-        du.print_w_toggle('& ' + output_od_name, echo=echo)
+        if full_od_out:
+            du.print_w_toggle('& ' + output_od_name, echo=echo)
         du.print_w_toggle('To ' + od_export, echo=echo)
 
         # Output from_home, to_home and full OD matrices
@@ -498,17 +500,18 @@ def _build_od_internal(pa_import,
         output_to_path = os.path.join(od_export, output_to_name)
         output_od_path = os.path.join(od_export, output_od_name)
 
-        # AUditing checks - tidality
+        # Auditing checks - tidality
         # OD from = PA
         # OD to = if it leaves it should come back
         # OD = 2(PA)
         output_from.to_csv(output_from_path)
         output_to.to_csv(output_to_path)
-        output_od.to_csv(output_od_path)
+        if full_od_out:
+            output_od.to_csv(output_od_path)
 
         matrix_totals.append([output_name, from_total, to_total])
 
-    dist_name = du.get_dist_name_from_calib_params('hb', 'od', calib_params)
+    dist_name = du.calib_params_to_dist_name('hb', 'od', calib_params)
     print("INFO: OD Matrices for %s written to file." % dist_name)
     return matrix_totals
 

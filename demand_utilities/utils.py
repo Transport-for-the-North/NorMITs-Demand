@@ -14,9 +14,12 @@ TODO: After integrations with TMS, combine with tms_utils.py
 """
 
 import os
+import re
+
 import pandas as pd
 
 from typing import List
+from typing import Dict
 from typing import Iterable
 
 import efs_constants as consts
@@ -131,6 +134,9 @@ def is_none_like(o) -> bool:
         if o.lower().strip() == 'none':
             return True
 
+    if isinstance(o, list):
+        return is_none_like(o[0])
+
     return False
 
 
@@ -211,9 +217,11 @@ def get_dist_name(trip_origin: str,
     return final_name
 
 
-def get_dist_name_from_calib_params(trip_origin: str,
-                                    matrix_format: str,
-                                    calib_params: dict):
+def calib_params_to_dist_name(trip_origin: str,
+                              matrix_format: str,
+                              calib_params: dict,
+                              csv: bool = False
+                              ) -> str:
     """
         Wrapper for get_distribution_name() using calib params
     """
@@ -228,7 +236,8 @@ def get_dist_name_from_calib_params(trip_origin: str,
             str(calib_params.get('m')),
             str(calib_params.get(segment_str)),
             str(calib_params.get('ca')),
-            tp=str(calib_params.get('tp'))
+            tp=str(calib_params.get('tp')),
+            csv=csv
         )
     else:
         return get_dist_name(
@@ -239,6 +248,7 @@ def get_dist_name_from_calib_params(trip_origin: str,
             str(calib_params.get('m')),
             str(calib_params.get(segment_str)),
             str(calib_params.get('ca')),
+            csv=csv
         )
 
 
@@ -294,6 +304,85 @@ def generate_calib_params(year: str,
         segment_str: segment,
         'ca': ca
     }
+
+
+def fname_to_calib_params(fname: str,
+                          get_trip_origin: bool = False,
+                          get_matrix_format: bool = False,
+                          get_user_class: bool = False
+                          ) -> Dict[str, str]:
+    """
+    Convert the filename into a calib_params dict, with the following keys
+    (if they exist in the filename):
+    yr, p, m, soc/ns, ca, tp
+    """
+    # Init
+    calib_params = dict()
+
+    # Search for each param in fname - store if found
+    loc = re.search('_yr[0-9]+', fname)
+    if loc is not None:
+        calib_params['yr'] = int(fname[loc.start() + 3:loc.end()])
+
+    loc = re.search('_p[0-9]+', fname)
+    if loc is not None:
+        calib_params['p'] = int(fname[loc.start() + 2:loc.end()])
+
+    loc = re.search('_m[0-9]+', fname)
+    if loc is not None:
+        calib_params['m'] = int(fname[loc.start() + 2:loc.end()])
+
+    loc = re.search('_soc[0-9]+', fname)
+    if loc is not None:
+        calib_params['soc'] = int(fname[loc.start() + 4:loc.end()])
+
+    loc = re.search('_ns[0-9]+', fname)
+    if loc is not None:
+        calib_params['ns'] = int(fname[loc.start() + 3:loc.end()])
+
+    loc = re.search('_ca[0-9]+', fname)
+    if loc is not None:
+        calib_params['ca'] = int(fname[loc.start() + 3:loc.end()])
+
+    loc = re.search('_tp[0-9]+', fname)
+    if loc is not None:
+        calib_params['tp'] = int(fname[loc.start() + 3:loc.end()])
+
+    # Optionally search for extra params
+    if get_trip_origin:
+        if re.search('^hb_', fname) is not None:
+            calib_params['trip_origin'] = 'hb'
+        elif re.search('^nhb_', fname) is not None:
+            calib_params['trip_origin'] = 'nhb'
+        else:
+            raise ValueError("Cannot find the trip origin in filename: %s" %
+                             str(fname))
+
+    if get_matrix_format:
+        if re.search('od_from_', fname) is not None:
+            calib_params['matrix_format'] = 'od_from'
+        elif re.search('od_to_', fname) is not None:
+            calib_params['matrix_format'] = 'od_to'
+        elif re.search('od_', fname) is not None:
+            calib_params['matrix_format'] = 'od'
+        elif re.search('pa_', fname) is not None:
+            calib_params['matrix_format'] = 'pa'
+        else:
+            raise ValueError("Cannot find the matrix format in filename: %s" %
+                             str(fname))
+
+    if get_user_class:
+        if re.search('commute_', fname) is not None:
+            calib_params['user_class'] = 'commute'
+        elif re.search('business_', fname) is not None:
+            calib_params['user_class'] = 'business'
+        elif re.search('other_', fname) is not None:
+            calib_params['user_class'] = 'other'
+        else:
+            raise ValueError("Cannot find the user class in filename: %s" %
+                             str(fname))
+
+    return calib_params
 
 
 def get_segmentation_mask(df: pd.DataFrame,
@@ -615,9 +704,10 @@ def build_compile_params(import_dir: str,
             for tp in consts.TIME_PERIODS:
                 # Init
                 compile_mats = all_od_matrices.copy()
-                ps = ['_p' + str(x) for x in purposes]  # _ avoids class with tp
-                year_str = 'yr' + str(year)
-                tp_str = 'tp' + str(tp)
+                # include _ before and after to avoid clashes
+                ps = ['_p' + str(x) + '_' for x in purposes]
+                year_str = '_yr' + str(year) + '_'
+                tp_str = '_tp' + str(tp)
 
                 # Narrow down to matrices for this compilation
                 compile_mats = [x for x in compile_mats if year_str in x]

@@ -23,6 +23,8 @@ import pandas as pd
 
 # self imports
 import pa_to_od as pa2od
+import od_to_pa as od2pa
+import matrix_processing as mat_p
 import efs_constants as consts
 import furness_process as fp
 import efs_production_generator as pm
@@ -2527,17 +2529,42 @@ def main():
 
 
 def main2():
-    du.build_compile_params(
-        import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\OD Matrices',
-        export_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params',
-        matrix_format='od',
-        needed_years=['2018']
-    )
+    # TODO: Will need to do for nhb at some point too
+    # for matrix_format in ['od_from', 'od_to']:
+    #     mat_p.aggregate_matrices(
+    #         import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\OD Matrices',
+    #         export_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated OD Matrices',
+    #         trip_origin='hb',
+    #         matrix_format=matrix_format,
+    #         years_needed=[consts.BASE_YEAR],
+    #         p_needed=consts.ALL_HB_P,
+    #         m_needed=consts.MODES_NEEDED,
+    #         tp_needed=consts.TP_NEEDED
+    #     )
+    # # NEED TO COPY NHB MATRICES OVER BY HAND FOR NOW
+    #
+    # du.build_compile_params(
+    #     import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated OD Matrices',
+    #     export_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params',
+    #     matrix_format='od',
+    #     needed_years=['2018']
+    # )
+    #
+    # du.compile_od(
+    #     od_folder=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated OD Matrices',
+    #     write_folder=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
+    #     compile_param_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_yr2018_compile_params.csv',
+    #     build_factor_pickle=True,
+    #     factor_pickle_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params'
+    # )
+    #
+    # exit()
 
-    du.compile_od(
-        od_folder=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\OD Matrices',
-        write_folder=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
-        compile_param_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_yr2018_compile_params.csv'
+    od2pa.decompile_od(
+        od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
+        od_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Decompiled OD Matrices',
+        decompile_factors_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_compilation_factors.pickle',
+        year=consts.BASE_YEAR
     )
 
 

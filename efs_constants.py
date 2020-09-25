@@ -21,6 +21,8 @@ SOC_P = [1, 2]
 NS_P = [3, 4, 5, 6, 7, 8]
 ALL_HB_P = [1, 2, 3, 4, 5, 6, 7, 8]
 ALL_NHB_P = [12, 13, 14, 15, 16, 18]
+ALL_P = ALL_HB_P + ALL_NHB_P
+
 ALL_MODES = [1, 2, 3, 5, 6]
 
 TIME_PERIODS = [1, 2, 3, 4]
@@ -28,12 +30,13 @@ TIME_PERIOD_STRS = ['tp' + str(x) for x in TIME_PERIODS]
 
 BASE_YEAR = 2018
 FUTURE_YEARS = [2033, 2035, 2050]
+ALL_YEARS = [BASE_YEAR] + FUTURE_YEARS
 
 # How do user classes relate to purposes
 USER_CLASS_PURPOSES = {
-    'com': [1],                                         # Commute
-    'eb': [2, 12],                                      # Employers Business
-    'oth': [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]       # Other
+    'commute': [1],
+    'business': [2, 12],
+    'other': [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
 }
 
 
@@ -43,7 +46,7 @@ MODES_NEEDED = [6]
 SOC_NEEDED = [0, 1, 2, 3]
 NS_NEEDED = [1, 2, 3, 4, 5]
 CA_NEEDED = [1, 2]
-TIMES_NEEDED = [1, 2, 3, 4]
+TP_NEEDED = [1, 2, 3, 4]
 
 # NHB consts
 NHB_PURPOSES_NEEDED = [12, 13, 14, 15, 16, 18]
