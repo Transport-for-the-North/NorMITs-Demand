@@ -1323,7 +1323,8 @@ class ExternalForecastSystem:
                               nhb_export=exports['productions'],
                               required_purposes=hb_purposes_needed,
                               required_modes=modes_needed,
-                              required_soc=hb_soc_needed, required_ns=hb_ns_needed,
+                              required_soc=hb_soc_needed,
+                              required_ns=hb_ns_needed,
                               required_car_availabilities=hb_ca_needed,
                               year_string_list=all_years,
                               nhb_factor_import=imports['home'])
@@ -1358,6 +1359,46 @@ class ExternalForecastSystem:
             print('NHB time period split OD matrices compiled!\n')
 
         print("NHB run complete!")
+
+    def od_to_pa(self,
+                 base_year: int = consts.BASE_YEAR,
+                 future_years: List[int] = consts.NHB_FUTURE_YEARS,
+                 modes_needed: List[int] = consts.MODES_NEEDED,
+                 hb_purposes_needed: List[int] = consts.PURPOSES_NEEDED,
+                 hb_soc_needed: List[int] = consts.SOC_NEEDED,
+                 hb_ns_needed: List[int] = consts.NS_NEEDED,
+                 hb_ca_needed: List[int] = consts.CA_NEEDED,
+                 nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
+                 output_location: str = 'E:/',
+                 iter_num: int = 0,
+                 ) -> None:
+        all_years = [str(x) for x in [base_year] + future_years]
+        iter_name = 'iter' + str(iter_num)
+        model_name = du.get_model_name(modes_needed[0])
+
+        if iter_num == 0:
+            Warning("iter_num is set to 0. This is should only be the case"
+                    "during testing.")
+
+        if len(modes_needed) > 1:
+            raise ValueError("Was given more than one mode. EFS cannot run "
+                             "using more than one mode at a time due to "
+                             "different zoning systems for NoHAM and NoRMS "
+                             "etc.")
+
+        # Generate paths
+        imports, exports = self.generate_output_paths(
+            output_location=output_location,
+            model_name=model_name,
+            iter_name=iter_name
+        )
+
+        du.build_compile_params(
+            import_dir=exports['od'],
+            export_dir=exports['compile_params'],
+            matrix_format='od',
+            needed_years=all_years
+        )
 
     def integrate_alternate_assumptions(self,
                                         alt_pop_base_year_file: str,
@@ -1993,7 +2034,7 @@ class ExternalForecastSystem:
             'home': import_home,
             'tp_splits': os.path.join(import_home, 'tp_splits'),
             'lookups': os.path.join(model_home, 'lookup'),
-            'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
+            'seed_dists': os.path.join(import_home, model_name, 'seed_distributions')
         }
 
         #  ## Generate export paths ## #
@@ -2014,7 +2055,9 @@ class ExternalForecastSystem:
             'pa_24': os.path.join(home_path, '24hr PA Matrices'),
             'od': os.path.join(home_path, 'OD Matrices'),
             'od_24': os.path.join(home_path, '24hr OD Matrices'),
-            'sectors': os.path.join(home_path, 'Sectors')
+            'comp_od': os.path.join(home_path, 'Compiled OD Matrices'),
+            'sectors': os.path.join(home_path, 'Sectors'),
+            'compile_params': os.path.join(home_path, 'compile_params')
         }
 
         # Create paths if they don't exist
@@ -2477,6 +2520,26 @@ def main():
         overwrite_nhb_tp_od=False
     )
 
+    efs.od_to_pa(
+        output_location=output_location,
+        iter_num=iter_num,
+    )
+
+
+def main2():
+    du.build_compile_params(
+        import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\OD Matrices',
+        export_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params',
+        matrix_format='od',
+        needed_years=['2018']
+    )
+
+    du.compile_od(
+        od_folder=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\OD Matrices',
+        write_folder=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
+        compile_param_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_yr2018_compile_params.csv'
+    )
+
 
 if __name__ == '__main__':
-    main()
+    main2()

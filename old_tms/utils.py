@@ -4,18 +4,19 @@ Created on Wed Mar  4 14:07:32 2020
 
 @author: cruella
 """
+
 import gc
 import os
 import sys
 import time
 import math
+import pickle
 
 import numpy as np
 import pandas as pd
 
 _default_home_dir = 'C:/'
 _default_iter = 'iter0'
-
 
 # Index functions - functions to aggregate columns into new category variables
 def create_project_folder(projectName):
@@ -324,6 +325,165 @@ def glimpse(dataframe):
     gl = dataframe.iloc[0:5]
     return gl
 
+def control_to_ntem(msoa_output,
+                    ntem_totals,
+                    lad_lookup,
+                    group_cols = ['p', 'm'],
+                    base_value_name = 'attractions',
+                    ntem_value_name = 'Attractions',
+                    base_zone_name = 'msoa_zone_id',
+                    purpose = 'hb'):
+    """
+    Control to a vector of NTEM constraints using single factor.
+    Return productions controlled to NTEM.
+
+    Parameters:
+    ----------
+    msoa_output:
+        DF of productions, flexible segments, should be in MSOA zones
+
+    ntem_totals:
+        DF of NTEM totals to control to. Will need all group cols.
+
+    lad_lookup:
+        DF of translation between MSOA and LAD - should be in globals
+
+    group_cols = ['p', 'm']:
+        Segments to include in control. Will usually be ['p','m'], or
+        ['p','m','ca'] for rail
+
+    msoa_value_name = 'attractions':
+        Name of the value column in the MSOA dataset - ie. productions or
+        attractions. Might also be trips or dt.
+
+    ntem_value_name = 'Attractions':
+        Name of the value column in the NTEM dataset. Usually 'Productions'
+        or 'Attractions' but could be used for ca variable or growth.
+    
+    base_zone_name = 'msoa_zone_id':
+        name of base zoning system. Will be dictated by the lad lookup.
+        Should be msoa in hb production model and attraction model but will
+        be target zoning system in nhb production model.
+
+    purpose = 'hb':
+        Purpose set to aggregate on. Can be 'hb' or 'nhb'
+
+    Returns:
+    ----------
+        adjusted_output:
+            DF with same msoa zoning as input but controlled to NTEM.
+    """
+    # Copy output
+    output = msoa_output.copy()
+
+    # Check params
+    # Groups
+    for col in group_cols:
+        if col not in list(output):
+            raise ValueError('Column ' + col + ' not in MSOA data')
+        if col not in list(ntem_totals):
+            raise ValueError('Column ' + col + ' not in NTEM data')
+    # Purposes
+    hb_purpose = [1,2,3,4,5,6,7,8]
+    nhb_purpose = [12,13,14,15,16,18]
+    if purpose not in ['hb', 'nhb']:
+        raise ValueError('Invalid purpose type')
+    else:
+        if purpose == 'hb':
+            p_vector = hb_purpose
+        else:
+            p_vector = nhb_purpose
+
+    # Print target value
+    before = output[base_value_name].sum()
+    print('Before: ' + str(before))
+
+    # Build factors
+    ntem_k_factors = ntem_totals[ntem_totals['p'].isin(p_vector)].copy()
+
+    kf_groups = ['lad_zone_id']
+    for col in group_cols:
+        kf_groups.append(col)
+    kf_sums = kf_groups.copy()
+    kf_sums.append(ntem_value_name)
+
+    # Sum down to drop non attraction segments
+    ntem_k_factors = ntem_k_factors.reindex(kf_sums,
+                                            axis=1).groupby(
+                                                    kf_groups).sum().reset_index()
+
+    target = ntem_k_factors[ntem_value_name].sum()
+    print('NTEM: ' + str(target))
+
+    # Assumes vectors are called productions or attractions
+    for col in group_cols:
+        ntem_k_factors.loc[:,col] = ntem_k_factors[
+                col].astype(int).astype(str)
+    ntem_k_factors['lad_zone_id'] = ntem_k_factors[
+            'lad_zone_id'].astype(float).astype(int)
+
+    lad_lookup = lad_lookup.reindex(['lad_zone_id', base_zone_name], axis=1)
+
+    output = output.merge(lad_lookup,
+                          how = 'left',
+                          on = base_zone_name)
+
+    # No lad match == likely an island - have to drop
+    output = output[~output['lad_zone_id'].isna()]
+
+    for col in group_cols:
+        output.loc[:,col] = output[col].astype(int).astype(str)
+    output['lad_zone_id'] = output['lad_zone_id'].astype(float).astype(int)
+
+    # Seed zero infill
+    output[base_value_name] = output[base_value_name].replace(0,0.001)
+
+    # Build LA adjustment
+    # Note tp not in the picture
+    af_groups = ['lad_zone_id']
+    for col in group_cols:
+        af_groups.append(col)
+    af_sums = af_groups.copy()
+    af_sums.append(base_value_name)
+
+    adj_fac = output.reindex(af_sums, axis=1).groupby(
+            af_groups).sum().reset_index().copy()
+    # Just have to do this manually
+    adj_fac['lad_zone_id'] = adj_fac['lad_zone_id'].astype(float).astype(int)
+
+    # Merge NTEM values
+    adj_fac = adj_fac.merge(ntem_k_factors,
+                            how = 'left',
+                            on = af_groups)
+    # Get adjustment factors
+    adj_fac['adj_fac'] = adj_fac[ntem_value_name]/adj_fac[base_value_name]
+    af_only = af_groups.copy()
+    af_only.append('adj_fac')
+    adj_fac = adj_fac.reindex(af_only, axis=1)
+    adj_fac['adj_fac'] = adj_fac['adj_fac'].replace(np.nan, 1)
+
+    for col in group_cols:
+        adj_fac.loc[:,col] = adj_fac[col].astype(int).astype(str)
+
+    adjustments = adj_fac['adj_fac']
+
+    # TODO: Report adj factors here
+    output = output.merge(adj_fac,
+                          how = 'left',
+                          on = kf_groups)
+
+    output[base_value_name] = output[base_value_name] * output['adj_fac']
+
+    output = output.drop(['lad_zone_id','adj_fac'], axis=1)
+
+    after = output[base_value_name].sum()
+    print('After: ' + str(after))
+
+    audit = {'before':before,
+             'target':target,
+             'after':after}
+
+    return(output, audit, adjustments)
 
 def aggregate_merger(dataframe,
                      target_segments,
@@ -527,7 +687,9 @@ def n_matrix_split(matrix,
     return(mats)
 
 def compile_od(od_folder,
-               compile_param_path):
+               write_folder,
+               compile_param_path,
+               build_factor_pickle=False):
     """
     Function to compile model format od matrices to a given specification
     """
@@ -541,9 +703,12 @@ def compile_od(od_folder,
 
     # Some sort of check on the files
     files = os.listdir(od_folder)
+    # Filter pickles or anything else odd in there
+    files = [x for x in files if '.csv' in x]
     print(files)
 
     comp_ph = []
+    od_pickle = {}
     for index,row in compilations.iterrows():
         compilation_name = row['compilation']
         print(compilation_name)
@@ -557,11 +722,17 @@ def compile_od(od_folder,
         import_me = subset['distribution_name'].drop_duplicates()
 
         ph = []
+        squares = []
 
         for each_one in import_me:
             reader = (od_folder + '/' + each_one)
             print('Importing ' + reader)
             temp = pd.read_csv(reader)
+
+            if build_factor_pickle:
+                square = temp.copy().drop(list(temp)[0],axis=1).values
+                squares.append({each_one.replace('.csv',''):square})
+                del(square)
 
             temp = temp.rename(columns={list(temp)[0]:'o_zone'})
 
@@ -569,6 +740,29 @@ def compile_od(od_folder,
                            var_name='d_zone', value_name='dt', col_level=0)
 
             ph.append(temp)
+
+        
+        if build_factor_pickle:
+            compilation_dict = {}
+            # Get size of first square matrix
+            for key, dat in squares[0].items():
+                ms = len(dat)
+            ph_sq = np.zeros([ms,ms])
+            # Build empty matrix
+            for square in squares:
+                for key, dat in square.items():
+                    ph_sq = ph_sq + dat
+            # If nothing: nothing, just dont div0
+            ph_sq = np.where(ph_sq==0,0.0001,ph_sq)
+            # Divide each matrix by total
+            for square in squares:
+                for key, dat in square.items():
+                    od_factors = dat/ph_sq
+                    od_factors = np.float32(od_factors)
+                    compilation_dict.update({key:od_factors})
+
+            od_pickle.update({row['compilation'].replace('.csv',
+                              ''):compilation_dict})
 
         # Copy the od columns over to a placeholder for joins
         final = ph[0].copy()
@@ -608,6 +802,24 @@ def compile_od(od_folder,
         export_dict = {compilation_name:final}
 
         comp_ph.append(export_dict)
+
+        # Write if you can
+        if write_folder is not None:
+            for mat in comp_ph:
+                # Write compiled od
+                for key,value in mat.items():
+                    print(key)
+                    c_od_out = os.path.join(write_folder,
+                                            key + '.csv')
+                    print(c_od_out)
+                    value.to_csv(c_od_out, index=True)
+            if build_factor_pickle:
+                p_path = os.path.join(write_folder,
+                                      'od_compilation_factors.pickle')
+                print('Writing factor pickle - might take a while')
+                with open(p_path, 'wb') as handle:
+                    pickle.dump(od_pickle, handle,
+                                protocol=pickle.HIGHEST_PROTOCOL)
 
     return(comp_ph)
 
@@ -1079,7 +1291,6 @@ def get_costs(model_lookup_path,
     # Redefine cols
     cols = list(dat)
 
-    # TODO: Seed intrazonal currently duplicates on multiple cols.
     if iz_infill is not None:
         dat = dat.copy()
         min_inter_dat = dat[dat[cols[2]]>0]
@@ -1291,12 +1502,19 @@ def balance_by_band(band_atl,
     total_a = internal_pa.sum(axis=0).sum()
 
     # Get min max for each
-    ph = band_atl['tlb_desc'].str.split('-', n=1, expand=True)
-    band_atl['min'] = ph[0].str.replace('(','')
-    band_atl['max'] = ph[1].str.replace('[','')
-    band_atl['min'] = band_atl['min'].str.replace('(','').values
-    band_atl['max'] = band_atl['max'].str.replace(']','').values
-    del(ph)
+    if 'tlb_desc' in list(band_atl):
+        # R built
+        ph = band_atl['tlb_desc'].str.split('-', n=1, expand=True)
+        band_atl['min'] = ph[0].str.replace('(', '')
+        band_atl['max'] = ph[1].str.replace('[', '')
+        band_atl['min'] = band_atl['min'].str.replace('(', '').values
+        band_atl['max'] = band_atl['max'].str.replace(']', '').values
+        del(ph)
+    elif 'lower' in list(band_atl):
+        # Python built
+        # Convert bands to km
+        band_atl['min'] = band_atl['lower']*1.61
+        band_atl['max'] = band_atl['upper']*1.61
 
     round_mat = []
     for index, row in band_atl.iterrows():
@@ -1653,7 +1871,7 @@ def get_trip_length_bands(import_folder,
     # tlb = tlb[tlb[trip_origin +'_purpose']==purpose].copy()
 
     if replace_nan:
-        for col_name in ['band_share', 'atl']:
+        for col_name in list(tlb):
             tlb[col_name] = tlb[col_name].fillna(0)
 
     return tlb
@@ -1703,11 +1921,13 @@ def get_init_params(path,
     init_params = pd.read_csv(path)
 
     if mode_subset:
-        init_params = init_params[init_params['m'].isin(mode_subset)]
+        init_params = init_params[
+                init_params['m'].isin(mode_subset)]
     if purpose_subset:
-        init_params = init_params[init_params['p'].isin(purpose_subset)]
+        init_params = init_params[
+                init_params['p'].isin(purpose_subset)]
 
-    return init_params
+    return(init_params)
 
 
 def get_cjtw(model_lookup_path,
@@ -2087,12 +2307,20 @@ def convert_table_desc_to_min_max(band_atl, in_place=False):
         band_atl = band_atl.copy()
 
     # Get min max for each band
-    ph = band_atl['tlb_desc'].str.split('-', n=1, expand=True)
-    band_atl['min'] = ph[0].str.replace('(', '')
-    band_atl['max'] = ph[1].str.replace('[', '')
-    band_atl['min'] = band_atl['min'].str.replace('(', '').values
-    band_atl['max'] = band_atl['max'].str.replace(']', '').values
-    del ph
+    if 'tlb_desc' in list(band_atl):
+        # R built
+        ph = band_atl['tlb_desc'].str.split('-', n=1, expand=True)
+        band_atl['min'] = ph[0].str.replace('(', '')
+        band_atl['max'] = ph[1].str.replace('[', '')
+        band_atl['min'] = band_atl['min'].str.replace('(', '').values
+        band_atl['max'] = band_atl['max'].str.replace(']', '').values
+        del(ph)
+    elif 'lower' in list(band_atl):
+        # Python built
+        # Convert bands to km
+        band_atl['min'] = band_atl['lower']*1.61
+        band_atl['max'] = band_atl['upper']*1.61
+
     return band_atl
 
 
@@ -2129,6 +2357,7 @@ def get_observed_estimated_trips(band_atl,
     """
     # Loop setup
     total_est_trips = internal_pa.sum(axis=1).sum()
+
     band_atl = convert_table_desc_to_min_max(band_atl)
     est_trips = list()
     obs_trips = list()
@@ -2295,6 +2524,25 @@ def get_pa_diff(new_p,
                 p_target,
                 new_a,
                 a_target):
+    pa_diff = (
+        (
+            (
+                sum((new_p-p_target)**2)
+                +
+                sum((new_a-a_target)**2)
+            )
+            /
+            len(p_target))
+        ** .5
+    )
+
+    return(pa_diff)
+
+    """
+    def get_pa_diff(new_p,
+                    p_target,
+                    new_a,
+                    a_target):
 
     """
     """
@@ -2309,13 +2557,15 @@ def get_pa_diff(new_p,
             len(p_target))
         ** .5
     )
+    
     return pa_diff
-
+    
+"""
 
 def correct_band_share(external_pa,
                        tbs,
                        band_totals,
-                       seed_infill=.0001,
+                       seed_infill=.001,
                        axis=1,
                        echo=False):
     """
@@ -2330,16 +2580,16 @@ def correct_band_share(external_pa,
     axis = 1:
         Axis to adjust band share, takes 0 or 1
     """
-    if not len(tbs['tlb_index']) == len(band_totals):
+    if not len(tbs.index) == len(band_totals):
         raise Warning('Adjustment factors and trip vectors not aligned')
-    
+
     v_totals = external_pa.sum(axis = axis)
 
     out_mat = np.zeros((len(band_totals[0]['totals']),
                         len(band_totals[0]['totals'])))
 
     for index, row in tbs.iterrows():
-        target_band = row['tlb_index']
+        target_band = index
         target_band_share = row['band_share']
         for b in band_totals:
             if b['tlb_index'] == target_band:

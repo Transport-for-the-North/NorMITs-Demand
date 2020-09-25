@@ -19,7 +19,7 @@ import pandas as pd
 from typing import List
 from typing import Iterable
 
-import efs_constants as efs_consts
+import efs_constants as consts
 
 # Can call tms pa_to_od.py functions from here
 from old_tms.utils import *
@@ -136,7 +136,7 @@ def is_none_like(o) -> bool:
 
 def get_data_subset(orig_data: pd.DataFrame,
                     split_col_name: str = 'model_zone_id',
-                    subset_vals: List[object] = efs_consts.DEFAULT_ZONE_SUBSET
+                    subset_vals: List[object] = consts.DEFAULT_ZONE_SUBSET
                     ) -> pd.DataFrame:
     """
     Returns a subset of the original data - useful for testing and dev
@@ -485,3 +485,161 @@ def long_to_wide_out(df: pd.DataFrame,
         index=unq_zones,
         columns=unq_zones
     ).to_csv(out_path)
+
+
+def build_full_paths(base_path: str,
+                     fnames: Iterable[str]
+                     ) -> List[str]:
+    """
+    Prepends the base_path name to all of the given fnames
+    """
+    return [os.path.join(base_path, x) for x in fnames]
+
+
+def list_files(path: str,
+               include_path: bool = False
+               ) -> List[str]:
+    """
+    Returns the names of all files (excluding directories) at the given path
+
+    Parameters
+    ----------
+    path:
+        Where to search for the files
+
+    include_path:
+        Whether to include the path with the returned filenames
+
+    Returns
+    -------
+    files:
+        Either filenames, or the paths to the found files
+
+    """
+    if include_path:
+        file_paths = build_full_paths(path, os.listdir(path))
+        return [x for x in file_paths if os.path.isfile(x)]
+    else:
+        fnames = os.listdir(path)
+        return [x for x in fnames if os.path.isfile(os.path.join(path, x))]
+
+
+def is_in_string(vals: Iterable[str],
+                 string: str
+                 ) -> bool:
+    """
+    Returns True if any of vals is on string, else False
+    """
+    for v in vals:
+        if v in string:
+            return True
+    return False
+
+
+def get_compiled_matrix_name(matrix_format: str,
+                             user_class: str,
+                             year: str,
+                             mode: str = None,
+                             tp: str = None,
+                             csv=False
+                             ) -> str:
+
+    """
+    Generates the compiled matrix name
+    """
+    # Generate the base name
+    name_parts = [
+        matrix_format,
+        user_class
+    ]
+
+    # Optionally add the extra segmentation
+    if not is_none_like(year):
+        name_parts += ["yr" + year]
+
+    if not is_none_like(mode):
+        name_parts += ["m" + mode]
+
+    if not is_none_like(tp):
+        name_parts += ["tp" + tp]
+
+    # Create name string
+    final_name = '_'.join(name_parts)
+
+    # Optionally add on the csv if needed
+    if csv:
+        final_name += '.csv'
+
+    return final_name
+
+
+def write_csv(headers: Iterable[str],
+              out_lines: List[Iterable[str]],
+              out_path: str
+              ) -> None:
+    """
+    Writes the given headers and outlines as a csv to out_path
+
+    Parameters
+    ----------
+    headers
+    out_lines
+    out_path
+
+    Returns
+    -------
+    None
+    """
+    all_out = [headers] + out_lines
+    all_out = [','.join(x) for x in all_out]
+    with open(out_path, 'w') as f:
+        f.write('\n'.join(all_out))
+
+
+def build_compile_params(import_dir: str,
+                         export_dir: str,
+                         matrix_format: str,
+                         needed_years: Iterable[str],
+                         output_headers: List[str] = None,
+                         output_format: str = 'wide'
+                         ):
+    # Init
+    all_od_matrices = list_files(import_dir)
+    out_lines = list()
+
+    if output_headers is None:
+        output_headers = ['distribution_name', 'compilation', 'format']
+
+    for year in needed_years:
+        for user_class, purposes in consts.USER_CLASS_PURPOSES.items():
+            for tp in consts.TIME_PERIODS:
+                # Init
+                compile_mats = all_od_matrices.copy()
+                ps = ['_p' + str(x) for x in purposes]  # _ avoids class with tp
+                year_str = 'yr' + str(year)
+                tp_str = 'tp' + str(tp)
+
+                # Narrow down to matrices for this compilation
+                compile_mats = [x for x in compile_mats if year_str in x]
+                compile_mats = [x for x in compile_mats if is_in_string(ps, x)]
+                compile_mats = [x for x in compile_mats if tp_str in x]
+
+                # Build the final output name
+                compiled_mat_name = get_compiled_matrix_name(
+                    matrix_format,
+                    user_class,
+                    year,
+                    tp=str(tp),
+                    csv=True
+
+                )
+
+                # Add lines to output
+                for mat_name in compile_mats:
+                    line_parts = (mat_name, compiled_mat_name, output_format)
+                    out_lines.append(line_parts)
+
+        # Write outputs for this year
+        out_fname = "%s_yr%s_compile_params.csv" % (matrix_format, year)
+        out_path = os.path.join(export_dir, out_fname)
+        write_csv(output_headers, out_lines, out_path)
