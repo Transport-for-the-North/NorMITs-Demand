@@ -2560,10 +2560,16 @@ def main2():
     #
     # exit()
 
-    od2pa.decompile_od(
-        od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
-        od_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Decompiled OD Matrices',
-        decompile_factors_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_compilation_factors.pickle',
+    # od2pa.decompile_od(
+    #     od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
+    #     od_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Decompiled OD Matrices',
+    #     decompile_factors_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_compilation_factors.pickle',
+    #     year=consts.BASE_YEAR
+    # )
+
+    mat_p.generate_tour_proportions(
+        od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Decompiled OD Matrices',
+        tour_proportions_export=r'E:\NorMITs Demand\norms\v2_2-EFS_Output\iter0\tour_proportions',
         year=consts.BASE_YEAR
     )
 

@@ -9,7 +9,7 @@ Other updates made by:
 
 File purpose:
 General utils for use in EFS.
-TODO: After integrations with TMS, combine with tms_utils.py
+TODO: After integrations with TMS, combine with old_tms.utils.py
   to create a general utils file
 """
 
@@ -176,7 +176,8 @@ def get_dist_name(trip_origin: str,
                   segment: str = None,
                   car_availability: str = None,
                   tp: str = None,
-                  csv: bool = False
+                  csv: bool = False,
+                  suffix: str = None,
                   ) -> str:
     """
     Generates the distribution name
@@ -210,9 +211,14 @@ def get_dist_name(trip_origin: str,
     # Create name string
     final_name = '_'.join(name_parts)
 
+    # Optionally add a custom f_type suffix
+    if suffix is not None:
+        final_name += suffix
+
     # Optionally add on the csv if needed
     if csv:
         final_name += '.csv'
+
 
     return final_name
 
@@ -500,7 +506,15 @@ def segmentation_loop_generator(p_list: Iterable[int],
     Simple generator to avoid the need for so many nested loops
     """
     for purpose in p_list:
-        required_segments = soc_list if purpose in [1, 2] else ns_list
+        if purpose in consts.SOC_P:
+            required_segments = soc_list
+        elif purpose in consts.NS_P:
+            required_segments = ns_list
+        elif purpose in consts.ALL_NHB_P:
+            required_segments = [None]
+        else:
+            raise ValueError("'%s' does not seem to be a valid soc, ns, or "
+                             "nhb purpose." % str(purpose))
         for mode in m_list:
             for segment in required_segments:
                 for car_availability in ca_list:
