@@ -15,6 +15,7 @@ TODO: After integrations with TMS, combine with old_tms.utils.py
 
 import os
 import re
+import shutil
 
 import pandas as pd
 
@@ -26,6 +27,39 @@ import efs_constants as consts
 
 # Can call tms pa_to_od.py functions from here
 from old_tms.utils import *
+
+
+def copy_and_rename(src: str, dst: str) -> None:
+    """
+    Makes a copy of the src file and saves it at dst with the new filename.
+
+    Parameters
+    ----------
+    src:
+        Path to the file to be copied.
+
+    dst:
+        Path to the new save location.
+
+    Returns
+    -------
+    None
+    """
+    if not os.path.isfile(src):
+        raise ValueError("The given src file is not a file. Cannot handle "
+                         "directories.")
+
+    # Only rename if given a filename
+    rename = True
+    if '.' not in dst:
+        rename = False
+
+    _, src_tail = os.path.split(src)
+    dst_head, dst_tail = os.path.split(dst)
+    shutil.copy(src, dst_head)
+
+    if rename:
+        shutil.move(os.path.join(dst_head, src_tail), dst)
 
 
 def get_model_name(mode: int) -> str:
@@ -705,7 +739,38 @@ def build_compile_params(import_dir: str,
                          needed_years: Iterable[str],
                          output_headers: List[str] = None,
                          output_format: str = 'wide'
-                         ):
+                         ) -> None:
+    """
+    Create a compile_params file to be used with compile_od().
+    In the future this should also work with compile_pa().
+
+    Parameters
+    ----------
+    import_dir:
+        Directory containing all of the matrices to be compiled.
+
+    export_dir:
+        Directory to output the compile parameters.
+
+    matrix_format:
+        Format of the input matrices. Usually 'pa' or 'od'.
+
+    needed_years:
+        Which years compile parameters should be generated for.
+
+    output_headers:
+        Optional. Use if custom output headers are needed. by default the
+        following headers are used:
+        ['distribution_name', 'compilation', 'format']
+
+    output_format:
+        What format the compiled matrices should be output as. Usually either
+        'wide' or 'long'.
+
+    Returns
+    -------
+    None
+    """
     # Init
     all_od_matrices = list_files(import_dir)
     out_lines = list()

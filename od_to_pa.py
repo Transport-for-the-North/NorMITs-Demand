@@ -10,6 +10,28 @@ def decompile_od(od_import: str,
                  year: int,
                  decompile_factors_path: str
                  ) -> None:
+    """
+    Takes User Class compiled OD matrices and decompiles them down to their
+    individual purposes. Uses the stored decompiled factors to split.
+
+    Parameters
+    ----------
+    od_import:
+        Directory containing the user class compiled OD matrices.
+
+    od_export:
+        Directory to write the decompiled OD matrices.
+
+    year:
+        Which year to decompile the matrices for.
+
+    decompile_factors_path:
+        Full path to the pickle file containing the decompile factors to use.
+
+    Returns
+    -------
+    None
+    """
     # Load the factors
     decompile_factors = pd.read_pickle(decompile_factors_path)
 

@@ -1,3 +1,16 @@
+# -*- coding: utf-8 -*-
+"""
+Created on: Mon Sept 21 09:06:46 2020
+Updated on:
+
+Original author: Ben Taylor
+Last update made by:
+Other updates made by:
+
+File purpose:
+Matrix processing functionality belongs here. This will be any processes
+that do not belong specifically to pa_to_od.py, or od_to_pa.py.
+"""
 import os
 
 import numpy as np
@@ -6,6 +19,8 @@ import pickle
 
 from typing import List
 from itertools import product
+
+import furness_process as fp
 
 import efs_constants as consts
 import demand_utilities.utils as du
@@ -44,7 +59,37 @@ def _recursive_aggregate(candidates: List[str],
                          import_dir: str,
                          export_path: str
                          ) -> None:
-    # Write Doc
+    """
+    The internal function of aggregate_matrices(). Recursively steps through
+    the segmentations given, aggregating as it goes.
+
+
+    Parameters
+    ----------
+    candidates:
+        All remaining candidate matrices for this segmentation. This it narrowed
+        down through the recursive calls.
+
+    segmentations:
+        A list of all segmentations (and their splits) that still need to be
+        considered. Directly relates to segmentation_strs. Narrowed
+        down through the recursive calls.
+
+    segmentation_strs:
+        A list of all segmentations (and their split names) that still need to
+        be considered. Directly relates to segmentations. Narrowed
+        down through the recursive calls.
+
+    import_dir:
+        Directory where the candidate matrices can be found.
+
+    export_path:
+        Directory to output the aggregated matrices.
+
+    Returns
+    -------
+    None
+    """
 
     # ## EXIT CONDITION ## #
     if len(segmentations) == 1:
@@ -104,8 +149,53 @@ def aggregate_matrices(import_dir: str,
                        ca_needed: List[int] = None,
                        tp_needed: List[int] = None
                        ) -> None:
-    # Write Doc
+    """
+    Aggregates the matrices in import_dir up to the given level and writes
+    the new matrices out to export_dir
 
+    Parameters
+    ----------
+    import_dir:
+        Where to find the starting matrices.
+
+    export_dir:
+        Where to output the aggregated matrices.
+
+    trip_origin:
+        Where did the trips originate. Usually 'nhb' or 'hb'.
+
+    matrix_format:
+        The format of the matrices to convert. Usually 'pa' or 'od'.
+
+    years_needed:
+        Which years to aggregate for.
+
+    p_needed:
+        Which purposes to aggregate for.
+
+    m_needed:
+        Which mode to aggregate for.
+
+    soc_needed:
+        If None, skill levels will be aggregated. If set, chosen skill
+        levels will be retained.
+
+    ns_needed:
+        If None, income levels will be aggregated. If set, chosen income
+        levels will be retained.
+
+    ca_needed:
+        If None, car availability levels will be aggregated. If set, chosen
+        car availability levels will be retained.
+
+    tp_needed:
+        If None, time periods will be aggregated. If set, chosen time periods
+        will be retained.
+
+    Returns
+    -------
+    None
+    """
     # Init
     if(ns_needed is not None and soc_needed is None
        or soc_needed is not None and ns_needed is None):
@@ -190,7 +280,6 @@ def _generate_tour_proportions_internal(orig,
         dict(). the tour_proportion values for all destinations in this orig
 
     """
-    print("Working on tour proportions for Origin: %s" % str(orig))
     tour_proportions = dict()
     for dest in dest_vals:
         # Build the from_home vector
@@ -229,7 +318,7 @@ def _generate_tour_proportions_internal(orig,
         n_tp = len(tp_needed)
         seed_vals = np.broadcast_to(seed_val, (n_tp, n_tp))
 
-        furnessed_mat = doubly_constrained_furness(
+        furnessed_mat = fp.doubly_constrained_furness(
             seed_vals=seed_vals,
             row_targets=fh_target,
             col_targets=th_target,
@@ -246,6 +335,7 @@ def _generate_tour_proportions_internal(orig,
 
 def generate_tour_proportions(od_import: str,
                               tour_proportions_export: str,
+                              pa_export: str = None,
                               year: int = consts.BASE_YEAR,
                               p_needed: List[int] = consts.ALL_HB_P,
                               m_needed: List[int] = consts.MODES_NEEDED,
@@ -257,6 +347,68 @@ def generate_tour_proportions(od_import: str,
                               furness_max_iters: int = 5000,
                               process_count: int = os.cpu_count() - 1
                               ) -> None:
+    """
+    Generates the 4x4 matrix of tour proportions for every OD pair for all
+    given segmentations.
+
+    Uses the "od_from" and "od_to" matrices in od_import to generate target
+    from-home and to-home trip proportions. They are then furnessed for each
+    OD pair to produce the tour factors. Tour factors are then written to disk
+    as a .pkl at tour_proportions_export, in the format
+    tour_proportions[O][D] = np.array. np.array is the tour proportions for
+    that OD pair. .pkl files are named depending on their segmentation.
+    Optionally outputs converted PA matrices.
+
+    Parameters
+    ----------
+    od_import:
+        Where to find the od_from and od_to matrices.
+
+    tour_proportions_export:
+        Where to write the tour proportions as a .pkl
+
+    pa_export:
+        Where to export the converted pa_matrices. If left as None,
+        no pa matrices are written.
+
+    year:
+        Which year to generate the tour proportions for. Usually the base year
+
+    p_needed:
+        Which purposes to use. Usually only home based.
+
+    m_needed:
+        Which mode to use.
+
+    soc_needed:
+        Which skill levels to segment by.
+
+    ns_needed:
+        Which income levels to segment by.
+
+    ca_needed:
+        Which car_availabilities to segment by.
+
+    tp_needed:
+        Which time periods to use. Usually 1-4.
+
+    furness_tol:
+        What tolerance to use during the furness.
+        See furness_process.doubly_constrained_furness() for more information.
+
+    furness_max_iters:
+        Max number of iterations for the furness.
+        See furness_process.doubly_constrained_furness() for more information.
+
+    process_count:
+        How many processes to use during multiprocessing. Usually set to
+        number_of_cpus - 1.
+
+    Returns
+    -------
+    None
+
+    """
     # Init
     soc_needed = [None] if soc_needed is None else soc_needed
     ns_needed = [None] if ns_needed is None else ns_needed
@@ -279,6 +431,18 @@ def generate_tour_proportions(od_import: str,
     )
 
     for p, m, seg, ca in loop_generator:
+        out_fname = du.get_dist_name(
+            trip_origin=trip_origin,
+            matrix_format='tour_proportions',
+            year=str(year),
+            purpose=str(p),
+            mode=str(m),
+            segment=str(seg),
+            car_availability=str(ca),
+            suffix='.pkl'
+        )
+        print("Generating tour proportions for %s..." % out_fname)
+
         # Load the from_home matrices
         fh_mats = dict()
         for tp in tp_needed:
@@ -295,6 +459,14 @@ def generate_tour_proportions(od_import: str,
             )
             fh_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name),
                                       index_col=0)
+
+            # Optionally output converted PA matrices
+            if pa_export is not None:
+                pa_name = dist_name.replace('od_from', 'pa')
+                du.copy_and_rename(
+                    src=os.path.join(od_import, dist_name),
+                    dst=os.path.join(pa_export, pa_name)
+                )
 
         # Load the to_home matrices
         th_mats = dict()
@@ -368,65 +540,7 @@ def generate_tour_proportions(od_import: str,
                 tour_proportions[orig] = tour_prop
 
         # Save the tour proportions for this segment
-        out_fname = du.get_dist_name(
-            trip_origin=trip_origin,
-            matrix_format='tour_proportions',
-            year=str(year),
-            purpose=str(p),
-            mode=str(m),
-            segment=str(seg),
-            car_availability=str(ca),
-            suffix='.pkl'
-        )
-
         print('Writing tour proportions for %s' % out_fname)
         out_path = os.path.join(tour_proportions_export, out_fname)
         with open(out_path, 'wb') as f:
             pickle.dump(tour_proportions, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-# TODO: Move to furness_process.py
-def doubly_constrained_furness(seed_vals: np.array,
-                               row_targets: np.array,
-                               col_targets: np.array,
-                               tol: float = 1e-9,
-                               max_iters: int = 5000
-                               ) -> np.array:
-    # Error check
-    if seed_vals.shape != (len(row_targets), len(col_targets)):
-        raise ValueError(
-            "The shape of the seed values given does not match the row "
-            "and col targets. Seed_vals are shape %s. Expected shape (%d, %d)."
-            % (str(seed_vals.shape), len(row_targets), len(col_targets))
-        )
-
-    # Init
-    furnessed_mat = seed_vals.copy()
-
-    for i in range(max_iters):
-        # ## ROW CONSTRAIN ## #
-        # Calculate difference factor
-        row_ach = np.sum(furnessed_mat, axis=1)
-        row_ach = np.where(row_ach == 0, 1, row_ach)
-        diff_factor = row_targets / row_ach
-
-        # adjust rows
-        furnessed_mat = (furnessed_mat.T * diff_factor).T
-
-        # ## COL CONSTRAIN ## #
-        # Calculate difference factor
-        col_ach = np.sum(furnessed_mat, axis=0)
-        col_ach = np.where(col_ach == 0, 1, col_ach)
-        diff_factor = col_targets / col_ach
-
-        # adjust cols
-        furnessed_mat = furnessed_mat * diff_factor
-
-        # Calculate the diff - leave early if met
-        row_diff = (row_targets - np.sum(furnessed_mat, axis=1)) ** 2
-        col_diff = (col_targets - np.sum(furnessed_mat, axis=0)) ** 2
-        cur_diff = np.sum(row_diff + col_diff) ** 0.5
-        if cur_diff < tol:
-            break
-
-    return furnessed_mat

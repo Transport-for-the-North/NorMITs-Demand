@@ -14,6 +14,84 @@ Utilities.
 import pandas as pd
 import numpy as np
 
+
+from demand_utilities import utils as du
+
+
+def doubly_constrained_furness(seed_vals: np.array,
+                               row_targets: np.array,
+                               col_targets: np.array,
+                               tol: float = 1e-9,
+                               max_iters: int = 5000
+                               ) -> np.array:
+    """
+    Performs a doubly constrained furness for max_iters or until tol is met
+
+    Parameters
+    ----------
+    seed_vals:
+        Initial values for the furness. Must be of shape
+        (len(n_rows), len(n_cols)).
+
+    row_targets:
+        The target values for the sum of each row
+
+    col_targets:
+        The target values for the sum of each column
+
+    tol:
+        The maximum difference between the achieved and the target values
+        to tolerate before exiting early. R^2 is used to calculate the
+        difference.
+
+    max_iters:
+        The maximum number of iterations to complete before exiting.
+
+    Returns
+    -------
+    furnessed_matrix:
+        The final furnessed matrix
+    """
+    # Error check
+    if seed_vals.shape != (len(row_targets), len(col_targets)):
+        raise ValueError(
+            "The shape of the seed values given does not match the row "
+            "and col targets. Seed_vals are shape %s. Expected shape (%d, %d)."
+            % (str(seed_vals.shape), len(row_targets), len(col_targets))
+        )
+
+    # Init
+    furnessed_mat = seed_vals.copy()
+
+    for i in range(max_iters):
+        # ## ROW CONSTRAIN ## #
+        # Calculate difference factor
+        row_ach = np.sum(furnessed_mat, axis=1)
+        row_ach = np.where(row_ach == 0, 1, row_ach)
+        diff_factor = row_targets / row_ach
+
+        # adjust rows
+        furnessed_mat = (furnessed_mat.T * diff_factor).T
+
+        # ## COL CONSTRAIN ## #
+        # Calculate difference factor
+        col_ach = np.sum(furnessed_mat, axis=0)
+        col_ach = np.where(col_ach == 0, 1, col_ach)
+        diff_factor = col_targets / col_ach
+
+        # adjust cols
+        furnessed_mat = furnessed_mat * diff_factor
+
+        # Calculate the diff - leave early if met
+        row_diff = (row_targets - np.sum(furnessed_mat, axis=1)) ** 2
+        col_diff = (col_targets - np.sum(furnessed_mat, axis=0)) ** 2
+        cur_diff = np.sum(row_diff + col_diff) ** 0.5
+        if cur_diff < tol:
+            break
+
+    return furnessed_mat
+
+
 def furness(productions: pd.DataFrame,
             attractions: pd.DataFrame,
             distributions: pd.DataFrame,
@@ -421,86 +499,6 @@ def furness(productions: pd.DataFrame,
             # TODO: Turn this into a for loop
             i = i + 1
 
-
-    # count iterations
-    #### OLD VERSION
-    #        for i in range(0, number_of_iterations):
-    #
-    #            # if we're constraining on production
-    #            if (constrain_on_production):
-    #                # we need to constrain on production axis
-    #                if (first_iteration):
-    #                    # if it's the first iteration/
-    #                    # set up the initial values
-    #                    furnessed_frame["dt"] =\
-    #                         (
-    #                                 furnessed_frame["production_forecast"].values
-    #                                 *
-    #                                 furnessed_frame["seed_values"].values
-    #                                 )
-    #                    # and uncheck the first iteration flag
-    #                    first_iteration = False
-    #                else:
-    #                    # if it's the second iteration
-    #                    # then we have the initial values
-    #                    # we just need to constrain to production
-    #                    # max
-    #                    for zone in production_zones:
-    #                        # we iterate over each zone
-    #                        # create zone mask
-    #                        furnessed_mask = furnessed_frame["p_zone"] == zone
-    #
-    #                        # change distributed trips values using zone mask
-    #                        furnessed_frame.loc[
-    #                                furnessed_mask,
-    #                                "dt"
-    #                                ] =\
-    #                             (
-    #                                     furnessed_frame[furnessed_mask]["dt"].values
-    #                                     /
-    #                                     (
-    #                                             furnessed_frame[furnessed_mask]["dt"].sum()
-    #                                             /
-    #                                             furnessed_frame[furnessed_mask]["production_forecast"].values[0]
-    #                                             )
-    #                                     )
-    #
-    #            # if we're constraining on attraction
-    #            if (constrain_on_attraction):
-    #                # we need to constrain on attraction axis
-    #                if (first_iteration):
-    #                    # if it's the first iteration
-    #                    # set up the initial values
-    #                    furnessed_frame["dt"] =\
-    #                         (
-    #                                 furnessed_frame["attraction_forecast"].values
-    #                                 *
-    #                                 furnessed_frame["seed_values"].values
-    #                                 )
-    #                    # and uncheck the first iteration flag
-    #                    first_iteration = False
-    #                else:
-    #                    # if it's not the first iteration
-    #                    for zone in attraction_zones:
-    #                        # we iterate over each zone
-    #                        # create zone mask
-    #                        furnessed_mask = furnessed_frame["a_zone"] == zone
-    #
-    #                        # change distributed trips values using zone mask
-    #                        furnessed_frame.loc[
-    #                                furnessed_mask,
-    #                                "dt"
-    #                                ] =\
-    #                             (
-    #                                     furnessed_frame[furnessed_mask]["dt"].values
-    #                                     /
-    #                                     (
-    #                                             furnessed_frame[furnessed_mask]["dt"].sum()
-    #                                             /
-    #                                             furnessed_frame[furnessed_mask]["attraction_forecast"].values[0]
-    #                                             )
-    #                                     )
-
     # if we're performing checks to see drift of production vs trips
     if audit_outputs:
         # do this for each zone
@@ -546,6 +544,3 @@ def furness(productions: pd.DataFrame,
 
     # return the completed furnessed frame
     return furnessed_frame[["p_zone", "a_zone", "dt"]]
-
-
-from demand_utilities import utils as du

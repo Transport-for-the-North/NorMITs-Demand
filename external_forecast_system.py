@@ -2529,7 +2529,7 @@ def main():
 
 
 def main2():
-    # TODO: Will need to do for nhb at some point too
+    # # TODO: Will need to do for nhb at some point too
     # for matrix_format in ['od_from', 'od_to']:
     #     mat_p.aggregate_matrices(
     #         import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\OD Matrices',
@@ -2557,18 +2557,17 @@ def main2():
     #     build_factor_pickle=True,
     #     factor_pickle_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params'
     # )
-    #
-    # exit()
 
-    # od2pa.decompile_od(
-    #     od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
-    #     od_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Decompiled OD Matrices',
-    #     decompile_factors_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_compilation_factors.pickle',
-    #     year=consts.BASE_YEAR
-    # )
+    od2pa.decompile_od(
+        od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
+        od_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Decompiled OD Matrices',
+        decompile_factors_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_compilation_factors.pickle',
+        year=consts.BASE_YEAR
+    )
 
     mat_p.generate_tour_proportions(
         od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Decompiled OD Matrices',
+        pa_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Decompiled PA Matrices',
         tour_proportions_export=r'E:\NorMITs Demand\norms\v2_2-EFS_Output\iter0\tour_proportions',
         year=consts.BASE_YEAR
     )
