@@ -16,6 +16,7 @@ TODO: After integrations with TMS, combine with old_tms.utils.py
 import os
 import re
 import shutil
+import random
 
 import pandas as pd
 
@@ -733,82 +734,58 @@ def write_csv(headers: Iterable[str],
         f.write('\n'.join(all_out))
 
 
-def build_compile_params(import_dir: str,
-                         export_dir: str,
-                         matrix_format: str,
-                         needed_years: Iterable[str],
-                         output_headers: List[str] = None,
-                         output_format: str = 'wide'
-                         ) -> None:
+def check_tour_proportions(tour_props: Dict[int, Dict[int, np.array]],
+                           n_tp: int,
+                           n_row_col: int,
+                           n_tests: int = 10
+                           ) -> None:
     """
-    Create a compile_params file to be used with compile_od().
-    In the future this should also work with compile_pa().
+    Carries out some checks to make sure the tour proportions are in the
+    correct format. Will randomly check n_tests vals.
 
     Parameters
     ----------
-    import_dir:
-        Directory containing all of the matrices to be compiled.
+    tour_props:
+        A loaded tour proportions dictionary to check.
 
-    export_dir:
-        Directory to output the compile parameters.
+    n_tp:
+        The number of time periods to be expected.
 
-    matrix_format:
-        Format of the input matrices. Usually 'pa' or 'od'.
+    n_row_col:
+        Assumes square PA/OD matrices. The number of zones in the matrices.
 
-    needed_years:
-        Which years compile parameters should be generated for.
-
-    output_headers:
-        Optional. Use if custom output headers are needed. by default the
-        following headers are used:
-        ['distribution_name', 'compilation', 'format']
-
-    output_format:
-        What format the compiled matrices should be output as. Usually either
-        'wide' or 'long'.
+    n_tests:
+        The number of random tests to carry out.
 
     Returns
     -------
     None
     """
-    # Init
-    all_od_matrices = list_files(import_dir)
-    out_lines = list()
+    # Get a list of keys - Assume completely square dict
+    first_keys = list(tour_props.keys())
+    second_keys = list(tour_props[first_keys[0]].keys())
 
-    if output_headers is None:
-        output_headers = ['distribution_name', 'compilation', 'format']
+    # Check dict shape
+    if len(first_keys) != n_row_col or len(second_keys) != n_row_col:
+        raise ValueError(
+            "Tour proportions dictionary is not the expected shape. Expected "
+            "a shape of (%d, %d), but got (%d, %d)."
+            % (n_row_col, n_row_col, len(first_keys), len(second_keys))
+        )
 
-    for year in needed_years:
-        for user_class, purposes in consts.USER_CLASS_PURPOSES.items():
-            for tp in consts.TIME_PERIODS:
-                # Init
-                compile_mats = all_od_matrices.copy()
-                # include _ before and after to avoid clashes
-                ps = ['_p' + str(x) + '_' for x in purposes]
-                year_str = '_yr' + str(year) + '_'
-                tp_str = '_tp' + str(tp)
+    # Check nested np.array shapes
+    for _ in range(n_tests):
+        key_1 = random.choice(first_keys)
+        key_2 = random.choice(second_keys)
 
-                # Narrow down to matrices for this compilation
-                compile_mats = [x for x in compile_mats if year_str in x]
-                compile_mats = [x for x in compile_mats if is_in_string(ps, x)]
-                compile_mats = [x for x in compile_mats if tp_str in x]
+        if tour_props[key_1][key_2].shape != (n_tp, n_tp):
+            raise ValueError(
+                "Tour proportion matrices are not the expected shape. Expected "
+                "a shape of (%d, %d), but found a shape of %s at "
+                "tour_props[%s][%s]."
+                % (n_tp, n_tp, str(tour_props[key_1][key_2].shape),
+                   str(key_1), str(key_2))
+            )
 
-                # Build the final output name
-                compiled_mat_name = get_compiled_matrix_name(
-                    matrix_format,
-                    user_class,
-                    year,
-                    tp=str(tp),
-                    csv=True
-
-                )
-
-                # Add lines to output
-                for mat_name in compile_mats:
-                    line_parts = (mat_name, compiled_mat_name, output_format)
-                    out_lines.append(line_parts)
-
-        # Write outputs for this year
-        out_fname = "%s_yr%s_compile_params.csv" % (matrix_format, year)
-        out_path = os.path.join(export_dir, out_fname)
-        write_csv(output_headers, out_lines, out_path)
+    # If here, all checks have passed
+    return

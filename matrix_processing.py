@@ -18,6 +18,7 @@ import pandas as pd
 import pickle
 
 from typing import List
+from typing import Iterable
 from itertools import product
 
 import furness_process as fp
@@ -544,3 +545,84 @@ def generate_tour_proportions(od_import: str,
         out_path = os.path.join(tour_proportions_export, out_fname)
         with open(out_path, 'wb') as f:
             pickle.dump(tour_proportions, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def build_compile_params(import_dir: str,
+                         export_dir: str,
+                         matrix_format: str,
+                         needed_years: Iterable[str],
+                         output_headers: List[str] = None,
+                         output_format: str = 'wide'
+                         ) -> None:
+    """
+    Create a compile_params file to be used with compile_od().
+    In the future this should also work with compile_pa().
+
+    Parameters
+    ----------
+    import_dir:
+        Directory containing all of the matrices to be compiled.
+
+    export_dir:
+        Directory to output the compile parameters.
+
+    matrix_format:
+        Format of the input matrices. Usually 'pa' or 'od'.
+
+    needed_years:
+        Which years compile parameters should be generated for.
+
+    output_headers:
+        Optional. Use if custom output headers are needed. by default the
+        following headers are used:
+        ['distribution_name', 'compilation', 'format']
+
+    output_format:
+        What format the compiled matrices should be output as. Usually either
+        'wide' or 'long'.
+
+    Returns
+    -------
+    None
+    """
+    # Init
+    all_od_matrices = du.list_files(import_dir)
+    out_lines = list()
+
+    if output_headers is None:
+        output_headers = ['distribution_name', 'compilation', 'format']
+
+    for year in needed_years:
+        for user_class, purposes in consts.USER_CLASS_PURPOSES.items():
+            for tp in consts.TIME_PERIODS:
+                # Init
+                compile_mats = all_od_matrices.copy()
+                # include _ before and after to avoid clashes
+                ps = ['_p' + str(x) + '_' for x in purposes]
+                year_str = '_yr' + str(year) + '_'
+                tp_str = '_tp' + str(tp)
+
+                # Narrow down to matrices for this compilation
+                compile_mats = [x for x in compile_mats if year_str in x]
+                compile_mats = [x for x in compile_mats if du.is_in_string(ps, x)]
+                compile_mats = [x for x in compile_mats if tp_str in x]
+
+                # Build the final output name
+                compiled_mat_name = du.get_compiled_matrix_name(
+                    matrix_format,
+                    user_class,
+                    year,
+                    tp=str(tp),
+                    csv=True
+
+                )
+
+                # Add lines to output
+                for mat_name in compile_mats:
+                    line_parts = (mat_name, compiled_mat_name, output_format)
+                    out_lines.append(line_parts)
+
+        # Write outputs for this year
+        out_fname = "%s_yr%s_compile_params.csv" % (matrix_format, year)
+        out_path = os.path.join(export_dir, out_fname)
+        du.write_csv(output_headers, out_lines, out_path)

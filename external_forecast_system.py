@@ -1395,7 +1395,7 @@ class ExternalForecastSystem:
             iter_name=iter_name
         )
 
-        du.build_compile_params(
+        mat_p.build_compile_params(
             import_dir=exports['od'],
             export_dir=exports['compile_params'],
             matrix_format='od',
@@ -2529,48 +2529,87 @@ def main():
 
 
 def main2():
-    # # TODO: Will need to do for nhb at some point too
-    # for matrix_format in ['od_from', 'od_to']:
-    #     mat_p.aggregate_matrices(
-    #         import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\OD Matrices',
-    #         export_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated OD Matrices',
-    #         trip_origin='hb',
-    #         matrix_format=matrix_format,
-    #         years_needed=[consts.BASE_YEAR],
-    #         p_needed=consts.ALL_HB_P,
-    #         m_needed=consts.MODES_NEEDED,
-    #         tp_needed=consts.TP_NEEDED
-    #     )
-    # # NEED TO COPY NHB MATRICES OVER BY HAND FOR NOW
-    #
-    # du.build_compile_params(
-    #     import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated OD Matrices',
-    #     export_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params',
-    #     matrix_format='od',
-    #     needed_years=['2018']
-    # )
-    #
-    # du.compile_od(
-    #     od_folder=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated OD Matrices',
-    #     write_folder=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
-    #     compile_param_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_yr2018_compile_params.csv',
-    #     build_factor_pickle=True,
-    #     factor_pickle_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params'
-    # )
+    # TODO: Switch between using CA/NCA if we need it for NoRMS
+    #  Test the whole thing works with it too
 
-    od2pa.decompile_od(
-        od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
-        od_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Decompiled OD Matrices',
-        decompile_factors_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_compilation_factors.pickle',
-        year=consts.BASE_YEAR
-    )
+    aggregate_matrices_bool = False
+    compile_od_bool = False
+    decompile_od_bool = False
+    gen_tour_proportions_bool = False
+    aggregate_pa_bool = False
+    tour_prop_pa2od_bool = True
 
-    mat_p.generate_tour_proportions(
-        od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Decompiled OD Matrices',
-        pa_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Decompiled PA Matrices',
-        tour_proportions_export=r'E:\NorMITs Demand\norms\v2_2-EFS_Output\iter0\tour_proportions',
-        year=consts.BASE_YEAR
-    )
+    if aggregate_matrices_bool:
+        for matrix_format in ['od_from', 'od_to']:
+            mat_p.aggregate_matrices(
+                import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\OD Matrices',
+                export_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated OD Matrices',
+                trip_origin='hb',
+                matrix_format=matrix_format,
+                years_needed=[consts.BASE_YEAR],
+                p_needed=consts.ALL_HB_P,
+                m_needed=consts.MODES_NEEDED,
+                tp_needed=consts.TP_NEEDED
+            )
+        mat_p.aggregate_matrices(
+            import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\OD Matrices',
+            export_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated OD Matrices',
+            trip_origin='nhb',
+            matrix_format='od',
+            years_needed=[consts.BASE_YEAR],
+            p_needed=consts.ALL_NHB_P,
+            m_needed=consts.MODES_NEEDED,
+            tp_needed=consts.TP_NEEDED
+        )
+
+    if compile_od_bool:
+        mat_p.build_compile_params(
+            import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated OD Matrices',
+            export_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params',
+            matrix_format='od',
+            needed_years=['2018']
+        )
+
+        du.compile_od(
+            od_folder=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated OD Matrices',
+            write_folder=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
+            compile_param_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_yr2018_compile_params.csv',
+            build_factor_pickle=True,
+            factor_pickle_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params'
+        )
+    if decompile_od_bool:
+        od2pa.decompile_od(
+            od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
+            od_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Post-ME OD Matrices',
+            decompile_factors_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_compilation_factors.pickle',
+            year=consts.BASE_YEAR
+        )
+
+    if gen_tour_proportions_bool:
+        mat_p.generate_tour_proportions(
+            od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Post-ME OD Matrices',
+            pa_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Post-ME PA Matrices',
+            tour_proportions_export=r'E:\NorMITs Demand\norms\v2_2-EFS_Output\iter0\tour_proportions',
+            year=consts.BASE_YEAR
+        )
+
+    if aggregate_pa_bool:
+        mat_p.aggregate_matrices(
+            import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\24hr PA Matrices',
+            export_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated 24hr PA Matrices',
+            trip_origin='hb',
+            matrix_format='pa',
+            years_needed=consts.FUTURE_YEARS,
+            p_needed=consts.ALL_HB_P,
+            m_needed=consts.MODES_NEEDED,
+        )
+
+    if tour_prop_pa2od_bool:
+        pa2od.build_od_from_tour_proportions(
+            pa_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated 24hr PA Matrices',
+            od_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Post-ME OD Matrices',
+            tour_proportions_dir=r'E:\NorMITs Demand\norms\v2_2-EFS_Output\iter0\tour_proportions',
+        )
 
 
 if __name__ == '__main__':
