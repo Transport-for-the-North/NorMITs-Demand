@@ -71,6 +71,7 @@ def simplify_time_period_splits(time_period_splits: pd.DataFrame):
         'direction_factor']
     return time_period_splits.reindex(needed_cols, axis='columns')
 
+
 def _build_tp_pa_internal(pa_import,
                           pa_export,
                           trip_origin,
@@ -212,7 +213,7 @@ def _build_tp_pa_internal(pa_import,
 def efs_build_tp_pa(tp_import: str,
                     pa_import: str,
                     pa_export: str,
-                    year_string_list: List[str],
+                    years_needed: List[int],
                     required_purposes: List[int],
                     required_modes: List[int],
                     required_soc: List[int] = None,
@@ -236,7 +237,7 @@ def efs_build_tp_pa(tp_import: str,
     pa_export:
         Path to the dir to export the tp split matrices
 
-    year_string_list:
+    years_needed:
         A list of which years of 24hr Matrices to convert.
 
     required_purposes:
@@ -284,7 +285,7 @@ def efs_build_tp_pa(tp_import: str,
                          "but build_tp_pa() cannot handle it. Sorry :(")
 
     # For every: Year, purpose, mode, segment, ca
-    for year in year_string_list:
+    for year in years_needed:
         for purpose in required_purposes:
             # Purpose specific set-up
             # Do it here to avoid repeats in inner loops
