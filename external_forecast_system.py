@@ -1317,6 +1317,7 @@ class ExternalForecastSystem:
 
         # TODO: Add time print outs
         # TODO: Change import paths to accept specific dir
+        # TODO: Allow flexible segmentations
 
         # TODO: Check if nhb productions exist first
         if overwrite_nhb_productions:
@@ -2532,11 +2533,17 @@ def main2():
     # TODO: Switch between using CA/NCA if we need it for NoRMS
     #  Test the whole thing works with it too
 
+    model_name = 'norms'
+    if model_name == 'norms':
+        ca_needed = consts.CA_NEEDED
+    else:
+        ca_needed = None
+
     aggregate_matrices_bool = False
     compile_od_bool = False
     decompile_od_bool = False
     gen_tour_proportions_bool = False
-    aggregate_pa_bool = False
+    aggregate_pa_bool = True
     tour_prop_pa2od_bool = True
 
     if aggregate_matrices_bool:
@@ -2549,6 +2556,7 @@ def main2():
                 years_needed=[consts.BASE_YEAR],
                 p_needed=consts.ALL_HB_P,
                 m_needed=consts.MODES_NEEDED,
+                ca_needed=ca_needed,
                 tp_needed=consts.TP_NEEDED
             )
         mat_p.aggregate_matrices(
@@ -2559,6 +2567,7 @@ def main2():
             years_needed=[consts.BASE_YEAR],
             p_needed=consts.ALL_NHB_P,
             m_needed=consts.MODES_NEEDED,
+            ca_needed=ca_needed,
             tp_needed=consts.TP_NEEDED
         )
 
@@ -2567,7 +2576,8 @@ def main2():
             import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated OD Matrices',
             export_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params',
             matrix_format='od',
-            needed_years=['2018']
+            needed_years=['2018'],
+            ca_needed=ca_needed
         )
 
         du.compile_od(
@@ -2590,7 +2600,8 @@ def main2():
             od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Post-ME OD Matrices',
             pa_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Post-ME PA Matrices',
             tour_proportions_export=r'E:\NorMITs Demand\norms\v2_2-EFS_Output\iter0\tour_proportions',
-            year=consts.BASE_YEAR
+            year=consts.BASE_YEAR,
+            ca_needed=ca_needed
         )
 
     if aggregate_pa_bool:
@@ -2601,6 +2612,7 @@ def main2():
             matrix_format='pa',
             years_needed=consts.FUTURE_YEARS,
             p_needed=consts.ALL_HB_P,
+            ca_needed=ca_needed,
             m_needed=consts.MODES_NEEDED,
         )
 
@@ -2609,6 +2621,7 @@ def main2():
             pa_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated 24hr PA Matrices',
             od_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Post-ME OD Matrices',
             tour_proportions_dir=r'E:\NorMITs Demand\norms\v2_2-EFS_Output\iter0\tour_proportions',
+            ca_needed=ca_needed
         )
 
 

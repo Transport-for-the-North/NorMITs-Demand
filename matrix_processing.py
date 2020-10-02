@@ -20,6 +20,7 @@ import pickle
 from typing import List
 from typing import Iterable
 from itertools import product
+from collections import defaultdict
 
 import furness_process as fp
 
@@ -263,75 +264,149 @@ def aggregate_matrices(import_dir: str,
         )
 
 
-def _generate_tour_proportions_internal(orig,
-                                        dest_vals,
-                                        tp_needed,
-                                        fh_mats,
-                                        th_mats,
-                                        furness_tol,
-                                        furness_max_iters
-                                        ):
+def _generate_tour_proportions_internal(od_import: str,
+                                        tour_proportions_export: str,
+                                        pa_export: str,
+                                        trip_origin: str,
+                                        year: int,
+                                        p: int,
+                                        m: int,
+                                        seg: int,
+                                        ca: int,
+                                        tp_needed: List[int],
+                                        furness_tol: float,
+                                        furness_max_iters: int
+                                        ) -> None:
     """
     The internals of generate_tour_proportions().
     Used to implement multiprocessing.
 
     Returns
     -------
-    tour_proportions:
-        dict(). the tour_proportion values for all destinations in this orig
-
+    None
     """
-    tour_proportions = dict()
-    for dest in dest_vals:
-        # Build the from_home vector
-        fh_target = list()
-        for tp in tp_needed:
-            fh_target.append(fh_mats[tp].values[orig, dest])
-        fh_target = np.array(fh_target)
+    out_fname = du.get_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='tour_proportions',
+        year=str(year),
+        purpose=str(p),
+        mode=str(m),
+        segment=str(seg),
+        car_availability=str(ca),
+        suffix='.pkl'
+    )
+    print("Generating tour proportions for %s..." % out_fname)
 
-        # Build the to_home vector
-        th_target = list()
-        for tp in tp_needed:
-            th_target.append(th_mats[tp].values[orig, dest])
-        th_target = np.array(th_target)
-
-        # ## BALANCE FROM_HOME AND TO_HOME ## #
-        seed_val = 1  # ASSUME 1 for now
-
-        # First use tp4 to bring both vector sums to average
-        fh_th_avg = (fh_target.sum() + th_target.sum()) / 2
-        fh_target[-1] = fh_th_avg - np.sum(fh_target[:-1])
-        th_target[-1] = fh_th_avg - np.sum(th_target[:-1])
-
-        # Correct for the resulting negative value
-        if fh_target[-1] < 0:
-            th_target[-1] -= (1 + seed_val) * fh_target[-1]
-            fh_target[-1] *= -seed_val
-        elif th_target[-1] < 0:
-            fh_target[-1] -= (1 + seed_val) * th_target[-1]
-            th_target[-1] *= -seed_val
-
-        # Convert the numbers to fractional factors
-        fh_target /= fh_target.sum()
-        th_target /= th_target.sum()
-
-        # ## FURNESS ## #
-        n_tp = len(tp_needed)
-        seed_vals = np.broadcast_to(seed_val, (n_tp, n_tp))
-
-        furnessed_mat = fp.doubly_constrained_furness(
-            seed_vals=seed_vals,
-            row_targets=fh_target,
-            col_targets=th_target,
-            tol=furness_tol,
-            max_iters=furness_max_iters
+    # Load the from_home matrices
+    fh_mats = dict()
+    for tp in tp_needed:
+        dist_name = du.get_dist_name(
+            trip_origin=trip_origin,
+            matrix_format='od_from',
+            year=str(year),
+            purpose=str(p),
+            mode=str(m),
+            segment=str(seg),
+            car_availability=str(ca),
+            tp=str(tp),
+            csv=True
         )
+        fh_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name),
+                                  index_col=0)
 
-        # Store the tour proportions
-        furnessed_mat = furnessed_mat.astype('float16')
-        tour_proportions[dest] = furnessed_mat
+        # Optionally output converted PA matrices
+        if pa_export is not None:
+            pa_name = dist_name.replace('od_from', 'pa')
+            du.copy_and_rename(
+                src=os.path.join(od_import, dist_name),
+                dst=os.path.join(pa_export, pa_name)
+            )
 
-    return tour_proportions
+    # Load the to_home matrices
+    th_mats = dict()
+    for tp in tp_needed:
+        dist_name = du.get_dist_name(
+            trip_origin=trip_origin,
+            matrix_format='od_to',
+            year=str(year),
+            purpose=str(p),
+            mode=str(m),
+            segment=str(seg),
+            car_availability=str(ca),
+            tp=str(tp),
+            csv=True
+        )
+        th_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name),
+                                  index_col=0).T
+
+    # Make sure all matrices have the same OD pairs
+    n_rows, n_cols = fh_mats[list(fh_mats.keys())[0]].shape
+    for mat_dict in [fh_mats, th_mats]:
+        for _, mat in mat_dict.items():
+            if mat.shape != (n_rows, n_cols):
+                raise ValueError("At least one of the loaded matrices "
+                                 "does not match the others. Expected a "
+                                 "matrix of shape (%d, %d), got %s."
+                                 % (n_rows, n_cols, str(mat.shape)))
+
+    # ## FURNESS TOUR PROPORTIONS ## #
+    # Init
+    tour_proportions = defaultdict(dict)
+    for orig in range(n_rows):
+        for dest in range(n_cols):
+            # Build the from_home vector
+            fh_target = list()
+            for tp in tp_needed:
+                fh_target.append(fh_mats[tp].values[orig, dest])
+            fh_target = np.array(fh_target)
+
+            # Build the to_home vector
+            th_target = list()
+            for tp in tp_needed:
+                th_target.append(th_mats[tp].values[orig, dest])
+            th_target = np.array(th_target)
+
+            # ## BALANCE FROM_HOME AND TO_HOME ## #
+            seed_val = 1  # ASSUME 1 for now
+
+            # First use tp4 to bring both vector sums to average
+            fh_th_avg = (fh_target.sum() + th_target.sum()) / 2
+            fh_target[-1] = fh_th_avg - np.sum(fh_target[:-1])
+            th_target[-1] = fh_th_avg - np.sum(th_target[:-1])
+
+            # Correct for the resulting negative value
+            if fh_target[-1] < 0:
+                th_target[-1] -= (1 + seed_val) * fh_target[-1]
+                fh_target[-1] *= -seed_val
+            elif th_target[-1] < 0:
+                fh_target[-1] -= (1 + seed_val) * th_target[-1]
+                th_target[-1] *= -seed_val
+
+            # Convert the numbers to fractional factors
+            fh_target /= fh_target.sum()
+            th_target /= th_target.sum()
+
+            # ## FURNESS ## #
+            n_tp = len(tp_needed)
+            seed_vals = np.broadcast_to(seed_val, (n_tp, n_tp))
+
+            furnessed_mat = fp.doubly_constrained_furness(
+                seed_vals=seed_vals,
+                row_targets=fh_target,
+                col_targets=th_target,
+                tol=furness_tol,
+                max_iters=furness_max_iters
+            )
+
+            # Store the tour proportions
+            furnessed_mat = furnessed_mat.astype('float16')
+            tour_proportions[orig][dest] = furnessed_mat
+
+    # Save the tour proportions for this segment
+    print('Writing tour proportions for %s' % out_fname)
+    out_path = os.path.join(tour_proportions_export, out_fname)
+    with open(out_path, 'wb') as f:
+        pickle.dump(tour_proportions, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def generate_tour_proportions(od_import: str,
@@ -431,126 +506,61 @@ def generate_tour_proportions(od_import: str,
         ca_list=ca_needed
     )
 
-    for p, m, seg, ca in loop_generator:
-        out_fname = du.get_dist_name(
-            trip_origin=trip_origin,
-            matrix_format='tour_proportions',
-            year=str(year),
-            purpose=str(p),
-            mode=str(m),
-            segment=str(seg),
-            car_availability=str(ca),
-            suffix='.pkl'
-        )
-        print("Generating tour proportions for %s..." % out_fname)
+    # TODO: Can all this faff be put in a function
+    #  It'll make the code a little easier to read
 
-        # Load the from_home matrices
-        fh_mats = dict()
-        for tp in tp_needed:
-            dist_name = du.get_dist_name(
-                trip_origin=trip_origin,
-                matrix_format='od_from',
-                year=str(year),
-                purpose=str(p),
-                mode=str(m),
-                segment=str(seg),
-                car_availability=str(ca),
-                tp=str(tp),
-                csv=True
-            )
-            fh_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name),
-                                      index_col=0)
+    # ## MULTIPROCESS EACH SEGMENT ## #
+    unchanging_kwargs = {
+        'od_import': od_import,
+        'tour_proportions_export': tour_proportions_export,
+        'pa_export': pa_export,
+        'trip_origin': trip_origin,
+        'year': year,
+        'tp_needed': tp_needed,
+        'furness_tol': furness_tol,
+        'furness_max_iters': furness_max_iters
+    }
 
-            # Optionally output converted PA matrices
-            if pa_export is not None:
-                pa_name = dist_name.replace('od_from', 'pa')
-                du.copy_and_rename(
-                    src=os.path.join(od_import, dist_name),
-                    dst=os.path.join(pa_export, pa_name)
-                )
+    # use as many as possible if negative
+    if process_count < 0:
+        process_count = os.cpu_count() - 1
 
-        # Load the to_home matrices
-        th_mats = dict()
-        for tp in tp_needed:
-            dist_name = du.get_dist_name(
-                trip_origin=trip_origin,
-                matrix_format='od_to',
-                year=str(year),
-                purpose=str(p),
-                mode=str(m),
-                segment=str(seg),
-                car_availability=str(ca),
-                tp=str(tp),
-                csv=True
-            )
-            th_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name),
-                                      index_col=0).T
+    if process_count == 0:
+        # Loop as normal
+        for p, m, seg, ca in loop_generator:
+            kwargs = unchanging_kwargs.copy()
+            kwargs.update({
+                'p': p,
+                'm': m,
+                'seg': seg,
+                'ca': ca,
+            })
+            _generate_tour_proportions_internal(**kwargs)
+    else:
+        # Build all the arguments, and call in ProcessPool
+        kwargs_list = list()
+        for p, m, seg, ca in loop_generator:
+            kwargs = unchanging_kwargs.copy()
+            kwargs.update({
+                'p': p,
+                'm': m,
+                'seg': seg,
+                'ca': ca
+            })
+            kwargs_list.append(kwargs)
 
-        # Make sure all matrices have the same OD pairs
-        n_rows, n_cols = fh_mats[list(fh_mats.keys())[0]].shape
-        for mat_dict in [fh_mats, th_mats]:
-            for _, mat in mat_dict.items():
-                if mat.shape != (n_rows, n_cols):
-                    raise ValueError("At least one of the loaded matrices "
-                                     "does not match the others. Expected a "
-                                     "matrix of shape (%d, %d), got %s."
-                                     % (n_rows, n_cols, str(mat.shape)))
-
-        # ## FURNESS TOUR PROPORTIONS ## #
-        # Init
-        tour_proportions = dict()
-
-        # TODO: Can all this faff be put in a function
-        #  It'll make the code a little easier to read
-        # Setup for multiprocessing
-        unchanging_kwargs = {
-            'dest_vals': list(range(n_cols)),
-            'tp_needed': tp_needed,
-            'fh_mats': fh_mats,
-            'th_mats': th_mats,
-            'furness_tol': furness_tol,
-            'furness_max_iters': furness_max_iters
-        }
-
-        if process_count == 0:
-            # Do as for loop
-            for orig in range(n_rows):
-                kwargs = unchanging_kwargs.copy()
-                kwargs['orig'] = orig
-                tour_proportions[orig] = _generate_tour_proportions_internal(**kwargs)
-                break
-
-        else:
-            # Use multiprocessing
-            kwargs_list = list()
-            orig_zones = list(range(n_rows))
-            for orig in orig_zones:
-                kwargs = unchanging_kwargs.copy()
-                kwargs['orig'] = orig
-                kwargs_list.append(kwargs)
-
-            mp_results = conc.process_pool_wrapper(
-                _generate_tour_proportions_internal,
-                kwargs=kwargs_list,
-                process_count=process_count,
-                in_order=True
-            )
-
-            # decode results
-            for orig, tour_prop in zip(orig_zones, mp_results):
-                tour_proportions[orig] = tour_prop
-
-        # Save the tour proportions for this segment
-        print('Writing tour proportions for %s' % out_fname)
-        out_path = os.path.join(tour_proportions_export, out_fname)
-        with open(out_path, 'wb') as f:
-            pickle.dump(tour_proportions, f, protocol=pickle.HIGHEST_PROTOCOL)
+        conc.process_pool_wrapper(_generate_tour_proportions_internal,
+                                  kwargs=kwargs_list,
+                                  process_count=process_count)
 
 
 def build_compile_params(import_dir: str,
                          export_dir: str,
                          matrix_format: str,
                          needed_years: Iterable[str],
+                         m_needed: List[int] = consts.MODES_NEEDED,
+                         ca_needed: Iterable[int] = None,
+                         tp_needed: Iterable[int] = consts.TIME_PERIODS,
                          output_headers: List[str] = None,
                          output_format: str = 'wide'
                          ) -> None:
@@ -585,7 +595,14 @@ def build_compile_params(import_dir: str,
     -------
     None
     """
+    # Error checking
+    if len(m_needed) > 1:
+        raise ValueError("Matrix compilation can only handle one mode at a "
+                         "time. Received %d modes" % len(m_needed))
+    mode = m_needed[0]
+
     # Init
+    ca_needed = [None] if ca_needed is None else ca_needed
     all_od_matrices = du.list_files(import_dir)
     out_lines = list()
 
@@ -594,24 +611,33 @@ def build_compile_params(import_dir: str,
 
     for year in needed_years:
         for user_class, purposes in consts.USER_CLASS_PURPOSES.items():
-            for tp in consts.TIME_PERIODS:
+            for ca, tp in product(ca_needed, tp_needed):
                 # Init
                 compile_mats = all_od_matrices.copy()
                 # include _ before and after to avoid clashes
                 ps = ['_p' + str(x) + '_' for x in purposes]
+                mode_str = '_m' + str(mode) + '_'
                 year_str = '_yr' + str(year) + '_'
                 tp_str = '_tp' + str(tp)
 
                 # Narrow down to matrices for this compilation
                 compile_mats = [x for x in compile_mats if year_str in x]
                 compile_mats = [x for x in compile_mats if du.is_in_string(ps, x)]
+                compile_mats = [x for x in compile_mats if mode_str in x]
                 compile_mats = [x for x in compile_mats if tp_str in x]
+
+                # Narrow down further if we're using ca
+                if ca is not None:
+                    ca_str = '_ca' + str(ca) + '_'
+                    compile_mats = [x for x in compile_mats if ca_str in x]
 
                 # Build the final output name
                 compiled_mat_name = du.get_compiled_matrix_name(
                     matrix_format,
                     user_class,
                     year,
+                    mode=str(mode),
+                    ca=ca,
                     tp=str(tp),
                     csv=True
 

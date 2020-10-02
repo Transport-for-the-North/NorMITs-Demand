@@ -40,13 +40,16 @@ def decompile_od(od_import: str,
         # We need to ignore the year, so break into component parts
         comp_calib_params = du.fname_to_calib_params(comp_mat_name,
                                                      get_user_class=True,
-                                                     get_matrix_format=True)
+                                                     get_matrix_format=True,
+                                                     force_ca_exists=True)
 
         # Find the matching compiled matrix and load
         mat_name = du.get_compiled_matrix_name(
             matrix_format=comp_calib_params['matrix_format'],
             user_class=comp_calib_params['user_class'],
             year=str(year),
+            mode=str(comp_calib_params['m']),
+            ca=int(comp_calib_params['ca']),
             tp=str(comp_calib_params['tp']),
             csv=True
         )

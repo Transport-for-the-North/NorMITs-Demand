@@ -254,7 +254,6 @@ def get_dist_name(trip_origin: str,
     if csv:
         final_name += '.csv'
 
-
     return final_name
 
 
@@ -350,7 +349,8 @@ def generate_calib_params(year: str,
 def fname_to_calib_params(fname: str,
                           get_trip_origin: bool = False,
                           get_matrix_format: bool = False,
-                          get_user_class: bool = False
+                          get_user_class: bool = False,
+                          force_ca_exists: bool = False,
                           ) -> Dict[str, str]:
     """
     Convert the filename into a calib_params dict, with the following keys
@@ -361,30 +361,45 @@ def fname_to_calib_params(fname: str,
     calib_params = dict()
 
     # Search for each param in fname - store if found
+    # year
     loc = re.search('_yr[0-9]+', fname)
     if loc is not None:
         calib_params['yr'] = int(fname[loc.start() + 3:loc.end()])
 
+    # purpose
     loc = re.search('_p[0-9]+', fname)
     if loc is not None:
         calib_params['p'] = int(fname[loc.start() + 2:loc.end()])
 
+    # mode
     loc = re.search('_m[0-9]+', fname)
     if loc is not None:
         calib_params['m'] = int(fname[loc.start() + 2:loc.end()])
 
+    # soc
     loc = re.search('_soc[0-9]+', fname)
     if loc is not None:
         calib_params['soc'] = int(fname[loc.start() + 4:loc.end()])
 
+    # ns
     loc = re.search('_ns[0-9]+', fname)
     if loc is not None:
         calib_params['ns'] = int(fname[loc.start() + 3:loc.end()])
 
+    # ca
     loc = re.search('_ca[0-9]+', fname)
     if loc is not None:
         calib_params['ca'] = int(fname[loc.start() + 3:loc.end()])
+    elif re.search('_nca', fname) is not None:
+        calib_params['ca'] = 1
+    elif re.search('_ca', fname) is not None:
+        calib_params['ca'] = 2
 
+    if force_ca_exists:
+        if 'ca' not in calib_params:
+            calib_params['ca'] = None
+
+    # tp
     loc = re.search('_tp[0-9]+', fname)
     if loc is not None:
         calib_params['tp'] = int(fname[loc.start() + 3:loc.end()])
@@ -678,6 +693,7 @@ def get_compiled_matrix_name(matrix_format: str,
                              user_class: str,
                              year: str,
                              mode: str = None,
+                             ca: int = None,
                              tp: str = None,
                              csv=False
                              ) -> str:
@@ -697,6 +713,15 @@ def get_compiled_matrix_name(matrix_format: str,
 
     if not is_none_like(mode):
         name_parts += ["m" + mode]
+
+    if not is_none_like(ca):
+        if ca == 1:
+            name_parts += ["nca"]
+        elif ca == 2:
+            name_parts += ["ca"]
+        else:
+            raise ValueError("Received an invalid car availability value. "
+                             "Got %s, expected either 1 or 2." % str(ca))
 
     if not is_none_like(tp):
         name_parts += ["tp" + tp]
