@@ -640,6 +640,13 @@ def long_to_wide_out(df: pd.DataFrame,
     ).to_csv(out_path)
 
 
+def get_compile_params_name(matrix_format: str, year: str) -> str:
+    """
+    Generates the compile params filename
+    """
+    return "%s_yr%s_compile_params.csv" % (matrix_format, year)
+
+
 def build_full_paths(base_path: str,
                      fnames: Iterable[str]
                      ) -> List[str]:

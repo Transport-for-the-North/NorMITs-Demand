@@ -557,7 +557,7 @@ def generate_tour_proportions(od_import: str,
 def build_compile_params(import_dir: str,
                          export_dir: str,
                          matrix_format: str,
-                         needed_years: Iterable[str],
+                         years_needed: Iterable[int],
                          m_needed: List[int] = consts.MODES_NEEDED,
                          ca_needed: Iterable[int] = None,
                          tp_needed: Iterable[int] = consts.TIME_PERIODS,
@@ -579,8 +579,18 @@ def build_compile_params(import_dir: str,
     matrix_format:
         Format of the input matrices. Usually 'pa' or 'od'.
 
-    needed_years:
+    years_needed:
         Which years compile parameters should be generated for.
+
+    m_needed:
+        Which mode compile parameters should be generated for.
+
+    ca_needed:
+        Which car availabilities compile parameters should be generated for.
+        If None, car availabilities are not used
+
+    tp_needed:
+        Which time periods compile parameters should be generated for.
 
     output_headers:
         Optional. Use if custom output headers are needed. by default the
@@ -609,7 +619,7 @@ def build_compile_params(import_dir: str,
     if output_headers is None:
         output_headers = ['distribution_name', 'compilation', 'format']
 
-    for year in needed_years:
+    for year in years_needed:
         for user_class, purposes in consts.USER_CLASS_PURPOSES.items():
             for ca, tp in product(ca_needed, tp_needed):
                 # Init
@@ -635,7 +645,7 @@ def build_compile_params(import_dir: str,
                 compiled_mat_name = du.get_compiled_matrix_name(
                     matrix_format,
                     user_class,
-                    year,
+                    str(year),
                     mode=str(mode),
                     ca=ca,
                     tp=str(tp),
@@ -649,6 +659,7 @@ def build_compile_params(import_dir: str,
                     out_lines.append(line_parts)
 
         # Write outputs for this year
+        out_fname = du.get_compile_params_name(matrix_format, year)
         out_fname = "%s_yr%s_compile_params.csv" % (matrix_format, year)
         out_path = os.path.join(export_dir, out_fname)
         du.write_csv(output_headers, out_lines, out_path)
