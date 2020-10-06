@@ -659,7 +659,6 @@ def build_compile_params(import_dir: str,
                     out_lines.append(line_parts)
 
         # Write outputs for this year
-        out_fname = du.get_compile_params_name(matrix_format, year)
-        out_fname = "%s_yr%s_compile_params.csv" % (matrix_format, year)
+        out_fname = du.get_compile_params_name(matrix_format, str(year))
         out_path = os.path.join(export_dir, out_fname)
         du.write_csv(output_headers, out_lines, out_path)

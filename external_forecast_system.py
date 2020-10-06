@@ -34,6 +34,7 @@ from efs_constrainer import ForecastConstrainer
 from zone_translator import ZoneTranslator
 
 from demand_utilities import utils as du
+from demand_utilities import vehicle_occupancy as vo
 from demand_utilities.sector_reporter_v2 import SectorReporter
 
 # TODO: Implement multiprocessing
@@ -2621,33 +2622,66 @@ def main():
         overwrite_compiled_od=True
     )
 
+    # TODO:
+    # efs.generate_post_me_tour_proportions()
+    #
+    # efs.future_year_pa_to_od()
+
 
 def main2():
-    model_name = 'norms'
+    model_name = 'noham'
     if model_name == 'norms':
         ca_needed = consts.CA_NEEDED
-    else:
+        from_pcu = False
+    elif model_name == 'noham':
         ca_needed = None
+        from_pcu = True
+    else:
+        raise ValueError("I don't know what model this is? %s"
+                         % str(model_name))
 
-    decompile_od_bool = False
-    gen_tour_proportions_bool = False
+    decompile_od_bool = True
+    gen_tour_proportions_bool = True
     aggregate_pa_bool = False
     tour_prop_pa2od_bool = False
 
     # WARNING: PATHS HAVE CHANGED. THIS CODE WONT RUN NOW
+    # Testing code for NoHam
+    
     if decompile_od_bool:
+        # od2pa.convert_to_efs_matrices(
+        #     import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
+        #     export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
+        #     matrix_format='od',
+        #     user_class=True,
+        #     to_wide=True,
+        #     wide_col_name=model_name + '_zone_id'
+        # )
+
+        if from_pcu:
+            vo.people_vehicle_conversion(
+                input_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
+                import_folder=r'Y:\NorMITs Demand\import',
+                export_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\no_pcu',
+                mode=str(consts.MODES_NEEDED[0]),
+                method='to_people',
+                out_format='wide'
+            )
+
+        exit()
+
         od2pa.decompile_od(
-            od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Compiled OD Matrices',
-            od_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Post-ME OD Matrices',
-            decompile_factors_path=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\compile_params\od_compilation_factors.pickle',
+            od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
+            od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
+            decompile_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params/od_compilation_factors.pickle',
             year=consts.BASE_YEAR
         )
 
     if gen_tour_proportions_bool:
         mat_p.generate_tour_proportions(
-            od_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Post-ME OD Matrices',
-            pa_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Post-ME PA Matrices',
-            tour_proportions_export=r'E:\NorMITs Demand\norms\v2_2-EFS_Output\iter0\tour_proportions',
+            od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
+            pa_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
+            tour_proportions_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             year=consts.BASE_YEAR,
             ca_needed=ca_needed
         )
@@ -2674,5 +2708,5 @@ def main2():
 
 
 if __name__ == '__main__':
-    main()
-    # main2()
+    # main()
+    main2()

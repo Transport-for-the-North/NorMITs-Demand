@@ -51,15 +51,16 @@ def copy_and_rename(src: str, dst: str) -> None:
                          "directories.")
 
     # Only rename if given a filename
-    rename = True
-    if '.' not in dst:
-        rename = False
+    if '.' not in os.path.basename(dst):
+        # Copy over with same filename
+        shutil.copy(src, dst)
+    else:
+        # Split paths
+        _, src_tail = os.path.split(src)
+        dst_head, dst_tail = os.path.split(dst)
 
-    _, src_tail = os.path.split(src)
-    dst_head, dst_tail = os.path.split(dst)
-    shutil.copy(src, dst_head)
-
-    if rename:
+        # Copy then rename
+        shutil.copy(src, dst_head)
         shutil.move(os.path.join(dst_head, src_tail), dst)
 
 
@@ -326,7 +327,6 @@ def get_dist_name_parts(dist_name: str) -> List[str]:
     ]
 
 
-# TODO: Does this need a better name?
 def generate_calib_params(year: str,
                           purpose: int,
                           mode: int,
@@ -344,6 +344,52 @@ def generate_calib_params(year: str,
         segment_str: segment,
         'ca': ca
     }
+
+
+def post_me_fname_to_calib_params(fname: str,
+                                  get_user_class: bool = True,
+                                  ) -> Dict[str, str]:
+    """
+    Convert the filename into a calib_params dict, with the following keys
+    (if they exist in the filename):
+    yr, p, m, soc/ns, ca, tp
+    """
+    # Init
+    calib_params = {}
+
+    # Might need to save or recreate this filename
+
+    # Assume year starts in 20/21
+    loc = re.search('2[0-1][0-9]+', fname)
+    if loc is not None:
+        calib_params['yr'] = int(fname[loc.start():loc.end()])
+
+    # Mode. What is the code for rail?
+    if re.search('_Hwy', fname) is not None:
+        calib_params['m'] = 3
+    else:
+        Warning("Cannot find a mode in filename. It might be rail, but I "
+                "don't know what to search for at the moment.\n"
+                "File name: '%s'" % fname)
+
+    # tp
+    loc = re.search('_TS[0-9]+', fname)
+    if loc is not None:
+        calib_params['tp'] = int(fname[loc.start() + 3:loc.end()])
+
+    # User Class
+    if get_user_class:
+        if re.search('_commute', fname) is not None:
+            calib_params['user_class'] = 'commute'
+        elif re.search('_business', fname) is not None:
+            calib_params['user_class'] = 'business'
+        elif re.search('_other', fname) is not None:
+            calib_params['user_class'] = 'other'
+        else:
+            raise ValueError("Cannot find the user class in filename: %s" %
+                             str(fname))
+
+    return calib_params
 
 
 def fname_to_calib_params(fname: str,
@@ -591,7 +637,8 @@ def long_to_wide_out(df: pd.DataFrame,
                      h_heading: str,
                      values: str,
                      out_path: str,
-                     echo=False
+                     echo=False,
+                     unq_zones: List[str] = None
                      ) -> None:
     """
     Converts a long format pd.Dataframe, converts it to long and writes
@@ -617,12 +664,21 @@ def long_to_wide_out(df: pd.DataFrame,
     echo:
         Indicates whether to print a log of the process to the terminal.
 
+    unq_zones:
+        A list of all the zone names that should exist in the output matrix.
+        If zones in this list are not in the given df, they are infilled with
+        values of 0.
+        If left as None, it assumes all zones in the range 1 to max zone number
+        should exist.
+
     Returns
     -------
         None
     """
     # Get the unique column names
-    unq_zones = df[v_heading].drop_duplicates().reset_index(drop=True).copy()
+    if unq_zones is None:
+        unq_zones = df[v_heading].drop_duplicates().reset_index(drop=True).copy()
+        unq_zones = list(range(1, max(unq_zones)+1))
 
     # Convert to wide format and write to file
     wide_mat = df_to_np(
