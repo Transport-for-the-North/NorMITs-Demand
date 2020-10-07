@@ -482,17 +482,10 @@ class ExternalForecastSystem:
         iter_name = 'iter' + str(iter_num)
         model_name = du.get_model_name(modes_needed[0])
 
-        if iter_num == 0:
-            Warning("iter_num is set to 0. This is should only be the case"
-                    "during testing.")
-
-        if len(modes_needed) > 1:
-            raise ValueError("Was given more than one mode. EFS cannot run "
-                             "using more than one mode at a time due to "
-                             "different zoning systems for NoHAM and NoRMS "
-                             "etc.")
-
         year_list = [str(x) for x in [base_year] + future_years]
+
+        # Validate inputs
+        _input_checks(iter_num=iter_num, m_needed=modes_needed)
 
         # ## PREPARE OUTPUTS ## #
         print("Initialising outputs...")
@@ -1167,16 +1160,7 @@ class ExternalForecastSystem:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
         model_name = du.get_model_name(modes_needed[0])
-
-        if iter_num == 0:
-            Warning("iter_num is set to 0. This is should only be the case"
-                    "during testing.")
-
-        if len(modes_needed) > 1:
-            raise ValueError("Was given more than one mode. EFS cannot run "
-                             "using more than one mode at a time due to "
-                             "different zoning systems for NoHAM and NoRMS "
-                             "etc.")
+        _input_checks(iter_num=iter_num, m_needed=modes_needed)
 
         # Generate paths
         imports, exports, _ = self.generate_output_paths(
@@ -1291,16 +1275,7 @@ class ExternalForecastSystem:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
         model_name = du.get_model_name(modes_needed[0])
-
-        if iter_num == 0:
-            Warning("iter_num is set to 0. This is should only be the case"
-                    "during testing.")
-
-        if len(modes_needed) > 1:
-            raise ValueError("Was given more than one mode. EFS cannot run "
-                             "using more than one mode at a time due to "
-                             "different zoning systems for NoHAM and NoRMS "
-                             "etc.")
+        _input_checks(iter_num=iter_num, m_needed=modes_needed)
 
         # Generate paths
         imports, exports, _ = self.generate_output_paths(
@@ -1421,6 +1396,7 @@ class ExternalForecastSystem:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
         model_name = du.get_model_name(modes_needed[0])
+        _input_checks(iter_num=iter_num, m_needed=modes_needed)
 
         if model_name == 'norms':
             ca_needed = consts.CA_NEEDED
@@ -1429,16 +1405,6 @@ class ExternalForecastSystem:
         else:
             raise ValueError("Got an unexpected model name. Got %s, expected "
                              "either 'norms' or 'noham'." % str(model_name))
-
-        if iter_num == 0:
-            Warning("iter_num is set to 0. This is should only be the case"
-                    "during testing.")
-
-        if len(modes_needed) > 1:
-            raise ValueError("Was given more than one mode. EFS cannot run "
-                             "using more than one mode at a time due to "
-                             "different zoning systems for NoHAM and NoRMS "
-                             "etc.")
 
         # Generate paths
         imports, exports, params = self.generate_output_paths(
@@ -1494,18 +1460,75 @@ class ExternalForecastSystem:
             )
 
     def generate_post_me_tour_proportions(self,
-                                          year: int = consts.BASE_YEAR,
-                                          hb_p_needed: List[int] = consts.PURPOSES_NEEDED,
-                                          nhb_p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
+                                          base_year: int = consts.BASE_YEAR,
                                           modes_needed: List[int] = consts.MODES_NEEDED,
-                                          tp_needed: List[int] = consts.TIME_PERIODS,
                                           output_location: str = None,
                                           iter_num: int = 0,
                                           overwrite_decompiled_od=True,
-                                          overwrite_tour_proportions=True,
-                                          overwrite_compiled_base_pa=True
+                                          overwrite_tour_proportions=True
                                           ) -> None:
-        raise NotImplementedError
+        # TODO: Write Doc
+        # Init
+        if output_location is None:
+            output_location = self.output_location
+        iter_name = 'iter' + str(iter_num)
+        model_name = du.get_model_name(modes_needed[0])
+        _input_checks(iter_num=iter_num, m_needed=modes_needed)
+
+        if model_name == 'norms':
+            ca_needed = consts.CA_NEEDED
+            from_pcu = False
+        elif model_name == 'noham':
+            ca_needed = [None]
+            from_pcu = True
+        else:
+            raise ValueError("Got an unexpected model name. Got %s, expected "
+                             "either 'norms' or 'noham'." % str(model_name))
+
+        # Generate paths
+        imports, exports, params = self.generate_output_paths(
+            output_location=output_location,
+            model_name=model_name,
+            iter_name=iter_name
+        )
+
+        if overwrite_decompiled_od:
+            need_convert = od2pa.need_to_convert_to_efs_matrices(
+                model_import=exports['post_me']['model_output'],
+                od_import=exports['post_me']['compiled_od']
+            )
+            if need_convert:
+                od2pa.convert_to_efs_matrices(
+                    import_path=exports['post_me']['model_output'],
+                    export_path=exports['post_me']['compiled_od'],
+                    matrix_format='od',
+                    user_class=True,
+                    to_wide=True,
+                    wide_col_name=model_name + '_zone_id',
+                    from_pcu=from_pcu,
+                    vehicle_occupancy_import=imports['home']
+                )
+
+            # TODO: Stop the filename being hardcoded after integration with TMS
+            decompile_factors_path = os.path.join(
+                params['compile'],
+                'od_compilation_factors.pickle'
+            )
+            od2pa.decompile_od(
+                od_import=exports['post_me']['compiled_od'],
+                od_export=exports['post_me']['od'],
+                decompile_factors_path=decompile_factors_path,
+                year=base_year
+            )
+
+        if overwrite_tour_proportions:
+            mat_p.generate_tour_proportions(
+                od_import=exports['post_me']['od'],
+                pa_export=exports['post_me']['pa'],
+                tour_proportions_export=params['tours'],
+                year=base_year,
+                ca_needed=ca_needed
+            )
 
     def integrate_alternate_assumptions(self,
                                         alt_pop_base_year_file: str,
@@ -2195,12 +2218,14 @@ class ExternalForecastSystem:
             du.create_folder(path, chDir=False)
 
         # Post-ME
+        compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
         post_me_exports = {
             'pa': os.path.join(post_me_home, pa),
             'pa_24': os.path.join(post_me_home, pa_24),
             'od': os.path.join(post_me_home, od),
             'od_24': os.path.join(post_me_home, od_24),
-            'compiled_od': os.path.join(post_me_home, ' '.join([compiled, od])),
+            'compiled_od': compiled_od_path,
+            'model_output': os.path.join(compiled_od_path, ''.join(['from_', model_name]))
         }
 
         for _, path in post_me_exports.items():
@@ -2446,6 +2471,24 @@ class ExternalForecastSystem:
         self.area_grouping = du.get_data_subset(self.area_grouping)
 
 
+def _input_checks(iter_num=None,
+                 m_needed=None
+                 ) -> None:
+    """
+    Checks that any arguments given are OK. Will raise an error
+    for any given input that is not correct.
+    """
+    if iter_num is not None and iter_num == 0:
+        Warning("iter_num is set to 0. This is should only be the case"
+                "during testing.")
+
+    if m_needed is not None and len(m_needed) > 1:
+        raise ValueError("Was given more than one mode. EFS cannot run "
+                         "using more than one mode at a time due to "
+                         "different zoning systems for NoHAM and NoRMS "
+                         "etc.")
+
+
 def nhb_furness(p_import,
                 seed_nhb_dist_dir,
                 od_export,
@@ -2675,20 +2718,19 @@ def main():
     #     overwrite_nhb_od=False,
     #     overwrite_nhb_tp_od=False
     # )
-
-    efs.pre_me_compile_od_matrices(
-        output_location=output_location,
-        iter_num=iter_num,
-        overwrite_aggregated_od=True,
-        overwrite_compiled_od=True
-    )
+    #
+    # efs.pre_me_compile_od_matrices(
+    #     output_location=output_location,
+    #     iter_num=iter_num,
+    #     overwrite_aggregated_od=True,
+    #     overwrite_compiled_od=True
+    # )
 
     efs.generate_post_me_tour_proportions(
         output_location=output_location,
         iter_num=iter_num,
-        overwrite_decompiled_od=True,
+        overwrite_decompiled_od=False,
         overwrite_tour_proportions=True,
-        overwrite_compiled_base_pa=True
     )
 
     # TODO:
@@ -2778,5 +2820,5 @@ def main2():
 
 
 if __name__ == '__main__':
-    # main()
-    main2()
+    main()
+    # main2()

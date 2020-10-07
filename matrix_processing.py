@@ -18,7 +18,9 @@ import pandas as pd
 import pickle
 
 from typing import List
+from typing import Tuple
 from typing import Iterable
+
 from itertools import product
 from collections import defaultdict
 
@@ -276,14 +278,22 @@ def _generate_tour_proportions_internal(od_import: str,
                                         tp_needed: List[int],
                                         furness_tol: float,
                                         furness_max_iters: int
-                                        ) -> None:
+                                        ) -> Tuple[str, int, float]:
     """
     The internals of generate_tour_proportions().
     Used to implement multiprocessing.
 
     Returns
     -------
-    None
+    tour_proportions_fname:
+        THe name of the tour proportions output file
+
+    zero_count:
+        How many tour proportion matrices are full of 0s
+
+    zero_percentage:
+        The percentage of all tour proportion matrices that are full of 0s
+
     """
     out_fname = du.get_dist_name(
         trip_origin=trip_origin,
@@ -344,10 +354,11 @@ def _generate_tour_proportions_internal(od_import: str,
     for mat_dict in [fh_mats, th_mats]:
         for _, mat in mat_dict.items():
             if mat.shape != (n_rows, n_cols):
-                raise ValueError("At least one of the loaded matrices "
-                                 "does not match the others. Expected a "
-                                 "matrix of shape (%d, %d), got %s."
-                                 % (n_rows, n_cols, str(mat.shape)))
+                raise ValueError(
+                    "At least one of the loaded matrices does not match the "
+                    "others. Expected a matrix of shape (%d, %d), got %s."
+                    % (n_rows, n_cols, str(mat.shape))
+                )
 
     # ## FURNESS TOUR PROPORTIONS ## #
     # Init
@@ -383,24 +394,28 @@ def _generate_tour_proportions_internal(od_import: str,
                 fh_target[-1] -= (1 + seed_val) * th_target[-1]
                 th_target[-1] *= -seed_val
 
-            if fh_target.sum() == 0 or th_target.sum() == 0:
+            # Only furness if targets are not 0
+            if not fh_target.sum() == 0 and th_target.sum() == 0:
+                # Convert the numbers to fractional factors
+                fh_target /= fh_target.sum()
+                th_target /= th_target.sum()
+
+                # ## FURNESS ## #
+                n_tp = len(tp_needed)
+                seed_vals = np.broadcast_to(seed_val, (n_tp, n_tp))
+
+                furnessed_mat = fp.doubly_constrained_furness(
+                    seed_vals=seed_vals,
+                    row_targets=fh_target,
+                    col_targets=th_target,
+                    tol=furness_tol,
+                    max_iters=furness_max_iters
+                )
+
+            else:
+                # Skip furness, create matrix of 0s instead
                 zero_count += 1
-
-            # Convert the numbers to fractional factors
-            fh_target /= fh_target.sum()
-            th_target /= th_target.sum()
-
-            # ## FURNESS ## #
-            n_tp = len(tp_needed)
-            seed_vals = np.broadcast_to(seed_val, (n_tp, n_tp))
-
-            furnessed_mat = fp.doubly_constrained_furness(
-                seed_vals=seed_vals,
-                row_targets=fh_target,
-                col_targets=th_target,
-                tol=furness_tol,
-                max_iters=furness_max_iters
-            )
+                furnessed_mat = np.zeros((len(tp_needed), len(tp_needed)))
 
             # Store the tour proportions
             furnessed_mat = furnessed_mat.astype('float16')
@@ -408,10 +423,12 @@ def _generate_tour_proportions_internal(od_import: str,
 
     # Save the tour proportions for this segment
     print('Writing tour proportions for %s' % out_fname)
-    print('Zero count for %s is %d' % (dist_name, zero_count))
     out_path = os.path.join(tour_proportions_export, out_fname)
     with open(out_path, 'wb') as f:
         pickle.dump(tour_proportions, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    zero_percentage = zero_count / float(n_rows * n_cols)
+    return out_fname, zero_count, zero_percentage
 
 
 def generate_tour_proportions(od_import: str,
@@ -513,6 +530,7 @@ def generate_tour_proportions(od_import: str,
 
     # TODO: Can all this faff be put in a function
     #  It'll make the code a little easier to read
+    #  Maybe integrate into multiprocessing.py?
 
     # ## MULTIPROCESS EACH SEGMENT ## #
     unchanging_kwargs = {
@@ -532,6 +550,7 @@ def generate_tour_proportions(od_import: str,
 
     if process_count == 0:
         # Loop as normal
+        zero_counts = list()
         for p, m, seg, ca in loop_generator:
             kwargs = unchanging_kwargs.copy()
             kwargs.update({
@@ -540,7 +559,7 @@ def generate_tour_proportions(od_import: str,
                 'seg': seg,
                 'ca': ca,
             })
-            _generate_tour_proportions_internal(**kwargs)
+            zero_counts.append(_generate_tour_proportions_internal(**kwargs))
     else:
         # Build all the arguments, and call in ProcessPool
         kwargs_list = list()
@@ -554,9 +573,18 @@ def generate_tour_proportions(od_import: str,
             })
             kwargs_list.append(kwargs)
 
-        conc.process_pool_wrapper(_generate_tour_proportions_internal,
-                                  kwargs=kwargs_list,
-                                  process_count=process_count)
+        zero_counts = conc.process_pool_wrapper(
+            _generate_tour_proportions_internal,
+            kwargs=kwargs_list,
+            process_count=process_count,
+            in_order=True
+        )
+
+    # Output a log of the zero counts found
+    header = ['tour_file', 'zero_count', 'percentage']
+    out_name = "yr%d_tour_proportions_log.csv" % year
+    out_path = os.path.join(tour_proportions_export, out_name)
+    du.write_csv(header, zero_counts, out_path)
 
     # ## COPY OVER NHB MATRICES ## #
     if pa_export is not None:

@@ -40,6 +40,7 @@ def decompile_od(od_import: str,
     decompile_factors = pd.read_pickle(decompile_factors_path)
 
     # Loop through the compiled matrices and decompile
+    # TODO: Multiprocess decompile_od()
     for comp_mat_name in decompile_factors.keys():
         # We need to ignore the year, so break into component parts
         comp_calib_params = du.fname_to_calib_params(comp_mat_name,
@@ -224,3 +225,34 @@ def convert_to_efs_matrices(import_path: str,
         method='to_people',
         out_format='wide'
     )
+
+
+def need_to_convert_to_efs_matrices(model_import: str,
+                                    od_import: str
+                                    ) -> bool:
+    """
+    Checks if the matrices stored in model_import need converting into
+    efs format.
+
+    At the moment this is just a simple check that matrices exist in
+    model_import and not od_import.
+    TODO: Update with better checks one NoRMS and NoHAM post-ME matrices
+      are more clear
+
+    Parameters
+    ----------
+    model_import:
+        Location that the post-ME model matrices are.
+
+    od_import:
+        Location that the converted post-ME model matrices should be
+        output to
+
+    Returns
+    -------
+    bool:
+        Returns True is the matrices need converting. Otherwise, False.
+    """
+    return (len(os.listdir(od_import)) == 0 and
+            len(os.listdir(model_import)) > 0)
+
