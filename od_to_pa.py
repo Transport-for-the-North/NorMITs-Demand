@@ -2,7 +2,11 @@ import os
 
 import pandas as pd
 
+from typing import List
+
+import efs_constants as consts
 import demand_utilities.utils as du
+import demand_utilities.vehicle_occupancy as vo
 
 
 def decompile_od(od_import: str,
@@ -134,7 +138,10 @@ def convert_to_efs_matrices(import_path: str,
                             matrix_format: str,
                             user_class: bool = True,
                             to_wide: bool = True,
-                            wide_col_name: str = 'zone_id'
+                            wide_col_name: str = 'zone_id',
+                            from_pcu: bool = False,
+                            vehicle_occupancy_import: str = None,
+                            m_needed: List[int] = consts.MODES_NEEDED
                             ) -> None:
     """
     Converts matrices from TfN models into a format that EFS uses.
@@ -163,14 +170,39 @@ def convert_to_efs_matrices(import_path: str,
         If converting the wide format, this name is used as the title for the
         rows/columns of the resulting matrices.
 
+    from_pcu:
+        Whether the input matrices need converting from vehicle demand to
+        people demand or not
+
+    vehicle_occupancy_import:
+        Only needs to be set if from_pcu is True. This is the location to find
+        the vehicle occupancy file. The given location is usually the home of
+        the imports directory. e.g. "Y:/NorMITs Demand/import"
+
+    m_needed:
+        The mode being used when converting from PCU to people.
+
     Returns
     -------
     None
     """
+    # Input checks
+    if len(m_needed) > 1:
+        raise ValueError("Got more than one mode. convert_to_efs_matrices() "
+                         "can only handle one mode at a time.")
+
+    temp_export_path = export_path
+    if from_pcu:
+        if vehicle_occupancy_import is None:
+            raise ValueError("vehicle_occupancy_import needs to be set when"
+                             "converting from PCU matrices.")
+        temp_export_path = os.path.join(export_path, 'from_pcu')
+        du.create_folder(temp_export_path)
+
     if user_class:
-        return _convert_to_efs_matrices_user_class(
+        _convert_to_efs_matrices_user_class(
             import_path=import_path,
-            export_path=export_path,
+            export_path=temp_export_path,
             matrix_format=matrix_format,
             to_wide=to_wide,
             wide_col_name=wide_col_name
@@ -179,3 +211,16 @@ def convert_to_efs_matrices(import_path: str,
         # TODO: Write this functionality
         raise NotImplementedError("Cannot convert naming unless in user class"
                                   "format.")
+
+    if not from_pcu:
+        return
+
+    # Only get here if we need to convert from PCU format
+    vo.people_vehicle_conversion(
+        input_folder=temp_export_path,
+        import_folder=vehicle_occupancy_import,
+        export_folder=export_path,
+        mode=str(m_needed[0]),
+        method='to_people',
+        out_format='wide'
+    )

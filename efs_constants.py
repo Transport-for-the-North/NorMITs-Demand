@@ -301,15 +301,6 @@ EFS_RUN_DISTRIBUTIONS_DICT = {
     },
 }
 
-# TODO: Move M6 to Norms
-DEFAULT_DIST_LOCATION = os.path.join(
-    "Y:/",
-    "EFS",
-    "inputs",
-    "distributions",
-    "PA Matrices 24hr"
-)
-
 CONSTRAINT_REQUIRED_DEFAULT = [
     True,   # initial population metric constraint
     True,   # post-development constraint

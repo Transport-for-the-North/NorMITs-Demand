@@ -213,7 +213,6 @@ class ExternalForecastSystem:
             alt_worker_growth_assumption_file: str = None,
             alt_pop_split_file: str = None,  # THIS ISN'T USED ANYWHERE
             distribution_method: str = "Furness",
-            seed_dist_location: str = consts.DEFAULT_DIST_LOCATION,
             distributions: dict = consts.EFS_RUN_DISTRIBUTIONS_DICT,
             purposes_needed: List[int] = consts.PURPOSES_NEEDED,
             modes_needed: List[int] = consts.MODES_NEEDED,
@@ -322,11 +321,6 @@ class ExternalForecastSystem:
             The method to be used for distributing the trips.
             Default input is: "Furness".
             Possible inputs are: "Furness".
-
-        seed_dist_location:
-            The primary location for all the distributions.
-            Default input is: "Y:/EFS/inputs/distributions".
-            Possible input is any file location folder.
 
         distributions:
             A series of nested dictionary containing all the distributions
@@ -519,7 +513,7 @@ class ExternalForecastSystem:
             alt_worker_growth_assumption_file,
             alt_pop_split_file,
             distribution_method,
-            seed_dist_location,
+            imports['seed_dists'],
             purposes_needed,
             modes_needed,
             soc_needed,
@@ -984,7 +978,7 @@ class ExternalForecastSystem:
                 required_modes=modes_needed,
                 year_string_list=year_list,
                 distribution_dataframe_dict=distributions,
-                distribution_file_location=seed_dist_location,
+                distribution_file_location=imports['seed_dists'],
                 echo=echo_distribution
             )
             print("Distributions generated!")
@@ -2158,6 +2152,8 @@ class ExternalForecastSystem:
             'compile': os.path.join(param_home, 'Compile Params'),
             'tours': os.path.join(param_home, 'Tour Proportions')
         }
+        for _, path in params.items():
+            du.create_folder(path, chDir=False)
 
         return imports, exports, params
 
@@ -2655,20 +2651,10 @@ def main2():
         #     matrix_format='od',
         #     user_class=True,
         #     to_wide=True,
-        #     wide_col_name=model_name + '_zone_id'
+        #     wide_col_name=model_name + '_zone_id',
+        #     from_pcu=from_pcu,
+        #     vehicle_occupancy_import=r'Y:\NorMITs Demand\import'
         # )
-
-        if from_pcu:
-            vo.people_vehicle_conversion(
-                input_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
-                import_folder=r'Y:\NorMITs Demand\import',
-                export_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\no_pcu',
-                mode=str(consts.MODES_NEEDED[0]),
-                method='to_people',
-                out_format='wide'
-            )
-
-        exit()
 
         od2pa.decompile_od(
             od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
