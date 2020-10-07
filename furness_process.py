@@ -89,6 +89,9 @@ def doubly_constrained_furness(seed_vals: np.array,
         if cur_diff < tol:
             break
 
+        if np.isnan(cur_diff):
+            return np.zeros(furnessed_mat.shape)
+
     return furnessed_mat
 
 

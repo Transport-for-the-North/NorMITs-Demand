@@ -346,6 +346,27 @@ def generate_calib_params(year: str,
     }
 
 
+def starts_with(s: str, x: str) -> bool:
+    """
+    Boolean test to see if string s starts with string x or not.
+
+    Parameters
+    ----------
+    s:
+        The string to test
+
+    x:
+        The string to search for
+
+    Returns
+    -------
+    Bool:
+        True if s starts with x, else False.
+    """
+    search_string = '^' + x
+    return re.search(search_string, s) is not None
+
+
 def post_me_fname_to_calib_params(fname: str,
                                   get_user_class: bool = True,
                                   ) -> Dict[str, str]:
@@ -755,6 +776,7 @@ def is_in_string(vals: Iterable[str],
 def get_compiled_matrix_name(matrix_format: str,
                              user_class: str,
                              year: str,
+                             trip_origin: str = None,
                              mode: str = None,
                              ca: int = None,
                              tp: str = None,
@@ -771,6 +793,9 @@ def get_compiled_matrix_name(matrix_format: str,
     ]
 
     # Optionally add the extra segmentation
+    if not is_none_like(trip_origin):
+        name_parts = [trip_origin] + name_parts
+
     if not is_none_like(year):
         name_parts += ["yr" + year]
 

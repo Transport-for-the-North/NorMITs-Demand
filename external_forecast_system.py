@@ -1365,8 +1365,57 @@ class ExternalForecastSystem:
                                    overwrite_aggregated_od: bool = True,
                                    overwrite_compiled_od: bool = True
                                    ) -> None:
-        # TODO: write doc
+        """
+        Compiles pre-ME OD matrices produced by EFS into User Class format
+        i.e. business, commute, other
 
+        Performs the following actions:
+            - Aggregates OD matrices up to p/m/tp segmentation. Will also
+                include ca/nca if run for norms.
+            - Compiles the aggregated OD matrices into User Class format,
+                saving the split factors for decompile later.
+
+        Parameters
+        ----------
+        year:
+            The year to produce compiled OD matrices for.
+
+        hb_p_needed:
+            The home based purposes to use when compiling and aggregating
+            OD matrices.
+
+        nhb_p_needed:
+            The non home based purposes to use when compiling and aggregating
+            OD matrices.
+
+        modes_needed:
+            The mode to use when compiling and aggregating OD matrices. This
+            will be used to determine if car availability needs to be included
+            or not
+
+        tp_needed:
+            The time periods to use when compiling and aggregating OD matrices.
+
+        output_location:
+            The directory to create the new output directory in - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+
+        iter_num:
+            The number of the iteration being run.
+
+        # TODO: Update docs once correct functionality exists
+        overwrite_aggregated_od:
+            Whether to generate aggregated od matrices or not.
+
+        overwrite_compiled_od
+            Whether to generate compiled OD matrices or not.
+
+
+        Returns
+        -------
+        None
+        """
         # Init
         if output_location is None:
             output_location = self.output_location
@@ -1429,7 +1478,9 @@ class ExternalForecastSystem:
                 export_dir=params['compile'],
                 matrix_format='od',
                 years_needed=[year],
-                ca_needed=ca_needed)
+                ca_needed=ca_needed,
+                tp_needed=tp_needed
+            )
 
             compile_params_fname = du.get_compile_params_name('od', str(year))
             compile_param_path = os.path.join(params['compile'],
@@ -1441,6 +1492,20 @@ class ExternalForecastSystem:
                 build_factor_pickle=True,
                 factor_pickle_path=params['compile']
             )
+
+    def generate_post_me_tour_proportions(self,
+                                          year: int = consts.BASE_YEAR,
+                                          hb_p_needed: List[int] = consts.PURPOSES_NEEDED,
+                                          nhb_p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
+                                          modes_needed: List[int] = consts.MODES_NEEDED,
+                                          tp_needed: List[int] = consts.TIME_PERIODS,
+                                          output_location: str = None,
+                                          iter_num: int = 0,
+                                          overwrite_decompiled_od=True,
+                                          overwrite_tour_proportions=True,
+                                          overwrite_compiled_base_pa=True
+                                          ) -> None:
+        raise NotImplementedError
 
     def integrate_alternate_assumptions(self,
                                         alt_pop_base_year_file: str,
@@ -2618,8 +2683,16 @@ def main():
         overwrite_compiled_od=True
     )
 
+    efs.generate_post_me_tour_proportions(
+        output_location=output_location,
+        iter_num=iter_num,
+        overwrite_decompiled_od=True,
+        overwrite_tour_proportions=True,
+        overwrite_compiled_base_pa=True
+    )
+
     # TODO:
-    # efs.generate_post_me_tour_proportions()
+    # efs.compile_post_me_pa?()
     #
     # efs.future_year_pa_to_od()
 
@@ -2636,8 +2709,9 @@ def main2():
         raise ValueError("I don't know what model this is? %s"
                          % str(model_name))
 
-    decompile_od_bool = True
-    gen_tour_proportions_bool = True
+    decompile_od_bool = False
+    gen_tour_proportions_bool = False
+    post_me_compile_pa = True
     aggregate_pa_bool = False
     tour_prop_pa2od_bool = False
 
@@ -2645,16 +2719,16 @@ def main2():
     # Testing code for NoHam
     
     if decompile_od_bool:
-        # od2pa.convert_to_efs_matrices(
-        #     import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
-        #     export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
-        #     matrix_format='od',
-        #     user_class=True,
-        #     to_wide=True,
-        #     wide_col_name=model_name + '_zone_id',
-        #     from_pcu=from_pcu,
-        #     vehicle_occupancy_import=r'Y:\NorMITs Demand\import'
-        # )
+        od2pa.convert_to_efs_matrices(
+            import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
+            export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
+            matrix_format='od',
+            user_class=True,
+            to_wide=True,
+            wide_col_name=model_name + '_zone_id',
+            from_pcu=from_pcu,
+            vehicle_occupancy_import=r'Y:\NorMITs Demand\import'
+        )
 
         od2pa.decompile_od(
             od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
@@ -2670,6 +2744,16 @@ def main2():
             tour_proportions_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             year=consts.BASE_YEAR,
             ca_needed=ca_needed
+        )
+
+    if post_me_compile_pa:
+        mat_p.build_compile_params(
+            import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
+            export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params',
+            matrix_format='pa',
+            years_needed=[consts.BASE_YEAR],
+            ca_needed=ca_needed,
+            split_hb_nhb=True
         )
 
     if aggregate_pa_bool:

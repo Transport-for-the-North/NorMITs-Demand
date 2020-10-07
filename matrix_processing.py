@@ -351,6 +351,7 @@ def _generate_tour_proportions_internal(od_import: str,
 
     # ## FURNESS TOUR PROPORTIONS ## #
     # Init
+    zero_count = 0
     tour_proportions = defaultdict(dict)
     for orig in range(n_rows):
         for dest in range(n_cols):
@@ -382,6 +383,9 @@ def _generate_tour_proportions_internal(od_import: str,
                 fh_target[-1] -= (1 + seed_val) * th_target[-1]
                 th_target[-1] *= -seed_val
 
+            if fh_target.sum() == 0 or th_target.sum() == 0:
+                zero_count += 1
+
             # Convert the numbers to fractional factors
             fh_target /= fh_target.sum()
             th_target /= th_target.sum()
@@ -404,6 +408,7 @@ def _generate_tour_proportions_internal(od_import: str,
 
     # Save the tour proportions for this segment
     print('Writing tour proportions for %s' % out_fname)
+    print('Zero count for %s is %d' % (dist_name, zero_count))
     out_path = os.path.join(tour_proportions_export, out_fname)
     with open(out_path, 'wb') as f:
         pickle.dump(tour_proportions, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -553,6 +558,17 @@ def generate_tour_proportions(od_import: str,
                                   kwargs=kwargs_list,
                                   process_count=process_count)
 
+    # ## COPY OVER NHB MATRICES ## #
+    if pa_export is not None:
+        nhb_mats = [x for x in du.list_files(od_import) if
+                    du.starts_with(x, 'nhb')]
+        for fname in nhb_mats:
+            pa_name = fname.replace('od', 'pa')
+            du.copy_and_rename(
+                src=os.path.join(od_import, fname),
+                dst=os.path.join(pa_export, pa_name)
+            )
+
 
 def build_compile_params(import_dir: str,
                          export_dir: str,
@@ -560,7 +576,8 @@ def build_compile_params(import_dir: str,
                          years_needed: Iterable[int],
                          m_needed: List[int] = consts.MODES_NEEDED,
                          ca_needed: Iterable[int] = None,
-                         tp_needed: Iterable[int] = consts.TIME_PERIODS,
+                         tp_needed: Iterable[int] = None,
+                         split_hb_nhb: bool = False,
                          output_headers: List[str] = None,
                          output_format: str = 'wide'
                          ) -> None:
@@ -592,6 +609,11 @@ def build_compile_params(import_dir: str,
     tp_needed:
         Which time periods compile parameters should be generated for.
 
+    split_hb_nhb:
+        Whether the home based and non-home based matrices should be compiled
+        together or not. If False, separate hb and nhb compiled matrices are
+        created.
+
     output_headers:
         Optional. Use if custom output headers are needed. by default the
         following headers are used:
@@ -613,6 +635,8 @@ def build_compile_params(import_dir: str,
 
     # Init
     ca_needed = [None] if ca_needed is None else ca_needed
+    tp_needed = [None] if tp_needed is None else tp_needed
+    to_needed = [None] if not split_hb_nhb else ['hb', 'nhb']
     all_od_matrices = du.list_files(import_dir)
     out_lines = list()
 
@@ -621,7 +645,7 @@ def build_compile_params(import_dir: str,
 
     for year in years_needed:
         for user_class, purposes in consts.USER_CLASS_PURPOSES.items():
-            for ca, tp in product(ca_needed, tp_needed):
+            for ca, tp, to in product(ca_needed, tp_needed, to_needed):
                 # Init
                 compile_mats = all_od_matrices.copy()
                 # include _ before and after to avoid clashes
@@ -634,18 +658,27 @@ def build_compile_params(import_dir: str,
                 compile_mats = [x for x in compile_mats if year_str in x]
                 compile_mats = [x for x in compile_mats if du.is_in_string(ps, x)]
                 compile_mats = [x for x in compile_mats if mode_str in x]
-                compile_mats = [x for x in compile_mats if tp_str in x]
 
                 # Narrow down further if we're using ca
                 if ca is not None:
                     ca_str = '_ca' + str(ca) + '_'
                     compile_mats = [x for x in compile_mats if ca_str in x]
 
+                # Narrow down again if we're using tp
+                if tp is not None:
+                    tp_str = '_tp' + str(tp)
+                    compile_mats = [x for x in compile_mats if tp_str in x]
+
+                # Narrow down again if we're using hb/nhb separation
+                if to is not None:
+                    compile_mats = [x for x in compile_mats if du.starts_with(x, to)]
+
                 # Build the final output name
                 compiled_mat_name = du.get_compiled_matrix_name(
                     matrix_format,
                     user_class,
                     str(year),
+                    trip_origin=to,
                     mode=str(mode),
                     ca=ca,
                     tp=str(tp),
