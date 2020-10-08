@@ -1584,7 +1584,7 @@ class ExternalForecastSystem:
                                         output_location: str = None,
                                         iter_num: int = 0,
                                         overwrite_aggregated_pa: bool = True,
-                                        overwrite_compiled_od: bool = True
+                                        overwrite_future_year_od: bool = True
                                         ) -> None:
         # TODO: Write Doc
         # Init
@@ -1621,13 +1621,15 @@ class ExternalForecastSystem:
                 m_needed=m_needed
             )
 
-        if overwrite_compiled_od:
+        if overwrite_future_year_od:
             pa2od.build_od_from_tour_proportions(
                 pa_import=exports['aggregated_pa_24'],
                 od_export=exports['post_me']['od'],
                 tour_proportions_dir=params['tours'],
                 ca_needed=ca_needed
             )
+
+        # TODO: Compile to OD/PA when we know what's needed
 
     def integrate_alternate_assumptions(self,
                                         alt_pop_base_year_file: str,
@@ -2792,117 +2794,79 @@ def main():
     use_zone_id_subset = False
     echo = False
 
+    # Running control
+    run_base_efs = True
+    run_nhb_efs = False
+    run_compile_od = False
+    run_decompile_od = False
+    run_future_year_compile_od = False
+
+    # Controls outputs location
     iter_num = 0
     output_location = "E:/"
 
+    # Initialise EFS
     efs = ExternalForecastSystem(use_zone_id_subset=use_zone_id_subset)
-    # efs.run(desired_zoning="norms_2015",
-    #         constraint_source="Default",
-    #         output_location=output_location,
-    #         iter_num=iter_num,
-    #         echo_distribution=echo)
 
-    # efs.pa_to_od(
-    #     output_location=output_location,
-    #     iter_num=iter_num,
-    #     overwrite_hb_tp_pa=False,
-    #     overwrite_hb_tp_od=False,
-    #     echo=echo
-    # )
-    #
-    # efs.run_nhb(
-    #     output_location=output_location,
-    #     iter_num=iter_num,
-    #     overwrite_nhb_productions=False,
-    #     overwrite_nhb_od=False,
-    #     overwrite_nhb_tp_od=False
-    # )
-    #
-    # Compiles base year OD matrices
-    # efs.pre_me_compile_od_matrices(
-    #     output_location=output_location,
-    #     iter_num=iter_num,
-    #     overwrite_aggregated_od=True,
-    #     overwrite_compiled_od=True
-    # )
+    if run_base_efs:
+        # Generates HB PA matrices
+        efs.run(desired_zoning="norms_2015",
+                constraint_source="Default",
+                output_location=output_location,
+                iter_num=iter_num,
+                echo_distribution=echo)
 
-    efs.generate_post_me_tour_proportions(
-        output_location=output_location,
-        iter_num=iter_num,
-        overwrite_decompiled_od=False,
-        overwrite_tour_proportions=True,
-    )
-    exit()
+    if run_nhb_efs:
+        # Need to convert, ready for NHB generation
+        efs.pa_to_od(
+            output_location=output_location,
+            iter_num=iter_num,
+            overwrite_hb_tp_pa=True,
+            overwrite_hb_tp_od=True,
+            echo=echo
+        )
 
-    # Uses the generated tour proportions to compile Post-ME OD matrices
-    # for future years
-    efs.compile_future_year_od_matrices(
-        output_location=output_location,
-        iter_num=iter_num,
-        overwrite_aggregated_pa=True,
-        overwrite_compiled_od=True
-    )
+        # Generate NHB PA/OD matrices
+        efs.run_nhb(
+            output_location=output_location,
+            iter_num=iter_num,
+            overwrite_nhb_productions=True,
+            overwrite_nhb_od=True,
+            overwrite_nhb_tp_od=True
+        )
 
-    # TODO:
+    if run_compile_od:
+        # Compiles base year OD matrices
+        efs.pre_me_compile_od_matrices(
+            output_location=output_location,
+            iter_num=iter_num,
+            overwrite_aggregated_od=True,
+            overwrite_compiled_od=True
+        )
+
+    if run_decompile_od:
+        # Decompiles post-me base year OD matrices - generates tour
+        # proportions in the process
+        efs.generate_post_me_tour_proportions(
+            output_location=output_location,
+            iter_num=iter_num,
+            overwrite_decompiled_od=False,
+            overwrite_tour_proportions=True,
+        )
+
+    if run_future_year_compile_od:
+        # Uses the generated tour proportions to compile Post-ME OD matrices
+        # for future years
+        efs.compile_future_year_od_matrices(
+            output_location=output_location,
+            iter_num=iter_num,
+            overwrite_aggregated_pa=True,
+            overwrite_future_year_od=True
+        )
+
+    # TODO: Add function to compile post-me PA correctly
     # efs.compile_post_me_pa?()
-
-def noham_postme():
-    model_name = 'noham'
-    if model_name == 'norms':
-        ca_needed = consts.CA_NEEDED
-        from_pcu = False
-    elif model_name == 'noham':
-        ca_needed = None
-        from_pcu = True
-    else:
-        raise ValueError("I don't know what model this is? %s"
-                         % str(model_name))
-
-    decompile_od_bool = False
-    gen_tour_proportions_bool = False
-    post_me_compile_pa = True
-
-    # Testing code for NoHam PostME while I can't run car through EFS
-    
-    if decompile_od_bool:
-        od2pa.convert_to_efs_matrices(
-            import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
-            export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
-            matrix_format='od',
-            user_class=True,
-            to_wide=True,
-            wide_col_name=model_name + '_zone_id',
-            from_pcu=from_pcu,
-            vehicle_occupancy_import=r'Y:\NorMITs Demand\import'
-        )
-
-        od2pa.decompile_od(
-            od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
-            od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
-            decompile_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params/od_compilation_factors.pickle',
-            year=consts.BASE_YEAR
-        )
-
-    if gen_tour_proportions_bool:
-        mat_p.generate_tour_proportions(
-            od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
-            pa_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
-            tour_proportions_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
-            year=consts.BASE_YEAR,
-            ca_needed=ca_needed
-        )
-
-    if post_me_compile_pa:
-        mat_p.build_compile_params(
-            import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
-            export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params',
-            matrix_format='pa',
-            years_needed=[consts.BASE_YEAR],
-            ca_needed=ca_needed,
-            split_hb_nhb=True
-        )
 
 
 if __name__ == '__main__':
     main()
-    # noham_postme()
