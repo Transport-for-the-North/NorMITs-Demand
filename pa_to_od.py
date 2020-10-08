@@ -85,11 +85,11 @@ def _build_tp_pa_internal(pa_import,
                           tp_split):
     """
     The internals of build_tp_pa(). Useful for making the code more
-    readable du to the number of nested loops needed
+    readable due to the number of nested loops needed
 
     Returns
     -------
-
+    None
     """
     # ## Read in 24hr matrix ## #
     productions_fname = du.get_dist_name(
@@ -232,10 +232,10 @@ def efs_build_tp_pa(tp_import: str,
         pa_import matrices by tp
 
     pa_import:
-        Path to the dir containing the 24hr matrices
+        Path to the directory containing the 24hr matrices
 
     pa_export:
-        Path to the dir to export the tp split matrices
+        Path to the directory to export the tp split matrices
 
     years_needed:
         A list of which years of 24hr Matrices to convert.
@@ -578,6 +578,14 @@ def _build_od_from_tour_prop_internal(pa_import,
                                       ca,
                                       tp_needed
                                       ) -> None:
+    """
+    The internals of build_od_from_tour_proportions() - See for full
+    documentation. Useful for implementing multiprocessing.
+
+    Returns
+    -------
+    None
+    """
     # Load in 24hr PA
     dist_name = du.get_dist_name(
         trip_origin=trip_origin,
@@ -690,7 +698,54 @@ def build_od_from_tour_proportions(pa_import: str,
                                    tp_needed: List[int] = consts.TIME_PERIODS,
                                    process_count: int = os.cpu_count() - 1
                                    ) -> None:
-    # TODO: Write docs
+    """
+    Builds future year OD matrices based on the base year tour proportions
+    at tour_proportions_dir.
+
+    Parameters
+    ----------
+    pa_import:
+        Path to the directory containing the 24hr matrices.
+
+    od_export:
+        Path to the directory to export the future year tp split OD matrices.
+
+    tour_proportions_dir:
+        Path to the directory containing the base year tour proportions.
+
+    base_year:
+        The base year that the tour proportions were generated for
+
+    years_needed:
+        The future year matrices that need to be converted from PA to OD
+
+    p_needed:
+        A list of purposes to use when converting from PA to OD
+
+    m_needed:
+        A list of modes to use when converting from PA to OD
+
+    soc_needed:
+        A list of skill levels to use when converting from PA to OD
+
+    ns_needed:
+        A list of income levels to use when converting from PA to OD
+
+    ca_needed:
+        A list of car availabilities to use when converting from PA to OD
+
+    tp_needed:
+        A list of time periods to use when converting from PA to OD
+
+    process_count:
+        The number of processes to use when multiprocessing. Set to 0 to not
+        use multiprocessing at all. Set to -1 to use all expect 1 available
+        CPU.
+
+    Returns
+    -------
+    None
+    """
     # Init
     soc_needed = [None] if soc_needed is None else soc_needed
     ns_needed = [None] if ns_needed is None else ns_needed

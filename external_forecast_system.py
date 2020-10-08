@@ -1347,9 +1347,9 @@ class ExternalForecastSystem:
 
         Performs the following actions:
             - Aggregates OD matrices up to p/m/tp segmentation. Will also
-                include ca/nca if run for norms.
+              include ca/nca if run for norms.
             - Compiles the aggregated OD matrices into User Class format,
-                saving the split factors for decompile later.
+              saving the split factors for decompile later.
 
         Parameters
         ----------
@@ -1475,13 +1475,13 @@ class ExternalForecastSystem:
 
         Performs the following actions:
             - Converts post-ME files into and EFS format as needed. (file name
-                changes, converting long to wide as needed.)
+              changes, converting long to wide as needed.)
             - Decompiles the converted post-ME matrices into purposes (and ca
-                when needed) using the split factors produced during pre-me
-                OD compilation
+              when needed) using the split factors produced during pre-me
+              OD compilation
             - Generates tour proportions for each OD pair, for each purpose
-                (and ca as needed), saving for future year post-ME compilation
-                later.
+              (and ca as needed), saving for future year post-ME compilation
+              later.
             - Converts OD matrices to PA.
 
         Parameters
@@ -1586,7 +1586,50 @@ class ExternalForecastSystem:
                                         overwrite_aggregated_pa: bool = True,
                                         overwrite_future_year_od: bool = True
                                         ) -> None:
-        # TODO: Write Doc
+        """
+        Generates future year post-ME OD matrices using the generated tour
+        proportions from decompiling post-ME base year matrices, and the
+        EFS generated future year PA matrices.
+
+        Performs the following actions:
+            - Aggregates EFS future year PA matrices up to the required
+              segmentation level to match the generated tour proportions.
+              (purpose and car_availability as needed).
+            - Uses the base year post-ME tour proportions to convert 24hr PA
+              matrices into time-period split OD matrices - outputting to
+              file.
+
+        Parameters
+        ----------
+        years_needed:
+            The future years that need converting from PA to OD.
+
+        hb_p_needed:
+            The home based purposes to use while converting PA to OD
+
+        m_needed:
+            The mode to use during the conversion. This will be used to
+            determine if car availability needs to be included or not.
+
+        output_location:
+            The directory to create the new output directory in - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+
+        iter_num:
+            The number of the iteration being run.
+
+        # TODO: Update docs once correct functionality exists
+        overwrite_aggregated_pa:
+            Whether to generate the aggregated pa matrices or not
+
+        overwrite_future_year_od:
+            Whether to convert pa to od or not.
+
+        Returns
+        -------
+        None
+        """
         # Init
         if output_location is None:
             output_location = self.output_location
@@ -1629,7 +1672,7 @@ class ExternalForecastSystem:
                 ca_needed=ca_needed
             )
 
-        # TODO: Compile to OD/PA when we know what's needed
+        # TODO: Compile to OD/PA when we know the correct format
 
     def integrate_alternate_assumptions(self,
                                         alt_pop_base_year_file: str,
