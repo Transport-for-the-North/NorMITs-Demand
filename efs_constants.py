@@ -42,7 +42,7 @@ USER_CLASS_PURPOSES = {
 
 # HB consts
 PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]
-MODES_NEEDED = [3]
+MODES_NEEDED = [6]
 SOC_NEEDED = [0, 1, 2, 3]
 NS_NEEDED = [1, 2, 3, 4, 5]
 CA_NEEDED = [1, 2]

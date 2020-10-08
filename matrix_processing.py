@@ -395,7 +395,12 @@ def _generate_tour_proportions_internal(od_import: str,
                 th_target[-1] *= -seed_val
 
             # Only furness if targets are not 0
-            if not fh_target.sum() == 0 and th_target.sum() == 0:
+            if fh_target.sum() == 0 or th_target.sum() == 0:
+                # Skip furness, create matrix of 0s instead
+                zero_count += 1
+                furnessed_mat = np.zeros((len(tp_needed), len(tp_needed)))
+
+            else:
                 # Convert the numbers to fractional factors
                 fh_target /= fh_target.sum()
                 th_target /= th_target.sum()
@@ -412,11 +417,6 @@ def _generate_tour_proportions_internal(od_import: str,
                     max_iters=furness_max_iters
                 )
 
-            else:
-                # Skip furness, create matrix of 0s instead
-                zero_count += 1
-                furnessed_mat = np.zeros((len(tp_needed), len(tp_needed)))
-
             # Store the tour proportions
             furnessed_mat = furnessed_mat.astype('float16')
             tour_proportions[orig][dest] = furnessed_mat
@@ -427,7 +427,7 @@ def _generate_tour_proportions_internal(od_import: str,
     with open(out_path, 'wb') as f:
         pickle.dump(tour_proportions, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    zero_percentage = zero_count / float(n_rows * n_cols)
+    zero_percentage = (zero_count / float(n_rows * n_cols)) * 100
     return out_fname, zero_count, zero_percentage
 
 

@@ -841,6 +841,10 @@ def write_csv(headers: Iterable[str],
     -------
     None
     """
+    # Make sure everything is a string
+    headers = [str(x) for x in headers]
+    out_lines = [[str(x) for x in y] for y in out_lines]
+
     all_out = [headers] + out_lines
     all_out = [','.join(x) for x in all_out]
     with open(out_path, 'w') as f:

@@ -795,7 +795,7 @@ class ExternalForecastSystem:
                                       "this will be created later...")
 
         # ## POPULATION GENERATION ## #
-        print("Generating population...")
+        print("Generating productions...")
         production_trips = self.production_generator.run(
             population_growth=population_growth,
             population_values=population_values,
@@ -850,7 +850,7 @@ class ExternalForecastSystem:
               (current_time - last_time))
 
         # ## ATTRACTION GENERATION ###
-        print("Generating workers...")
+        print("Generating attractions...")
         attraction_dataframe = self.attraction_generator.run(
             worker_growth=worker_growth,
             worker_values=worker_values,
@@ -965,7 +965,8 @@ class ExternalForecastSystem:
                 attraction_weights=converted_attractions,
                 mode_split_dataframe=hb_mode_split,
                 zone_areatype_lookup=zone_areatype_lookup,
-                required_purposes=purposes_needed, required_soc=soc_needed,
+                required_purposes=purposes_needed,
+                required_soc=soc_needed,
                 required_ns=ns_needed,
                 required_car_availabilities=car_availabilities_needed,
                 required_modes=modes_needed,
@@ -1333,7 +1334,7 @@ class ExternalForecastSystem:
                                    year: int = consts.BASE_YEAR,
                                    hb_p_needed: List[int] = consts.PURPOSES_NEEDED,
                                    nhb_p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
-                                   modes_needed: List[int] = consts.MODES_NEEDED,
+                                   m_needed: List[int] = consts.MODES_NEEDED,
                                    tp_needed: List[int] = consts.TIME_PERIODS,
                                    output_location: str = None,
                                    iter_num: int = 0,
@@ -1363,7 +1364,7 @@ class ExternalForecastSystem:
             The non home based purposes to use when compiling and aggregating
             OD matrices.
 
-        modes_needed:
+        m_needed:
             The mode to use when compiling and aggregating OD matrices. This
             will be used to determine if car availability needs to be included
             or not
@@ -1395,8 +1396,8 @@ class ExternalForecastSystem:
         if output_location is None:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(modes_needed[0])
-        _input_checks(iter_num=iter_num, m_needed=modes_needed)
+        model_name = du.get_model_name(m_needed[0])
+        _input_checks(iter_num=iter_num, m_needed=m_needed)
 
         if model_name == 'norms':
             ca_needed = consts.CA_NEEDED
@@ -1422,7 +1423,7 @@ class ExternalForecastSystem:
                     matrix_format=matrix_format,
                     years_needed=[year],
                     p_needed=hb_p_needed,
-                    m_needed=modes_needed,
+                    m_needed=m_needed,
                     ca_needed=ca_needed,
                     tp_needed=tp_needed
                 )
@@ -1433,7 +1434,7 @@ class ExternalForecastSystem:
                 matrix_format='od',
                 years_needed=[year],
                 p_needed=nhb_p_needed,
-                m_needed=modes_needed,
+                m_needed=m_needed,
                 ca_needed=ca_needed,
                 tp_needed=tp_needed
             )
@@ -1460,20 +1461,63 @@ class ExternalForecastSystem:
             )
 
     def generate_post_me_tour_proportions(self,
-                                          base_year: int = consts.BASE_YEAR,
-                                          modes_needed: List[int] = consts.MODES_NEEDED,
+                                          year: int = consts.BASE_YEAR,
+                                          m_needed: List[int] = consts.MODES_NEEDED,
                                           output_location: str = None,
                                           iter_num: int = 0,
                                           overwrite_decompiled_od=True,
                                           overwrite_tour_proportions=True
                                           ) -> None:
-        # TODO: Write Doc
+        """
+        Uses post-ME OD matrices from the TfN model (NoRMS/NoHAM) to generate
+        tour proportions for each OD pair, for each purpose (and ca as
+        needed). Also converts OD matrices to PA.
+
+        Performs the following actions:
+            - Converts post-ME files into and EFS format as needed. (file name
+                changes, converting long to wide as needed.)
+            - Decompiles the converted post-ME matrices into purposes (and ca
+                when needed) using the split factors produced during pre-me
+                OD compilation
+            - Generates tour proportions for each OD pair, for each purpose
+                (and ca as needed), saving for future year post-ME compilation
+                later.
+            - Converts OD matrices to PA.
+
+        Parameters
+        ----------
+        year:
+             The year to decompile OD matrices for. (Usually the base year)
+
+        m_needed:
+            The mode to use when decompiling OD matrices. This will be used
+            to determine if car availability needs to be included or not.
+
+        output_location:
+            The directory to create the new output directory in - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+
+        iter_num:
+            The number of the iteration being run.
+
+        # TODO: Update docs once correct functionality exists
+        overwrite_decompiled_od:
+            Whether to decompile the post-me od matrices or not
+
+        overwrite_tour_proportions:
+            Whether to generate tour proportions or not.
+
+        Returns
+        -------
+        None
+        """
         # Init
         if output_location is None:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(modes_needed[0])
-        _input_checks(iter_num=iter_num, m_needed=modes_needed)
+        model_name = du.get_model_name(m_needed[0])
+        _input_checks(iter_num=iter_num, m_needed=m_needed)
 
         if model_name == 'norms':
             ca_needed = consts.CA_NEEDED
@@ -1493,6 +1537,7 @@ class ExternalForecastSystem:
         )
 
         if overwrite_decompiled_od:
+            print("Decompiling OD Matrices into purposes...")
             need_convert = od2pa.need_to_convert_to_efs_matrices(
                 model_import=exports['post_me']['model_output'],
                 od_import=exports['post_me']['compiled_od']
@@ -1518,15 +1563,69 @@ class ExternalForecastSystem:
                 od_import=exports['post_me']['compiled_od'],
                 od_export=exports['post_me']['od'],
                 decompile_factors_path=decompile_factors_path,
-                year=base_year
+                year=year
             )
 
         if overwrite_tour_proportions:
+            print("Converting OD matrices to PA and generating tour "
+                  "proportions...")
             mat_p.generate_tour_proportions(
                 od_import=exports['post_me']['od'],
                 pa_export=exports['post_me']['pa'],
                 tour_proportions_export=params['tours'],
-                year=base_year,
+                year=year,
+                ca_needed=ca_needed
+            )
+
+    def compile_future_year_od_matrices(self,
+                                        years_needed: List[int] = consts.FUTURE_YEARS,
+                                        hb_p_needed: List[int] = consts.ALL_HB_P,
+                                        m_needed: List[int] = consts.MODES_NEEDED,
+                                        output_location: str = None,
+                                        iter_num: int = 0,
+                                        overwrite_aggregated_pa: bool = True,
+                                        overwrite_compiled_od: bool = True
+                                        ) -> None:
+        # TODO: Write Doc
+        # Init
+        if output_location is None:
+            output_location = self.output_location
+        iter_name = 'iter' + str(iter_num)
+        model_name = du.get_model_name(m_needed[0])
+        _input_checks(iter_num=iter_num, m_needed=m_needed)
+
+        if model_name == 'norms':
+            ca_needed = consts.CA_NEEDED
+        elif model_name == 'noham':
+            ca_needed = [None]
+        else:
+            raise ValueError("Got an unexpected model name. Got %s, expected "
+                             "either 'norms' or 'noham'." % str(model_name))
+
+        # Generate paths
+        imports, exports, params = self.generate_output_paths(
+            output_location=output_location,
+            model_name=model_name,
+            iter_name=iter_name
+        )
+
+        if overwrite_aggregated_pa:
+            mat_p.aggregate_matrices(
+                import_dir=exports['pa_24'],
+                export_dir=exports['aggregated_pa_24'],
+                trip_origin='hb',
+                matrix_format='pa',
+                years_needed=years_needed,
+                p_needed=hb_p_needed,
+                ca_needed=ca_needed,
+                m_needed=m_needed
+            )
+
+        if overwrite_compiled_od:
+            pa2od.build_od_from_tour_proportions(
+                pa_import=exports['aggregated_pa_24'],
+                od_export=exports['post_me']['od'],
+                tour_proportions_dir=params['tours'],
                 ca_needed=ca_needed
             )
 
@@ -2261,7 +2360,7 @@ class ExternalForecastSystem:
                              distribution_dataframe_dict: dict,
                              distribution_file_location: str,
                              trip_origin: str = 'hb',
-                             number_of_iterations: int = 1,
+                             number_of_iterations: int = 1000,
                              replace_zero_values: bool = True,
                              constrain_on_production: bool = True,
                              constrain_on_attraction: bool = True,
@@ -2719,6 +2818,7 @@ def main():
     #     overwrite_nhb_tp_od=False
     # )
     #
+    # Compiles base year OD matrices
     # efs.pre_me_compile_od_matrices(
     #     output_location=output_location,
     #     iter_num=iter_num,
@@ -2732,14 +2832,21 @@ def main():
         overwrite_decompiled_od=False,
         overwrite_tour_proportions=True,
     )
+    exit()
+
+    # Uses the generated tour proportions to compile Post-ME OD matrices
+    # for future years
+    efs.compile_future_year_od_matrices(
+        output_location=output_location,
+        iter_num=iter_num,
+        overwrite_aggregated_pa=True,
+        overwrite_compiled_od=True
+    )
 
     # TODO:
     # efs.compile_post_me_pa?()
-    #
-    # efs.future_year_pa_to_od()
 
-
-def main2():
+def noham_postme():
     model_name = 'noham'
     if model_name == 'norms':
         ca_needed = consts.CA_NEEDED
@@ -2754,11 +2861,8 @@ def main2():
     decompile_od_bool = False
     gen_tour_proportions_bool = False
     post_me_compile_pa = True
-    aggregate_pa_bool = False
-    tour_prop_pa2od_bool = False
 
-    # WARNING: PATHS HAVE CHANGED. THIS CODE WONT RUN NOW
-    # Testing code for NoHam
+    # Testing code for NoHam PostME while I can't run car through EFS
     
     if decompile_od_bool:
         od2pa.convert_to_efs_matrices(
@@ -2798,27 +2902,7 @@ def main2():
             split_hb_nhb=True
         )
 
-    if aggregate_pa_bool:
-        mat_p.aggregate_matrices(
-            import_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\24hr PA Matrices',
-            export_dir=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated 24hr PA Matrices',
-            trip_origin='hb',
-            matrix_format='pa',
-            years_needed=consts.FUTURE_YEARS,
-            p_needed=consts.ALL_HB_P,
-            ca_needed=ca_needed,
-            m_needed=consts.MODES_NEEDED,
-        )
-
-    if tour_prop_pa2od_bool:
-        pa2od.build_od_from_tour_proportions(
-            pa_import=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Aggregated 24hr PA Matrices',
-            od_export=r'E:/NorMITs Demand\norms\v2_2-EFS_Output\iter0\Post-ME OD Matrices',
-            tour_proportions_dir=r'E:\NorMITs Demand\norms\v2_2-EFS_Output\iter0\tour_proportions',
-            ca_needed=ca_needed
-        )
-
 
 if __name__ == '__main__':
     main()
-    # main2()
+    # noham_postme()
