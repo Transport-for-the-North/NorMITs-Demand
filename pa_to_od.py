@@ -18,10 +18,13 @@ import numpy as np
 import pandas as pd
 
 from typing import List
+from itertools import product
+
 
 import efs_constants as consts
 
 from demand_utilities import utils as du
+import demand_utilities.concurrency as conc
 
 # Can call tms pa_to_od.py functions from here
 from old_tms.pa_to_od import *
@@ -68,6 +71,7 @@ def simplify_time_period_splits(time_period_splits: pd.DataFrame):
         'direction_factor']
     return time_period_splits.reindex(needed_cols, axis='columns')
 
+
 def _build_tp_pa_internal(pa_import,
                           pa_export,
                           trip_origin,
@@ -81,11 +85,11 @@ def _build_tp_pa_internal(pa_import,
                           tp_split):
     """
     The internals of build_tp_pa(). Useful for making the code more
-    readable du to the number of nested loops needed
+    readable due to the number of nested loops needed
 
     Returns
     -------
-
+    None
     """
     # ## Read in 24hr matrix ## #
     productions_fname = du.get_dist_name(
@@ -181,7 +185,7 @@ def _build_tp_pa_internal(pa_import,
         # Build write path
         tp_pa_name = du.get_dist_name(
             str(trip_origin),
-            'pa',
+            str(matrix_format),
             str(year),
             str(purpose),
             str(mode),
@@ -209,7 +213,7 @@ def _build_tp_pa_internal(pa_import,
 def efs_build_tp_pa(tp_import: str,
                     pa_import: str,
                     pa_export: str,
-                    year_string_list: List[str],
+                    years_needed: List[int],
                     required_purposes: List[int],
                     required_modes: List[int],
                     required_soc: List[int] = None,
@@ -228,12 +232,12 @@ def efs_build_tp_pa(tp_import: str,
         pa_import matrices by tp
 
     pa_import:
-        Path to the dir containing the 24hr matrices
+        Path to the directory containing the 24hr matrices
 
     pa_export:
-        Path to the dir to export the tp split matrices
+        Path to the directory to export the tp split matrices
 
-    year_string_list:
+    years_needed:
         A list of which years of 24hr Matrices to convert.
 
     required_purposes:
@@ -281,7 +285,7 @@ def efs_build_tp_pa(tp_import: str,
                          "but build_tp_pa() cannot handle it. Sorry :(")
 
     # For every: Year, purpose, mode, segment, ca
-    for year in year_string_list:
+    for year in years_needed:
         for purpose in required_purposes:
             # Purpose specific set-up
             # Do it here to avoid repeats in inner loops
@@ -351,6 +355,7 @@ def _build_od_internal(pa_import,
                        phi_lookup_folder,
                        phi_type,
                        aggregate_to_wday,
+                       full_od_out=False,
                        echo=True):
     """
     The internals of build_od(). Useful for making the code more
@@ -490,7 +495,8 @@ def _build_od_internal(pa_import,
 
         du.print_w_toggle('Exporting ' + output_from_name, echo=echo)
         du.print_w_toggle('& ' + output_to_name, echo=echo)
-        du.print_w_toggle('& ' + output_od_name, echo=echo)
+        if full_od_out:
+            du.print_w_toggle('& ' + output_od_name, echo=echo)
         du.print_w_toggle('To ' + od_export, echo=echo)
 
         # Output from_home, to_home and full OD matrices
@@ -498,17 +504,18 @@ def _build_od_internal(pa_import,
         output_to_path = os.path.join(od_export, output_to_name)
         output_od_path = os.path.join(od_export, output_od_name)
 
-        # AUditing checks - tidality
+        # Auditing checks - tidality
         # OD from = PA
         # OD to = if it leaves it should come back
         # OD = 2(PA)
         output_from.to_csv(output_from_path)
         output_to.to_csv(output_to_path)
-        output_od.to_csv(output_od_path)
+        if full_od_out:
+            output_od.to_csv(output_od_path)
 
         matrix_totals.append([output_name, from_total, to_total])
 
-    dist_name = du.get_dist_name_from_calib_params('hb', 'od', calib_params)
+    dist_name = du.calib_params_to_dist_name('hb', 'od', calib_params)
     print("INFO: OD Matrices for %s written to file." % dist_name)
     return matrix_totals
 
@@ -557,3 +564,248 @@ def efs_build_od(pa_import,
                             echo=echo)
                         matrix_totals += segmented_matrix_totals
     return matrix_totals
+
+
+def _build_od_from_tour_prop_internal(pa_import,
+                                      od_export,
+                                      tour_proportions_dir,
+                                      trip_origin,
+                                      base_year,
+                                      year,
+                                      p,
+                                      m,
+                                      seg,
+                                      ca,
+                                      tp_needed
+                                      ) -> None:
+    """
+    The internals of build_od_from_tour_proportions() - See for full
+    documentation. Useful for implementing multiprocessing.
+
+    Returns
+    -------
+    None
+    """
+    # Load in 24hr PA
+    dist_name = du.get_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='pa',
+        year=str(year),
+        purpose=str(p),
+        mode=str(m),
+        segment=str(seg),
+        car_availability=str(ca),
+        csv=True
+    )
+    pa_24 = pd.read_csv(os.path.join(pa_import, dist_name), index_col=0)
+    n_rows, n_cols = pa_24.values.shape
+    print("Converting %s to tp split OD..." % dist_name)
+
+    # Load the tour proportions - always generated on base year
+    tour_prop_fname = du.get_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='tour_proportions',
+        year=str(base_year),
+        purpose=str(p),
+        mode=str(m),
+        segment=str(seg),
+        car_availability=str(ca),
+        suffix='.pkl'
+    )
+    tour_props = pd.read_pickle(os.path.join(tour_proportions_dir,
+                                             tour_prop_fname))
+
+    # Make sure tour props is the right shape
+    du.check_tour_proportions(
+        tour_props=tour_props,
+        n_tp=len(tp_needed),
+        n_row_col=n_rows
+    )
+
+    # Create empty from_home OD matrices
+    fh_mats = dict()
+    for tp in tp_needed:
+        fh_mats[tp] = pd.DataFrame(0.0,
+                                   index=pa_24.index,
+                                   columns=pa_24.columns,
+                                   )
+
+    # Create empty to_home OD matrices
+    th_mats = dict()
+    for tp in tp_needed:
+        th_mats[tp] = pd.DataFrame(0.0,
+                                   index=pa_24.index,
+                                   columns=pa_24.columns)
+
+    # Don't need the dataframe anymore - just use values
+    pa_24 = pa_24.values
+
+    # For each OD pair, generate value from 24hr PA & tour_prop
+    for orig, dest in product(range(n_rows), range(n_cols)):
+
+        # Generate the values for the from home mats
+        fh_factors = np.sum(tour_props[orig][dest], axis=1)
+        for i, tp in enumerate(fh_mats.keys()):
+            fh_mats[tp].values[orig][dest] = pa_24[orig][dest] * fh_factors[i]
+
+        # Generate the values for the to home mats
+        th_factors = np.sum(tour_props[orig][dest], axis=0)
+        for i, tp in enumerate(th_mats.keys()):
+            th_mats[tp].values[orig][dest] = pa_24[orig][dest] * th_factors[i]
+
+    # Save the generated from_home matrices
+    for tp, mat in fh_mats.items():
+        dist_name = du.get_dist_name(
+            trip_origin=trip_origin,
+            matrix_format='od_from',
+            year=str(year),
+            purpose=str(p),
+            mode=str(m),
+            segment=str(seg),
+            car_availability=str(ca),
+            tp=str(tp),
+            csv=True
+        )
+        mat.to_csv(os.path.join(od_export, dist_name))
+
+    # Save the generated to_home matrices
+    for tp, mat in th_mats.items():
+        dist_name = du.get_dist_name(
+            trip_origin=trip_origin,
+            matrix_format='od_to',
+            year=str(year),
+            purpose=str(p),
+            mode=str(m),
+            segment=str(seg),
+            car_availability=str(ca),
+            tp=str(tp),
+            csv=True
+        )
+        # Need to transpose to_home before writing
+        mat.T.to_csv(os.path.join(od_export, dist_name))
+
+
+def build_od_from_tour_proportions(pa_import: str,
+                                   od_export: str,
+                                   tour_proportions_dir: str,
+                                   base_year: str = consts.BASE_YEAR,
+                                   years_needed: List[int] = consts.FUTURE_YEARS,
+                                   p_needed: List[int] = consts.ALL_HB_P,
+                                   m_needed: List[int] = consts.MODES_NEEDED,
+                                   soc_needed: List[int] = None,
+                                   ns_needed: List[int] = None,
+                                   ca_needed: List[int] = None,
+                                   tp_needed: List[int] = consts.TIME_PERIODS,
+                                   process_count: int = os.cpu_count() - 1
+                                   ) -> None:
+    """
+    Builds future year OD matrices based on the base year tour proportions
+    at tour_proportions_dir.
+
+    Parameters
+    ----------
+    pa_import:
+        Path to the directory containing the 24hr matrices.
+
+    od_export:
+        Path to the directory to export the future year tp split OD matrices.
+
+    tour_proportions_dir:
+        Path to the directory containing the base year tour proportions.
+
+    base_year:
+        The base year that the tour proportions were generated for
+
+    years_needed:
+        The future year matrices that need to be converted from PA to OD
+
+    p_needed:
+        A list of purposes to use when converting from PA to OD
+
+    m_needed:
+        A list of modes to use when converting from PA to OD
+
+    soc_needed:
+        A list of skill levels to use when converting from PA to OD
+
+    ns_needed:
+        A list of income levels to use when converting from PA to OD
+
+    ca_needed:
+        A list of car availabilities to use when converting from PA to OD
+
+    tp_needed:
+        A list of time periods to use when converting from PA to OD
+
+    process_count:
+        The number of processes to use when multiprocessing. Set to 0 to not
+        use multiprocessing at all. Set to -1 to use all expect 1 available
+        CPU.
+
+    Returns
+    -------
+    None
+    """
+    # Init
+    soc_needed = [None] if soc_needed is None else soc_needed
+    ns_needed = [None] if ns_needed is None else ns_needed
+    ca_needed = [None] if ca_needed is None else ca_needed
+
+    # Make sure all purposes are home based
+    for p in p_needed:
+        if p not in consts.ALL_HB_P:
+            raise ValueError("Got purpose '%s' which is not a home based "
+                             "purpose. generate_tour_proportions() cannot "
+                             "handle nhb purposes." % str(p))
+    trip_origin = 'hb'
+
+    for year in years_needed:
+        loop_generator = du.segmentation_loop_generator(
+            p_list=p_needed,
+            m_list=m_needed,
+            soc_list=soc_needed,
+            ns_list=ns_needed,
+            ca_list=ca_needed
+        )
+
+        # ## Multiprocess the segmentation loop ## #
+        unchanging_kwargs = {
+            'pa_import': pa_import,
+            'od_export': od_export,
+            'tour_proportions_dir': tour_proportions_dir,
+            'trip_origin': trip_origin,
+            'base_year': base_year,
+            'year': year,
+            'tp_needed': tp_needed
+        }
+
+        # TODO: Update to use process_count == -1
+        if process_count == 0:
+            # Call in a loop like normal
+            for p, m, seg, ca in loop_generator:
+                kwargs = unchanging_kwargs.copy()
+                kwargs.update({
+                    'p': p,
+                    'm': m,
+                    'seg': seg,
+                    'ca': ca
+                })
+                _build_od_from_tour_prop_internal(**kwargs)
+        else:
+            # Build all the arguments, and call in ProcessPool
+            kwargs_list = list()
+            for p, m, seg, ca in loop_generator:
+                kwargs = unchanging_kwargs.copy()
+                kwargs.update({
+                    'p': p,
+                    'm': m,
+                    'seg': seg,
+                    'ca': ca
+                })
+                kwargs_list.append(kwargs)
+
+            conc.process_pool_wrapper(_build_od_from_tour_prop_internal,
+                                      kwargs=kwargs_list,
+                                      process_count=process_count)
+
+        # Repeat loop for every wanted year

@@ -23,6 +23,8 @@ import pandas as pd
 
 # self imports
 import pa_to_od as pa2od
+import od_to_pa as od2pa
+import matrix_processing as mat_p
 import efs_constants as consts
 import furness_process as fp
 import efs_production_generator as pm
@@ -32,10 +34,17 @@ from efs_constrainer import ForecastConstrainer
 from zone_translator import ZoneTranslator
 
 from demand_utilities import utils as du
+from demand_utilities import vehicle_occupancy as vo
 from demand_utilities.sector_reporter_v2 import SectorReporter
 
 # TODO: Implement multiprocessing
 # TODO: Determine the TfN model name based on the given mode
+# TODO: Output a run log instead of printing everything to the terminal.
+# TODO: On error, output a simple error report
+
+# TODO: Fix dtype error from pandas on initialisation
+#  More info here:
+#  https://stackoverflow.com/questions/24251219/pandas-read-csv-low-memory-and-dtype-options
 
 
 class ExternalForecastSystem:
@@ -77,6 +86,8 @@ class ExternalForecastSystem:
                  msoa_area_types_file: str = "zoning/msoa_area_types.csv",
                  zone_areatype_lookup_file: str = "zoning/norms_2015.csv",
                  input_file_home: str = "Y:/NorMITs Demand/inputs/default/",
+                 import_location: str = "Y:/",
+                 output_location: str = "E:/",
 
                  use_zone_id_subset: bool = False
                  ):
@@ -84,6 +95,8 @@ class ExternalForecastSystem:
         #TODO
         """
         self.use_zone_id_subset = use_zone_id_subset
+        self.output_location = output_location
+        self.import_location = import_location
 
         print("Initiating External Forecast System...")
         begin_time = time.time()
@@ -200,7 +213,6 @@ class ExternalForecastSystem:
             alt_worker_growth_assumption_file: str = None,
             alt_pop_split_file: str = None,  # THIS ISN'T USED ANYWHERE
             distribution_method: str = "Furness",
-            seed_dist_location: str = consts.DEFAULT_DIST_LOCATION,
             distributions: dict = consts.EFS_RUN_DISTRIBUTIONS_DICT,
             purposes_needed: List[int] = consts.PURPOSES_NEEDED,
             modes_needed: List[int] = consts.MODES_NEEDED,
@@ -309,11 +321,6 @@ class ExternalForecastSystem:
             The method to be used for distributing the trips.
             Default input is: "Furness".
             Possible inputs are: "Furness".
-
-        seed_dist_location:
-            The primary location for all the distributions.
-            Default input is: "Y:/EFS/inputs/distributions".
-            Possible input is any file location folder.
 
         distributions:
             A series of nested dictionary containing all the distributions
@@ -475,24 +482,16 @@ class ExternalForecastSystem:
         iter_name = 'iter' + str(iter_num)
         model_name = du.get_model_name(modes_needed[0])
 
-        if iter_num == 0:
-            Warning("iter_num is set to 0. This is should only be the case"
-                    "during testing.")
-
-        if len(modes_needed) > 1:
-            raise ValueError("Was given more than one mode. EFS cannot run "
-                             "using more than one mode at a time due to "
-                             "different zoning systems for NoHAM and NoRMS "
-                             "etc.")
-
         year_list = [str(x) for x in [base_year] + future_years]
+
+        # Validate inputs
+        _input_checks(iter_num=iter_num, m_needed=modes_needed)
 
         # ## PREPARE OUTPUTS ## #
         print("Initialising outputs...")
-        # TODO: Needs to be able to make nested dirs!
-        imports, exports = self.generate_output_paths(output_location,
-                                                      model_name,
-                                                      iter_name)
+        imports, exports, _ = self.generate_output_paths(output_location,
+                                                         model_name,
+                                                         iter_name)
 
         write_input_info(
             os.path.join(exports['home'], "input_parameters.txt"),
@@ -507,7 +506,7 @@ class ExternalForecastSystem:
             alt_worker_growth_assumption_file,
             alt_pop_split_file,
             distribution_method,
-            seed_dist_location,
+            imports['seed_dists'],
             purposes_needed,
             modes_needed,
             soc_needed,
@@ -796,7 +795,7 @@ class ExternalForecastSystem:
                                       "this will be created later...")
 
         # ## POPULATION GENERATION ## #
-        print("Generating population...")
+        print("Generating productions...")
         production_trips = self.production_generator.run(
             population_growth=population_growth,
             population_values=population_values,
@@ -851,7 +850,7 @@ class ExternalForecastSystem:
               (current_time - last_time))
 
         # ## ATTRACTION GENERATION ###
-        print("Generating workers...")
+        print("Generating attractions...")
         attraction_dataframe = self.attraction_generator.run(
             worker_growth=worker_growth,
             worker_values=worker_values,
@@ -966,13 +965,14 @@ class ExternalForecastSystem:
                 attraction_weights=converted_attractions,
                 mode_split_dataframe=hb_mode_split,
                 zone_areatype_lookup=zone_areatype_lookup,
-                required_purposes=purposes_needed, required_soc=soc_needed,
+                required_purposes=purposes_needed,
+                required_soc=soc_needed,
                 required_ns=ns_needed,
                 required_car_availabilities=car_availabilities_needed,
                 required_modes=modes_needed,
                 year_string_list=year_list,
                 distribution_dataframe_dict=distributions,
-                distribution_file_location=seed_dist_location,
+                distribution_file_location=imports['seed_dists'],
                 echo=echo_distribution
             )
             print("Distributions generated!")
@@ -1097,63 +1097,93 @@ class ExternalForecastSystem:
             self.sector_totals = sector_totals
             # TODO: Store output files into local storage (class storage)
 
-    def run_nhb(self,
-                base_year: int = consts.BASE_YEAR,
-                future_years: List[int] = consts.NHB_FUTURE_YEARS,
-                modes_needed: List[int] = consts.MODES_NEEDED,
-                hb_purposes_needed: List[int] = consts.PURPOSES_NEEDED,
-                hb_soc_needed: List[int] = consts.SOC_NEEDED,
-                hb_ns_needed: List[int] = consts.NS_NEEDED,
-                hb_ca_needed: List[int] = consts.CA_NEEDED,
-                nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
-                output_location: str = 'E:/',
-                iter_num: int = 0,
-                overwrite_hb_tp_pa: bool = True,
-                overwrite_hb_tp_od: bool = True,
-                overwrite_nhb_productions: bool = True,
-                overwrite_nhb_od: bool = True,
-                overwrite_nhb_tp_od: bool = True,
-                echo: bool = True
-                ):
+    def pa_to_od(self,
+                 years_needed: List[int] = consts.ALL_YEARS,
+                 modes_needed: List[int] = consts.MODES_NEEDED,
+                 purposes_needed: List[int] = consts.PURPOSES_NEEDED,
+                 soc_needed: List[int] = consts.SOC_NEEDED,
+                 ns_needed: List[int] = consts.NS_NEEDED,
+                 ca_needed: List[int] = consts.CA_NEEDED,
+                 output_location: str = None,
+                 iter_num: int = 0,
+                 overwrite_hb_tp_pa: bool = True,
+                 overwrite_hb_tp_od: bool = True,
+                 echo: bool = True
+                 ) -> None:
+        """
+        Converts home based PA matrices into time periods split PA matrices,
+        then OD matrices (to_home, from_home, and full OD)
+
+        Parameters
+        ----------
+        years_needed:
+            The years of PA matrices to convert to OD
+
+        modes_needed:
+            The modes of PA matrices to convert to OD
+
+        purposes_needed:
+            The purposes of PA matrices to convert to OD
+
+        soc_needed:
+            The skill levels of PA matrices to convert to OD
+
+        ns_needed:
+            The income levels of PA matrices to convert to OD
+
+        ca_needed:
+            The the car availability of PA matrices to convert to OD
+
+        output_location:
+            The directory to create the new output directory in - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+
+        iter_num:
+            The number of the iteration being run.
+
+        # TODO: Update docs once correct functionality exists
+        overwrite_hb_tp_pa:
+            Whether to split home based PA matrices into time periods.
+
+        overwrite_hb_tp_od:
+            Whether to convert time period split PA matrices into OD matrices.
+
+        echo:
+            If True, suppresses some of the non-essential terminal outputs.
+
+        Returns
+        -------
+        None
+        """
         # Init
-        all_years = [str(x) for x in [base_year] + future_years]
+        if output_location is None:
+            output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
         model_name = du.get_model_name(modes_needed[0])
-
-        if iter_num == 0:
-            Warning("iter_num is set to 0. This is should only be the case"
-                    "during testing.")
-
-        if len(modes_needed) > 1:
-            raise ValueError("Was given more than one mode. EFS cannot run "
-                             "using more than one mode at a time due to "
-                             "different zoning systems for NoHAM and NoRMS "
-                             "etc.")
+        _input_checks(iter_num=iter_num, m_needed=modes_needed)
 
         # Generate paths
-        imports, exports = self.generate_output_paths(
+        imports, exports, _ = self.generate_output_paths(
             output_location=output_location,
             model_name=model_name,
             iter_name=iter_name
         )
-
         # TODO: Add time print outs
         # TODO: Change import paths to accept specific dir
 
         # TODO: Check if tp pa matrices exist first
         if overwrite_hb_tp_pa:
             print("Converting HB 24hr PA to time period split PA...")
-            pa2od.efs_build_tp_pa(
-                tp_import=imports['tp_splits'],
-                pa_import=exports['pa_24'],
-                pa_export=exports['pa'],
-                year_string_list=all_years,
-                required_purposes=hb_purposes_needed,
-                required_modes=modes_needed,
-                required_soc=hb_soc_needed,
-                required_ns=hb_ns_needed,
-                required_ca=hb_ca_needed
-            )
+            pa2od.efs_build_tp_pa(tp_import=imports['tp_splits'],
+                                  pa_import=exports['pa_24'],
+                                  pa_export=exports['pa'],
+                                  years_needed=years_needed,
+                                  required_purposes=purposes_needed,
+                                  required_modes=modes_needed,
+                                  required_soc=soc_needed,
+                                  required_ns=ns_needed,
+                                  required_ca=ca_needed)
             print('HB time period split PA matrices compiled!\n')
 
         # TODO: Check if od matrices exist first
@@ -1162,18 +1192,102 @@ class ExternalForecastSystem:
             pa2od.efs_build_od(
                 pa_import=exports['pa'],
                 od_export=exports['od'],
-                required_purposes=hb_purposes_needed,
+                required_purposes=purposes_needed,
                 required_modes=modes_needed,
-                required_soc=hb_soc_needed,
-                required_ns=hb_ns_needed,
-                required_car_availabilities=hb_ca_needed,
-                year_string_list=all_years,
+                required_soc=soc_needed,
+                required_ns=ns_needed,
+                required_car_availabilities=ca_needed,
+                year_string_list=years_needed,
                 phi_type='fhp_tp',
                 aggregate_to_wday=True,
                 echo=echo)
             print('HB OD matrices compiled!\n')
+            # TODO: Create 24hr OD for HB
 
-        # TODO: Create 24hr OD for HB
+    def run_nhb(self,
+                years_needed: List[int] = consts.ALL_YEARS,
+                modes_needed: List[int] = consts.MODES_NEEDED,
+                hb_purposes_needed: List[int] = consts.PURPOSES_NEEDED,
+                hb_soc_needed: List[int] = consts.SOC_NEEDED,
+                hb_ns_needed: List[int] = consts.NS_NEEDED,
+                hb_ca_needed: List[int] = consts.CA_NEEDED,
+                nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
+                output_location: str = None,
+                iter_num: int = 0,
+                overwrite_nhb_productions: bool = True,
+                overwrite_nhb_od: bool = True,
+                overwrite_nhb_tp_od: bool = True,
+                ):
+        """
+        Generates NHB distributions based from the time-period split
+        HB distributions
+
+        Performs the following actions:
+            - Generates NHB productions using NHB factors and HB distributions
+            - Furnesses NHB productions Synthesiser distributions as a seed
+
+        Parameters
+        ----------
+        years_needed:
+            The years used to produce NHB distributions for.
+
+        modes_needed:
+            The mode to generate a NHB distributions for.
+
+        hb_purposes_needed:
+            The home based purposes to use when generating NHB productions.
+
+        hb_soc_needed:
+            The home based soc_ids to use when generating NHB productions.
+
+        hb_ns_needed:
+            The home based ns_ids to use when generating NHB productions.
+
+        hb_ca_needed:
+            The car availability ids to use when generating NHB productions.
+
+        nhb_purposes_needed:
+            Which NHB purposes to generate NHb distributions for.
+
+        output_location:
+            The directory to create the new output directory in - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+
+        iter_num:
+            The number of the iteration being run.
+
+        # TODO: Update docs once correct functionality exists
+        overwrite_nhb_productions:
+            Whether to generate nhb productions or not.
+
+        overwrite_nhb_od
+            Whether to generate nhb OD matrices or not.
+
+        overwrite_nhb_tp_od
+            Whether to generate nhb tp split OD matrices or not.
+
+        Returns
+        -------
+        None
+        """
+        # Init
+        if output_location is None:
+            output_location = self.output_location
+        iter_name = 'iter' + str(iter_num)
+        model_name = du.get_model_name(modes_needed[0])
+        _input_checks(iter_num=iter_num, m_needed=modes_needed)
+
+        # Generate paths
+        imports, exports, _ = self.generate_output_paths(
+            output_location=output_location,
+            model_name=model_name,
+            iter_name=iter_name
+        )
+
+        # TODO: Add time print outs
+        # TODO: Change import paths to accept specific dir
+        # TODO: Allow flexible segmentations
 
         # TODO: Check if nhb productions exist first
         if overwrite_nhb_productions:
@@ -1182,41 +1296,383 @@ class ExternalForecastSystem:
                               nhb_export=exports['productions'],
                               required_purposes=hb_purposes_needed,
                               required_modes=modes_needed,
-                              required_soc=hb_soc_needed, required_ns=hb_ns_needed,
+                              required_soc=hb_soc_needed,
+                              required_ns=hb_ns_needed,
                               required_car_availabilities=hb_ca_needed,
-                              year_string_list=all_years,
+                              years_needed=years_needed,
                               nhb_factor_import=imports['home'])
             print('NHB productions generated!\n')
 
         # TODO: Check if NHB matrices exist first
         if overwrite_nhb_od:
             print("Furnessing NHB productions...")
-            nhb_furness(
-                p_import=exports['productions'],
-                seed_nhb_dist_dir=imports['seed_dists'],
-                od_export=exports['od_24'],
-                required_purposes=nhb_purposes_needed,
-                required_modes=modes_needed,
-                year_string_list=all_years,
-                replace_zero_vals=True,
-                zero_infill=0.01,
-                use_zone_id_subset=self.use_zone_id_subset)
+            nhb_furness(p_import=exports['productions'],
+                        seed_nhb_dist_dir=imports['seed_dists'],
+                        od_export=exports['od_24'],
+                        required_purposes=nhb_purposes_needed,
+                        required_modes=modes_needed,
+                        years_needed=years_needed,
+                        replace_zero_vals=True,
+                        zero_infill=0.01,
+                        use_zone_id_subset=self.use_zone_id_subset)
             print('NHB productions "furnessed"\n')
 
         if overwrite_nhb_tp_od:
             print("Converting NHB 24hr OD to time period split OD...")
-            pa2od.efs_build_tp_pa(
-                tp_import=imports['tp_splits'],
-                pa_import=exports['od_24'],
-                pa_export=exports['od'],
-                matrix_format='od',
-                year_string_list=all_years,
-                required_purposes=nhb_purposes_needed,
-                required_modes=modes_needed
-            )
+            pa2od.efs_build_tp_pa(tp_import=imports['tp_splits'],
+                                  pa_import=exports['od_24'],
+                                  pa_export=exports['od'],
+                                  years_needed=years_needed,
+                                  required_purposes=nhb_purposes_needed,
+                                  required_modes=modes_needed,
+                                  matrix_format='od')
             print('NHB time period split OD matrices compiled!\n')
 
         print("NHB run complete!")
+
+    def pre_me_compile_od_matrices(self,
+                                   year: int = consts.BASE_YEAR,
+                                   hb_p_needed: List[int] = consts.PURPOSES_NEEDED,
+                                   nhb_p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
+                                   m_needed: List[int] = consts.MODES_NEEDED,
+                                   tp_needed: List[int] = consts.TIME_PERIODS,
+                                   output_location: str = None,
+                                   iter_num: int = 0,
+                                   overwrite_aggregated_od: bool = True,
+                                   overwrite_compiled_od: bool = True
+                                   ) -> None:
+        """
+        Compiles pre-ME OD matrices produced by EFS into User Class format
+        i.e. business, commute, other
+
+        Performs the following actions:
+            - Aggregates OD matrices up to p/m/tp segmentation. Will also
+              include ca/nca if run for norms.
+            - Compiles the aggregated OD matrices into User Class format,
+              saving the split factors for decompile later.
+
+        Parameters
+        ----------
+        year:
+            The year to produce compiled OD matrices for.
+
+        hb_p_needed:
+            The home based purposes to use when compiling and aggregating
+            OD matrices.
+
+        nhb_p_needed:
+            The non home based purposes to use when compiling and aggregating
+            OD matrices.
+
+        m_needed:
+            The mode to use when compiling and aggregating OD matrices. This
+            will be used to determine if car availability needs to be included
+            or not
+
+        tp_needed:
+            The time periods to use when compiling and aggregating OD matrices.
+
+        output_location:
+            The directory to create the new output directory in - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+
+        iter_num:
+            The number of the iteration being run.
+
+        # TODO: Update docs once correct functionality exists
+        overwrite_aggregated_od:
+            Whether to generate aggregated od matrices or not.
+
+        overwrite_compiled_od
+            Whether to generate compiled OD matrices or not.
+
+
+        Returns
+        -------
+        None
+        """
+        # Init
+        if output_location is None:
+            output_location = self.output_location
+        iter_name = 'iter' + str(iter_num)
+        model_name = du.get_model_name(m_needed[0])
+        _input_checks(iter_num=iter_num, m_needed=m_needed)
+
+        if model_name == 'norms':
+            ca_needed = consts.CA_NEEDED
+        elif model_name == 'noham':
+            ca_needed = [None]
+        else:
+            raise ValueError("Got an unexpected model name. Got %s, expected "
+                             "either 'norms' or 'noham'." % str(model_name))
+
+        # Generate paths
+        imports, exports, params = self.generate_output_paths(
+            output_location=output_location,
+            model_name=model_name,
+            iter_name=iter_name
+        )
+
+        if overwrite_aggregated_od:
+            for matrix_format in ['od_from', 'od_to']:
+                mat_p.aggregate_matrices(
+                    import_dir=exports['od'],
+                    export_dir=exports['aggregated_od'],
+                    trip_origin='hb',
+                    matrix_format=matrix_format,
+                    years_needed=[year],
+                    p_needed=hb_p_needed,
+                    m_needed=m_needed,
+                    ca_needed=ca_needed,
+                    tp_needed=tp_needed
+                )
+            mat_p.aggregate_matrices(
+                import_dir=exports['od'],
+                export_dir=exports['aggregated_od'],
+                trip_origin='nhb',
+                matrix_format='od',
+                years_needed=[year],
+                p_needed=nhb_p_needed,
+                m_needed=m_needed,
+                ca_needed=ca_needed,
+                tp_needed=tp_needed
+            )
+
+        if overwrite_compiled_od:
+            mat_p.build_compile_params(
+                import_dir=exports['aggregated_od'],
+                export_dir=params['compile'],
+                matrix_format='od',
+                years_needed=[year],
+                ca_needed=ca_needed,
+                tp_needed=tp_needed
+            )
+
+            compile_params_fname = du.get_compile_params_name('od', str(year))
+            compile_param_path = os.path.join(params['compile'],
+                                              compile_params_fname)
+            du.compile_od(
+                od_folder=exports['aggregated_od'],
+                write_folder=exports['compiled_od'],
+                compile_param_path=compile_param_path,
+                build_factor_pickle=True,
+                factor_pickle_path=params['compile']
+            )
+
+    def generate_post_me_tour_proportions(self,
+                                          year: int = consts.BASE_YEAR,
+                                          m_needed: List[int] = consts.MODES_NEEDED,
+                                          output_location: str = None,
+                                          iter_num: int = 0,
+                                          overwrite_decompiled_od=True,
+                                          overwrite_tour_proportions=True
+                                          ) -> None:
+        """
+        Uses post-ME OD matrices from the TfN model (NoRMS/NoHAM) to generate
+        tour proportions for each OD pair, for each purpose (and ca as
+        needed). Also converts OD matrices to PA.
+
+        Performs the following actions:
+            - Converts post-ME files into and EFS format as needed. (file name
+              changes, converting long to wide as needed.)
+            - Decompiles the converted post-ME matrices into purposes (and ca
+              when needed) using the split factors produced during pre-me
+              OD compilation
+            - Generates tour proportions for each OD pair, for each purpose
+              (and ca as needed), saving for future year post-ME compilation
+              later.
+            - Converts OD matrices to PA.
+
+        Parameters
+        ----------
+        year:
+             The year to decompile OD matrices for. (Usually the base year)
+
+        m_needed:
+            The mode to use when decompiling OD matrices. This will be used
+            to determine if car availability needs to be included or not.
+
+        output_location:
+            The directory to create the new output directory in - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+
+        iter_num:
+            The number of the iteration being run.
+
+        # TODO: Update docs once correct functionality exists
+        overwrite_decompiled_od:
+            Whether to decompile the post-me od matrices or not
+
+        overwrite_tour_proportions:
+            Whether to generate tour proportions or not.
+
+        Returns
+        -------
+        None
+        """
+        # Init
+        if output_location is None:
+            output_location = self.output_location
+        iter_name = 'iter' + str(iter_num)
+        model_name = du.get_model_name(m_needed[0])
+        _input_checks(iter_num=iter_num, m_needed=m_needed)
+
+        if model_name == 'norms':
+            ca_needed = consts.CA_NEEDED
+            from_pcu = False
+        elif model_name == 'noham':
+            ca_needed = [None]
+            from_pcu = True
+        else:
+            raise ValueError("Got an unexpected model name. Got %s, expected "
+                             "either 'norms' or 'noham'." % str(model_name))
+
+        # Generate paths
+        imports, exports, params = self.generate_output_paths(
+            output_location=output_location,
+            model_name=model_name,
+            iter_name=iter_name
+        )
+
+        if overwrite_decompiled_od:
+            print("Decompiling OD Matrices into purposes...")
+            need_convert = od2pa.need_to_convert_to_efs_matrices(
+                model_import=exports['post_me']['model_output'],
+                od_import=exports['post_me']['compiled_od']
+            )
+            if need_convert:
+                od2pa.convert_to_efs_matrices(
+                    import_path=exports['post_me']['model_output'],
+                    export_path=exports['post_me']['compiled_od'],
+                    matrix_format='od',
+                    user_class=True,
+                    to_wide=True,
+                    wide_col_name=model_name + '_zone_id',
+                    from_pcu=from_pcu,
+                    vehicle_occupancy_import=imports['home']
+                )
+
+            # TODO: Stop the filename being hardcoded after integration with TMS
+            decompile_factors_path = os.path.join(
+                params['compile'],
+                'od_compilation_factors.pickle'
+            )
+            od2pa.decompile_od(
+                od_import=exports['post_me']['compiled_od'],
+                od_export=exports['post_me']['od'],
+                decompile_factors_path=decompile_factors_path,
+                year=year
+            )
+
+        if overwrite_tour_proportions:
+            print("Converting OD matrices to PA and generating tour "
+                  "proportions...")
+            mat_p.generate_tour_proportions(
+                od_import=exports['post_me']['od'],
+                pa_export=exports['post_me']['pa'],
+                tour_proportions_export=params['tours'],
+                year=year,
+                ca_needed=ca_needed
+            )
+
+    def compile_future_year_od_matrices(self,
+                                        years_needed: List[int] = consts.FUTURE_YEARS,
+                                        hb_p_needed: List[int] = consts.ALL_HB_P,
+                                        m_needed: List[int] = consts.MODES_NEEDED,
+                                        output_location: str = None,
+                                        iter_num: int = 0,
+                                        overwrite_aggregated_pa: bool = True,
+                                        overwrite_future_year_od: bool = True
+                                        ) -> None:
+        """
+        Generates future year post-ME OD matrices using the generated tour
+        proportions from decompiling post-ME base year matrices, and the
+        EFS generated future year PA matrices.
+
+        Performs the following actions:
+            - Aggregates EFS future year PA matrices up to the required
+              segmentation level to match the generated tour proportions.
+              (purpose and car_availability as needed).
+            - Uses the base year post-ME tour proportions to convert 24hr PA
+              matrices into time-period split OD matrices - outputting to
+              file.
+
+        Parameters
+        ----------
+        years_needed:
+            The future years that need converting from PA to OD.
+
+        hb_p_needed:
+            The home based purposes to use while converting PA to OD
+
+        m_needed:
+            The mode to use during the conversion. This will be used to
+            determine if car availability needs to be included or not.
+
+        output_location:
+            The directory to create the new output directory in - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+
+        iter_num:
+            The number of the iteration being run.
+
+        # TODO: Update docs once correct functionality exists
+        overwrite_aggregated_pa:
+            Whether to generate the aggregated pa matrices or not
+
+        overwrite_future_year_od:
+            Whether to convert pa to od or not.
+
+        Returns
+        -------
+        None
+        """
+        # Init
+        if output_location is None:
+            output_location = self.output_location
+        iter_name = 'iter' + str(iter_num)
+        model_name = du.get_model_name(m_needed[0])
+        _input_checks(iter_num=iter_num, m_needed=m_needed)
+
+        if model_name == 'norms':
+            ca_needed = consts.CA_NEEDED
+        elif model_name == 'noham':
+            ca_needed = [None]
+        else:
+            raise ValueError("Got an unexpected model name. Got %s, expected "
+                             "either 'norms' or 'noham'." % str(model_name))
+
+        # Generate paths
+        imports, exports, params = self.generate_output_paths(
+            output_location=output_location,
+            model_name=model_name,
+            iter_name=iter_name
+        )
+
+        if overwrite_aggregated_pa:
+            mat_p.aggregate_matrices(
+                import_dir=exports['pa_24'],
+                export_dir=exports['aggregated_pa_24'],
+                trip_origin='hb',
+                matrix_format='pa',
+                years_needed=years_needed,
+                p_needed=hb_p_needed,
+                ca_needed=ca_needed,
+                m_needed=m_needed
+            )
+
+        if overwrite_future_year_od:
+            pa2od.build_od_from_tour_proportions(
+                pa_import=exports['aggregated_pa_24'],
+                od_export=exports['post_me']['od'],
+                tour_proportions_dir=params['tours'],
+                ca_needed=ca_needed
+            )
+
+        # TODO: Compile to OD/PA when we know the correct format
 
     def integrate_alternate_assumptions(self,
                                         alt_pop_base_year_file: str,
@@ -1807,8 +2263,8 @@ class ExternalForecastSystem:
                               output_location: str,
                               model_name: str,
                               iter_name: str,
-                              import_location: str = "Y:/"
-                              ) -> Tuple[dict, dict]:
+                              import_location: str = None
+                              ) -> Tuple[dict, dict, dict]:
         """
 
         Parameters
@@ -1825,6 +2281,12 @@ class ExternalForecastSystem:
             The name of the iteration being run. Usually of the format iterx,
             where x is a number, e.g. iter3
 
+        import_location:
+            The directory the import directory exists - a dir named
+            self._out_dir (NorMITs Demand) should exist here. Usually
+            a drive name e.g. Y:/
+            If left as None, will default to class import location
+
         Returns
         -------
         imports:
@@ -1835,10 +2297,17 @@ class ExternalForecastSystem:
             Dictionary of export paths with the following keys:
             productions, attractions, pa, od, pa_24, od_24, sectors
 
-        """
-        model_name = model_name.lower()
+        params:
+            Dictionary of parameter export paths with the following keys:
+            compile, tours
 
-        # ## Generate import paths ## #
+        """
+        # Init
+        model_name = model_name.lower()
+        if import_location is None:
+            import_location = self.import_location
+
+        # ## IMPORT PATHS ## #
         # Generate import and export paths
         model_home = os.path.join(import_location, self._out_dir)
         import_home = os.path.join(model_home, 'import')
@@ -1847,35 +2316,80 @@ class ExternalForecastSystem:
             'home': import_home,
             'tp_splits': os.path.join(import_home, 'tp_splits'),
             'lookups': os.path.join(model_home, 'lookup'),
-            'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
+            'seed_dists': os.path.join(import_home, model_name, 'seed_distributions')
         }
 
-        #  ## Generate export paths ## #
+        #  ## EXPORT PATHS ## #
+        # Create home paths
         fname_parts = [
             output_location,
             self._out_dir,
             model_name,
             self.__version__ + "-EFS_Output",
-            iter_name
+            iter_name,
         ]
-        home_path = os.path.join(*fname_parts)
+        export_home = os.path.join(*fname_parts)
+        matrices_home = os.path.join(export_home, 'Matrices')
+        post_me_home = os.path.join(matrices_home, 'Post-ME Matrices')
+
+        # Create consistent filenames
+        pa = 'PA Matrices'
+        pa_24 = '24hr PA Matrices'
+        od = 'OD Matrices'
+        od_24 = '24hr OD Matrices'
+        compiled = 'Compiled'
+        aggregated = 'Aggregated'
 
         exports = {
-            'home': home_path,
-            'productions': os.path.join(home_path, 'Productions'),
-            'attractions': os.path.join(home_path, 'Attractions'),
-            'pa': os.path.join(home_path, 'PA Matrices'),
-            'pa_24': os.path.join(home_path, '24hr PA Matrices'),
-            'od': os.path.join(home_path, 'OD Matrices'),
-            'od_24': os.path.join(home_path, '24hr OD Matrices'),
-            'sectors': os.path.join(home_path, 'Sectors')
+            'home': export_home,
+            'productions': os.path.join(export_home, 'Productions'),
+            'attractions': os.path.join(export_home, 'Attractions'),
+            'sectors': os.path.join(export_home, 'Sectors'),
+
+            # Pre-ME
+            'pa': os.path.join(matrices_home, pa),
+            'pa_24': os.path.join(matrices_home, pa_24),
+            'od': os.path.join(matrices_home, od),
+            'od_24': os.path.join(matrices_home, od_24),
+
+            'compiled_od': os.path.join(matrices_home, ' '.join([compiled, od])),
+
+            'aggregated_pa_24': os.path.join(matrices_home, ' '.join([aggregated, pa_24])),
+            'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
         }
 
-        # Create paths if they don't exist
         for _, path in exports.items():
             du.create_folder(path, chDir=False)
 
-        return imports, exports
+        # Post-ME
+        compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
+        post_me_exports = {
+            'pa': os.path.join(post_me_home, pa),
+            'pa_24': os.path.join(post_me_home, pa_24),
+            'od': os.path.join(post_me_home, od),
+            'od_24': os.path.join(post_me_home, od_24),
+            'compiled_od': compiled_od_path,
+            'model_output': os.path.join(compiled_od_path, ''.join(['from_', model_name]))
+        }
+
+        for _, path in post_me_exports.items():
+            du.create_folder(path, chDir=False)
+
+        # Combine into full export dict
+        exports['post_me'] = post_me_exports
+
+        # ## PARAMS OUT ## #
+        param_home = os.path.join(export_home, 'Params')
+
+        params = {
+            'home': param_home,
+            'compile': os.path.join(param_home, 'Compile Params'),
+            'tours': os.path.join(param_home, 'Tour Proportions')
+        }
+        for _, path in params.items():
+            du.create_folder(path, chDir=False)
+
+        return imports, exports, params
 
     def distribute_dataframe(self,
                              productions: pd.DataFrame,
@@ -1891,7 +2405,7 @@ class ExternalForecastSystem:
                              distribution_dataframe_dict: dict,
                              distribution_file_location: str,
                              trip_origin: str = 'hb',
-                             number_of_iterations: int = 1,
+                             number_of_iterations: int = 1000,
                              replace_zero_values: bool = True,
                              constrain_on_production: bool = True,
                              constrain_on_attraction: bool = True,
@@ -2101,12 +2615,30 @@ class ExternalForecastSystem:
         self.area_grouping = du.get_data_subset(self.area_grouping)
 
 
+def _input_checks(iter_num=None,
+                 m_needed=None
+                 ) -> None:
+    """
+    Checks that any arguments given are OK. Will raise an error
+    for any given input that is not correct.
+    """
+    if iter_num is not None and iter_num == 0:
+        Warning("iter_num is set to 0. This is should only be the case"
+                "during testing.")
+
+    if m_needed is not None and len(m_needed) > 1:
+        raise ValueError("Was given more than one mode. EFS cannot run "
+                         "using more than one mode at a time due to "
+                         "different zoning systems for NoHAM and NoRMS "
+                         "etc.")
+
+
 def nhb_furness(p_import,
                 seed_nhb_dist_dir,
                 od_export,
                 required_purposes,
                 required_modes,
-                year_string_list,
+                years_needed,
                 replace_zero_vals,
                 zero_infill,
                 nhb_productions_fname='internal_nhb_productions.csv',
@@ -2127,10 +2659,10 @@ def nhb_furness(p_import,
     # TODO: Add in file exists checks
 
     # For every year, purpose, mode
-    yr_p_m_iter = itertools.product(year_string_list,
-                                    required_purposes,
-                                    required_modes)
-    for year, purpose, mode in yr_p_m_iter:
+    loop_iter = itertools.product(years_needed,
+                                  required_purposes,
+                                  required_modes)
+    for year, purpose, mode in loop_iter:
         # ## Read in Files ## #
         # Create year fname
         year_p_fname = '_'.join(
@@ -2305,19 +2837,78 @@ def main():
     use_zone_id_subset = False
     echo = False
 
-    iter_num = 2
+    # Running control
+    run_base_efs = True
+    run_nhb_efs = False
+    run_compile_od = False
+    run_decompile_od = False
+    run_future_year_compile_od = False
+
+    # Controls outputs location
+    iter_num = 0
     output_location = "E:/"
 
+    # Initialise EFS
     efs = ExternalForecastSystem(use_zone_id_subset=use_zone_id_subset)
-    efs.run(desired_zoning="norms_2015",
-            constraint_source="Default",
+
+    if run_base_efs:
+        # Generates HB PA matrices
+        efs.run(desired_zoning="norms_2015",
+                constraint_source="Default",
+                output_location=output_location,
+                iter_num=iter_num,
+                echo_distribution=echo)
+
+    if run_nhb_efs:
+        # Need to convert, ready for NHB generation
+        efs.pa_to_od(
             output_location=output_location,
             iter_num=iter_num,
-            echo_distribution=echo)
+            overwrite_hb_tp_pa=True,
+            overwrite_hb_tp_od=True,
+            echo=echo
+        )
 
-    efs.run_nhb(output_location=output_location,
-                iter_num=iter_num,
-                echo=echo)
+        # Generate NHB PA/OD matrices
+        efs.run_nhb(
+            output_location=output_location,
+            iter_num=iter_num,
+            overwrite_nhb_productions=True,
+            overwrite_nhb_od=True,
+            overwrite_nhb_tp_od=True
+        )
+
+    if run_compile_od:
+        # Compiles base year OD matrices
+        efs.pre_me_compile_od_matrices(
+            output_location=output_location,
+            iter_num=iter_num,
+            overwrite_aggregated_od=True,
+            overwrite_compiled_od=True
+        )
+
+    if run_decompile_od:
+        # Decompiles post-me base year OD matrices - generates tour
+        # proportions in the process
+        efs.generate_post_me_tour_proportions(
+            output_location=output_location,
+            iter_num=iter_num,
+            overwrite_decompiled_od=False,
+            overwrite_tour_proportions=True,
+        )
+
+    if run_future_year_compile_od:
+        # Uses the generated tour proportions to compile Post-ME OD matrices
+        # for future years
+        efs.compile_future_year_od_matrices(
+            output_location=output_location,
+            iter_num=iter_num,
+            overwrite_aggregated_pa=True,
+            overwrite_future_year_od=True
+        )
+
+    # TODO: Add function to compile post-me PA correctly
+    # efs.compile_post_me_pa?()
 
 
 if __name__ == '__main__':

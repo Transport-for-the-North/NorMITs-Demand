@@ -849,7 +849,7 @@ def _nhb_production_internal(hb_pa_import,
                              car_availability):
     """
       The internals of nhb_production(). Useful for making the code more
-      readable du to the number of nested loops needed
+      readable due to the number of nested loops needed
     """
     hb_dist = du.get_dist_name(
         'hb',
@@ -919,7 +919,7 @@ def nhb_production(hb_pa_import,
                    required_soc,
                    required_ns,
                    required_car_availabilities,
-                   year_string_list,
+                   years_needed,
                    nhb_factor_import,
                    out_fname='internal_nhb_productions.csv'):
     """
@@ -951,7 +951,7 @@ def nhb_production(hb_pa_import,
     )
 
     # For every: Year, purpose, mode, segment, ca
-    for year in year_string_list:
+    for year in years_needed:
         loop_gen = du.segmentation_loop_generator(required_purposes,
                                                   required_modes,
                                                   required_soc,
