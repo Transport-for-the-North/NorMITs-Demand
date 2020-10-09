@@ -85,7 +85,6 @@ class ExternalForecastSystem:
                  area_grouping_file: str = "zoning/lad_msoa_grouping.csv",
                  msoa_area_types_file: str = "zoning/msoa_area_types.csv",
                  zone_areatype_lookup_file: str = "zoning/norms_2015.csv",
-                 input_file_home: str = "Y:/NorMITs Demand/inputs/default/",
                  import_location: str = "Y:/",
                  output_location: str = "E:/",
 
@@ -98,87 +97,92 @@ class ExternalForecastSystem:
         self.output_location = output_location
         self.import_location = import_location
 
+        input_dir = os.path.join(import_location,
+                                 self._out_dir,
+                                 'inputs',
+                                 'default')
+
         print("Initiating External Forecast System...")
         begin_time = time.time()
         current_time = begin_time
 
         # Read in population files
-        file_path = os.path.join(input_file_home, population_value_file)
+        file_path = os.path.join(input_dir, population_value_file)
         self.population_values = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, population_growth_file)
+        file_path = os.path.join(input_dir, population_growth_file)
         self.population_growth = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, population_constraint_file)
+        file_path = os.path.join(input_dir, population_constraint_file)
         self.population_constraint = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, future_population_ratio_file)
+        file_path = os.path.join(input_dir, future_population_ratio_file)
         self.future_population_ratio = du.safe_read_csv(file_path)
 
         # Households files
-        file_path = os.path.join(input_file_home, households_value_file)
+        file_path = os.path.join(input_dir, households_value_file)
         self.households_values = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, household_growth_file)
+        file_path = os.path.join(input_dir, household_growth_file)
         self.households_growth = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, households_constraint_file)
+        file_path = os.path.join(input_dir, households_constraint_file)
         self.households_constraint = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, housing_type_split_file)
+        file_path = os.path.join(input_dir, housing_type_split_file)
         self.housing_type_split = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, housing_occupancy_file)
+        file_path = os.path.join(input_dir, housing_occupancy_file)
         self.housing_occupancy = du.safe_read_csv(file_path)
 
         # Worker files
-        file_path = os.path.join(input_file_home, worker_value_file)
+        file_path = os.path.join(input_dir, worker_value_file)
         self.worker_values = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, worker_growth_file)
+        file_path = os.path.join(input_dir, worker_growth_file)
         self.worker_growth = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, worker_constraint_file)
+        file_path = os.path.join(input_dir, worker_constraint_file)
         self.worker_constraint = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, worker_ratio_file)
+        file_path = os.path.join(input_dir, worker_ratio_file)
         self.worker_splits = du.safe_read_csv(file_path)
 
         # Production and attraction files
-        file_path = os.path.join(input_file_home, production_trip_rates_file)
+        file_path = os.path.join(input_dir, production_trip_rates_file)
         self.production_trip_rates = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, hb_mode_split_file)
+        file_path = os.path.join(input_dir, hb_mode_split_file)
         self.hb_mode_split = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, hb_mode_time_split_file)
+        file_path = os.path.join(input_dir, hb_mode_time_split_file)
         self.hb_mode_time_split = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, split_handler_file)
+        file_path = os.path.join(input_dir, split_handler_file)
         self.split_handler = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, traveller_types_file)
+        file_path = os.path.join(input_dir, traveller_types_file)
         self.traveller_types = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, attraction_weights_file)
+        file_path = os.path.join(input_dir, attraction_weights_file)
         self.attraction_weights = du.safe_read_csv(file_path)
 
         # Zone and area files
         self.value_zoning = value_zoning
 
-        file_path = os.path.join(input_file_home, value_zones_file)
+        file_path = os.path.join(input_dir, value_zones_file)
         self.value_zones = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, area_types_file)
+        file_path = os.path.join(input_dir, area_types_file)
         self.area_types = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, area_grouping_file)
+        file_path = os.path.join(input_dir, area_grouping_file)
         self.area_grouping = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, msoa_area_types_file)
+        file_path = os.path.join(input_dir, msoa_area_types_file)
         self.msoa_area_types = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_file_home, zone_areatype_lookup_file)
+        file_path = os.path.join(input_dir, zone_areatype_lookup_file)
         self.zone_areatype_lookup = du.safe_read_csv(file_path)
 
         if use_zone_id_subset:
@@ -231,7 +235,7 @@ class ExternalForecastSystem:
             outputting_files: bool = True,
             iter_num: int = 0,
             performing_sector_totals: bool = True,
-            output_location: str = 'E:/',
+            output_location: str = None,
             echo_distribution: bool = True
             ) -> None:
         """
@@ -466,6 +470,10 @@ class ExternalForecastSystem:
             - Include more forms of distribution than just Furness.
             - Use purposes needed / car availabilities needed / modes needed / times needed to reduce the amount of calculations to be done.
         """
+        # Init
+        if output_location is None:
+            output_location = self.output_location
+
         # Set up timing
         begin_time = time.time()
         current_time = begin_time
@@ -909,9 +917,9 @@ class ExternalForecastSystem:
             print("Need to translate zones.")
             print("Translating from: " + self.value_zoning)
             print("Translating to: " + desired_zoning)
+
             # read in translation dataframe
-            output_path = "Y:/EFS/inputs/default/zone_translation"
-            output_path = os.path.join(output_path, desired_zoning + ".csv")
+            output_path = os.path.join(imports['zoning'], desired_zoning + ".csv")
             translation_dataframe = pd.read_csv(output_path)
 
             converted_productions = self.zone_translator.run(
@@ -985,12 +993,17 @@ class ExternalForecastSystem:
                              (str(distribution_method)))
 
         # ## SECTOR TOTALS ## #
+        zone_system_file = os.path.join(imports['zoning'],
+                                        desired_zoning + '.csv')
+        sector_grouping_file = os.path.join(imports['zoning'],
+                                            "tfn_level_one_sectors_norms_grouping.csv")
+
         sector_totals = self.sector_reporter.calculate_sector_totals(
                 converted_productions,
                 grouping_metric_columns=year_list,
-                zone_system_name="norms_2015",
-                zone_system_file="Y:/EFS/inputs/default/norms_2015.csv",
-                sector_grouping_file="Y:/EFS/inputs/default/zone_translation/tfn_level_one_sectors_norms_grouping.csv"
+                zone_system_name=desired_zoning,
+                zone_system_file=zone_system_file,
+                sector_grouping_file=sector_grouping_file
                 )
 
         pm_sector_total_dictionary = {}
@@ -1004,10 +1017,10 @@ class ExternalForecastSystem:
             pm_sector_totals = self.sector_reporter.calculate_sector_totals(
                 pm_productions,
                 grouping_metric_columns=year_list,
-                zone_system_name="norms_2015",
-                zone_system_file="Y:/EFS/inputs/default/norms_2015.csv",
-                sector_grouping_file="Y:/EFS/inputs/default/zone_translation/tfn_level_one_sectors_norms_grouping.csv"
-                )
+                zone_system_name=desired_zoning,
+                zone_system_file=zone_system_file,
+                sector_grouping_file=sector_grouping_file
+            )
 
             key_string = (
                 # "mode"
@@ -2311,12 +2324,15 @@ class ExternalForecastSystem:
         # Generate import and export paths
         model_home = os.path.join(import_location, self._out_dir)
         import_home = os.path.join(model_home, 'import')
+        input_home = os.path.join(model_home, 'inputs', 'default')
 
         imports = {
             'home': import_home,
+            'default_inputs': input_home,
             'tp_splits': os.path.join(import_home, 'tp_splits'),
             'lookups': os.path.join(model_home, 'lookup'),
-            'seed_dists': os.path.join(import_home, model_name, 'seed_distributions')
+            'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
+            'zoning': os.path.join(input_home, 'zoning')
         }
 
         #  ## EXPORT PATHS ## #
@@ -2844,12 +2860,17 @@ def main():
     run_decompile_od = False
     run_future_year_compile_od = False
 
-    # Controls outputs location
-    iter_num = 0
+    # Controls I/O
+    iter_num = 2
     output_location = "E:/"
+    import_location = "I:/"
 
     # Initialise EFS
-    efs = ExternalForecastSystem(use_zone_id_subset=use_zone_id_subset)
+    efs = ExternalForecastSystem(
+        use_zone_id_subset=use_zone_id_subset,
+        import_location=import_location,
+        output_location=output_location
+    )
 
     if run_base_efs:
         # Generates HB PA matrices
