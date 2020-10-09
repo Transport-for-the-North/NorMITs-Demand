@@ -88,7 +88,8 @@ class ExternalForecastSystem:
                  import_location: str = "Y:/",
                  output_location: str = "E:/",
 
-                 use_zone_id_subset: bool = False
+                 use_zone_id_subset: bool = False,
+                 dirty_init: bool = False
                  ):
         """
         #TODO
@@ -106,84 +107,85 @@ class ExternalForecastSystem:
         begin_time = time.time()
         current_time = begin_time
 
-        # Read in population files
-        file_path = os.path.join(input_dir, population_value_file)
-        self.population_values = du.safe_read_csv(file_path)
+        if not dirty_init:
+            # Read in population files
+            file_path = os.path.join(input_dir, population_value_file)
+            self.population_values = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, population_growth_file)
-        self.population_growth = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, population_growth_file)
+            self.population_growth = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, population_constraint_file)
-        self.population_constraint = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, population_constraint_file)
+            self.population_constraint = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, future_population_ratio_file)
-        self.future_population_ratio = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, future_population_ratio_file)
+            self.future_population_ratio = du.safe_read_csv(file_path)
 
-        # Households files
-        file_path = os.path.join(input_dir, households_value_file)
-        self.households_values = du.safe_read_csv(file_path)
+            # Households files
+            file_path = os.path.join(input_dir, households_value_file)
+            self.households_values = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, household_growth_file)
-        self.households_growth = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, household_growth_file)
+            self.households_growth = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, households_constraint_file)
-        self.households_constraint = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, households_constraint_file)
+            self.households_constraint = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, housing_type_split_file)
-        self.housing_type_split = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, housing_type_split_file)
+            self.housing_type_split = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, housing_occupancy_file)
-        self.housing_occupancy = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, housing_occupancy_file)
+            self.housing_occupancy = du.safe_read_csv(file_path)
 
-        # Worker files
-        file_path = os.path.join(input_dir, worker_value_file)
-        self.worker_values = du.safe_read_csv(file_path)
+            # Worker files
+            file_path = os.path.join(input_dir, worker_value_file)
+            self.worker_values = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, worker_growth_file)
-        self.worker_growth = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, worker_growth_file)
+            self.worker_growth = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, worker_constraint_file)
-        self.worker_constraint = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, worker_constraint_file)
+            self.worker_constraint = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, worker_ratio_file)
-        self.worker_splits = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, worker_ratio_file)
+            self.worker_splits = du.safe_read_csv(file_path)
 
-        # Production and attraction files
-        file_path = os.path.join(input_dir, production_trip_rates_file)
-        self.production_trip_rates = du.safe_read_csv(file_path)
+            # Production and attraction files
+            file_path = os.path.join(input_dir, production_trip_rates_file)
+            self.production_trip_rates = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, hb_mode_split_file)
-        self.hb_mode_split = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, hb_mode_split_file)
+            self.hb_mode_split = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, hb_mode_time_split_file)
-        self.hb_mode_time_split = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, hb_mode_time_split_file)
+            self.hb_mode_time_split = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, split_handler_file)
-        self.split_handler = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, split_handler_file)
+            self.split_handler = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, traveller_types_file)
-        self.traveller_types = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, traveller_types_file)
+            self.traveller_types = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, attraction_weights_file)
-        self.attraction_weights = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, attraction_weights_file)
+            self.attraction_weights = du.safe_read_csv(file_path)
 
-        # Zone and area files
-        self.value_zoning = value_zoning
+            # Zone and area files
+            self.value_zoning = value_zoning
 
-        file_path = os.path.join(input_dir, value_zones_file)
-        self.value_zones = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, value_zones_file)
+            self.value_zones = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, area_types_file)
-        self.area_types = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, area_types_file)
+            self.area_types = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, area_grouping_file)
-        self.area_grouping = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, area_grouping_file)
+            self.area_grouping = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, msoa_area_types_file)
-        self.msoa_area_types = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, msoa_area_types_file)
+            self.msoa_area_types = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, zone_areatype_lookup_file)
-        self.zone_areatype_lookup = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, zone_areatype_lookup_file)
+            self.zone_areatype_lookup = du.safe_read_csv(file_path)
 
         if use_zone_id_subset:
             print("WARNING: Not using all of the input data. "
@@ -2657,7 +2659,7 @@ def nhb_furness(p_import,
                 years_needed,
                 replace_zero_vals,
                 zero_infill,
-                nhb_productions_fname='internal_nhb_productions.csv',
+                nhb_productions_fname=consts.NHB_PRODUCTIONS_FNAME,
                 use_zone_id_subset=False):
 
     """
@@ -2850,12 +2852,13 @@ def write_input_info(output_path,
 
 
 def main():
+    dirty_init = True
     use_zone_id_subset = False
     echo = False
 
     # Running control
-    run_base_efs = True
-    run_nhb_efs = False
+    run_base_efs = False
+    run_nhb_efs = True
     run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False
@@ -2867,6 +2870,7 @@ def main():
 
     # Initialise EFS
     efs = ExternalForecastSystem(
+        dirty_init=dirty_init,
         use_zone_id_subset=use_zone_id_subset,
         import_location=import_location,
         output_location=output_location
@@ -2881,14 +2885,14 @@ def main():
                 echo_distribution=echo)
 
     if run_nhb_efs:
-        # Need to convert, ready for NHB generation
-        efs.pa_to_od(
-            output_location=output_location,
-            iter_num=iter_num,
-            overwrite_hb_tp_pa=True,
-            overwrite_hb_tp_od=True,
-            echo=echo
-        )
+        # # Need to convert, ready for NHB generation
+        # efs.pa_to_od(
+        #     output_location=output_location,
+        #     iter_num=iter_num,
+        #     overwrite_hb_tp_pa=True,
+        #     overwrite_hb_tp_od=True,
+        #     echo=echo
+        # )
 
         # Generate NHB PA/OD matrices
         efs.run_nhb(

@@ -12,6 +12,8 @@ import os
 import numpy as np
 import pandas as pd
 
+from tqdm import tqdm
+
 import efs_constants as consts
 from efs_constrainer import ForecastConstrainer
 from demand_utilities import utils as du
@@ -882,10 +884,7 @@ def _nhb_production_internal(hb_pa_import,
     nhb_prods = hb_pa.groupby([
         "a_zone",
         "purpose_id",
-        "mode_id",
-        "car_availability_id",
-        "soc_id",
-        "ns_id"
+        "mode_id"
     ])["trips"].sum().reset_index()
 
     # join nhb trip rates
@@ -904,9 +903,6 @@ def _nhb_production_internal(hb_pa_import,
         "a_zone",
         "nhb_p",
         "nhb_m",
-        "car_availability_id",
-        "soc_id",
-        "ns_id"
     ])["nhb_dt"].sum().reset_index()
 
     return nhb_prods
@@ -921,7 +917,8 @@ def nhb_production(hb_pa_import,
                    required_car_availabilities,
                    years_needed,
                    nhb_factor_import,
-                   out_fname='internal_nhb_productions.csv'):
+                   out_fname=consts.NHB_PRODUCTIONS_FNAME
+                   ):
     """
     This function builds NHB productions by
     aggregates HB distribution from EFS output to destination
@@ -939,7 +936,6 @@ def nhb_production(hb_pa_import,
         Dictionary containing NHB productions by year
     """
     # Init
-    yearly_nhb_productions = list()
     nhb_production_dictionary = dict()
 
     # Get nhb trip rates
@@ -952,12 +948,16 @@ def nhb_production(hb_pa_import,
 
     # For every: Year, purpose, mode, segment, ca
     for year in years_needed:
-        loop_gen = du.segmentation_loop_generator(required_purposes,
-                                                  required_modes,
-                                                  required_soc,
-                                                  required_ns,
-                                                  required_car_availabilities)
-        for purpose, mode, segment, car_availability in loop_gen:
+        loop_gen = list(du.segmentation_loop_generator(
+            required_purposes,
+            required_modes,
+            required_soc,
+            required_ns,
+            required_car_availabilities
+        ))
+        yearly_nhb_productions = list()
+        desc = 'Generating NHB Productions for yr%s' % year
+        for purpose, mode, segment, car_availability in tqdm(loop_gen, desc=desc):
             nhb_productions = _nhb_production_internal(
                 hb_pa_import,
                 nhb_trip_rates,
@@ -971,9 +971,10 @@ def nhb_production(hb_pa_import,
 
         # ## Output the yearly productions ## #
         # Aggregate all productions for this year
-        print("INFO: NHB Productions for yr%s complete!" % year)
         yr_nhb_productions = pd.concat(yearly_nhb_productions)
-        yearly_nhb_productions.clear()
+        yr_nhb_productions = yr_nhb_productions.groupby(
+            ["a_zone", "nhb_p", "nhb_m"]
+        )["nhb_dt"].sum().reset_index()
 
         # Rename columns from NHB perspective
         yr_nhb_productions = yr_nhb_productions.rename(
@@ -985,25 +986,18 @@ def nhb_production(hb_pa_import,
             }
         )
 
+        # Print some audit vals
+        # audit = yr_nhb_productions.groupby(
+        #     ["p", "m"]
+        # )["trips"].sum().reset_index()
+        # print(audit)
+
         # Create year fname
         nhb_productions_fname = '_'.join(
             ["yr" + str(year), out_fname]
         )
 
-        # Output disaggregated
-        da_fname = du.add_fname_suffix(nhb_productions_fname, '_disaggregated')
-        yr_nhb_productions.to_csv(
-            os.path.join(nhb_export, da_fname),
-            index=False
-        )
-
-        # Aggregate productions up to p/m level
-        yr_nhb_productions = yr_nhb_productions.groupby(
-            ["p_zone", "p", "m"]
-        )["trips"].sum().reset_index()
-
-        # Rename cols and output to file
-        # Output at p/m aggregation
+        # Output
         yr_nhb_productions.to_csv(
             os.path.join(nhb_export, nhb_productions_fname),
             index=False
