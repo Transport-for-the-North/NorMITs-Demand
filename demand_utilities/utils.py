@@ -30,6 +30,149 @@ import efs_constants as consts
 from old_tms.utils import *
 
 
+def growth_recombination(df: pd.DataFrame,
+                         base_year_col: str,
+                         future_year_cols: List[str],
+                         in_place: bool = False,
+                         drop_base_year: bool = True
+                         ) -> pd.DataFrame:
+    """
+    Combines the future year and base year column values to give full
+    future year values
+
+     e.g. base year will get 0 + base_year_population
+
+    Parameters
+    ----------
+    df:
+        The dataframe containing the data to be combined
+
+    base_year_col:
+        Which column in df contains the base year data
+
+    future_year_cols:
+        A list of all the growth columns in df to convert
+
+    in_place:
+        Whether to do the combination in_place, or make a copy of
+        df to return
+
+    drop_base_year:
+        Whether to drop the base year column or not before returning.
+
+    Returns
+    -------
+    growth_df:
+        Dataframe with full growth values for all_year_cols.
+    """
+    if not in_place:
+        df = df.copy()
+
+    for year in future_year_cols:
+        df[year] = df[year] + df[base_year_col]
+
+    if drop_base_year:
+        df = df.drop(labels=base_year_col, axis=1)
+
+    return df
+
+
+def get_growth_values(base_year_df: pd.DataFrame,
+                      growth_df: pd.DataFrame,
+                      base_year_col: str,
+                      future_year_cols: List[str],
+                      merge_col: str = 'model_zone_id'
+                      ) -> pd.DataFrame:
+    """
+    Returns base_year_df extended to include the growth values in
+    future_year_cols
+
+    Parameters
+    ----------
+    base_year_df:
+        Dataframe containing the base year data. Must have at least 2 columns
+        of merge_col, and base_year_col
+
+    growth_df:
+        Dataframe containing the growth factors over base year for all future
+        years i.e. The base year column would be 1 as it cannot grow over
+        itself. Must have at least the following cols: merge_col and all
+        future_year_cols.
+
+    base_year_col:
+        The column name that the base year data is in
+
+    future_year_cols:
+        The columns names that contain the future year growth factor data.
+
+    merge_col:
+        Name of the column to merge base_year_df and growth_df on.
+
+    Returns
+    -------
+    Growth_values_df:
+        base_year_df extended and populated with the future_year_cols
+        columns.
+    """
+    base_year_df = base_year_df.copy()
+    growth_df = growth_df.copy()
+
+    # Avoid clashes in the base year
+    if base_year_col in growth_df:
+        growth_df = growth_df.drop(base_year_col, axis='columns')
+
+    # Merge on merge col
+    growth_values = pd.merge(base_year_df,
+                             growth_df,
+                             on=merge_col)
+
+    # Grow base year value by values given in growth_df - 1
+    # -1 so we get growth values. NOT growth values + base year
+    for year in future_year_cols:
+        growth_values.loc[:, year] = (
+            (growth_values.loc[:, year] - 1)
+            *
+            growth_values.loc[:, base_year_col]
+        )
+
+    return growth_values
+
+
+def convert_growth_off_base_year(growth_df: pd.DataFrame,
+                                 base_year: str,
+                                 future_years: List[str]
+                                 ) -> pd.DataFrame:
+    """
+    Converts the multiplicative growth value of each future_years to be
+    based off of the base year.
+
+    Parameters
+    ----------
+    growth_df:
+        The starting dataframe containing the growth values of all_years
+        and base_year
+
+    base_year:
+        The new base year to base all the all_years growth off of.
+
+    future_years:
+        The years in growth_dataframe to convert to be based off of
+        base_year growth
+
+    Returns
+    -------
+    converted_growth_dataframe:
+        The original growth dataframe with all growth values converted
+
+    """
+    growth_dataframe = growth_df.copy()
+
+    for year in future_years:
+        growth_df[year] = growth_df[year] / growth_df[base_year]
+
+    return growth_dataframe
+
+
 def copy_and_rename(src: str, dst: str) -> None:
     """
     Makes a copy of the src file and saves it at dst with the new filename.

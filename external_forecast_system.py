@@ -29,6 +29,7 @@ import efs_constants as consts
 import furness_process as fp
 import efs_production_generator as pm
 import efs_attraction_generator as am
+import efs_constrainer as constrainer
 
 from efs_constrainer import ForecastConstrainer
 from zone_translator import ZoneTranslator
@@ -104,6 +105,7 @@ class ExternalForecastSystem:
                                  'default')
 
         print("Initiating External Forecast System...")
+        
         begin_time = time.time()
         current_time = begin_time
 
@@ -728,18 +730,18 @@ class ExternalForecastSystem:
             print("Constraint 'default' selected, retrieving constraint "
                   + "data...")
             population_constraint = self.population_constraint[pop_cols].copy()
-            population_constraint = self.constrainer.convert_constraint_off_base_year(
-                population_constraint,
-                str(base_year),
-                year_list
-            )
+            # population_constraint = self.constrainer.convert_constraint_off_base_year(
+            #     population_constraint,
+            #     str(base_year),
+            #     year_list
+            # )
 
             households_constraint = self.households_constraint[hh_cols].copy()
-            households_constraint = self.constrainer.convert_constraint_off_base_year(
-                households_constraint,
-                str(base_year),
-                year_list
-            )
+            # households_constraint = self.constrainer.convert_constraint_off_base_year(
+            #     households_constraint,
+            #     str(base_year),
+            #     year_list
+            # )
 
             worker_constraint = self.worker_constraint[emp_cols].copy()
             worker_constraint = self.constrainer.convert_constraint_off_base_year(
@@ -758,32 +760,25 @@ class ExternalForecastSystem:
             print("Constraint 'grown base' source selected, growing given "
                   "base by default growth factors...")
             population_constraint = self.population_growth[pop_cols].copy()
-
-            population_constraint = self.convert_growth_off_base_year(
+            population_constraint = constrainer.grow_constraint(
+                population_values,
                 population_constraint,
                 str(base_year),
-                year_list
+                [str(x) for x in future_years]
             )
-            population_constraint = self.get_grown_values(population_values,
-                                                          population_constraint,
-                                                          "base_year_population",
-                                                          year_list)
 
             households_constraint = self.households_growth[hh_cols].copy()
-
-            households_constraint = self.convert_growth_off_base_year(
+            households_constraint = constrainer.grow_constraint(
+                households_values,
                 households_constraint,
                 str(base_year),
-                year_list
+                [str(x) for x in future_years]
             )
-            households_constraint = self.get_grown_values(households_values,
-                                                          households_constraint,
-                                                          "base_year_households",
-                                                          year_list)
 
+            # Update this with attraction model updates
             worker_constraint = self.worker_growth[emp_cols].copy()
 
-            worker_constraint = self.convert_growth_off_base_year(
+            worker_constraint = du.convert_growth_off_base_year(
                 worker_constraint,
                 str(base_year),
                 year_list
@@ -826,8 +821,8 @@ class ExternalForecastSystem:
             constraint_on=constraint_on,
             constraint_source=constraint_source,
             designated_area=self.area_grouping.copy(),
-            base_year_string=str(base_year),
-            model_years=year_list,
+            base_year=str(base_year),
+            future_years=[str(x) for x in future_years],
             out_path=exports['productions'],
             area_types=self.area_types,
             trip_rates=trip_rates
@@ -1930,44 +1925,6 @@ class ExternalForecastSystem:
     #  get_grown_values()
     #  growth_recombination()
     #  check nearby functions for same issue
-    def convert_growth_off_base_year(self,
-                                     growth_dataframe: pd.DataFrame,
-                                     base_year: str,
-                                     all_years: List[str]
-                                     ) -> pd.DataFrame:
-        """
-        Converts the multiplicative growth value of each all_years to be
-        based off of the base year.
-
-        Parameters
-        ----------
-        growth_dataframe:
-            The starting dataframe containing the growth values of all_years
-            and base_year
-
-        base_year:
-            The new base year to base all the all_years growth off of.
-
-        all_years:
-            The years in growth_dataframe to convert to be based off of
-            base_year growth
-
-        Returns
-        -------
-        converted_growth_dataframe:
-            The original growth dataframe with all growth values converted
-
-        """
-        growth_dataframe = growth_dataframe.copy()
-        for year in all_years:
-            growth_dataframe.loc[:, year] = (
-                growth_dataframe.loc[:, year]
-                /
-                growth_dataframe.loc[:, base_year]
-            )
-
-        return growth_dataframe
-
     def get_grown_values(self,
                          base_year_dataframe: pd.DataFrame,
                          growth_dataframe: pd.DataFrame,
@@ -2014,8 +1971,8 @@ class ExternalForecastSystem:
         """
         metric_dataframe = metric_dataframe.copy()
 
-        ## combine together dataframe columns to give full future values
-        ## f.e. base year will get 0 + base_year_population
+        # combine together dataframe columns to give full future values
+        # e.g. base year will get 0 + base_year_population
         for year in all_years:
             metric_dataframe.loc[:, year] = (
                 metric_dataframe.loc[:, year]
@@ -2023,7 +1980,6 @@ class ExternalForecastSystem:
                 metric_dataframe.loc[:, metric_column_name]
             )
 
-        ## drop the unnecessary metric column
         metric_dataframe = metric_dataframe.drop(
             labels=metric_column_name,
             axis=1
@@ -2852,13 +2808,16 @@ def write_input_info(output_path,
 
 
 def main():
-    dirty_init = True
+    dirty_init = False
     use_zone_id_subset = False
     echo = False
 
+    if dirty_init:
+        print("Not Initialising correctly. This WILL cause problems!")
+
     # Running control
-    run_base_efs = False
-    run_nhb_efs = True
+    run_base_efs = True
+    run_nhb_efs = False
     run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False
