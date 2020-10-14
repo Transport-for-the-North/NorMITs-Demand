@@ -5,14 +5,15 @@ Created on Mon Dec  9 12:13:07 2019
 @author: Sneezy
 """
 
-from functools import reduce
-from typing import List
 import os
 import sys
 import warnings
 
 import numpy as np
 import pandas as pd
+
+from typing import List
+from typing import Dict
 
 from tqdm import tqdm
 
@@ -21,6 +22,9 @@ from efs_constrainer import ForecastConstrainer
 from demand_utilities import utils as du
 # TODO: Move functions that can be static elsewhere.
 #  Maybe utils?
+
+# TODO: Tidy up the no longer needed functions -
+#  Production model was re-written to use TMS method
 
 
 class EFSProductionGenerator:
@@ -85,10 +89,13 @@ class EFSProductionGenerator:
                 'traveller_type',
                 'soc',
                 'ns',
+                'ca'
             ]
 
-        production_group_cols = [zone_col, 'purpose_id'] + merge_cols
-        production_cols = production_group_cols + [base_year] + future_years
+        production_group_cols = [zone_col] + merge_cols
+        production_cols = production_group_cols + ['purpose_id'] + all_years
+
+        land_use_cols = ['msoa_zone_id'] + merge_cols + ['people']
 
         # Fix column naming
         if zone_col not in population_growth:
@@ -113,21 +120,32 @@ class EFSProductionGenerator:
         # TODO: FIX ME once dev over
         lu_import_path = r'Y:\NorMITs Land Use\iter3\land_use_output_msoa.csv'
         msoa_import_path = r'Y:\NorMITs Demand\inputs\default\zoning\msoa_zones.csv'
-        trip_rate_path = r"Y:\NorMITs Demand\import\tfn_segment_production_params\hb_trip_rates.csv"
+        trip_rates_path = r"Y:\NorMITs Demand\import\tfn_segment_production_params\hb_trip_rates.csv"
         time_splits_path = r"Y:\NorMITs Demand\import\tfn_segment_production_params\hb_time_split.csv"
         mean_time_splits_path = r"Y:\NorMITs Demand\import\tfn_segment_production_params\hb_ave_time_split.csv"
+        mode_share_path = r"Y:\NorMITs Demand\import\tfn_segment_production_params\hb_mode_split.csv"
+
+        ntem_control_dir = r'Y:/NorMITs Synthesiser/import/ntem_constraints'
+        lad_lookup_dir = 'Y:/NorMITs Synthesiser/import'
+
         population_metric = 'population'
         constraint_required[0] = False
         constraint_required[1] = False
+
+        # END OF STUFF TO FIX
 
         if population_metric == "households":
             raise ValueError("Production Model has changed. Households growth "
                              "is not currently supported.")
 
+
+        # TODO: Convert all of the production mode to use MSOA codes instead
+        #  of integers - more descriptive
         # ## BASE YEAR POPULATION ## #
         print("Loading the base year population data...")
         base_year_pop = get_land_use_data(lu_import_path,
-                                          msoa_import_path,
+                                          msoa_path=msoa_import_path,
+                                          land_use_cols=land_use_cols,
                                           zone_col=zone_col)
         base_year_pop = base_year_pop.rename(columns={'people': base_year})
 
@@ -197,6 +215,14 @@ class EFSProductionGenerator:
                       % (year, population[year].sum()))
             print('\n')
 
+        # Convert back to MSOA codes for id numbers
+        population = du.convert_msoa_naming(
+            population,
+            msoa_col_name=zone_col,
+            msoa_path=msoa_import_path,
+            to='string'
+        )
+
         # Write the produced population to file
         if out_path is None:
             print("WARNING! No output path given. "
@@ -213,94 +239,24 @@ class EFSProductionGenerator:
         print("Population generated. Converting to productions...")
         productions = generate_productions(
             population=population,
-            merge_cols=merge_cols,
             group_cols=production_group_cols,
             base_year=base_year,
             future_years=future_years,
-            trip_rates_path=trip_rate_path,
+            trip_rates_path=trip_rates_path,
             time_splits_path=time_splits_path,
-            mean_time_splits_path=mean_time_splits_path
+            mean_time_splits_path=mean_time_splits_path,
+            mode_share_path=mode_share_path,
+            audit_dir=out_path,
+            ntem_control_dir=ntem_control_dir,
+            lad_lookup_dir=lad_lookup_dir
         )
 
         print(productions)
         sys.exit()
 
+        # Rename columns as needed
+
         return productions
-
-
-        # USE THIS TO COMBINE WITH TRIP RATES LATER
-        # Get trip rate cols for application
-        # p_params.update({'tr_cols': ['traveller_type', 'area_type']})
-
-        print("Used population metric is: " + population_metric)
-        if d_log is not None:
-            d_log = d_log.copy()
-
-        # Choose the correct method for growing the productions
-        if population_metric == "population":
-            population = self.grow_by_population(
-                population_growth,
-                population_values,
-                population_constraint,
-                d_log,
-                d_log_split,
-                minimum_development_certainty,
-                constraint_required,
-                constraint_method,
-                constraint_area,
-                constraint_on,
-                constraint_source,
-                designated_area,
-                base_year,
-                model_years
-            )
-        elif population_metric == "households":
-            population = self.grow_by_households(
-                population_constraint,
-                population_split,
-                households_growth,
-                households_values,
-                households_constraint,
-                housing_split,
-                housing_occupancy,
-                d_log,
-                d_log_split,
-                minimum_development_certainty,
-                constraint_required,
-                constraint_method,
-                constraint_area,
-                constraint_on,
-                constraint_source,
-                designated_area,
-                base_year,
-                model_years
-            )
-        else:
-            raise ValueError("%s is not a valid population metric." %
-                             str(population_metric))
-
-        if out_path is None:
-            print("WARNING! No output path given. "
-                  "Not writing populations to file.")
-        else:
-            population.to_csv(os.path.join(out_path, "MSOA_population.csv"),
-                              index=False)
-
-        if area_types is None and trip_rates is None:
-            return population
-
-        print("Population generated. Converting to productions...")
-        p_trips = self.production_generation(population,
-                                             area_types,
-                                             trip_rates,
-                                             model_years)
-        p_trips = self.convert_to_average_weekday(p_trips, model_years)
-
-        print(p_trips)
-        print(list(p_trips))
-        sys.exit()
-
-        return p_trips
 
     def grow_population(self,
                         population_values: pd.DataFrame,
@@ -944,7 +900,7 @@ class EFSProductionGenerator:
 
 
 def get_land_use_data(land_use_path: str,
-                      msoa_path: str,
+                      msoa_path: str = None,
                       land_use_cols: List[str] = None,
                       zone_col: str = 'msoa_zone_id'
                       ) -> pd.DataFrame:
@@ -958,7 +914,7 @@ def get_land_use_data(land_use_path: str,
 
     msoa_path:
         Path to the msoa file for converting from msoa string ids to
-        integer ids
+        integer ids. If left as None, then MSOA codes are returned instead
 
     land_use_cols:
         The columns to keep in the land use data. Must include msoa_zone_id
@@ -1007,52 +963,90 @@ def get_land_use_data(land_use_path: str,
     ).sum().reset_index().sort_values(land_use_cols).reset_index()
     del group_cols
 
-    # Read in MSOA conversion file
-    msoa_zones = pd.read_csv(msoa_path).rename(
-        columns={
-            'model_zone_code': 'msoa_string'
-        }
-    )
+    # Convert to msoa zone numbers if needed
+    if msoa_path is not None:
+        # Read in MSOA conversion file
+        msoa_zones = pd.read_csv(msoa_path).rename(
+            columns={
+                'model_zone_code': 'msoa_string'
+            }
+        )
 
-    # Convert MSOA strings to id numbers
-    land_use = pd.merge(land_use,
-                        msoa_zones,
-                        left_on='msoa_zone_id',
-                        right_on='msoa_string')
+        # Convert MSOA strings to id numbers
+        land_use = pd.merge(land_use,
+                            msoa_zones,
+                            left_on='msoa_zone_id',
+                            right_on='msoa_string')
 
-    # Drop unneeded columns and rename
-    land_use = land_use.drop(columns=['msoa_zone_id', 'msoa_string'])
-    land_use = land_use.rename(columns={'model_zone_id': zone_col})
+        # Drop unneeded columns and rename
+        land_use = land_use.drop(columns=['msoa_zone_id', 'msoa_string'])
+        land_use = land_use.rename(columns={'model_zone_id': zone_col})
+    else:
+        # Make sure zone col has the correct name
+        land_use.rename(columns={'msoa_zone_id': zone_col})
 
     return land_use
 
 
 def merge_pop_trip_rates(population: pd.DataFrame,
-                         merge_cols: List[str],
                          group_cols: List[str],
                          trip_rates_path: str,
                          time_splits_path: str,
                          mean_time_splits_path: str,
+                         mode_share_path: str,
+                         audit_out: str,
+                         ntem_control_path: str = None,
+                         lad_lookup_dir: str = None,
+                         lad_lookup_name: str = consts.DEFAULT_LAD_LOOKUP,
                          tp_needed: List[int] = consts.TP_NEEDED,
-                         purpose_col: str = 'purpose_id'
+                         traveller_type_col: str = 'traveller_type',
                          ) -> pd.DataFrame:
+    """
+    TODO: Write merge_pop_trip_rates() doc
+
+    Parameters
+    ----------
+    population
+    group_cols
+    trip_rates_path
+    time_splits_path
+    mean_time_splits_path
+    mode_share_path
+    audit_out
+    ntem_control_path
+    lad_lookup_dir
+    lad_lookup_name
+    tp_needed
+    traveller_type_col
+
+    Returns
+    -------
+
+    """
     # Init
+    do_ntem_control = ntem_control_path is not None and lad_lookup_dir is not None
+
+    group_cols = group_cols.copy()
+    group_cols.insert(2, 'p')
+
     index_cols = group_cols.copy()
     index_cols.append('trips')
+
+    # ## GET WEEKLY TRIP RATE FROM POPULATION ## #
+    # Init
     trip_rates = pd.read_csv(trip_rates_path)
 
-    if purpose_col not in group_cols:
-        raise ValueError("Cannot find purpose col '%s' in group_cols. "
-                         "group_cols: %s"
-                         % (purpose_col, str(group_cols)))
+    # TODO: Make the production model more adaptable
+    # Merge on all possible columns
+    tr_cols = list(trip_rates)
+    pop_cols = list(population)
+    tr_merge_cols = [x for x in tr_cols if x in pop_cols]
 
-    # Get the weekly trip rate for the populations
     purpose_ph = dict()
     all_purposes = trip_rates['p'].drop_duplicates().reset_index(drop=True)
     desc = "Building trip rates by purpose"
     for p in tqdm(all_purposes, desc=desc):
         trip_rate_subset = trip_rates[trip_rates['p'] == p].copy()
-        trip_rate_subset = trip_rate_subset.rename(columns={'p': purpose_col})
         ph = population.copy()
 
         if p in consts.SOC_P:
@@ -1073,16 +1067,10 @@ def merge_pop_trip_rates(population: pd.DataFrame,
 
         # Merge and calculate productions
         ph = ph[ph['people'] > 0].copy()
-        ph = pd.merge(ph, trip_rate_subset, on=merge_cols)
-
-        print(ph)
+        ph = pd.merge(ph, trip_rate_subset, on=tr_merge_cols)
 
         ph['trips'] = ph['trip_rate'] * ph['people']
         ph = ph.drop(['trip_rate'], axis=1)
-
-        print(ph)
-        print(group_cols)
-        print(index_cols)
 
         # Group and sum
         ph = ph.reindex(index_cols, axis='columns')
@@ -1090,24 +1078,23 @@ def merge_pop_trip_rates(population: pd.DataFrame,
 
         # Update dictionary
         purpose_ph[p] = ph
-
-        print(ph)
-        print(list(ph))
-
-        sys.exit()
     del trip_rates
     # Results in weekly trip rates by purpose and segmentation
 
     # ## SPLIT WEEKLY TRIP RATES BY TIME PERIOD ## #
+    # Also converts to average weekday trips!
     # Init
     time_splits = pd.read_csv(time_splits_path)
     mean_time_splits = pd.read_csv(mean_time_splits_path)
-    merge_cols = ['area_type', 'traveller_type', 'p']
+    tp_merge_cols = ['area_type', 'traveller_type', 'p']
 
-    tp_ph = {}
+    # Convert tp nums to strings
+    tp_needed = ['tp' + str(x) for x in tp_needed]
+
+    tp_ph = dict()
     desc = 'Splitting trip rates by time period'
     for tp in tqdm(tp_needed, desc=desc):
-        needed_cols = merge_cols.copy() + [tp]
+        needed_cols = tp_merge_cols.copy() + [tp]
         tp_subset = time_splits.reindex(needed_cols, axis='columns').copy()
         tp_mean_subset = mean_time_splits.reindex(['p', tp], axis='columns').copy()
 
@@ -1121,49 +1108,227 @@ def merge_pop_trip_rates(population: pd.DataFrame,
                 tp_mat,
                 tp_subset,
                 how='left',
-                on=merge_cols
+                on=tp_merge_cols
             )
             tp_mat[tp] = tp_mat[tp].fillna(tp_mean)
 
             # Apply tp split and divide by 5 to get average weekday by tp
             tp_mat['trips'] = (tp_mat['trips'] * tp_mat[tp]) / 5
 
-            # Drop tp col
-            tp_mat = tp_mat.drop(tp, axis=1)
+            # Group and sum
+            tp_mat = tp_mat.reindex(index_cols, axis='columns')
+            tp_mat = tp_mat.groupby(group_cols).sum().reset_index()
 
             # Add to compilation dict
-            tp_ph.update({('p' + str(key) + '_' + tp): tp_mat})
+            tp_ph[(p, tp)] = tp_mat
+    del time_splits
+    del mean_time_splits
+    del purpose_ph
+    # Results in average weekday trips by purpose, tp, and segmentation
 
-    return productions
+    # Quick Audit
+    approx_tp_totals = []
+    for key, dat in tp_ph.items():
+        total = dat['trips'].sum()
+        approx_tp_totals.append(total)
+    ave_wday = sum(approx_tp_totals)
+    print('. Average weekday productions: %.2f' % ave_wday)
+
+    # ## SPLIT AVERAGE WEEKDAY TRIP RATES BY MODE ## #
+    # TODO: Apply at MSOA level rather than area type
+    # Init
+    mode_share = pd.read_csv(mode_share_path)
+    m_merge_cols = ['area_type', 'ca', 'p']
+    target_modes = ['m1', 'm2', 'm3', 'm5', 'm6']
+
+    # Can get rid of traveller type now - too much detail
+    # If we keep it we WILL have memory problems
+    group_cols.remove(traveller_type_col)
+    index_cols.remove(traveller_type_col)
+
+    m_ph = dict()
+    desc = 'Applying mode share splits'
+    for m in tqdm(target_modes, desc=desc):
+        needed_cols = m_merge_cols.copy() + [m]
+        m_subset = mode_share.reindex(needed_cols, axis='columns').copy()
+
+        for (p, tp), dat in tp_ph.items():
+            m_mat = dat.copy()
+
+            # Would merge all purposes, but left join should pick out target mode
+            m_mat = pd.merge(
+                m_mat,
+                m_subset,
+                how='left',
+                on=m_merge_cols
+            )
+
+            # Apply m split
+            m_mat['trips'] = (m_mat['trips'] * m_mat[m])
+
+            # Reindex cols for efficiency
+            m_mat = m_mat.reindex(index_cols, axis='columns')
+            m_mat = m_mat.groupby(group_cols).sum().reset_index()
+
+            m_mat = m_mat[m_mat['trips'] > 0]
+
+            m_ph[(p, tp, m)] = m_mat
+    del mode_share
+    del tp_ph
+    # Results in average weekday trips by purpose, tp, mode, and segmentation
+
+    print("Writing topline audit...")
+    approx_mode_totals = []
+    for key, dat in m_ph.items():
+        total = dat['trips'].sum()
+        approx_mode_totals.append([key, total])
+
+    # Build topline report
+    topline = pd.DataFrame(approx_mode_totals, columns=['desc', 'total'])
+    # Split key into components
+    topline['p'], topline['tp'], topline['m'] = list(zip(*topline['desc']))
+    topline = topline.reindex(['p', 'tp', 'm', 'total'], axis=1)
+    topline = topline.groupby(['p', 'tp', 'm']).sum().reset_index()
+    topline.to_csv(os.path.join(audit_out), index=False)
+
+    # ## COMPILE ALL MATRICES INTO ONE ## #
+    output_ph = list()
+    desc = 'Compiling productions'
+    for (p, tp, m), dat in tqdm(m_ph.items(), desc=desc):
+        dat['p'] = p
+        dat['tp'] = tp
+        dat['m'] = m
+        output_ph.append(dat)
+    msoa_output = pd.concat(output_ph)
+
+    # We now need to deal with tp and mode in one big matrix
+    group_cols = group_cols + ['tp', 'm']
+    index_cols = group_cols.copy()
+    index_cols.append('trips')
+
+    # Ensure matrix is in the correct format
+    msoa_output = msoa_output.reindex(index_cols, axis='columns')
+    msoa_output = msoa_output.groupby(group_cols).sum().reset_index()
+    msoa_output['m'] = [int(m[1:]) for m in msoa_output['m']]
+    msoa_output['tp'] = [int(tp[2:]) for tp in msoa_output['tp']]
+    msoa_output['p'] = msoa_output['p'].astype(int)
+    msoa_output['m'] = msoa_output['m'].astype(int)
+
+    if do_ntem_control is not None:
+        # Get ntem totals
+        # TODO: Depends on the time period - but this is fixed for now
+        ntem_totals = pd.read_csv(ntem_control_path)
+        ntem_lad_lookup = pd.read_csv(os.path.join(lad_lookup_dir,
+                                                   lad_lookup_name))
+
+        print("Performing NTEM constraint...")
+        msoa_output, ntem_p, ntem_a = du.control_to_ntem(
+            msoa_output,
+            ntem_totals,
+            ntem_lad_lookup,
+            group_cols=['p', 'm'],
+            base_value_name='trips',
+            ntem_value_name='Productions',
+            purpose='hb'
+        )
+
+    return msoa_output
+
+
+def combine_yearly_productions(year_dfs: Dict[str, pd.DataFrame],
+                               unique_col: str,
+                               purpose_col: str = 'p',
+                               purposes: List[int] = None
+                               ) -> pd.DataFrame:
+    # Init
+    keys = list(year_dfs.keys())
+    merge_cols = list(year_dfs[keys[0]])
+    merge_cols.remove(unique_col)
+
+    if purposes is None:
+        purposes = year_dfs[keys[0]]['p'].drop_duplicates().reset_index(drop=True)
+
+    # ## SPLIT MATRICES AND JOIN BY PURPOSE ## #
+    purpose_ph = list()
+    desc = "Merging productions by purpose"
+    for p in tqdm(purposes, desc=desc):
+
+        # Get all the matrices that belong to this purpose
+        yr_p_dfs = list()
+        for year, df in year_dfs.items():
+            temp_df = df[df[purpose_col] == p].copy()
+            temp_df = temp_df.rename(columns={unique_col: year})
+            yr_p_dfs.append(temp_df)
+
+        # Iteratively merge all matrices into one
+        merged_df = yr_p_dfs[0]
+        for df in yr_p_dfs[1:]:
+            merged_df = pd.merge(
+                merged_df,
+                df,
+                on=merge_cols
+            )
+        purpose_ph.append(merged_df)
+        del yr_p_dfs
+
+    # ## CONCATENATE ALL MERGED MATRICES ## #
+    return pd.concat(purpose_ph)
 
 
 def generate_productions(population: pd.DataFrame,
-                         merge_cols: List[str],
                          group_cols: List[str],
                          base_year: str,
                          future_years: List[str],
                          trip_rates_path: str,
                          time_splits_path: str,
                          mean_time_splits_path: str,
+                         mode_share_path: str,
+                         audit_dir: str,
+                         ntem_control_dir: str = None,
+                         lad_lookup_dir: str = None
                          ) -> pd.DataFrame:
     # Init
     all_years = [base_year] + future_years
+    audit_base_fname = 'yr%s_production_topline.csv'
+    ntem_base_fname = 'ntem_pa_ave_wday_%s.csv'
 
+    # Generate Productions for each year
     yr_ph = dict()
     for year in all_years:
+        if ntem_control_dir is not None:
+            ntem_control_path = os.path.join(ntem_control_dir,
+                                             ntem_base_fname % year)
+        else:
+            ntem_control_path = None
+
+        audit_out = os.path.join(audit_dir, audit_base_fname % year)
+
         yr_pop = population.copy().reindex(group_cols + [year], axis='columns')
         yr_pop = yr_pop.rename(columns={year: 'people'})
         yr_prod = merge_pop_trip_rates(
             yr_pop,
-            merge_cols=merge_cols,
             group_cols=group_cols,
             trip_rates_path=trip_rates_path,
             time_splits_path=time_splits_path,
-            mean_time_splits_path=mean_time_splits_path
+            mean_time_splits_path=mean_time_splits_path,
+            mode_share_path=mode_share_path,
+            audit_out=audit_out,
+            ntem_control_path=ntem_control_path,
+            lad_lookup_dir=lad_lookup_dir,
         )
+        print(yr_prod)
+
+        yr_ph[year] = yr_prod
+
         sys.exit()
 
+    # Join all productions into one big matrix
+    productions = combine_yearly_productions(
+        yr_ph,
+        unique_col='trips'
+    )
 
+    sys.exit()
     return productions
 
 

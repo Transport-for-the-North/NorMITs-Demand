@@ -30,6 +30,83 @@ import efs_constants as consts
 from old_tms.utils import *
 
 
+def convert_msoa_naming(df: pd.DataFrame,
+                        msoa_col_name: str,
+                        msoa_path: str,
+                        msoa_str_col: str = 'model_zone_code',
+                        msoa_int_col: str = 'model_zone_id',
+                        to: str = 'string'
+                        ) -> pd.DataFrame:
+    """
+    Returns df with the msoa zoning given converted to either string or int
+    names, as requested.
+
+    Parameters
+    ----------
+    df:
+        The dataframe to convert. Must have a column named as msoa_col_name
+
+    msoa_col_name:
+        The name of the column in df to convert.
+
+    msoa_path:
+        The full path to the file to use to do the conversion.
+
+    msoa_str_col:
+        The name of the column in msoa_path file which contains the string
+        names for all msoa zones.
+
+    msoa_int_col:
+        The name of the column in msoa_path file which contains the integer
+        ids for all msoa zones.
+
+    to:
+        The format to convert to. Supports either 'int' or 'string'.
+
+    Returns
+    -------
+    converted_df:
+        df, in the same order, but the msoa_col_name has been converted to the
+        desired format.
+    """
+    # Init
+    column_order = list(df)
+    to = to.strip().lower()
+
+    # Rename everything to make sure there are no clashes
+    df = df.rename(columns={msoa_col_name: 'df_msoa'})
+
+    # Read in MSOA conversion file
+    msoa_zones = pd.read_csv(msoa_path).rename(
+        columns={
+            msoa_str_col: 'msoa_string',
+            msoa_int_col: 'msoa_int'
+        }
+    )
+
+    if to == 'string':
+        merge_col = 'msoa_int'
+        keep_col = 'msoa_string'
+    elif to == 'int':
+        merge_col = 'msoa_string'
+        keep_col = 'msoa_int'
+    else:
+        raise ValueError("Invalid value received. Do not know how to convert "
+                         "to '%s'" % str(to))
+
+    # Convert MSOA strings to id numbers
+    df = pd.merge(df,
+                  msoa_zones,
+                  left_on='df_msoa',
+                  right_on=merge_col)
+
+    # Drop unneeded columns and rename
+    df = df.drop(columns=['df_msoa', merge_col])
+    df = df.rename(columns={keep_col: msoa_col_name})
+
+    return df.reindex(column_order, axis='columns')
+
+
 def growth_recombination(df: pd.DataFrame,
                          base_year_col: str,
                          future_year_cols: List[str],

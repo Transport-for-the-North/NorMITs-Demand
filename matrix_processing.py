@@ -381,6 +381,10 @@ def _generate_tour_proportions_internal(od_import: str,
             # ## BALANCE FROM_HOME AND TO_HOME ## #
             seed_val = 1  # ASSUME 1 for now
 
+            # TODO: Update to use seed values from
+            #  phi factors and time split factors
+            # Dont forget 0.001 infill from 0 seed values
+
             # First use tp4 to bring both vector sums to average
             fh_th_avg = (fh_target.sum() + th_target.sum()) / 2
             fh_target[-1] = fh_th_avg - np.sum(fh_target[:-1])

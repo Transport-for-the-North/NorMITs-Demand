@@ -61,8 +61,10 @@ TAG_CERTAINTY_BOUNDS = {
     "H": ["NC", "MTL", "RF", "H"]
 }
 
-# ## File Names ## #
+# ## File Names and Paths ## #
 NHB_PRODUCTIONS_FNAME = 'nhb_productions.csv'
+
+DEFAULT_LAD_LOOKUP = 'lad_to_msoa.csv'
 
 EFS_COLUMN_DICTIONARY = {
     "base_year_population": [
