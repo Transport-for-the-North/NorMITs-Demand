@@ -40,59 +40,76 @@ class EFSProductionGenerator:
         self.pop_infill = population_infill
     
     def run(self,
+            base_year: str,
+            future_years: List[str],
+
+            # Population growth
             population_growth: pd.DataFrame,
-            population_values: pd.DataFrame,
             population_constraint: pd.DataFrame,
-            population_split: pd.DataFrame,
-            households_growth: pd.DataFrame,
-            households_values: pd.DataFrame,
-            households_constraint: pd.DataFrame,
-            housing_split: pd.DataFrame,
-            housing_occupancy: pd.DataFrame,
-            # lu_import_path: str,
-            lu_year: int = 2018,
+
+            # Build import paths
+            import_home: str,        # y:/normits demand/import
+            msoa_conversion_path: str,
+
+            # Alternate population/production creation files
+            lu_import_path: str = None,
+            trip_rates_path: str = None,
+            time_splits_path: str = None,
+            mean_time_splits_path: str = None,
+            mode_share_path: str = None,
+
+            # Production control file
+            ntem_control_dir: str = None,
+            lad_lookup_dir: str = None,
+            control_productions: bool = True,
+
+            # D-Log
             d_log: pd.DataFrame = None,
             d_log_split: pd.DataFrame = None,
-            minimum_development_certainty: str = "MTL",  # "NC", "MTL", "RF", "H"
-            population_metric: str = "Population",  # Households, Population
+
+            # Population constraints
             constraint_required: List[bool] = consts.DEFAULT_PRODUCTION_CONSTRAINTS,
             constraint_method: str = "Percentage",  # Percentage, Average
             constraint_area: str = "Designated",  # Zone, Designated, All
             constraint_on: str = "Growth",  # Growth, All
             constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
             designated_area: pd.DataFrame = None,
-            base_year: str = None,
-            future_years: List[str] = List[None],
-            out_path: str = None,
-            area_types: pd.DataFrame = None,
-            trip_rates: pd.DataFrame = None,
-            merge_cols: List[str] = None,
-            zone_col: str = 'msoa_zone_id',
+
+            # Segmentation Controls
+            m_needed: List[int] = consts.MODES_NEEDED,
+            segmentation_cols: List[str] = None,
+            external_zone_col: str = 'model_zone_id',
+            lu_year: int = 2018,
+
+            # Handle outputs
             audits: bool = True,
-            m_needed: List[int] = consts.MODES_NEEDED
+            out_path: str = None,
+            recreate_productions: bool = True,
+            population_metric: str = "Population",  # Households, Population
             ) -> pd.DataFrame:
         """
-        #TODO
+        #TODO Write production model docs
         """
+        # Return previously created productions if we can
         fname = 'MSOA_aggregated_productions.csv'
-        final_file = os.path.join(out_path, fname)
+        final_output_path = os.path.join(out_path, fname)
 
-        if os.path.isfile(final_file):
+        if not recreate_productions and os.path.isfile(final_output_path):
             print("Found some already produced productions. Using them!")
-            return pd.read_csv(final_file)
+            return pd.read_csv(final_output_path)
 
         # Init
+        internal_zone_col = 'msoa_zone_id'
         all_years = [str(x) for x in [base_year] + future_years]
-        create_productions = area_types is not None and trip_rates is not None
         integrate_d_log = d_log is not None and d_log_split is not None
         if integrate_d_log:
             d_log = d_log.copy()
             d_log_split = d_log_split.copy()
 
         # TODO: Make this more adaptive
-        # Set merge and join cols
-        if merge_cols is None:
-            merge_cols = [
+        # Set the level of segmentation being used
+        if segmentation_cols is None:
+            segmentation_cols = [
                 'area_type',
                 'traveller_type',
                 'soc',
@@ -100,23 +117,16 @@ class EFSProductionGenerator:
                 'ca'
             ]
 
-        production_group_cols = [zone_col] + merge_cols
-        production_cols = production_group_cols + ['purpose_id'] + all_years
-
-        land_use_cols = ['msoa_zone_id'] + merge_cols + ['people']
-
-        # Fix column naming
-        if zone_col not in population_growth:
+        # Fix column naming if different
+        if external_zone_col != internal_zone_col:
             population_growth = population_growth.copy().rename(
-                columns={'model_zone_id': zone_col}
+                columns={external_zone_col: internal_zone_col}
             )
-        if zone_col not in designated_area:
             designated_area = designated_area.copy().rename(
-                columns={'model_zone_id': zone_col}
+                columns={external_zone_col: internal_zone_col}
             )
-        if zone_col not in population_constraint:
             population_constraint = population_constraint.rename(
-                columns={'model_zone_id': zone_col}
+                columns={external_zone_col: internal_zone_col}
             )
 
         # TODO: Deal with case where land use year and base year don't match
@@ -125,40 +135,34 @@ class EFSProductionGenerator:
                              "same. Don't know how to deal with that at the"
                              "moment.")
 
-        # TODO: FIX ME once dev over
-        lu_import_path = r'Y:\NorMITs Land Use\iter3\land_use_output_msoa.csv'
-        msoa_import_path = r'Y:\NorMITs Demand\inputs\default\zoning\msoa_zones.csv'
-        trip_rates_path = r"Y:\NorMITs Demand\import\tfn_segment_production_params\hb_trip_rates.csv"
-        time_splits_path = r"Y:\NorMITs Demand\import\tfn_segment_production_params\hb_time_split.csv"
-        mean_time_splits_path = r"Y:\NorMITs Demand\import\tfn_segment_production_params\hb_ave_time_split.csv"
-        mode_share_path = r"Y:\NorMITs Demand\import\tfn_segment_production_params\hb_mode_split.csv"
-
-        ntem_control_dir = r'Y:/NorMITs Synthesiser/import/ntem_constraints'
-        lad_lookup_dir = 'Y:/NorMITs Synthesiser/import'
-
-        population_metric = 'population'
-        constraint_required[0] = False
-        constraint_required[1] = False
-
-        # END OF STUFF TO FIX
+        # Build paths to the needed files
+        imports = build_production_imports(
+            import_home=import_home,
+            lu_import_path=lu_import_path,
+            trip_rates_path=trip_rates_path,
+            time_splits_path=time_splits_path,
+            mean_time_splits_path=mean_time_splits_path,
+            mode_share_path=mode_share_path,
+            ntem_control_dir=ntem_control_dir,
+            lad_lookup_dir=lad_lookup_dir,
+            set_controls=control_productions
+        )
 
         if population_metric == "households":
             raise ValueError("Production Model has changed. Households growth "
                              "is not currently supported.")
 
-
-        # TODO: Convert all of the production mode to use MSOA codes instead
-        #  of integers - more descriptive
         # ## BASE YEAR POPULATION ## #
         print("Loading the base year population data...")
-        base_year_pop = get_land_use_data(lu_import_path,
-                                          msoa_path=msoa_import_path,
-                                          land_use_cols=land_use_cols,
-                                          zone_col=zone_col)
+        base_year_pop = get_land_use_data(imports['land_use'],
+                                          msoa_path=msoa_conversion_path,
+                                          segmentation_cols=segmentation_cols)
         base_year_pop = base_year_pop.rename(columns={'people': base_year})
 
         # Audit population numbers
-        print("Base Year Population: %d" % base_year_pop[base_year].sum())
+        du.print_w_toggle("Base Year Population: %d"
+                          % base_year_pop[base_year].sum(),
+                          echo=audits)
 
         # ## FUTURE YEAR POPULATION ## #
         print("Generating future year population data...")
@@ -181,7 +185,7 @@ class EFSProductionGenerator:
                 base_year,
                 all_years,
                 designated_area,
-                zone_col
+                internal_zone_col
             )
         elif constraint_source == "model grown base":
             print("Generating model grown base constraint for use on "
@@ -206,11 +210,11 @@ class EFSProductionGenerator:
                 base_year,
                 all_years,
                 designated_area,
-                zone_col
+                internal_zone_col
             )
 
         # Reindex and sum
-        group_cols = [zone_col] + merge_cols
+        group_cols = [internal_zone_col] + segmentation_cols
         index_cols = group_cols.copy() + all_years
         population = population.reindex(index_cols, axis='columns')
         population = population.groupby(group_cols).sum().reset_index()
@@ -223,11 +227,11 @@ class EFSProductionGenerator:
                       % (year, population[year].sum()))
             print('\n')
 
-        # Convert back to MSOA codes for id numbers
+        # Convert back to MSOA codes for output and productions
         population = du.convert_msoa_naming(
             population,
-            msoa_col_name=zone_col,
-            msoa_path=msoa_import_path,
+            msoa_col_name=internal_zone_col,
+            msoa_path=msoa_conversion_path,
             to='string'
         )
 
@@ -240,23 +244,20 @@ class EFSProductionGenerator:
             population.to_csv(os.path.join(out_path, "MSOA_population.csv"),
                               index=False)
 
-        if not create_productions:
-            return population
-
         # ## CREATE PRODUCTIONS ## #
         print("Population generated. Converting to productions...")
         productions = generate_productions(
             population=population,
-            group_cols=production_group_cols,
+            group_cols=group_cols,
             base_year=base_year,
             future_years=future_years,
-            trip_rates_path=trip_rates_path,
-            time_splits_path=time_splits_path,
-            mean_time_splits_path=mean_time_splits_path,
-            mode_share_path=mode_share_path,
+            trip_rates_path=imports['trip_rates'],
+            time_splits_path=imports['time_splits'],
+            mean_time_splits_path=imports['mean_time_splits'],
+            mode_share_path=imports['mode_share'],
             audit_dir=out_path,
-            ntem_control_dir=ntem_control_dir,
-            lad_lookup_dir=lad_lookup_dir
+            ntem_control_dir=imports['ntem_control'],
+            lad_lookup_dir=imports['lad_lookup']
         )
 
         # Write productions to file
@@ -290,14 +291,14 @@ class EFSProductionGenerator:
         # as it was before the re-write
         productions = du.convert_msoa_naming(
             productions,
-            msoa_col_name=zone_col,
-            msoa_path=msoa_import_path,
+            msoa_col_name=internal_zone_col,
+            msoa_path=msoa_conversion_path,
             to='int'
         )
 
         productions = productions.rename(
             columns={
-                zone_col: 'model_zone_id',
+                internal_zone_col: external_zone_col,
                 'ca': 'car_availability_id',
                 'p': 'purpose_id',
                 'area_type': 'area_type_id'
@@ -447,34 +448,6 @@ class EFSProductionGenerator:
                            base_year_string: str = None,
                            model_years: List[str] = List[None]
                            ) -> pd.DataFrame:
-        """
-        TODO: Write grow_by_households() doc
-
-        Parameters
-        ----------
-        population_constraint
-        population_split
-        households_growth
-        households_values
-        households_constraint
-        housing_split
-        housing_occupancy
-        d_log
-        d_log_split
-        minimum_development_certainty
-        constraint_required
-        constraint_method
-        constraint_area
-        constraint_on
-        constraint_source
-        designated_area
-        base_year_string
-        model_years
-
-        Returns
-        -------
-
-        """
         # ## GROW HOUSEHOLDS
         grown_households = self.households_grower(
             households_growth,
@@ -950,10 +923,118 @@ class EFSProductionGenerator:
         return combined_households
 
 
+def build_production_imports(import_home: str,
+                             lu_import_path: str = None,
+                             trip_rates_path: str = None,
+                             time_splits_path: str = None,
+                             mean_time_splits_path: str = None,
+                             mode_share_path: str = None,
+                             ntem_control_dir: str = None,
+                             lad_lookup_dir: str = None,
+                             set_controls: bool = True
+                             ) -> Dict[str, str]:
+    """
+    Builds a dictionary of production import paths, forming a standard calling
+    procedure for production imports. Arguments allow default paths to be
+    replaced.
+
+    Parameters
+    ----------
+    import_home:
+        The base path to base all of the other import paths from. This
+        should usually be "Y:/NorMITs Demand/import" for business as usual.
+
+    lu_import_path:
+        An alternate land use import path to use. File will need to follow the
+        same format as default file.
+
+    trip_rates_path:
+        An alternate trip rates import path to use. File will need to follow the
+        same format as default file.
+
+    time_splits_path:
+        An alternate time splits import path to use. File will need to follow
+        the same format as default file.
+
+    mean_time_splits_path:
+        An alternate mean time splits import path to use. File will need to
+        follow the same format as default file.
+
+    mode_share_path:
+        An alternate mode share import path to use. File will need to follow
+        the same format as default file.
+
+    ntem_control_dir:
+        An alternate ntem control directory to use. Files will need to follow
+        the same format as default files.
+
+    lad_lookup_dir:
+        An alternate lad lookup directory to use. File will need to follow
+        the same format as default file.
+
+    set_controls:
+        If False 'ntem_control' and 'lad_lookup' outputs will be set to None,
+        regardless of any other inputs.
+
+    Returns
+    -------
+    import_dict:
+        A dictionary of paths with the following keys:
+        'land_use',
+        'trip_rates',
+        'time_splits',
+        'mean_time_splits',
+        'mode_share_path',
+        'ntem_control',
+        'lad_lookup',
+
+    """
+    # Set all unset import paths to default values
+    if lu_import_path is None:
+        path = 'land use\land_use_output_msoa.csv'
+        lu_import_path = os.path.join(import_home, path)
+
+    if trip_rates_path is None:
+        path = 'tfn_segment_production_params\hb_trip_rates.csv'
+        trip_rates_path = os.path.join(import_home, path)
+
+    if time_splits_path is None:
+        path = 'tfn_segment_production_params\hb_time_split.csv'
+        time_splits_path = os.path.join(import_home, path)
+
+    if mean_time_splits_path is None:
+        path = 'tfn_segment_production_params\hb_ave_time_split.csv'
+        mean_time_splits_path = os.path.join(import_home, path)
+
+    if mode_share_path is None:
+        path = 'tfn_segment_production_params\hb_mode_split.csv'
+        mode_share_path = os.path.join(import_home, path)
+
+    if set_controls and ntem_control_dir is None:
+        path = 'ntem_constraints'
+        ntem_control_dir = os.path.join(import_home, path)
+
+    if set_controls and lad_lookup_dir is None:
+        lad_lookup_dir = import_home
+
+    # Assign to dict
+    imports = {
+        'land_use': lu_import_path,
+        'trip_rates': trip_rates_path,
+        'time_splits': time_splits_path,
+        'mean_time_splits': mean_time_splits_path,
+        'mode_share': mode_share_path,
+        'ntem_control': ntem_control_dir,
+        'lad_lookup': lad_lookup_dir
+    }
+
+    return imports
+
+
 def get_land_use_data(land_use_path: str,
                       msoa_path: str = None,
-                      land_use_cols: List[str] = None,
-                      zone_col: str = 'msoa_zone_id'
+                      segmentation_cols: List[str] = None,
+                      lu_zone_col: str = 'msoa_zone_id'
                       ) -> pd.DataFrame:
     """
     Reads in land use outputs and aggregates up to land_use_cols
@@ -967,36 +1048,36 @@ def get_land_use_data(land_use_path: str,
         Path to the msoa file for converting from msoa string ids to
         integer ids. If left as None, then MSOA codes are returned instead
 
-    land_use_cols:
-        The columns to keep in the land use data. Must include msoa_zone_id
-        and people. If None, defaults to:
+    segmentation_cols:
+        The columns to keep in the land use data. Must include. If None,
+        defaults to:
          [
-            zone_col,
             'area_type',
             'traveller_type',
             'soc',
             'ns',
-            'people'
         ]
 
-    zone_col:
-        The name to give to the zone column in the final output
+    lu_zone_col:
+        The name of the column in the land use data that refers to the zones.
 
     Returns
     -------
     population:
-        Population data segmented by land_use_cols
+        Population data segmented by segmentation_cols. Will also include
+        lu_zone_col and people cols from land use.
     """
     # Init
-    if land_use_cols is None:
-        land_use_cols = [
-            'msoa_zone_id',
+    if segmentation_cols is None:
+        # Assume full segmentation if not told otherwise
+        segmentation_cols = [
             'area_type',
             'traveller_type',
             'soc',
             'ns',
-            'people'
+            'ca'
         ]
+    land_use_cols = [lu_zone_col] + segmentation_cols + ['people']
 
     # Set up the columns to keep
     group_cols = land_use_cols.copy()
@@ -1016,25 +1097,12 @@ def get_land_use_data(land_use_path: str,
 
     # Convert to msoa zone numbers if needed
     if msoa_path is not None:
-        # Read in MSOA conversion file
-        msoa_zones = pd.read_csv(msoa_path).rename(
-            columns={
-                'model_zone_code': 'msoa_string'
-            }
+        land_use = du.convert_msoa_naming(
+            land_use,
+            msoa_col_name=lu_zone_col,
+            msoa_path=msoa_path,
+            to='int'
         )
-
-        # Convert MSOA strings to id numbers
-        land_use = pd.merge(land_use,
-                            msoa_zones,
-                            left_on='msoa_zone_id',
-                            right_on='msoa_string')
-
-        # Drop unneeded columns and rename
-        land_use = land_use.drop(columns=['msoa_zone_id', 'msoa_string'])
-        land_use = land_use.rename(columns={'model_zone_id': zone_col})
-    else:
-        # Make sure zone col has the correct name
-        land_use.rename(columns={'msoa_zone_id': zone_col})
 
     return land_use
 

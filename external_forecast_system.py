@@ -35,7 +35,6 @@ from efs_constrainer import ForecastConstrainer
 from zone_translator import ZoneTranslator
 
 from demand_utilities import utils as du
-from demand_utilities import vehicle_occupancy as vo
 from demand_utilities.sector_reporter_v2 import SectorReporter
 
 # TODO: Implement multiprocessing
@@ -50,7 +49,7 @@ from demand_utilities.sector_reporter_v2 import SectorReporter
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
-    __version__ = "v2_2"
+    __version__ = "v2_3"
     _out_dir = "NorMITs Demand"
 
     # defines all non-year columns
@@ -103,6 +102,8 @@ class ExternalForecastSystem:
                                  self._out_dir,
                                  'inputs',
                                  'default')
+
+        self.msoa_zones_path = os.path.join(input_dir, value_zones_file)
 
         print("Initiating External Forecast System...")
         
@@ -230,13 +231,14 @@ class ExternalForecastSystem:
             dlog_file: str = None,
             dlog_split_file: str = None,
             minimum_development_certainty: str = "MTL",
-            population_metric: str = "Households",  # Households, Population
+            population_metric: str = "Population",  # Households, Population
             constraint_required: List[bool] = consts.CONSTRAINT_REQUIRED_DEFAULT,
             constraint_method: str = "Percentage",  # Percentage, Average
             constraint_area: str = "Designated",  # Zone, Designated, All
             constraint_on: str = "Growth",  # Growth, All
             constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
             outputting_files: bool = True,
+            recreate_productions: bool = True,
             iter_num: int = 0,
             performing_sector_totals: bool = True,
             output_location: str = None,
@@ -798,64 +800,40 @@ class ExternalForecastSystem:
             population_constraint = None
             raise NotImplementedError("Constraint 'model grown base' selected, "
                                       "this will be created later...")
+        else:
+            raise ValueError("'%s' is not a recognised constraint source."
+                             % constraint_source)
 
-        # ## POPULATION GENERATION ## #
+        # msoa_conversion_path = r'Y:\NorMITs Demand\inputs\default\zoning\msoa_zones.csv'
+
+        # ## PRODUCTION GENERATION ## #
         print("Generating productions...")
         production_trips = self.production_generator.run(
+            base_year=str(base_year),
+            future_years=[str(x) for x in future_years],
             population_growth=population_growth,
-            population_values=population_values,
             population_constraint=population_constraint,
-            population_split=population_split,
-            households_growth=households_growth,
-            households_values=households_values,
-            households_constraint=households_constraint,
-            housing_split=housing_type_split,
-            housing_occupancy=housing_occupancy,
+            import_home=imports['home'],
+            msoa_conversion_path=self.msoa_zones_path,
+            control_productions=True,
             d_log=development_log,
             d_log_split=development_log_split,
-            minimum_development_certainty=minimum_development_certainty,
-            population_metric=population_metric,
             constraint_required=constraint_required,
             constraint_method=constraint_method,
             constraint_area=constraint_area,
             constraint_on=constraint_on,
             constraint_source=constraint_source,
             designated_area=self.area_grouping.copy(),
-            base_year=str(base_year),
-            future_years=[str(x) for x in future_years],
             out_path=exports['productions'],
-            area_types=self.area_types,
-            trip_rates=trip_rates
+            recreate_productions=recreate_productions,
+
+            population_metric=population_metric,
         )
         print("Productions generated!")
         last_time = current_time
         current_time = time.time()
         print("Production generation took: %.2f seconds" %
               (current_time - last_time))
-
-        # Don't need to convert to ca anymore - just rename
-        ca_production_trips = production_trips
-
-        # print("Converting traveller type id to car availability id...")
-        # required_columns = [
-        #     "model_zone_id",
-        #     "purpose_id",
-        #     "car_availability_id",
-        #     "soc",
-        #     "ns"
-        # ]
-        # ca_production_trips = self.generate_car_availability(
-        #     production_trips,
-        #     car_association,
-        #     year_list,
-        #     required_columns
-        # )
-        #
-        # print("Converted to car availability!")
-        # last_time = current_time
-        # current_time = time.time()
-        # print("Car availability conversion took: %.2f seconds" %
-        #       (current_time - last_time))
 
         # ## ATTRACTION GENERATION ###
         print("Generating attractions...")
@@ -923,7 +901,7 @@ class ExternalForecastSystem:
             translation_dataframe = pd.read_csv(output_path)
 
             converted_productions = self.zone_translator.run(
-                ca_production_trips,
+                production_trips,
                 translation_dataframe,
                 self.value_zoning,
                 desired_zoning,
@@ -958,7 +936,7 @@ class ExternalForecastSystem:
             print("Zone translation took: %.2f seconds" %
                   (current_time - last_time))
         else:
-            converted_productions = ca_production_trips.copy()
+            converted_productions = production_trips.copy()
             converted_attractions = attraction_weights.copy()
 
         # TODO: Save converted productions and attractions to file
@@ -1058,13 +1036,8 @@ class ExternalForecastSystem:
                     print("Saved distribution: " + key)
 
                 # Pop generation moved
+                # Production Generation moved
                 # Final workers out moved
-
-                fname = "MSOA_production_trips.csv"
-                ca_production_trips.to_csv(
-                    os.path.join(exports['productions'], fname),
-                    index=False
-                )
 
                 fname = "MSOA_attractions.csv"
                 attraction_dataframe.to_csv(
@@ -2820,15 +2793,17 @@ def main():
 
     # Running control
     run_base_efs = True
+    recreate_productions = True
+
     run_nhb_efs = False
     run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False
 
     # Controls I/O
-    iter_num = 2
+    iter_num = 3
     output_location = "E:/"
-    import_location = "I:/"
+    import_location = "Y:/"
 
     # Initialise EFS
     efs = ExternalForecastSystem(
@@ -2843,6 +2818,7 @@ def main():
         efs.run(desired_zoning="norms_2015",
                 constraint_source="Default",
                 output_location=output_location,
+                recreate_productions=recreate_productions,
                 iter_num=iter_num,
                 echo_distribution=echo)
 
