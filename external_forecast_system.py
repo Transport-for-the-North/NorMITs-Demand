@@ -46,6 +46,9 @@ from demand_utilities.sector_reporter_v2 import SectorReporter
 #  More info here:
 #  https://stackoverflow.com/questions/24251219/pandas-read-csv-low-memory-and-dtype-options
 
+# TODO: CLean up unnecessary processing and files left over from production
+#  model rewrite
+
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
@@ -594,13 +597,12 @@ class ExternalForecastSystem:
             households_growth = integrated_assumptions[4][hh_cols]
             worker_growth = integrated_assumptions[5][emp_cols]
 
-            # TODO: Remove self references and integrate into alternate assumptions
-            # TODO: Alternate population split read in
-            population_split = self.future_population_ratio[pop_ratio_cols].copy()
-            housing_type_split = self.housing_type_split[hh_occupancy_cols].copy()
-            housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
+            # TODO: Remove uneeded files
+            # population_split = self.future_population_ratio[pop_ratio_cols].copy()
+            # housing_type_split = self.housing_type_split[hh_occupancy_cols].copy()
+            # housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
             hb_mode_split = self.hb_mode_split[mode_split_cols].copy()
-            msoa_area_types = self.msoa_area_types.copy()
+            # msoa_area_types = self.msoa_area_types.copy()
             zone_areatype_lookup = self.zone_areatype_lookup.copy()
             worker_split = self.worker_splits[emp_ratio_cols].copy()
 
@@ -636,12 +638,12 @@ class ExternalForecastSystem:
             print("Reading in default values...")
             population_values = self.population_values[base_year_pop_cols].copy()
             population_growth = self.population_growth[pop_cols].copy()
-            population_split = self.future_population_ratio[pop_ratio_cols].copy()
+            # population_split = self.future_population_ratio[pop_ratio_cols].copy()
 
             households_values = self.households_values[base_year_hh_cols].copy()
-            households_growth = self.households_growth[hh_cols].copy()
-            housing_type_split = self.housing_type_split[hh_occupancy_cols].copy()
-            housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
+            # households_growth = self.households_growth[hh_cols].copy()
+            # housing_type_split = self.housing_type_split[hh_occupancy_cols].copy()
+            # housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
 
             worker_values = self.worker_values[base_year_workers_cols].copy()
             worker_growth = self.worker_growth[emp_cols].copy()

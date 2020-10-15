@@ -197,6 +197,9 @@ class EFSProductionGenerator:
             print("Integrating the development log...")
             raise NotImplementedError("D-Log population integration has not "
                                       "yet been implemented.")
+        else:
+            # If not integrating, no need for another contraint
+            constraint_required[1] = False
 
         # ## POST D-LOG CONSTRAINT ## #
         if constraint_required[1]:
