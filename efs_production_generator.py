@@ -68,11 +68,19 @@ class EFSProductionGenerator:
             trip_rates: pd.DataFrame = None,
             merge_cols: List[str] = None,
             zone_col: str = 'msoa_zone_id',
-            audits: bool = True
+            audits: bool = True,
+            m_needed: List[int] = consts.MODES_NEEDED
             ) -> pd.DataFrame:
         """
         #TODO
         """
+        fname = 'MSOA_aggregated_productions.csv'
+        final_file = os.path.join(out_path, fname)
+
+        if os.path.isfile(final_file):
+            print("Found some already produced productions. Using them!")
+            return pd.read_csv(final_file)
+
         # Init
         all_years = [str(x) for x in [base_year] + future_years]
         create_productions = area_types is not None and trip_rates is not None
@@ -251,10 +259,53 @@ class EFSProductionGenerator:
             lad_lookup_dir=lad_lookup_dir
         )
 
-        print(productions)
-        sys.exit()
+        # Write productions to file
+        if out_path is None:
+            print("WARNING! No output path given. "
+                  "Not writing productions to file.")
+        else:
+            print("Writing productions to file...")
+            fname = 'MSOA_production_trips.csv'
+            productions.to_csv(os.path.join(out_path, fname), index=False)
 
-        # Rename columns as needed
+        # ## CONVERT TO OLD EFS FORMAT ## #
+        # Aggregate tp
+        index_cols = list(productions)
+        index_cols.remove('tp')
+
+        group_cols = index_cols.copy()
+        for year in all_years:
+            group_cols.remove(year)
+
+        # Group and sum
+        productions = productions.reindex(index_cols, axis='columns')
+        productions = productions.groupby(group_cols).sum().reset_index()
+
+        # Extract just the needed mode
+        mask = productions['m'].isin(m_needed)
+        productions = productions[mask]
+        productions = productions.drop('m', axis='columns')
+
+        # Rename columns so output of this function call is the same
+        # as it was before the re-write
+        productions = du.convert_msoa_naming(
+            productions,
+            msoa_col_name=zone_col,
+            msoa_path=msoa_import_path,
+            to='int'
+        )
+
+        productions = productions.rename(
+            columns={
+                zone_col: 'model_zone_id',
+                'ca': 'car_availability_id',
+                'p': 'purpose_id',
+                'area_type': 'area_type_id'
+            }
+        )
+
+        fname = 'MSOA_aggregated_productions.csv'
+        productions.to_csv(os.path.join(out_path, fname), index=False)
 
         return productions
 
@@ -1316,11 +1367,7 @@ def generate_productions(population: pd.DataFrame,
             ntem_control_path=ntem_control_path,
             lad_lookup_dir=lad_lookup_dir,
         )
-        print(yr_prod)
-
         yr_ph[year] = yr_prod
-
-        sys.exit()
 
     # Join all productions into one big matrix
     productions = combine_yearly_productions(
@@ -1328,7 +1375,6 @@ def generate_productions(population: pd.DataFrame,
         unique_col='trips'
     )
 
-    sys.exit()
     return productions
 
 

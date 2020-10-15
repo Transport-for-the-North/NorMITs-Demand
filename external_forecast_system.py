@@ -833,26 +833,29 @@ class ExternalForecastSystem:
         print("Production generation took: %.2f seconds" %
               (current_time - last_time))
 
-        print("Converting traveller type id to car availability id...")
-        required_columns = [
-            "model_zone_id",
-            "purpose_id",
-            "car_availability_id",
-            "soc",
-            "ns"
-        ]
-        ca_production_trips = self.generate_car_availability(
-            production_trips,
-            car_association,
-            year_list,
-            required_columns
-        )
+        # Don't need to convert to ca anymore - just rename
+        ca_production_trips = production_trips
 
-        print("Converted to car availability!")
-        last_time = current_time
-        current_time = time.time()
-        print("Car availability conversion took: %.2f seconds" %
-              (current_time - last_time))
+        # print("Converting traveller type id to car availability id...")
+        # required_columns = [
+        #     "model_zone_id",
+        #     "purpose_id",
+        #     "car_availability_id",
+        #     "soc",
+        #     "ns"
+        # ]
+        # ca_production_trips = self.generate_car_availability(
+        #     production_trips,
+        #     car_association,
+        #     year_list,
+        #     required_columns
+        # )
+        #
+        # print("Converted to car availability!")
+        # last_time = current_time
+        # current_time = time.time()
+        # print("Car availability conversion took: %.2f seconds" %
+        #       (current_time - last_time))
 
         # ## ATTRACTION GENERATION ###
         print("Generating attractions...")
