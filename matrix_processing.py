@@ -21,9 +21,11 @@ from typing import List
 from typing import Tuple
 from typing import Iterable
 
+from functools import reduce
 from itertools import product
 from collections import defaultdict
 
+import pa_to_od as pa2od
 import furness_process as fp
 
 import efs_constants as consts
@@ -266,6 +268,88 @@ def aggregate_matrices(import_dir: str,
         )
 
 
+def get_tour_proportion_seed_values(m: int,
+                                    p: int,
+                                    tp_split_path: str = None,
+                                    phi_lookup_folder: str = None,
+                                    phi_type: str = 'fhp_tp',
+                                    aggregate_to_wday: bool = True,
+                                    infill: float = 0.001
+                                    ) -> np.ndarray:
+    """
+    TODO: write get_seed_values doc
+
+    Parameters
+    ----------
+    m
+    p
+    tp_split_path
+    phi_lookup_folder
+    phi_type
+    aggregate_to_wday
+    infill
+
+    Returns
+    -------
+
+    """
+    # Init
+    # TODO: Hardcoding this is bad!
+    if phi_lookup_folder is None:
+        phi_lookup_folder = 'Y:/NorMITs Demand/import/phi_factors'
+
+    tp_split_path = r"Y:\NorMITs Demand\import\tfn_segment_production_params\hb_ave_time_split.csv"
+
+    # Get appropriate phis and filter to purpose
+    phi_factors = pa2od.get_time_period_splits(
+        m,
+        phi_type,
+        aggregate_to_wday=aggregate_to_wday,
+        lookup_folder=phi_lookup_folder
+    )
+    phi_factors = pa2od.simplify_time_period_splits(phi_factors)
+    phi_factors = phi_factors[phi_factors['purpose_from_home'] == p]
+
+    # Get the time period splits
+    tp_splits = du.get_mean_tp_splits(
+        tp_split_path=tp_split_path,
+        p=p,
+        aggregate_to_weekday=aggregate_to_wday,
+        tp_as='int'
+    )
+
+    # Create the seed values
+    valid_tps = phi_factors['time_from_home'].unique()
+    seed_values = np.zeros((len(valid_tps), len(valid_tps)))
+
+    for fh_idx, fh_tp in enumerate(valid_tps):
+        # Extract the from home phi values
+        fh_phi = phi_factors[phi_factors['time_from_home'] == fh_tp].copy()
+
+        # Extract the from home time split
+        time_split = tp_splits[fh_tp].values
+
+        # Multiply phi factors by time splits
+        for th_idx, th_tp in enumerate(valid_tps):
+            # Extract the to home phi value
+            th_phi = fh_phi[fh_phi['time_to_home'] == th_tp].copy()
+            th_phi = th_phi['direction_factor'].values
+
+            seed_values[fh_idx, th_idx] = th_phi * time_split
+
+    # Check for really bad cases
+    total_seed = seed_values.sum()
+    if total_seed > 1.1 or total_seed < 0.9:
+        raise ValueError("Something has gone wrong while generating tour "
+                         "proportion seed values. The total seed value should "
+                         "be 1, but we got %.2f." % total_seed)
+
+    # infill as needed
+    seed_values = np.where(seed_values <= 0, infill, seed_values)
+
+    return seed_values
+
+
 def _generate_tour_proportions_internal(od_import: str,
                                         tour_proportions_export: str,
                                         pa_export: str,
@@ -277,7 +361,10 @@ def _generate_tour_proportions_internal(od_import: str,
                                         ca: int,
                                         tp_needed: List[int],
                                         furness_tol: float,
-                                        furness_max_iters: int
+                                        furness_max_iters: int,
+                                        phi_lookup_folder: str,
+                                        phi_type: str,
+                                        aggregate_to_wday: bool,
                                         ) -> Tuple[str, int, float]:
     """
     The internals of generate_tour_proportions().
@@ -360,6 +447,16 @@ def _generate_tour_proportions_internal(od_import: str,
                     % (n_rows, n_cols, str(mat.shape))
                 )
 
+    # Get the seed values for this purpose
+    seed_values = get_tour_proportion_seed_values(
+        m=m,
+        p=p,
+        phi_lookup_folder=phi_lookup_folder,
+        phi_type=phi_type,
+        aggregate_to_wday=aggregate_to_wday,
+        infill=0.001,
+    )
+
     # ## FURNESS TOUR PROPORTIONS ## #
     # Init
     zero_count = 0
@@ -379,18 +476,13 @@ def _generate_tour_proportions_internal(od_import: str,
             th_target = np.array(th_target)
 
             # ## BALANCE FROM_HOME AND TO_HOME ## #
-            seed_val = 1  # ASSUME 1 for now
-
-            # TODO: Update to use seed values from
-            #  phi factors and time split factors
-            # Dont forget 0.001 infill from 0 seed values
-
             # First use tp4 to bring both vector sums to average
             fh_th_avg = (fh_target.sum() + th_target.sum()) / 2
             fh_target[-1] = fh_th_avg - np.sum(fh_target[:-1])
             th_target[-1] = fh_th_avg - np.sum(th_target[:-1])
 
             # Correct for the resulting negative value
+            seed_val = seed_values[-1][-1]
             if fh_target[-1] < 0:
                 th_target[-1] -= (1 + seed_val) * fh_target[-1]
                 fh_target[-1] *= -seed_val
@@ -422,7 +514,7 @@ def _generate_tour_proportions_internal(od_import: str,
                 )
 
             # Store the tour proportions
-            furnessed_mat = furnessed_mat.astype('float16')
+            furnessed_mat = furnessed_mat.astype('float32')
             tour_proportions[orig][dest] = furnessed_mat
 
     # Save the tour proportions for this segment
@@ -447,7 +539,10 @@ def generate_tour_proportions(od_import: str,
                               tp_needed: List[int] = consts.TIME_PERIODS,
                               furness_tol: float = 1e-9,
                               furness_max_iters: int = 5000,
-                              process_count: int = os.cpu_count() - 1
+                              process_count: int = os.cpu_count() - 1,
+                              phi_lookup_folder: str = None,
+                              phi_type: str = 'fhp',
+                              aggregate_to_wday: bool = True,
                               ) -> None:
     """
     Generates the 4x4 matrix of tour proportions for every OD pair for all
@@ -545,8 +640,14 @@ def generate_tour_proportions(od_import: str,
         'year': year,
         'tp_needed': tp_needed,
         'furness_tol': furness_tol,
-        'furness_max_iters': furness_max_iters
+        'furness_max_iters': furness_max_iters,
+        'phi_lookup_folder': phi_lookup_folder,
+        'phi_type': phi_type,
+        'aggregate_to_wday': aggregate_to_wday
+
     }
+    
+    # process_count = 0
 
     # use as many as possible if negative
     if process_count < 0:
@@ -727,3 +828,119 @@ def build_compile_params(import_dir: str,
         out_fname = du.get_compile_params_name(matrix_format, str(year))
         out_path = os.path.join(export_dir, out_fname)
         du.write_csv(output_headers, out_lines, out_path)
+
+
+def build_24hr_mats(import_dir: str,
+                    export_dir: str,
+                    matrix_format: str,
+                    years_needed: List[str],
+                    p_needed: List[int] = consts.ALL_HB_P,
+                    m_needed: List[int] = consts.MODES_NEEDED,
+                    soc_needed: List[int] = None,
+                    ns_needed: List[int] = None,
+                    ca_needed: List[int] = None,
+                    tp_needed: List[int] = consts.TIME_PERIODS
+                    ) -> None:
+    """
+    Compiles time period split matrices int import_dir into 24hr Matrices,
+    saving them back to export dir
+
+    Parameters
+    ----------
+    import_dir:
+        Directory to find the time period split matrices.
+
+    export_dir:
+        Directory to store the created 24hr matrices.
+
+    matrix_format:
+        Format of the matrices to convert. Usually either 'pa' or 'od'.
+
+    years_needed:
+        Which years of matrices in import_dir to convert.
+
+    p_needed:
+        Which purposes of matrices in import_dir to convert.
+
+    m_needed:
+        Which modes of matrices in import_dir to convert.
+
+    soc_needed:
+        Which skill levels of matrices in import_dir to convert. If left as
+        None, this segmentation is ignored.
+
+    ns_needed:
+        Which income levels of matrices in import_dir to convert. If left as
+        None, this segmentation is ignored.
+
+    ca_needed:
+        Which car availabilities matrices in import_dir to convert. If left as
+        None, this segmentation is ignored.
+
+    tp_needed:
+        Which time period matrices in import_dir to combine to get to
+        24hr matrices.
+
+    Returns
+    -------
+    None
+    """
+    # Init
+    soc_needed = [None] if soc_needed is None else soc_needed
+    ns_needed = [None] if ns_needed is None else ns_needed
+    ca_needed = [None] if ca_needed is None else ca_needed
+
+    for year in years_needed:
+        loop_generator = du.segmentation_loop_generator(
+            p_list=p_needed,
+            m_list=m_needed,
+            soc_list=soc_needed,
+            ns_list=ns_needed,
+            ca_list=ca_needed
+        )
+
+        for p, m, seg, ca in loop_generator:
+            # Figure out trip origin
+            if p in consts.ALL_HB_P:
+                trip_origin = 'hb'
+            elif p in consts.ALL_NHB_P:
+                trip_origin = 'nhb'
+            else:
+                raise ValueError("'%s' is not a valid purpose. Don't know if it "
+                                 "is home based or non-home based.")
+
+            # Figure out output name to tell user
+            output_dist_name = du.get_dist_name(
+                trip_origin=trip_origin,
+                matrix_format=matrix_format,
+                year=str(year),
+                purpose=str(p),
+                mode=str(m),
+                segment=str(seg),
+                car_availability=str(ca),
+                csv=True
+            )
+            print("Generating output matrix %s..." % output_dist_name)
+
+            # Read in all time period matrices
+            tp_mats = list()
+            for tp in tp_needed:
+                dist_name = du.get_dist_name(
+                    trip_origin=trip_origin,
+                    matrix_format=matrix_format,
+                    year=str(year),
+                    purpose=str(p),
+                    mode=str(m),
+                    segment=str(seg),
+                    car_availability=str(ca),
+                    tp=str(tp),
+                    csv=True
+                )
+                dist_path = os.path.join(import_dir, dist_name)
+                tp_mats.append(pd.read_csv(dist_path, index_col=0))
+
+            # Combine all matrices together
+            full_mat = reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
+
+            # Output to file
+            full_mat.to_csv(os.path.join(export_dir, output_dist_name))

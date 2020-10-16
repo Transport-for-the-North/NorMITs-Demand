@@ -13,6 +13,7 @@ EFS runs are not working.
 """
 
 import od_to_pa as od2pa
+import pa_to_od as pa2od
 import matrix_processing as mat_p
 
 import efs_constants as consts
@@ -30,9 +31,12 @@ def main():
         raise ValueError("I don't know what model this is? %s"
                          % str(model_name))
 
+    m_needed = [3]
+
     decompile_od_bool = False
-    gen_tour_proportions_bool = False
-    post_me_compile_pa = True
+    gen_tour_proportions_bool = True
+    post_me_compile_pa = False
+    pa_back_to_od_check = False
 
     if decompile_od_bool:
         od2pa.convert_to_efs_matrices(
@@ -59,6 +63,7 @@ def main():
             pa_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
             tour_proportions_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             year=consts.BASE_YEAR,
+            m_needed=m_needed,
             ca_needed=ca_needed
         )
 
@@ -68,8 +73,28 @@ def main():
             export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params',
             matrix_format='pa',
             years_needed=[consts.BASE_YEAR],
+            m_needed=m_needed,
             ca_needed=ca_needed,
             split_hb_nhb=True
+        )
+
+    if pa_back_to_od_check:
+        # mat_p.build_24hr_mats(
+        #     import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
+        #     export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\24hr PA Matrices',
+        #     matrix_format='pa',
+        #     years_needed=[consts.BASE_YEAR],
+        #     m_needed=m_needed,
+        #     ca_needed=ca_needed,
+        # )
+
+        pa2od.build_od_from_tour_proportions(
+            pa_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\24hr PA Matrices',
+            od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test OD Matrices',
+            tour_proportions_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
+            years_needed=[consts.BASE_YEAR],
+            m_needed=m_needed,
+            ca_needed=ca_needed
         )
 
 

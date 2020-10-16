@@ -61,13 +61,13 @@ def people_vehicle_conversion(input_folder = _default_folder,
     # If people to vehicles, export to vehicle export
 
     for pl in purpose_lookup:
-        print(pl)
+        # print(pl)
 
         # Do commute business and other seperately    
         mats = [x for x in internal_file if pl[0] in x]
 
         for mpt in tps:
-            print(mpt)
+            # print(mpt)
 
             sub_co = c_o[c_o['trip_purpose'] == pl[1]]
             tp_int = int(mpt[-1])
@@ -75,16 +75,16 @@ def people_vehicle_conversion(input_folder = _default_folder,
             factor = sub_co['car_occupancy'].squeeze()
 
             tp_mat = [x for x in mats if mpt in x]
-            print(tp_mat)
-            print(factor)
+            # print(tp_mat)
+            # print(factor)
             
             # Get period factor
             p_factor = period_hours[tp_int]
-            print('Dividing by ' + str(p_factor))
+            # print('Dividing by ' + str(p_factor))
     
             for f_loop in tp_mat:
 
-                print(input_folder + '/' + f_loop)
+                # print(input_folder + '/' + f_loop)
                 ph_mat = pd.read_csv(input_folder + '/' + f_loop)
 
                 cols = list(ph_mat)[1:-1]
@@ -102,7 +102,7 @@ def people_vehicle_conversion(input_folder = _default_folder,
                             ph_mat[col] = ph_mat[col] / p_factor
 
                 export_path = (export_folder + '/' + f_loop)
-                print(export_path)
+                # print(export_path)
 
                 if out_format == 'long':
                     ph_mat = pd.melt(ph_mat,

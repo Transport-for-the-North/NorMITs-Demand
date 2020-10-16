@@ -1126,3 +1126,66 @@ def check_tour_proportions(tour_props: Dict[int, Dict[int, np.array]],
 
     # If here, all checks have passed
     return
+
+
+def get_mean_tp_splits(tp_split_path: str,
+                       p: int,
+                       aggregate_to_weekday: bool = True,
+                       p_col: str = 'purpose',
+                       tp_as: str = 'str'
+                       ) -> pd.DataFrame:
+    """
+    TODO: Write get_mean_tp_splits() doc
+
+    Parameters
+    ----------
+    tp_split_path
+    p
+    aggregate_to_weekday
+    p_col
+    tp_as
+
+    Returns
+    -------
+
+    """
+    # Init
+    tp_splits = pd.read_csv(tp_split_path)
+    p_tp_splits = tp_splits[tp_splits[p_col] == p].copy()
+
+    # If more than one row, we have a problem!
+    if len(p_tp_splits) > 1:
+        raise ValueError("Found more than one row in the mean time period "
+                         "splits file.")
+
+    if aggregate_to_weekday:
+        tp_needed = ['tp1', 'tp2', 'tp3', 'tp4']
+
+        # Drop all unneeded columns
+        p_tp_splits = p_tp_splits.reindex(tp_needed, axis='columns')
+
+        # Aggregate each value
+        tp_sum = p_tp_splits.values.sum()
+        for tp_col in tp_needed:
+            p_tp_splits[tp_col] = p_tp_splits[tp_col] / tp_sum
+
+    tp_as = tp_as.lower()
+    if tp_as == 'str' or tp_as == 'string':
+        # Don't need to change anything
+        pass
+    elif tp_as == 'int' or tp_as == 'integer':
+        p_tp_splits = p_tp_splits.rename(
+            columns={
+                'tp1': 1,
+                'tp2': 2,
+                'tp3': 3,
+                'tp4': 4,
+                'tp5': 5,
+                'tp6': 6,
+            }
+        )
+    else:
+        raise ValueError("'%s' is not a valid value for tp_as.")
+
+    return p_tp_splits
+

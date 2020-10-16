@@ -2821,14 +2821,14 @@ def main():
         )
 
     if run_nhb_efs:
-        # # Need to convert, ready for NHB generation
-        # efs.pa_to_od(
-        #     output_location=output_location,
-        #     iter_num=iter_num,
-        #     overwrite_hb_tp_pa=True,
-        #     overwrite_hb_tp_od=True,
-        #     echo=echo
-        # )
+        # Need to convert, ready for NHB generation
+        efs.pa_to_od(
+            output_location=output_location,
+            iter_num=iter_num,
+            overwrite_hb_tp_pa=True,
+            overwrite_hb_tp_od=True,
+            echo=echo
+        )
 
         # Generate NHB PA/OD matrices
         efs.run_nhb(
