@@ -282,7 +282,7 @@ def efs_build_tp_pa(tp_import: str,
     else:
         # Shouldn't be able to get here
         raise ValueError("'%s' seems to be a valid matrix format, "
-                         "but build_tp_pa() cannot handle it. Sorry :(")
+                         "but build_tp_pa() cannot handle it.")
 
     # For every: Year, purpose, mode, segment, ca
     for year in years_needed:
