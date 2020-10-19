@@ -517,11 +517,18 @@ def _generate_tour_proportions_internal(od_import: str,
             furnessed_mat = furnessed_mat.astype('float32')
             tour_proportions[orig][dest] = furnessed_mat
 
-    # Save the tour proportions for this segment
+    # Save the tour proportions for this segment (model_zone level)
     print('Writing tour proportions for %s' % out_fname)
     out_path = os.path.join(tour_proportions_export, out_fname)
     with open(out_path, 'wb') as f:
         pickle.dump(tour_proportions, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    # Aggregate tour proportions to LA and TfN Sector level
+    la_tour_props, tfn_tour_props = aggregate_tour_proportions(
+        tour_proportions,
+        model=du.get_model_name(m),
+    )
+
 
     zero_percentage = (zero_count / float(n_rows * n_cols)) * 100
     return out_fname, zero_count, zero_percentage
@@ -647,7 +654,7 @@ def generate_tour_proportions(od_import: str,
 
     }
     
-    # process_count = 0
+    process_count = 0
 
     # use as many as possible if negative
     if process_count < 0:
