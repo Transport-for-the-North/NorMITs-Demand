@@ -155,6 +155,13 @@ class EFSAttractionGenerator:
             model_years
         )
 
+        # Write attractions out
+        out_fname = 'MSOA_attractions.csv'
+        attractions.to_csv(
+            os.path.join(output_path, out_fname),
+            index=False
+        )
+
         return attractions
 
     def attraction_generation(self,

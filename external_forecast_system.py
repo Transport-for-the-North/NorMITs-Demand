@@ -866,9 +866,19 @@ class ExternalForecastSystem:
         print("Employment and Attraction generation took: %.2f seconds" %
               (current_time - last_time))
 
-        # ## ATTRACTION WEIGHT GENERATION & MATCHING ## #
+        # # ## ATTRACTION MATCHING ## #
+        print("Matching attractions...")
+        attraction_dataframe = match_attractions_to_productions(
+            attraction_dataframe, production_trips, year_list)
+        print("Attractions matched!")
+        last_time = current_time
+        current_time = time.time()
+        print("Attraction matching took: %.2f seconds" %
+              (current_time - last_time))
+
+        # # ## ATTRACTION WEIGHT GENERATION ## #
         print("Generating attraction weights...")
-        attraction_weights = self.generate_attraction_weights(
+        attraction_weights = generate_attraction_weights(
             attraction_dataframe,
             year_list
         )
@@ -878,19 +888,6 @@ class ExternalForecastSystem:
         current_time = time.time()
         print("Attraction weight generation took: %.2f seconds" %
               (current_time - last_time))
-
-        # TODO: Why has this been commented out?
-        # print("Matching attractions...")
-        # attraction_dataframe = self.match_attractions_to_productions(
-        #    attraction_weights,
-        #    production_trips,
-        #    year_list
-        # )
-        # print("Attractions matched!")
-        # last_time = current_time
-        # current_time = time.time()
-        # print("Attraction matching took: %.2f seconds" %
-        #       (current_time - last_time))
 
         # ## ZONE TRANSLATION ## #
         if desired_zoning != self.value_zoning:
@@ -940,10 +937,7 @@ class ExternalForecastSystem:
         else:
             converted_productions = production_trips.copy()
             converted_attractions = attraction_weights.copy()
-
-        # TODO: Save converted productions and attractions to file
-        # converted_productions.to_csv("F:/EFS/EFS_Full/check/converted_productions.csv", index=False)
-        # converted_attractions.to_csv("F:/EFS/EFS_Full/check/converted_attractions.csv", index=False)
+            converted_pure_attractions = attraction_dataframe.copy()
 
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
@@ -1002,16 +996,7 @@ class ExternalForecastSystem:
                 sector_grouping_file=sector_grouping_file
             )
 
-            key_string = (
-                # "mode"
-                # +
-                # str(mode)
-                # +
-                "purpose"
-                +
-                str(purpose)
-                )
-
+            key_string = str(purpose)
             pm_sector_total_dictionary[key_string] = pm_sector_totals
 
         # ## OUTPUTS ## #
@@ -1040,12 +1025,7 @@ class ExternalForecastSystem:
                 # Pop generation moved
                 # Production Generation moved
                 # Final workers out moved
-
-                fname = "MSOA_attractions.csv"
-                attraction_dataframe.to_csv(
-                    os.path.join(exports['attractions'], fname),
-                    index=False
-                )
+                # Attractions output moved
 
                 fname = desired_zoning + "_production_trips.csv"
                 converted_productions.to_csv(
@@ -2080,68 +2060,6 @@ class ExternalForecastSystem:
 
         return attraction_dataframe
 
-    def generate_attraction_weights(self,
-                                    attraction_dataframe: pd.DataFrame,
-                                    year_list: List[str]
-                                    ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        attraction_weights = attraction_dataframe.copy()
-        purposes = attraction_weights["purpose_id"].unique()
-
-        for purpose in purposes:
-            for year in year_list:
-                mask = (attraction_weights["purpose_id"] == purpose)
-                attraction_weights.loc[mask, year] = (
-                    attraction_weights.loc[mask, year]
-                    /
-                    attraction_weights.loc[mask, year].sum()
-                )
-
-        return attraction_weights
-
-    def match_attractions_to_productions(self,
-                                         attraction_weights: pd.DataFrame,
-                                         production_dataframe: pd.DataFrame,
-                                         year_list: List[str]
-                                         ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        attraction_weights = attraction_weights.copy()
-        production_dataframe = production_dataframe.copy()
-
-        purposes = attraction_weights["purpose_id"].unique()
-
-        attraction_dataframe = pd.merge(
-            attraction_weights,
-            production_dataframe,
-            on=["model_zone_id", "purpose_id"],
-            suffixes=("", "_productions")
-        )
-
-        for purpose in purposes:
-            for year in year_list:
-                mask = (attraction_dataframe["purpose_id"] == purpose)
-                attraction_dataframe.loc[mask, year] = (
-                    attraction_weights.loc[mask, year]
-                    *
-                    attraction_dataframe.loc[mask, year + "_productions"].sum()
-                )
-
-        group_by_cols = ["model_zone_id", "purpose_id"]
-        needed_columns = group_by_cols.copy()
-        needed_columns.extend(year_list)
-
-        attraction_dataframe = attraction_dataframe[needed_columns]
-        attraction_dataframe = attraction_dataframe.groupby(
-            by=group_by_cols,
-            as_index=False
-        ).sum()
-
-        return attraction_dataframe
-
     def generate_car_availability(self,
                                   traveller_based_dataframe: pd.DataFrame,
                                   car_availability: pd.DataFrame,
@@ -2567,6 +2485,99 @@ class ExternalForecastSystem:
         self.area_grouping = du.get_data_subset(self.area_grouping)
 
 
+def generate_attraction_weights(attraction_dataframe: pd.DataFrame,
+                                year_list: List[str]
+                                ) -> pd.DataFrame:
+    """
+    TODO: write generate_attraction_weights doc
+    """
+    attraction_weights = attraction_dataframe.copy()
+    purposes = attraction_weights["purpose_id"].unique()
+
+    for purpose in purposes:
+        for year in year_list:
+            mask = (attraction_weights["purpose_id"] == purpose)
+            attraction_weights.loc[mask, year] = (
+                attraction_weights.loc[mask, year]
+                /
+                attraction_weights.loc[mask, year].sum()
+            )
+
+    return attraction_weights
+
+
+def match_attractions_to_productions(attractions: pd.DataFrame,
+                                     productions: pd.DataFrame,
+                                     year_list: List[str],
+                                     infill: float = 0.001,
+                                     echo: bool = False
+                                     ) -> pd.DataFrame:
+    """
+    TODO: Write match_attractions_to_productions doc
+    """
+    attractions = attractions.copy()
+    productions = productions.copy()
+
+    # Make sure all column names are strings
+    productions.columns = productions.columns.astype(str)
+    attractions.columns = attractions.columns.astype(str)
+
+    purposes = attractions["purpose_id"].unique()
+
+    if echo:
+        print("Balancing Attractions...")
+        print("Before:")
+        for year in year_list:
+            print("Year: %s\tProductions: %.2f\tAttractions: %.2f"
+                  % (year, productions[year].sum(), attractions[year].sum()))
+
+    attractions = pd.merge(
+        attractions,
+        productions,
+        on=["model_zone_id", "purpose_id"],
+        how='outer',
+        suffixes=("", "_productions")
+    )
+
+    # Infill where P/A don't match
+    attractions_cols = year_list.copy()
+    productions_cols = [x + '_productions' for x in year_list]
+    for col in attractions_cols + productions_cols:
+        attractions[col] = attractions[col].fillna(infill)
+
+    # Balance the attractions to the productions
+    for purpose in purposes:
+        for year in year_list:
+            mask = (attractions["purpose_id"] == purpose)
+            attractions.loc[mask, year] = (
+                    attractions.loc[mask, year].values
+                    /
+                    (
+                        attractions.loc[mask, year].sum()
+                        /
+                        attractions.loc[mask, year + '_productions'].sum()
+                    )
+            )
+
+    group_by_cols = ["model_zone_id", "purpose_id"]
+    needed_columns = group_by_cols.copy()
+    needed_columns.extend(year_list)
+
+    attractions = attractions[needed_columns]
+    attractions = attractions.groupby(
+        by=group_by_cols,
+        as_index=False
+    ).sum()
+
+    if echo:
+        print("After:")
+        for year in year_list:
+            print("Year: %s\tProductions: %.2f\tAttractions: %.2f"
+                  % (year, productions[year].sum(), attractions[year].sum()))
+
+    return attractions
+
+
 def _input_checks(iter_num=None,
                  m_needed=None
                  ) -> None:
@@ -2795,7 +2806,7 @@ def main():
 
     # Running control
     run_base_efs = True
-    recreate_productions = True
+    recreate_productions = False
 
     run_nhb_efs = False
     run_compile_od = False

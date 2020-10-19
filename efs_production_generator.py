@@ -96,6 +96,7 @@ class EFSProductionGenerator:
 
         if not recreate_productions and os.path.isfile(final_output_path):
             print("Found some already produced productions. Using them!")
+            print(final_output_path)
             return pd.read_csv(final_output_path)
 
         # Init
