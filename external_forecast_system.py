@@ -2806,7 +2806,7 @@ def main():
 
     # Running control
     run_base_efs = True
-    recreate_productions = False
+    recreate_productions = True
 
     run_nhb_efs = False
     run_compile_od = False
