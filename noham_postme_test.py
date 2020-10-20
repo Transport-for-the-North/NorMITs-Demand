@@ -32,6 +32,7 @@ def main():
                          % str(model_name))
 
     m_needed = [3]
+    process_count = 6
 
     decompile_od_bool = False
     gen_tour_proportions_bool = True
@@ -62,9 +63,11 @@ def main():
             od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
             pa_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
             tour_proportions_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
+            zone_translate_dir=r'Y:\NorMITs Demand\import\zone_translation',
             year=consts.BASE_YEAR,
             m_needed=m_needed,
-            ca_needed=ca_needed
+            ca_needed=ca_needed,
+            process_count=process_count
         )
 
     if post_me_compile_pa:
@@ -94,7 +97,8 @@ def main():
             tour_proportions_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             years_needed=[consts.BASE_YEAR],
             m_needed=m_needed,
-            ca_needed=ca_needed
+            ca_needed=ca_needed,
+            process_count=process_count
         )
 
 

@@ -365,6 +365,7 @@ def _generate_tour_proportions_internal(od_import: str,
                                         phi_lookup_folder: str,
                                         phi_type: str,
                                         aggregate_to_wday: bool,
+                                        zone_translate_dir: str,
                                         ) -> Tuple[str, int, float]:
     """
     The internals of generate_tour_proportions().
@@ -410,6 +411,8 @@ def _generate_tour_proportions_internal(od_import: str,
         )
         fh_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name),
                                   index_col=0)
+        fh_mats[tp].columns = fh_mats[tp].columns.astype(int)
+        fh_mats[tp].index = fh_mats[tp].index.astype(int)
 
         # Optionally output converted PA matrices
         if pa_export is not None:
@@ -435,6 +438,20 @@ def _generate_tour_proportions_internal(od_import: str,
         )
         th_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name),
                                   index_col=0).T
+        th_mats[tp].columns = th_mats[tp].columns.astype(int)
+        th_mats[tp].index = th_mats[tp].index.astype(int)
+
+    # Load the zone aggregation dictionaries for this model
+    model2lad = du.get_zone_translation(
+        import_dir=zone_translate_dir,
+        from_zone=du.get_model_name(m),
+        to_zone='lad'
+    )
+    model2tfn = du.get_zone_translation(
+        import_dir=zone_translate_dir,
+        from_zone=du.get_model_name(m),
+        to_zone='tfn_sectors'
+    )
 
     # Make sure all matrices have the same OD pairs
     n_rows, n_cols = fh_mats[list(fh_mats.keys())[0]].shape
@@ -447,6 +464,14 @@ def _generate_tour_proportions_internal(od_import: str,
                     % (n_rows, n_cols, str(mat.shape))
                 )
 
+    # Get a list of the zone names for iterating
+    orig_vals = list(fh_mats[list(fh_mats.keys())[0]].index.values)
+    dest_vals = list(fh_mats[list(fh_mats.keys())[0]])
+
+    # make sure they are integers
+    orig_vals = [int(x) for x in orig_vals]
+    dest_vals = [int(x) for x in dest_vals]
+
     # Get the seed values for this purpose
     seed_values = get_tour_proportion_seed_values(
         m=m,
@@ -458,21 +483,30 @@ def _generate_tour_proportions_internal(od_import: str,
     )
 
     # ## FURNESS TOUR PROPORTIONS ## #
+    # Define the default value for the nested defaultdict
+    def empty_tour_prop():
+        return np.zeros((len(tp_needed), len(tp_needed)))
+
+    # Use function to initialise defaultdicts
+    lad_tour_props = defaultdict(lambda: defaultdict(empty_tour_prop))
+    tfn_tour_props = defaultdict(lambda: defaultdict(empty_tour_prop))
+
     # Init
     zero_count = 0
     tour_proportions = defaultdict(dict)
-    for orig in range(n_rows):
-        for dest in range(n_cols):
+    test = empty_tour_prop()
+    for orig in orig_vals:
+        for dest in dest_vals:
             # Build the from_home vector
             fh_target = list()
             for tp in tp_needed:
-                fh_target.append(fh_mats[tp].values[orig, dest])
+                fh_target.append(fh_mats[tp].loc[orig, dest])
             fh_target = np.array(fh_target)
 
             # Build the to_home vector
             th_target = list()
             for tp in tp_needed:
-                th_target.append(th_mats[tp].values[orig, dest])
+                th_target.append(th_mats[tp].loc[orig, dest])
             th_target = np.array(th_target)
 
             # ## BALANCE FROM_HOME AND TO_HOME ## #
@@ -489,6 +523,9 @@ def _generate_tour_proportions_internal(od_import: str,
             elif th_target[-1] < 0:
                 fh_target[-1] -= (1 + seed_val) * th_target[-1]
                 th_target[-1] *= -seed_val
+
+            # Calculate the full demand of this OD pair
+            od_demand = fh_target.sum()
 
             # Only furness if targets are not 0
             if fh_target.sum() == 0 or th_target.sum() == 0:
@@ -517,18 +554,48 @@ def _generate_tour_proportions_internal(od_import: str,
             furnessed_mat = furnessed_mat.astype('float32')
             tour_proportions[orig][dest] = furnessed_mat
 
+            # TODO: Manually assign the missing aggregation zones
+            # NOTE: Here we are assigning any zone we can't aggregate to
+            # -1. These are usually point zones etc. and won't cause a problem
+            # when we use these aggregated tour proportions later.
+            # Making a note here in case it becomes a problem later
+
+            # Calculate the lad aggregated tour proportions
+            lad_orig = model2lad.get(orig, -1)
+            lad_dest = model2lad.get(dest, -1)
+            lad_tour_props[lad_orig][lad_dest] += (furnessed_mat * od_demand)
+
+            # Calculate the tfn aggregated tour proportions
+            tfn_orig = model2tfn.get(orig, -1)
+            tfn_dest = model2tfn.get(dest, -1)
+            tfn_tour_props[tfn_orig][tfn_dest] += (furnessed_mat * od_demand)
+
+            test += (furnessed_mat * od_demand)
+
+    # Normalise all of the aggregated matrices to 1
+    for agg_tour_props in [lad_tour_props, tfn_tour_props]:
+        for key1, inner_dict in agg_tour_props.items():
+            for key2, mat in inner_dict.items():
+                agg_tour_props[key1][key2] = mat / mat.sum()
+
+    # ## WRITE ALL TOUR PROPS TO DISK ## #
     # Save the tour proportions for this segment (model_zone level)
     print('Writing tour proportions for %s' % out_fname)
     out_path = os.path.join(tour_proportions_export, out_fname)
     with open(out_path, 'wb') as f:
         pickle.dump(tour_proportions, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    # Aggregate tour proportions to LA and TfN Sector level
-    la_tour_props, tfn_tour_props = aggregate_tour_proportions(
-        tour_proportions,
-        model=du.get_model_name(m),
-    )
+    # Write the LAD tour proportions
+    lad_out_fname = out_fname.replace('tour_proportions', 'lad_tour_proportions')
+    out_path = os.path.join(tour_proportions_export, lad_out_fname)
+    with open(out_path, 'wb') as f:
+        pickle.dump(lad_tour_props, f, protocol=pickle.HIGHEST_PROTOCOL)
 
+    # Write the TfN Sector tour proportions
+    tfn_out_fname = out_fname.replace('tour_proportions', 'tfn_tour_proportions')
+    out_path = os.path.join(tour_proportions_export, tfn_out_fname)
+    with open(out_path, 'wb') as f:
+        pickle.dump(tfn_tour_props, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     zero_percentage = (zero_count / float(n_rows * n_cols)) * 100
     return out_fname, zero_count, zero_percentage
@@ -536,6 +603,7 @@ def _generate_tour_proportions_internal(od_import: str,
 
 def generate_tour_proportions(od_import: str,
                               tour_proportions_export: str,
+                              zone_translate_dir: str,
                               pa_export: str = None,
                               year: int = consts.BASE_YEAR,
                               p_needed: List[int] = consts.ALL_HB_P,
@@ -642,6 +710,7 @@ def generate_tour_proportions(od_import: str,
     unchanging_kwargs = {
         'od_import': od_import,
         'tour_proportions_export': tour_proportions_export,
+        'zone_translate_dir': zone_translate_dir,
         'pa_export': pa_export,
         'trip_origin': trip_origin,
         'year': year,
@@ -653,8 +722,6 @@ def generate_tour_proportions(od_import: str,
         'aggregate_to_wday': aggregate_to_wday
 
     }
-    
-    process_count = 0
 
     # use as many as possible if negative
     if process_count < 0:

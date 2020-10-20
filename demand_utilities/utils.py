@@ -1189,3 +1189,63 @@ def get_mean_tp_splits(tp_split_path: str,
 
     return p_tp_splits
 
+
+def get_zone_translation(import_dir: str,
+                         from_zone: str,
+                         to_zone: str
+                         ) -> Dict[int, int]:
+    """
+    Reads in the zone translation file from import_dir and converts it into a
+    dictionary of from_zone: to_zone numbers
+
+    Note: from_zone must be of a lower aggregation than to_zone, otherwise
+    weird things might happen
+
+    Parameters
+    ----------
+    import_dir:
+        The directory to find the zone translation files
+
+    from_zone:
+        The name of the zoning system to convert from, e.g. noham
+
+    to_zone
+        The name of the zoning system to convert to, e.g. lad
+
+    Returns
+    -------
+    zone_translation:
+        A dictionary of from_zone values to to_zone values. Can be used to
+        convert a zone number from one zoning system to another.
+    """
+    # Init
+    base_filename = '%s_to_%s.csv'
+    base_col_name = '%s_zone_id'
+
+    # Load the file
+    path = os.path.join(import_dir, base_filename % (from_zone, to_zone))
+    translation = pd.read_csv(path)
+    
+    # Make sure we can find the columns
+    from_col = base_col_name % from_zone
+    to_col = base_col_name % to_zone
+
+    if from_col not in translation.columns:
+        raise ValueError("Found the file at '%s', but the columns do not "
+                         "match. Cannot find from_zone column '%s'"
+                         % (path, from_col))
+
+    if to_col not in translation.columns:
+        raise ValueError("Found the file at '%s', but the columns do not "
+                         "match. Cannot find to_zone column '%s'"
+                         % (path, to_col))
+
+    # Make sure the columns are in the correct format
+    translation = translation.reindex([from_col, to_col], axis='columns')
+    translation[from_col] = translation[from_col].astype(int)
+    translation[to_col] = translation[to_col].astype(int)
+
+    # Convert pandas to a {from_col: to_col} dictionary
+    translation = dict(translation.itertuples(index=False, name=None))
+
+    return translation

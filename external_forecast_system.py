@@ -1525,6 +1525,7 @@ class ExternalForecastSystem:
                   "proportions...")
             mat_p.generate_tour_proportions(
                 od_import=exports['post_me']['od'],
+                zone_translate_dir=imports['zone_translation'],
                 pa_export=exports['post_me']['pa'],
                 tour_proportions_export=params['tours'],
                 year=year,
@@ -2170,6 +2171,7 @@ class ExternalForecastSystem:
             'home': import_home,
             'default_inputs': input_home,
             'tp_splits': os.path.join(import_home, 'tp_splits'),
+            'zone_translation': os.path.join(import_home, 'zone_translation'),
             'lookups': os.path.join(model_home, 'lookup'),
             'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
             'zoning': os.path.join(input_home, 'zoning')
