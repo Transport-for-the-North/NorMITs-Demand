@@ -131,13 +131,17 @@ def norms_to_tfn(in_dir, out_path):
     needed_cols = [norms_col, tfn_col, overlap_col]
     file = file.reindex(needed_cols, axis='columns')
 
+    # Output columns name
+    norms_out = 'norms_zone_id'
+
     # Output to file
     create_translation_dataframe(
         file=file,
         model_col=norms_col,
         aggregate_col=tfn_col,
         overlap_col=overlap_col,
-        out_path=out_path
+        out_path=out_path,
+        model_col_out=norms_out
     )
 
 
@@ -169,19 +173,23 @@ def norms_to_lad(in_dir, out_path):
     file = pd.read_csv(os.path.join(in_dir, NORMS2LAD_FNAME))
 
     # get just the needed columns
-    noham_col = 'norms_2015_zone_id'
+    norms_col = 'norms_2015_zone_id'
     lad_col = 'lad_zone_id'
     overlap_col = 'overlap_lad_split_factor'
-    needed_cols = [noham_col, lad_col, overlap_col]
+    needed_cols = [norms_col, lad_col, overlap_col]
     file = file.reindex(needed_cols, axis='columns')
+    
+    # Output columns name
+    norms_out = 'norms_zone_id'
 
     # Output to file
     create_translation_dataframe(
         file=file,
-        model_col=noham_col,
+        model_col=norms_col,
         aggregate_col=lad_col,
         overlap_col=overlap_col,
-        out_path=out_path
+        out_path=out_path,
+        model_col_out=norms_out
     )
 
 
@@ -212,7 +220,9 @@ def create_translation_dataframe(file,
                                  aggregate_col,
                                  overlap_col,
                                  keep_overlap=False,
-                                 out_path=None
+                                 out_path=None,
+                                 model_col_out=None,
+                                 aggregate_col_out=None
                                  ):
     # Create the output lines
     model2agg = defaultdict(list)
@@ -239,6 +249,12 @@ def create_translation_dataframe(file,
 
     # Output
     df = pd.DataFrame(model2agg)
+    if model_col_out is not None:
+        df = df.rename(columns={model_col: model_col_out})
+
+    if aggregate_col_out is not None:
+        df = df.rename(columns={aggregate_col: aggregate_col_out})
+
     if out_path is not None:
         df.to_csv(out_path, index=False)
         print("%s min overlap: %.4f" % (out_path, min_overlap))
@@ -259,7 +275,7 @@ def main():
     )
     noham_to_tfn(
         in_dir=in_dir,
-        out_path=os.path.join(out_dir, base_fname % ('noham', 'tfn')),
+        out_path=os.path.join(out_dir, base_fname % ('noham', 'tfn_sectors')),
     )
 
     norms_to_lad(
@@ -268,7 +284,7 @@ def main():
     )
     norms_to_tfn(
         in_dir=in_dir,
-        out_path=os.path.join(out_dir, base_fname % ('norms', 'tfn')),
+        out_path=os.path.join(out_dir, base_fname % ('norms', 'tfn_sectors')),
     )
 
     pass
