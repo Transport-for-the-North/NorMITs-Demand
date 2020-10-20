@@ -24,6 +24,8 @@ from typing import List
 from typing import Dict
 from typing import Iterable
 
+from collections import defaultdict
+
 import efs_constants as consts
 
 # Can call tms pa_to_od.py functions from here
@@ -1249,3 +1251,24 @@ def get_zone_translation(import_dir: str,
     translation = dict(translation.itertuples(index=False, name=None))
 
     return translation
+
+
+def defaultdict_to_regular(d):
+    """
+    Iteratively converts nested default dicts to nested regular dicts.
+
+    Useful for pickling - keeps the unpickling of the dict simple
+
+    Parameters
+    ----------
+    d:
+        The nested defaultdict to convert
+
+    Returns
+    -------
+    converted_d:
+        nested dictionaries with same values
+    """
+    if isinstance(d, defaultdict):
+        d = {k: defaultdict_to_regular(v) for k, v in d.items()}
+    return d

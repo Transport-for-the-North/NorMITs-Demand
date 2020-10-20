@@ -1624,6 +1624,7 @@ class ExternalForecastSystem:
                 pa_import=exports['aggregated_pa_24'],
                 od_export=exports['post_me']['od'],
                 tour_proportions_dir=params['tours'],
+                zone_translate_dir=imports['zone_translation'],
                 ca_needed=ca_needed
             )
 

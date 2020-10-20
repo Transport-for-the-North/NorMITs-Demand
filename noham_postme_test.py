@@ -32,12 +32,12 @@ def main():
                          % str(model_name))
 
     m_needed = [3]
-    process_count = 6
+    process_count = 5
 
     decompile_od_bool = False
-    gen_tour_proportions_bool = True
+    gen_tour_proportions_bool = False
     post_me_compile_pa = False
-    pa_back_to_od_check = False
+    pa_back_to_od_check = True
 
     if decompile_od_bool:
         od2pa.convert_to_efs_matrices(
@@ -95,6 +95,7 @@ def main():
             pa_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\24hr PA Matrices',
             od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test OD Matrices',
             tour_proportions_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
+            zone_translate_dir=r'Y:\NorMITs Demand\import\zone_translation',
             years_needed=[consts.BASE_YEAR],
             m_needed=m_needed,
             ca_needed=ca_needed,
