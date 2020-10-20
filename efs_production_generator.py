@@ -90,6 +90,7 @@ class EFSProductionGenerator:
         """
         #TODO Write production model docs
         """
+
         # Return previously created productions if we can
         fname = 'MSOA_aggregated_productions.csv'
         final_output_path = os.path.join(out_path, fname)
@@ -199,7 +200,7 @@ class EFSProductionGenerator:
             raise NotImplementedError("D-Log population integration has not "
                                       "yet been implemented.")
         else:
-            # If not integrating, no need for another contraint
+            # If not integrating, no need for another constraint
             constraint_required[1] = False
 
         # ## POST D-LOG CONSTRAINT ## #
@@ -287,6 +288,7 @@ class EFSProductionGenerator:
         productions = productions.groupby(group_cols).sum().reset_index()
 
         # Extract just the needed mode
+        productions['m'] = productions['m'].astype(int)
         mask = productions['m'].isin(m_needed)
         productions = productions[mask]
         productions = productions.drop('m', axis='columns')
