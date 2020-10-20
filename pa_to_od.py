@@ -569,6 +569,7 @@ def efs_build_od(pa_import,
 def _build_od_from_tour_prop_internal(pa_import,
                                       od_export,
                                       tour_proportions_dir,
+                                      zone_translate_dir,
                                       trip_origin,
                                       base_year,
                                       year,
@@ -598,10 +599,17 @@ def _build_od_from_tour_prop_internal(pa_import,
         csv=True
     )
     pa_24 = pd.read_csv(os.path.join(pa_import, dist_name), index_col=0)
-    n_rows, n_cols = pa_24.values.shape
+    pa_24.columns = pa_24.columns.astype(int)
+    pa_24.index = pa_24.index.astype(int)
+
+    # Get a list of the zone names for iterating - make sure integers
+    orig_vals = [int(x) for x in pa_24.index.values]
+    dest_vals = [int(x) for x in list(pa_24)]
+
     print("Converting %s to tp split OD..." % dist_name)
 
-    # Load the tour proportions - always generated on base year
+    # ## Load the tour proportions - always generated on base year ## #
+    # Load the model zone tour proportions
     tour_prop_fname = du.get_dist_name(
         trip_origin=trip_origin,
         matrix_format='tour_proportions',
@@ -615,11 +623,37 @@ def _build_od_from_tour_prop_internal(pa_import,
     tour_props = pd.read_pickle(os.path.join(tour_proportions_dir,
                                              tour_prop_fname))
 
-    # Make sure tour props is the right shape
+    # Load the aggregated tour props
+    lad_fname = tour_prop_fname.replace('tour_proportions', 'lad_tour_proportions')
+    lad_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, lad_fname))
+
+    tfn_fname = tour_prop_fname.replace('tour_proportions', 'tfn_tour_proportions')
+    tfn_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, tfn_fname))
+
+    # Make sure tour props are the right shape
     du.check_tour_proportions(
         tour_props=tour_props,
         n_tp=len(tp_needed),
-        n_row_col=n_rows
+        n_row_col=len(orig_vals)
+    )
+
+    for tp_dict in [lad_tour_props, tfn_tour_props]:
+        du.check_tour_proportions(
+            tour_props=tp_dict,
+            n_tp=len(tp_needed),
+            n_row_col=len(tp_dict)
+        )
+
+    # Load the zone aggregation dictionaries for this model
+    model2lad = du.get_zone_translation(
+        import_dir=zone_translate_dir,
+        from_zone=du.get_model_name(m),
+        to_zone='lad'
+    )
+    model2tfn = du.get_zone_translation(
+        import_dir=zone_translate_dir,
+        from_zone=du.get_model_name(m),
+        to_zone='tfn_sectors'
     )
 
     # Create empty from_home OD matrices
@@ -627,8 +661,7 @@ def _build_od_from_tour_prop_internal(pa_import,
     for tp in tp_needed:
         fh_mats[tp] = pd.DataFrame(0.0,
                                    index=pa_24.index,
-                                   columns=pa_24.columns,
-                                   )
+                                   columns=pa_24.columns)
 
     # Create empty to_home OD matrices
     th_mats = dict()
@@ -637,21 +670,70 @@ def _build_od_from_tour_prop_internal(pa_import,
                                    index=pa_24.index,
                                    columns=pa_24.columns)
 
-    # Don't need the dataframe anymore - just use values
-    pa_24 = pa_24.values
-
     # For each OD pair, generate value from 24hr PA & tour_prop
-    for orig, dest in product(range(n_rows), range(n_cols)):
+    for orig, dest in product(orig_vals, dest_vals):
+        # Translate to the aggregated zones
+        lad_orig = model2lad.get(orig, -1)
+        lad_dest = model2lad.get(dest, -1)
+        tfn_orig = model2tfn.get(orig, -1)
+        tfn_dest = model2tfn.get(dest, -1)
+
+        # If the model zone tour proportions are zero, fall back on the
+        # aggregated tour proportions
+        bad_key_grown = False
+        if not pa_24.loc[orig, dest] > 0:
+            # The cell demand is zero - it doesn't matter which tour props
+            # we use
+            od_tour_props = tour_props[orig][dest]
+
+        elif tour_props[orig][dest].sum() != 0:
+            od_tour_props = tour_props[orig][dest]
+
+        elif lad_tour_props[lad_orig][lad_dest].sum() != 0:
+            # First - fall back to LAD aggregation
+            od_tour_props = lad_tour_props[lad_orig][lad_dest]
+
+            # We have a problem if this used a negative key AND cell has grown
+            bad_key = lad_orig < 0 or lad_dest < 0
+            bad_key_grown = bad_key and pa_24.loc[orig, dest] > 0
+
+        elif tfn_tour_props[tfn_orig][tfn_dest].sum() != 0:
+            # Second - Try fall back to TfN Sector aggregation
+            od_tour_props = tfn_tour_props[tfn_orig][tfn_dest]
+
+            # We have a problem if this used a negative key AND cell has grown
+            bad_key = tfn_orig < 0 or tfn_dest < 0
+            bad_key_grown = bad_key and pa_24.loc[orig, dest] > 0
+
+        else:
+            # If all aggregations are zero, and the zone has grown
+            # we probably have a problem elsewhere
+            raise ValueError(
+                "Could not find a non-zero tour proportions for (O, D) pair "
+                "(%s, %s). This likely means there was a problem when "
+                "generating these tour proportions."
+                % (str(orig), str(dest))
+            )
+
+        if bad_key_grown:
+            raise KeyError(
+                "A negative key was used to get aggregated tour proportions. "
+                "This probably means that either the origin or destination "
+                "zone could not be found in the zone translation files. Check "
+                "the zone translation files at '%s' for (O, D) pair (%s, %s) "
+                "to make sure."
+                % (zone_translate_dir, str(orig), str(dest))
+            )
 
         # Generate the values for the from home mats
-        fh_factors = np.sum(tour_props[orig][dest], axis=1)
+        fh_factors = np.sum(od_tour_props, axis=1)
         for i, tp in enumerate(fh_mats.keys()):
-            fh_mats[tp].values[orig][dest] = pa_24[orig][dest] * fh_factors[i]
+            fh_mats[tp].loc[orig, dest] = pa_24.loc[orig, dest] * fh_factors[i]
 
         # Generate the values for the to home mats
-        th_factors = np.sum(tour_props[orig][dest], axis=0)
+        th_factors = np.sum(od_tour_props, axis=0)
         for i, tp in enumerate(th_mats.keys()):
-            th_mats[tp].values[orig][dest] = pa_24[orig][dest] * th_factors[i]
+            th_mats[tp].loc[orig, dest] = pa_24.loc[orig, dest] * th_factors[i]
 
     # Save the generated from_home matrices
     for tp, mat in fh_mats.items():
@@ -688,6 +770,7 @@ def _build_od_from_tour_prop_internal(pa_import,
 def build_od_from_tour_proportions(pa_import: str,
                                    od_export: str,
                                    tour_proportions_dir: str,
+                                   zone_translate_dir: str,
                                    base_year: str = consts.BASE_YEAR,
                                    years_needed: List[int] = consts.FUTURE_YEARS,
                                    p_needed: List[int] = consts.ALL_HB_P,
@@ -712,6 +795,10 @@ def build_od_from_tour_proportions(pa_import: str,
 
     tour_proportions_dir:
         Path to the directory containing the base year tour proportions.
+
+    zone_translate_dir:
+        Where to find the zone translation files from the model zoning system
+        to the aggregated LAD nad TfN zoning systems.
 
     base_year:
         The base year that the tour proportions were generated for
@@ -773,13 +860,20 @@ def build_od_from_tour_proportions(pa_import: str,
             'pa_import': pa_import,
             'od_export': od_export,
             'tour_proportions_dir': tour_proportions_dir,
+            'zone_translate_dir': zone_translate_dir,
             'trip_origin': trip_origin,
             'base_year': base_year,
             'year': year,
             'tp_needed': tp_needed
         }
 
-        # TODO: Update to use process_count == -1
+        # If negative use process_count less than max processes
+        if process_count < 0:
+            if process_count < os.cpu_count():
+                process_count = os.cpu_count() + process_count
+            else:
+                process_count = os.cpu_count() - 1
+
         if process_count == 0:
             # Call in a loop like normal
             for p, m, seg, ca in loop_generator:

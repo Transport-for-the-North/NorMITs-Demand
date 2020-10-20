@@ -576,9 +576,17 @@ def _generate_tour_proportions_internal(od_import: str,
     for agg_tour_props in [lad_tour_props, tfn_tour_props]:
         for key1, inner_dict in agg_tour_props.items():
             for key2, mat in inner_dict.items():
+                # Avoid warning if 0
+                if mat.sum() == 0:
+                    continue
                 agg_tour_props[key1][key2] = mat / mat.sum()
 
     # ## WRITE ALL TOUR PROPS TO DISK ## #
+    # Can just be normal dicts now - keeps pickle happy
+    tour_proportions = du.defaultdict_to_regular(tour_proportions)
+    lad_tour_props = du.defaultdict_to_regular(lad_tour_props)
+    tfn_tour_props = du.defaultdict_to_regular(tfn_tour_props)
+
     # Save the tour proportions for this segment (model_zone level)
     print('Writing tour proportions for %s' % out_fname)
     out_path = os.path.join(tour_proportions_export, out_fname)
@@ -614,10 +622,10 @@ def generate_tour_proportions(od_import: str,
                               tp_needed: List[int] = consts.TIME_PERIODS,
                               furness_tol: float = 1e-9,
                               furness_max_iters: int = 5000,
-                              process_count: int = os.cpu_count() - 1,
                               phi_lookup_folder: str = None,
                               phi_type: str = 'fhp',
                               aggregate_to_wday: bool = True,
+                              process_count: int = os.cpu_count() - 1,
                               ) -> None:
     """
     Generates the 4x4 matrix of tour proportions for every OD pair for all
@@ -638,6 +646,10 @@ def generate_tour_proportions(od_import: str,
 
     tour_proportions_export:
         Where to write the tour proportions as a .pkl
+
+    zone_translate_dir:
+        Where to find the zone translation files from the model zoning system
+        to the aggregated LAD nad TfN zoning systems.
 
     pa_export:
         Where to export the converted pa_matrices. If left as None,
@@ -671,6 +683,18 @@ def generate_tour_proportions(od_import: str,
     furness_max_iters:
         Max number of iterations for the furness.
         See furness_process.doubly_constrained_furness() for more information.
+
+    phi_lookup_folder:
+        The directory to find the phi lookups - these are used to generate the
+        seed values for each purpose.
+
+    phi_type:
+        The type of phi lookups to use. This argument is passed directly to
+        pa2od.get_time_period_splits().
+
+    aggregate_to_wday:
+        Whether to aggregate the loaded phi lookups to weekday or not. This
+        argument is passed directly to pa2od.get_time_period_splits().
 
     process_count:
         How many processes to use during multiprocessing. Usually set to
@@ -723,9 +747,12 @@ def generate_tour_proportions(od_import: str,
 
     }
 
-    # use as many as possible if negative
+    # If negative use process_count less than max processes
     if process_count < 0:
-        process_count = os.cpu_count() - 1
+        if process_count < os.cpu_count():
+            process_count = os.cpu_count() + process_count
+        else:
+            process_count = os.cpu_count() - 1
 
     if process_count == 0:
         # Loop as normal
