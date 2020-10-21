@@ -591,6 +591,7 @@ def starts_with(s: str, x: str) -> bool:
 
 def post_me_fname_to_calib_params(fname: str,
                                   get_user_class: bool = True,
+                                  force_year: int = None
                                   ) -> Dict[str, str]:
     """
     Convert the filename into a calib_params dict, with the following keys
@@ -607,18 +608,29 @@ def post_me_fname_to_calib_params(fname: str,
     if loc is not None:
         calib_params['yr'] = int(fname[loc.start():loc.end()])
 
-    # Mode. What is the code for rail?
-    if re.search('_Hwy', fname) is not None:
+    # Force the year if we need to
+    if force_year is not None and 'yr' not in calib_params.keys():
+        calib_params['yr'] = force_year
+
+    # Mode.
+    loc = re.search('_m[0-9]+', fname)
+    if loc is not None:
+        calib_params['m'] = int(fname[loc.start() + 2:loc.end()])
+    elif re.search('_Hwy', fname) is not None:
         calib_params['m'] = 3
     else:
+        # What is the code for rail?
         Warning("Cannot find a mode in filename. It might be rail, but I "
                 "don't know what to search for at the moment.\n"
                 "File name: '%s'" % fname)
 
     # tp
     loc = re.search('_TS[0-9]+', fname)
+    loc2 = re.search('_tp[0-9]+', fname)
     if loc is not None:
         calib_params['tp'] = int(fname[loc.start() + 3:loc.end()])
+    elif loc2 is not None:
+        calib_params['tp'] = int(fname[loc2.start() + 3:loc2.end()])
 
     # User Class
     if get_user_class:

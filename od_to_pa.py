@@ -89,7 +89,8 @@ def _convert_to_efs_matrices_user_class(import_path: str,
                                         export_path: str,
                                         matrix_format: str,
                                         to_wide: bool = False,
-                                        wide_col_name: str = 'zone_id'
+                                        wide_col_name: str = 'zone_id',
+                                        force_year: int = None
                                         ) -> None:
     # Init
     import_files = du.list_files(import_path)
@@ -98,7 +99,11 @@ def _convert_to_efs_matrices_user_class(import_path: str,
     for fname in import_files:
         print("Converting '%s' to EFS matrix format..." % str(fname))
 
-        calib_params = du.post_me_fname_to_calib_params(fname)
+        # Try get the calib params from the filename
+        calib_params = du.post_me_fname_to_calib_params(fname,
+                                                        force_year=force_year)
+
+        # Generate the new filename
         new_fname = du.get_compiled_matrix_name(
             matrix_format=matrix_format,
             user_class=calib_params['user_class'],
@@ -137,6 +142,7 @@ def _convert_to_efs_matrices_user_class(import_path: str,
 def convert_to_efs_matrices(import_path: str,
                             export_path: str,
                             matrix_format: str,
+                            year: int,
                             user_class: bool = True,
                             to_wide: bool = True,
                             wide_col_name: str = 'zone_id',
@@ -200,18 +206,19 @@ def convert_to_efs_matrices(import_path: str,
         temp_export_path = os.path.join(export_path, 'from_pcu')
         du.create_folder(temp_export_path)
 
-    if user_class:
-        _convert_to_efs_matrices_user_class(
-            import_path=import_path,
-            export_path=temp_export_path,
-            matrix_format=matrix_format,
-            to_wide=to_wide,
-            wide_col_name=wide_col_name
-        )
-    else:
-        # TODO: Write this functionality
-        raise NotImplementedError("Cannot convert naming unless in user class"
-                                  "format.")
+    # if user_class:
+    #     _convert_to_efs_matrices_user_class(
+    #         import_path=import_path,
+    #         export_path=temp_export_path,
+    #         matrix_format=matrix_format,
+    #         to_wide=to_wide,
+    #         wide_col_name=wide_col_name,
+    #         force_year=year
+    #     )
+    # else:
+    #     # TODO: Write this functionality
+    #     raise NotImplementedError("Cannot convert naming unless in user class"
+    #                               "format.")
 
     if not from_pcu:
         return

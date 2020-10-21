@@ -34,8 +34,8 @@ def main():
     m_needed = [3]
     process_count = 5
 
-    decompile_od_bool = False
-    gen_tour_proportions_bool = False
+    decompile_od_bool = True
+    gen_tour_proportions_bool = True
     post_me_compile_pa = False
     pa_back_to_od_check = True
 
@@ -44,6 +44,8 @@ def main():
             import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
             export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
             matrix_format='od',
+            year=consts.BASE_YEAR,
+            m_needed=m_needed,
             user_class=True,
             to_wide=True,
             wide_col_name=model_name + '_zone_id',
