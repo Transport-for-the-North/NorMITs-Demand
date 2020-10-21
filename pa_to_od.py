@@ -18,8 +18,10 @@ import numpy as np
 import pandas as pd
 
 from typing import List
+from typing import Dict
 from itertools import product
 
+from tqdm import tqdm
 
 import efs_constants as consts
 
@@ -566,6 +568,69 @@ def efs_build_od(pa_import,
     return matrix_totals
 
 
+def maybe_get_aggregated_tour_proportions(orig: int,
+                                          dest: int,
+                                          model_tour_props: Dict[int, Dict[int, np.array]],
+                                          lad_tour_props: Dict[int, Dict[int, np.array]],
+                                          tfn_tour_props: Dict[int, Dict[int, np.array]],
+                                          model2lad: Dict[int, int],
+                                          model2tfn: Dict[int, int],
+                                          cell_demand: float,
+                                          ) -> np.array:
+    # Translate to the aggregated zones
+    lad_orig = model2lad.get(orig, -1)
+    lad_dest = model2lad.get(dest, -1)
+    tfn_orig = model2tfn.get(orig, -1)
+    tfn_dest = model2tfn.get(dest, -1)
+
+    # If the model zone tour proportions are zero, fall back on the
+    # aggregated tour proportions
+    bad_key = False
+    if not cell_demand > 0:
+        # The cell demand is zero - it doesn't matter which tour props
+        # we use
+        od_tour_props = model_tour_props[orig][dest]
+
+    elif model_tour_props[orig][dest].sum() != 0:
+        od_tour_props = model_tour_props[orig][dest]
+
+    elif lad_tour_props[lad_orig][lad_dest].sum() != 0:
+        # First - fall back to LAD aggregation
+        od_tour_props = lad_tour_props[lad_orig][lad_dest]
+
+        # We have a problem if this used a negative key
+        bad_key = lad_orig < 0 or lad_dest < 0
+
+    elif tfn_tour_props[tfn_orig][tfn_dest].sum() != 0:
+        # Second - Try fall back to TfN Sector aggregation
+        od_tour_props = tfn_tour_props[tfn_orig][tfn_dest]
+
+        # We have a problem if this used a negative key
+        bad_key = tfn_orig < 0 or tfn_dest < 0
+
+    else:
+        # If all aggregations are zero, and the zone has grown
+        # we probably have a problem elsewhere
+        raise ValueError(
+            "Could not find a non-zero tour proportions for (O, D) pair "
+            "(%s, %s). This likely means there was a problem when "
+            "generating these tour proportions."
+            % (str(orig), str(dest))
+        )
+
+    if bad_key:
+        raise KeyError(
+            "A negative key was used to get aggregated tour proportions. "
+            "This probably means that either the origin or destination "
+            "zone could not be found in the zone translation files. Check "
+            "the zone translation files for (O, D) pair (%s, %s) "
+            "to make sure."
+            % (str(orig), str(dest))
+        )
+
+    return od_tour_props
+
+
 def _build_od_from_tour_prop_internal(pa_import,
                                       od_export,
                                       tour_proportions_dir,
@@ -588,7 +653,7 @@ def _build_od_from_tour_prop_internal(pa_import,
     None
     """
     # Load in 24hr PA
-    dist_name = du.get_dist_name(
+    input_dist_name = du.get_dist_name(
         trip_origin=trip_origin,
         matrix_format='pa',
         year=str(year),
@@ -598,15 +663,13 @@ def _build_od_from_tour_prop_internal(pa_import,
         car_availability=str(ca),
         csv=True
     )
-    pa_24 = pd.read_csv(os.path.join(pa_import, dist_name), index_col=0)
+    pa_24 = pd.read_csv(os.path.join(pa_import, input_dist_name), index_col=0)
     pa_24.columns = pa_24.columns.astype(int)
     pa_24.index = pa_24.index.astype(int)
 
     # Get a list of the zone names for iterating - make sure integers
     orig_vals = [int(x) for x in pa_24.index.values]
     dest_vals = [int(x) for x in list(pa_24)]
-
-    print("Converting %s to tp split OD..." % dist_name)
 
     # ## Load the tour proportions - always generated on base year ## #
     # Load the model zone tour proportions
@@ -671,59 +734,23 @@ def _build_od_from_tour_prop_internal(pa_import,
                                    columns=pa_24.columns)
 
     # For each OD pair, generate value from 24hr PA & tour_prop
-    for orig, dest in product(orig_vals, dest_vals):
-        # Translate to the aggregated zones
-        lad_orig = model2lad.get(orig, -1)
-        lad_dest = model2lad.get(dest, -1)
-        tfn_orig = model2tfn.get(orig, -1)
-        tfn_dest = model2tfn.get(dest, -1)
+    # TODO: Stop all of the tqdm bars overwriting each other
+    # Some info on how to do it https://github.com/tqdm/tqdm/pull/329
+    total = len(orig_vals) * len(dest_vals)
+    desc = "Converting %s to tp split OD..." % input_dist_name
+    for orig, dest in tqdm(product(orig_vals, dest_vals), total=total, desc=desc):
 
-        # If the model zone tour proportions are zero, fall back on the
-        # aggregated tour proportions
-        bad_key_grown = False
-        if not pa_24.loc[orig, dest] > 0:
-            # The cell demand is zero - it doesn't matter which tour props
-            # we use
-            od_tour_props = tour_props[orig][dest]
-
-        elif tour_props[orig][dest].sum() != 0:
-            od_tour_props = tour_props[orig][dest]
-
-        elif lad_tour_props[lad_orig][lad_dest].sum() != 0:
-            # First - fall back to LAD aggregation
-            od_tour_props = lad_tour_props[lad_orig][lad_dest]
-
-            # We have a problem if this used a negative key AND cell has grown
-            bad_key = lad_orig < 0 or lad_dest < 0
-            bad_key_grown = bad_key and pa_24.loc[orig, dest] > 0
-
-        elif tfn_tour_props[tfn_orig][tfn_dest].sum() != 0:
-            # Second - Try fall back to TfN Sector aggregation
-            od_tour_props = tfn_tour_props[tfn_orig][tfn_dest]
-
-            # We have a problem if this used a negative key AND cell has grown
-            bad_key = tfn_orig < 0 or tfn_dest < 0
-            bad_key_grown = bad_key and pa_24.loc[orig, dest] > 0
-
-        else:
-            # If all aggregations are zero, and the zone has grown
-            # we probably have a problem elsewhere
-            raise ValueError(
-                "Could not find a non-zero tour proportions for (O, D) pair "
-                "(%s, %s). This likely means there was a problem when "
-                "generating these tour proportions."
-                % (str(orig), str(dest))
-            )
-
-        if bad_key_grown:
-            raise KeyError(
-                "A negative key was used to get aggregated tour proportions. "
-                "This probably means that either the origin or destination "
-                "zone could not be found in the zone translation files. Check "
-                "the zone translation files at '%s' for (O, D) pair (%s, %s) "
-                "to make sure."
-                % (zone_translate_dir, str(orig), str(dest))
-            )
+        # Will get the aggregated tour props if needed
+        od_tour_props = maybe_get_aggregated_tour_proportions(
+            orig=orig,
+            dest=dest,
+            model_tour_props=tour_props,
+            lad_tour_props=lad_tour_props,
+            tfn_tour_props=tfn_tour_props,
+            model2lad=model2lad,
+            model2tfn=model2tfn,
+            cell_demand=pa_24.loc[orig, dest]
+        )
 
         # Generate the values for the from home mats
         fh_factors = np.sum(od_tour_props, axis=1)
@@ -734,6 +761,8 @@ def _build_od_from_tour_prop_internal(pa_import,
         th_factors = np.sum(od_tour_props, axis=0)
         for i, tp in enumerate(th_mats.keys()):
             th_mats[tp].loc[orig, dest] = pa_24.loc[orig, dest] * th_factors[i]
+
+    print("Writing %s converted matrices to disk..." % input_dist_name)
 
     # Save the generated from_home matrices
     for tp, mat in fh_mats.items():
