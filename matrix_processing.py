@@ -551,7 +551,7 @@ def _generate_tour_proportions_internal(od_import: str,
                 )
 
             # Store the tour proportions
-            furnessed_mat = furnessed_mat.astype('float32')
+            furnessed_mat = furnessed_mat.astype('float64')
             tour_proportions[orig][dest] = furnessed_mat
 
             # TODO: Manually assign the missing aggregation zones

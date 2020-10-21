@@ -1501,6 +1501,7 @@ class ExternalForecastSystem:
                     import_path=exports['post_me']['model_output'],
                     export_path=exports['post_me']['compiled_od'],
                     matrix_format='od',
+                    year=year,
                     user_class=True,
                     to_wide=True,
                     wide_col_name=model_name + '_zone_id',

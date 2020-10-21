@@ -10,6 +10,8 @@ Also works the opposite way to get person trips from vehicle trips
 import pandas as pd # most of the heavy lifting
 import os # File ops
 
+from tqdm import tqdm
+
 # File paths
 _default_home_dir = 'Y:/NorMITs Synthesiser/Noham'
 _import_file_drive = "Y:/"
@@ -60,7 +62,8 @@ def people_vehicle_conversion(input_folder = _default_folder,
 
     # If people to vehicles, export to vehicle export
 
-    for pl in purpose_lookup:
+    desc = 'converting matrices by purpose'
+    for pl in tqdm(purpose_lookup, desc=desc):
         # print(pl)
 
         # Do commute business and other seperately    
