@@ -216,7 +216,7 @@ def aggregate_matrices(import_dir: str,
     mat_format_str = '_' + matrix_format + '_'
     all_matrices = du.list_files(import_dir)
     all_matrices = [x for x in all_matrices if mat_format_str in x]
-    all_matrices = [x for x in all_matrices if x[:len(trip_origin)] == trip_origin]
+    all_matrices = [x for x in all_matrices if du.starts_with(x, trip_origin)]
 
     # for year, purpose, mode, time_period
     print("Writing files to: %s" % export_dir)

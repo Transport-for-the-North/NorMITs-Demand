@@ -275,6 +275,13 @@ class EFSProductionGenerator:
             productions.to_csv(os.path.join(out_path, fname), index=False)
 
         # ## CONVERT TO OLD EFS FORMAT ## #
+        # Make sure columns are the correct data type
+        productions['area_type'] = productions['area_type'].astype(int)
+        productions['m'] = productions['m'].astype(int)
+        productions['p'] = productions['p'].astype(int)
+        productions['ca'] = productions['ca'].astype(int)
+        productions.columns = productions.columns.astype(str)
+
         # Aggregate tp
         index_cols = list(productions)
         index_cols.remove('tp')
@@ -288,7 +295,6 @@ class EFSProductionGenerator:
         productions = productions.groupby(group_cols).sum().reset_index()
 
         # Extract just the needed mode
-        productions['m'] = productions['m'].astype(int)
         mask = productions['m'].isin(m_needed)
         productions = productions[mask]
         productions = productions.drop('m', axis='columns')
