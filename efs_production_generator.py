@@ -88,7 +88,138 @@ class EFSProductionGenerator:
             population_metric: str = "Population",  # Households, Population
             ) -> pd.DataFrame:
         """
-        #TODO Write production model docs
+        Production model for the external forecast system. This has been
+        written to align with TMS production generation, with the addition of
+        future year population growth and production generation.
+
+        Performs the following functions:
+            - Reads in the base year land use data to create the base year
+              population numbers
+            - Grows the base year population by population_growth factors,
+              resulting in future year population numbers.
+            - Combines base and future year population numbers with trip_rates
+              (currently the same across all years) to produce the base and
+              future year production values (for all modes).
+            - Finally, splits the produced productions to only return the
+              desired mode. This dataframe is then returned.
+
+        Parameters
+        ----------
+        base_year:
+            The base year of the forecast.
+
+        future_years:
+            The future years to forecast.
+
+        population_growth:
+            pandas dataframe containing the future year growth values for
+            growing the base year population. Must be segmented by the same
+            level as land use data (usually msoa_zone_id).
+
+        population_constraint:
+            TODO: Need to clarify if population constrain is still needed,
+            where the values come from, and how exactly the  constrainer works.
+
+        import_home:
+            The home directory to find all the production imports. Usually
+            Y:\NorMITs Demand\import
+
+        msoa_conversion_path:
+            Path to the file containing the conversion from msoa integer
+            identifiers to the msoa string code identifiers. Hoping to remove
+            this in a future update and align all of EFS to use msoa string
+            code identifiers.
+
+        lu_import_path:
+            The path to alternate land use import data. If left as None, the
+            production model will use the default land use data.
+
+        trip_rates_path:
+            The path to alternate trip rates data. If left as None, the
+            production model will use the default trip rates data.
+
+        time_splits_path:
+            The path to alternate time splits data. If left as None, the
+            production model will use the default time splits data.
+
+        mean_time_splits_path:
+            The path to alternate mean time splits data. If left as None, the
+            production model will use the default mean time splits data.
+
+        mode_share_path:
+            The path to alternate mode share data. If left as None, the
+            production model will use the default mode share data.
+
+        ntem_control_dir
+        lad_lookup_dir
+        control_productions
+        d_log:
+            TODO: Clarify what format D_log data comes in as
+
+        d_log_split:
+            See d_log
+
+        constraint_required:
+            See population_constraint
+
+        constraint_method:
+            See population_constraint
+
+        constraint_area:
+            See population_constraint
+
+        constraint_on:
+            See population_constraint
+
+        constraint_source:
+            See population_constraint
+
+        designated_area:
+            See population_constraint
+
+        m_needed:
+            Which mode to return productions for.
+
+        segmentation_cols:
+            The levels of segmentation that exist in the land use data. If
+            not defined, will default to: ['area_type', 'traveller_type',
+            'soc', 'ns', 'ca'].
+
+        external_zone_col:
+            The name of the zone column, as used externally to this production
+            model. This is used to make sure this model can translate to the
+            zoning name used internally in land_use and trip_rates data.
+
+        lu_year:
+            Which year the land_use data has been generated for. At the moment,
+            if this is different to the base year and error is thrown. Used as
+            a safety measure to make sure the user is warned if the base year
+            changes without the land use.
+
+        audits:
+            Whether to output audits to the terminal during running. This can
+            be used to monitor the population and production numbers being
+            generated and constrained.
+
+        out_path:
+            Path to the directory to output the population and productions
+            dataframes.
+
+        recreate_productions:
+            Whether to recreate the productions or not. If False, it will
+            look in out_path for previously produced productions and return
+            them. If none can be found, they will be generated.
+
+        population_metric:
+            No longer used - kept for now to retain all information from
+            previous EFS. Will be removed in future.
+
+        Returns
+        -------
+        Segmented_productions:
+            Productions for mode m_needed, segmented by all segments possible
+            in the input data.
+
         """
 
         # Return previously created productions if we can

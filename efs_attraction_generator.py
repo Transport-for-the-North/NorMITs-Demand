@@ -162,6 +162,12 @@ class EFSAttractionGenerator:
             index=False
         )
 
+        print(attractions)
+        print(list(attractions))
+        print(attractions.dtypes)
+
+        exit()
+
         return attractions
 
     def attraction_generation(self,
