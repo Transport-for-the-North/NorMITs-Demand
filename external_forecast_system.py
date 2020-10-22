@@ -2797,7 +2797,7 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    iter_num = 3
+    iter_num = 2
     output_location = "E:/"
     import_location = "Y:/"
 
@@ -2809,9 +2809,6 @@ def main():
         output_location=output_location
     )
 
-    print("@@@@@@@@@" * 20)
-    print("WARNING! Not doing all future years!")
-
     if run_base_efs:
         # Generates HB PA matrices
         efs.run(
@@ -2820,8 +2817,7 @@ def main():
             output_location=output_location,
             recreate_productions=recreate_productions,
             iter_num=iter_num,
-            echo_distribution=echo,
-            future_years=[2033]
+            echo_distribution=echo
         )
 
     if run_nhb_efs:
