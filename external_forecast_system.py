@@ -2789,7 +2789,9 @@ def main():
 
     # Running control
     run_base_efs = True
-    recreate_productions = False
+    recreate_productions = True
+
+    constrain_population = False
 
     run_nhb_efs = False
     run_compile_od = False
@@ -2797,11 +2799,17 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    iter_num = 2
+    iter_num = 0
     output_location = "E:/"
     import_location = "Y:/"
 
-    # Initialise EFS
+    # Set up constraints
+    if constrain_population:
+        constraints = consts.CONSTRAINT_REQUIRED_DEFAULT
+    else:
+        constraints = [False] * 6
+
+    # ## RUN START ## #
     efs = ExternalForecastSystem(
         dirty_init=dirty_init,
         use_zone_id_subset=use_zone_id_subset,
@@ -2817,7 +2825,8 @@ def main():
             output_location=output_location,
             recreate_productions=recreate_productions,
             iter_num=iter_num,
-            echo_distribution=echo
+            echo_distribution=echo,
+            constraint_required=constraints
         )
 
     if run_nhb_efs:
