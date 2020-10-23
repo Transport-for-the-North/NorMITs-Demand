@@ -29,12 +29,12 @@ import efs_constants as consts
 import furness_process as fp
 import efs_production_generator as pm
 import efs_attraction_generator as am
+import efs_constrainer as constrainer
 
 from efs_constrainer import ForecastConstrainer
 from zone_translator import ZoneTranslator
 
 from demand_utilities import utils as du
-from demand_utilities import vehicle_occupancy as vo
 from demand_utilities.sector_reporter_v2 import SectorReporter
 
 # TODO: Implement multiprocessing
@@ -46,10 +46,16 @@ from demand_utilities.sector_reporter_v2 import SectorReporter
 #  More info here:
 #  https://stackoverflow.com/questions/24251219/pandas-read-csv-low-memory-and-dtype-options
 
+# TODO: CLean up unnecessary processing and files left over from production
+#  model rewrite.
+# This includes: all household files, car association , trip_rates,
+# mode splits, mode time splits.
+# THe new production model reads these files in as needed
+
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
-    __version__ = "v2_2"
+    __version__ = "v2_3"
     _out_dir = "NorMITs Demand"
 
     # defines all non-year columns
@@ -88,7 +94,8 @@ class ExternalForecastSystem:
                  import_location: str = "Y:/",
                  output_location: str = "E:/",
 
-                 use_zone_id_subset: bool = False
+                 use_zone_id_subset: bool = False,
+                 dirty_init: bool = False
                  ):
         """
         #TODO
@@ -102,88 +109,92 @@ class ExternalForecastSystem:
                                  'inputs',
                                  'default')
 
+        self.msoa_zones_path = os.path.join(input_dir, value_zones_file)
+
         print("Initiating External Forecast System...")
+        
         begin_time = time.time()
         current_time = begin_time
 
-        # Read in population files
-        file_path = os.path.join(input_dir, population_value_file)
-        self.population_values = du.safe_read_csv(file_path)
+        if not dirty_init:
+            # Read in population files
+            file_path = os.path.join(input_dir, population_value_file)
+            self.population_values = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, population_growth_file)
-        self.population_growth = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, population_growth_file)
+            self.population_growth = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, population_constraint_file)
-        self.population_constraint = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, population_constraint_file)
+            self.population_constraint = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, future_population_ratio_file)
-        self.future_population_ratio = du.safe_read_csv(file_path)
+            # file_path = os.path.join(input_dir, future_population_ratio_file)
+            # self.future_population_ratio = du.safe_read_csv(file_path)
 
-        # Households files
-        file_path = os.path.join(input_dir, households_value_file)
-        self.households_values = du.safe_read_csv(file_path)
+            # Households files
+            # file_path = os.path.join(input_dir, households_value_file)
+            # self.households_values = du.safe_read_csv(file_path)
+            #
+            # file_path = os.path.join(input_dir, household_growth_file)
+            # self.households_growth = du.safe_read_csv(file_path)
+            #
+            # file_path = os.path.join(input_dir, households_constraint_file)
+            # self.households_constraint = du.safe_read_csv(file_path)
+            #
+            # file_path = os.path.join(input_dir, housing_type_split_file)
+            # self.housing_type_split = du.safe_read_csv(file_path)
+            #
+            # file_path = os.path.join(input_dir, housing_occupancy_file)
+            # self.housing_occupancy = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, household_growth_file)
-        self.households_growth = du.safe_read_csv(file_path)
+            # Worker files
+            file_path = os.path.join(input_dir, worker_value_file)
+            self.worker_values = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, households_constraint_file)
-        self.households_constraint = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, worker_growth_file)
+            self.worker_growth = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, housing_type_split_file)
-        self.housing_type_split = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, worker_constraint_file)
+            self.worker_constraint = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, housing_occupancy_file)
-        self.housing_occupancy = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, worker_ratio_file)
+            self.worker_splits = du.safe_read_csv(file_path)
 
-        # Worker files
-        file_path = os.path.join(input_dir, worker_value_file)
-        self.worker_values = du.safe_read_csv(file_path)
+            # Production and attraction files
+            # file_path = os.path.join(input_dir, production_trip_rates_file)
+            # self.production_trip_rates = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, worker_growth_file)
-        self.worker_growth = du.safe_read_csv(file_path)
+            # file_path = os.path.join(input_dir, hb_mode_split_file)
+            # self.hb_mode_split = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, worker_constraint_file)
-        self.worker_constraint = du.safe_read_csv(file_path)
+            # file_path = os.path.join(input_dir, hb_mode_time_split_file)
+            # self.hb_mode_time_split = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, worker_ratio_file)
-        self.worker_splits = du.safe_read_csv(file_path)
+            # file_path = os.path.join(input_dir, split_handler_file)
+            # self.split_handler = du.safe_read_csv(file_path)
 
-        # Production and attraction files
-        file_path = os.path.join(input_dir, production_trip_rates_file)
-        self.production_trip_rates = du.safe_read_csv(file_path)
+            # file_path = os.path.join(input_dir, traveller_types_file)
+            # self.traveller_types = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, hb_mode_split_file)
-        self.hb_mode_split = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, attraction_weights_file)
+            self.attraction_weights = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, hb_mode_time_split_file)
-        self.hb_mode_time_split = du.safe_read_csv(file_path)
+            # Zone and area files
+            self.value_zoning = value_zoning
 
-        file_path = os.path.join(input_dir, split_handler_file)
-        self.split_handler = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, value_zones_file)
+            self.value_zones = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, traveller_types_file)
-        self.traveller_types = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, area_types_file)
+            self.area_types = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, attraction_weights_file)
-        self.attraction_weights = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, area_grouping_file)
+            self.area_grouping = du.safe_read_csv(file_path)
 
-        # Zone and area files
-        self.value_zoning = value_zoning
+            file_path = os.path.join(input_dir, msoa_area_types_file)
+            self.msoa_area_types = du.safe_read_csv(file_path)
 
-        file_path = os.path.join(input_dir, value_zones_file)
-        self.value_zones = du.safe_read_csv(file_path)
-
-        file_path = os.path.join(input_dir, area_types_file)
-        self.area_types = du.safe_read_csv(file_path)
-
-        file_path = os.path.join(input_dir, area_grouping_file)
-        self.area_grouping = du.safe_read_csv(file_path)
-
-        file_path = os.path.join(input_dir, msoa_area_types_file)
-        self.msoa_area_types = du.safe_read_csv(file_path)
-
-        file_path = os.path.join(input_dir, zone_areatype_lookup_file)
-        self.zone_areatype_lookup = du.safe_read_csv(file_path)
+            file_path = os.path.join(input_dir, zone_areatype_lookup_file)
+            self.zone_areatype_lookup = du.safe_read_csv(file_path)
 
         if use_zone_id_subset:
             print("WARNING: Not using all of the input data. "
@@ -226,13 +237,14 @@ class ExternalForecastSystem:
             dlog_file: str = None,
             dlog_split_file: str = None,
             minimum_development_certainty: str = "MTL",
-            population_metric: str = "Households",  # Households, Population
+            population_metric: str = "Population",  # Households, Population
             constraint_required: List[bool] = consts.CONSTRAINT_REQUIRED_DEFAULT,
             constraint_method: str = "Percentage",  # Percentage, Average
             constraint_area: str = "Designated",  # Zone, Designated, All
             constraint_on: str = "Growth",  # Growth, All
             constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
             outputting_files: bool = True,
+            recreate_productions: bool = True,
             iter_num: int = 0,
             performing_sector_totals: bool = True,
             output_location: str = None,
@@ -494,6 +506,7 @@ class ExternalForecastSystem:
 
         # Validate inputs
         _input_checks(iter_num=iter_num, m_needed=modes_needed)
+        mode_needed = modes_needed[0]
 
         # ## PREPARE OUTPUTS ## #
         print("Initialising outputs...")
@@ -516,7 +529,7 @@ class ExternalForecastSystem:
             distribution_method,
             imports['seed_dists'],
             purposes_needed,
-            modes_needed,
+            mode_needed,
             soc_needed,
             ns_needed,
             car_availabilities_needed,
@@ -539,16 +552,16 @@ class ExternalForecastSystem:
         base_year_workers_cols = self.column_dictionary["base_year_workers"]
 
         pop_cols = self.column_dictionary["population"] + year_list
-        pop_ratio_cols = self.column_dictionary["population_ratio"] + year_list
+        # pop_ratio_cols = self.column_dictionary["population_ratio"] + year_list
 
-        hh_cols = self.column_dictionary["households"] + year_list
-        hh_occupancy_cols = self.column_dictionary["housing_occupancy"] + year_list
+        # hh_cols = self.column_dictionary["households"] + year_list
+        # hh_occupancy_cols = self.column_dictionary["housing_occupancy"] + year_list
 
         emp_cols = self.column_dictionary["employment"] + year_list
         emp_ratio_cols = self.column_dictionary["employment_ratio"] + year_list
 
-        production_trip_cols = self.column_dictionary["production_trips"] + year_list
-        mode_split_cols = self.column_dictionary["mode_split"] + year_list
+        # production_trip_cols = self.column_dictionary["production_trips"] + year_list
+        # mode_split_cols = self.column_dictionary["mode_split"] + year_list
         attraction_weight_cols = self.column_dictionary["attraction_weights"] + year_list
 
         print("No known errors in the inputs!")
@@ -582,42 +595,41 @@ class ExternalForecastSystem:
                 base_year_hh_cols)
 
             population_values = integrated_assumptions[0][base_year_pop_cols]
-            households_values = integrated_assumptions[1][base_year_hh_cols]
+            # households_values = integrated_assumptions[1][base_year_hh_cols]
             worker_values = integrated_assumptions[2][base_year_workers_cols]
             population_growth = integrated_assumptions[3][pop_cols]
-            households_growth = integrated_assumptions[4][hh_cols]
+            # households_growth = integrated_assumptions[4][hh_cols]
             worker_growth = integrated_assumptions[5][emp_cols]
 
-            # TODO: Remove self references and integrate into alternate assumptions
-            # TODO: Alternate population split read in
-            population_split = self.future_population_ratio[pop_ratio_cols].copy()
-            housing_type_split = self.housing_type_split[hh_occupancy_cols].copy()
-            housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
-            hb_mode_split = self.hb_mode_split[mode_split_cols].copy()
-            msoa_area_types = self.msoa_area_types.copy()
+            # TODO: Remove uneeded files
+            # population_split = self.future_population_ratio[pop_ratio_cols].copy()
+            # housing_type_split = self.housing_type_split[hh_occupancy_cols].copy()
+            # housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
+            # hb_mode_split = self.hb_mode_split[mode_split_cols].copy()
+            # msoa_area_types = self.msoa_area_types.copy()
             zone_areatype_lookup = self.zone_areatype_lookup.copy()
             worker_split = self.worker_splits[emp_ratio_cols].copy()
 
-            trip_rates = self.production_trip_rates[
-                production_trip_cols
-            ].copy().rename(
-                # Rename to cols names used in code
-                columns={
-                    "traveller_type": "traveller_type_id",
-                    "area_type": "area_type_id",
-                    "p": "purpose_id"
-                }
-            )
-
-            car_association = self.traveller_types[[
-                "cars", "traveller_type"
-            ]].copy().rename(columns={"traveller_type": "traveller_type_id"})
-
-            car_association["car_availability_id"] = 0
-            no_car_mask = (car_association["cars"] == 0)
-
-            car_association[no_car_mask]["car_availability_id"] = 1
-            car_association[-no_car_mask]["car_availability_id"] = 2
+            # trip_rates = self.production_trip_rates[
+            #     production_trip_cols
+            # ].copy().rename(
+            #     # Rename to cols names used in code
+            #     columns={
+            #         "traveller_type": "traveller_type_id",
+            #         "area_type": "area_type_id",
+            #         "p": "purpose_id"
+            #     }
+            # )
+            #
+            # car_association = self.traveller_types[[
+            #     "cars", "traveller_type"
+            # ]].copy().rename(columns={"traveller_type": "traveller_type_id"})
+            #
+            # car_association["car_availability_id"] = 0
+            # no_car_mask = (car_association["cars"] == 0)
+            #
+            # car_association[no_car_mask]["car_availability_id"] = 1
+            # car_association[-no_car_mask]["car_availability_id"] = 2
 
             print("Integrated alternate assumptions!")
             last_time = current_time
@@ -630,32 +642,31 @@ class ExternalForecastSystem:
             print("Reading in default values...")
             population_values = self.population_values[base_year_pop_cols].copy()
             population_growth = self.population_growth[pop_cols].copy()
-            population_split = self.future_population_ratio[pop_ratio_cols].copy()
+            # population_split = self.future_population_ratio[pop_ratio_cols].copy()
 
-            households_values = self.households_values[base_year_hh_cols].copy()
-            households_growth = self.households_growth[hh_cols].copy()
-            housing_type_split = self.housing_type_split[hh_occupancy_cols].copy()
-            housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
+            # households_values = self.households_values[base_year_hh_cols].copy()
+            # households_growth = self.households_growth[hh_cols].copy()
+            # housing_type_split = self.housing_type_split[hh_occupancy_cols].copy()
+            # housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
 
             worker_values = self.worker_values[base_year_workers_cols].copy()
             worker_growth = self.worker_growth[emp_cols].copy()
             worker_split = self.worker_splits[emp_ratio_cols].copy()
 
-            # Need to rename cols to names used in code
-            trip_rates = self.production_trip_rates[production_trip_cols].copy()
-            trip_rates = trip_rates.rename(
-                columns={
-                    "traveller_type": "traveller_type_id",
-                    "area_type": "area_type_id",
-                    "p": "purpose_id"
-                }
-            )
+            # # Need to rename cols to names used in code
+            # trip_rates = self.production_trip_rates[production_trip_cols].copy()
+            # trip_rates = trip_rates.rename(
+            #     columns={
+            #         "traveller_type": "traveller_type_id",
+            #         "area_type": "area_type_id",
+            #         "p": "purpose_id"
+            #     }
+            # )
 
-            hb_mode_split = self.hb_mode_split[mode_split_cols].copy()
+            # hb_mode_split = self.hb_mode_split[mode_split_cols].copy()
             msoa_area_types = self.msoa_area_types.copy()
             zone_areatype_lookup = self.zone_areatype_lookup.copy()
 
-            # TODO: make norms_2015_AreaType_Lookup table
             zone_areatype_lookup = zone_areatype_lookup.merge(
                 msoa_area_types,
                 left_on="msoa_zone_id",
@@ -674,38 +685,24 @@ class ExternalForecastSystem:
                 'norms_2015_zone_id', 'area_type_id'
             ]].sort_values('norms_2015_zone_id')
 
-            # zone_areatype_lookup.sort_values('norms_2015_zone_id').to_csv(lookup_location + "norms_2015_AreaType_Lookup.csv", index=False)
-            # .rename(
-            #     columns = {
-            #         "area_type": "area_type_id",
-            #         "ca": "car_availability_id",
-            #         "p": "purpose_id",
-            #         "m1": "1",
-            #         "m2": "2",
-            #         "m3": "3",
-            #         "m5": "5",
-            #         "m6": "6",
-            #         }
-            #     )
+            # car_association = self.traveller_types[[
+            #         "cars",
+            #         "traveller_type"
+            # ]].copy().rename(columns={"traveller_type": "traveller_type_id"})
+            #
+            # car_association["car_availability_id"] = 0
+            # no_car_mask = (car_association["cars"] == "0")
+            #
+            # # set up ids (-no_car_mask is the inversion of no_car_mask)
+            # car_association.loc[no_car_mask, "car_availability_id"] = 1
+            # car_association.loc[-no_car_mask, "car_availability_id"] = 2
+
+            # car_association = car_association[[
+            #     "traveller_type_id",
+            #     "car_availability_id"
+            # ]]
 
             attraction_weights = self.attraction_weights[attraction_weight_cols].copy()
-
-            car_association = self.traveller_types[[
-                    "cars",
-                    "traveller_type"
-            ]].copy().rename(columns={"traveller_type": "traveller_type_id"})
-
-            car_association["car_availability_id"] = 0
-            no_car_mask = (car_association["cars"] == "0")
-
-            # set up ids (-no_car_mask is the inversion of no_car_mask)
-            car_association.loc[no_car_mask, "car_availability_id"] = 1
-            car_association.loc[-no_car_mask, "car_availability_id"] = 2
-
-            car_association = car_association[[
-                "traveller_type_id",
-                "car_availability_id"
-            ]]
 
             print("Read-in default values!")
             last_time = current_time
@@ -726,18 +723,8 @@ class ExternalForecastSystem:
             print("Constraint 'default' selected, retrieving constraint "
                   + "data...")
             population_constraint = self.population_constraint[pop_cols].copy()
-            population_constraint = self.constrainer.convert_constraint_off_base_year(
-                population_constraint,
-                str(base_year),
-                year_list
-            )
 
-            households_constraint = self.households_constraint[hh_cols].copy()
-            households_constraint = self.constrainer.convert_constraint_off_base_year(
-                households_constraint,
-                str(base_year),
-                year_list
-            )
+            # households_constraint = self.households_constraint[hh_cols].copy()
 
             worker_constraint = self.worker_constraint[emp_cols].copy()
             worker_constraint = self.constrainer.convert_constraint_off_base_year(
@@ -755,33 +742,26 @@ class ExternalForecastSystem:
         elif constraint_source == "grown base":
             print("Constraint 'grown base' source selected, growing given "
                   "base by default growth factors...")
-            population_constraint = self.population_growth[pop_cols].copy()
-
-            population_constraint = self.convert_growth_off_base_year(
+            population_constraint = self.population_constraint[pop_cols].copy()
+            population_constraint = constrainer.grow_constraint(
+                population_values,
                 population_constraint,
                 str(base_year),
-                year_list
+                [str(x) for x in future_years]
             )
-            population_constraint = self.get_grown_values(population_values,
-                                                          population_constraint,
-                                                          "base_year_population",
-                                                          year_list)
 
-            households_constraint = self.households_growth[hh_cols].copy()
+            # households_constraint = self.households_growth[hh_cols].copy()
+            # households_constraint = constrainer.grow_constraint(
+            #     households_values,
+            #     households_constraint,
+            #     str(base_year),
+            #     [str(x) for x in future_years]
+            # )
 
-            households_constraint = self.convert_growth_off_base_year(
-                households_constraint,
-                str(base_year),
-                year_list
-            )
-            households_constraint = self.get_grown_values(households_values,
-                                                          households_constraint,
-                                                          "base_year_households",
-                                                          year_list)
-
+            # Update this with attraction model updates
             worker_constraint = self.worker_growth[emp_cols].copy()
 
-            worker_constraint = self.convert_growth_off_base_year(
+            worker_constraint = du.convert_growth_off_base_year(
                 worker_constraint,
                 str(base_year),
                 year_list
@@ -797,64 +777,39 @@ class ExternalForecastSystem:
                   (current_time - last_time))
 
         elif constraint_source == "model grown base":
-            households_constraint = None
-            population_constraint = None
             raise NotImplementedError("Constraint 'model grown base' selected, "
                                       "this will be created later...")
+        else:
+            raise ValueError("'%s' is not a recognised constraint source."
+                             % constraint_source)
 
-        # ## POPULATION GENERATION ## #
+        # ## PRODUCTION GENERATION ## #
         print("Generating productions...")
         production_trips = self.production_generator.run(
+            base_year=str(base_year),
+            future_years=[str(x) for x in future_years],
             population_growth=population_growth,
-            population_values=population_values,
             population_constraint=population_constraint,
-            population_split=population_split,
-            households_growth=households_growth,
-            households_values=households_values,
-            households_constraint=households_constraint,
-            housing_split=housing_type_split,
-            housing_occupancy=housing_occupancy,
+            import_home=imports['home'],
+            msoa_conversion_path=self.msoa_zones_path,
+            control_productions=True,
             d_log=development_log,
             d_log_split=development_log_split,
-            minimum_development_certainty=minimum_development_certainty,
-            population_metric=population_metric,
             constraint_required=constraint_required,
             constraint_method=constraint_method,
             constraint_area=constraint_area,
             constraint_on=constraint_on,
             constraint_source=constraint_source,
             designated_area=self.area_grouping.copy(),
-            base_year_string=str(base_year),
-            model_years=year_list,
             out_path=exports['productions'],
-            area_types=self.area_types,
-            trip_rates=trip_rates
+            recreate_productions=recreate_productions,
+
+            population_metric=population_metric,
         )
         print("Productions generated!")
         last_time = current_time
         current_time = time.time()
         print("Production generation took: %.2f seconds" %
-              (current_time - last_time))
-
-        print("Converting traveller type id to car availability id...")
-        required_columns = [
-            "model_zone_id",
-            "purpose_id",
-            "car_availability_id",
-            "soc",
-            "ns"
-        ]
-        ca_production_trips = self.generate_car_availability(
-            production_trips,
-            car_association,
-            year_list,
-            required_columns
-        )
-
-        print("Converted to car availability!")
-        last_time = current_time
-        current_time = time.time()
-        print("Car availability conversion took: %.2f seconds" %
               (current_time - last_time))
 
         # ## ATTRACTION GENERATION ###
@@ -886,9 +841,19 @@ class ExternalForecastSystem:
         print("Employment and Attraction generation took: %.2f seconds" %
               (current_time - last_time))
 
-        # ## ATTRACTION WEIGHT GENERATION & MATCHING ## #
+        # # ## ATTRACTION MATCHING ## #
+        print("Matching attractions...")
+        attraction_dataframe = match_attractions_to_productions(
+            attraction_dataframe, production_trips, year_list)
+        print("Attractions matched!")
+        last_time = current_time
+        current_time = time.time()
+        print("Attraction matching took: %.2f seconds" %
+              (current_time - last_time))
+
+        # # ## ATTRACTION WEIGHT GENERATION ## #
         print("Generating attraction weights...")
-        attraction_weights = self.generate_attraction_weights(
+        attraction_weights = generate_attraction_weights(
             attraction_dataframe,
             year_list
         )
@@ -899,18 +864,10 @@ class ExternalForecastSystem:
         print("Attraction weight generation took: %.2f seconds" %
               (current_time - last_time))
 
-        # TODO: Why has this been commented out?
-        # print("Matching attractions...")
-        # attraction_dataframe = self.match_attractions_to_productions(
-        #    attraction_weights,
-        #    production_trips,
-        #    year_list
-        # )
-        # print("Attractions matched!")
-        # last_time = current_time
-        # current_time = time.time()
-        # print("Attraction matching took: %.2f seconds" %
-        #       (current_time - last_time))
+        # To avoid errors lets make sure all columns have the same datatype
+        production_trips.columns = production_trips.columns.astype(str)
+        attraction_dataframe.columns = attraction_dataframe.columns.astype(str)
+        attraction_weights.columns = attraction_weights.columns.astype(str)
 
         # ## ZONE TRANSLATION ## #
         if desired_zoning != self.value_zoning:
@@ -922,8 +879,14 @@ class ExternalForecastSystem:
             output_path = os.path.join(imports['zoning'], desired_zoning + ".csv")
             translation_dataframe = pd.read_csv(output_path)
 
+            print("Translation")
+            print(translation_dataframe.dtypes)
+
+            print("productions")
+            print(production_trips.dtypes)
+
             converted_productions = self.zone_translator.run(
-                ca_production_trips,
+                production_trips,
                 translation_dataframe,
                 self.value_zoning,
                 desired_zoning,
@@ -958,12 +921,10 @@ class ExternalForecastSystem:
             print("Zone translation took: %.2f seconds" %
                   (current_time - last_time))
         else:
-            converted_productions = ca_production_trips.copy()
+            converted_productions = production_trips.copy()
             converted_attractions = attraction_weights.copy()
+            converted_pure_attractions = attraction_dataframe.copy()
 
-        # TODO: Save converted productions and attractions to file
-        # converted_productions.to_csv("F:/EFS/EFS_Full/check/converted_productions.csv", index=False)
-        # converted_attractions.to_csv("F:/EFS/EFS_Full/check/converted_attractions.csv", index=False)
 
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
@@ -971,13 +932,12 @@ class ExternalForecastSystem:
             final_distribution_dictionary = self.distribute_dataframe(
                 productions=converted_productions,
                 attraction_weights=converted_attractions,
-                mode_split_dataframe=hb_mode_split,
                 zone_areatype_lookup=zone_areatype_lookup,
                 required_purposes=purposes_needed,
                 required_soc=soc_needed,
                 required_ns=ns_needed,
                 required_car_availabilities=car_availabilities_needed,
-                required_modes=modes_needed,
+                required_mode=mode_needed,
                 year_string_list=year_list,
                 distribution_dataframe_dict=distributions,
                 distribution_file_location=imports['seed_dists'],
@@ -1022,16 +982,7 @@ class ExternalForecastSystem:
                 sector_grouping_file=sector_grouping_file
             )
 
-            key_string = (
-                # "mode"
-                # +
-                # str(mode)
-                # +
-                "purpose"
-                +
-                str(purpose)
-                )
-
+            key_string = str(purpose)
             pm_sector_total_dictionary[key_string] = pm_sector_totals
 
         # ## OUTPUTS ## #
@@ -1058,19 +1009,9 @@ class ExternalForecastSystem:
                     print("Saved distribution: " + key)
 
                 # Pop generation moved
+                # Production Generation moved
                 # Final workers out moved
-
-                fname = "MSOA_production_trips.csv"
-                ca_production_trips.to_csv(
-                    os.path.join(exports['productions'], fname),
-                    index=False
-                )
-
-                fname = "MSOA_attractions.csv"
-                attraction_dataframe.to_csv(
-                    os.path.join(exports['attractions'], fname),
-                    index=False
-                )
+                # Attractions output moved
 
                 fname = desired_zoning + "_production_trips.csv"
                 converted_productions.to_csv(
@@ -1928,44 +1869,6 @@ class ExternalForecastSystem:
     #  get_grown_values()
     #  growth_recombination()
     #  check nearby functions for same issue
-    def convert_growth_off_base_year(self,
-                                     growth_dataframe: pd.DataFrame,
-                                     base_year: str,
-                                     all_years: List[str]
-                                     ) -> pd.DataFrame:
-        """
-        Converts the multiplicative growth value of each all_years to be
-        based off of the base year.
-
-        Parameters
-        ----------
-        growth_dataframe:
-            The starting dataframe containing the growth values of all_years
-            and base_year
-
-        base_year:
-            The new base year to base all the all_years growth off of.
-
-        all_years:
-            The years in growth_dataframe to convert to be based off of
-            base_year growth
-
-        Returns
-        -------
-        converted_growth_dataframe:
-            The original growth dataframe with all growth values converted
-
-        """
-        growth_dataframe = growth_dataframe.copy()
-        for year in all_years:
-            growth_dataframe.loc[:, year] = (
-                growth_dataframe.loc[:, year]
-                /
-                growth_dataframe.loc[:, base_year]
-            )
-
-        return growth_dataframe
-
     def get_grown_values(self,
                          base_year_dataframe: pd.DataFrame,
                          growth_dataframe: pd.DataFrame,
@@ -2012,8 +1915,8 @@ class ExternalForecastSystem:
         """
         metric_dataframe = metric_dataframe.copy()
 
-        ## combine together dataframe columns to give full future values
-        ## f.e. base year will get 0 + base_year_population
+        # combine together dataframe columns to give full future values
+        # e.g. base year will get 0 + base_year_population
         for year in all_years:
             metric_dataframe.loc[:, year] = (
                 metric_dataframe.loc[:, year]
@@ -2021,7 +1924,6 @@ class ExternalForecastSystem:
                 metric_dataframe.loc[:, metric_column_name]
             )
 
-        ## drop the unnecessary metric column
         metric_dataframe = metric_dataframe.drop(
             labels=metric_column_name,
             axis=1
@@ -2131,68 +2033,6 @@ class ExternalForecastSystem:
                 *
                 attraction_dataframe[year + "_weights"]
             )
-
-        group_by_cols = ["model_zone_id", "purpose_id"]
-        needed_columns = group_by_cols.copy()
-        needed_columns.extend(year_list)
-
-        attraction_dataframe = attraction_dataframe[needed_columns]
-        attraction_dataframe = attraction_dataframe.groupby(
-            by=group_by_cols,
-            as_index=False
-        ).sum()
-
-        return attraction_dataframe
-
-    def generate_attraction_weights(self,
-                                    attraction_dataframe: pd.DataFrame,
-                                    year_list: List[str]
-                                    ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        attraction_weights = attraction_dataframe.copy()
-        purposes = attraction_weights["purpose_id"].unique()
-
-        for purpose in purposes:
-            for year in year_list:
-                mask = (attraction_weights["purpose_id"] == purpose)
-                attraction_weights.loc[mask, year] = (
-                    attraction_weights.loc[mask, year]
-                    /
-                    attraction_weights.loc[mask, year].sum()
-                )
-
-        return attraction_weights
-
-    def match_attractions_to_productions(self,
-                                         attraction_weights: pd.DataFrame,
-                                         production_dataframe: pd.DataFrame,
-                                         year_list: List[str]
-                                         ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        attraction_weights = attraction_weights.copy()
-        production_dataframe = production_dataframe.copy()
-
-        purposes = attraction_weights["purpose_id"].unique()
-
-        attraction_dataframe = pd.merge(
-            attraction_weights,
-            production_dataframe,
-            on=["model_zone_id", "purpose_id"],
-            suffixes=("", "_productions")
-        )
-
-        for purpose in purposes:
-            for year in year_list:
-                mask = (attraction_dataframe["purpose_id"] == purpose)
-                attraction_dataframe.loc[mask, year] = (
-                    attraction_weights.loc[mask, year]
-                    *
-                    attraction_dataframe.loc[mask, year + "_productions"].sum()
-                )
 
         group_by_cols = ["model_zone_id", "purpose_id"]
         needed_columns = group_by_cols.copy()
@@ -2410,13 +2250,12 @@ class ExternalForecastSystem:
     def distribute_dataframe(self,
                              productions: pd.DataFrame,
                              attraction_weights: pd.DataFrame,
-                             mode_split_dataframe: pd.DataFrame,
                              zone_areatype_lookup: pd.DataFrame,
                              required_purposes: List[int],
                              required_soc: List[int],
                              required_ns: List[int],
                              required_car_availabilities: List[int],
-                             required_modes: List[int],
+                             required_mode: int,
                              year_string_list: List[str],
                              distribution_dataframe_dict: dict,
                              distribution_file_location: str,
@@ -2434,25 +2273,14 @@ class ExternalForecastSystem:
         # TODO: Output files while it runs, instead of at the end!
         productions = productions.copy()
         attraction_weights = attraction_weights.copy()
-        mode_split_dataframe = mode_split_dataframe.copy()
         zone_areatype_lookup = zone_areatype_lookup.copy()
         final_distribution_dictionary = {}
         required_segments = []
         distribution_dataframe_list = []
 
-        mode_split_dataframe = mode_split_dataframe.merge(
-            zone_areatype_lookup,
-            on="area_type_id",
-        ).rename(columns={"norms_2015_zone_id": "p_zone"}).drop_duplicates()
-
-        # TODO: Is this still needed?
-        # make table wide to long
-        # mode_split_dataframe = mode_split_dataframe.copy().melt(
-        #     id_vars=['area_type_id', 'car_availability_id', 'purpose_id'],
-        #     value_vars=['1', '2', '3', '5', '6'],
-        #     var_name='mode_id', value_name='factor'
-        #     )
-        # mode_split_dataframe.to_csv(r'F:\EFS\EFS_Full\inputs\default\traveller_type\hb_mode_split.csv', index=False)
+        # Make sure the soc and ns columns are strings
+        productions['soc'] = productions['soc'].astype(str)
+        productions['ns'] = productions['ns'].astype(str)
 
         # TODO: Move inside of all nested loops into function (stops the
         #  indentation from making difficult to read code)
@@ -2462,7 +2290,6 @@ class ExternalForecastSystem:
         #  and file location given
         for year in year_string_list:
             for purpose in required_purposes:
-
                 # ns/soc depends on purpose
                 if purpose in [1, 2]:
                     required_segments = required_soc
@@ -2473,7 +2300,6 @@ class ExternalForecastSystem:
                     car_availability_dataframe = pd.DataFrame
                     first_iteration = True
                     for car_availability in required_car_availabilities:
-                        print()
 
                         # for tp in required_times:
                         dist_path = os.path.join(
@@ -2530,6 +2356,30 @@ class ExternalForecastSystem:
                             ["model_zone_id", str(year)]
                         ].rename(columns={str(year): "attraction_forecast"})
 
+                        # ## MATCH P/A ZONES ## #
+                        if production_input.empty:
+                            raise ValueError("Something has gone wrong. I "
+                                             "have no productions.")
+
+                        if attraction_input.empty:
+                            raise ValueError("Something has gone wrong. I "
+                                             "have no productions.")
+
+                        # Match the production and attraction zones
+                        p_cols = list(production_input)
+                        a_cols = list(attraction_input)
+
+                        # Outer join makes sure all model zones will get values
+                        pa_input = pd.merge(
+                            production_input,
+                            attraction_input,
+                            on='model_zone_id',
+                            how='outer'
+                        ).fillna(0)
+
+                        production_input = pa_input.reindex(p_cols, axis='columns').copy()
+                        attraction_input = pa_input.reindex(a_cols, axis='columns').copy()
+
                         # Furness the productions and attractions
                         target_percentage = 0.7 if self.use_zone_id_subset else 0.975
                         final_distribution = fp.furness(
@@ -2547,19 +2397,9 @@ class ExternalForecastSystem:
 
                         final_distribution["purpose_id"] = purpose
                         final_distribution["car_availability_id"] = car_availability
+                        final_distribution[year] = year
 
-                        # tfn mode split
-                        final_distribution = final_distribution.merge(
-                            mode_split_dataframe,
-                            on=["p_zone", "purpose_id", "car_availability_id"]
-                        )
-
-                        # calculate dt by mode
-                        final_distribution["dt"] = (
-                                final_distribution["dt"]
-                                *
-                                final_distribution[str(year)])
-
+                        final_distribution["mode_id"] = required_mode
                         final_distribution = final_distribution[[
                             "p_zone",
                             "a_zone",
@@ -2575,34 +2415,31 @@ class ExternalForecastSystem:
 
                         # TODO: Make sure this works for NHB trips too
 
-                        # loop over required modes
-                        for mode in required_modes:
-                            mask = (final_distribution["m"] == mode)
-                            final_distribution_mode = final_distribution[mask]
-                            final_distribution_mode = final_distribution_mode[[
-                                'p_zone', 'a_zone', 'trips'
-                            ]]
+                        final_distribution_mode = final_distribution.copy()
+                        final_distribution_mode = final_distribution_mode[[
+                            'p_zone', 'a_zone', 'trips'
+                        ]]
 
-                            dict_string = du.get_dist_name(
-                                str(trip_origin),
-                                'pa',
-                                str(year),
-                                str(purpose),
-                                str(mode),
-                                str(segment),
-                                str(car_availability)
-                            )
+                        dict_string = du.get_dist_name(
+                            str(trip_origin),
+                            'pa',
+                            str(year),
+                            str(purpose),
+                            str(required_mode),
+                            str(segment),
+                            str(car_availability)
+                        )
 
-                            final_distribution_dictionary[dict_string] = final_distribution_mode
+                        final_distribution_dictionary[dict_string] = final_distribution_mode
 
-                            print("Distribution " + dict_string + " complete!")
-                            if first_iteration:
-                                car_availability_dataframe = final_distribution_mode
-                                first_iteration = False
-                            else:
-                                car_availability_dataframe = car_availability_dataframe.append(
-                                    final_distribution_mode
-                                    )
+                        print("Distribution " + dict_string + " complete!")
+                        if first_iteration:
+                            car_availability_dataframe = final_distribution_mode
+                            first_iteration = False
+                        else:
+                            car_availability_dataframe = car_availability_dataframe.append(
+                                final_distribution_mode
+                                )
 
         return final_distribution_dictionary
 
@@ -2631,9 +2468,102 @@ class ExternalForecastSystem:
         self.area_grouping = du.get_data_subset(self.area_grouping)
 
 
+def generate_attraction_weights(attraction_dataframe: pd.DataFrame,
+                                year_list: List[str]
+                                ) -> pd.DataFrame:
+    """
+    TODO: write generate_attraction_weights doc
+    """
+    attraction_weights = attraction_dataframe.copy()
+    purposes = attraction_weights["purpose_id"].unique()
+
+    for purpose in purposes:
+        for year in year_list:
+            mask = (attraction_weights["purpose_id"] == purpose)
+            attraction_weights.loc[mask, year] = (
+                attraction_weights.loc[mask, year]
+                /
+                attraction_weights.loc[mask, year].sum()
+            )
+
+    return attraction_weights
+
+
+def match_attractions_to_productions(attractions: pd.DataFrame,
+                                     productions: pd.DataFrame,
+                                     year_list: List[str],
+                                     infill: float = 0.001,
+                                     echo: bool = False
+                                     ) -> pd.DataFrame:
+    """
+    TODO: Write match_attractions_to_productions doc
+    """
+    attractions = attractions.copy()
+    productions = productions.copy()
+
+    # Make sure all column names are strings
+    productions.columns = productions.columns.astype(str)
+    attractions.columns = attractions.columns.astype(str)
+
+    purposes = attractions["purpose_id"].unique()
+
+    if echo:
+        print("Balancing Attractions...")
+        print("Before:")
+        for year in year_list:
+            print("Year: %s\tProductions: %.2f\tAttractions: %.2f"
+                  % (year, productions[year].sum(), attractions[year].sum()))
+
+    attractions = pd.merge(
+        attractions,
+        productions,
+        on=["model_zone_id", "purpose_id"],
+        how='outer',
+        suffixes=("", "_productions")
+    )
+
+    # Infill where P/A don't match
+    attractions_cols = year_list.copy()
+    productions_cols = [x + '_productions' for x in year_list]
+    for col in attractions_cols + productions_cols:
+        attractions[col] = attractions[col].fillna(infill)
+
+    # Balance the attractions to the productions
+    for purpose in purposes:
+        for year in year_list:
+            mask = (attractions["purpose_id"] == purpose)
+            attractions.loc[mask, year] = (
+                    attractions.loc[mask, year].values
+                    /
+                    (
+                        attractions.loc[mask, year].sum()
+                        /
+                        attractions.loc[mask, year + '_productions'].sum()
+                    )
+            )
+
+    group_by_cols = ["model_zone_id", "purpose_id"]
+    needed_columns = group_by_cols.copy()
+    needed_columns.extend(year_list)
+
+    attractions = attractions[needed_columns]
+    attractions = attractions.groupby(
+        by=group_by_cols,
+        as_index=False
+    ).sum()
+
+    if echo:
+        print("After:")
+        for year in year_list:
+            print("Year: %s\tProductions: %.2f\tAttractions: %.2f"
+                  % (year, productions[year].sum(), attractions[year].sum()))
+
+    return attractions
+
+
 def _input_checks(iter_num=None,
-                 m_needed=None
-                 ) -> None:
+                  m_needed=None
+                  ) -> None:
     """
     Checks that any arguments given are OK. Will raise an error
     for any given input that is not correct.
@@ -2657,7 +2587,7 @@ def nhb_furness(p_import,
                 years_needed,
                 replace_zero_vals,
                 zero_infill,
-                nhb_productions_fname='internal_nhb_productions.csv',
+                nhb_productions_fname=consts.NHB_PRODUCTIONS_FNAME,
                 use_zone_id_subset=False):
 
     """
@@ -2850,23 +2780,38 @@ def write_input_info(output_path,
 
 
 def main():
+    dirty_init = False
     use_zone_id_subset = False
     echo = False
 
+    if dirty_init:
+        print("Not Initialising correctly. This WILL cause problems!")
+
     # Running control
     run_base_efs = True
+    recreate_productions = True
+
+    constrain_population = False
+
     run_nhb_efs = False
     run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False
 
     # Controls I/O
-    iter_num = 2
+    iter_num = 0
     output_location = "E:/"
-    import_location = "I:/"
+    import_location = "Y:/"
 
-    # Initialise EFS
+    # Set up constraints
+    if constrain_population:
+        constraints = consts.CONSTRAINT_REQUIRED_DEFAULT
+    else:
+        constraints = [False] * 6
+
+    # ## RUN START ## #
     efs = ExternalForecastSystem(
+        dirty_init=dirty_init,
         use_zone_id_subset=use_zone_id_subset,
         import_location=import_location,
         output_location=output_location
@@ -2874,21 +2819,25 @@ def main():
 
     if run_base_efs:
         # Generates HB PA matrices
-        efs.run(desired_zoning="norms_2015",
-                constraint_source="Default",
-                output_location=output_location,
-                iter_num=iter_num,
-                echo_distribution=echo)
+        efs.run(
+            desired_zoning="norms_2015",
+            constraint_source="Default",
+            output_location=output_location,
+            recreate_productions=recreate_productions,
+            iter_num=iter_num,
+            echo_distribution=echo,
+            constraint_required=constraints
+        )
 
     if run_nhb_efs:
-        # Need to convert, ready for NHB generation
-        efs.pa_to_od(
-            output_location=output_location,
-            iter_num=iter_num,
-            overwrite_hb_tp_pa=True,
-            overwrite_hb_tp_od=True,
-            echo=echo
-        )
+        # # Need to convert, ready for NHB generation
+        # efs.pa_to_od(
+        #     output_location=output_location,
+        #     iter_num=iter_num,
+        #     overwrite_hb_tp_pa=True,
+        #     overwrite_hb_tp_od=True,
+        #     echo=echo
+        # )
 
         # Generate NHB PA/OD matrices
         efs.run_nhb(

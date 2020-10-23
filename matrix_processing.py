@@ -216,7 +216,7 @@ def aggregate_matrices(import_dir: str,
     mat_format_str = '_' + matrix_format + '_'
     all_matrices = du.list_files(import_dir)
     all_matrices = [x for x in all_matrices if mat_format_str in x]
-    all_matrices = [x for x in all_matrices if x[:len(trip_origin)] == trip_origin]
+    all_matrices = [x for x in all_matrices if du.starts_with(x, trip_origin)]
 
     # for year, purpose, mode, time_period
     print("Writing files to: %s" % export_dir)
@@ -380,6 +380,10 @@ def _generate_tour_proportions_internal(od_import: str,
 
             # ## BALANCE FROM_HOME AND TO_HOME ## #
             seed_val = 1  # ASSUME 1 for now
+
+            # TODO: Update to use seed values from
+            #  phi factors and time split factors
+            # Dont forget 0.001 infill from 0 seed values
 
             # First use tp4 to bring both vector sums to average
             fh_th_avg = (fh_target.sum() + th_target.sum()) / 2

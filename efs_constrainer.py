@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from demand_utilities import error_management as err_check
+from demand_utilities import utils as du
 
 
 class ForecastConstrainer:
@@ -23,48 +24,48 @@ class ForecastConstrainer:
             constraint_on: str, # growth, all
             constraint_values: pd.DataFrame,
             base_year: str,
-            model_years: List[str],
-            designated_area: pd.DataFrame = None
+            years: List[str],
+            designated_area: pd.DataFrame = None,
+            zone_col: str = 'model_zone_id'
             ):
         """
         # TODO
-        """        
+        """
         # ## CONSTRAINT APPLICATION
         if constraint_method == "percentage":
-            # TODO
             constrained_dataframe = self.constrain_by_percentage(
-                    grown_dataframe,
-                    constraint_area,
-                    constraint_on,
-                    constraint_values,
-                    model_years,
-                    designated_area
-                    )
-            print("")
+                grown_dataframe,
+                constraint_area,
+                constraint_on,
+                constraint_values,
+                years,
+                designated_area,
+                zone_col
+            )
         elif constraint_method == "average":
-            # TODO
-            print("")
             constrained_dataframe = self.constrain_by_average(
-                    grown_dataframe,
-                    constraint_area,
-                    constraint_on,
-                    constraint_values,
-                    model_years,
-                    designated_area
-                    )
+                grown_dataframe,
+                constraint_area,
+                constraint_on,
+                constraint_values,
+                years,
+                designated_area,
+                zone_col
+            )
         else:
             raise ValueError("constraint_area '%s' does not exist." %
                              str(constraint_area))
-        
+
         return constrained_dataframe
-        
+
     def constrain_by_percentage(self,
                                 grown_dataframe: pd.DataFrame,
                                 constraint_area: str, # zone, designated, all
                                 constraint_on: str, # growth, all
                                 constraint_values: pd.DataFrame,
                                 model_years: List[str],
-                                designated_area: pd.DataFrame
+                                designated_area: pd.DataFrame,
+                                zone_col: str = 'model_zone_id'
                                 ) -> pd.DataFrame:
         """
         #TODO
@@ -72,8 +73,8 @@ class ForecastConstrainer:
         if constraint_area == "zone":
             # set each grouping area to one zone
             grouping_area = pd.DataFrame({
-                "grouping_id": grown_dataframe["model_zone_id"].values,
-                "model_zone_id": grown_dataframe["model_zone_id"].values
+                "grouping_id": grown_dataframe[zone_col].values,
+                zone_col: grown_dataframe[zone_col].values
             })
 
         elif constraint_area == "designated":
@@ -84,7 +85,7 @@ class ForecastConstrainer:
             # singular grouping area for all zones
             grouping_area = pd.DataFrame({
                 "grouping_id": 1,
-                "model_zone_id": grown_dataframe["model_zone_id"].values
+                zone_col: grown_dataframe[zone_col].values
             })
 
         else:
@@ -96,9 +97,9 @@ class ForecastConstrainer:
         for group in groupings:
             # Create masks for the zones in this group
             group_mask = grouping_area["grouping_id"] == group
-            zones = grouping_area[group_mask]["model_zone_id"].values
-            grown_dataframe_mask = grown_dataframe["model_zone_id"].isin(zones)
-            constraint_dataframe_mask = constraint_values["model_zone_id"].isin(zones)
+            zones = grouping_area[group_mask][zone_col].values
+            grown_dataframe_mask = grown_dataframe[zone_col].isin(zones)
+            constraint_dataframe_mask = constraint_values[zone_col].isin(zones)
 
             for year in model_years:
                 # Sum all zones in this group for this year
@@ -136,7 +137,8 @@ class ForecastConstrainer:
                              constraint_on: str, # growth, all
                              constraint_values: pd.DataFrame,
                              model_years: List[str],
-                             designated_area: pd.DataFrame
+                             designated_area: pd.DataFrame,
+                             zone_col: str = 'model_zone_id'
                              ) -> pd.DataFrame:
         """
         #TODO
@@ -144,8 +146,8 @@ class ForecastConstrainer:
         if constraint_area == "zone":
             # set each grouping area to one zone
             grouping_area = pd.DataFrame({
-                "grouping_id": grown_dataframe["model_zone_id"].values,
-                "model_zone_id": grown_dataframe["model_zone_id"].values
+                "grouping_id": grown_dataframe[zone_col].values,
+                zone_col: grown_dataframe[zone_col].values
             })
         elif constraint_area == "designated":
             # no need to change anything
@@ -155,7 +157,7 @@ class ForecastConstrainer:
             # singular grouping area for all zones
             grouping_area = pd.DataFrame({
                 "grouping_id": 1,
-                "model_zone_id": grown_dataframe["model_zone_id"].values
+                zone_col: grown_dataframe[zone_col].values
             })
         else:
             raise ValueError("constraint_area '%s' does not exist." %
@@ -165,9 +167,9 @@ class ForecastConstrainer:
         
         for group in groupings:
             group_mask = grouping_area["grouping_id"] == group
-            zones = grouping_area[group_mask]["model_zone_id"].values
-            grown_dataframe_mask = grown_dataframe["model_zone_id"].isin(zones)
-            constraint_dataframe_mask = constraint_values["model_zone_id"].isin(zones)
+            zones = grouping_area[group_mask][zone_col].values
+            grown_dataframe_mask = grown_dataframe[zone_col].isin(zones)
+            constraint_dataframe_mask = constraint_values[zone_col].isin(zones)
 
             for year in model_years:
                 constraint_total = constraint_values.loc[
@@ -207,3 +209,30 @@ class ForecastConstrainer:
             axis=1)
         
         return constraint_dataframe
+
+
+def grow_constraint(base_values: pd.DataFrame,
+                    growth_factors: pd.DataFrame,
+                    base_year: str,
+                    future_years: List[str]
+                    ) -> pd.DataFrame:
+    growth_factors = du.convert_growth_off_base_year(
+        growth_factors,
+        base_year,
+        future_years
+    )
+    grown_vals = du.get_growth_values(
+        base_values,
+        growth_factors,
+        base_year,
+        future_years
+    )
+    # Add base year back in to get full grown values
+    grown_vals = du.growth_recombination(
+        grown_vals,
+        base_year_col=base_year,
+        future_year_cols=future_years,
+        drop_base_year=False
+    )
+
+    return grown_vals

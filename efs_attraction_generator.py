@@ -59,7 +59,7 @@ class EFSAttractionGenerator:
                 print("No development_log dataframe passed to worker "
                       + "generator but development_log is indicated to be "
                       + "required. Process will not function correctly.")
-                exit(10)
+                sys.exit(1)
                  
         # ## GROW WORKERS
         grown_workers = self.worker_grower(
@@ -154,6 +154,19 @@ class EFSAttractionGenerator:
             attraction_weights,
             model_years
         )
+
+        # Write attractions out
+        out_fname = 'MSOA_attractions.csv'
+        attractions.to_csv(
+            os.path.join(output_path, out_fname),
+            index=False
+        )
+
+        # print(attractions)
+        # print(list(attractions))
+        # print(attractions.dtypes)
+        #
+        # exit()
 
         return attractions
 
