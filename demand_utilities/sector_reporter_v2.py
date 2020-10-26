@@ -22,8 +22,8 @@ class SectorReporter:
     
     def __init__(self,
                  default_zone_system: str = "MSOA",
-                 default_zone_file: str = "C:/Users/Sneezy/Desktop/GitHub/Normits-Utils/zone_groupings/msoa_zones.csv",
-                 default_sector_grouping_file: str = "C:/Users/Sneezy/Desktop/GitHub/Normits-Utils/zone_groupings/lad_msoa_grouping.csv"
+                 default_zone_file: str = "Y:/NorMITs Synthesiser/Repo/Normits-Utils/zone_groupings/msoa_zones.csv",
+                 default_sector_grouping_file: str = "Y:/NorMITs Synthesiser/Repo/Normits-Utils/zone_groupings/lad_msoa_grouping.csv"
                  ):
         """
         Initialises the sector reporting class.
