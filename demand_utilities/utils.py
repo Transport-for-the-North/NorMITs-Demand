@@ -146,12 +146,66 @@ def growth_recombination(df: pd.DataFrame,
         df = df.copy()
 
     for year in future_year_cols:
-        df[year] = df[year] + df[base_year_col]
+        df[year] += df[base_year_col]
 
     if drop_base_year:
         df = df.drop(labels=base_year_col, axis=1)
 
     return df
+
+
+def get_grown_values(base_year_df: pd.DataFrame,
+                     growth_df: pd.DataFrame,
+                     base_year_col: str,
+                     future_years: List[str],
+                     merge_col: str = "model_zone_id"
+                     ) -> pd.DataFrame:
+    """
+    Returns base_year_df extended to include the grown values in
+    future_year_cols
+
+    Parameters
+    ----------
+    base_year_df:
+        Dataframe containing the base year data. Must have at least 2 columns
+        of merge_col, and base_year_col
+
+    growth_df:
+        Dataframe containing the growth factors over base year for all future
+        years i.e. The base year column would be 1 as it cannot grow over
+        itself. Must have at least the following cols: merge_col and all
+        future_year_cols.
+
+    base_year_col:
+        The column name that the base year data is in
+
+    future_years:
+        The columns names that contain the growth factor data for base and
+        future years.
+
+    merge_col:
+        Name of the column to merge base_year_df and growth_df on.
+
+    Returns
+    -------
+    Grown_values_df:
+        base_year_df extended and populated with the future_year_cols
+        columns.
+    """
+    # Init
+    base_year_df = base_year_df.copy()
+    growth_df = growth_df.copy()
+
+    # CREATE GROWN DATAFRAME
+    grown_df = pd.merge(
+        base_year_df,
+        growth_df,
+        on=merge_col
+    )
+
+    for year in future_years:
+        grown_df[year] *= grown_df.loc[base_year_col]
+    return grown_df
 
 
 def get_growth_values(base_year_df: pd.DataFrame,
@@ -206,10 +260,10 @@ def get_growth_values(base_year_df: pd.DataFrame,
     # Grow base year value by values given in growth_df - 1
     # -1 so we get growth values. NOT growth values + base year
     for year in future_year_cols:
-        growth_values.loc[:, year] = (
-            (growth_values.loc[:, year] - 1)
+        growth_values[year] = (
+            (growth_values[year] - 1)
             *
-            growth_values.loc[:, base_year_col]
+            growth_values[base_year_col]
         )
 
     return growth_values

@@ -293,8 +293,7 @@ class EFSProductionGenerator:
         base_year_pop = base_year_pop.rename(columns={'people': base_year})
 
         # Audit population numbers
-        du.print_w_toggle("Base Year Population: %d"
-                          % base_year_pop[base_year].sum(),
+        du.print_w_toggle("Base Year Population: %d" % base_year_pop[base_year].sum(),
                           echo=audits)
 
         # ## FUTURE YEAR POPULATION ## #

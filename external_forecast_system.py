@@ -245,6 +245,7 @@ class ExternalForecastSystem:
             constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
             outputting_files: bool = True,
             recreate_productions: bool = True,
+            recreate_attractions: bool = True,
             iter_num: int = 0,
             performing_sector_totals: bool = True,
             output_location: str = None,
@@ -766,10 +767,10 @@ class ExternalForecastSystem:
                 str(base_year),
                 year_list
             )
-            worker_constraint = self.get_grown_values(worker_values,
-                                                      worker_constraint,
-                                                      "base_year_workers",
-                                                      year_list)
+            worker_constraint = du.get_grown_values(worker_values,
+                                                    worker_constraint,
+                                                    "base_year_workers",
+                                                    year_list)
             print("Constraint generated!")
             last_time = current_time
             current_time = time.time()
@@ -815,24 +816,25 @@ class ExternalForecastSystem:
         # ## ATTRACTION GENERATION ###
         print("Generating attractions...")
         attraction_dataframe = self.attraction_generator.run(
-            worker_growth=worker_growth,
+            base_year=str(base_year),
+            future_years=[str(x) for x in future_years],
+            employment_growth=worker_growth,
+            employment_constraint=worker_constraint,
             worker_values=worker_values,
-            worker_constraint=worker_constraint,
             worker_split=worker_split,
-            development_log=development_log,
-            development_log_split=development_log_split,
-            minimum_development_certainty=minimum_development_certainty,
-            integrating_development_log=integrate_dlog,
+            import_home=imports['home'],
+            msoa_conversion_path=self.msoa_zones_path,
+            control_attractions=False,
+            d_log=development_log,
+            d_log_split=development_log_split,
             constraint_required=constraint_required,
             constraint_method=constraint_method,
             constraint_area=constraint_area,
             constraint_on=constraint_on,
             constraint_source=constraint_source,
             designated_area=self.area_grouping.copy(),
-            base_year_string=str(base_year),
-            model_years=year_list,
-            attraction_weights=attraction_weights,
-            output_path=exports['attractions']
+            out_path=exports['attractions'],
+            recreate_attractions=recreate_attractions
         )
 
         print("Attractions generated!")
@@ -1864,73 +1866,6 @@ class ExternalForecastSystem:
             alt_worker_growth
         ]
 
-    # TODO: Move these functions to utils as they are copied in multiple places
-    #  convert_growth_off_base_year()
-    #  get_grown_values()
-    #  growth_recombination()
-    #  check nearby functions for same issue
-    def get_grown_values(self,
-                         base_year_dataframe: pd.DataFrame,
-                         growth_dataframe: pd.DataFrame,
-                         base_year: str,
-                         all_years: List[str]
-                         ) -> pd.DataFrame:
-        """
-
-        Parameters
-        ----------
-        base_year_dataframe
-        growth_dataframe
-        base_year
-        all_years
-
-        Returns
-        -------
-
-        """
-        base_year_dataframe = base_year_dataframe.copy()
-        growth_dataframe = growth_dataframe.copy()
-
-        # CREATE GROWN DATAFRAME
-        grown_dataframe = pd.merge(
-            base_year_dataframe,
-            growth_dataframe,
-            on="model_zone_id"
-        )
-        for year in all_years:
-            growth_dataframe.loc[:, year] = (
-                (growth_dataframe.loc[:, year] - 1)
-                *
-                growth_dataframe.loc[:, base_year]
-            )
-        return grown_dataframe
-
-    def growth_recombination(self,
-                             metric_dataframe: pd.DataFrame,
-                             metric_column_name: str,
-                             all_years: List[str]
-                             ) -> pd.DataFrame:
-        """
-        #TODO GOt a better version in production_generator
-        """
-        metric_dataframe = metric_dataframe.copy()
-
-        # combine together dataframe columns to give full future values
-        # e.g. base year will get 0 + base_year_population
-        for year in all_years:
-            metric_dataframe.loc[:, year] = (
-                metric_dataframe.loc[:, year]
-                +
-                metric_dataframe.loc[:, metric_column_name]
-            )
-
-        metric_dataframe = metric_dataframe.drop(
-            labels=metric_column_name,
-            axis=1
-        )
-
-        return metric_dataframe
-
     def segment_dataframe(self,
                           combined_dataframe: pd.DataFrame,
                           split_dataframe: pd.DataFrame,
@@ -2789,7 +2724,8 @@ def main():
 
     # Running control
     run_base_efs = True
-    recreate_productions = True
+    recreate_productions = False
+    recreate_attractions = True
 
     constrain_population = False
 
@@ -2824,6 +2760,7 @@ def main():
             constraint_source="Default",
             output_location=output_location,
             recreate_productions=recreate_productions,
+            recreate_attractions=recreate_attractions,
             iter_num=iter_num,
             echo_distribution=echo,
             constraint_required=constraints
