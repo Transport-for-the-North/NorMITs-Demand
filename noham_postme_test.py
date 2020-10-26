@@ -37,6 +37,7 @@ def main():
 
     m_needed = [3]
     process_count = 5
+    p_needed = consts.ALL_HB_P
 
     # Audit as we go
     audit_tol = 0.001
@@ -44,7 +45,7 @@ def main():
     decompile_od_bool = False
     gen_tour_proportions_bool = True
     post_me_compile_pa = False
-    pa_back_to_od_check = False
+    pa_back_to_od_check = True
 
     if decompile_od_bool:
         od2pa.convert_to_efs_matrices(
@@ -74,6 +75,7 @@ def main():
             pa_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
             tour_proportions_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             zone_translate_dir=r'Y:\NorMITs Demand\import\zone_translation',
+            p_needed=p_needed,
             year=consts.BASE_YEAR,
             m_needed=m_needed,
             ca_needed=ca_needed,
@@ -107,6 +109,7 @@ def main():
             tour_proportions_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             zone_translate_dir=r'Y:\NorMITs Demand\import\zone_translation',
             years_needed=[consts.BASE_YEAR],
+            p_needed=p_needed,
             m_needed=m_needed,
             ca_needed=ca_needed,
             process_count=process_count
@@ -145,8 +148,9 @@ def main():
             export_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test PCU Compiled OD Matrices',
             import_folder=r'Y:\NorMITs Demand\import',
             mode=str(m_needed[0]),
-            method='to_people',
-            out_format='wide'
+            method='to_vehicles',
+            out_format='wide',
+            hourly_average=True
         )
 
         # Check against original postme compiled

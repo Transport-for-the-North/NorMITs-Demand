@@ -22,16 +22,16 @@ import pandas as pd
 from tqdm import tqdm
 
 # Compare compiled matrices
-# ORIGINAL_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_pcu'
-# COMPARE_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test PCU Compiled OD Matrices'
-# TRIP_ORIGIN = None
-# REPORT_FNAME = 'comparison_report_compiled.csv'
+ORIGINAL_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_pcu'
+COMPARE_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test PCU Compiled OD Matrices'
+TRIP_ORIGIN = None
+REPORT_FNAME = 'comparison_report_compiled.csv'
 
-# Compare time period split OD matrices
-ORIGINAL_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices'
-COMPARE_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test OD Matrices'
-TRIP_ORIGIN = 'hb'
-REPORT_FNAME = 'comparison_report_tp_od.csv'
+# # Compare time period split OD matrices
+# ORIGINAL_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices'
+# COMPARE_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test OD Matrices'
+# TRIP_ORIGIN = 'hb'
+# REPORT_FNAME = 'comparison_report_tp_od.csv'
 
 
 OUTPUT_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices'

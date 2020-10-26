@@ -577,6 +577,8 @@ def maybe_get_aggregated_tour_proportions(orig: int,
                                           model2tfn: Dict[int, int],
                                           cell_demand: float,
                                           ) -> np.array:
+    return model_tour_props[orig][dest]
+
     # Translate to the aggregated zones
     lad_orig = model2lad.get(orig, -1)
     lad_dest = model2lad.get(dest, -1)
