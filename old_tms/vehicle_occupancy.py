@@ -66,7 +66,7 @@ def people_vehicle_conversion(input_folder = _default_folder,
     for pl in tqdm(purpose_lookup, desc=desc):
         # print(pl)
 
-        # Do commute business and other seperately    
+        # Do commute business and other seperately
         mats = [x for x in internal_file if pl[0] in x]
 
         for mpt in tps:
@@ -80,11 +80,11 @@ def people_vehicle_conversion(input_folder = _default_folder,
             tp_mat = [x for x in mats if mpt in x]
             # print(tp_mat)
             # print(factor)
-            
+
             # Get period factor
             p_factor = period_hours[tp_int]
             # print('Dividing by ' + str(p_factor))
-    
+
             for f_loop in tp_mat:
 
                 # print(input_folder + '/' + f_loop)
@@ -92,17 +92,21 @@ def people_vehicle_conversion(input_folder = _default_folder,
 
                 cols = list(ph_mat)[1:-1]
 
+                # For converting from people to vehicles hourly average refers
+                # to the output matrix
                 if method == 'to_vehicles':
                     for col in cols:
                         ph_mat[col] = ph_mat[col] / factor
                         if hourly_average:
                             ph_mat[col] = ph_mat[col] / p_factor
-                
+
+                # For converting from vehicles to people hourly average refers
+                # to the input OD matrix
                 elif method == 'to_people':
                     for col in cols:
-                        ph_mat[col] = ph_mat[col] * factor
                         if hourly_average:
-                            ph_mat[col] = ph_mat[col] / p_factor
+                            ph_mat[col] = ph_mat[col] * p_factor
+                        ph_mat[col] = ph_mat[col] * factor
 
                 export_path = (export_folder + '/' + f_loop)
                 # print(export_path)

@@ -686,6 +686,7 @@ def n_matrix_split(matrix,
 
     return(mats)
 
+
 def compile_od(od_folder,
                write_folder,
                compile_param_path,
@@ -706,13 +707,17 @@ def compile_od(od_folder,
     files = os.listdir(od_folder)
     # Filter pickles or anything else odd in there
     files = [x for x in files if '.csv' in x]
-    print(files)
+    # print(files)
+
+    from tqdm import tqdm
 
     comp_ph = []
     od_pickle = {}
-    for index,row in compilations.iterrows():
+    desc = 'Compiling matrices'
+    total = len(list(compilations.iterrows()))
+    for index, row in tqdm(compilations.iterrows(), desc=desc, total=total):
         compilation_name = row['compilation']
-        print(compilation_name)
+        # print(compilation_name)
 
         if row['format'] == 'long':
             target_format = 'long'
@@ -727,7 +732,7 @@ def compile_od(od_folder,
 
         for each_one in import_me:
             reader = (od_folder + '/' + each_one)
-            print('Importing ' + reader)
+            # print('Importing ' + reader)
             temp = pd.read_csv(reader)
 
             if build_factor_pickle:
@@ -780,7 +785,7 @@ def compile_od(od_folder,
         final['dt'] = 0
 
         for add in range(mat_len):
-            print('adding dt_' + str(add+1))
+            # print('adding dt_' + str(add+1))
             final['dt'] = final['dt'] + final['dt_'+str(add+1)]
             final = final.drop('dt_'+str(add+1), axis=1)
 
@@ -794,7 +799,7 @@ def compile_od(od_folder,
                                               ['o_zone', 'd_zone']).reset_index()
 
         if target_format == 'wide':
-            print('translating back to wide')
+            # print('translating back to wide')
             final = final.pivot(index = 'o_zone',
                                 columns = 'd_zone',
                                 values = 'dt')
@@ -808,12 +813,12 @@ def compile_od(od_folder,
             for mat in comp_ph:
                 # Write compiled od
                 for key,value in mat.items():
-                    print(key)
+                    # print(key)
                     if key[-4:] == '.csv':
                         c_od_out = os.path.join(write_folder, key)
                     else:
                         c_od_out = os.path.join(write_folder, key + '.csv')
-                    print(c_od_out)
+                    # print(c_od_out)
                     value.to_csv(c_od_out, index=True)
             if build_factor_pickle:
                 fname = 'od_compilation_factors.pickle'

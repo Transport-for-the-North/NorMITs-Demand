@@ -59,7 +59,7 @@ class EFSAttractionGenerator:
                 print("No development_log dataframe passed to worker "
                       + "generator but development_log is indicated to be "
                       + "required. Process will not function correctly.")
-                sys.exit(1)
+                exit(1)
                  
         # ## GROW WORKERS
         grown_workers = self.worker_grower(

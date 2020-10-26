@@ -12,11 +12,15 @@ Small test file to help with testing post-ME code for noham while full noham
 EFS runs are not working.
 """
 
+import os
+
 import od_to_pa as od2pa
 import pa_to_od as pa2od
 import matrix_processing as mat_p
 
 import efs_constants as consts
+import demand_utilities.utils as du
+import demand_utilities.vehicle_occupancy as vo
 
 
 def main():
@@ -34,10 +38,13 @@ def main():
     m_needed = [3]
     process_count = 5
 
-    decompile_od_bool = True
+    # Audit as we go
+    audit_tol = 0.001
+
+    decompile_od_bool = False
     gen_tour_proportions_bool = True
     post_me_compile_pa = False
-    pa_back_to_od_check = True
+    pa_back_to_od_check = False
 
     if decompile_od_bool:
         od2pa.convert_to_efs_matrices(
@@ -57,7 +64,8 @@ def main():
             od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
             od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
             decompile_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params/od_compilation_factors.pickle',
-            year=consts.BASE_YEAR
+            year=consts.BASE_YEAR,
+            audit_tol=audit_tol
         )
 
     if gen_tour_proportions_bool:
@@ -84,14 +92,14 @@ def main():
         )
 
     if pa_back_to_od_check:
-        # mat_p.build_24hr_mats(
-        #     import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
-        #     export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\24hr PA Matrices',
-        #     matrix_format='pa',
-        #     years_needed=[consts.BASE_YEAR],
-        #     m_needed=m_needed,
-        #     ca_needed=ca_needed,
-        # )
+        mat_p.build_24hr_mats(
+            import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
+            export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\24hr PA Matrices',
+            matrix_format='pa',
+            years_needed=[consts.BASE_YEAR],
+            m_needed=m_needed,
+            ca_needed=ca_needed,
+        )
 
         pa2od.build_od_from_tour_proportions(
             pa_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\24hr PA Matrices',
@@ -103,6 +111,45 @@ def main():
             ca_needed=ca_needed,
             process_count=process_count
         )
+
+        # NEW CODE NEED TO FULLY TEST BELOW
+        # Need to copy over NHB
+        mat_p.copy_nhb_matrices(
+            import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
+            export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test OD Matrices'
+        )
+
+        mat_p.build_compile_params(
+            import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test OD Matrices',
+            export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Test Compile Params',
+            matrix_format='od',
+            years_needed=[consts.BASE_YEAR],
+            m_needed=m_needed,
+            ca_needed=ca_needed,
+            tp_needed=consts.TIME_PERIODS
+        )
+
+        compile_params_fname = du.get_compile_params_name('od', str(consts.BASE_YEAR))
+        compile_param_path = os.path.join(r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Test Compile Params',
+                                          compile_params_fname)
+        du.compile_od(
+            od_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test OD Matrices',
+            write_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test Compiled OD Matrices',
+            compile_param_path=compile_param_path,
+            build_factor_pickle=False
+        )
+
+        # Convert the compiled OD into hourly average PCU
+        vo.people_vehicle_conversion(
+            input_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test Compiled OD Matrices',
+            export_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test PCU Compiled OD Matrices',
+            import_folder=r'Y:\NorMITs Demand\import',
+            mode=str(m_needed[0]),
+            method='to_people',
+            out_format='wide'
+        )
+
+        # Check against original postme compiled
 
 
 if __name__ == '__main__':

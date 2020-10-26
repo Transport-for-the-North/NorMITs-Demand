@@ -25,6 +25,8 @@ from functools import reduce
 from itertools import product
 from collections import defaultdict
 
+from tqdm import tqdm
+
 import pa_to_od as pa2od
 import furness_process as fp
 
@@ -360,6 +362,7 @@ def _generate_tour_proportions_internal(od_import: str,
                                         seg: int,
                                         ca: int,
                                         tp_needed: List[int],
+                                        tour_prop_tol: float,
                                         furness_tol: float,
                                         furness_max_iters: int,
                                         phi_lookup_folder: str,
@@ -393,7 +396,6 @@ def _generate_tour_proportions_internal(od_import: str,
         car_availability=str(ca),
         suffix='.pkl'
     )
-    print("Generating tour proportions for %s..." % out_fname)
 
     # Load the from_home matrices
     fh_mats = dict()
@@ -493,87 +495,96 @@ def _generate_tour_proportions_internal(od_import: str,
 
     # Init
     zero_count = 0
+    report = defaultdict(list)
     tour_proportions = defaultdict(dict)
-    test = empty_tour_prop()
-    for orig in orig_vals:
-        for dest in dest_vals:
-            # Build the from_home vector
-            fh_target = list()
-            for tp in tp_needed:
-                fh_target.append(fh_mats[tp].loc[orig, dest])
-            fh_target = np.array(fh_target)
 
-            # Build the to_home vector
-            th_target = list()
-            for tp in tp_needed:
-                th_target.append(th_mats[tp].loc[orig, dest])
-            th_target = np.array(th_target)
+    total = len(orig_vals) * len(dest_vals)
+    desc = "Generating tour proportions for %s..." % out_fname
+    for orig, dest in tqdm(product(orig_vals, dest_vals), total=total, desc=desc):
+        # Build the from_home vector
+        fh_target = list()
+        for tp in tp_needed:
+            fh_target.append(fh_mats[tp].loc[orig, dest])
+        fh_target = np.array(fh_target)
+        pre_bal_fh = fh_target.copy()
 
-            # ## BALANCE FROM_HOME AND TO_HOME ## #
-            # First use tp4 to bring both vector sums to average
-            fh_th_avg = (fh_target.sum() + th_target.sum()) / 2
-            fh_target[-1] = fh_th_avg - np.sum(fh_target[:-1])
-            th_target[-1] = fh_th_avg - np.sum(th_target[:-1])
+        # Build the to_home vector
+        th_target = list()
+        for tp in tp_needed:
+            th_target.append(th_mats[tp].loc[orig, dest])
+        th_target = np.array(th_target)
+        pre_bal_th = th_target.copy()
 
-            # Correct for the resulting negative value
-            seed_val = seed_values[-1][-1]
-            if fh_target[-1] < 0:
-                th_target[-1] -= (1 + seed_val) * fh_target[-1]
-                fh_target[-1] *= -seed_val
-            elif th_target[-1] < 0:
-                fh_target[-1] -= (1 + seed_val) * th_target[-1]
-                th_target[-1] *= -seed_val
+        # TODO: Check for really unbalanced fh_target and th_target
+        #  report to file if found
 
-            # Calculate the full demand of this OD pair
-            od_demand = fh_target.sum()
+        # ## BALANCE FROM_HOME AND TO_HOME ## #
+        # First use tp4 to bring both vector sums to average
+        fh_th_avg = (fh_target.sum() + th_target.sum()) / 2
+        fh_target[-1] = fh_th_avg - np.sum(fh_target[:-1])
+        th_target[-1] = fh_th_avg - np.sum(th_target[:-1])
 
-            # Only furness if targets are not 0
-            if fh_target.sum() == 0 or th_target.sum() == 0:
-                # Skip furness, create matrix of 0s instead
-                zero_count += 1
-                furnessed_mat = np.zeros((len(tp_needed), len(tp_needed)))
+        # Correct for the resulting negative value
+        seed_val = seed_values[-1][-1]
+        if fh_target[-1] < 0:
+            th_target[-1] -= (1 + seed_val) * fh_target[-1]
+            fh_target[-1] *= -seed_val
+        elif th_target[-1] < 0:
+            fh_target[-1] -= (1 + seed_val) * th_target[-1]
+            th_target[-1] *= -seed_val
 
-            else:
-                # Convert the numbers to fractional factors
-                fh_target /= fh_target.sum()
-                th_target /= th_target.sum()
+        # Check for unbalanced tour proportions
+        temp_th_target = th_target.copy() / th_target.sum()
+        temp_fh_target = fh_target.copy() / fh_target.sum()
 
-                # ## FURNESS ## #
-                n_tp = len(tp_needed)
-                seed_vals = np.broadcast_to(seed_val, (n_tp, n_tp))
+        # If tp4 is greater than the tolerance, this usually means the original
+        # to_home and from_home targets were not balanced
+        if temp_th_target[-1] > tour_prop_tol or temp_fh_target > tour_prop_tol:
+            report['tour_prop_fname'].append(out_fname)
+            report['OD_pair'].append((orig, dest))
+            report['fh_before'].append(pre_bal_fh)
+            report['fh_after'].append(fh_target)
+            report['th_before'].append(pre_bal_th)
+            report['th_after'].append(th_target)
 
-                furnessed_mat = fp.doubly_constrained_furness(
-                    seed_vals=seed_vals,
-                    row_targets=fh_target,
-                    col_targets=th_target,
-                    tol=furness_tol,
-                    max_iters=furness_max_iters
-                )
+        # Only furness if targets are not 0
+        if fh_target.sum() == 0 or th_target.sum() == 0:
+            # Skip furness, create matrix of 0s instead
+            zero_count += 1
+            furnessed_mat = np.zeros((len(tp_needed), len(tp_needed)))
 
-            # Store the tour proportions
-            furnessed_mat = furnessed_mat.astype('float64')
-            tour_proportions[orig][dest] = furnessed_mat
+        else:
+            # ## FURNESS ## #
+            furnessed_mat = fp.doubly_constrained_furness(
+                seed_vals=seed_values,
+                row_targets=fh_target,
+                col_targets=th_target,
+                tol=furness_tol,
+                max_iters=furness_max_iters
+            )
 
-            # TODO: Manually assign the missing aggregation zones
-            # NOTE: Here we are assigning any zone we can't aggregate to
-            # -1. These are usually point zones etc. and won't cause a problem
-            # when we use these aggregated tour proportions later.
-            # Making a note here in case it becomes a problem later
+        # Store the tour proportions
+        furnessed_mat = furnessed_mat.astype('float64')
+        tour_proportions[orig][dest] = furnessed_mat
 
-            # Calculate the lad aggregated tour proportions
-            lad_orig = model2lad.get(orig, -1)
-            lad_dest = model2lad.get(dest, -1)
-            lad_tour_props[lad_orig][lad_dest] += (furnessed_mat * od_demand)
+        # TODO: Manually assign the missing aggregation zones
+        # NOTE: Here we are assigning any zone we can't aggregate to
+        # -1. These are usually point zones etc. and won't cause a problem
+        # when we use these aggregated tour proportions later.
+        # Making a note here in case it becomes a problem later
 
-            # Calculate the tfn aggregated tour proportions
-            tfn_orig = model2tfn.get(orig, -1)
-            tfn_dest = model2tfn.get(dest, -1)
-            tfn_tour_props[tfn_orig][tfn_dest] += (furnessed_mat * od_demand)
+        # Calculate the lad aggregated tour proportions
+        lad_orig = model2lad.get(orig, -1)
+        lad_dest = model2lad.get(dest, -1)
+        lad_tour_props[lad_orig][lad_dest] += furnessed_mat
 
-            test += (furnessed_mat * od_demand)
+        # Calculate the tfn aggregated tour proportions
+        tfn_orig = model2tfn.get(orig, -1)
+        tfn_dest = model2tfn.get(dest, -1)
+        tfn_tour_props[tfn_orig][tfn_dest] += furnessed_mat
 
-    # Normalise all of the aggregated matrices to 1
-    for agg_tour_props in [lad_tour_props, tfn_tour_props]:
+    # Normalise all of the tour proportion matrices to 1
+    for agg_tour_props in [tour_proportions, lad_tour_props, tfn_tour_props]:
         for key1, inner_dict in agg_tour_props.items():
             for key2, mat in inner_dict.items():
                 # Avoid warning if 0
@@ -605,6 +616,12 @@ def _generate_tour_proportions_internal(od_import: str,
     with open(out_path, 'wb') as f:
         pickle.dump(tfn_tour_props, f, protocol=pickle.HIGHEST_PROTOCOL)
 
+    # Write the error report to disk
+    error_fname = out_fname.replace('tour_proportions', 'error_report')
+    error_fname = error_fname.replace('.pkl', '.csv')
+    out_path = os.path.join(tour_proportions_export, error_fname)
+    pd.DataFrame(report).to_csv(out_path, index=False)
+
     zero_percentage = (zero_count / float(n_rows * n_cols)) * 100
     return out_fname, zero_count, zero_percentage
 
@@ -620,6 +637,7 @@ def generate_tour_proportions(od_import: str,
                               ns_needed: List[int] = None,
                               ca_needed: List[int] = None,
                               tp_needed: List[int] = consts.TIME_PERIODS,
+                              tour_prop_tol: float = 0.5,
                               furness_tol: float = 1e-9,
                               furness_max_iters: int = 5000,
                               phi_lookup_folder: str = None,
@@ -739,6 +757,7 @@ def generate_tour_proportions(od_import: str,
         'trip_origin': trip_origin,
         'year': year,
         'tp_needed': tp_needed,
+        'tour_prop_tol': tour_prop_tol,
         'furness_tol': furness_tol,
         'furness_max_iters': furness_max_iters,
         'phi_lookup_folder': phi_lookup_folder,
@@ -886,7 +905,6 @@ def build_compile_params(import_dir: str,
                 ps = ['_p' + str(x) + '_' for x in purposes]
                 mode_str = '_m' + str(mode) + '_'
                 year_str = '_yr' + str(year) + '_'
-                tp_str = '_tp' + str(tp)
 
                 # Narrow down to matrices for this compilation
                 compile_mats = [x for x in compile_mats if year_str in x]
@@ -1040,8 +1058,36 @@ def build_24hr_mats(import_dir: str,
                 dist_path = os.path.join(import_dir, dist_name)
                 tp_mats.append(pd.read_csv(dist_path, index_col=0))
 
+            # Check all the input matrices have the same columns and index
+            col_ref = tp_mats[0].columns
+            idx_ref = tp_mats[0].index
+            for i, mat in enumerate(tp_mats):
+                if len(mat.columns.difference(col_ref)) > 0:
+                    raise ValueError("tp matrix %s columns do not match the "
+                                     "others." % str(tp_needed[i]))
+
+                if len(mat.index.difference(idx_ref)) > 0:
+                    raise ValueError("tp matrix %s index does not match the "
+                                     "others." % str(tp_needed[i]))
+
             # Combine all matrices together
             full_mat = reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
 
             # Output to file
             full_mat.to_csv(os.path.join(export_dir, output_dist_name))
+
+
+def copy_nhb_matrices(import_dir: str,
+                      export_dir: str,
+                      ) -> None:
+    # Find the .csv nhb mats
+    mats = du.list_files(import_dir)
+    mats = [x for x in mats if '.csv' in x]
+    nhb_mats = [x for x in mats if du.starts_with(x, 'nhb')]
+
+    # Copy them over without a rename
+    for mat_fname in nhb_mats:
+        du.copy_and_rename(
+            src=os.path.join(import_dir, mat_fname),
+            dst=export_dir
+        )

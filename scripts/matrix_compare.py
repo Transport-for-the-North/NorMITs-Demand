@@ -21,13 +21,20 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-ORIGINAL_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter1\Matrices\Post-ME Matrices\OD Matrices'
-COMPARE_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter1\Matrices\Post-ME Matrices\Test OD Matrices'
+# Compare compiled matrices
+# ORIGINAL_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_pcu'
+# COMPARE_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test PCU Compiled OD Matrices'
+# TRIP_ORIGIN = None
+# REPORT_FNAME = 'comparison_report_compiled.csv'
 
-OUTPUT_DIR = COMPARE_DIR
-REPORT_FNAME = 'comparison_report.csv'
-
+# Compare time period split OD matrices
+ORIGINAL_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices'
+COMPARE_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test OD Matrices'
 TRIP_ORIGIN = 'hb'
+REPORT_FNAME = 'comparison_report_tp_od.csv'
+
+
+OUTPUT_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices'
 
 
 def list_files(path):
@@ -110,6 +117,14 @@ def main():
         report['mean_diff'].append(diff.mean())
         report['max_diff'].append(diff.max())
         report['total_diff'].append(diff.sum())
+
+        # ## ERROR CHECKING ## #
+        max_idx = np.where(diff == diff.max())
+        max_row, max_col = max_idx[0][0], max_idx[1][0]
+        report['spacer'].append('')
+        report['max_OD'].append((max_row+1, max_col+1))
+        report['original_value'].append(orig[max_row, max_col])
+        report['test_value'].append(comp[max_row, max_col])
 
     # Write the report to disk
     pd.DataFrame(report).to_csv(os.path.join(OUTPUT_DIR, REPORT_FNAME),
