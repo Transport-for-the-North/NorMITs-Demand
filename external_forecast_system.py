@@ -820,8 +820,6 @@ class ExternalForecastSystem:
             future_years=[str(x) for x in future_years],
             employment_growth=worker_growth,
             employment_constraint=worker_constraint,
-            worker_values=worker_values,
-            worker_split=worker_split,
             import_home=imports['home'],
             msoa_conversion_path=self.msoa_zones_path,
             control_attractions=False,

@@ -30,14 +30,12 @@ from demand_utilities import utils as du
 class EFSProductionGenerator:
     
     def __init__(self,
-                 tag_certainty_bounds=consts.TAG_CERTAINTY_BOUNDS,
-                 population_infill: float = 0.001):
+                 tag_certainty_bounds=consts.TAG_CERTAINTY_BOUNDS):
         """
         #TODO
         """
         self.efs_constrainer = ForecastConstrainer()
         self.tag_certainty_bounds = tag_certainty_bounds
-        self.pop_infill = population_infill
     
     def run(self,
             base_year: str,
@@ -80,6 +78,8 @@ class EFSProductionGenerator:
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
             lu_year: int = 2018,
+            no_neg_growth: bool = True,
+            population_infill: float = 0.001,
 
             # Handle outputs
             audits: bool = True,
@@ -196,6 +196,14 @@ class EFSProductionGenerator:
             a safety measure to make sure the user is warned if the base year
             changes without the land use.
 
+        no_neg_growth:
+            Whether to ensure there is no negative growth. If True, any growth
+            values below 0 will be replaced with infill.
+
+        population_infill:
+            If no_neg_growth is True, this value will be used to replace all
+            values that are less than 0.
+
         audits:
             Whether to output audits to the terminal during running. This can
             be used to monitor the population and production numbers being
@@ -298,11 +306,13 @@ class EFSProductionGenerator:
 
         # ## FUTURE YEAR POPULATION ## #
         print("Generating future year population data...")
-        population = self.grow_population(
-            base_year_pop,
-            population_growth,
-            base_year,
-            future_years
+        population = du.grow_to_future_years(
+            base_year_df=base_year_pop,
+            growth_df=population_growth,
+            base_year=base_year,
+            future_years=future_years,
+            no_neg_growth=no_neg_growth,
+            infill=population_infill
         )
 
         # ## CONSTRAIN POPULATION ## #
@@ -462,7 +472,6 @@ class EFSProductionGenerator:
         # TODO: Write grow_population() doc
         # Init
         all_years = [base_year] + future_years
-        base_year_pop = population_values[base_year]
 
         print("Adjusting population growth to base year...")
         population_growth = du.convert_growth_off_base_year(

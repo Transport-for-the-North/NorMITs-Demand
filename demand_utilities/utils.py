@@ -29,6 +29,94 @@ import efs_constants as consts
 # Can call tms pa_to_od.py functions from here
 from old_tms.utils import *
 
+# TODO: Utils is getting big. Refactor into smaller, more specific modules
+
+
+def grow_to_future_years(base_year_df: pd.DataFrame,
+                         growth_df: pd.DataFrame,
+                         base_year: str,
+                         future_years: List[str],
+                         growth_merge_col: str = 'msoa_zone_id',
+                         no_neg_growth: bool = True,
+                         infill: float = 0.001,
+                         ) -> pd.DataFrame:
+    """
+    Grows the base_year dataframe using the growth_dataframe to produce future
+    year values.
+
+    Can ensure there is no negative growth through an infill if requested.
+
+    Parameters
+    ----------
+    base_year_df:
+        Dataframe containing the base year values. The column named with
+        base_year value will be grown.
+
+    growth_df:
+        Dataframe containing the growth factors for future_years. The base year
+        population will be multiplied by these factors to produce future year
+        growth.
+
+    base_year:
+        The column name containing the base year data in base_year_df and
+        growth_df.
+
+    future_years:
+        The columns names containing the future year data in growth_df.
+
+    growth_merge_col:
+        The name of the column to merge the base_year_df and growth_df
+        dataframes. This is usually the model_zone column
+
+    no_neg_growth:
+        Whether to ensure there is no negative growth. If True, any growth
+        values below 0 will be replaced with infill.
+
+    infill:
+        If no_neg_growth is True, this value will be used to replace all values
+        that are less than 0.
+
+    Returns
+    -------
+    grown_df:
+        base_year_df extended to include future_years, which will contain the
+        base year data grown by the factors provided in growth_df.
+    """
+    # Init
+    all_years = [base_year] + future_years
+
+    # Get the growth factors based from base year
+    growth_df = convert_growth_off_base_year(
+        growth_df,
+        base_year,
+        future_years
+    )
+
+    # Convert growth factors to growth values
+    grown_df = get_growth_values(
+        base_year_df,
+        growth_df,
+        base_year,
+        future_years,
+        merge_col=growth_merge_col
+    )
+
+    # Ensure there is no minus growth
+    if no_neg_growth:
+        for year in all_years:
+            mask = (grown_df[year] < 0)
+            grown_df.loc[mask, year] = infill
+
+    # Add base year back in to get full grown values
+    grown_df = growth_recombination(
+        grown_df,
+        base_year_col=base_year,
+        future_year_cols=future_years,
+        drop_base_year=False
+    )
+
+    return grown_df
+
 
 def convert_msoa_naming(df: pd.DataFrame,
                         msoa_col_name: str,
@@ -245,8 +333,12 @@ def get_growth_values(base_year_df: pd.DataFrame,
         base_year_df extended and populated with the future_year_cols
         columns.
     """
+    # Init
     base_year_df = base_year_df.copy()
     growth_df = growth_df.copy()
+
+    base_year_df.columns = base_year_df.columns.astype(str)
+    growth_df.columns = growth_df.columns.astype(str)
 
     # Avoid clashes in the base year
     if base_year_col in growth_df:
@@ -296,12 +388,15 @@ def convert_growth_off_base_year(growth_df: pd.DataFrame,
         The original growth dataframe with all growth values converted
 
     """
-    growth_dataframe = growth_df.copy()
+    # Init
+    growth_df = growth_df.copy()
+    growth_df.columns = growth_df.columns.astype(str)
 
-    for year in future_years:
-        growth_df[year] = growth_df[year] / growth_df[base_year]
+    # Do base year last, otherwise conversion won't work
+    for year in future_years + [base_year]:
+        growth_df[year] /= growth_df[base_year]
 
-    return growth_dataframe
+    return growth_df
 
 
 def copy_and_rename(src: str, dst: str) -> None:
