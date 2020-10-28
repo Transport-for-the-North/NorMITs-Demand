@@ -1275,3 +1275,69 @@ def check_tour_proportions(tour_props: Dict[int, Dict[int, np.array]],
 
     # If here, all checks have passed
     return
+
+from tqdm import tqdm
+def combine_yearly_dfs(year_dfs: Dict[str, pd.DataFrame],
+                       unique_col: str,
+                       p_col: str = 'p',
+                       purposes: List[int] = None
+                       ) -> pd.DataFrame:
+    """
+    Efficiently concatenates the yearly dataframes in year_dfs.
+
+    Parameters
+    ----------
+    year_dfs:
+        Dictionary, with keys as the years, and the productions data for that
+        year as a value.
+
+    unique_col:
+        The name of the column containing the data - i.e. the productions for
+        that year
+
+    p_col:
+        The name of the column containing the purpose values.
+
+    purposes:
+        A list of the purposes to keep. If left as None, all purposes are
+        kept
+
+    Returns
+    -------
+    combined_productions:
+        A dataframe of all combined data in year_dfs. There will be a separate
+        column for each year of data.
+    """
+    # Init
+    keys = list(year_dfs.keys())
+    merge_cols = list(year_dfs[keys[0]])
+    merge_cols.remove(unique_col)
+
+    if purposes is None:
+        purposes = year_dfs[keys[0]][p_col].unique()
+
+    # ## SPLIT MATRICES AND JOIN BY PURPOSE ## #
+    purpose_ph = list()
+    desc = "Merging productions by purpose"
+    for p in tqdm(purposes, desc=desc):
+
+        # Get all the matrices that belong to this purpose
+        yr_p_dfs = list()
+        for year, df in year_dfs.items():
+            temp_df = df[df[p_col] == p].copy()
+            temp_df = temp_df.rename(columns={unique_col: year})
+            yr_p_dfs.append(temp_df)
+
+        # Iteratively merge all matrices into one
+        merged_df = yr_p_dfs[0]
+        for df in yr_p_dfs[1:]:
+            merged_df = pd.merge(
+                merged_df,
+                df,
+                on=merge_cols
+            )
+        purpose_ph.append(merged_df)
+        del yr_p_dfs
+
+    # ## CONCATENATE ALL MERGED MATRICES ## #
+    return pd.concat(purpose_ph)

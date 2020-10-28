@@ -39,6 +39,19 @@ USER_CLASS_PURPOSES = {
     'other': [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
 }
 
+# Convert between Purpose int and strings
+_p_str_int = [
+    ('Commute',             1),
+    ('Business',            2),
+    ('Education',           3),
+    ('Shopping',            4),
+    ('Personal_business',   5),
+    ('Recreation_social',   6),
+    ('Visiting_friends',    7),
+    ('Holiday_day_trip',    8),
+]
+P_STR2INT = {s: i for s, i in _p_str_int}
+P_INT2STR = {i: s for s, i in _p_str_int}
 
 # HB consts
 PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]

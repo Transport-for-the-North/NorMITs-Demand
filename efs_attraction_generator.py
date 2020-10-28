@@ -11,6 +11,9 @@ import numpy as np
 import pandas as pd
 
 from typing import List
+from typing import Dict
+
+from tqdm import tqdm
 
 import efs_constants as consts
 from efs_constrainer import ForecastConstrainer
@@ -105,6 +108,13 @@ class EFSAttractionGenerator:
         # Replace with path builder
         soc_to_sic_path = r"Y:\NorMITs Synthesiser\import\attraction_data\soc_2_digit_sic_2018.csv"
         employment_path = r"Y:\NorMITs Synthesiser\import\attraction_data\non_freight_msoa_2018.csv"
+        mode_splits_path = r"Y:\NorMITs Synthesiser\import\attraction_data\attraction_mode_split.csv"
+
+        ntem_control_dir = r'Y:\NorMITs Demand\import\ntem_constraints'
+        lad_lookup_dir = r'Y:\NorMITs Demand\import'
+
+        # Watch out - this changes depending on the model!!!
+        attraction_weights_path = r"Y:\NorMITs Synthesiser\Noham\Model Zone Lookups\attraction_weights.csv"
 
         # ## BASE YEAR EMPLOYMENT ## #
         print("Loading the base year employment data...")
@@ -211,12 +221,34 @@ class EFSAttractionGenerator:
                   "Not writing employment to file.")
         else:
             print("Writing employment to file...")
-            employment.to_csv(os.path.join(out_path, "MSOA_employment.csv"),
-                              index=False)
-
-        print(employment)
+            fname = "MSOA_employment.csv"
+            employment.to_csv(os.path.join(out_path, fname), index=False)
 
         # ## CREATE ATTRACTIONS ## #
+        # Index by as much segmentation as possible
+        idx_cols = list(employment.columns)
+        for unq_col in all_years:
+            idx_cols.remove(unq_col)
+
+        attractions = generate_attractions(
+            employment=employment,
+            all_years=all_years,
+            attraction_weights_path=attraction_weights_path,
+            mode_splits_path=mode_splits_path,
+            idx_cols=idx_cols,
+            emp_cat_col=emp_cat_col,
+            ntem_control_dir=ntem_control_dir,
+            lad_lookup_dir=lad_lookup_dir
+        )
+
+        # Write attractions to file
+        if out_path is None:
+            print("WARNING! No output path given. "
+                  "Not writing attractions to file.")
+        else:
+            print("Writing productions to file...")
+            fname = 'MSOA_attractions.csv'
+            attractions.to_csv(os.path.join(out_path, fname), index=False)
 
         exit()
 
@@ -579,3 +611,364 @@ def get_soc_weights(soc_to_sic_path: str,
     soc_weights = soc_weights.drop('total', axis='columns')
 
     return soc_weights
+
+
+def combine_yearly_attractions(year_dfs: Dict[str, pd.DataFrame],
+                               zone_col: str = 'msoa_zone_id',
+                               p_col: str = 'purpose',
+                               purposes: List[int] = None
+                               ) -> pd.DataFrame:
+    """
+    Efficiently concatenates the yearly dataframes in year_dfs.
+
+    Parameters
+    ----------
+    year_dfs:
+        Dictionary, with keys as the years, and the attractions data for that
+        year as a value. Expects the attractions data to be in wide format with
+        an index of zone_id (plus any segmentation) and  a column for each
+        purpose.
+
+    zone_col:
+        The name of the column containing the zone ids
+
+    p_col:
+        The name to give to the created purpose column during melting.
+
+    purposes:
+        A list of the purposes to keep. If left as None, all purposes are
+        kept
+
+    Returns
+    -------
+    combined_attractions:
+        A dataframe of all combined data in year_dfs. There will be a separate
+        column for each year of data.
+    """
+    # Init
+    keys = list(year_dfs.keys())
+
+    if purposes is None:
+        purposes = list(year_dfs[keys[0]].columns)
+
+    # ## CONVERT THE MATRICES TO LONG FORMAT ## #
+    for year, mat in year_dfs.items():
+        year_dfs[year] = mat.reset_index().melt(
+            id_vars=zone_col,
+            var_name=p_col,
+            value_name=year
+        )
+
+    # The merge cols will be everything but the years
+    year = list(year_dfs.keys())[0]
+    merge_cols = list(year_dfs[year].columns)
+    merge_cols.remove(year)
+
+    # ## SPLIT MATRICES AND JOIN BY PURPOSE ## #
+    attraction_ph = list()
+    desc = "Merging attractions by purpose"
+    for p in tqdm(purposes, desc=desc):
+
+        # Get all the matrices that belong to this purpose
+        yr_p_dfs = list()
+        for year, df in year_dfs.items():
+            temp_df = df[df[p_col] == p].copy()
+            yr_p_dfs.append(temp_df)
+
+        # Iteratively merge all matrices into one
+        merged_df = yr_p_dfs[0]
+        for df in yr_p_dfs[1:]:
+            merged_df = pd.merge(
+                merged_df,
+                df,
+                on=merge_cols
+            )
+        attraction_ph.append(merged_df)
+        del yr_p_dfs
+
+    # ## CONCATENATE ALL MERGED MATRICES ## #
+    return pd.concat(attraction_ph)
+
+
+def merge_attraction_weights(employment: pd.DataFrame,
+                             attraction_weights_path: str,
+                             mode_splits_path: str,
+                             idx_cols: List[str] = None,
+                             p_col: str = 'purpose',
+                             m_col: str = 'mode',
+                             m_split_col: str = 'mode_share',
+                             unique_col: str = 'trips',
+                             control_path: str = None,
+                             lad_lookup_dir: str = None,
+                             lad_lookup_name: str = consts.DEFAULT_LAD_LOOKUP,
+                             ) -> pd.DataFrame:
+    """
+    Combines employment numbers with attractions weights to produce the
+    attractions per purpose.
+
+    Carries out the following actions:
+        - Applies attraction weights to employment to produce attractions
+        - Splits the attractions by mode
+        - Optionally constrains to the values in control_path
+
+    Parameters
+    ----------
+    employment:
+        Wide dataframe containing the employment data. The index should be the
+        model_zone (plus any further segmentation), and the columns should be
+        the employment categories.
+
+    attraction_weights_path:
+        Path the the attraction weights file. This file should contain a wide
+        matrix, with the purposes as the index, and the employment categories
+        as the columns.
+
+    mode_splits_path:
+        Path to the file of mode splits by 'p'
+
+    idx_cols:
+        The column names used to index the wide employment df. This should
+        cover all segmentation in the employment
+
+    p_col:
+        The name of the column containing the purpose values.
+
+    m_col:
+        The name of the column in mode_splits_path containing the mode values.
+
+    m_split_col
+        The name of the column in mode_splits_path containing the mode share
+        values.
+
+    unique_col:
+        The name to give to the unique column for each year
+
+    control_path:
+        Path to the file containing the data to control the produced
+        attractions to. If left as None, no control will be carried out.
+
+
+    lad_lookup_dir:
+        Path to the file containing the conversion from msoa zoning to LAD
+        zoning, to be used for controlling the attractions. If left as None, no
+        control will be carried out.
+
+    lad_lookup_name:
+        The name of the file in lad_lookup_dir that contains the msoa zoning
+        to LAD zoning conversion.
+
+    Returns
+    -------
+    Attractions:
+        A wide dataframe containing the attraction numbers. The index will
+        match the index from employment, the columns will be the purposes
+        given in p_col of attractions_weight_path.
+
+    """
+    # Init
+    do_ntem_control = control_path is not None and lad_lookup_dir is not None
+    idx_cols = ['msoa_zone_id'] if idx_cols is None else idx_cols
+    emp_cats = list(employment.columns.unique())
+
+    # Read in the attraction weights
+    attraction_weights = pd.read_csv(attraction_weights_path)
+    purposes = list(attraction_weights[p_col])
+
+    # Apply purpose weights to the employment
+    a_ph = list()
+    for p in purposes:
+        # Init loop
+        p_attractions = employment.copy()
+
+        # Get the weights and broadcast across all model zones
+        p_weights = attraction_weights[attraction_weights[p_col] == p]
+        p_weights = np.broadcast_to(
+            p_weights[emp_cats].values,
+            (len(p_attractions.index), len(emp_cats))
+        )
+
+        # Calculate the total attractions per zone for this purpose
+        p_attractions[emp_cats] *= p_weights
+        p_attractions[p] = p_attractions[emp_cats].sum(axis='columns')
+        p_attractions = p_attractions.drop(emp_cats, axis='columns')
+
+        a_ph.append(p_attractions)
+
+    # Stick the attractions by purpose together, and return
+    attractions = pd.concat(a_ph, axis='columns')
+
+    # Convert the matrix back to long format
+    attractions = attractions.reset_index().melt(
+        id_vars=idx_cols,
+        var_name=p_col,
+        value_name=unique_col
+    )
+
+    # TODO: Do we need to add in further segmentation here?
+    # I think it should happen earlier so we can grow employment by segments
+    # Will ask Chris when he is back
+
+    # ## SPLIT THE ATTRACTIONS BY MODE ## #
+    # Need to convert the str purposes into int
+    attractions[p_col] = attractions[p_col].apply(lambda row: consts.P_STR2INT[row])
+
+    # Read in and apply mode splits
+    mode_splits = pd.read_csv(mode_splits_path)
+    mode_splits = mode_splits.rename(columns={'p': p_col, 'm': m_col})
+
+    attractions = attractions.merge(
+        mode_splits,
+        how='left',
+        on=idx_cols + [p_col]
+    )
+    attractions[unique_col] = attractions[unique_col] * attractions[m_split_col]
+    attractions = attractions.drop(m_split_col, axis='columns')
+
+    # ## TIDY UP AND SORT ## #
+    group_cols = idx_cols + [p_col, m_col]
+    index_cols = group_cols.copy()
+    index_cols.append(unique_col)
+
+    attractions = attractions.reindex(index_cols, axis='columns')
+    attractions = attractions.groupby(group_cols).sum().reset_index()
+    attractions = attractions.sort_values(group_cols).reset_index(drop=True)
+
+    attractions[m_col] = attractions[m_col].astype(int)
+    attractions[p_col] = attractions[p_col].astype(int)
+
+    # Control if required
+    if do_ntem_control is not None:
+        # Get ntem totals
+        ntem_totals = pd.read_csv(control_path)
+        ntem_lad_lookup = pd.read_csv(os.path.join(lad_lookup_dir,
+                                                   lad_lookup_name))
+
+        print("Performing NTEM constraint...")
+        # TODO: Allow control_to_ntem() to take flexible col names
+        attractions = attractions.rename(columns={p_col: 'p', m_col: 'm'})
+        attractions, *_ = du.control_to_ntem(
+            attractions,
+            ntem_totals,
+            ntem_lad_lookup,
+            group_cols=['p', 'm'],
+            base_value_name='trips',
+            ntem_value_name='Attractions',
+            purpose='hb'
+        )
+        attractions = attractions.rename(columns={'p': p_col, 'm': m_col})
+
+    return attractions
+
+
+def generate_attractions(employment: pd.DataFrame,
+                         all_years: List[str],
+                         attraction_weights_path: str,
+                         mode_splits_path: str,
+                         idx_cols: List[str],
+                         emp_cat_col: str = 'employment_cat',
+                         p_col: str = 'purpose',
+                         m_col: str = 'mode',
+                         m_split_col: str = 'mode_share',
+                         ntem_control_dir: str = None,
+                         lad_lookup_dir: str = None
+                         ) -> pd.DataFrame:
+    """
+    Converts employment to attractions using attraction_weights
+
+    Parameters
+    ----------
+    employment:
+        Dataframe containing the employment data. This should contain all
+        segmentation, and then a separate column for each year
+
+    all_years:
+        A list of all the year columns to be converted
+
+    attraction_weights_path:
+        Path the the attraction weights file. This file should contain a wide
+        matrix, with the purposes as the index, and the employment categories
+        as the columns.
+
+    mode_splits_path:
+        Path to the file of mode splits by 'p'
+
+    idx_cols:
+        The column names used to index the wide employment df. This should
+        cover all segmentation in the employment
+
+    emp_cat_col:
+        The name of the column containing the employment categories
+
+    p_col:
+        The name of the column in attraction weights containing the purpose
+        names.
+
+    m_col:
+        The name of the column in mode_splits_path containing the mode values.
+
+    m_split_col
+        The name of the column in mode_splits_path containing the mode share
+        values.
+
+    ntem_control_dir:
+        Path to the file containing the data to control the produced
+        attractions to. If left as None, no control will be carried out.
+
+    lad_lookup_dir:
+        Path to the file containing the conversion from msoa zoning to LAD
+        zoning, to be used for controlling the attractions. If left as None, no
+        control will be carried out.
+
+    Returns
+    -------
+    attractions:
+        A copy of the employment dataframe, with the yearly values converted
+        to attractions.
+    """
+    # Init
+    unique_col = 'trips'
+    idx_cols = idx_cols.copy()
+    idx_cols.remove(emp_cat_col)
+    ntem_base_fname = 'ntem_pa_ave_wday_%s.csv'
+
+    # Generate attractions per year
+    yr_ph = dict()
+    for year in all_years:
+        print("\nConverting year %s to attractions..." % str(year))
+
+        # Figure out the ntem control path
+        if ntem_control_dir is not None:
+            ntem_fname = ntem_base_fname % year
+            ntem_control_path = os.path.join(ntem_control_dir, ntem_fname)
+        else:
+            ntem_control_path = None
+
+        # Convert to wide format, for this single year
+        yr_emp = employment.pivot_table(
+            index=idx_cols,
+            columns=emp_cat_col,
+            values=year
+        )
+
+        # Convert employment to attractions for this year
+        yr_ph[year] = merge_attraction_weights(
+            employment=yr_emp,
+            attraction_weights_path=attraction_weights_path,
+            mode_splits_path=mode_splits_path,
+            idx_cols=idx_cols,
+            p_col=p_col,
+            m_col=m_col,
+            m_split_col=m_split_col,
+            unique_col=unique_col,
+            control_path=ntem_control_path,
+            lad_lookup_dir=lad_lookup_dir
+
+        )
+
+    # Get all the attractions into a single df, efficiently
+    attractions = du.combine_yearly_dfs(
+        yr_ph,
+        unique_col=unique_col,
+        p_col=p_col
+    )
+    return attractions

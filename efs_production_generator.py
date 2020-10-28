@@ -1265,36 +1265,75 @@ def merge_pop_trip_rates(population: pd.DataFrame,
                          mean_time_splits_path: str,
                          mode_share_path: str,
                          audit_out: str,
-                         ntem_control_path: str = None,
+                         control_path: str = None,
                          lad_lookup_dir: str = None,
                          lad_lookup_name: str = consts.DEFAULT_LAD_LOOKUP,
                          tp_needed: List[int] = consts.TP_NEEDED,
                          traveller_type_col: str = 'traveller_type',
                          ) -> pd.DataFrame:
     """
-    TODO: Write merge_pop_trip_rates() doc
+    Converts a single year of population into productions
+
+    Carries out the following actions:
+        - Calculates the weekly trip rates
+        - Convert to average weekday trip rate, and split by time period
+        - Further splits the productions by mode
+        - Optionally constrains to the values in control_path
 
     Parameters
     ----------
-    population
-    group_cols
-    trip_rates_path
-    time_splits_path
-    mean_time_splits_path
-    mode_share_path
-    audit_out
-    ntem_control_path
-    lad_lookup_dir
-    lad_lookup_name
-    tp_needed
-    traveller_type_col
+    population:
+        Dataframe containing the segmented population values for this year.
+
+    group_cols:
+        A list of all non-unique columns in population. This will be used to
+        retain any already given segmentation.
+
+    trip_rates_path:
+        Path to the file of trip rates data. Will try to merge with the
+        population on all possible columns.
+
+    time_splits_path:
+        Path to the file of time splits by ['area_type', 'traveller_type', 'p'].
+
+    mean_time_splits_path:
+        Path to the file of mean time splits by 'p'
+
+    mode_share_path:
+        Path to the file of mode shares by ['area_type', 'ca', 'p']
+
+    audit_out:
+        The directory to write out any audit files produced.
+
+    control_path:
+        Path to the file containing the data to control the produced
+        productions to. If left as None, no control will be carried out.
+
+
+    lad_lookup_dir:
+        Path to the file containing the conversion from msoa zoning to LAD
+        zoning, to be used for controlling the productions. If left as None, no
+        control will be carried out.
+
+    lad_lookup_name:
+        The name of the file in lad_lookup_dir that contains the msoa zoning
+        to LAD zoning conversion.
+
+    tp_needed:
+        A list of the time periods to split the productions by.
+
+    traveller_type_col:
+        The name of the column in population that contains the traveller type
+        information.
 
     Returns
     -------
-
+    Productions:
+        The population converted to productions for this year. Will try to keep
+        all segmentation in the given population if possible, and add more.
     """
     # Init
-    do_ntem_control = ntem_control_path is not None and lad_lookup_dir is not None
+    do_ntem_control = control_path is not None and lad_lookup_dir is not None
 
     group_cols = group_cols.copy()
     group_cols.insert(2, 'p')
@@ -1487,12 +1526,12 @@ def merge_pop_trip_rates(population: pd.DataFrame,
     if do_ntem_control is not None:
         # Get ntem totals
         # TODO: Depends on the time period - but this is fixed for now
-        ntem_totals = pd.read_csv(ntem_control_path)
+        ntem_totals = pd.read_csv(control_path)
         ntem_lad_lookup = pd.read_csv(os.path.join(lad_lookup_dir,
                                                    lad_lookup_name))
 
         print("Performing NTEM constraint...")
-        msoa_output, ntem_p, ntem_a = du.control_to_ntem(
+        msoa_output, *_, = du.control_to_ntem(
             msoa_output,
             ntem_totals,
             ntem_lad_lookup,
@@ -1503,46 +1542,6 @@ def merge_pop_trip_rates(population: pd.DataFrame,
         )
 
     return msoa_output
-
-
-def combine_yearly_productions(year_dfs: Dict[str, pd.DataFrame],
-                               unique_col: str,
-                               purpose_col: str = 'p',
-                               purposes: List[int] = None
-                               ) -> pd.DataFrame:
-    # Init
-    keys = list(year_dfs.keys())
-    merge_cols = list(year_dfs[keys[0]])
-    merge_cols.remove(unique_col)
-
-    if purposes is None:
-        purposes = year_dfs[keys[0]]['p'].drop_duplicates().reset_index(drop=True)
-
-    # ## SPLIT MATRICES AND JOIN BY PURPOSE ## #
-    purpose_ph = list()
-    desc = "Merging productions by purpose"
-    for p in tqdm(purposes, desc=desc):
-
-        # Get all the matrices that belong to this purpose
-        yr_p_dfs = list()
-        for year, df in year_dfs.items():
-            temp_df = df[df[purpose_col] == p].copy()
-            temp_df = temp_df.rename(columns={unique_col: year})
-            yr_p_dfs.append(temp_df)
-
-        # Iteratively merge all matrices into one
-        merged_df = yr_p_dfs[0]
-        for df in yr_p_dfs[1:]:
-            merged_df = pd.merge(
-                merged_df,
-                df,
-                on=merge_cols
-            )
-        purpose_ph.append(merged_df)
-        del yr_p_dfs
-
-    # ## CONCATENATE ALL MERGED MATRICES ## #
-    return pd.concat(purpose_ph)
 
 
 def generate_productions(population: pd.DataFrame,
@@ -1557,6 +1556,7 @@ def generate_productions(population: pd.DataFrame,
                          ntem_control_dir: str = None,
                          lad_lookup_dir: str = None
                          ) -> pd.DataFrame:
+    # TODO: write generate_productions() docs
     # Init
     all_years = [base_year] + future_years
     audit_base_fname = 'yr%s_production_topline.csv'
@@ -1566,8 +1566,8 @@ def generate_productions(population: pd.DataFrame,
     yr_ph = dict()
     for year in all_years:
         if ntem_control_dir is not None:
-            ntem_control_path = os.path.join(ntem_control_dir,
-                                             ntem_base_fname % year)
+            ntem_fname = ntem_base_fname % year
+            ntem_control_path = os.path.join(ntem_control_dir, ntem_fname)
         else:
             ntem_control_path = None
 
@@ -1575,21 +1575,18 @@ def generate_productions(population: pd.DataFrame,
 
         yr_pop = population.copy().reindex(group_cols + [year], axis='columns')
         yr_pop = yr_pop.rename(columns={year: 'people'})
-        yr_prod = merge_pop_trip_rates(
-            yr_pop,
-            group_cols=group_cols,
-            trip_rates_path=trip_rates_path,
-            time_splits_path=time_splits_path,
-            mean_time_splits_path=mean_time_splits_path,
-            mode_share_path=mode_share_path,
-            audit_out=audit_out,
-            ntem_control_path=ntem_control_path,
-            lad_lookup_dir=lad_lookup_dir,
-        )
+        yr_prod = merge_pop_trip_rates(yr_pop, group_cols=group_cols,
+                                       trip_rates_path=trip_rates_path,
+                                       time_splits_path=time_splits_path,
+                                       mean_time_splits_path=mean_time_splits_path,
+                                       mode_share_path=mode_share_path,
+                                       audit_out=audit_out,
+                                       control_path=ntem_control_path,
+                                       lad_lookup_dir=lad_lookup_dir)
         yr_ph[year] = yr_prod
 
     # Join all productions into one big matrix
-    productions = combine_yearly_productions(
+    productions = du.combine_yearly_dfs(
         yr_ph,
         unique_col='trips'
     )
