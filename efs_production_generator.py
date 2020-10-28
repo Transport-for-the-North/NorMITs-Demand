@@ -1116,7 +1116,7 @@ def build_production_imports(import_home: str,
         the same format as default file.
 
     ntem_control_dir:
-        An alternate ntem control directory to use. Files will need to follow
+        An alternate ntem control directory to use. File will need to follow
         the same format as default files.
 
     lad_lookup_dir:
@@ -1523,7 +1523,7 @@ def merge_pop_trip_rates(population: pd.DataFrame,
     msoa_output['p'] = msoa_output['p'].astype(int)
     msoa_output['m'] = msoa_output['m'].astype(int)
 
-    if do_ntem_control is not None:
+    if do_ntem_control:
         # Get ntem totals
         # TODO: Depends on the time period - but this is fixed for now
         ntem_totals = pd.read_csv(control_path)

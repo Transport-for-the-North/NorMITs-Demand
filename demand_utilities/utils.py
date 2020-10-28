@@ -24,6 +24,8 @@ from typing import List
 from typing import Dict
 from typing import Iterable
 
+from tqdm import tqdm
+
 import efs_constants as consts
 
 # Can call tms pa_to_od.py functions from here
@@ -1276,7 +1278,7 @@ def check_tour_proportions(tour_props: Dict[int, Dict[int, np.array]],
     # If here, all checks have passed
     return
 
-from tqdm import tqdm
+
 def combine_yearly_dfs(year_dfs: Dict[str, pd.DataFrame],
                        unique_col: str,
                        p_col: str = 'p',
@@ -1318,7 +1320,7 @@ def combine_yearly_dfs(year_dfs: Dict[str, pd.DataFrame],
 
     # ## SPLIT MATRICES AND JOIN BY PURPOSE ## #
     purpose_ph = list()
-    desc = "Merging productions by purpose"
+    desc = "Merging dataframes by purpose"
     for p in tqdm(purposes, desc=desc):
 
         # Get all the matrices that belong to this purpose

@@ -813,6 +813,9 @@ class ExternalForecastSystem:
         print("Production generation took: %.2f seconds" %
               (current_time - last_time))
 
+        # Watch out - this changes depending on the model!!!
+        attraction_weights_path = r"Y:\NorMITs Synthesiser\Noham\Model Zone Lookups\attraction_weights.csv"
+
         # ## ATTRACTION GENERATION ###
         print("Generating attractions...")
         attraction_dataframe = self.attraction_generator.run(
@@ -822,7 +825,8 @@ class ExternalForecastSystem:
             employment_constraint=worker_constraint,
             import_home=imports['home'],
             msoa_conversion_path=self.msoa_zones_path,
-            control_attractions=False,
+            attraction_weights_path=attraction_weights_path,
+            control_attractions=True,
             d_log=development_log,
             d_log_split=development_log_split,
             constraint_required=constraint_required,
@@ -878,12 +882,6 @@ class ExternalForecastSystem:
             # read in translation dataframe
             output_path = os.path.join(imports['zoning'], desired_zoning + ".csv")
             translation_dataframe = pd.read_csv(output_path)
-
-            print("Translation")
-            print(translation_dataframe.dtypes)
-
-            print("productions")
-            print(production_trips.dtypes)
 
             converted_productions = self.zone_translator.run(
                 production_trips,
