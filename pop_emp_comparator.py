@@ -23,6 +23,7 @@ class PopEmpComparator:
     output population (or employment) data at various levels of aggregation. Csvs are produced
     with the comparisons for checking.
     """
+    ZONE_COL = 'model_zone_id'
 
     def __init__(self, input_csv: str, growth_csv: str,
                  constraint_csv: str, ratio_csv: str,
@@ -69,10 +70,10 @@ class PopEmpComparator:
         # Check data_type is allowed and initialise variables for that type
         self.data_type = data_type.lower()
         if self.data_type == 'population':
-            ratio_cols = ['model_zone_id', 'property_type_id', 'traveller_type_id']
+            ratio_cols = [self.ZONE_COL, 'property_type_id', 'traveller_type_id']
             base_yr_col  = 'base_year_population'
         elif self.data_type == 'employment':
-            ratio_cols = ['model_zone_id', 'employment_class']
+            ratio_cols = [self.ZONE_COL, 'employment_class']
             base_yr_col = 'base_year_workers'
         else:
             raise ValueError('data_type parameter should be "population" or "employment" '
@@ -91,7 +92,7 @@ class PopEmpComparator:
         # Read the required columns for input csvs
         self.input_data = read_print(input_csv, skipinitialspace=True)
         self.input_data.rename(columns={base_yr_col: str(self.base_year)}, inplace=True)
-        cols = ['model_zone_id', *self.years]
+        cols = [self.ZONE_COL, *self.years]
         self.growth_data = read_print(growth_csv, skipinitialspace=True, usecols=cols)
         self.constraint_data = read_print(constraint_csv, skipinitialspace=True, usecols=cols)
         self.ratio_data = read_print(ratio_csv, skipinitialspace=True,
@@ -132,8 +133,41 @@ class PopEmpComparator:
         return totals
 
     def compare_msoa_totals(self) -> pd.DataFrame:
-        # FIXME Placeholder for msoa comparisons
-        return pd.DataFrame()
+        """Compares the input and output values at MSOA level and produces a summary.
+
+        Returns
+        -------
+        pd.DataFrame
+            Differences between the input and output values at MSOA level.
+        """
+        # Calculate totals for each MSOA on the outputs
+        cols = [self.ZONE_COL, *self.years]
+        output_msoa = self.output[cols].groupby(self.ZONE_COL, as_index=False).sum()
+
+        # Set index of dataframes to ZONE_COL for concat and rename columns with source
+        concat = []
+        for nm, df in (('input', self.input_data), ('constraint', self.constraint_data),
+                       ('growth', self.growth_data), ('output', output_msoa)):
+            df = df.set_index(self.ZONE_COL)
+            df.columns = pd.MultiIndex.from_tuples([(i, nm) for i in df.columns])
+            concat.append(df)
+        msoa_comp = pd.concat(concat, axis=1)
+
+        # Calculate comparison columns
+        for yr in self.years:
+            msoa_comp[(yr, 'constraint difference')] = (msoa_comp[(yr, 'output')]
+                                                        - msoa_comp[(yr, 'constraint')])
+            msoa_comp[(yr, 'constraint % difference')] = (msoa_comp[(yr, 'output')]
+                                                          / msoa_comp[(yr, 'constraint')]) - 1
+            msoa_comp[(yr, 'output growth')] = (msoa_comp[(yr, 'output')]
+                                                / msoa_comp[(self.base_year, 'output')])
+            msoa_comp[(yr, 'growth difference')] = (msoa_comp[(yr, 'output growth')]
+                                                    - msoa_comp[(yr, 'growth')])
+
+        # Sort and flatten index
+        msoa_comp = msoa_comp.sort_index(axis=1, level=0, sort_remaining=False)
+        msoa_comp.columns = [f'{i} - {j}' for i, j in msoa_comp.columns]
+        return msoa_comp
 
     def compare_sector_totals(self) -> pd.DataFrame:
         # FIXME Placeholder for sector total comparison
