@@ -84,6 +84,14 @@ class EFSAttractionGenerator:
         """
         TODO: Write attraction model documentation
         """
+        # Return previously created productions if we can
+        fname = 'MSOA_aggregated_attractions.csv'
+        final_output_path = os.path.join(out_path, fname)
+
+        if not recreate_attractions and os.path.isfile(final_output_path):
+            print("Found some already produced attractions. Using them!")
+            return pd.read_csv(final_output_path)
+
         # Init
         internal_zone_col = 'msoa_zone_id'
         a_weights_p_col = 'purpose'
