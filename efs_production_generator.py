@@ -48,7 +48,7 @@ class EFSProductionGenerator:
             population_constraint: pd.DataFrame,
 
             # Build import paths
-            import_home: str,        # y:/normits demand/import
+            import_home: str,
             msoa_conversion_path: str,
 
             # Alternate population/production creation files
@@ -122,7 +122,7 @@ class EFSProductionGenerator:
 
         import_home:
             The home directory to find all the production imports. Usually
-            Y:\NorMITs Demand\import
+            Y:/NorMITs Demand/import
 
         msoa_conversion_path:
             Path to the file containing the conversion from msoa integer

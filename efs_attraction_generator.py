@@ -162,11 +162,11 @@ class EFSAttractionGenerator:
             index=False
         )
 
-        print(attractions)
-        print(list(attractions))
-        print(attractions.dtypes)
-
-        exit()
+        # print(attractions)
+        # print(list(attractions))
+        # print(attractions.dtypes)
+        #
+        # exit()
 
         return attractions
 
