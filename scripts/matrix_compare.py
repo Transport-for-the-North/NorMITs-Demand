@@ -118,13 +118,13 @@ def main():
         report['max_diff'].append(diff.max())
         report['total_diff'].append(diff.sum())
 
-        # ## ERROR CHECKING ## #
-        max_idx = np.where(diff == diff.max())
-        max_row, max_col = max_idx[0][0], max_idx[1][0]
-        report['spacer'].append('')
-        report['max_OD'].append((max_row+1, max_col+1))
-        report['original_value'].append(orig[max_row, max_col])
-        report['test_value'].append(comp[max_row, max_col])
+        # # ## ERROR CHECKING ## #
+        # max_idx = np.where(diff == diff.max())
+        # max_row, max_col = max_idx[0][0], max_idx[1][0]
+        # report['spacer'].append('')
+        # report['max_OD'].append((max_row+1, max_col+1))
+        # report['original_value'].append(orig[max_row, max_col])
+        # report['test_value'].append(comp[max_row, max_col])
 
     # Write the report to disk
     pd.DataFrame(report).to_csv(os.path.join(OUTPUT_DIR, REPORT_FNAME),
