@@ -1,8 +1,10 @@
 import os
 
+import numpy as np
 import pandas as pd
 
 from typing import List
+from functools import reduce
 
 import efs_constants as consts
 import demand_utilities.utils as du
@@ -12,7 +14,9 @@ import demand_utilities.vehicle_occupancy as vo
 def decompile_od(od_import: str,
                  od_export: str,
                  year: int,
-                 decompile_factors_path: str
+                 decompile_factors_path: str,
+                 audit: bool = False,
+                 audit_tol: float = 0.001
                  ) -> None:
     """
     Takes User Class compiled OD matrices and decompiles them down to their
@@ -49,7 +53,7 @@ def decompile_od(od_import: str,
                                                      force_ca_exists=True)
 
         # Find the matching compiled matrix and load
-        mat_name = du.get_compiled_matrix_name(
+        in_mat_name = du.get_compiled_matrix_name(
             matrix_format=comp_calib_params['matrix_format'],
             user_class=comp_calib_params['user_class'],
             year=str(year),
@@ -58,10 +62,11 @@ def decompile_od(od_import: str,
             tp=str(comp_calib_params['tp']),
             csv=True
         )
-        comp_mat = pd.read_csv(os.path.join(od_import, mat_name), index_col=0)
-        print("Decompiling matrix: %s" % mat_name)
+        comp_mat = pd.read_csv(os.path.join(od_import, in_mat_name), index_col=0)
+        print("Decompiling matrix: %s" % in_mat_name)
 
         # Loop through the factors and decompile the matrix
+        decompiled_mats = list()
         for part_mat_name in decompile_factors[comp_mat_name].keys():
             # Decompile the matrix using the factors
             factors = decompile_factors[comp_mat_name][part_mat_name]
@@ -84,12 +89,33 @@ def decompile_od(od_import: str,
             )
             part_mat.to_csv(os.path.join(od_export, mat_name))
 
+            # Save for audit later
+            decompiled_mats.append(part_mat)
+
+        # Check that the output matrices total the input matrices
+        if audit:
+            # Sum the split matrices
+            mats_sum = reduce(lambda x, y: x.add(y, fill_value=0),
+                              decompiled_mats)
+
+            # Get the absolute difference between the compiled and decompiled
+            abs_diff = np.absolute((mats_sum - comp_mat).values).sum()
+
+            if abs_diff > audit_tol:
+                raise ValueError(
+                    "While decompiling matrices from %s, the absolute "
+                    "difference between the original and decompiled matrices "
+                    "exceeded the tolerance. Tolerance: %s, Absolute "
+                    "Difference: %s"
+                    % (in_mat_name, str(audit_tol), str(abs_diff)))
+
 
 def _convert_to_efs_matrices_user_class(import_path: str,
                                         export_path: str,
                                         matrix_format: str,
                                         to_wide: bool = False,
-                                        wide_col_name: str = 'zone_id'
+                                        wide_col_name: str = 'zone_id',
+                                        force_year: int = None
                                         ) -> None:
     # Init
     import_files = du.list_files(import_path)
@@ -98,7 +124,11 @@ def _convert_to_efs_matrices_user_class(import_path: str,
     for fname in import_files:
         print("Converting '%s' to EFS matrix format..." % str(fname))
 
-        calib_params = du.post_me_fname_to_calib_params(fname)
+        # Try get the calib params from the filename
+        calib_params = du.post_me_fname_to_calib_params(fname,
+                                                        force_year=force_year)
+
+        # Generate the new filename
         new_fname = du.get_compiled_matrix_name(
             matrix_format=matrix_format,
             user_class=calib_params['user_class'],
@@ -137,6 +167,7 @@ def _convert_to_efs_matrices_user_class(import_path: str,
 def convert_to_efs_matrices(import_path: str,
                             export_path: str,
                             matrix_format: str,
+                            year: int,
                             user_class: bool = True,
                             to_wide: bool = True,
                             wide_col_name: str = 'zone_id',
@@ -158,6 +189,9 @@ def convert_to_efs_matrices(import_path: str,
 
     matrix_format:
         What format the matrices are in. Usually 'pa' or 'od'.
+
+    year:
+        The year the compiled matrices have been generated for
 
     user_class:
         Whether the matrices are aggregated to used class or not.
@@ -206,7 +240,8 @@ def convert_to_efs_matrices(import_path: str,
             export_path=temp_export_path,
             matrix_format=matrix_format,
             to_wide=to_wide,
-            wide_col_name=wide_col_name
+            wide_col_name=wide_col_name,
+            force_year=year
         )
     else:
         # TODO: Write this functionality

@@ -13,6 +13,7 @@ Also works the opposite way to get person trips from vehicle trips
 
 TODO: After integrations with TMS, combine with
   old_tms.vehicle_occupancy.py
+  new version of people_vehicle_conversion written here
 """
 
 from old_tms.vehicle_occupancy import *

@@ -1501,6 +1501,7 @@ class ExternalForecastSystem:
                     import_path=exports['post_me']['model_output'],
                     export_path=exports['post_me']['compiled_od'],
                     matrix_format='od',
+                    year=year,
                     user_class=True,
                     to_wide=True,
                     wide_col_name=model_name + '_zone_id',
@@ -1525,6 +1526,7 @@ class ExternalForecastSystem:
                   "proportions...")
             mat_p.generate_tour_proportions(
                 od_import=exports['post_me']['od'],
+                zone_translate_dir=imports['zone_translation'],
                 pa_export=exports['post_me']['pa'],
                 tour_proportions_export=params['tours'],
                 year=year,
@@ -1623,6 +1625,7 @@ class ExternalForecastSystem:
                 pa_import=exports['aggregated_pa_24'],
                 od_export=exports['post_me']['od'],
                 tour_proportions_dir=params['tours'],
+                zone_translate_dir=imports['zone_translation'],
                 ca_needed=ca_needed
             )
 
@@ -2170,6 +2173,7 @@ class ExternalForecastSystem:
             'home': import_home,
             'default_inputs': input_home,
             'tp_splits': os.path.join(import_home, 'tp_splits'),
+            'zone_translation': os.path.join(import_home, 'zone_translation'),
             'lookups': os.path.join(model_home, 'lookup'),
             'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
             'zoning': os.path.join(input_home, 'zoning')
@@ -2830,14 +2834,14 @@ def main():
         )
 
     if run_nhb_efs:
-        # # Need to convert, ready for NHB generation
-        # efs.pa_to_od(
-        #     output_location=output_location,
-        #     iter_num=iter_num,
-        #     overwrite_hb_tp_pa=True,
-        #     overwrite_hb_tp_od=True,
-        #     echo=echo
-        # )
+        # Need to convert, ready for NHB generation
+        efs.pa_to_od(
+            output_location=output_location,
+            iter_num=iter_num,
+            overwrite_hb_tp_pa=True,
+            overwrite_hb_tp_od=True,
+            echo=echo
+        )
 
         # Generate NHB PA/OD matrices
         efs.run_nhb(

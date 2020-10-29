@@ -24,6 +24,8 @@ from typing import List
 from typing import Dict
 from typing import Iterable
 
+from collections import defaultdict
+
 import efs_constants as consts
 
 # Can call tms pa_to_od.py functions from here
@@ -589,6 +591,7 @@ def starts_with(s: str, x: str) -> bool:
 
 def post_me_fname_to_calib_params(fname: str,
                                   get_user_class: bool = True,
+                                  force_year: int = None
                                   ) -> Dict[str, str]:
     """
     Convert the filename into a calib_params dict, with the following keys
@@ -605,18 +608,29 @@ def post_me_fname_to_calib_params(fname: str,
     if loc is not None:
         calib_params['yr'] = int(fname[loc.start():loc.end()])
 
-    # Mode. What is the code for rail?
-    if re.search('_Hwy', fname) is not None:
+    # Force the year if we need to
+    if force_year is not None and 'yr' not in calib_params.keys():
+        calib_params['yr'] = force_year
+
+    # Mode.
+    loc = re.search('_m[0-9]+', fname)
+    if loc is not None:
+        calib_params['m'] = int(fname[loc.start() + 2:loc.end()])
+    elif re.search('_Hwy', fname) is not None:
         calib_params['m'] = 3
     else:
+        # What is the code for rail?
         Warning("Cannot find a mode in filename. It might be rail, but I "
                 "don't know what to search for at the moment.\n"
                 "File name: '%s'" % fname)
 
     # tp
     loc = re.search('_TS[0-9]+', fname)
+    loc2 = re.search('_tp[0-9]+', fname)
     if loc is not None:
         calib_params['tp'] = int(fname[loc.start() + 3:loc.end()])
+    elif loc2 is not None:
+        calib_params['tp'] = int(fname[loc2.start() + 3:loc2.end()])
 
     # User Class
     if get_user_class:
@@ -1126,3 +1140,147 @@ def check_tour_proportions(tour_props: Dict[int, Dict[int, np.array]],
 
     # If here, all checks have passed
     return
+
+
+def get_mean_tp_splits(tp_split_path: str,
+                       p: int,
+                       aggregate_to_weekday: bool = True,
+                       p_col: str = 'purpose',
+                       tp_as: str = 'str'
+                       ) -> pd.DataFrame:
+    """
+    TODO: Write get_mean_tp_splits() doc
+
+    Parameters
+    ----------
+    tp_split_path
+    p
+    aggregate_to_weekday
+    p_col
+    tp_as
+
+    Returns
+    -------
+
+    """
+    # Init
+    tp_splits = pd.read_csv(tp_split_path)
+    p_tp_splits = tp_splits[tp_splits[p_col] == p].copy()
+
+    # If more than one row, we have a problem!
+    if len(p_tp_splits) > 1:
+        raise ValueError("Found more than one row in the mean time period "
+                         "splits file.")
+
+    if aggregate_to_weekday:
+        tp_needed = ['tp1', 'tp2', 'tp3', 'tp4']
+
+        # Drop all unneeded columns
+        p_tp_splits = p_tp_splits.reindex(tp_needed, axis='columns')
+
+        # Aggregate each value
+        tp_sum = p_tp_splits.values.sum()
+        for tp_col in tp_needed:
+            p_tp_splits[tp_col] = p_tp_splits[tp_col] / tp_sum
+
+    tp_as = tp_as.lower()
+    if tp_as == 'str' or tp_as == 'string':
+        # Don't need to change anything
+        pass
+    elif tp_as == 'int' or tp_as == 'integer':
+        p_tp_splits = p_tp_splits.rename(
+            columns={
+                'tp1': 1,
+                'tp2': 2,
+                'tp3': 3,
+                'tp4': 4,
+                'tp5': 5,
+                'tp6': 6,
+            }
+        )
+    else:
+        raise ValueError("'%s' is not a valid value for tp_as.")
+
+    return p_tp_splits
+
+
+def get_zone_translation(import_dir: str,
+                         from_zone: str,
+                         to_zone: str
+                         ) -> Dict[int, int]:
+    """
+    Reads in the zone translation file from import_dir and converts it into a
+    dictionary of from_zone: to_zone numbers
+
+    Note: from_zone must be of a lower aggregation than to_zone, otherwise
+    weird things might happen
+
+    Parameters
+    ----------
+    import_dir:
+        The directory to find the zone translation files
+
+    from_zone:
+        The name of the zoning system to convert from, e.g. noham
+
+    to_zone
+        The name of the zoning system to convert to, e.g. lad
+
+    Returns
+    -------
+    zone_translation:
+        A dictionary of from_zone values to to_zone values. Can be used to
+        convert a zone number from one zoning system to another.
+    """
+    # Init
+    base_filename = '%s_to_%s.csv'
+    base_col_name = '%s_zone_id'
+
+    # Load the file
+    path = os.path.join(import_dir, base_filename % (from_zone, to_zone))
+    translation = pd.read_csv(path)
+    
+    # Make sure we can find the columns
+    from_col = base_col_name % from_zone
+    to_col = base_col_name % to_zone
+
+    if from_col not in translation.columns:
+        raise ValueError("Found the file at '%s', but the columns do not "
+                         "match. Cannot find from_zone column '%s'"
+                         % (path, from_col))
+
+    if to_col not in translation.columns:
+        raise ValueError("Found the file at '%s', but the columns do not "
+                         "match. Cannot find to_zone column '%s'"
+                         % (path, to_col))
+
+    # Make sure the columns are in the correct format
+    translation = translation.reindex([from_col, to_col], axis='columns')
+    translation[from_col] = translation[from_col].astype(int)
+    translation[to_col] = translation[to_col].astype(int)
+
+    # Convert pandas to a {from_col: to_col} dictionary
+    translation = dict(translation.itertuples(index=False, name=None))
+
+    return translation
+
+
+def defaultdict_to_regular(d):
+    """
+    Iteratively converts nested default dicts to nested regular dicts.
+
+    Useful for pickling - keeps the unpickling of the dict simple
+
+    Parameters
+    ----------
+    d:
+        The nested defaultdict to convert
+
+    Returns
+    -------
+    converted_d:
+        nested dictionaries with same values
+    """
+    if isinstance(d, defaultdict):
+        d = {k: defaultdict_to_regular(v) for k, v in d.items()}
+    return d
