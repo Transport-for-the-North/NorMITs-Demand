@@ -11,6 +11,8 @@ from typing import List
 import numpy as np
 import pandas as pd
 
+from demand_utilities import utils as du
+
 class SectorReporter:
     """
     Sector reporting class for use in NorMITs Demand framework.
@@ -65,7 +67,8 @@ class SectorReporter:
                                 grouping_metric_columns: List[str] = None,
                                 zone_system_name: str = None,
                                 zone_system_file: str = None,
-                                sector_grouping_file: str = None
+                                sector_grouping_file: str = None,
+                                verbose: bool = True
                                 ) -> pd.DataFrame:
         """
         Calculates the sector totals off the given parameters.
@@ -175,7 +178,152 @@ class SectorReporter:
                     calculating_dataframe_mask
                 ].sum()[metric]
                 
-            print(new_grouping_dataframe)
+            if verbose:
+                print(new_grouping_dataframe)
             sector_totals = sector_totals.append(new_grouping_dataframe)
             
         return sector_totals
+
+    def get_parameters(self,
+                       zone_system_name: str = None,
+                       zone_system_file: str = None,
+                       sector_grouping_file: str = None,
+                       verbose: bool = False):
+
+        messages = []
+
+        if (zone_system_name is not None):
+            # do nothing
+            messages.append("Changing zone system name...")
+        else:
+            messages.append("Not changing zone system name...")
+            zone_system_name = self.default_zone_system_name
+
+        if (zone_system_file is not None):
+            # read in file
+            messages.append("Changing zone system...")
+            zone_system = pd.read_csv(zone_system_file)
+        else:
+            messages.append("Not changing zone system...")
+            zone_system = self.default_zone_system.copy()
+
+        if (sector_grouping_file is not None):
+            # read in file
+            messages.append("Changing sector grouping...")
+            sector_grouping = pd.read_csv(sector_grouping_file)
+        else:
+            messages.append("Not changing sector grouping...")
+            sector_grouping = self.default_sector_grouping.copy()
+
+        if verbose:
+            print(*messages, sep="\n")
+
+        return (zone_system_name, zone_system, sector_grouping)
+
+    def calculate_sector_totals_v2(self,
+                                   calculating_dataframe: pd.DataFrame,
+                                   metric_columns: List[str] = [],
+                                   segment_columns: List[str] = [],
+                                   zone_system_name: str = None,
+                                   zone_system_file: str = None,
+                                   sector_grouping_file: str = None,
+                                   aggregation_method: str = "sum",
+                                   verbose: bool = False
+                                   ) -> pd.DataFrame:
+        """
+        TODO
+        """
+
+        calculating_dataframe = calculating_dataframe.copy()
+
+        # Check Inputs
+        missing_metrics = [
+            metric for metric in metric_columns if
+            metric not in calculating_dataframe.columns
+        ]
+        missing_segments = [
+            segment for segment in segment_columns if
+            segment not in calculating_dataframe.columns
+        ]
+        if len(missing_metrics) + len(missing_segments) > 0:
+            raise ValueError(f"Dataframe missing: segments - "
+                             f"{missing_segments}, metrics - {missing_metrics}"
+                             )
+
+        # TODO Make this bit look better
+        (
+            zone_system_name, zone_system, sector_grouping
+        ) = self.get_parameters(
+            zone_system_name, zone_system_file, sector_grouping_file,
+            verbose=verbose
+            )
+
+        grouping_dataframe_columns = ["grouping_id"]
+        grouping_dataframe_columns.extend(segment_columns)
+
+        res = calculating_dataframe.merge(
+            sector_grouping,
+            on="model_zone_id"
+            )
+
+        res = res.groupby(grouping_dataframe_columns, as_index=False).agg(
+            {col: aggregation_method for col in metric_columns}
+        )
+
+        return res
+
+    def aggregate_matrix_sectors(self,
+                                 matrix_path: str,
+                                 out_path: str = None,
+                                 zone_system_name: str = None,
+                                 zone_system_file: str = None,
+                                 sector_grouping_file: str = None,
+                                 aggregation_method: str = "sum",
+                                 verbose: bool = False):
+        """
+        TODO
+        """
+
+        if out_path is None:
+            out_path = matrix_path
+
+        # Fetch any overridden parameters
+        (
+            zone_system_name, zone_system, sector_grouping
+        ) = self.get_parameters(
+            zone_system_name, zone_system_file, sector_grouping_file,
+            verbose=verbose
+            )
+
+        sector_grouping.set_index("model_zone_id", inplace=True)
+
+        # Replace with du.safe_read_csv when possible
+        df = pd.read_csv(matrix_path, index_col=0)
+
+        # Convert to a stacked matrix
+        df = df.stack().reset_index()
+        df.columns = ["i", "j", "v"]
+        df["i"] = df["i"].astype("int64")
+        df["j"] = df["j"].astype("int64")
+
+        # Aggregate Origin Zones
+        df = df.set_index("i").join(sector_grouping)
+        df.columns = ["j", "v", "i_sec"]
+        df = df.groupby(["i_sec", "j"], as_index=False).agg(
+            {"v": aggregation_method}
+        )
+
+        # Aggregate Destination Zones
+        df = df.set_index("j").join(sector_grouping)
+        df.columns = ["i_sec", "v", "j_sec"]
+        df = df.groupby(["i_sec", "j_sec"]).agg(
+            {"v": aggregation_method}
+        )
+
+        # Convert back to wide matrix form for file
+        df = df.unstack()
+        df.index.name = zone_system_name
+        df.columns = df.columns.droplevel()
+
+        # Replace with safe write csv
+        df.to_csv(out_path)
