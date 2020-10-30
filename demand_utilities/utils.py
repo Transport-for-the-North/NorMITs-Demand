@@ -24,12 +24,103 @@ from typing import List
 from typing import Dict
 from typing import Iterable
 
+
+from tqdm import tqdm
 from collections import defaultdict
+
 
 import efs_constants as consts
 
 # Can call tms pa_to_od.py functions from here
 from old_tms.utils import *
+
+# TODO: Utils is getting big. Refactor into smaller, more specific modules
+
+
+def grow_to_future_years(base_year_df: pd.DataFrame,
+                         growth_df: pd.DataFrame,
+                         base_year: str,
+                         future_years: List[str],
+                         growth_merge_col: str = 'msoa_zone_id',
+                         no_neg_growth: bool = True,
+                         infill: float = 0.001,
+                         ) -> pd.DataFrame:
+    """
+    Grows the base_year dataframe using the growth_dataframe to produce future
+    year values.
+
+    Can ensure there is no negative growth through an infill if requested.
+
+    Parameters
+    ----------
+    base_year_df:
+        Dataframe containing the base year values. The column named with
+        base_year value will be grown.
+
+    growth_df:
+        Dataframe containing the growth factors for future_years. The base year
+        population will be multiplied by these factors to produce future year
+        growth.
+
+    base_year:
+        The column name containing the base year data in base_year_df and
+        growth_df.
+
+    future_years:
+        The columns names containing the future year data in growth_df.
+
+    growth_merge_col:
+        The name of the column to merge the base_year_df and growth_df
+        dataframes. This is usually the model_zone column
+
+    no_neg_growth:
+        Whether to ensure there is no negative growth. If True, any growth
+        values below 0 will be replaced with infill.
+
+    infill:
+        If no_neg_growth is True, this value will be used to replace all values
+        that are less than 0.
+
+    Returns
+    -------
+    grown_df:
+        base_year_df extended to include future_years, which will contain the
+        base year data grown by the factors provided in growth_df.
+    """
+    # Init
+    all_years = [base_year] + future_years
+
+    # Get the growth factors based from base year
+    growth_df = convert_growth_off_base_year(
+        growth_df,
+        base_year,
+        future_years
+    )
+
+    # Convert growth factors to growth values
+    grown_df = get_growth_values(
+        base_year_df,
+        growth_df,
+        base_year,
+        future_years,
+        merge_col=growth_merge_col
+    )
+
+    # Ensure there is no minus growth
+    if no_neg_growth:
+        for year in all_years:
+            mask = (grown_df[year] < 0)
+            grown_df.loc[mask, year] = infill
+
+    # Add base year back in to get full grown values
+    grown_df = growth_recombination(
+        grown_df,
+        base_year_col=base_year,
+        future_year_cols=future_years,
+        drop_base_year=False
+    )
+
+    return grown_df
 
 
 def convert_msoa_naming(df: pd.DataFrame,
@@ -148,12 +239,66 @@ def growth_recombination(df: pd.DataFrame,
         df = df.copy()
 
     for year in future_year_cols:
-        df[year] = df[year] + df[base_year_col]
+        df[year] += df[base_year_col]
 
     if drop_base_year:
         df = df.drop(labels=base_year_col, axis=1)
 
     return df
+
+
+def get_grown_values(base_year_df: pd.DataFrame,
+                     growth_df: pd.DataFrame,
+                     base_year_col: str,
+                     future_years: List[str],
+                     merge_col: str = "model_zone_id"
+                     ) -> pd.DataFrame:
+    """
+    Returns base_year_df extended to include the grown values in
+    future_year_cols
+
+    Parameters
+    ----------
+    base_year_df:
+        Dataframe containing the base year data. Must have at least 2 columns
+        of merge_col, and base_year_col
+
+    growth_df:
+        Dataframe containing the growth factors over base year for all future
+        years i.e. The base year column would be 1 as it cannot grow over
+        itself. Must have at least the following cols: merge_col and all
+        future_year_cols.
+
+    base_year_col:
+        The column name that the base year data is in
+
+    future_years:
+        The columns names that contain the growth factor data for base and
+        future years.
+
+    merge_col:
+        Name of the column to merge base_year_df and growth_df on.
+
+    Returns
+    -------
+    Grown_values_df:
+        base_year_df extended and populated with the future_year_cols
+        columns.
+    """
+    # Init
+    base_year_df = base_year_df.copy()
+    growth_df = growth_df.copy()
+
+    # CREATE GROWN DATAFRAME
+    grown_df = pd.merge(
+        base_year_df,
+        growth_df,
+        on=merge_col
+    )
+
+    for year in future_years:
+        grown_df[year] *= grown_df.loc[base_year_col]
+    return grown_df
 
 
 def get_growth_values(base_year_df: pd.DataFrame,
@@ -193,8 +338,12 @@ def get_growth_values(base_year_df: pd.DataFrame,
         base_year_df extended and populated with the future_year_cols
         columns.
     """
+    # Init
     base_year_df = base_year_df.copy()
     growth_df = growth_df.copy()
+
+    base_year_df.columns = base_year_df.columns.astype(str)
+    growth_df.columns = growth_df.columns.astype(str)
 
     # Avoid clashes in the base year
     if base_year_col in growth_df:
@@ -208,10 +357,10 @@ def get_growth_values(base_year_df: pd.DataFrame,
     # Grow base year value by values given in growth_df - 1
     # -1 so we get growth values. NOT growth values + base year
     for year in future_year_cols:
-        growth_values.loc[:, year] = (
-            (growth_values.loc[:, year] - 1)
+        growth_values[year] = (
+            (growth_values[year] - 1)
             *
-            growth_values.loc[:, base_year_col]
+            growth_values[base_year_col]
         )
 
     return growth_values
@@ -244,12 +393,15 @@ def convert_growth_off_base_year(growth_df: pd.DataFrame,
         The original growth dataframe with all growth values converted
 
     """
-    growth_dataframe = growth_df.copy()
+    # Init
+    growth_df = growth_df.copy()
+    growth_df.columns = growth_df.columns.astype(str)
 
-    for year in future_years:
-        growth_df[year] = growth_df[year] / growth_df[base_year]
+    # Do base year last, otherwise conversion won't work
+    for year in future_years + [base_year]:
+        growth_df[year] /= growth_df[base_year]
 
-    return growth_dataframe
+    return growth_df
 
 
 def copy_and_rename(src: str, dst: str) -> None:
@@ -1140,6 +1292,72 @@ def check_tour_proportions(tour_props: Dict[int, Dict[int, np.array]],
 
     # If here, all checks have passed
     return
+
+
+def combine_yearly_dfs(year_dfs: Dict[str, pd.DataFrame],
+                       unique_col: str,
+                       p_col: str = 'p',
+                       purposes: List[int] = None
+                       ) -> pd.DataFrame:
+    """
+    Efficiently concatenates the yearly dataframes in year_dfs.
+
+    Parameters
+    ----------
+    year_dfs:
+        Dictionary, with keys as the years, and the productions data for that
+        year as a value.
+
+    unique_col:
+        The name of the column containing the data - i.e. the productions for
+        that year
+
+    p_col:
+        The name of the column containing the purpose values.
+
+    purposes:
+        A list of the purposes to keep. If left as None, all purposes are
+        kept
+
+    Returns
+    -------
+    combined_productions:
+        A dataframe of all combined data in year_dfs. There will be a separate
+        column for each year of data.
+    """
+    # Init
+    keys = list(year_dfs.keys())
+    merge_cols = list(year_dfs[keys[0]])
+    merge_cols.remove(unique_col)
+
+    if purposes is None:
+        purposes = year_dfs[keys[0]][p_col].unique()
+
+    # ## SPLIT MATRICES AND JOIN BY PURPOSE ## #
+    purpose_ph = list()
+    desc = "Merging dataframes by purpose"
+    for p in tqdm(purposes, desc=desc):
+
+        # Get all the matrices that belong to this purpose
+        yr_p_dfs = list()
+        for year, df in year_dfs.items():
+            temp_df = df[df[p_col] == p].copy()
+            temp_df = temp_df.rename(columns={unique_col: year})
+            yr_p_dfs.append(temp_df)
+
+        # Iteratively merge all matrices into one
+        merged_df = yr_p_dfs[0]
+        for df in yr_p_dfs[1:]:
+            merged_df = pd.merge(
+                merged_df,
+                df,
+                on=merge_cols
+            )
+        purpose_ph.append(merged_df)
+        del yr_p_dfs
+
+    # ## CONCATENATE ALL MERGED MATRICES ## #
+    return pd.concat(purpose_ph)
 
 
 def get_mean_tp_splits(tp_split_path: str,

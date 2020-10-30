@@ -95,7 +95,6 @@ class ExternalForecastSystem:
                  output_location: str = "E:/",
 
                  use_zone_id_subset: bool = False,
-                 dirty_init: bool = False
                  ):
         """
         #TODO
@@ -116,85 +115,84 @@ class ExternalForecastSystem:
         begin_time = time.time()
         current_time = begin_time
 
-        if not dirty_init:
-            # Read in population files
-            file_path = os.path.join(input_dir, population_value_file)
-            self.population_values = du.safe_read_csv(file_path)
+        # Read in population files
+        file_path = os.path.join(input_dir, population_value_file)
+        self.population_values = du.safe_read_csv(file_path)
 
-            file_path = os.path.join(input_dir, population_growth_file)
-            self.population_growth = du.safe_read_csv(file_path)
+        file_path = os.path.join(input_dir, population_growth_file)
+        self.population_growth = du.safe_read_csv(file_path)
 
-            file_path = os.path.join(input_dir, population_constraint_file)
-            self.population_constraint = du.safe_read_csv(file_path)
+        file_path = os.path.join(input_dir, population_constraint_file)
+        self.population_constraint = du.safe_read_csv(file_path)
 
-            # file_path = os.path.join(input_dir, future_population_ratio_file)
-            # self.future_population_ratio = du.safe_read_csv(file_path)
+        # file_path = os.path.join(input_dir, future_population_ratio_file)
+        # self.future_population_ratio = du.safe_read_csv(file_path)
 
-            # Households files
-            # file_path = os.path.join(input_dir, households_value_file)
-            # self.households_values = du.safe_read_csv(file_path)
-            #
-            # file_path = os.path.join(input_dir, household_growth_file)
-            # self.households_growth = du.safe_read_csv(file_path)
-            #
-            # file_path = os.path.join(input_dir, households_constraint_file)
-            # self.households_constraint = du.safe_read_csv(file_path)
-            #
-            # file_path = os.path.join(input_dir, housing_type_split_file)
-            # self.housing_type_split = du.safe_read_csv(file_path)
-            #
-            # file_path = os.path.join(input_dir, housing_occupancy_file)
-            # self.housing_occupancy = du.safe_read_csv(file_path)
+        # Households files
+        # file_path = os.path.join(input_dir, households_value_file)
+        # self.households_values = du.safe_read_csv(file_path)
+        #
+        # file_path = os.path.join(input_dir, household_growth_file)
+        # self.households_growth = du.safe_read_csv(file_path)
+        #
+        # file_path = os.path.join(input_dir, households_constraint_file)
+        # self.households_constraint = du.safe_read_csv(file_path)
+        #
+        # file_path = os.path.join(input_dir, housing_type_split_file)
+        # self.housing_type_split = du.safe_read_csv(file_path)
+        #
+        # file_path = os.path.join(input_dir, housing_occupancy_file)
+        # self.housing_occupancy = du.safe_read_csv(file_path)
 
-            # Worker files
-            file_path = os.path.join(input_dir, worker_value_file)
-            self.worker_values = du.safe_read_csv(file_path)
+        # Worker files
+        file_path = os.path.join(input_dir, worker_value_file)
+        self.worker_values = du.safe_read_csv(file_path)
 
-            file_path = os.path.join(input_dir, worker_growth_file)
-            self.worker_growth = du.safe_read_csv(file_path)
+        file_path = os.path.join(input_dir, worker_growth_file)
+        self.worker_growth = du.safe_read_csv(file_path)
 
-            file_path = os.path.join(input_dir, worker_constraint_file)
-            self.worker_constraint = du.safe_read_csv(file_path)
+        file_path = os.path.join(input_dir, worker_constraint_file)
+        self.worker_constraint = du.safe_read_csv(file_path)
 
-            file_path = os.path.join(input_dir, worker_ratio_file)
-            self.worker_splits = du.safe_read_csv(file_path)
+        # file_path = os.path.join(input_dir, worker_ratio_file)
+        # self.worker_splits = du.safe_read_csv(file_path)
 
-            # Production and attraction files
-            # file_path = os.path.join(input_dir, production_trip_rates_file)
-            # self.production_trip_rates = du.safe_read_csv(file_path)
+        # Production and attraction files
+        # file_path = os.path.join(input_dir, production_trip_rates_file)
+        # self.production_trip_rates = du.safe_read_csv(file_path)
 
-            # file_path = os.path.join(input_dir, hb_mode_split_file)
-            # self.hb_mode_split = du.safe_read_csv(file_path)
+        # file_path = os.path.join(input_dir, hb_mode_split_file)
+        # self.hb_mode_split = du.safe_read_csv(file_path)
 
-            # file_path = os.path.join(input_dir, hb_mode_time_split_file)
-            # self.hb_mode_time_split = du.safe_read_csv(file_path)
+        # file_path = os.path.join(input_dir, hb_mode_time_split_file)
+        # self.hb_mode_time_split = du.safe_read_csv(file_path)
 
-            # file_path = os.path.join(input_dir, split_handler_file)
-            # self.split_handler = du.safe_read_csv(file_path)
+        # file_path = os.path.join(input_dir, split_handler_file)
+        # self.split_handler = du.safe_read_csv(file_path)
 
-            # file_path = os.path.join(input_dir, traveller_types_file)
-            # self.traveller_types = du.safe_read_csv(file_path)
+        # file_path = os.path.join(input_dir, traveller_types_file)
+        # self.traveller_types = du.safe_read_csv(file_path)
 
-            file_path = os.path.join(input_dir, attraction_weights_file)
-            self.attraction_weights = du.safe_read_csv(file_path)
+        # file_path = os.path.join(input_dir, attraction_weights_file)
+        # self.attraction_weights = du.safe_read_csv(file_path)
 
-            # Zone and area files
-            self.value_zoning = value_zoning
+        # Zone and area files
+        self.value_zoning = value_zoning
 
-            file_path = os.path.join(input_dir, value_zones_file)
-            self.value_zones = du.safe_read_csv(file_path)
+        file_path = os.path.join(input_dir, value_zones_file)
+        self.value_zones = du.safe_read_csv(file_path)
 
-            file_path = os.path.join(input_dir, area_types_file)
-            self.area_types = du.safe_read_csv(file_path)
+        file_path = os.path.join(input_dir, area_types_file)
+        self.area_types = du.safe_read_csv(file_path)
 
-            file_path = os.path.join(input_dir, area_grouping_file)
-            self.area_grouping = du.safe_read_csv(file_path)
+        file_path = os.path.join(input_dir, area_grouping_file)
+        self.area_grouping = du.safe_read_csv(file_path)
 
-            file_path = os.path.join(input_dir, msoa_area_types_file)
-            self.msoa_area_types = du.safe_read_csv(file_path)
+        file_path = os.path.join(input_dir, msoa_area_types_file)
+        self.msoa_area_types = du.safe_read_csv(file_path)
 
-            file_path = os.path.join(input_dir, zone_areatype_lookup_file)
-            self.zone_areatype_lookup = du.safe_read_csv(file_path)
+        file_path = os.path.join(input_dir, zone_areatype_lookup_file)
+        self.zone_areatype_lookup = du.safe_read_csv(file_path)
 
         if use_zone_id_subset:
             print("WARNING: Not using all of the input data. "
@@ -245,6 +243,7 @@ class ExternalForecastSystem:
             constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
             outputting_files: bool = True,
             recreate_productions: bool = True,
+            recreate_attractions: bool = True,
             iter_num: int = 0,
             performing_sector_totals: bool = True,
             output_location: str = None,
@@ -558,11 +557,11 @@ class ExternalForecastSystem:
         # hh_occupancy_cols = self.column_dictionary["housing_occupancy"] + year_list
 
         emp_cols = self.column_dictionary["employment"] + year_list
-        emp_ratio_cols = self.column_dictionary["employment_ratio"] + year_list
+        # emp_ratio_cols = self.column_dictionary["employment_ratio"] + year_list
 
         # production_trip_cols = self.column_dictionary["production_trips"] + year_list
         # mode_split_cols = self.column_dictionary["mode_split"] + year_list
-        attraction_weight_cols = self.column_dictionary["attraction_weights"] + year_list
+        # attraction_weight_cols = self.column_dictionary["attraction_weights"] + year_list
 
         print("No known errors in the inputs!")
         last_time = current_time
@@ -591,8 +590,10 @@ class ExternalForecastSystem:
                 alt_worker_base_year_file,
                 alt_pop_growth_assumption_file,
                 alt_households_growth_assumption_file,
-                alt_worker_growth_assumption_file, base_year_pop_cols,
-                base_year_hh_cols)
+                alt_worker_growth_assumption_file,
+                base_year_pop_cols,
+                base_year_hh_cols
+            )
 
             population_values = integrated_assumptions[0][base_year_pop_cols]
             # households_values = integrated_assumptions[1][base_year_hh_cols]
@@ -601,14 +602,14 @@ class ExternalForecastSystem:
             # households_growth = integrated_assumptions[4][hh_cols]
             worker_growth = integrated_assumptions[5][emp_cols]
 
-            # TODO: Remove uneeded files
+            # TODO: Remove unneeded files
             # population_split = self.future_population_ratio[pop_ratio_cols].copy()
             # housing_type_split = self.housing_type_split[hh_occupancy_cols].copy()
             # housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
             # hb_mode_split = self.hb_mode_split[mode_split_cols].copy()
             # msoa_area_types = self.msoa_area_types.copy()
             zone_areatype_lookup = self.zone_areatype_lookup.copy()
-            worker_split = self.worker_splits[emp_ratio_cols].copy()
+            # worker_split = self.worker_splits[emp_ratio_cols].copy()
 
             # trip_rates = self.production_trip_rates[
             #     production_trip_cols
@@ -651,7 +652,7 @@ class ExternalForecastSystem:
 
             worker_values = self.worker_values[base_year_workers_cols].copy()
             worker_growth = self.worker_growth[emp_cols].copy()
-            worker_split = self.worker_splits[emp_ratio_cols].copy()
+            # worker_split = self.worker_splits[emp_ratio_cols].copy()
 
             # # Need to rename cols to names used in code
             # trip_rates = self.production_trip_rates[production_trip_cols].copy()
@@ -702,7 +703,7 @@ class ExternalForecastSystem:
             #     "car_availability_id"
             # ]]
 
-            attraction_weights = self.attraction_weights[attraction_weight_cols].copy()
+            # attraction_weights = self.attraction_weights[attraction_weight_cols].copy()
 
             print("Read-in default values!")
             last_time = current_time
@@ -766,10 +767,10 @@ class ExternalForecastSystem:
                 str(base_year),
                 year_list
             )
-            worker_constraint = self.get_grown_values(worker_values,
-                                                      worker_constraint,
-                                                      "base_year_workers",
-                                                      year_list)
+            worker_constraint = du.get_grown_values(worker_values,
+                                                    worker_constraint,
+                                                    "base_year_workers",
+                                                    year_list)
             print("Constraint generated!")
             last_time = current_time
             current_time = time.time()
@@ -815,24 +816,24 @@ class ExternalForecastSystem:
         # ## ATTRACTION GENERATION ###
         print("Generating attractions...")
         attraction_dataframe = self.attraction_generator.run(
-            worker_growth=worker_growth,
-            worker_values=worker_values,
-            worker_constraint=worker_constraint,
-            worker_split=worker_split,
-            development_log=development_log,
-            development_log_split=development_log_split,
-            minimum_development_certainty=minimum_development_certainty,
-            integrating_development_log=integrate_dlog,
+            base_year=str(base_year),
+            future_years=[str(x) for x in future_years],
+            employment_growth=worker_growth,
+            employment_constraint=worker_constraint,
+            import_home=imports['home'],
+            msoa_conversion_path=self.msoa_zones_path,
+            attraction_weights_path=imports['a_weights'],
+            control_attractions=True,
+            d_log=development_log,
+            d_log_split=development_log_split,
             constraint_required=constraint_required,
             constraint_method=constraint_method,
             constraint_area=constraint_area,
             constraint_on=constraint_on,
             constraint_source=constraint_source,
             designated_area=self.area_grouping.copy(),
-            base_year_string=str(base_year),
-            model_years=year_list,
-            attraction_weights=attraction_weights,
-            output_path=exports['attractions']
+            out_path=exports['attractions'],
+            recreate_attractions=recreate_attractions
         )
 
         print("Attractions generated!")
@@ -878,12 +879,6 @@ class ExternalForecastSystem:
             # read in translation dataframe
             output_path = os.path.join(imports['zoning'], desired_zoning + ".csv")
             translation_dataframe = pd.read_csv(output_path)
-
-            print("Translation")
-            print(translation_dataframe.dtypes)
-
-            print("productions")
-            print(production_trips.dtypes)
 
             converted_productions = self.zone_translator.run(
                 production_trips,
@@ -1867,73 +1862,6 @@ class ExternalForecastSystem:
             alt_worker_growth
         ]
 
-    # TODO: Move these functions to utils as they are copied in multiple places
-    #  convert_growth_off_base_year()
-    #  get_grown_values()
-    #  growth_recombination()
-    #  check nearby functions for same issue
-    def get_grown_values(self,
-                         base_year_dataframe: pd.DataFrame,
-                         growth_dataframe: pd.DataFrame,
-                         base_year: str,
-                         all_years: List[str]
-                         ) -> pd.DataFrame:
-        """
-
-        Parameters
-        ----------
-        base_year_dataframe
-        growth_dataframe
-        base_year
-        all_years
-
-        Returns
-        -------
-
-        """
-        base_year_dataframe = base_year_dataframe.copy()
-        growth_dataframe = growth_dataframe.copy()
-
-        # CREATE GROWN DATAFRAME
-        grown_dataframe = pd.merge(
-            base_year_dataframe,
-            growth_dataframe,
-            on="model_zone_id"
-        )
-        for year in all_years:
-            growth_dataframe.loc[:, year] = (
-                (growth_dataframe.loc[:, year] - 1)
-                *
-                growth_dataframe.loc[:, base_year]
-            )
-        return grown_dataframe
-
-    def growth_recombination(self,
-                             metric_dataframe: pd.DataFrame,
-                             metric_column_name: str,
-                             all_years: List[str]
-                             ) -> pd.DataFrame:
-        """
-        #TODO GOt a better version in production_generator
-        """
-        metric_dataframe = metric_dataframe.copy()
-
-        # combine together dataframe columns to give full future values
-        # e.g. base year will get 0 + base_year_population
-        for year in all_years:
-            metric_dataframe.loc[:, year] = (
-                metric_dataframe.loc[:, year]
-                +
-                metric_dataframe.loc[:, metric_column_name]
-            )
-
-        metric_dataframe = metric_dataframe.drop(
-            labels=metric_column_name,
-            axis=1
-        )
-
-        return metric_dataframe
-
     def segment_dataframe(self,
                           combined_dataframe: pd.DataFrame,
                           split_dataframe: pd.DataFrame,
@@ -2164,6 +2092,17 @@ class ExternalForecastSystem:
             import_location = self.import_location
 
         # ## IMPORT PATHS ## #
+        # Attraction weights are a bit special, we get these directly from
+        # TMS to ensure they are the same - update this on integration
+        tms_path_parts = [
+            import_location,
+            "NorMITs Synthesiser",
+            model_name,
+            "Model Zone Lookups",
+            "attraction_weights.csv"
+        ]
+        a_weights_path = os.path.join(*tms_path_parts)
+
         # Generate import and export paths
         model_home = os.path.join(import_location, self._out_dir)
         import_home = os.path.join(model_home, 'import')
@@ -2176,7 +2115,8 @@ class ExternalForecastSystem:
             'zone_translation': os.path.join(import_home, 'zone_translation'),
             'lookups': os.path.join(model_home, 'lookup'),
             'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
-            'zoning': os.path.join(input_home, 'zoning')
+            'zoning': os.path.join(input_home, 'zoning'),
+            'a_weights': a_weights_path
         }
 
         #  ## EXPORT PATHS ## #
@@ -2784,16 +2724,13 @@ def write_input_info(output_path,
 
 
 def main():
-    dirty_init = False
     use_zone_id_subset = False
     echo = False
-
-    if dirty_init:
-        print("Not Initialising correctly. This WILL cause problems!")
 
     # Running control
     run_base_efs = True
     recreate_productions = True
+    recreate_attractions = True
 
     constrain_population = False
 
@@ -2804,8 +2741,8 @@ def main():
 
     # Controls I/O
     iter_num = 0
-    output_location = "E:/"
     import_location = "Y:/"
+    output_location = "E:/"
 
     # Set up constraints
     if constrain_population:
@@ -2815,7 +2752,6 @@ def main():
 
     # ## RUN START ## #
     efs = ExternalForecastSystem(
-        dirty_init=dirty_init,
         use_zone_id_subset=use_zone_id_subset,
         import_location=import_location,
         output_location=output_location
@@ -2828,6 +2764,7 @@ def main():
             constraint_source="Default",
             output_location=output_location,
             recreate_productions=recreate_productions,
+            recreate_attractions=recreate_attractions,
             iter_num=iter_num,
             echo_distribution=echo,
             constraint_required=constraints
