@@ -1293,6 +1293,7 @@ def check_tour_proportions(tour_props: Dict[int, Dict[int, np.array]],
     # If here, all checks have passed
     return
 
+
 def combine_yearly_dfs(year_dfs: Dict[str, pd.DataFrame],
                        unique_col: str,
                        p_col: str = 'p',
