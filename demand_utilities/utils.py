@@ -20,6 +20,7 @@ import random
 
 import pandas as pd
 
+from typing import Any
 from typing import List
 from typing import Dict
 from typing import Iterable
@@ -1502,3 +1503,22 @@ def defaultdict_to_regular(d):
     if isinstance(d, defaultdict):
         d = {k: defaultdict_to_regular(v) for k, v in d.items()}
     return d
+
+
+def intersection(l1: List[Any],
+                 l2: List[Any],
+                 ) -> List[Any]:
+    """
+    Efficient method to return the intersection between l1 and l2
+    """
+    # Want to loop through the smaller list for efficiency
+    if len(l1) > len(l2):
+        big = l1.copy()
+        small = l2
+    else:
+        big = l2
+        small = l1
+
+    # Get the intersection
+    temp = set(big)
+    return [x for x in small if x in temp]
