@@ -83,6 +83,7 @@ class EFSAttractionGenerator:
             ) -> pd.DataFrame:
         """
         TODO: Write attraction model documentation
+        will be similar to production model docs
         """
         # Return previously created productions if we can
         fname = 'MSOA_aggregated_attractions.csv'

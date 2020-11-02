@@ -28,7 +28,7 @@ from collections import defaultdict
 from tqdm import tqdm
 
 import pa_to_od as pa2od
-import furness_process as fp
+import distribution as dm
 
 import efs_constants as consts
 import demand_utilities.utils as du
@@ -563,7 +563,7 @@ def _generate_tour_proportions_internal(od_import: str,
             furnessed_mat = np.zeros((len(tp_needed), len(tp_needed)))
 
         else:
-            furnessed_mat = fp.doubly_constrained_furness(
+            furnessed_mat = dm.doubly_constrained_furness(
                 seed_vals=seed_values,
                 row_targets=fh_target,
                 col_targets=th_target,

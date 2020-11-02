@@ -20,6 +20,7 @@ import random
 
 import pandas as pd
 
+from typing import Any
 from typing import List
 from typing import Dict
 from typing import Iterable
@@ -545,7 +546,7 @@ def is_none_like(o) -> bool:
             return True
 
     if isinstance(o, list):
-        return is_none_like(o[0])
+        return all([is_none_like(x) for x in o])
 
     return False
 
@@ -1502,3 +1503,106 @@ def defaultdict_to_regular(d):
     if isinstance(d, defaultdict):
         d = {k: defaultdict_to_regular(v) for k, v in d.items()}
     return d
+
+
+def fit_filter(df: pd.DataFrame,
+               df_filter: Dict[str, Any],
+               raise_error: bool = False
+               ) -> Dict[str, Any]:
+    """
+    Whittles down filter to only include relevant items
+
+    Any columns that do not exits in the dataframe will be removed from the
+    filter; optionally raises an error if a filter column is not in the given
+    dataframe. Furthermore, any items that are 'none like' as determined by
+    is_none_like() will also be removed.
+
+    Parameters
+    ----------
+    df:
+        The dataframe that the filter is to be applied to.
+
+    df_filter:
+        The filter dictionary in the format of {df_col_name: filter_values}
+
+    raise_error:
+        Whether to raise an error or not when a df_col_name does not exist in
+        the given dataframe.
+
+    Returns
+    -------
+    fitted_filter:
+        A filter with non-relevant (as defined in the function description)
+        items removed.
+    """
+    # Init
+    fitted_filter = dict()
+    df = df.copy()
+    df.columns = df.columns.astype(str)
+
+    # Check each item in the given filter
+    for col, vals in df_filter.items():
+
+        # Check the column exists
+        if col not in df.columns:
+            if raise_error:
+                raise KeyError("'%s' Column not found in given dataframe"
+                               % str(col))
+            else:
+                continue
+
+        # Check the given value isn't None
+        if is_none_like(vals):
+            continue
+
+        # Should only get here for valid combinations
+        fitted_filter[col] = vals
+
+    return fitted_filter
+
+
+def filter_by_segmentation(df: pd.DataFrame,
+                           df_filter: Dict[str, Any],
+                           fit: bool = False,
+                           **kwargs
+                           ) -> pd.DataFrame:
+    """
+    Filters a dataframe down to a given segmentation
+
+    Can handle flexible segmentation if fit is set to True - all unnecessary
+    columns will be removed, and any 'None like' filters will be removed. This
+    follows the convention of settings segmentation splits to None when it
+    is not needed.
+
+    Parameters
+    ----------
+    df:
+        The dataframe that the filter is to be applied to.
+
+    df_filter:
+        The filter dictionary in the format of {df_col_name: filter_values}.
+
+    fit:
+        Whether to try and fit the given filter to the dataframe before
+        application. If using flexible segmentation and filter has not already
+        been fit, set to True.
+
+    kwargs:
+        Any additional kwargs that should be passed to fit_filter() if fit is
+        set to True.
+    Returns
+    -------
+    filtered_df:
+        The original dataframe given, segmented to the given filter level.
+    """
+    # Init
+    df = df.copy()
+
+    if fit:
+        df_filter = fit_filter(df, df_filter.copy(), **kwargs)
+
+    # Figure out the correct mask
+    needed_cols = list(df_filter.keys())
+    mask = df[needed_cols].isin(df_filter).all(axis='columns')
+
+    return df[mask]
