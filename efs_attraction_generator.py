@@ -72,7 +72,6 @@ class EFSAttractionGenerator:
             m_needed: List[int] = consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
-            emp_cat_col: str = 'employment_cat',
             no_neg_growth: bool = True,
             employment_infill: float = 0.001,
 
@@ -82,7 +81,142 @@ class EFSAttractionGenerator:
             recreate_attractions: bool = True,
             ) -> pd.DataFrame:
         """
-        TODO: Write attraction model documentation
+        Attraction model for the external forecast system. This has been
+        written to align with TMS attraction generation, with the addition of
+        future year employment growth and attraction generation.
+
+        Performs the following functions:
+            - Reads in the base year employment data to create the base year
+              employment numbers
+            - Grows the base year employment by employment_growth factors,
+              resulting in future year employment numbers.
+            - Combines base and future year employment numbers with
+              attraction_weights (currently the same across all years) to
+              produce the base and future year attraction values (for all
+              modes).
+            - Finally, splits the produced attractions to only return the
+              desired mode. This dataframe is then returned.
+
+        Parameters
+        ----------
+        base_year:
+            The base year of the forecast.
+
+        future_years:
+            The future years to forecast.
+
+        employment_growth:
+            dataframe containing the future year growth values for
+            growing the base year employment. Must be segmented by the same
+            zoning system (at least) as employment_path data (usually
+            msoa_zone_id).
+
+        employment_constraint:
+            Values to constrain the employment numbers to. See
+            efs_constrainer.ForecastConstrainer() for further information.
+
+        import_home:
+            The home directory to find all the attraction imports. Usually
+            Y:/NorMITs Demand/import
+
+        msoa_conversion_path:
+            Path to the file containing the conversion from msoa integer
+            identifiers to the msoa string code identifiers. Hoping to remove
+            this in a future update and align all of EFS to use msoa string
+            code identifiers.
+
+        attraction_weights_path:
+            The path to alternate attraction weights import data. If left as
+            None, the attraction model will use the default land use data.
+
+        employment_path:
+            The path to alternate employment import data. If left as None, the
+            attraction model will use the default land use data.
+
+        mode_splits_path:
+            The path to alternate mode splits import data. If left as None, the
+            attraction model will use the default land use data.
+
+        soc_weights_path:
+            The path to alternate soc weights import data. If left as None, the
+            attraction model will use the default land use data.
+
+        ntem_control_dir:
+            The path to alternate ntem control directory. If left as None, the
+            attraction model will use the default land use data.
+
+        lad_lookup_dir:
+            The path to alternate lad to msoa import data. If left as None, the
+            attraction model will use the default land use data.
+
+        control_attractions:
+            Whether to control the generated attractions to the constraints
+            given in ntem_control_dir or not.
+
+        d_log:
+            TODO: Clarify what format D_log data comes in as
+
+        d_log_split:
+            See d_log
+
+        constraint_required:
+            See efs_constrainer.ForecastConstrainer()
+
+        constraint_method:
+            See efs_constrainer.ForecastConstrainer()
+
+        constraint_area:
+            See efs_constrainer.ForecastConstrainer()
+
+        constraint_on:
+            See efs_constrainer.ForecastConstrainer()
+
+        constraint_source:
+            See efs_constrainer.ForecastConstrainer()
+
+        designated_area:
+            See efs_constrainer.ForecastConstrainer()
+
+        m_needed:
+            Which mode to return productions for.
+
+        segmentation_cols:
+            The levels of segmentation that exist in the employment_path data.
+            If not defined, will default to: [emp_cat_col].
+
+        external_zone_col:
+            The name of the zone column, as used externally to this attraction
+            model. This is used to make sure this model can translate to the
+            zoning name used internally in employment_path and
+            attraction_weights data.
+
+        no_neg_growth:
+            Whether to ensure there is no negative growth. If True, any growth
+            values below 0 will be replaced with employment_infill.
+
+        employment_infill:
+            If no_neg_growth is True, this value will be used to replace all
+            values that are less than 0.
+
+        audits:
+            Whether to output audits to the terminal during running. This can
+            be used to monitor the employment and attraction numbers being
+            generated and constrained.
+
+        out_path:
+            Path to the directory to output the employment and attractions
+            dataframes.
+
+        recreate_attractions:
+            Whether to recreate the attractions or not. If False, it will
+            look in out_path for previously produced attractions and return
+            them. If none can be found, they will be generated.
+
+        Returns
+        -------
+        segmented_attractions:
+            Attractions for mode m_needed, segmented by all segments possible
+            in the input data.
         """
         # Return previously created productions if we can
         fname = 'MSOA_aggregated_attractions.csv'
@@ -96,6 +230,7 @@ class EFSAttractionGenerator:
         internal_zone_col = 'msoa_zone_id'
         a_weights_p_col = 'purpose'
         mode_split_m_col = 'mode'
+        emp_cat_col = 'employment_cat'
         all_years = [str(x) for x in [base_year] + future_years]
         integrate_d_log = d_log is not None and d_log_split is not None
         if integrate_d_log:
@@ -550,33 +685,58 @@ def get_mode_splits(mode_splits_path: str,
                     ret_zone_col: str = None,
                     ret_p_col: str = None,
                     ret_m_col: str = None,
+                    ret_m_split_col: str = None,
                     infill: float = 0.0
                     ) -> pd.DataFrame:
     """
     Reads the mode splits from file
 
-    Will make sure
+    Will make sure all combinations of purposes and modes exist, and aggregate
+    any duplicate entries.
 
     Parameters
     ----------
-    mode_splits_path
-    zone_col
-    p_col
-    m_col
-    m_split_col
-    ret_zone_col
-    ret_p_col
+    mode_splits_path:
+        Path to the mode splits file to read in
+
+    zone_col:
+        Name of the column containing the zone data
+
+    p_col:
+        Name of the columns containing the purpose data
+
+    m_col:
+        Name of the column containing the mode data
+
+    m_split_col:
+        Name of the column containing the mode split factors
+
+    ret_zone_col:
+        The name to give to zone_col on return.
+
+    ret_p_col:
+        The name to give to p_col on return.
+
     ret_m_col
-    infill
+        The name to give to m_col on return.
+
+    ret_m_split_col
+        The name to give to m_split_col on return.
+
+    infill:
+        The value to infill any missing p/m combinations
 
     Returns
     -------
-
+    mode_splits:
+        Dataframe containing the following columns [ret_zone_col, ret_p_col,
+        ret_m_col, ret_m_split_col]
     """
     # Init
     ret_zone_col = zone_col if ret_zone_col is None else ret_zone_col
     ret_p_col = p_col if ret_p_col is None else ret_p_col
     ret_m_col = m_col if ret_m_col is None else ret_m_col
+    ret_m_split_col = m_split_col if ret_m_split_col is None else ret_m_split_col
     mode_splits = pd.read_csv(mode_splits_path)
 
     # Aggregate any duplicates
@@ -607,7 +767,8 @@ def get_mode_splits(mode_splits_path: str,
         columns={
             zone_col: ret_zone_col,
             p_col: ret_p_col,
-            m_col: ret_m_col
+            m_col: ret_m_col,
+            m_split_col: ret_m_split_col
         }
     )
 
@@ -762,21 +923,54 @@ def combine_yearly_attractions(year_dfs: Dict[str, pd.DataFrame],
     return pd.concat(attraction_ph)
 
 
-def split_by_soc(attractions: pd.DataFrame,
+def split_by_soc(df: pd.DataFrame,
                  soc_weights: pd.DataFrame,
                  zone_col: str = 'msoa_zone_id',
                  p_col: str = 'p',
                  unique_col: str = 'trips',
                  soc_col: str = 'soc'
                  ) -> pd.DataFrame:
-    # TODO: Write split_by_soc() docs
+    """
+    Splits df purposes by the soc_weights given.
+
+    Parameters
+    ----------
+    df:
+        Dataframe to add soc splits too. Must contain the following columns
+        [zone_col, p_col, unique_col]
+
+    soc_weights:
+        Wide dataframe containing the soc splitting weights. Must have a
+        zone_col columns, and all other columns are the soc categories to split
+        by.
+
+    zone_col:
+        The name of the column in df and soc_weights that contains the
+        zone data.
+
+    p_col:
+        Name of the column in df that contains purpose data.
+
+    unique_col:
+        Name of the column in df that contains the unique data (usually the
+        number of trips at that row of segmentation)
+
+    soc_col:
+        The name to give to the added soc column in the return dataframe.
+
+    Returns
+    -------
+    soc_split_df:
+        df with an added soc_col. Unique_col will be split by the weights
+        given
+    """
     # Init
     soc_cats = list(soc_weights.columns)
 
     # Figure out which rows need splitting
-    mask = (attractions[p_col].isin(consts.SOC_P))
-    split_df = attractions[mask].copy()
-    retain_df = attractions[~mask].copy()
+    mask = (df[p_col].isin(consts.SOC_P))
+    split_df = df[mask].copy()
+    retain_df = df[~mask].copy()
 
     # Split by soc weights
     split_df = pd.merge(
@@ -1012,7 +1206,7 @@ def generate_attractions(employment: pd.DataFrame,
                          m_split_col: str = 'mode_share',
                          ntem_control_dir: str = None,
                          lad_lookup_dir: str = None,
-                         split_by_soc: bool = True
+                         soc_split: bool = True
                          ) -> pd.DataFrame:
     """
     Converts employment to attractions using attraction_weights
@@ -1033,6 +1227,11 @@ def generate_attractions(employment: pd.DataFrame,
 
     mode_splits_path:
         Path to the file of mode splits by 'p'
+
+    soc_weights_path:
+        Path to the file of soc weights by zone. This file does not
+        specifically need to be weights, as the reader will do the conversion
+        on data ingestion.
 
     idx_cols:
         The column names used to index the wide employment df. This should
@@ -1062,6 +1261,10 @@ def generate_attractions(employment: pd.DataFrame,
         zoning, to be used for controlling the attractions. If left as None, no
         control will be carried out.
 
+    soc_split:
+        Whether to apply the soc splits from soc_weights_path to the
+        attractions or not.
+
     Returns
     -------
     attractions:
@@ -1077,7 +1280,7 @@ def generate_attractions(employment: pd.DataFrame,
     # Get the soc weights per zone - may want to move this into each year
     # in future
     soc_weights = None
-    if split_by_soc:
+    if soc_split:
         soc_weights = get_soc_weights(soc_weights_path)
 
     # Generate attractions per year
