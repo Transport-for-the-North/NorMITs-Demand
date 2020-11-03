@@ -1606,3 +1606,22 @@ def filter_by_segmentation(df: pd.DataFrame,
     mask = df[needed_cols].isin(df_filter).all(axis='columns')
 
     return df[mask]
+
+
+def intersection(l1: List[Any],
+                 l2: List[Any],
+                 ) -> List[Any]:
+    """
+    Efficient method to return the intersection between l1 and l2
+    """
+    # Want to loop through the smaller list for efficiency
+    if len(l1) > len(l2):
+        big = l1.copy()
+        small = l2
+    else:
+        big = l2
+        small = l1
+
+    # Get the intersection
+    temp = set(big)
+    return [x for x in small if x in temp]
