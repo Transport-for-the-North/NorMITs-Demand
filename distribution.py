@@ -16,6 +16,7 @@ import numpy as np
 
 from typing import List
 
+import audits
 import efs_constants as consts
 from demand_utilities import utils as du
 
@@ -36,10 +37,12 @@ def doubly_constrained_furness(seed_vals: np.array,
         (len(n_rows), len(n_cols)).
 
     row_targets:
-        The target values for the sum of each row
+        The target values for the sum of each row.
+        i.e np.sum(matrix, axis=1)
 
     col_targets:
         The target values for the sum of each column
+        i.e np.sum(matrix, axis=0)
 
     tol:
         The maximum difference between the achieved and the target values
@@ -61,6 +64,9 @@ def doubly_constrained_furness(seed_vals: np.array,
             "and col targets. Seed_vals are shape %s. Expected shape (%d, %d)."
             % (str(seed_vals.shape), len(row_targets), len(col_targets))
         )
+
+    if row_targets.sum() == 0 or col_targets.sum() == 0:
+        return np.zeros(seed_vals.shape)
 
     # Init
     furnessed_mat = seed_vals.copy()
@@ -112,14 +118,18 @@ def _distribute_pa_internal(productions,
                             m_col,
                             seg_col,
                             ca_col,
-                            tp_col
+                            tp_col,
+                            echo,
+                            audit_out,
+                            dist_out,
                             ):
     """
     Internal function of distribute_pa(). See that for full documentation.
     """
     # Init
     productions = productions.copy()
-    attraction_weights = attraction_weights.copy()
+    a_weights = attraction_weights.copy()
+    unique_col = 'trips'
 
     # Read in the seed distribution
     seed_fname = du.get_dist_name(
@@ -132,7 +142,17 @@ def _distribute_pa_internal(productions,
         tp=str(tp),
         csv=True
     )
-    seed_dist = pd.read_csv(os.path.join(seed_dist_dir, seed_fname))
+    seed_dist = pd.read_csv(os.path.join(seed_dist_dir, seed_fname), index_col=0)
+    seed_dist.columns = seed_dist.columns.astype(int)
+
+    # Quick check that seed is valid
+    if len(seed_dist.columns.difference(seed_dist.index)) > 0:
+        raise ValueError("The index and columns of the seed distribution"
+                         "'%s' do not match."
+                         % seed_fname)
+
+    # Assume seed contains all the zones numbers
+    unique_zones = list(seed_dist.index)
 
     # TODO: Make sure the seed values are the same size as P/A
     # TODO: Add in zone subset stuff?
@@ -156,249 +176,93 @@ def _distribute_pa_internal(productions,
     productions = du.filter_by_segmentation(productions,
                                             df_filter=base_filter,
                                             fit=True)
-    attraction_weights = du.filter_by_segmentation(attraction_weights,
-                                                   df_filter=base_filter,
-                                                   fit=True)
+    a_weights = du.filter_by_segmentation(a_weights,
+                                          df_filter=base_filter,
+                                          fit=True)
 
     # Rename columns for furness
-    productions = productions.rename(columns={str(year): "production_forecast"})
-    attraction_weights = attraction_weights.rename(columns={str(year): "attraction_forecast"})
+    productions = productions.rename(columns={str(year): unique_col})
+    a_weights = a_weights.rename(columns={str(year): unique_col})
 
     # ## MATCH P/A ZONES ## #
     if productions.empty:
         raise ValueError("Something has gone wrong. I "
                          "have no productions.")
 
-    if attraction_weights.empty:
+    if a_weights.empty:
         raise ValueError("Something has gone wrong. I "
                          "have no productions.")
 
-    # TODO: Fix how this is done - might introduce an error like this
-    #  Use same method developed for mode shares in attractions
+    productions, a_weights = du.match_pa_zones(
+        productions=productions,
+        attractions=a_weights,
+        zone_col=zone_col,
+        unique_zones=unique_zones
+    )
 
-    # Match the production and attraction zones
-    prod_cols = list(productions)
-    att_cols = list(attraction_weights)
+    # ## BALANCE P/A FORECASTS ## #
+    if productions[unique_col].sum() != a_weights[unique_col].sum():
+        du.print_w_toggle("Row and Column targets do not match. Balancing...",
+                          echo=echo)
+        a_weights[unique_col] /= (
+            a_weights[unique_col].sum() / productions[unique_col].sum()
+        )
 
-    # Outer join makes sure all model zones will get values
-    pa_input = pd.merge(
-        productions,
-        attraction_weights,
-        on=zone_col,
-        how='outer'
-    ).fillna(0)
-
-    productions = pa_input.reindex(prod_cols, axis='columns').copy()
-    attraction_weights = pa_input.reindex(att_cols, axis='columns').copy()
+    # Tidy up
+    productions = productions.reindex([zone_col, unique_col], axis='columns')
+    a_weights = a_weights.reindex([zone_col, unique_col], axis='columns')
 
     # TODO: write this properly after dev
-    target_percentage = 0.975
     max_iters = 5000
-    constrain_on_production = True
-    constrain_on_attraction = True
-    zero_replacement_value = 0.001
-    echo = True
+    seed_infill = 0.001
 
-    seed_dist = seed_dist.rename(columns={'norms_zone_id': 'p_zone'}).melt(
-        id_vars=['p_zone'],
-        var_name='a_zone',
-        value_name='seed_values'
-    )
-
-    # Furness the productions and attractions
-    final_distribution = furness(
-        productions=productions,
-        attractions=attraction_weights,
-        distributions=seed_dist,
+    pa_dist = furness_pandas_wrapper(
+        row_targets=productions,
+        col_targets=a_weights,
+        seed_values=seed_dist,
         max_iters=max_iters,
-        constrain_on_production=constrain_on_production,
-        constrain_on_attraction=constrain_on_attraction,
-        zero_replacement_value=zero_replacement_value,
-        target_percentage=target_percentage,
-        echo=echo
+        seed_infill=seed_infill,
+        idx_col=zone_col,
+        unique_col=unique_col
     )
 
-    # sort out and save furnessed val
+    if audit_out is not None:
+        # Create output filename
+        audit_fname = seed_fname.replace('_pa_', '_dist_audit_')
+        audit_path = os.path.join(audit_out, audit_fname)
 
-    exit()
-    return
+        audits.audit_furness(
+            row_targets=productions,
+            col_targets=a_weights,
+            furness_out=pa_dist,
+            output_path=audit_path,
+            idx_col=zone_col,
+            unique_col=unique_col,
+            row_prefix='p',
+            col_prefix='a',
+            index_name='zone'
+        )
 
-    ########### OLD DISTRBUTION BELOW #########
-
-    # TODO: Output files while it runs, instead of at the end!
-    productions = productions.copy()
-    attraction_weights = attraction_weights.copy()
-    final_distribution_dictionary = {}
-
-    # Make sure the soc and ns columns are strings
-    productions['soc'] = productions['soc'].astype(str)
-    productions['ns'] = productions['ns'].astype(str)
-
-    # TODO: Move inside of all nested loops into function (stops the
-    #  indentation from making difficult to read code)
-    # TODO: Move mode out to nested loops
-    # TODO: Tidy this up
-    # TODO: Generate synth_dists path based on segmentation
-    #  and file location given
-    for year in years_needed:
-        for purpose in p_needed:
-            # ns/soc depends on purpose
-            if purpose in [1, 2]:
-                required_segments = soc_needed
-            else:
-                required_segments = ns_needed
-
-            for segment in required_segments:
-                car_availability_dataframe = pd.DataFrame
-                first_iteration = True
-                for car_availability in ca_needed:
-
-                    # for tp in required_times:
-                    dist_path = os.path.join(
-                        distribution_file_location,
-                        distribution_dataframe_dict[purpose][segment][car_availability]
-                    )
-
-                    # Convert from wide to long format
-                    # (needed for furnessing)
-                    synth_dists = pd.read_csv(dist_path)
-                    synth_dists = pd.melt(
-                        synth_dists,
-                        id_vars=['norms_zone_id'],
-                        var_name='a_zone',
-                        value_name='seed_values'
-                    ).rename(
-                        columns={"norms_zone_id": "p_zone"})
-
-                    # convert column object to int
-                    synth_dists['a_zone'] = synth_dists['a_zone'].astype(int)
-                    synth_dists = synth_dists.groupby(
-                        by=["p_zone", "a_zone"],
-                        as_index=False
-                    ).sum()
-
-                    if self.use_zone_id_subset:
-                        zone_subset = [259, 267, 268, 270, 275, 1171, 1173]
-                        synth_dists = du.get_data_subset(
-                            synth_dists, 'p_zone', zone_subset)
-                        synth_dists = du.get_data_subset(
-                            synth_dists, 'a_zone', zone_subset)
-
-                    # Generate productions input
-                    if purpose in [1, 2]:
-                        segment_mask = (
-                            (productions["purpose_id"] == purpose)
-                            & (productions["car_availability_id"] == car_availability)
-                            & (productions["soc"] == str(segment))
-                        )
-                    else:
-                        segment_mask = (
-                            (productions["purpose_id"] == purpose)
-                            & (productions["car_availability_id"] == car_availability)
-                            & (productions["ns"] == str(segment))
-                        )
-
-                    production_input = productions[segment_mask][
-                        ["model_zone_id", str(year)]
-                    ].rename(columns={str(year): "production_forecast"})
-
-                    # Generate attractions input
-                    mask = attraction_weights["purpose_id"] == purpose
-                    attraction_input = attraction_weights[mask][
-                        ["model_zone_id", str(year)]
-                    ].rename(columns={str(year): "attraction_forecast"})
-
-                    # ## MATCH P/A ZONES ## #
-                    if production_input.empty:
-                        raise ValueError("Something has gone wrong. I "
-                                         "have no productions.")
-
-                    if attraction_input.empty:
-                        raise ValueError("Something has gone wrong. I "
-                                         "have no productions.")
-
-                    # Match the production and attraction zones
-                    p_cols = list(production_input)
-                    a_cols = list(attraction_input)
-
-                    # Outer join makes sure all model zones will get values
-                    pa_input = pd.merge(
-                        production_input,
-                        attraction_input,
-                        on='model_zone_id',
-                        how='outer'
-                    ).fillna(0)
-
-                    production_input = pa_input.reindex(p_cols, axis='columns').copy()
-                    attraction_input = pa_input.reindex(a_cols, axis='columns').copy()
-
-                    # Furness the productions and attractions
-                    target_percentage = 0.7 if self.use_zone_id_subset else 0.975
-                    final_distribution = fp.furness(
-                        productions=production_input,
-                        attractions=attraction_input,
-                        distributions=synth_dists,
-                        max_iters=max_iters,
-                        constrain_on_production=constrain_on_production,
-                        constrain_on_attraction=constrain_on_attraction,
-                        zero_replacement_value=zero_replacement_value,
-                        target_percentage=target_percentage,
-                        echo=echo
-                    )
-
-                    final_distribution["purpose_id"] = purpose
-                    final_distribution["car_availability_id"] = car_availability
-                    final_distribution[year] = year
-
-                    final_distribution["mode_id"] = required_mode
-                    final_distribution = final_distribution[[
-                        "p_zone",
-                        "a_zone",
-                        "mode_id",
-                        "dt"
-                     ]]
-
-                    # Rename to the common output names
-                    final_distribution = final_distribution.rename(columns={
-                        "mode_id": "m",
-                        "dt": "trips"
-                    })
-
-                    # TODO: Make sure this works for NHB trips too
-
-                    final_distribution_mode = final_distribution.copy()
-                    final_distribution_mode = final_distribution_mode[[
-                        'p_zone', 'a_zone', 'trips'
-                    ]]
-
-                    dict_string = du.get_dist_name(
-                        str(trip_origin),
-                        'pa',
-                        str(year),
-                        str(purpose),
-                        str(required_mode),
-                        str(segment),
-                        str(car_availability)
-                    )
-
-                    final_distribution_dictionary[dict_string] = final_distribution_mode
-
-                    print("Distribution " + dict_string + " complete!")
-                    if first_iteration:
-                        car_availability_dataframe = final_distribution_mode
-                        first_iteration = False
-                    else:
-                        car_availability_dataframe = car_availability_dataframe.append(
-                            final_distribution_mode
-                            )
-
-    return final_distribution_dictionary
+    # ## OUTPUT TO DISK ## #
+    dist_name = du.get_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='pa',
+        year=str(year),
+        purpose=str(p),
+        mode=str(m),
+        segment=str(seg),
+        car_availability=str(ca),
+        tp=str(tp),
+        csv=True
+    )
+    output_path = os.path.join(dist_out, dist_name)
+    pa_dist.to_csv(output_path)
 
 
 def distribute_pa(productions: pd.DataFrame,
                   attraction_weights: pd.DataFrame,
-                  zone_areatype_lookup: pd.DataFrame,
                   seed_dist_dir: str,
+                  dist_out: str,
                   years_needed: List[str],
                   p_needed: List[int],
                   m_needed: List[int],
@@ -415,14 +279,14 @@ def distribute_pa(productions: pd.DataFrame,
                   tp_col: str = 'tp',
                   trip_origin: str = 'hb',
                   max_iters: int = 5000,
-                  constrain_on_production: bool = True,
-                  constrain_on_attraction: bool = True,
-                  zero_replacement_value: float = 0.00001,
-                  echo: bool = False
+                  zero_replacement_value: float = 1e-5,
+                  echo: bool = False,
+                  audit_out: str = None
                   ) -> None:
     """
     # TODO: Write distribute_pa() docs
     """
+    # TODO: Make sure distribute_pa() works for NHB trips
     # Init
     productions = productions.copy()
     attraction_weights = attraction_weights.copy()
@@ -498,10 +362,123 @@ def distribute_pa(productions: pd.DataFrame,
                 seg_col=seg_col,
                 ca_col=ca_col,
                 tp_col=tp_col,
+                echo=echo,
+                audit_out=audit_out,
+                dist_out=dist_out,
             )
 
 
-def furness(productions: pd.DataFrame,
+def furness_pandas_wrapper(seed_values: pd.DataFrame,
+                           row_targets: pd.DataFrame,
+                           col_targets: pd.DataFrame,
+                           max_iters: int = 2000,
+                           seed_infill: float = 1e-3,
+                           tol: float = 1e-9,
+                           idx_col: str = 'model_zone_id',
+                           unique_col: str = 'trips',
+                           ):
+    """
+    Wrapper around doubly_constrained_furness() to handle pandas in/out
+
+    Internally checks and converts the pandas inputs into numpy in order to
+    run doubly_constrained_furness(). Converts the output back into pandas
+    at the end
+
+    Parameters
+    ----------
+    seed_values:
+        The seed values to use for the furness. The index and columns must
+        match the idx_col of row_targets and col_targets.
+
+    row_targets:
+        The target values for the sum of each row. In production/attraction
+        furnessing, this would be the productions. The idx_col must match
+        the idx_col of col_targets.
+
+    col_targets:
+        The target values for the sum of each column. In production/attraction
+        furnessing, this would be the attractions. The idx_col must match
+        the idx_col of row_targets.
+
+    max_iters:
+        The maximum number of iterations to complete before exiting.
+
+    tol:
+        The maximum difference between the achieved and the target values
+        to tolerate before exiting early. R^2 is used to calculate the
+        difference.
+
+    seed_infill:
+        The value to infill any seed values that are 0.
+
+    idx_col:
+        Name of the columns in row_targets and col_targets that contain the
+        index data that matches seed_values index/columns
+
+    unique_col:
+        Name of the columns in row_targets and col_targets that contain the
+        values to target during the furness.
+
+    Returns
+    -------
+    furnessed_matrix:
+        The final furnessed matrix, in the same format as seed_values
+    """
+    # Init
+    row_targets = row_targets.copy()
+    col_targets = col_targets.copy()
+    seed_values = seed_values.copy()
+
+    row_targets = row_targets.reindex([idx_col, unique_col], axis='columns')
+    col_targets = col_targets.reindex([idx_col, unique_col], axis='columns')
+    row_targets = row_targets.set_index(idx_col)
+    col_targets = col_targets.set_index(idx_col)
+
+    # ## VALIDATE INPUTS ## #
+    ref_index = row_targets.index
+    if len(ref_index.difference(col_targets.index)) > 0:
+        raise ValueError("Row and Column target indexes do not match.")
+
+    if len(ref_index.difference(seed_values.index)) > 0:
+        raise ValueError("Row and Column target indexes do not match "
+                         "seed index.")
+
+    if len(ref_index.difference(seed_values.columns)) > 0:
+        raise ValueError("Row and Column target indexes do not match "
+                         "seed columns.")
+
+    if row_targets[unique_col].sum() != col_targets[unique_col].sum():
+        raise ValueError("Row and Column target totals do not match. "
+                         "Cannot Furness.")
+
+    # Now we know everything matches, we can convert to numpy
+    row_targets = row_targets.values.flatten()
+    col_targets = col_targets.values.flatten()
+    seed_values = seed_values.values
+
+    # ## TIDY AND INFILL SEED ## #
+    seed_values = np.where(seed_values <= 0, seed_infill, seed_values)
+    seed_values /= seed_values.sum()
+
+    furnessed_mat = doubly_constrained_furness(
+        seed_vals=seed_values,
+        row_targets=row_targets,
+        col_targets=col_targets,
+        tol=tol,
+        max_iters=max_iters
+    )
+
+    # ## STICK BACK INTO PANDAS ## #
+    furnessed_mat = pd.DataFrame(
+        index=ref_index,
+        columns=ref_index,
+        data=furnessed_mat
+    )
+
+    return furnessed_mat
+
+
+def furness_old(productions: pd.DataFrame,
             attractions: pd.DataFrame,
             distributions: pd.DataFrame,
             max_iters: int = 1000,
@@ -579,14 +556,18 @@ def furness(productions: pd.DataFrame,
         The complete final furnessed frame with the
         columns "p_zone", "a_zone" and "dt".
     """
+
+    print("WARNING! This code is now deprecated. Use furness_pandas_wrapper() "
+          "instead, it is much much faster and converts to numpy!")
+
     # Grab only the necessary columns
-    productions = productions[["model_zone_id", "production_forecast"]].copy()
-    attractions = attractions[["model_zone_id", "attraction_forecast"]].copy()
+    productions = productions[[zone_col, "production_forecast"]].copy()
+    attractions = attractions[[zone_col, "attraction_forecast"]].copy()
     distributions = distributions[["p_zone", "a_zone", "seed_values"]].copy()
 
     # Ensure correct formats
-    productions['model_zone_id'] = productions['model_zone_id'].astype(int)
-    attractions['model_zone_id'] = attractions['model_zone_id'].astype(int)
+    productions[zone_col] = productions[zone_col].astype(int)
+    attractions[zone_col] = attractions[zone_col].astype(int)
     distributions['p_zone'] = distributions['p_zone'].astype(int)
     distributions['a_zone'] = distributions['a_zone'].astype(int)
 
@@ -625,12 +606,12 @@ def furness(productions: pd.DataFrame,
         distributions.loc[zero_seed_mask, "seed_values"] = zero_replacement_value
 
     # Get percentage of productions to each a_zone from each p_zone
-    ph = list()
-    for zone in distribution_zones:
-        temp_dists = distributions[distributions["p_zone"] == zone].copy()
-        temp_dists['seed_values'] /= temp_dists['seed_values'].sum()
-        ph.append(temp_dists)
-    distributions = pd.concat(ph)
+    # ph = list()
+    # for zone in distribution_zones:
+    #     temp_dists = distributions[distributions["p_zone"] == zone].copy()
+    #     temp_dists['seed_values'] /= temp_dists['seed_values'].sum()
+    #     ph.append(temp_dists)
+    # distributions = pd.concat(ph)
 
     # Loop Init
     furnessed_frame = pd.merge(

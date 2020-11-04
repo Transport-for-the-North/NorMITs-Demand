@@ -23,6 +23,7 @@ import pandas as pd
 from typing import Any
 from typing import List
 from typing import Dict
+from typing import Tuple
 from typing import Iterable
 
 
@@ -349,6 +350,11 @@ def get_growth_values(base_year_df: pd.DataFrame,
     # Avoid clashes in the base year
     if base_year_col in growth_df:
         growth_df = growth_df.drop(base_year_col, axis='columns')
+
+    # Avoid future year clashes
+    base_year_df = base_year_df.drop(future_year_cols,
+                                     axis='columns',
+                                     errors='ignore')
 
     # Merge on merge col
     growth_values = pd.merge(base_year_df,
@@ -1625,3 +1631,80 @@ def intersection(l1: List[Any],
     # Get the intersection
     temp = set(big)
     return [x for x in small if x in temp]
+
+
+def ensure_index(df: pd.DataFrame,
+                 index: List[Any],
+                 index_col: str,
+                 infill: float = 0.0
+                 ) -> pd.DataFrame:
+    """
+    Ensures every value in index exists in index_col of df.
+    Missing values are infilled with infill
+    """
+    # Make a dataframe with just the new index
+    ph = pd.DataFrame({index_col: index})
+
+    # Merge with the given and infill missing
+    return ph.merge(df, how='left', on=index_col).fillna(infill)
+
+
+def match_pa_zones(productions: pd.DataFrame,
+                   attractions: pd.DataFrame,
+                   unique_zones: List[Any],
+                   zone_col: str = 'model_zone_id',
+                   infill: float = 0.0,
+                   set_index: bool = False
+                   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Makes sure all unique zones exist in productions and attractions
+
+    Any missing zones will be infilled with infill,
+
+    Parameters
+    ----------
+    productions:
+        Dataframe containing the productions data - must have a zone_col
+
+    attractions:
+        Dataframe containing the productions data - must have a zone_col
+
+    unique_zones:
+        List of the desired zones to have in productions and attractions
+
+    zone_col:
+        Column in productions and attractions that contains the zone data.
+
+    infill:
+        Value to infill missing rows with in productions and attractions when
+        new zone may be added in.
+
+    set_index:
+        Whether to set the zone_col as the index before returning or not.
+
+    Returns
+    -------
+    (productions, attractions):
+        The provided productions and attractions with all zones from
+        unique_zones either as the index, or in zone_col
+    """
+    # Match productions and attractions
+    productions = ensure_index(
+        df=productions,
+        index=unique_zones,
+        index_col=zone_col,
+        infill=infill
+    )
+
+    attractions = ensure_index(
+        df=attractions,
+        index=unique_zones,
+        index_col=zone_col,
+        infill=infill
+    )
+
+    if set_index:
+        productions = productions.set_index(zone_col)
+        attractions = attractions.set_index(zone_col)
+
+    return productions, attractions

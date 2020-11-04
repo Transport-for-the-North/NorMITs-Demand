@@ -745,8 +745,8 @@ class ExternalForecastSystem:
                   "base by default growth factors...")
             population_constraint = self.population_constraint[pop_cols].copy()
             population_constraint = constrainer.grow_constraint(
-                population_values,
                 population_constraint,
+                population_growth,
                 str(base_year),
                 [str(x) for x in future_years]
             )
@@ -932,13 +932,15 @@ class ExternalForecastSystem:
             index=False
         )
 
+        # TODO: Add audit_out to export paths
+        audit_out = os.path.join(exports['home'], 'Audits')
+
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
             print("Generating distributions...")
-            final_distribution_dictionary = dm.distribute_pa(
+            dm.distribute_pa(
                 productions=converted_productions,
                 attraction_weights=converted_attractions,
-                zone_areatype_lookup=zone_areatype_lookup,
                 years_needed=year_list,
                 p_needed=purposes_needed,
                 m_needed=modes_needed,
@@ -946,6 +948,8 @@ class ExternalForecastSystem:
                 ns_needed=ns_needed,
                 ca_needed=car_availabilities_needed,
                 seed_dist_dir=imports['seed_dists'],
+                dist_out=exports['pa_24'],
+                audit_out=audit_out,
                 echo=echo_distribution
             )
             print("Distributions generated!")
