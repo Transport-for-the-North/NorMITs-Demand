@@ -1,12 +1,19 @@
 import os
+import re
 from glob import glob
 from typing import List, Union
+from itertools import product
+
+import pandas as pd
+from tqdm import tqdm
 
 from demand_utilities.sector_reporter_v2 import SectorReporter
 from matrix_processing import aggregate_matrices
 import efs_constants as consts
 
 
+# Define the possible values for trip origin type - 
+# homebased or non-homebased
 VALID_TRIP_ORIGIN = ["hb", "nhb"]
 
 
@@ -18,7 +25,8 @@ def matrix_reporting(matrix_directory: str,
                      zone_file: str = None,
                      sectors_file: str = None,
                      sectors_name: str = "Sectors",
-                     aggregation_method: str = "sum"):
+                     aggregation_method: str = "sum",
+                     overwrite_dir: bool = True):
     """
     TODO: write documentataion
     Options to aggregate any matrix segment.
@@ -43,6 +51,10 @@ def matrix_reporting(matrix_directory: str,
     if sectors_file is not None and not os.path.isfile(sectors_file):
         raise ValueError(f"{sectors_file} does not exist")
 
+    if overwrite_dir:
+        for file_name in glob(os.path.join(output_dir, "*.csv")):
+            os.remove(file_name)
+
     # Get the lists of all segments
     all_segments = {
         "years": consts.FUTURE_YEARS,
@@ -66,7 +78,7 @@ def matrix_reporting(matrix_directory: str,
     # Aggregate the matrices
     try:
         # TODO add aggregation_method to this function
-        aggregate_matrices(
+        output_files = aggregate_matrices(
             import_dir=matrix_directory,
             export_dir=output_dir,
             trip_origin=trip_origin,
@@ -77,7 +89,8 @@ def matrix_reporting(matrix_directory: str,
             soc_needed=parsed_segments["soc"],
             ns_needed=parsed_segments["ns"],
             ca_needed=parsed_segments["ca"],
-            tp_needed=parsed_segments["tp"]
+            tp_needed=parsed_segments["tp"],
+            return_paths=True
         )
     except AttributeError:
         # If there are no matrices available for these segments
@@ -91,11 +104,8 @@ def matrix_reporting(matrix_directory: str,
             default_zone_file=zone_file,
             default_sector_grouping_file=sectors_file
         )
-        # TODO change this to just get the new matrices
-        valid_files = (
-            set(glob(os.path.join(output_dir, "*.csv")))
-            - set(glob(os.path.join(output_dir, "*_agg.csv")))
-        )
+        valid_files = output_files.copy()
+        output_files = []
         for matrix_file in valid_files:
             # Write the sectored matrices in place
             sr.aggregate_matrix_sectors(
@@ -103,9 +113,91 @@ def matrix_reporting(matrix_directory: str,
                 zone_system_name=sectors_name,
                 aggregation_method=aggregation_method
             )
-            os.replace(matrix_file, matrix_file.replace(".csv", "_agg.csv"))
+            new_file = matrix_file.replace(".csv", "_sector.csv")
+            output_files.append(new_file)
+            os.replace(matrix_file, new_file)
+
+    # Create a GIS format report
+    generate_gis_report(
+        output_files,
+        parsed_segments["years"],
+        parsed_segments["p"]
+    )
 
     return success
+
+
+def generate_gis_report(all_files: List[int],
+                        years_needed: List[int],
+                        purposes_needed: List[int],
+                        aggregate_purposes: bool = True,
+                        aggregate_years: bool = True):
+    """
+    TODO
+    """
+
+    # Get the base file names so that purpose and year can be combined to
+    # one file
+    replaces = (
+        ("_p", "{purpose}"),
+        ("_yr", "{year}")
+    )
+    re_string = r"(?<={old})(\d+)"
+    base_files = all_files.copy()
+    for old, new in replaces:
+        base_files = set(
+            [
+                re.sub(re_string.format(old=old), new, x)
+                for x in base_files
+            ]
+        )
+
+    # Loop over all required segments and aggregate to a stacked matrix for GIS
+    # format
+    for file_base in tqdm(base_files):
+
+        trip_ends = pd.DataFrame()
+        matrix = pd.DataFrame()
+
+        for year, purpose in tqdm(product(years_needed, purposes_needed)):
+
+            file_name = file_base.format(
+                year=year,
+                purpose=purpose
+            )
+            df = pd.read_csv(file_name, index_col=0).stack()
+            df.columns = ["v"]
+
+            if matrix.empty:
+                matrix = pd.DataFrame(index=df.index)
+
+            column_name = f"{year}_p{purpose}"
+            matrix[column_name] = df
+
+        if aggregate_purposes:
+            years = [str(x) for x in years_needed]
+            for year in years:
+                matrix[year] = matrix[
+                    [col for col in matrix.columns if year in col]
+                ].sum(axis=1)
+
+        if aggregate_years:
+            purposes = [str(x) for x in purposes_needed]
+            for purpose in purposes:
+                matrix[purpose] = matrix[
+                    [col for col in matrix.columns if f"_p{purpose}" in col]
+                ].sum(axis=1)
+
+        trip_ends = matrix.groupby(level=0).sum().merge(
+            matrix.groupby(level=1).sum(),
+            left_index=True,
+            right_index=True,
+            suffixes=("_o", "_d"),
+        )
+
+        out_file = file_base.format(year="_all", purpose="_all")
+        trip_ends.to_csv(out_file.replace(".csv", "_te_gis_report.csv"))
+        matrix.to_csv(out_file.replace(".csv", "_gis_report.csv"))
 
 
 def parse_segments(required_segments: Union[List[int], str],
@@ -130,24 +222,23 @@ def test():
     """
 
     test_directories = {
-        "od": r"C:\Users\japeach\Documents\49808 - EFS\EFS Data\OD Matrices",
-        "pa": r"C:\Users\japeach\Documents\49808 - EFS\EFS Data\PA Matrices"
+        "pa": r"Y:\NorMITs Demand\norms\v2_2-EFS_Output\iter1\PA Matrices"
     }
 
     test_output_dir = (
-        r"C:\Users\japeach\Documents\49808 - EFS\EFS Data\Summaries")
+        r"C:\Users\Monopoly\Documents\EFS\data\summaries")
     test_trip_origin = "hb"
     test_segments_needed = {
-        "years": [2018],
-        "p": [1, 2],
+        "years": [2018, 2033, 2035, 2050],
+        "p": "Keep",
         "m": [6],
         "soc": "Agg",
         "ns": "Agg",
         "ca": "Agg",
-        "tp": [1]
+        "tp": "Agg"
     }
 
-    zoning = r"C:\Users\japeach\Documents\49808 - EFS\EFS Data\zoning"
+    zoning = r"C:\Users\Monopoly\Documents\EFS\data\zoning"
     test_zones_file = os.path.join(
         zoning, "msoa_zones.csv"
     )
@@ -156,6 +247,7 @@ def test():
     )
 
     errors = []
+    overwrite = True
 
     for test_matrix_format in test_directories.keys():
 
@@ -170,11 +262,14 @@ def test():
             zone_file=test_zones_file,
             sectors_name="tfn_sectors",
             sectors_file=test_sectors_file,
-            aggregation_method="sum"
+            aggregation_method="sum",
+            overwrite_dir=overwrite
         )
 
         if not successful:
             errors.append([test_matrix_format, test_segments_needed])
+
+        overwrite = False
 
     print("Errors:")
     print(*errors, sep="\n")
