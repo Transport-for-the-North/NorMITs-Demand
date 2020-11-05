@@ -24,7 +24,9 @@ from typing import Any
 from typing import List
 from typing import Dict
 from typing import Tuple
+from typing import Union
 from typing import Iterable
+from typing import Iterator
 
 
 from tqdm import tqdm
@@ -641,37 +643,27 @@ def get_dist_name(trip_origin: str,
 
 def calib_params_to_dist_name(trip_origin: str,
                               matrix_format: str,
-                              calib_params: dict,
-                              csv: bool = False
+                              calib_params: Dict[str, int],
+                              csv: bool = False,
+                              suffix: str = None,
                               ) -> str:
     """
-        Wrapper for get_distribution_name() using calib params
+    Wrapper for get_distribution_name() using calib params
     """
     segment_str = 'soc' if calib_params['p'] in [1, 2] else 'ns'
 
-    if 'tp' in calib_params:
-        return get_dist_name(
-            trip_origin,
-            matrix_format,
-            str(calib_params.get('yr')),
-            str(calib_params.get('p')),
-            str(calib_params.get('m')),
-            str(calib_params.get(segment_str)),
-            str(calib_params.get('ca')),
-            tp=str(calib_params.get('tp')),
-            csv=csv
-        )
-    else:
-        return get_dist_name(
-            trip_origin,
-            matrix_format,
-            str(calib_params.get('yr')),
-            str(calib_params.get('p')),
-            str(calib_params.get('m')),
-            str(calib_params.get(segment_str)),
-            str(calib_params.get('ca')),
-            csv=csv
-        )
+    return get_dist_name(
+        trip_origin,
+        matrix_format,
+        str(calib_params.get('yr')),
+        str(calib_params.get('p')),
+        str(calib_params.get('m')),
+        str(calib_params.get(segment_str)),
+        str(calib_params.get('ca')),
+        tp=str(calib_params.get('tp')),
+        csv=csv,
+        suffix=suffix
+    )
 
 
 def get_dist_name_parts(dist_name: str) -> List[str]:
@@ -708,23 +700,28 @@ def get_dist_name_parts(dist_name: str) -> List[str]:
     ]
 
 
-def generate_calib_params(year: str,
-                          purpose: int,
-                          mode: int,
-                          segment: int,
-                          ca: int
+def generate_calib_params(year: str = None,
+                          purpose: int = None,
+                          mode: int = None,
+                          segment: int = None,
+                          ca: int = None,
+                          tp: int = None
                           ) -> dict:
     """
     Returns a TMS style calib_params dict
     """
+    # Purpose needs to be set if segment is
+    if segment is not None and purpose is None:
+        raise ValueError("If segment is set, purpose needs to be set too, "
+                         "otherwise segment text cannot be determined.")
+    # Init
     segment_str = 'soc' if purpose in [1, 2] else 'ns'
-    return {
-        'yr': year,
-        'p': purpose,
-        'm': mode,
-        segment_str: segment,
-        'ca': ca
-    }
+
+    keys = ['yr', 'p', 'm', segment_str, 'ca', 'tp']
+    vals = [year, purpose, mode, segment, ca, tp]
+
+    # Add params to dict if they are not None
+    return {k: v for k, v in zip(keys, vals) if v is not None}
 
 
 def starts_with(s: str, x: str) -> bool:
@@ -1011,7 +1008,9 @@ def segmentation_loop_generator(p_list: Iterable[int],
                                 soc_list: Iterable[int],
                                 ns_list: Iterable[int],
                                 ca_list: Iterable[int],
-                                tp_list: Iterable[int] = None):
+                                tp_list: Iterable[int] = None
+                                ) -> (Union[Iterator[Tuple[int, int, int, int, int]],
+                                            Iterator[Tuple[int, int, int, int]]]):
     """
     Simple generator to avoid the need for so many nested loops
     """
@@ -1044,6 +1043,41 @@ def segmentation_loop_generator(p_list: Iterable[int],
                                 car_availability,
                                 tp
                             )
+
+
+def cp_segmentation_loop_generator(p_list: Iterable[int],
+                                   m_list: Iterable[int],
+                                   soc_list: Iterable[int],
+                                   ns_list: Iterable[int],
+                                   ca_list: Iterable[int],
+                                   tp_list: Iterable[int] = None
+                                   ) -> Iterator[Dict[str, int]]:
+    """
+    Wrapper for segmentation_loop_generator() to return TMS style
+    calib params instead of a number of integer
+    """
+    # Init
+    tp_list = [None] if tp_list is None else tp_list
+
+    loop_generator = segmentation_loop_generator(
+        p_list=p_list,
+        m_list=m_list,
+        soc_list=soc_list,
+        ns_list=ns_list,
+        ca_list=ca_list,
+        tp_list=tp_list
+    )
+
+    for p, m, seg, ca, tp in loop_generator:
+        yield generate_calib_params(
+            purpose=p,
+            mode=m,
+            segment=seg,
+            ca=ca,
+            tp=tp
+        )
+
+
 
 
 def long_to_wide_out(df: pd.DataFrame,

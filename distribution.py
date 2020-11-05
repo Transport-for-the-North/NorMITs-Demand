@@ -14,6 +14,8 @@ import os
 import pandas as pd
 import numpy as np
 
+from numpy.testing import assert_approx_equal
+
 from typing import List
 
 import audits
@@ -70,8 +72,10 @@ def doubly_constrained_furness(seed_vals: np.array,
 
     # Init
     furnessed_mat = seed_vals.copy()
+    early_exit = False
+    cur_diff = tol + 10
 
-    for i in range(max_iters):
+    for _ in range(max_iters):
         # ## ROW CONSTRAIN ## #
         # Calculate difference factor
         row_ach = np.sum(furnessed_mat, axis=1)
@@ -95,10 +99,19 @@ def doubly_constrained_furness(seed_vals: np.array,
         col_diff = (col_targets - np.sum(furnessed_mat, axis=0)) ** 2
         cur_diff = np.sum(row_diff + col_diff) ** 0.5
         if cur_diff < tol:
+            early_exit = True
             break
 
         if np.isnan(cur_diff):
             return np.zeros(furnessed_mat.shape)
+
+    # Warn the user if we exhausted our number of loops
+    if not early_exit:
+        print("WARNING! The doubly constrained furness exhausted its max "
+              "number of loops (%d), while achieving an R^2 difference of "
+              "%f. The values returned may not be accurate."
+              % (max_iters, cur_diff))
+
 
     return furnessed_mat
 
@@ -107,18 +120,15 @@ def _distribute_pa_internal(productions,
                             attraction_weights,
                             seed_dist_dir,
                             trip_origin,
-                            year,
-                            p,
-                            m,
-                            seg,
-                            ca,
-                            tp,
+                            calib_params,
                             zone_col,
                             p_col,
                             m_col,
                             seg_col,
                             ca_col,
                             tp_col,
+                            max_iters,
+                            seed_infill,
                             echo,
                             audit_out,
                             dist_out,
@@ -131,15 +141,23 @@ def _distribute_pa_internal(productions,
     a_weights = attraction_weights.copy()
     unique_col = 'trips'
 
-    # Read in the seed distribution
-    seed_fname = du.get_dist_name(
+    out_dist_name = du.calib_params_to_dist_name(
         trip_origin=trip_origin,
         matrix_format='pa',
-        purpose=str(p),
-        mode=str(m),
-        segment=str(seg),
-        car_availability=str(ca),
-        tp=str(tp),
+        calib_params=calib_params,
+        csv=True
+    )
+    print("Furnessing %s ..." % out_dist_name)
+
+    # Don't need year in calib params for much of this
+    year = calib_params['yr']
+    del calib_params['yr']
+
+    # Read in the seed distribution - ignoring year
+    seed_fname = du.calib_params_to_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='pa',
+        calib_params=calib_params,
         csv=True
     )
     seed_dist = pd.read_csv(os.path.join(seed_dist_dir, seed_fname), index_col=0)
@@ -154,23 +172,18 @@ def _distribute_pa_internal(productions,
     # Assume seed contains all the zones numbers
     unique_zones = list(seed_dist.index)
 
-    # TODO: Make sure the seed values are the same size as P/A
-    # TODO: Add in zone subset stuff?
-    # if self.use_zone_id_subset:
-    #     zone_subset = [259, 267, 268, 270, 275, 1171, 1173]
-    #     synth_dists = du.get_data_subset(
-    #         synth_dists, 'p_zone', zone_subset)
-    #     synth_dists = du.get_data_subset(
-    #         synth_dists, 'a_zone', zone_subset)
-
     # ## FILTER P/A TO SEGMENTATION ## #
-    str_seg = str(seg) if seg is not None else None
+    if calib_params.get('soc') is not None:
+        seg = calib_params['soc']
+    else:
+        seg = calib_params['ns']
+
     base_filter = {
-        p_col: [p],
-        m_col: [m],
-        seg_col: [str_seg],
-        ca_col: [ca],
-        tp_col: [tp]
+        p_col: [calib_params.get('p')],
+        m_col: [calib_params.get('m')],
+        seg_col: [str(seg)],
+        ca_col: [calib_params.get('ca')],
+        tp_col: [calib_params.get('tp')]
     }
 
     productions = du.filter_by_segmentation(productions,
@@ -186,12 +199,16 @@ def _distribute_pa_internal(productions,
 
     # ## MATCH P/A ZONES ## #
     if productions.empty:
-        raise ValueError("Something has gone wrong. I "
-                         "have no productions.")
+        raise ValueError(
+            "Something has gone wrong. I have no productions. Perhaps none"
+            "exist for the given segmentation: %s" % str(calib_params)
+        )
 
     if a_weights.empty:
-        raise ValueError("Something has gone wrong. I "
-                         "have no productions.")
+        raise ValueError(
+            "Something has gone wrong. I have no attractions. Perhaps none"
+            "exist for the given segmentation: %s" % str(calib_params)
+        )
 
     productions, a_weights = du.match_pa_zones(
         productions=productions,
@@ -211,10 +228,6 @@ def _distribute_pa_internal(productions,
     # Tidy up
     productions = productions.reindex([zone_col, unique_col], axis='columns')
     a_weights = a_weights.reindex([zone_col, unique_col], axis='columns')
-
-    # TODO: write this properly after dev
-    max_iters = 5000
-    seed_infill = 0.001
 
     pa_dist = furness_pandas_wrapper(
         row_targets=productions,
@@ -244,18 +257,7 @@ def _distribute_pa_internal(productions,
         )
 
     # ## OUTPUT TO DISK ## #
-    dist_name = du.get_dist_name(
-        trip_origin=trip_origin,
-        matrix_format='pa',
-        year=str(year),
-        purpose=str(p),
-        mode=str(m),
-        segment=str(seg),
-        car_availability=str(ca),
-        tp=str(tp),
-        csv=True
-    )
-    output_path = os.path.join(dist_out, dist_name)
+    output_path = os.path.join(dist_out, out_dist_name)
     pa_dist.to_csv(output_path)
 
 
@@ -279,12 +281,123 @@ def distribute_pa(productions: pd.DataFrame,
                   tp_col: str = 'tp',
                   trip_origin: str = 'hb',
                   max_iters: int = 5000,
-                  zero_replacement_value: float = 1e-5,
+                  seed_infill: float = 1e-5,
                   echo: bool = False,
                   audit_out: str = None
                   ) -> None:
     """
-    # TODO: Write distribute_pa() docs
+    Furnesses the given productions and attractions
+
+    years_needed, p_needed, m_needed, soc_needed, ns_needed, ca_needed, and
+    tp_needed can all be used to control to segmentation used when furnessing
+    to productions and attractions. If no productions or attractions exist
+    for the given segmentation then an error will be thrown.
+
+    Parameters
+    ----------
+    productions:
+        Dataframe of segmented productions values across all years in
+        years_needed.
+
+    attraction_weights:
+        Dataframe of segmented attraction weight factors across all years in
+        years_needed.
+
+    seed_dist_dir:
+        Path to the folder where the seed distributions are located. Filenames
+        will automatically be generated based on the segmentation being
+        furnessed. If a file cannot be found, and error will be raised
+
+    dist_out:
+        Path to the directory to output the furnessed distributions. Filenames
+        will automatically be generated based on the segmentation that has
+        been furnessed.
+
+    years_needed:
+        A list of the base and future years that should be furnessed. All years
+        in this list must have a column in productions and attraction_weights.
+
+    p_needed:
+        A list of the purposes that should be distributed. Any purposes that are
+        not in this list, but do exist in the productions/attraction_weights
+        will be ignored.
+
+    m_needed:
+        A list of the modes that should be distributed (at the moment this
+        should only be one mode, but this allows multi-modal in the future).
+        All productions and attraction_weights given are assumed to be of the
+        mode in this List.
+
+    soc_needed:
+        A list of the soc categories that should be distributed. Any soc
+        categories that are not in this list, but do exist in the productions/
+        attraction_weights will be ignored.
+
+    ns_needed:
+        A list of the ns-sec categories that should be distributed. Any ns-sec
+        categories that are not in this list, but do exist in the productions/
+        attraction_weights will be ignored.
+
+    ca_needed:
+        A list of the car availabilities that should be distributed. Any car
+        availabilities that are not in this list, but do exist in the
+        productions/attraction_weights will be ignored.
+
+    tp_needed:
+        A list of time periods that should be distributed. Any time periods
+        that are not in this list, but do exist in the productions/
+        attraction_weights will be ignored.
+
+    zone_col:
+        Name of the column in productions/attraction_weights that contains
+        the zone data.
+
+    p_col:
+        Name of the column in productions/attraction_weights that contains
+        the purpose data (if segmenting by purpose).
+
+    m_col:
+        Name of the column in productions/attraction_weights that contains
+        the mode data (if segmenting by mode).
+
+    soc_col:
+        Name of the column in productions/attraction_weights that contains
+        the soc data (if segmenting by soc).
+
+    ns_col:
+        Name of the column in productions/attraction_weights that contains
+        the ns-sec data (if segmenting by ns-sec).
+
+    ca_col:
+        Name of the column in productions/attraction_weights that contains
+        the car availability data (if segmenting by car availability).
+
+    tp_col:
+        Name of the column in productions/attraction_weights that contains
+        the time periods data (if segmenting by time periods).
+
+    trip_origin:
+        The origin of the trips being distributed. This will be used to
+        generate the seed and output filenames. Will accept 'hb' or 'nhb'.
+
+    max_iters
+        The maximum number of iterations to complete within the furness process
+        before exiting, if a solution has not been found a message will be
+        printed to the terminal.
+
+    seed_infill:
+        The value to infill any seed values that are 0.
+
+    echo:
+        Controls the amount of printing to the terminal. If False, most of the
+        print outs will be ignored.
+
+    audit_out:
+        Path to a directory to output all audit checks.
+
+    Returns
+    -------
+    None
     """
     # TODO: Make sure distribute_pa() works for NHB trips
     # Init
@@ -298,6 +411,8 @@ def distribute_pa(productions: pd.DataFrame,
     # Make sure the soc and ns columns are strings
     productions['soc'] = productions['soc'].astype(str)
     productions['ns'] = productions['ns'].astype(str)
+
+    # ENSURE SEGMENATION GIVEN EXISTS?
 
     # Get P/A columns
     p_cols = list(productions.columns)
@@ -324,7 +439,7 @@ def distribute_pa(productions: pd.DataFrame,
         attraction_weights = attraction_weights.reindex(a_index, axis='columns')
 
         # Loop through segmentations for this year
-        loop_generator = du.segmentation_loop_generator(
+        loop_generator = du.cp_segmentation_loop_generator(
             p_list=p_needed,
             m_list=m_needed,
             soc_list=soc_needed,
@@ -333,35 +448,35 @@ def distribute_pa(productions: pd.DataFrame,
             tp_list=tp_needed,
         )
 
-        # TODO: Multiprocess distributions
-        for p, m, seg, ca, tp in loop_generator:
-            if p in consts.SOC_P:
+        # TODO: Multiprocess furnessing - by year?
+        for calib_params in loop_generator:
+            if calib_params['p'] in consts.SOC_P:
                 seg_col = soc_col
-            elif p in consts.NS_P:
-                seg_col = ns_col,
-            elif p in consts.ALL_NHB_P:
+            elif calib_params['p'] in consts.NS_P:
+                seg_col = ns_col
+            elif calib_params['p'] in consts.ALL_NHB_P:
                 seg_col = None
             else:
                 raise ValueError("'%s' does not seem to be a valid soc, ns, or "
-                                 "nhb purpose." % str(p))
+                                 "nhb purpose." % str(calib_params['p']))
+
+            # Add in year
+            calib_params['yr'] = int(year)
 
             _distribute_pa_internal(
                 productions=productions,
                 attraction_weights=attraction_weights,
                 seed_dist_dir=seed_dist_dir,
                 trip_origin=trip_origin,
-                year=year,
-                p=p,
-                m=m,
-                seg=seg,
-                ca=ca,
-                tp=tp,
                 zone_col=zone_col,
+                calib_params=calib_params,
                 p_col=p_col,
                 m_col=m_col,
                 seg_col=seg_col,
                 ca_col=ca_col,
                 tp_col=tp_col,
+                max_iters=max_iters,
+                seed_infill=seed_infill,
                 echo=echo,
                 audit_out=audit_out,
                 dist_out=dist_out,
@@ -447,9 +562,11 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         raise ValueError("Row and Column target indexes do not match "
                          "seed columns.")
 
-    if row_targets[unique_col].sum() != col_targets[unique_col].sum():
-        raise ValueError("Row and Column target totals do not match. "
-                         "Cannot Furness.")
+    assert_approx_equal(
+        row_targets[unique_col].sum(),
+        col_targets[unique_col].sum(),
+        err_msg="Row and Column target totals do not match. Cannot Furness."
+    )
 
     # Now we know everything matches, we can convert to numpy
     row_targets = row_targets.values.flatten()

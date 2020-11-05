@@ -175,7 +175,7 @@ class SectorReporter:
                     calculating_dataframe_mask
                 ].sum()[metric]
                 
-            print(new_grouping_dataframe)
+            # print(new_grouping_dataframe)
             sector_totals = sector_totals.append(new_grouping_dataframe)
             
         return sector_totals

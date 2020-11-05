@@ -1000,21 +1000,8 @@ class ExternalForecastSystem:
         if outputting_files:
             if output_location is not None:
                 print("Saving files to: " + output_location)
-                # TODO: Integrate into furnessing!
 
-                # Write distributions to file
-                for key, distribution in final_distribution_dictionary.items():
-                    key = str(key)
-                    out_path = os.path.join(exports['pa_24'], key + '.csv')
-
-                    # Output in wide format
-                    distribution.pivot_table(
-                        index='p_zone',
-                        columns='a_zone',
-                        values='trips'
-                    ).to_csv(out_path)
-                    print("Saved distribution: " + key)
-
+                # Distributions moved to furness
                 # Pop generation moved
                 # Production Generation moved
                 # Final workers out moved
