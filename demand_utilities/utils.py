@@ -19,6 +19,7 @@ import shutil
 import random
 
 import pandas as pd
+import numpy as np
 
 from typing import Any
 from typing import List
@@ -1522,3 +1523,306 @@ def intersection(l1: List[Any],
     # Get the intersection
     temp = set(big)
     return [x for x in small if x in temp]
+
+def get_costs(model_lookup_path,
+              calib_params,
+              tp = '24hr',
+              iz_infill = 0.5):
+
+    # units takes different parameters
+    # TODO: Needs a config guide for the costs somewhere
+    """
+    This function imports distances or costs from a given path.
+
+    Parameters
+    ----------
+    model_lookup_path:
+        Model folder to look in for distances/costs. Should be in call or global.
+
+    calib_params:
+        Calibration parameters dictionary'
+
+    tp:
+        Should ultimately take 24hr & tp, usually 24hr for hb and tp for NHB.
+
+    direction = None:
+        Takes None, 'To', 'From'
+
+    car_available = None:
+        Takes None, True, False
+
+    seed_intrazonal = True:
+        Takes True or False - whether to add a value half the minimum
+        interzonal value to the intrazonal cells. Currently needed for distance
+        but not cost.
+
+    Returns:
+    ----------
+    dat:
+        DataFrame containing required cost or distance values.
+    """
+    # TODO: Adapt model input costs to take time periods
+    # TODO: The name cost_cols is misleading
+    file_sys = os.listdir(os.path.join(model_lookup_path, 'costs'))
+    tp_path = [x for x in file_sys if tp in x]
+
+    dat = pd.read_csv(os.path.join(model_lookup_path,
+                                   'costs',
+                                   tp_path[0]))
+    cols = list(dat)
+
+    # Get purpose and direction from calib_params
+    ca = None
+    purpose = None
+    time_period = None
+
+    for index, param in calib_params.items():
+        # Need a purpose, if a ca is not picked up returns none
+        if index == 'p':
+            purpose = param
+        if index == 'ca':
+            if param == 1:
+                ca = 'nca'
+            elif param == 2:
+                ca = 'ca'
+        if index == 'tp':
+            time_period = param
+
+    # Purpose to string
+    commute = [1]
+    business = [2, 12]
+    other = [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
+    if purpose in commute:
+        str_purpose = 'commute'
+    elif purpose in business:
+        str_purpose = 'business'
+    elif purpose in other:
+        str_purpose = 'other'
+    else:
+        raise ValueError("Cannot convert purpose to string." +
+                         "Got %s" % str(purpose))
+
+    # Filter down on purpose
+    cost_cols = [x for x in cols if str_purpose in x]
+    # Handle if we have numeric purpose costs, hope so, they're better!
+    if len(cost_cols) == 0:
+        cost_cols = [x for x in cols if ('p' + str(purpose)) in x]
+
+    # Filter down on car availability
+    if ca is not None:
+        # Have to be fussy as ca is in nca...
+        if ca == 'ca':
+            cost_cols = [x for x in cost_cols if 'nca' not in x]
+        elif ca == 'nca':
+            cost_cols = [x for x in cost_cols if 'nca' in x]
+
+    if time_period is not None:
+        cost_cols = [x for x in cost_cols if str(time_period) in x]
+
+    target_cols = ['p_zone', 'a_zone']
+    for col in cost_cols:
+        target_cols.append(col)
+
+    cost_return_name = cost_cols[0]
+
+    dat = dat.reindex(target_cols, axis=1)
+    dat = dat.rename(columns={cost_cols[0]: 'cost'})
+
+    # Redefine cols
+    cols = list(dat)
+
+    if iz_infill is not None:
+        dat = dat.copy()
+        min_inter_dat = dat[dat[cols[2]]>0]
+        # Derive minimum intrazonal
+        min_inter_dat = min_inter_dat.groupby(
+                cols[0]).min().reset_index().drop(cols[1],axis=1)
+        intra_dat = min_inter_dat.copy()
+        intra_dat[cols[2]] = intra_dat[cols[2]]*iz_infill
+        iz = dat[dat[cols[0]] == dat[cols[1]]]
+        non_iz = dat[dat[cols[0]] != dat[cols[1]]]
+        iz = iz.drop(cols[2],axis=1)
+        # Rejoin
+        iz = iz.merge(intra_dat, how='inner', on=cols[0])
+        dat = pd.concat([iz, non_iz],axis=0,sort=True).reset_index(drop=True)
+
+    return(dat, cost_return_name)
+
+def get_trip_length_bands(import_folder,
+                          calib_params,
+                          segmentation,
+                          trip_origin,
+                          replace_nan=False,
+                          echo=True): # 'hb' or 'nhb'
+
+    # TODO: Overwrite the segmentation parameter, sorry Ben
+    """
+    Function to check a folder for trip length band parameters.
+    Returns a subset.
+    """
+    # Append name of tlb area
+
+
+    # Index folder
+    target_files = os.listdir(import_folder)
+    # Define file contents, should just be target files - should fix.
+    import_files = target_files.copy()
+
+    # TODO: Fixed for new ntem dists - pointless duplication now
+    if segmentation == 'ntem':
+        for key, value in calib_params.items():
+            # Don't want empty segments, don't want ca
+            if value != 'none' and key != 'ca':
+                 # print_w_toggle(key + str(value), echo=echo)
+                import_files = [x for x in import_files if
+                                ('_' + key + str(value)) in x]
+    elif segmentation == 'tfn':
+        for key, value in calib_params.items():
+            # Don't want empty segments, don't want ca
+            if value != 'none' and key != 'ca':
+                # print_w_toggle(key + str(value), echo=echo)
+                import_files = [x for x in import_files if
+                                ('_' + key + str(value)) in x]
+    else:
+        raise ValueError('Non-valid segmentation. How did you get this far?')
+
+    if trip_origin == 'hb':
+        import_files = [x for x in import_files if 'nhb' not in x]
+    elif trip_origin == 'nhb':
+        import_files = [x for x in import_files if 'nhb' in x]
+    else:
+        raise ValueError('Trip length band import failed,' +
+                         'provide valid trip origin')
+    if len(import_files) > 1:
+        raise Warning('Picking from two similar files,' +
+                      ' check import folder')
+
+    # Import
+    tlb = pd.read_csv(import_folder + '/' + import_files[0])
+
+    # Filter to target purpose
+    # TODO: Don't want to have to do this for NTEM anymore. Just keep them individual.
+    # tlb = tlb[tlb[trip_origin +'_purpose']==purpose].copy()
+
+    if replace_nan:
+        for col_name in list(tlb):
+            tlb[col_name] = tlb[col_name].fillna(0)
+
+    return tlb
+
+def parse_mat_output(list_dir,
+                     sep = '_',
+                     mat_type = 'dat',
+                     file_format = '.csv',
+                     file_name = 'file'):
+    """
+    
+    """
+    # Get target file format only
+    unq_files = [x for x in list_dir if file_format in x]
+    # If no numbers in then drop
+    unq_files = [x for x in list_dir if any(c.isdigit() for c in x)]
+
+    split_list = []
+    for file in unq_files:
+        split_dict = {file_name:file}
+        file = file.replace(file_format,'')
+        test = str(file).split('_')
+        for item in test:
+            if 'hb' in item:
+                name = 'trip_origin'
+                dat = item
+            elif item == mat_type:
+                pass
+            else:
+                name = ''
+                dat = ''
+                # name = letters, dat = numbers
+                for char in item:
+                    if char.isalpha():
+                        name += str(char)
+                    else:
+                        dat += str(char)
+            # Return None not nan
+            if len(dat) == 0:
+                dat = 'none'
+            split_dict.update({name:dat})
+        split_list.append(split_dict)           
+
+    segments = pd.DataFrame(split_list)
+    segments = segments.replace({np.nan:'none'})
+
+    return(segments)
+
+def df_to_np(df,
+             values,
+             unq_internal_zones,
+             v_heading,
+             h_heading=None,
+             echo=True):
+    """
+    df: A Dataframe
+
+    v_heading: heading to use as row index
+
+    h_heading: heading to use as column index
+
+    unq_internal_zones: unq zones to use as placeholder
+
+    echo = True:
+        Indicates whether to print a log of the process to the terminal.
+        Useful to set echo=False when using multi-threaded loops
+    """
+    df = df.copy()
+
+    placeholder = pd.DataFrame(unq_internal_zones).copy()
+    col_name = list(placeholder)[0]
+
+    if h_heading is None:
+        full_placeholder = placeholder.merge(df,
+                                             how='left',
+                                             on=[v_heading])
+        # Replace NAs with zeroes
+        full_placeholder[values] = full_placeholder[values].fillna(0)
+
+        array = full_placeholder[values].copy().values
+
+    else:
+        # Build placeholders
+        ph_v = placeholder.copy()
+        ph_v = ph_v.rename(columns={col_name: v_heading})
+        ph_v['ph'] = 0
+        ph_h = placeholder.copy()
+        ph_h = ph_h.rename(columns={col_name: h_heading})
+        ph_h['ph'] = 0
+
+        # Join placeholders
+        placeholder = ph_v.merge(ph_h,
+                                 how='left',
+                                 on='ph')
+        placeholder = placeholder.drop(['ph'], axis=1)
+
+        # Merge df onto placeholder
+        full_placeholder = placeholder.merge(df,
+                                             how='left',
+                                             on=[h_heading, v_heading])
+
+        # Replace NAs with zeroes
+        full_placeholder[values] = full_placeholder[values].fillna(0)
+
+        # Pivot to array
+        # TODO: u - test
+        array = full_placeholder.sort_values([
+            v_heading,
+            h_heading
+        ]).pivot(
+            index=v_heading,
+            columns=h_heading,
+            values=values
+        ).values
+
+    # Array len should be same as length of unq values
+    if echo and len(array) == len(unq_internal_zones):
+        print('Matrix length=%d. Matches input constraint.' % (len(array)))
+
+    return array
