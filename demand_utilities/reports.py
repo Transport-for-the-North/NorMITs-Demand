@@ -95,3 +95,5 @@ def get_trip_length_by_band(band_atl,
     bs_mat = bs_mat.reindex(['tlb_index', 'tbs', 'bs'], axis=1)
 
     return(dist_mat, bs_mat, global_atl)
+    
+    
