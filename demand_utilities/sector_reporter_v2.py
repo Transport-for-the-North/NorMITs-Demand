@@ -6,7 +6,7 @@ Created on Fri Jan 17 10:27:28 2020
 """
 
 from functools import reduce
-from typing import List
+from typing import List, Union, Tuple
 
 import numpy as np
 import pandas as pd
@@ -188,8 +188,28 @@ class SectorReporter:
                        zone_system_name: str = None,
                        zone_system_file: str = None,
                        sector_grouping_file: str = None,
-                       verbose: bool = False):
+                       verbose: bool = False
+                       ) -> Tuple[str, str, str]:
+        """If non-default parameters are supplied, return the correct paths
 
+        Parameters
+        ----------
+        zone_system_name : str, optional
+            Non-default zone system name, by default None
+        zone_system_file : str, optional
+            Path to the non-default zone definition file, by default None
+        sector_grouping_file : str, optional
+            Path to the non-default sector definition file, by default None
+        verbose : bool, optional
+            If True, prints messages when using non-default values, 
+            by default False
+
+        Returns
+        -------
+        Tuple[str, str, str]
+            Returns the values for zone_system_name, zone_system_file,
+            and sector_grouping_file that should be used
+        """
         messages = []
 
         if (zone_system_name is not None):
@@ -222,19 +242,61 @@ class SectorReporter:
 
     def calculate_sector_totals_v2(self,
                                    calculating_dataframe: pd.DataFrame,
-                                   metric_columns: List[str] = [],
-                                   segment_columns: List[str] = [],
+                                   metric_columns: List[str] = None,
+                                   segment_columns: List[str] = None,
                                    zone_system_name: str = None,
                                    zone_system_file: str = None,
                                    sector_grouping_file: str = None,
-                                   aggregation_method: str = "sum",
+                                   aggregation_method: Union[List[str],
+                                                             str] = "sum",
                                    verbose: bool = False
                                    ) -> pd.DataFrame:
-        """
-        TODO
+        """Groups a dataframe by the desired sector system.
+        Aggregates metric_columns by the desired method and retains any
+        column names given as segment_columns.
+
+        Parameters
+        ----------
+        calculating_dataframe : pd.DataFrame
+            The dataframe to apply the sectoring to.
+            Requires the column model_zone_id to be present and the zoning 
+            should match the sector_grouping_file used.
+        metric_columns : List[str], optional
+            List of columns to aggregate, by default None
+        segment_columns : List[str], optional
+            List of column names to keep dissaggregated. Any columns not 
+            specified in metric_columns or segment_columns will be lost, 
+            by default None
+        zone_system_name : str, optional
+            Name of the zone system if not using the default system, 
+            by default None
+        zone_system_file : str, optional
+            Path to the non-default zone definition file, by default None
+        sector_grouping_file : str, optional
+            Path to the non-default sector grouping file, by default None
+        aggregation_method : Union[List[str], str], optional
+            Aggregation method to use for the metric columns. The same method
+            is applied to all matric columns. Can be a list of methods to 
+            produce a column for each method for each metric or None to keep
+            the original zone system but add the sector ids as a new column,
+             by default "sum"
+        verbose : bool, optional
+            If True, will print progress messages, by default False
+
+        Returns
+        -------
+        pd.DataFrame
+            The dataframe with sectoring applied.
+
+        Raises
+        ------
+        ValueError
+            Raises a ValueError is any provided column name is not available.
         """
 
         calculating_dataframe = calculating_dataframe.copy()
+        metric_columns = metric_columns or []
+        segment_columns = segment_columns or []
 
         # Check Inputs
         missing_metrics = [
@@ -250,13 +312,12 @@ class SectorReporter:
                              f"{missing_segments}, metrics - {missing_metrics}"
                              )
 
-        # TODO Make this bit look better
-        (
-            zone_system_name, zone_system, sector_grouping
-        ) = self.get_parameters(
-            zone_system_name, zone_system_file, sector_grouping_file,
+        zone_system_name, zone_system, sector_grouping = self.get_parameters(
+            zone_system_name,
+            zone_system_file,
+            sector_grouping_file,
             verbose=verbose
-            )
+        )
 
         grouping_dataframe_columns = ["grouping_id"]
         grouping_dataframe_columns.extend(segment_columns)
@@ -264,8 +325,13 @@ class SectorReporter:
         res = calculating_dataframe.merge(
             sector_grouping,
             on="model_zone_id"
-            )
+        )
 
+        if aggregation_method is None:
+            # Return the non-aggregated dataframe
+            return res
+
+        # Otherwise use the given aggregation method
         res = res.groupby(grouping_dataframe_columns, as_index=False).agg(
             {col: aggregation_method for col in metric_columns}
         )
@@ -279,21 +345,42 @@ class SectorReporter:
                                  zone_system_file: str = None,
                                  sector_grouping_file: str = None,
                                  aggregation_method: str = "sum",
-                                 verbose: bool = False):
-        """
-        TODO
+                                 verbose: bool = False
+                                 ) -> None:
+        """Aggregates a wide format matrix file to the goven sector system.
+
+        Parameters
+        ----------
+        matrix_path : str
+            Path to a matrix file. Must be wide format and contain the zone
+            id system within the sector_grouping_file
+        out_path : str, optional
+            Path to save the new matrix file. If None, the original file is 
+            overwritten, by default None
+        zone_system_name : str, optional
+            Name of the zone system if not using the default, by default None
+        zone_system_file : str, optional
+            Path to the zone definition file, by default None
+        sector_grouping_file : str, optional
+            Path to the non-default sector grouping file. Must contain 
+            model_zone_d and grouping_id columns, by default None
+        aggregation_method : str, optional
+            Aggregation method to use for the metric columns. The same method
+            is applied to all matric columns, by default "sum"
+        verbose : bool, optional
+            If True, log messages will be printed, by default False
         """
 
         if out_path is None:
             out_path = matrix_path
 
         # Fetch any overridden parameters
-        (
-            zone_system_name, zone_system, sector_grouping
-        ) = self.get_parameters(
-            zone_system_name, zone_system_file, sector_grouping_file,
+        zone_system_name, zone_system, sector_grouping = self.get_parameters(
+            zone_system_name,
+             zone_system_file, 
+             sector_grouping_file,
             verbose=verbose
-            )
+        )
 
         sector_grouping.set_index("model_zone_id", inplace=True)
 
