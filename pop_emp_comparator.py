@@ -16,6 +16,8 @@ import numpy as np
 
 # Local imports
 from demand_utilities import utils as du
+from demand_utilities.sector_reporter_v2 import SectorReporter
+
 
 ##### CLASSES #####
 class PopEmpComparator:
@@ -135,6 +137,55 @@ class PopEmpComparator:
         totals['growth difference'] = totals['output growth'] - totals['mean growth input']
         return totals
 
+    def _compare_dataframes(self, index_col: str, input_: pd.DataFrame,
+                            constraint: pd.DataFrame, growth: pd.DataFrame,
+                            output: pd.DataFrame) -> pd.DataFrame:
+        """Concatanates the given dataframes and calulcates comparison columns.
+
+        All dataframes should include a column with the name `self.ZONE_COL` which
+        will be set as the index for the concatenation. An additional level will be
+        added to the column names to distinguish the source of the data.
+
+        Parameters
+        ----------
+        index_col : str
+            Name of the column to be used as the index for concatenation.
+        input_ : pd.DataFrame
+            Input base year data.
+        constraint : pd.DataFrame
+            Input constraint data with all output year columns.
+        growth : pd.DataFrame
+            Input growth data with all output year columns.
+        output : pd.DataFrame
+            Output data.
+
+        Returns
+        -------
+        pd.DataFrame
+            Concatenation of all given dataframes with additional comparison columns.
+        """
+        # Set index of dataframes to index_col for concat and rename columns with source
+        concat = []
+        for nm, df in (('input', input_), ('constraint', constraint), ('growth', growth),
+                       ('output', output)):
+            df = df.set_index(index_col)
+            df.columns = pd.MultiIndex.from_tuples([(i, nm) for i in df.columns])
+            concat.append(df)
+        comp = pd.concat(concat, axis=1)
+
+        # Calculate comparison columns
+        for yr in self.years:
+            comp[(yr, 'constraint difference')] = (comp[(yr, 'output')]
+                                                   - comp[(yr, 'constraint')])
+            comp[(yr, 'constraint % difference')] = (comp[(yr, 'output')]
+                                                     / comp[(yr, 'constraint')]) - 1
+            comp[(yr, 'output growth')] = (comp[(yr, 'output')]
+                                           / comp[(self.base_year, 'output')])
+            comp[(yr, 'growth difference')] = (comp[(yr, 'output growth')]
+                                               - comp[(yr, 'growth')])
+        # Sort columns and return comparison
+        return comp.sort_index(axis=1, level=0, sort_remaining=False)
+
     def compare_msoa_totals(self) -> pd.DataFrame:
         """Compares the input and output values at MSOA level and produces a summary.
 
@@ -147,32 +198,31 @@ class PopEmpComparator:
         cols = [self.ZONE_COL, *self.years]
         output_msoa = self.output[cols].groupby(self.ZONE_COL, as_index=False).sum()
 
-        # Set index of dataframes to ZONE_COL for concat and rename columns with source
-        concat = []
-        for nm, df in (('input', self.input_data), ('constraint', self.constraint_data),
-                       ('growth', self.growth_data), ('output', output_msoa)):
-            df = df.set_index(self.ZONE_COL)
-            df.columns = pd.MultiIndex.from_tuples([(i, nm) for i in df.columns])
-            concat.append(df)
-        msoa_comp = pd.concat(concat, axis=1)
-
-        # Calculate comparison columns
-        for yr in self.years:
-            msoa_comp[(yr, 'constraint difference')] = (msoa_comp[(yr, 'output')]
-                                                        - msoa_comp[(yr, 'constraint')])
-            msoa_comp[(yr, 'constraint % difference')] = (msoa_comp[(yr, 'output')]
-                                                          / msoa_comp[(yr, 'constraint')]) - 1
-            msoa_comp[(yr, 'output growth')] = (msoa_comp[(yr, 'output')]
-                                                / msoa_comp[(self.base_year, 'output')])
-            msoa_comp[(yr, 'growth difference')] = (msoa_comp[(yr, 'output growth')]
-                                                    - msoa_comp[(yr, 'growth')])
-
-        # Sort columns
-        return msoa_comp.sort_index(axis=1, level=0, sort_remaining=False)
+        # Concatentate dataframes and create comparison columns
+        return self._compare_dataframes(self.ZONE_COL, self.input_data, self.constraint_data,
+                                        self.growth_data, output_msoa)
 
     def compare_sector_totals(self) -> pd.DataFrame:
-        # FIXME Placeholder for sector total comparison
-        return pd.DataFrame()
+        """Compares the input and output values at sector level and provides a summary.
+
+        Returns
+        -------
+        pd.DataFrame
+            Differences between the input and output values at sector level.
+        """
+        # Calculate sectors totals (or means) for the comparison data
+        sector_rep = SectorReporter()
+        input_sec = sector_rep.calculate_sector_totals_v2(self.input_data, [self.base_year])
+        constraint_sec = sector_rep.calculate_sector_totals_v2(self.constraint_data, self.years)
+        output_sec = sector_rep.calculate_sector_totals_v2(self.output, self.years)
+        growth_sec = sector_rep.calculate_sector_totals_v2(self.growth_data, self.years,
+                                                           aggregation_method='mean')
+
+        # Concatentate dataframes and create comparison columns
+        sector_comp = self._compare_dataframes('grouping_id', input_sec, constraint_sec, growth_sec,
+                                               output_sec)
+        sector_comp.index.name = 'sector'
+        return sector_comp
 
     def ratio_comparison(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Calculates the ratio of types in the output and compares to ratio input.
@@ -261,6 +311,8 @@ class PopEmpComparator:
                        (self.ratio_comparison, ('Ratio Comparison MSOA',
                                                 'Ratio Comparison Totals')))
         # Run all comparisons and save each DataFrame to a csv
+        # TODO add option to output to a spreadsheet, ratio comparison MSOA for population
+        # will be too large for this
         for func, names in comparisons:
             # Create tuple for dataframes if func only returns one, so it can be looped through
             dataframes = (func(),) if len(names) == 1 else func()
