@@ -9,6 +9,7 @@ pylint = "*"
 [packages]
 pandas = "*"
 tqdm = "*"
+openpyxl = "*"
 
 [requires]
 python_version = "3.8"

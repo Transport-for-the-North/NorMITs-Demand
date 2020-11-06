@@ -8,15 +8,20 @@
 import re
 import time
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, List
 
 # Third party imports
 import pandas as pd
 import numpy as np
+from openpyxl.worksheet.worksheet import Worksheet
 
 # Local imports
 from demand_utilities import utils as du
 from demand_utilities.sector_reporter_v2 import SectorReporter
+
+
+##### CONSTANTS #####
+EXCEL_MAX = (10000, 1000) # Maximum size of dataframe to be written to excel
 
 
 ##### CLASSES #####
@@ -301,25 +306,70 @@ class PopEmpComparator:
 
         return output_ratios, total_ratios
 
-    def write_comparisons(self):
-        """Runs each comparison method and writes the output to a csv. """
+    def write_comparisons(self, output_as: str='excel'):
+        """Runs each comparison method and writes the output to a csv.
+
+        Parameters
+        ----------
+        output_as : str, optional
+            What type of output file(s) should be created options are 'excel' (default)
+            or 'csv', if 'excel' is selected any outputs that are too large for a sheet
+            will be saved as CSVs instead.
+        """
+        # Check output type
+        output_as = output_as.lower()
+        accepted_values = ('excel', 'csv')
+        if output_as not in accepted_values:
+            raise ValueError(f'output_as should be one of {accepted_values} not "{output_as}"')
+
         print(f'Producing {self.data_type.capitalize()} comparisons:')
         # Comparison methods to run with tuple containing names for return DataFrames
-        comparisons = ((self.compare_totals, ('Totals Summary',)),
+        comparisons = ((self.compare_totals, ('Totals Comparison',)),
                        (self.compare_msoa_totals, ('MSOA Totals Comparison',)),
                        (self.compare_sector_totals, ('Sector Totals Comparison',)),
                        (self.ratio_comparison, ('Ratio Comparison MSOA',
                                                 'Ratio Comparison Totals')))
-        # Run all comparisons and save each DataFrame to a csv
-        # TODO add option to output to a spreadsheet, ratio comparison MSOA for population
-        # will be too large for this
+        # Run all comparisons and save each dataframe
+        outputs = {}
         for func, names in comparisons:
             # Create tuple for dataframes if func only returns one, so it can be looped through
             dataframes = (func(),) if len(names) == 1 else func()
             for nm, df in zip(names, dataframes):
-                du.safe_dataframe_to_csv(df, self.output_dir / f'{nm}.csv')
+                # Write to csv if df too large for excel sheet, or csv output type selected
+                if output_as == 'csv' or len(df) > EXCEL_MAX[0] or len(df.columns) > EXCEL_MAX[1]:
+                    du.safe_dataframe_to_csv(df, self.output_dir / f'{nm}.csv')
+                else: # Save to dict ready to write to spreadsheet
+                    outputs[nm] = df
+
+        if output_as == 'excel':
+            # Check path can be written to
+            out_path = self.output_dir / f'{self.data_type.capitalize()}_Comparisons.xlsx'
+            out_path = du.file_write_check(out_path)
+
+            with pd.ExcelWriter(out_path, engine='openpyxl') as writer:
+                # Write all the outputs dataframes to a separate sheet in the spreadsheet
+                for nm, df in outputs.items():
+                    df.to_excel(writer, sheet_name=nm)
+
+                    # Generate list of number formats based on column names
+                    # Use different pattern for ratio sheet
+                    if 'ratio' in nm.lower():
+                        # Pattern which matches anything except within.* or total
+                        pat = re.compile(r'.*\'(within.*|total)\'.*', re.IGNORECASE)
+                        num_format = ['Percent' if not pat.match(str(c)) else 'Comma [0]'
+                                      for c in df.columns]
+                    else:
+                        pat = re.compile(r'.*(percent|\%|growth).*', re.IGNORECASE)
+                        num_format = ['Percent' if pat.match(str(c)) else 'Comma [0]'
+                                      for c in df.columns]
+                    # Leave formatting alone for index columns and header rows
+                    num_format = [None] * len(df.index.names) + num_format
+                    # Update column formats
+                    _excel_column_format(writer.sheets[nm], num_format, len(df.columns.names))
+
         print(f'\tSaved in: "{self.output_dir}"')
         return
+
 
 ##### FUNCTIONS #####
 def test():
@@ -358,8 +408,36 @@ def test():
                                 output_loc / worker_output_file,
                                 'employment', BASE_YEAR)
     emp_comp.write_comparisons()
-
     return
+
+
+def _excel_column_format(sheet: Worksheet, formats: List[str], ignore_rows: int=0):
+    """Updates the formats of all columns in given sheet based on list of formats.
+
+    Parameters
+    ----------
+    sheet : Worksheet
+        The sheet to update.
+    formats : List[str]
+        The names of the styles to use for each column in the sheet, should
+        be the same length as the number of columns in the sheet.
+    ignore_rows : int
+        Number of header rows that shouldn't be formatted, default 0.
+    """
+    for i, col in enumerate(sheet.iter_cols()):
+        # Get format for the current column if non given then move to next column
+        try:
+            form = formats[i]
+        except IndexError:
+            break
+        if form is None or form.lower() == 'normal':
+            continue
+        # Update each cells style
+        for r, cell in enumerate(col):
+            # Ignore cells that are in header rows
+            if r < ignore_rows:
+                continue
+            cell.style = form
 
 
 ##### MAIN #####

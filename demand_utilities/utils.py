@@ -22,7 +22,8 @@ import pandas as pd
 
 from typing import List
 from typing import Dict
-from typing import Iterable
+from typing import Iterable, Union
+from pathlib import Path
 
 
 from tqdm import tqdm
@@ -1502,3 +1503,54 @@ def defaultdict_to_regular(d):
     if isinstance(d, defaultdict):
         d = {k: defaultdict_to_regular(v) for k, v in d.items()}
     return d
+
+
+def file_write_check(path: Union[str, Path], wait: bool=True) -> Path:
+    """Attempts to write to given path to see if file is in use.
+
+    Will either wait for the file to be closed or it will append numbers
+    to the file name until and path can be found that isn't in use.
+
+    Parameters
+    ----------
+    path : str
+        Path to the file to check.
+    wait : bool, optional
+        Whether or not to wait for the file to be closed, by default True.
+        If False appends number to the end of file name to find a path that
+        isn't in use.
+
+    Returns
+    -------
+    Path
+        Path that isn't currently in use, will be the same as given `path`
+        if wait is True.
+
+    Raises
+    ------
+    ValueError
+        When wait is False and a path can't be found, that isn't in use, in less
+        than 100 attempts.
+    """
+    path = Path(path)
+    new_path = path
+    count = 1
+    waiting = False
+    while True:
+        try:
+            with open(new_path, 'wb') as f:
+                pass
+            return new_path
+        except PermissionError:
+            if wait:
+                if not waiting:
+                    print(f"Cannot write to file at {new_path.absolute()}.",
+                          "Please ensure it is not open anywhere.",
+                          "Waiting for permission to write...", sep='\n')
+                    waiting = True
+                time.sleep(1)
+            else:
+                new_path = path.parent / (path.stem + f'_{count}' + path.suffix)
+                count += 1
+                if count > 100:
+                    raise ValueError('Too many files in use!')
