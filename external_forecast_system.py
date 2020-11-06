@@ -1107,7 +1107,6 @@ class ExternalForecastSystem:
             iter_name=iter_name
         )
         # TODO: Add time print outs
-        # TODO: Change import paths to accept specific dir
 
         # TODO: Check if tp pa matrices exist first
         if overwrite_hb_tp_pa:
@@ -2526,7 +2525,7 @@ def main():
 
     constrain_population = False
 
-    run_nhb_efs = False
+    run_nhb_efs = True
     run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False

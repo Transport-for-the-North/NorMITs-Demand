@@ -14,3 +14,5 @@ TODO: After integrations with TMS, combine with
 """
 
 from old_tms.multiprocessing_wrapper import *
+
+from typing import Callable

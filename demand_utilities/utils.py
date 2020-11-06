@@ -31,6 +31,7 @@ from typing import Iterator
 
 
 from tqdm import tqdm
+from itertools import product
 from collections import defaultdict
 
 
@@ -1079,14 +1080,11 @@ def cp_segmentation_loop_generator(p_list: Iterable[int],
         )
 
 
-
-
 def long_to_wide_out(df: pd.DataFrame,
                      v_heading: str,
                      h_heading: str,
                      values: str,
                      out_path: str,
-                     echo=False,
                      unq_zones: List[str] = None
                      ) -> None:
     """
@@ -1129,19 +1127,17 @@ def long_to_wide_out(df: pd.DataFrame,
         unq_zones = df[v_heading].drop_duplicates().reset_index(drop=True).copy()
         unq_zones = list(range(1, max(unq_zones)+1))
 
-    # Convert to wide format and write to file
-    wide_mat = df_to_np(
+    # Make sure all unq_zones exists in v_heading and h_heading
+    df = ensure_multi_index(
         df=df,
-        values=values,
-        unq_internal_zones=unq_zones,
-        v_heading=v_heading,
-        h_heading=h_heading,
-        echo=echo
+        index_dict={v_heading: unq_zones, h_heading: unq_zones},
     )
-    pd.DataFrame(
-        wide_mat,
-        index=unq_zones,
-        columns=unq_zones
+
+    # Convert to wide format and output
+    df.pivot(
+        index=v_heading,
+        columns=h_heading,
+        values=values
     ).to_csv(out_path)
 
 
@@ -1684,6 +1680,44 @@ def ensure_index(df: pd.DataFrame,
     return ph.merge(df, how='left', on=index_col).fillna(infill)
 
 
+def ensure_multi_index(df: pd.DataFrame,
+                       index_dict: Dict[str, List[Any]],
+                       infill: float = 0.0
+                       ) -> pd.DataFrame:
+    """
+    Ensures every combination of values in index_list exists in df.
+
+    This function is useful to ensure a conversion from long to wide will
+    happen correctly
+
+    Parameters
+    ----------
+    df:
+        The dataframe to alter.
+
+    index_dict:
+        A dictionary of {column_name: index_vals} to ensure exist in all
+        combinations within df.
+
+    infill:
+        Value to infill any other columns of df where the given indexes
+        don't exist.
+
+    Returns
+    -------
+    df:
+        The given df given with all combinations of the index dict values
+    """
+    # Create a new placeholder df with every combination of the unique columns
+    all_combos = zip(*product(*index_dict.values()))
+    ph = {col: vals for col, vals in zip(index_dict.keys(), all_combos)}
+    ph = pd.DataFrame(ph)
+
+    # Merge with the given and infill missing
+    merge_cols = list(index_dict.keys())
+    return ph.merge(df, how='left', on=merge_cols).fillna(infill)
+
+
 def match_pa_zones(productions: pd.DataFrame,
                    attractions: pd.DataFrame,
                    unique_zones: List[Any],
@@ -1747,11 +1781,9 @@ def match_pa_zones(productions: pd.DataFrame,
 
 def get_costs(model_lookup_path,
               calib_params,
-              tp = '24hr',
-              iz_infill = 0.5):
-
-    # units takes different parameters
-    # TODO: Needs a config guide for the costs somewhere
+              tp='24hr',
+              iz_infill = 0.5
+              ):
     """
     This function imports distances or costs from a given path.
 
@@ -1772,16 +1804,17 @@ def get_costs(model_lookup_path,
     car_available = None:
         Takes None, True, False
 
-    seed_intrazonal = True:
-        Takes True or False - whether to add a value half the minimum
-        interzonal value to the intrazonal cells. Currently needed for distance
-        but not cost.
+    iz_infill = 0.5:
+        Currently needed for distance but not cost. Add a value of iz_infill *
+        the minimum inter-zonal value to the intra-zonal cells.
 
-    Returns:
+    Returns
     ----------
     dat:
         DataFrame containing required cost or distance values.
     """
+    # units takes different parameters
+    # TODO: Needs a config guide for the costs somewhere
     # TODO: Adapt model input costs to take time periods
     # TODO: The name cost_cols is misleading
     file_sys = os.listdir(os.path.join(model_lookup_path, 'costs'))
@@ -1855,35 +1888,32 @@ def get_costs(model_lookup_path,
     if iz_infill is not None:
         dat = dat.copy()
         min_inter_dat = dat[dat[cols[2]]>0]
-        # Derive minimum intrazonal
+        # Derive minimum intra-zonal
         min_inter_dat = min_inter_dat.groupby(
                 cols[0]).min().reset_index().drop(cols[1],axis=1)
         intra_dat = min_inter_dat.copy()
         intra_dat[cols[2]] = intra_dat[cols[2]]*iz_infill
         iz = dat[dat[cols[0]] == dat[cols[1]]]
         non_iz = dat[dat[cols[0]] != dat[cols[1]]]
-        iz = iz.drop(cols[2],axis=1)
+        iz = iz.drop(cols[2], axis=1)
         # Rejoin
         iz = iz.merge(intra_dat, how='inner', on=cols[0])
-        dat = pd.concat([iz, non_iz],axis=0,sort=True).reset_index(drop=True)
+        dat = pd.concat([iz, non_iz], axis=0, sort=True).reset_index(drop=True)
 
-    return(dat, cost_return_name)
+    return dat, cost_return_name
+
 
 def get_trip_length_bands(import_folder,
                           calib_params,
                           segmentation,
                           trip_origin,
                           replace_nan=False,
-                          echo=True): # 'hb' or 'nhb'
-
+                          echo=True):
     # TODO: Overwrite the segmentation parameter, sorry Ben
     """
     Function to check a folder for trip length band parameters.
     Returns a subset.
     """
-    # Append name of tlb area
-
-
     # Index folder
     target_files = os.listdir(import_folder)
     # Define file contents, should just be target files - should fix.
@@ -1894,7 +1924,7 @@ def get_trip_length_bands(import_folder,
         for key, value in calib_params.items():
             # Don't want empty segments, don't want ca
             if value != 'none' and key != 'ca':
-                 # print_w_toggle(key + str(value), echo=echo)
+                # print_w_toggle(key + str(value), echo=echo)
                 import_files = [x for x in import_files if
                                 ('_' + key + str(value)) in x]
     elif segmentation == 'tfn':
@@ -1931,13 +1961,13 @@ def get_trip_length_bands(import_folder,
 
     return tlb
 
+
 def parse_mat_output(list_dir,
-                     sep = '_',
-                     mat_type = 'dat',
-                     file_format = '.csv',
-                     file_name = 'file'):
+                     sep='_',
+                     mat_type='dat',
+                     file_format='.csv',
+                     file_name='file'):
     """
-    
     """
     # Get target file format only
     unq_files = [x for x in list_dir if file_format in x]
@@ -1954,7 +1984,8 @@ def parse_mat_output(list_dir,
                 name = 'trip_origin'
                 dat = item
             elif item == mat_type:
-                pass
+                name = ''
+                dat = ''
             else:
                 name = ''
                 dat = ''
@@ -1967,11 +1998,11 @@ def parse_mat_output(list_dir,
             # Return None not nan
             if len(dat) == 0:
                 dat = 'none'
-            split_dict.update({name:dat})
+            split_dict.update({name: dat})
         split_list.append(split_dict)           
 
     segments = pd.DataFrame(split_list)
     segments = segments.replace({np.nan:'none'})
 
-    return(segments)
+    return segments
 

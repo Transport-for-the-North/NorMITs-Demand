@@ -94,7 +94,7 @@ def _build_tp_pa_internal(pa_import,
     None
     """
     # ## Read in 24hr matrix ## #
-    productions_fname = du.get_dist_name(
+    dist_fname = du.get_dist_name(
         trip_origin,
         matrix_format,
         str(year),
@@ -104,7 +104,8 @@ def _build_tp_pa_internal(pa_import,
         str(car_availability),
         csv=True
     )
-    pa_24hr = pd.read_csv(os.path.join(pa_import, productions_fname))
+    pa_24hr = pd.read_csv(os.path.join(pa_import, dist_fname))
+    zoning_system = pa_24hr.columns[0]
 
     # Convert from wide to long format
     y_zone = 'a_zone' if model_zone == 'p_zone' else 'd_zone'
@@ -204,8 +205,8 @@ def _build_tp_pa_internal(pa_import,
         # Convert table from long to wide format and save
         # TODO: Generate header based on mode used
         du.long_to_wide_out(
-            gb_tp.rename(columns={model_zone: 'norms_zone_id'}),
-            v_heading='norms_zone_id',
+            gb_tp.rename(columns={model_zone: zoning_system}),
+            v_heading=zoning_system,
             h_heading=y_zone,
             values='dt',
             out_path=out_tp_pa_path
@@ -270,8 +271,6 @@ def efs_build_tp_pa(tp_import: str,
         raise ValueError("'%s' is not a valid matrix format."
                          % str(matrix_format))
 
-    # TODO: Infer these arguments based on pa_import
-    #  Along with yr, p, m
     required_soc = [None] if required_soc is None else required_soc
     required_ns = [None] if required_ns is None else required_ns
     required_ca = [None] if required_ca is None else required_ca
@@ -577,8 +576,6 @@ def maybe_get_aggregated_tour_proportions(orig: int,
                                           model2tfn: Dict[int, int],
                                           cell_demand: float,
                                           ) -> np.array:
-    return model_tour_props[orig][dest]
-
     # Translate to the aggregated zones
     lad_orig = model2lad.get(orig, -1)
     lad_dest = model2lad.get(dest, -1)
