@@ -1111,15 +1111,17 @@ class ExternalForecastSystem:
         # TODO: Check if tp pa matrices exist first
         if overwrite_hb_tp_pa:
             print("Converting HB 24hr PA to time period split PA...")
-            pa2od.efs_build_tp_pa(tp_import=imports['tp_splits'],
-                                  pa_import=exports['pa_24'],
-                                  pa_export=exports['pa'],
-                                  years_needed=years_needed,
-                                  required_purposes=purposes_needed,
-                                  required_modes=modes_needed,
-                                  required_soc=soc_needed,
-                                  required_ns=ns_needed,
-                                  required_ca=ca_needed)
+            pa2od.efs_build_tp_pa(
+                tp_import=imports['tp_splits'],
+                pa_import=exports['pa_24'],
+                pa_export=exports['pa'],
+                years_needed=years_needed,
+                p_needed=purposes_needed,
+                m_needed=modes_needed,
+                soc_needed=soc_needed,
+                ns_needed=ns_needed,
+                ca_needed=ca_needed
+            )
             print('HB time period split PA matrices compiled!\n')
 
         # TODO: Check if od matrices exist first
@@ -1255,13 +1257,15 @@ class ExternalForecastSystem:
 
         if overwrite_nhb_tp_od:
             print("Converting NHB 24hr OD to time period split OD...")
-            pa2od.efs_build_tp_pa(tp_import=imports['tp_splits'],
-                                  pa_import=exports['od_24'],
-                                  pa_export=exports['od'],
-                                  years_needed=years_needed,
-                                  required_purposes=nhb_purposes_needed,
-                                  required_modes=modes_needed,
-                                  matrix_format='od')
+            pa2od.efs_build_tp_pa(
+                tp_import=imports['tp_splits'],
+                pa_import=exports['od_24'],
+                pa_export=exports['od'],
+                years_needed=years_needed,
+                p_needed=nhb_purposes_needed,
+                m_needed=modes_needed,
+                matrix_format='od'
+            )
             print('NHB time period split OD matrices compiled!\n')
 
         print("NHB run complete!")
@@ -2519,7 +2523,7 @@ def main():
     echo = False
 
     # Running control
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = False
     recreate_attractions = False
 

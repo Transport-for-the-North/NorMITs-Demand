@@ -105,6 +105,9 @@ def multiprocess(fn: Callable,
     >>> kwargs = [a_kwargs, b_kwargs, c_kwargs]
     >>> a, b, c = process_pool_wrapper(sorted, args, kwargs)
     """
+    # Init
+    args, kwargs = _check_args_kwargs(args, kwargs)
+
     # Validate process_count
     if process_count < -os.cpu_count():
         raise ValueError(
@@ -143,3 +146,32 @@ def multiprocess(fn: Callable,
         in_order=in_order,
         result_timeout=result_timeout
     )
+
+
+def _check_args_kwargs(args: List[Any],
+                       kwargs: List[Any],
+                       args_default: Any = None,
+                       kwargs_default: Any = None,
+                       length: int = None):
+    """
+    If args or kwargs are set to None they are filled with their default value
+    to match the length of the other.
+    If both are None, then they are set to length.
+    If neither are None, they are returned as is.
+    """
+    # Init
+    args_default = list() if args_default is None else args_default
+    kwargs_default = list() if kwargs_default is None else kwargs_default
+
+    if args is not None and kwargs is None:
+        kwargs = [kwargs_default for _ in range(len(args))]
+    elif args is None and kwargs is not None:
+        args = [args_default for _ in range(len(kwargs))]
+    elif args is None and kwargs is None and length is not None:
+        args = [args_default for _ in range(length)]
+        kwargs = [kwargs_default for _ in range(length)]
+    elif args is None and kwargs is None and length is None:
+        raise ValueError("Both args and kwargs are None and length has not " +
+                         "been set. Don't know how to proceed!")
+
+    return args, kwargs

@@ -16,6 +16,9 @@ import sys
 import time
 import traceback
 
+from typing import Any
+from typing import List
+
 from multiprocessing import Pool as ProcessPool
 from multiprocessing import Event
 from multiprocessing import Value
@@ -189,17 +192,21 @@ def _call_order_wrapper(index, func, *args, **kwargs):
     return index, func(*args, **kwargs)
 
 
-def _check_args_kwargs(args,
-                       kwargs,
-                       args_default=list(),
-                       kwargs_default=dict(),
-                       length=None):
+def _check_args_kwargs(args: List[Any],
+                       kwargs: List[Any],
+                       args_default: Any = None,
+                       kwargs_default: Any = None,
+                       length: int = None):
     """
     If args or kwargs are set to None they are filled with their default value
     to match the length of the other.
     If both are None, then they are set to length.
     If neither are None, they are returned as is.
     """
+    # Init
+    args_default = list() if args_default is None else args_default
+    kwargs_default = list() if kwargs_default is None else kwargs_default
+
     if args is not None and kwargs is None:
         kwargs = [kwargs_default for _ in range(len(args))]
     elif args is None and kwargs is not None:

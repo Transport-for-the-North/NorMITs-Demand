@@ -76,7 +76,6 @@ def simplify_time_period_splits(time_period_splits: pd.DataFrame):
 
 def _build_tp_pa_internal(pa_import,
                           pa_export,
-                          trip_origin,
                           matrix_format,
                           year,
                           purpose,
@@ -84,7 +83,8 @@ def _build_tp_pa_internal(pa_import,
                           segment,
                           car_availability,
                           model_zone,
-                          tp_split):
+                          tp_import
+                          ):
     """
     The internals of build_tp_pa(). Useful for making the code more
     readable due to the number of nested loops needed
@@ -93,6 +93,41 @@ def _build_tp_pa_internal(pa_import,
     -------
     None
     """
+    # ## READ IN TIME PERIOD SPLITS FILE ## #
+    if purpose in consts.ALL_NHB_P:
+        tp_split_fname = 'export_nhb_productions_norms.csv'
+        tp_split_path = os.path.join(tp_import, tp_split_fname)
+        trip_origin = 'nhb'
+    elif purpose in consts.ALL_HB_P:
+        tp_split_fname = 'export_productions_norms.csv'
+        tp_split_path = os.path.join(tp_import, tp_split_fname)
+        trip_origin = 'hb'
+    else:
+        raise ValueError(
+            "%s is neither a home based nor non-home based purpose."
+            % str(purpose)
+        )
+
+    # Read in the seed values for tp splits
+    tp_split = pd.read_csv(tp_split_path).rename(
+        columns={
+            'norms_zone_id': model_zone,
+            'p': 'purpose_id',
+            'm': 'mode_id',
+            'soc': 'soc_id',
+            'ns': 'ns_id',
+            'ca': 'car_availability_id',
+            'time': 'tp'
+        }
+    )
+    tp_split[model_zone] = tp_split[model_zone].astype(int)
+
+    # Aggregate to p/m if NHB
+    if trip_origin == 'nhb':
+        tp_split = tp_split.groupby(
+            [model_zone, 'purpose_id', 'mode_id', 'tp']
+        )['trips'].sum().reset_index()
+
     # ## Read in 24hr matrix ## #
     dist_fname = du.get_dist_name(
         trip_origin,
@@ -106,6 +141,8 @@ def _build_tp_pa_internal(pa_import,
     )
     pa_24hr = pd.read_csv(os.path.join(pa_import, dist_fname))
     zoning_system = pa_24hr.columns[0]
+
+    print("Working on splitting %s..." % dist_fname)
 
     # Convert from wide to long format
     y_zone = 'a_zone' if model_zone == 'p_zone' else 'd_zone'
@@ -217,12 +254,13 @@ def efs_build_tp_pa(tp_import: str,
                     pa_import: str,
                     pa_export: str,
                     years_needed: List[int],
-                    required_purposes: List[int],
-                    required_modes: List[int],
-                    required_soc: List[int] = None,
-                    required_ns: List[int] = None,
-                    required_ca: List[int] = None,
-                    matrix_format: str = 'pa'
+                    p_needed: List[int],
+                    m_needed: List[int],
+                    soc_needed: List[int] = None,
+                    ns_needed: List[int] = None,
+                    ca_needed: List[int] = None,
+                    matrix_format: str = 'pa',
+                    process_count: int = -1
                     ) -> None:
     """
     Converts the 24hr matrices in pa_import into time_period segmented
@@ -243,37 +281,43 @@ def efs_build_tp_pa(tp_import: str,
     years_needed:
         A list of which years of 24hr Matrices to convert.
 
-    required_purposes:
+    p_needed:
         A list of which purposes of 24hr Matrices to convert.
 
-    required_modes:
+    m_needed:
         A list of which modes of 24hr Matrices to convert.
 
-    required_soc:
+    soc_needed:
         A list of which soc of 24hr Matrices to convert.
 
-    required_ns:
+    ns_needed:
         A list of which ns of 24hr Matrices to convert.
 
-    required_ca:
+    ca_needed:
         A list of which car availabilities of 24hr Matrices to convert.
 
     matrix_format:
         Which format the matrix is in. Either 'pa' or 'od'
+
+    process_count:
+        The number of processes to use when multiprocessing. Negative numbers
+        use that many processes less than the max. i.e. -1 ->
+        os.cpu_count() - 1
 
     Returns
     -------
         None
 
     """
-    # Arg init
+    # Validate inputs
     if matrix_format not in consts.VALID_MATRIX_FORMATS:
         raise ValueError("'%s' is not a valid matrix format."
                          % str(matrix_format))
 
-    required_soc = [None] if required_soc is None else required_soc
-    required_ns = [None] if required_ns is None else required_ns
-    required_ca = [None] if required_ca is None else required_ca
+    # Init
+    soc_needed = [None] if soc_needed is None else soc_needed
+    ns_needed = [None] if ns_needed is None else ns_needed
+    ca_needed = [None] if ca_needed is None else ca_needed
 
     # Loop Init
     if matrix_format == 'pa':
@@ -285,69 +329,43 @@ def efs_build_tp_pa(tp_import: str,
         raise ValueError("'%s' seems to be a valid matrix format, "
                          "but build_tp_pa() cannot handle it.")
 
-    # For every: Year, purpose, mode, segment, ca
+    # ## MULTIPROCESS ## #
+    unchanging_kwargs = {
+        'pa_import': pa_import,
+        'pa_export': pa_export,
+        'matrix_format': matrix_format,
+        'model_zone': model_zone,
+        'tp_import': tp_import
+    }
+
+    # Build a list of the changing arguments
+    kwargs_list = list()
     for year in years_needed:
-        for purpose in required_purposes:
-            # Purpose specific set-up
-            # Do it here to avoid repeats in inner loops
-            if purpose in consts.ALL_NHB_P:
-                trip_origin = 'nhb'
-                required_segments = [None]
-                tp_split_fname = 'export_nhb_productions_norms.csv'
-                tp_split_path = os.path.join(tp_import, tp_split_fname)
+        loop_generator = du.segmentation_loop_generator(
+            p_needed,
+            m_needed,
+            soc_needed,
+            ns_needed,
+            ca_needed
+        )
 
-            elif purpose in consts.ALL_HB_P:
-                trip_origin = 'hb'
-                tp_split_fname = 'export_productions_norms.csv'
-                tp_split_path = os.path.join(tp_import, tp_split_fname)
-                if purpose in [1, 2]:
-                    required_segments = required_soc
-                else:
-                    required_segments = required_ns
+        for p, m, seg, ca in loop_generator:
+            kwargs = unchanging_kwargs.copy()
+            kwargs.update({
+                'year': year,
+                'purpose': p,
+                'mode': m,
+                'segment': seg,
+                'car_availability': ca
+            })
+            kwargs_list.append(kwargs)
 
-            else:
-                raise ValueError("%s is not a valid purpose."
-                                 % str(purpose))
-
-            # Read in the seed values for tp splits
-            tp_split = pd.read_csv(tp_split_path).rename(
-                columns={
-                    'norms_zone_id': model_zone,
-                    'p': 'purpose_id',
-                    'm': 'mode_id',
-                    'soc': 'soc_id',
-                    'ns': 'ns_id',
-                    'ca': 'car_availability_id',
-                    'time': 'tp'
-                }
-            )
-            tp_split[model_zone] = tp_split[model_zone].astype(int)
-
-            # Compile aggregate to p/m if NHB
-            if trip_origin == 'nhb':
-                tp_split = tp_split.groupby(
-                    [model_zone, 'purpose_id', 'mode_id', 'tp']
-                )['trips'].sum().reset_index()
-
-            for mode in required_modes:
-                print("Working on yr%s_p%s_m%s..."
-                      % (str(year), str(purpose), str(mode)))
-                for segment in required_segments:
-                    for car_availability in required_ca:
-                        _build_tp_pa_internal(
-                            pa_import,
-                            pa_export,
-                            trip_origin,
-                            matrix_format,
-                            year,
-                            purpose,
-                            mode,
-                            segment,
-                            car_availability,
-                            model_zone,
-                            tp_split
-                        )
-    return
+    # Multiprocess - split by time period and write to disk
+    conc.multiprocess(
+        _build_tp_pa_internal,
+        kwargs=kwargs_list,
+        process_count=process_count
+    )
 
 
 def _build_od_internal(pa_import,
