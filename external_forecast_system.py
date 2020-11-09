@@ -2523,9 +2523,9 @@ def main():
     echo = False
 
     # Running control
-    run_base_efs = False
-    recreate_productions = False
-    recreate_attractions = False
+    run_base_efs = True
+    recreate_productions = True
+    recreate_attractions = True
 
     constrain_population = False
 
