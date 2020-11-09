@@ -87,6 +87,14 @@ def decompile_od(od_import: str,
                 calib_params=part_calib_params,
                 csv=True
             )
+
+            # TODO: Convert matrices to VDM segmentation
+            #  Then output
+            #  HBW,     p1
+            #  HBEB,    p2
+            #  HBO,     p3-8
+            #  NHBEB,   p12,
+            #  NHBO,    p13-16, 18
             part_mat.to_csv(os.path.join(od_export, mat_name))
 
             # Save for audit later

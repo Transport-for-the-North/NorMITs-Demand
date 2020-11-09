@@ -26,7 +26,7 @@ import pa_to_od as pa2od
 import od_to_pa as od2pa
 import matrix_processing as mat_p
 import efs_constants as consts
-import furness_process as fp
+import distribution as dm
 import efs_production_generator as pm
 import efs_attraction_generator as am
 import efs_constrainer as constrainer
@@ -745,8 +745,8 @@ class ExternalForecastSystem:
                   "base by default growth factors...")
             population_constraint = self.population_constraint[pop_cols].copy()
             population_constraint = constrainer.grow_constraint(
-                population_values,
                 population_constraint,
+                population_growth,
                 str(base_year),
                 [str(x) for x in future_years]
             )
@@ -880,18 +880,17 @@ class ExternalForecastSystem:
             output_path = os.path.join(imports['zoning'], desired_zoning + ".csv")
             translation_dataframe = pd.read_csv(output_path)
 
+            # Figure out which columns are the segmentation
+            non_split_columns = list(production_trips.columns)
+            for year in year_list:
+                non_split_columns.remove(year)
+
             converted_productions = self.zone_translator.run(
                 production_trips,
                 translation_dataframe,
                 self.value_zoning,
                 desired_zoning,
-                non_split_columns=[
-                        "model_zone_id",
-                        "purpose_id",
-                        "car_availability_id",
-                        "soc",
-                        "ns"
-                        ]
+                non_split_columns=non_split_columns
             )
 
             converted_pure_attractions = self.zone_translator.run(
@@ -920,22 +919,37 @@ class ExternalForecastSystem:
             converted_attractions = attraction_weights.copy()
             converted_pure_attractions = attraction_dataframe.copy()
 
+        # Write Translated p/a to file
+        fname = desired_zoning + "_productions.csv"
+        converted_productions.to_csv(
+            os.path.join(exports['productions'], fname),
+            index=False
+        )
+
+        fname = desired_zoning + "_attractions.csv"
+        converted_pure_attractions.to_csv(
+            os.path.join(exports['attractions'], fname),
+            index=False
+        )
+
+        # TODO: Add audit_out to export paths
+        audit_out = os.path.join(exports['home'], 'Audits')
 
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
             print("Generating distributions...")
-            final_distribution_dictionary = self.distribute_dataframe(
+            dm.distribute_pa(
                 productions=converted_productions,
                 attraction_weights=converted_attractions,
-                zone_areatype_lookup=zone_areatype_lookup,
-                required_purposes=purposes_needed,
-                required_soc=soc_needed,
-                required_ns=ns_needed,
-                required_car_availabilities=car_availabilities_needed,
-                required_mode=mode_needed,
-                year_string_list=year_list,
-                distribution_dataframe_dict=distributions,
-                distribution_file_location=imports['seed_dists'],
+                years_needed=year_list,
+                p_needed=purposes_needed,
+                m_needed=modes_needed,
+                soc_needed=soc_needed,
+                ns_needed=ns_needed,
+                ca_needed=car_availabilities_needed,
+                seed_dist_dir=imports['seed_dists'],
+                dist_out=exports['pa_24'],
+                audit_out=audit_out,
                 echo=echo_distribution
             )
             print("Distributions generated!")
@@ -965,7 +979,7 @@ class ExternalForecastSystem:
 
         for purpose in purposes_needed:
             # TODO: Update sector reporter.
-            #  Sector totals don't currently allow this
+            #  Sector totals don't currently allow per purpose reporting
 
             pm_productions = converted_productions.copy()
 
@@ -982,43 +996,17 @@ class ExternalForecastSystem:
 
         # ## OUTPUTS ## #
         # TODO: Properly integrate this
-        # TODO: Tidy up outputs, separate into different files
 
-        # TODO: Integrate output file setup into init!
         if outputting_files:
             if output_location is not None:
                 print("Saving files to: " + output_location)
-                # TODO: Integrate into furnessing!
 
-                # Write distributions to file
-                for key, distribution in final_distribution_dictionary.items():
-                    key = str(key)
-                    out_path = os.path.join(exports['pa_24'], key + '.csv')
-
-                    # Output in wide format
-                    distribution.pivot_table(
-                        index='p_zone',
-                        columns='a_zone',
-                        values='trips'
-                    ).to_csv(out_path)
-                    print("Saved distribution: " + key)
-
+                # Distributions moved to furness
                 # Pop generation moved
                 # Production Generation moved
                 # Final workers out moved
                 # Attractions output moved
-
-                fname = desired_zoning + "_production_trips.csv"
-                converted_productions.to_csv(
-                    os.path.join(exports['productions'], fname),
-                    index=False
-                )
-
-                fname = desired_zoning + "_attractions.csv"
-                converted_pure_attractions.to_csv(
-                    os.path.join(exports['attractions'], fname),
-                    index=False
-                )
+                # Translated production and attractions moved
 
                 fname = desired_zoning + "_sector_totals.csv"
                 sector_totals.to_csv(
@@ -1119,20 +1107,21 @@ class ExternalForecastSystem:
             iter_name=iter_name
         )
         # TODO: Add time print outs
-        # TODO: Change import paths to accept specific dir
 
         # TODO: Check if tp pa matrices exist first
         if overwrite_hb_tp_pa:
             print("Converting HB 24hr PA to time period split PA...")
-            pa2od.efs_build_tp_pa(tp_import=imports['tp_splits'],
-                                  pa_import=exports['pa_24'],
-                                  pa_export=exports['pa'],
-                                  years_needed=years_needed,
-                                  required_purposes=purposes_needed,
-                                  required_modes=modes_needed,
-                                  required_soc=soc_needed,
-                                  required_ns=ns_needed,
-                                  required_ca=ca_needed)
+            pa2od.efs_build_tp_pa(
+                tp_import=imports['tp_splits'],
+                pa_import=exports['pa_24'],
+                pa_export=exports['pa'],
+                years_needed=years_needed,
+                p_needed=purposes_needed,
+                m_needed=modes_needed,
+                soc_needed=soc_needed,
+                ns_needed=ns_needed,
+                ca_needed=ca_needed
+            )
             print('HB time period split PA matrices compiled!\n')
 
         # TODO: Check if od matrices exist first
@@ -1268,13 +1257,15 @@ class ExternalForecastSystem:
 
         if overwrite_nhb_tp_od:
             print("Converting NHB 24hr OD to time period split OD...")
-            pa2od.efs_build_tp_pa(tp_import=imports['tp_splits'],
-                                  pa_import=exports['od_24'],
-                                  pa_export=exports['od'],
-                                  years_needed=years_needed,
-                                  required_purposes=nhb_purposes_needed,
-                                  required_modes=modes_needed,
-                                  matrix_format='od')
+            pa2od.efs_build_tp_pa(
+                tp_import=imports['tp_splits'],
+                pa_import=exports['od_24'],
+                pa_export=exports['od'],
+                years_needed=years_needed,
+                p_needed=nhb_purposes_needed,
+                m_needed=modes_needed,
+                matrix_format='od'
+            )
             print('NHB time period split OD matrices compiled!\n')
 
         print("NHB run complete!")
@@ -2191,202 +2182,6 @@ class ExternalForecastSystem:
 
         return imports, exports, params
 
-    def distribute_dataframe(self,
-                             productions: pd.DataFrame,
-                             attraction_weights: pd.DataFrame,
-                             zone_areatype_lookup: pd.DataFrame,
-                             required_purposes: List[int],
-                             required_soc: List[int],
-                             required_ns: List[int],
-                             required_car_availabilities: List[int],
-                             required_mode: int,
-                             year_string_list: List[str],
-                             distribution_dataframe_dict: dict,
-                             distribution_file_location: str,
-                             trip_origin: str = 'hb',
-                             number_of_iterations: int = 1000,
-                             replace_zero_values: bool = True,
-                             constrain_on_production: bool = True,
-                             constrain_on_attraction: bool = True,
-                             zero_replacement_value: float = 0.00001,
-                             echo: bool = False
-                             ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        # TODO: Output files while it runs, instead of at the end!
-        productions = productions.copy()
-        attraction_weights = attraction_weights.copy()
-        zone_areatype_lookup = zone_areatype_lookup.copy()
-        final_distribution_dictionary = {}
-        required_segments = []
-        distribution_dataframe_list = []
-
-        # Make sure the soc and ns columns are strings
-        productions['soc'] = productions['soc'].astype(str)
-        productions['ns'] = productions['ns'].astype(str)
-
-        # TODO: Move inside of all nested loops into function (stops the
-        #  indentation from making difficult to read code)
-        # TODO: Move mode out to nested loops
-        # TODO: Tidy this up
-        # TODO: Generate synth_dists path based on segmentation
-        #  and file location given
-        for year in year_string_list:
-            for purpose in required_purposes:
-                # ns/soc depends on purpose
-                if purpose in [1, 2]:
-                    required_segments = required_soc
-                else:
-                    required_segments = required_ns
-
-                for segment in required_segments:
-                    car_availability_dataframe = pd.DataFrame
-                    first_iteration = True
-                    for car_availability in required_car_availabilities:
-
-                        # for tp in required_times:
-                        dist_path = os.path.join(
-                            distribution_file_location,
-                            distribution_dataframe_dict[purpose][segment][car_availability]
-                        )
-
-                        # Convert from wide to long format
-                        # (needed for furnessing)
-                        synth_dists = pd.read_csv(dist_path)
-                        synth_dists = pd.melt(
-                            synth_dists,
-                            id_vars=['norms_zone_id'],
-                            var_name='a_zone',
-                            value_name='seed_values'
-                        ).rename(
-                            columns={"norms_zone_id": "p_zone"})
-
-                        # convert column object to int
-                        synth_dists['a_zone'] = synth_dists['a_zone'].astype(int)
-                        synth_dists = synth_dists.groupby(
-                            by=["p_zone", "a_zone"],
-                            as_index=False
-                        ).sum()
-
-                        if self.use_zone_id_subset:
-                            zone_subset = [259, 267, 268, 270, 275, 1171, 1173]
-                            synth_dists = du.get_data_subset(
-                                synth_dists, 'p_zone', zone_subset)
-                            synth_dists = du.get_data_subset(
-                                synth_dists, 'a_zone', zone_subset)
-
-                        # Generate productions input
-                        if purpose in [1, 2]:
-                            segment_mask = (
-                                (productions["purpose_id"] == purpose)
-                                & (productions["car_availability_id"] == car_availability)
-                                & (productions["soc"] == str(segment))
-                            )
-                        else:
-                            segment_mask = (
-                                (productions["purpose_id"] == purpose)
-                                & (productions["car_availability_id"] == car_availability)
-                                & (productions["ns"] == str(segment))
-                            )
-
-                        production_input = productions[segment_mask][
-                            ["model_zone_id", str(year)]
-                        ].rename(columns={str(year): "production_forecast"})
-
-                        # Generate attractions input
-                        mask = attraction_weights["purpose_id"] == purpose
-                        attraction_input = attraction_weights[mask][
-                            ["model_zone_id", str(year)]
-                        ].rename(columns={str(year): "attraction_forecast"})
-
-                        # ## MATCH P/A ZONES ## #
-                        if production_input.empty:
-                            raise ValueError("Something has gone wrong. I "
-                                             "have no productions.")
-
-                        if attraction_input.empty:
-                            raise ValueError("Something has gone wrong. I "
-                                             "have no productions.")
-
-                        # Match the production and attraction zones
-                        p_cols = list(production_input)
-                        a_cols = list(attraction_input)
-
-                        # Outer join makes sure all model zones will get values
-                        pa_input = pd.merge(
-                            production_input,
-                            attraction_input,
-                            on='model_zone_id',
-                            how='outer'
-                        ).fillna(0)
-
-                        production_input = pa_input.reindex(p_cols, axis='columns').copy()
-                        attraction_input = pa_input.reindex(a_cols, axis='columns').copy()
-
-                        # Furness the productions and attractions
-                        target_percentage = 0.7 if self.use_zone_id_subset else 0.975
-                        final_distribution = fp.furness(
-                            productions=production_input,
-                            attractions=attraction_input,
-                            distributions=synth_dists,
-                            max_iters=number_of_iterations,
-                            replace_zero_values=replace_zero_values,
-                            constrain_on_production=constrain_on_production,
-                            constrain_on_attraction=constrain_on_attraction,
-                            zero_replacement_value=zero_replacement_value,
-                            target_percentage=target_percentage,
-                            echo=echo
-                        )
-
-                        final_distribution["purpose_id"] = purpose
-                        final_distribution["car_availability_id"] = car_availability
-                        final_distribution[year] = year
-
-                        final_distribution["mode_id"] = required_mode
-                        final_distribution = final_distribution[[
-                            "p_zone",
-                            "a_zone",
-                            "mode_id",
-                            "dt"
-                         ]]
-
-                        # Rename to the common output names
-                        final_distribution = final_distribution.rename(columns={
-                            "mode_id": "m",
-                            "dt": "trips"
-                        })
-
-                        # TODO: Make sure this works for NHB trips too
-
-                        final_distribution_mode = final_distribution.copy()
-                        final_distribution_mode = final_distribution_mode[[
-                            'p_zone', 'a_zone', 'trips'
-                        ]]
-
-                        dict_string = du.get_dist_name(
-                            str(trip_origin),
-                            'pa',
-                            str(year),
-                            str(purpose),
-                            str(required_mode),
-                            str(segment),
-                            str(car_availability)
-                        )
-
-                        final_distribution_dictionary[dict_string] = final_distribution_mode
-
-                        print("Distribution " + dict_string + " complete!")
-                        if first_iteration:
-                            car_availability_dataframe = final_distribution_mode
-                            first_iteration = False
-                        else:
-                            car_availability_dataframe = car_availability_dataframe.append(
-                                final_distribution_mode
-                                )
-
-        return final_distribution_dictionary
-
     def _subset_zone_ids(self):
         """
         Shrink down all inputs. Useful for testing and dev.
@@ -2734,7 +2529,7 @@ def main():
 
     constrain_population = False
 
-    run_nhb_efs = False
+    run_nhb_efs = True
     run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False

@@ -24,10 +24,14 @@ import numpy as np
 from typing import Any
 from typing import List
 from typing import Dict
+from typing import Tuple
+from typing import Union
 from typing import Iterable
+from typing import Iterator
 
 
 from tqdm import tqdm
+from itertools import product
 from collections import defaultdict
 
 
@@ -351,6 +355,11 @@ def get_growth_values(base_year_df: pd.DataFrame,
     if base_year_col in growth_df:
         growth_df = growth_df.drop(base_year_col, axis='columns')
 
+    # Avoid future year clashes
+    base_year_df = base_year_df.drop(future_year_cols,
+                                     axis='columns',
+                                     errors='ignore')
+
     # Merge on merge col
     growth_values = pd.merge(base_year_df,
                              growth_df,
@@ -547,7 +556,7 @@ def is_none_like(o) -> bool:
             return True
 
     if isinstance(o, list):
-        return is_none_like(o[0])
+        return all([is_none_like(x) for x in o])
 
     return False
 
@@ -636,37 +645,27 @@ def get_dist_name(trip_origin: str,
 
 def calib_params_to_dist_name(trip_origin: str,
                               matrix_format: str,
-                              calib_params: dict,
-                              csv: bool = False
+                              calib_params: Dict[str, int],
+                              csv: bool = False,
+                              suffix: str = None,
                               ) -> str:
     """
-        Wrapper for get_distribution_name() using calib params
+    Wrapper for get_distribution_name() using calib params
     """
     segment_str = 'soc' if calib_params['p'] in [1, 2] else 'ns'
 
-    if 'tp' in calib_params:
-        return get_dist_name(
-            trip_origin,
-            matrix_format,
-            str(calib_params.get('yr')),
-            str(calib_params.get('p')),
-            str(calib_params.get('m')),
-            str(calib_params.get(segment_str)),
-            str(calib_params.get('ca')),
-            tp=str(calib_params.get('tp')),
-            csv=csv
-        )
-    else:
-        return get_dist_name(
-            trip_origin,
-            matrix_format,
-            str(calib_params.get('yr')),
-            str(calib_params.get('p')),
-            str(calib_params.get('m')),
-            str(calib_params.get(segment_str)),
-            str(calib_params.get('ca')),
-            csv=csv
-        )
+    return get_dist_name(
+        trip_origin,
+        matrix_format,
+        str(calib_params.get('yr')),
+        str(calib_params.get('p')),
+        str(calib_params.get('m')),
+        str(calib_params.get(segment_str)),
+        str(calib_params.get('ca')),
+        tp=str(calib_params.get('tp')),
+        csv=csv,
+        suffix=suffix
+    )
 
 
 def get_dist_name_parts(dist_name: str) -> List[str]:
@@ -703,23 +702,28 @@ def get_dist_name_parts(dist_name: str) -> List[str]:
     ]
 
 
-def generate_calib_params(year: str,
-                          purpose: int,
-                          mode: int,
-                          segment: int,
-                          ca: int
+def generate_calib_params(year: str = None,
+                          purpose: int = None,
+                          mode: int = None,
+                          segment: int = None,
+                          ca: int = None,
+                          tp: int = None
                           ) -> dict:
     """
     Returns a TMS style calib_params dict
     """
+    # Purpose needs to be set if segment is
+    if segment is not None and purpose is None:
+        raise ValueError("If segment is set, purpose needs to be set too, "
+                         "otherwise segment text cannot be determined.")
+    # Init
     segment_str = 'soc' if purpose in [1, 2] else 'ns'
-    return {
-        'yr': year,
-        'p': purpose,
-        'm': mode,
-        segment_str: segment,
-        'ca': ca
-    }
+
+    keys = ['yr', 'p', 'm', segment_str, 'ca', 'tp']
+    vals = [year, purpose, mode, segment, ca, tp]
+
+    # Add params to dict if they are not None
+    return {k: v for k, v in zip(keys, vals) if v is not None}
 
 
 def starts_with(s: str, x: str) -> bool:
@@ -1006,7 +1010,9 @@ def segmentation_loop_generator(p_list: Iterable[int],
                                 soc_list: Iterable[int],
                                 ns_list: Iterable[int],
                                 ca_list: Iterable[int],
-                                tp_list: Iterable[int] = None):
+                                tp_list: Iterable[int] = None
+                                ) -> (Union[Iterator[Tuple[int, int, int, int, int]],
+                                            Iterator[Tuple[int, int, int, int]]]):
     """
     Simple generator to avoid the need for so many nested loops
     """
@@ -1041,12 +1047,44 @@ def segmentation_loop_generator(p_list: Iterable[int],
                             )
 
 
+def cp_segmentation_loop_generator(p_list: Iterable[int],
+                                   m_list: Iterable[int],
+                                   soc_list: Iterable[int],
+                                   ns_list: Iterable[int],
+                                   ca_list: Iterable[int],
+                                   tp_list: Iterable[int] = None
+                                   ) -> Iterator[Dict[str, int]]:
+    """
+    Wrapper for segmentation_loop_generator() to return TMS style
+    calib params instead of a number of integer
+    """
+    # Init
+    tp_list = [None] if tp_list is None else tp_list
+
+    loop_generator = segmentation_loop_generator(
+        p_list=p_list,
+        m_list=m_list,
+        soc_list=soc_list,
+        ns_list=ns_list,
+        ca_list=ca_list,
+        tp_list=tp_list
+    )
+
+    for p, m, seg, ca, tp in loop_generator:
+        yield generate_calib_params(
+            purpose=p,
+            mode=m,
+            segment=seg,
+            ca=ca,
+            tp=tp
+        )
+
+
 def long_to_wide_out(df: pd.DataFrame,
                      v_heading: str,
                      h_heading: str,
                      values: str,
                      out_path: str,
-                     echo=False,
                      unq_zones: List[str] = None
                      ) -> None:
     """
@@ -1089,19 +1127,17 @@ def long_to_wide_out(df: pd.DataFrame,
         unq_zones = df[v_heading].drop_duplicates().reset_index(drop=True).copy()
         unq_zones = list(range(1, max(unq_zones)+1))
 
-    # Convert to wide format and write to file
-    wide_mat = df_to_np(
+    # Make sure all unq_zones exists in v_heading and h_heading
+    df = ensure_multi_index(
         df=df,
-        values=values,
-        unq_internal_zones=unq_zones,
-        v_heading=v_heading,
-        h_heading=h_heading,
-        echo=echo
+        index_dict={v_heading: unq_zones, h_heading: unq_zones},
     )
-    pd.DataFrame(
-        wide_mat,
-        index=unq_zones,
-        columns=unq_zones
+
+    # Convert to wide format and output
+    df.pivot(
+        index=v_heading,
+        columns=h_heading,
+        values=values
     ).to_csv(out_path)
 
 
@@ -1506,6 +1542,109 @@ def defaultdict_to_regular(d):
     return d
 
 
+def fit_filter(df: pd.DataFrame,
+               df_filter: Dict[str, Any],
+               raise_error: bool = False
+               ) -> Dict[str, Any]:
+    """
+    Whittles down filter to only include relevant items
+
+    Any columns that do not exits in the dataframe will be removed from the
+    filter; optionally raises an error if a filter column is not in the given
+    dataframe. Furthermore, any items that are 'none like' as determined by
+    is_none_like() will also be removed.
+
+    Parameters
+    ----------
+    df:
+        The dataframe that the filter is to be applied to.
+
+    df_filter:
+        The filter dictionary in the format of {df_col_name: filter_values}
+
+    raise_error:
+        Whether to raise an error or not when a df_col_name does not exist in
+        the given dataframe.
+
+    Returns
+    -------
+    fitted_filter:
+        A filter with non-relevant (as defined in the function description)
+        items removed.
+    """
+    # Init
+    fitted_filter = dict()
+    df = df.copy()
+    df.columns = df.columns.astype(str)
+
+    # Check each item in the given filter
+    for col, vals in df_filter.items():
+
+        # Check the column exists
+        if col not in df.columns:
+            if raise_error:
+                raise KeyError("'%s' Column not found in given dataframe"
+                               % str(col))
+            else:
+                continue
+
+        # Check the given value isn't None
+        if is_none_like(vals):
+            continue
+
+        # Should only get here for valid combinations
+        fitted_filter[col] = vals
+
+    return fitted_filter
+
+
+def filter_by_segmentation(df: pd.DataFrame,
+                           df_filter: Dict[str, Any],
+                           fit: bool = False,
+                           **kwargs
+                           ) -> pd.DataFrame:
+    """
+    Filters a dataframe down to a given segmentation
+
+    Can handle flexible segmentation if fit is set to True - all unnecessary
+    columns will be removed, and any 'None like' filters will be removed. This
+    follows the convention of settings segmentation splits to None when it
+    is not needed.
+
+    Parameters
+    ----------
+    df:
+        The dataframe that the filter is to be applied to.
+
+    df_filter:
+        The filter dictionary in the format of {df_col_name: filter_values}.
+
+    fit:
+        Whether to try and fit the given filter to the dataframe before
+        application. If using flexible segmentation and filter has not already
+        been fit, set to True.
+
+    kwargs:
+        Any additional kwargs that should be passed to fit_filter() if fit is
+        set to True.
+    Returns
+    -------
+    filtered_df:
+        The original dataframe given, segmented to the given filter level.
+    """
+    # Init
+    df = df.copy()
+
+    if fit:
+        df_filter = fit_filter(df, df_filter.copy(), **kwargs)
+
+    # Figure out the correct mask
+    needed_cols = list(df_filter.keys())
+    mask = df[needed_cols].isin(df_filter).all(axis='columns')
+
+    return df[mask]
+
+
 def intersection(l1: List[Any],
                  l2: List[Any],
                  ) -> List[Any]:
@@ -1524,13 +1663,127 @@ def intersection(l1: List[Any],
     temp = set(big)
     return [x for x in small if x in temp]
 
+
+def ensure_index(df: pd.DataFrame,
+                 index: List[Any],
+                 index_col: str,
+                 infill: float = 0.0
+                 ) -> pd.DataFrame:
+    """
+    Ensures every value in index exists in index_col of df.
+    Missing values are infilled with infill
+    """
+    # Make a dataframe with just the new index
+    ph = pd.DataFrame({index_col: index})
+
+    # Merge with the given and infill missing
+    return ph.merge(df, how='left', on=index_col).fillna(infill)
+
+
+def ensure_multi_index(df: pd.DataFrame,
+                       index_dict: Dict[str, List[Any]],
+                       infill: float = 0.0
+                       ) -> pd.DataFrame:
+    """
+    Ensures every combination of values in index_list exists in df.
+
+    This function is useful to ensure a conversion from long to wide will
+    happen correctly
+
+    Parameters
+    ----------
+    df:
+        The dataframe to alter.
+
+    index_dict:
+        A dictionary of {column_name: index_vals} to ensure exist in all
+        combinations within df.
+
+    infill:
+        Value to infill any other columns of df where the given indexes
+        don't exist.
+
+    Returns
+    -------
+    df:
+        The given df given with all combinations of the index dict values
+    """
+    # Create a new placeholder df with every combination of the unique columns
+    all_combos = zip(*product(*index_dict.values()))
+    ph = {col: vals for col, vals in zip(index_dict.keys(), all_combos)}
+    ph = pd.DataFrame(ph)
+
+    # Merge with the given and infill missing
+    merge_cols = list(index_dict.keys())
+    return ph.merge(df, how='left', on=merge_cols).fillna(infill)
+
+
+def match_pa_zones(productions: pd.DataFrame,
+                   attractions: pd.DataFrame,
+                   unique_zones: List[Any],
+                   zone_col: str = 'model_zone_id',
+                   infill: float = 0.0,
+                   set_index: bool = False
+                   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Makes sure all unique zones exist in productions and attractions
+
+    Any missing zones will be infilled with infill,
+
+    Parameters
+    ----------
+    productions:
+        Dataframe containing the productions data - must have a zone_col
+
+    attractions:
+        Dataframe containing the productions data - must have a zone_col
+
+    unique_zones:
+        List of the desired zones to have in productions and attractions
+
+    zone_col:
+        Column in productions and attractions that contains the zone data.
+
+    infill:
+        Value to infill missing rows with in productions and attractions when
+        new zone may be added in.
+
+    set_index:
+        Whether to set the zone_col as the index before returning or not.
+
+    Returns
+    -------
+    (productions, attractions):
+        The provided productions and attractions with all zones from
+        unique_zones either as the index, or in zone_col
+    """
+    # Match productions and attractions
+    productions = ensure_index(
+        df=productions,
+        index=unique_zones,
+        index_col=zone_col,
+        infill=infill
+    )
+
+    attractions = ensure_index(
+        df=attractions,
+        index=unique_zones,
+        index_col=zone_col,
+        infill=infill
+    )
+
+    if set_index:
+        productions = productions.set_index(zone_col)
+        attractions = attractions.set_index(zone_col)
+
+    return productions, attractions
+
+
 def get_costs(model_lookup_path,
               calib_params,
-              tp = '24hr',
-              iz_infill = 0.5):
-
-    # units takes different parameters
-    # TODO: Needs a config guide for the costs somewhere
+              tp='24hr',
+              iz_infill = 0.5
+              ):
     """
     This function imports distances or costs from a given path.
 
@@ -1551,16 +1804,17 @@ def get_costs(model_lookup_path,
     car_available = None:
         Takes None, True, False
 
-    seed_intrazonal = True:
-        Takes True or False - whether to add a value half the minimum
-        interzonal value to the intrazonal cells. Currently needed for distance
-        but not cost.
+    iz_infill = 0.5:
+        Currently needed for distance but not cost. Add a value of iz_infill *
+        the minimum inter-zonal value to the intra-zonal cells.
 
-    Returns:
+    Returns
     ----------
     dat:
         DataFrame containing required cost or distance values.
     """
+    # units takes different parameters
+    # TODO: Needs a config guide for the costs somewhere
     # TODO: Adapt model input costs to take time periods
     # TODO: The name cost_cols is misleading
     file_sys = os.listdir(os.path.join(model_lookup_path, 'costs'))
@@ -1634,35 +1888,32 @@ def get_costs(model_lookup_path,
     if iz_infill is not None:
         dat = dat.copy()
         min_inter_dat = dat[dat[cols[2]]>0]
-        # Derive minimum intrazonal
+        # Derive minimum intra-zonal
         min_inter_dat = min_inter_dat.groupby(
                 cols[0]).min().reset_index().drop(cols[1],axis=1)
         intra_dat = min_inter_dat.copy()
         intra_dat[cols[2]] = intra_dat[cols[2]]*iz_infill
         iz = dat[dat[cols[0]] == dat[cols[1]]]
         non_iz = dat[dat[cols[0]] != dat[cols[1]]]
-        iz = iz.drop(cols[2],axis=1)
+        iz = iz.drop(cols[2], axis=1)
         # Rejoin
         iz = iz.merge(intra_dat, how='inner', on=cols[0])
-        dat = pd.concat([iz, non_iz],axis=0,sort=True).reset_index(drop=True)
+        dat = pd.concat([iz, non_iz], axis=0, sort=True).reset_index(drop=True)
 
-    return(dat, cost_return_name)
+    return dat, cost_return_name
+
 
 def get_trip_length_bands(import_folder,
                           calib_params,
                           segmentation,
                           trip_origin,
                           replace_nan=False,
-                          echo=True): # 'hb' or 'nhb'
-
+                          echo=True):
     # TODO: Overwrite the segmentation parameter, sorry Ben
     """
     Function to check a folder for trip length band parameters.
     Returns a subset.
     """
-    # Append name of tlb area
-
-
     # Index folder
     target_files = os.listdir(import_folder)
     # Define file contents, should just be target files - should fix.
@@ -1673,7 +1924,7 @@ def get_trip_length_bands(import_folder,
         for key, value in calib_params.items():
             # Don't want empty segments, don't want ca
             if value != 'none' and key != 'ca':
-                 # print_w_toggle(key + str(value), echo=echo)
+                # print_w_toggle(key + str(value), echo=echo)
                 import_files = [x for x in import_files if
                                 ('_' + key + str(value)) in x]
     elif segmentation == 'tfn':
@@ -1710,13 +1961,13 @@ def get_trip_length_bands(import_folder,
 
     return tlb
 
+
 def parse_mat_output(list_dir,
-                     sep = '_',
-                     mat_type = 'dat',
-                     file_format = '.csv',
-                     file_name = 'file'):
+                     sep='_',
+                     mat_type='dat',
+                     file_format='.csv',
+                     file_name='file'):
     """
-    
     """
     # Get target file format only
     unq_files = [x for x in list_dir if file_format in x]
@@ -1733,7 +1984,8 @@ def parse_mat_output(list_dir,
                 name = 'trip_origin'
                 dat = item
             elif item == mat_type:
-                pass
+                name = ''
+                dat = ''
             else:
                 name = ''
                 dat = ''
@@ -1746,83 +1998,11 @@ def parse_mat_output(list_dir,
             # Return None not nan
             if len(dat) == 0:
                 dat = 'none'
-            split_dict.update({name:dat})
+            split_dict.update({name: dat})
         split_list.append(split_dict)           
 
     segments = pd.DataFrame(split_list)
     segments = segments.replace({np.nan:'none'})
 
-    return(segments)
+    return segments
 
-def df_to_np(df,
-             values,
-             unq_internal_zones,
-             v_heading,
-             h_heading=None,
-             echo=True):
-    """
-    df: A Dataframe
-
-    v_heading: heading to use as row index
-
-    h_heading: heading to use as column index
-
-    unq_internal_zones: unq zones to use as placeholder
-
-    echo = True:
-        Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops
-    """
-    df = df.copy()
-
-    placeholder = pd.DataFrame(unq_internal_zones).copy()
-    col_name = list(placeholder)[0]
-
-    if h_heading is None:
-        full_placeholder = placeholder.merge(df,
-                                             how='left',
-                                             on=[v_heading])
-        # Replace NAs with zeroes
-        full_placeholder[values] = full_placeholder[values].fillna(0)
-
-        array = full_placeholder[values].copy().values
-
-    else:
-        # Build placeholders
-        ph_v = placeholder.copy()
-        ph_v = ph_v.rename(columns={col_name: v_heading})
-        ph_v['ph'] = 0
-        ph_h = placeholder.copy()
-        ph_h = ph_h.rename(columns={col_name: h_heading})
-        ph_h['ph'] = 0
-
-        # Join placeholders
-        placeholder = ph_v.merge(ph_h,
-                                 how='left',
-                                 on='ph')
-        placeholder = placeholder.drop(['ph'], axis=1)
-
-        # Merge df onto placeholder
-        full_placeholder = placeholder.merge(df,
-                                             how='left',
-                                             on=[h_heading, v_heading])
-
-        # Replace NAs with zeroes
-        full_placeholder[values] = full_placeholder[values].fillna(0)
-
-        # Pivot to array
-        # TODO: u - test
-        array = full_placeholder.sort_values([
-            v_heading,
-            h_heading
-        ]).pivot(
-            index=v_heading,
-            columns=h_heading,
-            values=values
-        ).values
-
-    # Array len should be same as length of unq values
-    if echo and len(array) == len(unq_internal_zones):
-        print('Matrix length=%d. Matches input constraint.' % (len(array)))
-
-    return array
