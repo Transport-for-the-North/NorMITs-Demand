@@ -422,7 +422,7 @@ def distribute_pa(productions: pd.DataFrame,
     if 'ns' in list(productions):
         productions['ns'] = productions['ns'].astype(str)
 
-    # ENSURE SEGMENATION GIVEN EXISTS?
+    # TODO: Ensure given segmentation exists
 
     # Get P/A columns
     p_cols = list(productions.columns)

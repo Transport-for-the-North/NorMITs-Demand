@@ -400,6 +400,10 @@ def _build_od_internal(pa_import,
     model_name = du.get_model_name(mode)
     model_zone_col = model_name + '_zone_id'
 
+    # Print out some info
+    dist_name = du.calib_params_to_dist_name('hb', 'od', calib_params)
+    print("Generating %s..." % dist_name)
+
     # Get appropriate phis and filter
     phi_factors = get_time_period_splits(
         mode,
@@ -523,6 +527,7 @@ def _build_od_internal(pa_import,
         output_to_path = os.path.join(od_export, output_to_name)
         output_od_path = os.path.join(od_export, output_od_name)
 
+        # TODO: Add tidality checks into efs_build_od()
         # Auditing checks - tidality
         # OD from = PA
         # OD to = if it leaves it should come back
@@ -534,55 +539,70 @@ def _build_od_internal(pa_import,
 
         matrix_totals.append([output_name, from_total, to_total])
 
-    dist_name = du.calib_params_to_dist_name('hb', 'od', calib_params)
-    print("INFO: OD Matrices for %s written to file." % dist_name)
     return matrix_totals
 
 
 def efs_build_od(pa_import,
                  od_export,
-                 required_purposes,
-                 required_modes,
-                 required_soc,
-                 required_ns,
-                 required_car_availabilities,
-                 year_string_list,
+                 p_needed,
+                 m_needed,
+                 soc_needed,
+                 ns_needed,
+                 ca_needed,
+                 years_needed,
                  phi_lookup_folder=None,
                  phi_type='fhp_tp',
                  aggregate_to_wday=True,
-                 echo=True):
+                 echo=True,
+                 process_count: int = -2
+                 ):
     """
-    This function imports time period split factors from a given path.W
+    This function imports time period split factors from a given path.
+    TODO: write efs_build_od() docs
     """
     # Init
     if phi_lookup_folder is None:
         phi_lookup_folder = 'Y:/NorMITs Demand/import/phi_factors'
 
-    # For every: Year, purpose, mode, segment, ca
-    matrix_totals = list()
-    for year in year_string_list:
-        for purpose in required_purposes:
-            required_segments = required_soc if purpose in [1, 2] else required_ns
-            for mode in required_modes:
-                for segment in required_segments:
-                    for ca in required_car_availabilities:
-                        calib_params = du.generate_calib_params(
-                            year,
-                            purpose,
-                            mode,
-                            segment,
-                            ca
-                        )
-                        segmented_matrix_totals = _build_od_internal(
-                            pa_import,
-                            od_export,
-                            calib_params,
-                            phi_lookup_folder,
-                            phi_type,
-                            aggregate_to_wday,
-                            echo=echo)
-                        matrix_totals += segmented_matrix_totals
-    return matrix_totals
+    # ## MULTIPROCESS ## #
+    unchanging_kwargs = {
+       'pa_import': pa_import,
+       'od_export': od_export,
+       'phi_lookup_folder': phi_lookup_folder,
+       'phi_type': phi_type,
+       'aggregate_to_wday': aggregate_to_wday,
+       'echo': echo
+    }
+
+    # Build a list of the changing arguments
+    kwargs_list = list()
+    for year in years_needed:
+        loop_generator = du.cp_segmentation_loop_generator(
+            p_needed,
+            m_needed,
+            soc_needed,
+            ns_needed,
+            ca_needed
+        )
+
+        for calib_params in loop_generator:
+            calib_params['yr'] = year
+            kwargs = unchanging_kwargs.copy()
+            kwargs.update({
+                'calib_params': calib_params,
+            })
+            kwargs_list.append(kwargs)
+
+    # Multiprocess - split by time period and write to disk
+    matrix_totals = conc.multiprocess(
+        _build_od_internal,
+        kwargs=kwargs_list,
+        process_count=process_count,
+        in_order=True
+    )
+
+    # Make sure individual process outputs are concatenated together
+    return [y for x in matrix_totals for y in x]
 
 
 def maybe_get_aggregated_tour_proportions(orig: int,
@@ -825,7 +845,7 @@ def build_od_from_tour_proportions(pa_import: str,
                                    ns_needed: List[int] = None,
                                    ca_needed: List[int] = None,
                                    tp_needed: List[int] = consts.TIME_PERIODS,
-                                   process_count: int = os.cpu_count() - 1
+                                   process_count: int = os.cpu_count() - 2
                                    ) -> None:
     """
     Builds future year OD matrices based on the base year tour proportions

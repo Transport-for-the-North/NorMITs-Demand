@@ -1146,18 +1146,12 @@ class ExternalForecastSystem:
         # TODO: Check if od matrices exist first
         if overwrite_hb_tp_od:
             print('Converting time period split PA to OD...')
-            pa2od.efs_build_od(
-                pa_import=exports['pa'],
-                od_export=exports['od'],
-                required_purposes=purposes_needed,
-                required_modes=modes_needed,
-                required_soc=soc_needed,
-                required_ns=ns_needed,
-                required_car_availabilities=ca_needed,
-                year_string_list=years_needed,
-                phi_type='fhp_tp',
-                aggregate_to_wday=True,
-                echo=echo)
+            pa2od.efs_build_od(pa_import=exports['pa'], od_export=exports['od'],
+                               p_needed=purposes_needed, m_needed=modes_needed,
+                               soc_needed=soc_needed, ns_needed=ns_needed,
+                               ca_needed=ca_needed, years_needed=years_needed,
+                               phi_type='fhp_tp', aggregate_to_wday=True,
+                               echo=echo)
             print('HB OD matrices compiled!\n')
             # TODO: Create 24hr OD for HB
 
@@ -2387,7 +2381,7 @@ def main():
     echo = False
 
     # Running control
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = True
     recreate_attractions = True
 
@@ -2436,10 +2430,12 @@ def main():
         efs.pa_to_od(
             output_location=output_location,
             iter_num=iter_num,
-            overwrite_hb_tp_pa=True,
+            overwrite_hb_tp_pa=False,
             overwrite_hb_tp_od=True,
             echo=echo
         )
+
+        exit()
 
         # Generate NHB PA/OD matrices
         efs.run_nhb(
