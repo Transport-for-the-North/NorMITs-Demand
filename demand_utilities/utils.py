@@ -1554,3 +1554,45 @@ def file_write_check(path: Union[str, Path], wait: bool=True) -> Path:
                 count += 1
                 if count > 100:
                     raise ValueError('Too many files in use!')
+
+
+def safe_dataframe_to_csv(df, out_path, flatten_header=False, **to_csv_kwargs):
+    """
+    Wrapper around df.to_csv. Gives the user a chance to close the open file.
+
+    Parameters
+    ----------
+    df:
+        pandas.DataFrame to write to call to_csv on
+
+    out_path:
+        Where to write the file to. TO first argument to df.to_csv()
+
+    flatten_header: bool, optional
+        Whether or not MultiIndex column names should be flattened into a single level,
+        default False.
+
+    to_csv_kwargs:
+        Any other kwargs to be passed straight to df.to_csv()
+
+    Returns
+    -------
+        None
+    """
+    if flatten_header and len(df.columns.names) > 1:
+        # Combine multple columns levels into a single name split by ':'
+        df.columns = [' : '.join(str(i) for i in c) for c in df.columns]
+
+    written_to_file = False
+    waiting = False
+    while not written_to_file:
+        try:
+            df.to_csv(out_path, **to_csv_kwargs)
+            written_to_file = True
+        except PermissionError:
+            if not waiting:
+                print("Cannot write to file at %s.\n" % out_path +
+                      "Please ensure it is not open anywhere.\n" +
+                      "Waiting for permission to write...\n")
+                waiting = True
+            time.sleep(1)

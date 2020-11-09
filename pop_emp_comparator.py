@@ -337,7 +337,7 @@ class PopEmpComparator:
             for nm, df in zip(names, dataframes):
                 # Write to csv if df too large for excel sheet, or csv output type selected
                 if output_as == 'csv' or len(df) > EXCEL_MAX[0] or len(df.columns) > EXCEL_MAX[1]:
-                    du.safe_dataframe_to_csv(df, self.output_dir / f'{nm}.csv')
+                    du.safe_dataframe_to_csv(df, self.output_dir / f'{nm}.csv', flatten_header=True)
                 else: # Save to dict ready to write to spreadsheet
                     outputs[nm] = df
 
@@ -399,7 +399,7 @@ def test():
                                 import_loc / future_population_ratio_file,
                                 output_loc / population_output_file,
                                 'population', BASE_YEAR)
-    pop_comp.write_comparisons()
+    pop_comp.write_comparisons(output_as='csv')
     # Compare the employment inputs and outputs
     emp_comp = PopEmpComparator(import_loc / worker_value_file,
                                 import_loc / worker_growth_file,
@@ -407,7 +407,7 @@ def test():
                                 import_loc / worker_ratio_file,
                                 output_loc / worker_output_file,
                                 'employment', BASE_YEAR)
-    emp_comp.write_comparisons()
+    emp_comp.write_comparisons(output_as='csv')
     return
 
 
