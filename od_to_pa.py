@@ -10,11 +10,14 @@ import efs_constants as consts
 import demand_utilities.utils as du
 import demand_utilities.vehicle_occupancy as vo
 
+from audits import AuditError
+
 
 def decompile_od(od_import: str,
                  od_export: str,
                  year: int,
                  decompile_factors_path: str,
+                 seg_level: str = 'dist',
                  audit: bool = False,
                  audit_tol: float = 0.001
                  ) -> None:
@@ -36,10 +39,28 @@ def decompile_od(od_import: str,
     decompile_factors_path:
         Full path to the pickle file containing the decompile factors to use.
 
+    seg_level:
+        The level of segmentation to decompile to. If segmentation is higher
+        than distribution then conversion will be done via distribution
+        segmentation.
+
+    audit:
+        Whether to perform audits to make sure the decompiled matrices are
+        sufficiently similar to the compiled matrices when reversing the
+        process.
+
+    audit_tol:
+        The tolerance to apply when auditing. If the total absolute difference
+        between the original and audit matrices is greater than this value, an
+        error will be thrown.
+
     Returns
     -------
     None
     """
+    # Validate input
+    seg_level = du.validate_seg_level(seg_level)
+    
     # Load the factors
     decompile_factors = pd.read_pickle(decompile_factors_path)
 
@@ -110,12 +131,22 @@ def decompile_od(od_import: str,
             abs_diff = np.absolute((mats_sum - comp_mat).values).sum()
 
             if abs_diff > audit_tol:
-                raise ValueError(
+                raise AuditError(
                     "While decompiling matrices from %s, the absolute "
                     "difference between the original and decompiled matrices "
                     "exceeded the tolerance. Tolerance: %s, Absolute "
                     "Difference: %s"
                     % (in_mat_name, str(audit_tol), str(abs_diff)))
+
+    if seg_level == 'dist':
+        # Already here
+        return
+    elif seg_level == 'vdm':
+        # Compile up to VDM level
+        pass
+    else:
+        raise NotImplementedError("Cannot decompile OD matrices to %s level "
+                                  "of segmentation" % seg_level)
 
 
 def _convert_to_efs_matrices_user_class(import_path: str,

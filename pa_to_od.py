@@ -542,23 +542,46 @@ def _build_od_internal(pa_import,
     return matrix_totals
 
 
-def efs_build_od(pa_import,
-                 od_export,
-                 p_needed,
-                 m_needed,
-                 soc_needed,
-                 ns_needed,
-                 ca_needed,
-                 years_needed,
-                 phi_lookup_folder=None,
-                 phi_type='fhp_tp',
-                 aggregate_to_wday=True,
-                 echo=True,
+def efs_build_od(pa_import: str,
+                 od_export: str,
+                 p_needed: List[int],
+                 m_needed: List[int],
+                 soc_needed: List[int],
+                 ns_needed: List[int],
+                 ca_needed: List[int],
+                 years_needed: List[int],
+                 phi_lookup_folder: str = None,
+                 phi_type: str = 'fhp_tp',
+                 aggregate_to_wday: bool = True,
+                 echo: bool = True,
                  process_count: int = -2
-                 ):
+                 ) -> None:
     """
-    This function imports time period split factors from a given path.
+     This function imports time period split factors from a given path.
     TODO: write efs_build_od() docs
+
+    Parameters
+    ----------
+    pa_import
+    od_export
+    p_needed
+    m_needed
+    soc_needed
+    ns_needed
+    ca_needed
+    years_needed
+    phi_lookup_folder
+    phi_type
+    aggregate_to_wday
+    echo
+    process_count:
+        The number of processes to use when multiprocessing. Set to 0 to not
+        use multiprocessing at all. Set to -1 to use all expect 1 available
+        CPU.
+
+    Returns
+    -------
+    None
     """
     # Init
     if phi_lookup_folder is None:

@@ -38,6 +38,7 @@ def main():
     m_needed = [3]
     process_count = 5
     p_needed = consts.ALL_HB_P
+    seg_level = 'distribution'
 
     # Audit as we go
     audit_tol = 0.001
@@ -65,6 +66,7 @@ def main():
             od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
             od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
             decompile_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params/od_compilation_factors.pickle',
+            seg_level=seg_level,
             year=consts.BASE_YEAR,
             audit_tol=audit_tol
         )

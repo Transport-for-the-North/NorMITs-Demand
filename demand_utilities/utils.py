@@ -43,6 +43,45 @@ from old_tms.utils import *
 # TODO: Utils is getting big. Refactor into smaller, more specific modules
 
 
+class NormitsDemandError(Exception):
+    """
+    Base Exception for all custom NotMITS demand errors
+    """
+
+    def __init__(self, message=None):
+        self.message = message
+        super().__init__(self.message)
+
+
+def validate_seg_level(seg_level: str) -> str:
+    """
+    Tidies up seg_level and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    seg_level:
+        The name of the segmentation level to validate
+
+    Returns
+    -------
+    seg_level:
+        seg_level with both strip and lower applied to remove any whitespace
+        and make it all lowercase
+
+    Raises
+    -------
+    ValueError:
+        If seg_level is not a valid name for a level of segmentation
+    """
+    # Init
+    seg_level = seg_level.strip().lower()
+
+    if seg_level not in consts.SEG_LEVELS:
+        raise ValueError("%s is not a valid name for a level of segmentation"
+                         % seg_level)
+    return seg_level
+
+
 def grow_to_future_years(base_year_df: pd.DataFrame,
                          growth_df: pd.DataFrame,
                          base_year: str,
@@ -810,7 +849,7 @@ def fname_to_calib_params(fname: str,
                           get_matrix_format: bool = False,
                           get_user_class: bool = False,
                           force_ca_exists: bool = False,
-                          ) -> Dict[str, str]:
+                          ) -> Dict[str, Union[str, int]]:
     """
     Convert the filename into a calib_params dict, with the following keys
     (if they exist in the filename):
@@ -1108,9 +1147,6 @@ def long_to_wide_out(df: pd.DataFrame,
     out_path:
         Where to write the converted matrix.
 
-    echo:
-        Indicates whether to print a log of the process to the terminal.
-
     unq_zones:
         A list of all the zone names that should exist in the output matrix.
         If zones in this list are not in the given df, they are infilled with
@@ -1139,6 +1175,25 @@ def long_to_wide_out(df: pd.DataFrame,
         columns=h_heading,
         values=values
     ).to_csv(out_path)
+
+
+def wide_to_long_out(df: pd.DataFrame,
+                     id_vars: str,
+                     var_name: str,
+                     value_name: str,
+                     out_path: str
+                     ) -> None:
+    # TODO: Write wide_to_long_out() docs
+    # This way we can avoid the name of the first col
+    df = df.melt(
+        id_vars=df.columns[:1],
+        var_name=var_name,
+        value_name=value_name
+    )
+    id_vars = id_vars[0] if isinstance(id_vars, list) else id_vars
+    df.columns.values[0] = id_vars
+
+    df.to_csv(out_path, index=False)
 
 
 def get_compile_params_name(matrix_format: str, year: str) -> str:
