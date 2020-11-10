@@ -33,6 +33,7 @@ import efs_constrainer as constrainer
 
 from efs_constrainer import ForecastConstrainer
 from zone_translator import ZoneTranslator
+from pop_emp_comparator import PopEmpComparator
 
 from demand_utilities import utils as du
 from demand_utilities.sector_reporter_v2 import SectorReporter
@@ -207,6 +208,18 @@ class ExternalForecastSystem:
         # support utilities tools
         self.sector_reporter = SectorReporter()
         self.zone_translator = ZoneTranslator()
+
+        # Initialise parameters for population and employment comparisons
+        self.pop_emp_inputs = {
+            'population': {'input_csv': os.path.join(input_dir, population_value_file),
+                           'growth_csv': os.path.join(input_dir, population_growth_file),
+                           'constraint_csv': os.path.join(input_dir, population_constraint_file),
+                           'ratio_csv': os.path.join(input_dir, future_population_ratio_file)},
+            'employment': {'input_csv': os.path.join(input_dir, worker_value_file),
+                           'growth_csv': os.path.join(input_dir, worker_growth_file),
+                           'constraint_csv': os.path.join(input_dir, worker_constraint_file),
+                           'ratio_csv': os.path.join(input_dir, worker_ratio_file)}
+            }
 
         print("External Forecast System initiated!")
         last_time = current_time
@@ -808,6 +821,14 @@ class ExternalForecastSystem:
             population_metric=population_metric,
         )
         print("Productions generated!")
+        # Compare productions output to inputs
+        comparison = PopEmpComparator(
+            **self.pop_emp_inputs['population'],
+            output_csv=os.path.join(exports['productions'], 'MSOA_population.csv'),
+            data_type='population', base_year=str(base_year)
+            )
+        comparison.write_comparisons()
+
         last_time = current_time
         current_time = time.time()
         print("Production generation took: %.2f seconds" %
@@ -837,6 +858,14 @@ class ExternalForecastSystem:
         )
 
         print("Attractions generated!")
+        # Compare attractions output to inputs
+        comparison = PopEmpComparator(
+            **self.pop_emp_inputs['employment'],
+            output_csv=os.path.join(exports['productions'], 'MSOA_workers.csv'),
+            data_type='employment', base_year=str(base_year)
+            )
+        comparison.write_comparisons()
+
         last_time = current_time
         current_time = time.time()
         print("Employment and Attraction generation took: %.2f seconds" %
