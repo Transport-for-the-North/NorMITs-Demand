@@ -62,6 +62,8 @@ class ExternalForecastSystem:
     column_dictionary = consts.EFS_COLUMN_DICTIONARY
 
     def __init__(self,
+                 model_name: str,
+
                  population_value_file: str = "population/base_population_2018.csv",
                  population_growth_file: str = "population/future_population_growth.csv",
                  population_constraint_file: str = "population/future_population_values.csv",
@@ -99,6 +101,7 @@ class ExternalForecastSystem:
         """
         #TODO
         """
+        self.model_name = model_name
         self.use_zone_id_subset = use_zone_id_subset
         self.output_location = output_location
         self.import_location = import_location
@@ -226,7 +229,6 @@ class ExternalForecastSystem:
             alt_worker_growth_assumption_file: str = None,
             alt_pop_split_file: str = None,  # THIS ISN'T USED ANYWHERE
             distribution_method: str = "Furness",
-            distributions: dict = consts.EFS_RUN_DISTRIBUTIONS_DICT,
             purposes_needed: List[int] = consts.PURPOSES_NEEDED,
             modes_needed: List[int] = consts.MODES_NEEDED,
             soc_needed: List[int] = consts.SOC_NEEDED,
@@ -499,7 +501,6 @@ class ExternalForecastSystem:
         minimum_development_certainty = minimum_development_certainty.upper()
         integrate_dlog = dlog_split_file is not None and dlog_file is not None
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(modes_needed[0])
 
         year_list = [str(x) for x in [base_year] + future_years]
 
@@ -508,9 +509,10 @@ class ExternalForecastSystem:
         mode_needed = modes_needed[0]
 
         # ## PREPARE OUTPUTS ## #
+        # TODO: Generate output paths when EFS is initialised
         print("Initialising outputs...")
         imports, exports, _ = self.generate_output_paths(output_location,
-                                                         model_name,
+                                                         self.model_name,
                                                          iter_name)
 
         write_input_info(
@@ -1097,13 +1099,12 @@ class ExternalForecastSystem:
         if output_location is None:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(modes_needed[0])
         _input_checks(iter_num=iter_num, m_needed=modes_needed)
 
         # Generate paths
         imports, exports, _ = self.generate_output_paths(
             output_location=output_location,
-            model_name=model_name,
+            model_name=self.model_name,
             iter_name=iter_name
         )
         # TODO: Add time print outs
@@ -1213,13 +1214,12 @@ class ExternalForecastSystem:
         if output_location is None:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(modes_needed[0])
         _input_checks(iter_num=iter_num, m_needed=modes_needed)
 
         # Generate paths
         imports, exports, _ = self.generate_output_paths(
             output_location=output_location,
-            model_name=model_name,
+            model_name=self.model_name,
             iter_name=iter_name
         )
 
@@ -1336,21 +1336,21 @@ class ExternalForecastSystem:
         if output_location is None:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(m_needed[0])
         _input_checks(iter_num=iter_num, m_needed=m_needed)
 
-        if model_name == 'norms':
+        if self.model_name == 'norms' or self.model_name == 'norms_2015':
             ca_needed = consts.CA_NEEDED
-        elif model_name == 'noham':
+        elif self.model_name == 'noham':
             ca_needed = [None]
         else:
             raise ValueError("Got an unexpected model name. Got %s, expected "
-                             "either 'norms' or 'noham'." % str(model_name))
+                             "either 'norms', 'norms_2015' or 'noham'."
+                             % str(self.model_name))
 
         # Generate paths
         imports, exports, params = self.generate_output_paths(
             output_location=output_location,
-            model_name=model_name,
+            model_name=self.model_name,
             iter_name=iter_name
         )
 
@@ -1456,25 +1456,27 @@ class ExternalForecastSystem:
         if output_location is None:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(m_needed[0])
         _input_checks(iter_num=iter_num, m_needed=m_needed)
 
-        if model_name == 'norms':
+        if self.model_name == 'norms' or self.model_name == 'norms_2015':
             ca_needed = consts.CA_NEEDED
             from_pcu = False
-        elif model_name == 'noham':
+        elif self.model_name == 'noham':
             ca_needed = [None]
             from_pcu = True
         else:
             raise ValueError("Got an unexpected model name. Got %s, expected "
-                             "either 'norms' or 'noham'." % str(model_name))
+                             "either 'norms', 'norms_2015' or 'noham'."
+                             % str(self.model_name))
 
         # Generate paths
         imports, exports, params = self.generate_output_paths(
             output_location=output_location,
-            model_name=model_name,
+            model_name=self.model_name,
             iter_name=iter_name
         )
+
+        # TODO: Fix OD2PA to use norms_2015/norms for zone names
 
         if overwrite_decompiled_od:
             print("Decompiling OD Matrices into purposes...")
@@ -1490,7 +1492,7 @@ class ExternalForecastSystem:
                     year=year,
                     user_class=True,
                     to_wide=True,
-                    wide_col_name=model_name + '_zone_id',
+                    wide_col_name=du.get_model_name(m_needed[0]) + '_zone_id',
                     from_pcu=from_pcu,
                     vehicle_occupancy_import=imports['home']
                 )
@@ -1576,21 +1578,21 @@ class ExternalForecastSystem:
         if output_location is None:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(m_needed[0])
         _input_checks(iter_num=iter_num, m_needed=m_needed)
 
-        if model_name == 'norms':
+        if self.model_name == 'norms' or self.model_name == 'norms_2015':
             ca_needed = consts.CA_NEEDED
-        elif model_name == 'noham':
+        elif self.model_name == 'noham':
             ca_needed = [None]
         else:
             raise ValueError("Got an unexpected model name. Got %s, expected "
-                             "either 'norms' or 'noham'." % str(model_name))
+                             "either 'norms', 'norms_2015' or 'noham'."
+                             % str(self.model_name))
 
         # Generate paths
         imports, exports, params = self.generate_output_paths(
             output_location=output_location,
-            model_name=model_name,
+            model_name=self.model_name,
             iter_name=iter_name
         )
 
@@ -2085,10 +2087,11 @@ class ExternalForecastSystem:
         # ## IMPORT PATHS ## #
         # Attraction weights are a bit special, we get these directly from
         # TMS to ensure they are the same - update this on integration
+        temp_model_name = 'norms' if model_name == 'norms_2015' else model_name
         tms_path_parts = [
             import_location,
             "NorMITs Synthesiser",
-            model_name,
+            temp_model_name,
             "Model Zone Lookups",
             "attraction_weights.csv"
         ]
@@ -2538,6 +2541,7 @@ def main():
     iter_num = 0
     import_location = "Y:/"
     output_location = "E:/"
+    model_name = 'norms_2015'   # Make sure the correct mode is being used!!!
 
     # Set up constraints
     if constrain_population:
@@ -2547,6 +2551,7 @@ def main():
 
     # ## RUN START ## #
     efs = ExternalForecastSystem(
+        model_name=model_name,
         use_zone_id_subset=use_zone_id_subset,
         import_location=import_location,
         output_location=output_location
@@ -2612,9 +2617,6 @@ def main():
             overwrite_aggregated_pa=True,
             overwrite_future_year_od=True
         )
-
-    # TODO: Add function to compile post-me PA correctly
-    # efs.compile_post_me_pa?()
 
 
 if __name__ == '__main__':

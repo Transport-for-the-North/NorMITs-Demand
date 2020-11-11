@@ -351,7 +351,7 @@ class EFSAttractionGenerator:
             mask = (employment[emp_cat_col] == 'E01')
             for year in all_years:
                 total_emp = employment.loc[mask, year].sum()
-                print('. Total population for year %s is: %.4f'
+                print('. Total jobs for year %s is: %.4f'
                       % (str(year), total_emp))
             print('\n')
 
