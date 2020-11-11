@@ -244,9 +244,10 @@ class SectorReporter:
                                    calculating_dataframe: pd.DataFrame,
                                    metric_columns: List[str] = None,
                                    segment_columns: List[str] = None,
-                                   zone_system_name: str = None,
+                                   zone_system_name: str = "model",
                                    zone_system_file: str = None,
                                    sector_grouping_file: str = None,
+                                   sector_system_name: str = "grouping",
                                    aggregation_method: Union[List[str],
                                                              str] = "sum",
                                    verbose: bool = False
@@ -268,12 +269,16 @@ class SectorReporter:
             specified in metric_columns or segment_columns will be lost, 
             by default None
         zone_system_name : str, optional
-            Name of the zone system if not using the default system, 
-            by default None
+            Name of the zone system if not using the default system. Will be
+            used to as the original zone column name 
+            e.g. "model" -> "model_zone_id, by default "model"
         zone_system_file : str, optional
             Path to the non-default zone definition file, by default None
         sector_grouping_file : str, optional
             Path to the non-default sector grouping file, by default None
+        sector_system_name : str, optional
+            Name of the sector system. Will be used as the sector column
+            name. e.g. "grouping" -> "grouping_id", by default "grouping"
         aggregation_method : Union[List[str], str], optional
             Aggregation method to use for the metric columns. The same method
             is applied to all matric columns. Can be a list of methods to 
@@ -319,9 +324,17 @@ class SectorReporter:
             verbose=verbose
         )
 
-        grouping_dataframe_columns = ["grouping_id"]
+        # Use the sector system name as the column name
+        sector_grouping_column = f"{sector_system_name}_id"
+        grouping_dataframe_columns = [sector_grouping_column]
         grouping_dataframe_columns.extend(segment_columns)
 
+        zone_id_column = f"{zone_system_name}_zone_id"
+        sector_grouping.rename(
+            {zone_id_column: "model_zone_id"},
+            axis=1,
+            inplace=True
+        )
         res = calculating_dataframe.merge(
             sector_grouping,
             on="model_zone_id"
@@ -341,9 +354,10 @@ class SectorReporter:
     def aggregate_matrix_sectors(self,
                                  matrix_path: str,
                                  out_path: str = None,
-                                 zone_system_name: str = None,
+                                 zone_system_name: str = "model",
                                  zone_system_file: str = None,
                                  sector_grouping_file: str = None,
+                                 sector_system_name: str = "grouping",
                                  aggregation_method: str = "sum",
                                  verbose: bool = False
                                  ) -> None:
@@ -358,12 +372,17 @@ class SectorReporter:
             Path to save the new matrix file. If None, the original file is 
             overwritten, by default None
         zone_system_name : str, optional
-            Name of the zone system if not using the default, by default None
+            Name of the zone system if not using the default system. Will be
+            used to as the original zone column name 
+            e.g. "model" -> "model_zone_id, by default "model"
         zone_system_file : str, optional
             Path to the zone definition file, by default None
         sector_grouping_file : str, optional
             Path to the non-default sector grouping file. Must contain 
             model_zone_d and grouping_id columns, by default None
+        sector_system_name : str, optional
+            Name of the sector system. Will be used as the sector column
+            name. e.g. "grouping" -> "grouping_id", by default "grouping"
         aggregation_method : str, optional
             Aggregation method to use for the metric columns. The same method
             is applied to all matric columns, by default "sum"
@@ -382,6 +401,12 @@ class SectorReporter:
             verbose=verbose
         )
 
+        zone_id_column = f"{zone_system_name}_zone_id"
+        sector_grouping.rename(
+            {zone_id_column: "model_zone_id"},
+            axis=1,
+            inplace=True
+        )
         sector_grouping.set_index("model_zone_id", inplace=True)
 
         # Replace with du.safe_read_csv when possible
@@ -392,6 +417,9 @@ class SectorReporter:
         df.columns = ["i", "j", "v"]
         df["i"] = df["i"].astype("int64")
         df["j"] = df["j"].astype("int64")
+        
+        # Get the initial matrix total
+        pre_agg_total = df["v"].sum()
 
         # Aggregate Origin Zones
         df = df.set_index("i").join(sector_grouping)
@@ -407,9 +435,15 @@ class SectorReporter:
             {"v": aggregation_method}
         )
 
+        # Get the post aggregation total
+        post_agg_total = df["v"].sum()
+        if abs(pre_agg_total - post_agg_total) > 1e6:
+            print(f"Warning: Starting total {pre_agg_total} does not "
+                  f"equal final total {post_agg_total}")
+
         # Convert back to wide matrix form for file
         df = df.unstack()
-        df.index.name = zone_system_name
+        df.index.name = sector_system_name
         df.columns = df.columns.droplevel()
 
         # Replace with safe write csv
