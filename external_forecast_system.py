@@ -2407,120 +2407,6 @@ def nhb_furness(p_import: str,
     )
 
 
-
-    # For every year, purpose, mode
-    loop_iter = itertools.product(years_needed,
-                                  p_needed,
-                                  m_needed)
-    for year, purpose, mode in loop_iter:
-        # ## Read in Files ## #
-        # Create year fname
-        year_p_fname = '_'.join(
-            ["yr" + str(year), nhb_productions_fname]
-        )
-
-        # Read in productions
-        p_path = os.path.join(p_import, year_p_fname)
-        productions = pd.read_csv(p_path)
-
-        # select needed productions
-        productions = productions.loc[productions["p"] == purpose]
-        productions = productions.loc[productions["m"] == mode]
-
-        # read in nhb_seeds
-        seed_fname = du.get_dist_name(
-            'nhb',
-            'pa',
-            purpose=str(purpose),
-            mode=str(mode),
-            csv=True
-        )
-        nhb_seeds = pd.read_csv(os.path.join(seed_dir, seed_fname))
-
-        # convert from wide to long format
-        nhb_seeds = nhb_seeds.melt(
-            id_vars=['p_zone'],
-            var_name='a_zone',
-            value_name='seed_vals'
-        )
-
-        # Need to make sure they are the correct types
-        nhb_seeds['a_zone'] = nhb_seeds['a_zone'].astype(float).astype(int)
-        productions['p_zone'] = productions['p_zone'].astype(int)
-
-        if use_zone_id_subset:
-            zone_subset = [259, 267, 268, 270, 275, 1171, 1173]
-            nhb_seeds = du.get_data_subset(
-                nhb_seeds, 'p_zone', zone_subset)
-            nhb_seeds = du.get_data_subset(
-                nhb_seeds, 'a_zone', zone_subset)
-
-        # Check the productions and seed zones match
-        p_zones = set(productions["p_zone"].tolist())
-        seed_zones = set(nhb_seeds["p_zone"].tolist())
-
-        # Skip check if we're using a subset
-        if use_zone_id_subset:
-            print("WARNING! Using a zone subset. Can't check seed "
-                  "zones are valid!")
-        else:
-            if p_zones != seed_zones:
-                raise ValueError("Production and seed attraction zones "
-                                 "do not match.")
-
-        # Infill zero values
-        mask = (nhb_seeds["seed_vals"] == 0)
-        nhb_seeds.loc[mask, "seed_vals"] = seed_infill
-
-        # Calculate seed factors by zone
-        # (The sum of zone seed factors should equal 1)
-        unq_zone = nhb_seeds['p_zone'].drop_duplicates()
-        for zone in unq_zone:
-            zone_mask = (nhb_seeds['p_zone'] == zone)
-            nhb_seeds.loc[zone_mask, 'seed_factor'] = (
-                    nhb_seeds[zone_mask]['seed_vals'].values
-                    /
-                    nhb_seeds[zone_mask]['seed_vals'].sum()
-            )
-        nhb_seeds = nhb_seeds.reindex(
-            ['p_zone', 'a_zone', 'seed_factor'],
-            axis=1
-        )
-
-        # Use the seed factors to Init P-A trips
-        init_pa = pd.merge(
-            nhb_seeds,
-            productions,
-            on=["p_zone"])
-        init_pa["trips"] = init_pa["seed_factor"] * init_pa["trips"]
-
-        # TODO: Some actual furnessing should happen here!
-        final_pa = init_pa
-
-        # ## Output the furnessed PA matrix to file ## #
-        # Generate path
-        nhb_dist_fname = du.get_dist_name(
-            'nhb',
-            'od',
-            str(year),
-            str(purpose),
-            str(mode),
-            csv=True
-        )
-        out_path = os.path.join(od_export, nhb_dist_fname)
-
-        # Convert from long to wide format and output
-        # TODO: Generate output name based on model name
-        du.long_to_wide_out(
-            final_pa.rename(columns={'p_zone': 'norms_zone_id'}),
-            v_heading='norms_zone_id',
-            h_heading='a_zone',
-            values='trips',
-            out_path=out_path
-        )
-        print("NHB Distribution %s complete!" % nhb_dist_fname)
-
-
 def write_input_info(output_path,
                      base_year: int,
                      future_years: List[int],
@@ -2632,14 +2518,14 @@ def main():
         )
 
     if run_nhb_efs:
-        # Need to convert, ready for NHB generation
-        # efs.pa_to_od(
-        #     output_location=output_location,
-        #     iter_num=iter_num,
-        #     overwrite_hb_tp_pa=True,
-        #     overwrite_hb_tp_od=True,
-        #     echo=echo
-        # )
+        # Convert to HB to OD
+        efs.pa_to_od(
+            output_location=output_location,
+            iter_num=iter_num,
+            overwrite_hb_tp_pa=True,
+            overwrite_hb_tp_od=True,
+            echo=echo
+        )
 
         # Generate NHB PA/OD matrices
         efs.run_nhb(
