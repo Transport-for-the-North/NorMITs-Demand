@@ -1744,18 +1744,8 @@ def nhb_production(hb_pa_import,
             }
         )
 
-        # Print some audit vals
-        # audit = yr_nhb_productions.groupby(
-        #     ["p", "m"]
-        # )["trips"].sum().reset_index()
-        # print(audit)
-
-        # Create year fname
-        nhb_productions_fname = '_'.join(
-            ["yr" + str(year), out_fname]
-        )
-
         # Output
+        nhb_productions_fname = '_'.join(["yr" + str(year), out_fname])
         yr_nhb_productions.to_csv(
             os.path.join(nhb_export, nhb_productions_fname),
             index=False

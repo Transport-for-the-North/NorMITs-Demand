@@ -2006,3 +2006,24 @@ def parse_mat_output(list_dir,
 
     return segments
 
+
+def convert_to_weights(df: pd.DataFrame,
+                       year_cols: List[str],
+                       weight_by_col: str = 'purpose_id'
+                       ) -> pd.DataFrame:
+    """
+    TODO: write convert_to_weights() doc
+    """
+    df = df.copy()
+    unq_vals = df[weight_by_col].unique()
+
+    for val in unq_vals:
+        mask = (df[weight_by_col] == val)
+        for year in year_cols:
+            df.loc[mask, year] = (
+                df.loc[mask, year]
+                /
+                df.loc[mask, year].sum()
+            )
+    return df
+

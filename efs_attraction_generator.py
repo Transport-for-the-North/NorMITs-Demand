@@ -12,6 +12,7 @@ import pandas as pd
 
 from typing import List
 from typing import Dict
+from typing import Tuple
 
 from itertools import product
 
@@ -79,6 +80,7 @@ class EFSAttractionGenerator:
             audits: bool = True,
             out_path: str = None,
             recreate_attractions: bool = True,
+            aggregate_nhb_tp: bool = True
             ) -> pd.DataFrame:
         """
         Attraction model for the external forecast system. This has been
@@ -211,6 +213,10 @@ class EFSAttractionGenerator:
             Whether to recreate the attractions or not. If False, it will
             look in out_path for previously produced attractions and return
             them. If none can be found, they will be generated.
+
+        aggregate_nhb_tp:
+            Whether to aggregate the time period before writing to disk for
+            nhb attractions or not
 
         Returns
         -------
@@ -378,7 +384,7 @@ class EFSAttractionGenerator:
         for unq_col in all_years:
             idx_cols.remove(unq_col)
 
-        attractions = generate_attractions(
+        attractions, nhb_att = generate_attractions(
             employment=employment,
             all_years=all_years,
             attraction_weights_path=imports['weights'],
@@ -392,6 +398,15 @@ class EFSAttractionGenerator:
             lad_lookup_dir=imports['lad_lookup']
         )
 
+        # Aggregate nhb trips if needed
+        if aggregate_nhb_tp:
+            reindex_cols = list(nhb_att)
+            reindex_cols.remove('tp')
+            group_cols = [x for x in reindex_cols.copy() if x not in all_years]
+
+            nhb_att = nhb_att.reindex(reindex_cols, axis='columns')
+            nhb_att = nhb_att.groupby(group_cols).sum().reset_index()
+
         # Write attractions to file
         if out_path is None:
             print("WARNING! No output path given. "
@@ -399,7 +414,9 @@ class EFSAttractionGenerator:
         else:
             print("Writing productions to file...")
             fname = 'MSOA_attractions.csv'
+            nhb_fname = 'MSOA_nhb_attractions.csv'
             attractions.to_csv(os.path.join(out_path, fname), index=False)
+            nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 
         # ## CONVERT TO OLD EFS FORMAT ## #
         # Make sure columns are the correct data type
@@ -1010,7 +1027,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
                              control_path: str = None,
                              lad_lookup_dir: str = None,
                              lad_lookup_name: str = consts.DEFAULT_LAD_LOOKUP,
-                             ) -> pd.DataFrame:
+                             ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Combines employment numbers with attractions weights to produce the
     attractions per purpose.
@@ -1170,6 +1187,25 @@ def merge_attraction_weights(employment: pd.DataFrame,
     attractions[m_col] = attractions[m_col].astype(int)
     attractions[p_col] = attractions[p_col].astype(int)
 
+    # ## GENERATE NHB ATTRACTIONS ## #
+    # Copy and rename Hb attractions
+    nhb_attractions = attractions.copy()
+    nhb_attractions = nhb_attractions[nhb_attractions[p_col] != 1]
+    nhb_attractions = nhb_attractions[nhb_attractions[p_col] != 7]
+    nhb_attractions[p_col] += 10
+
+    # In the meantime hack infill time period in nhb
+    tp_infill = pd.DataFrame({'ph': [1, 1, 1, 1],
+                              'tp': [1, 2, 3, 4]})
+    nhb_attractions['ph'] = 1
+    nhb_attractions = pd.merge(
+        nhb_attractions,
+        tp_infill,
+        how='left',
+        on='ph'
+    ).drop('ph', axis='columns')
+    del tp_infill
+
     # Control if required
     if do_ntem_control:
         # Get ntem totals
@@ -1177,7 +1213,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
         ntem_lad_lookup = pd.read_csv(os.path.join(lad_lookup_dir,
                                                    lad_lookup_name))
 
-        print("Performing NTEM constraint...")
+        print("Performing HB NTEM constraint...")
         # TODO: Allow control_to_ntem() to take flexible col names
         attractions = attractions.rename(columns={p_col: 'p', m_col: 'm'})
         attractions, *_ = du.control_to_ntem(
@@ -1191,7 +1227,20 @@ def merge_attraction_weights(employment: pd.DataFrame,
         )
         attractions = attractions.rename(columns={'p': p_col, 'm': m_col})
 
-    return attractions
+        print("Performing NHB NTEM constraint...")
+        nhb_attractions = nhb_attractions.rename(columns={p_col: 'p', m_col: 'm'})
+        nhb_attractions, *_ = du.control_to_ntem(
+            nhb_attractions,
+            ntem_totals,
+            ntem_lad_lookup,
+            group_cols=['p', 'm', 'tp'],
+            base_value_name='trips',
+            ntem_value_name='Attractions',
+            purpose='nhb'
+        )
+        nhb_attractions = nhb_attractions.rename(columns={'p': p_col, 'm': m_col})
+
+    return attractions, nhb_attractions
 
 
 def generate_attractions(employment: pd.DataFrame,
@@ -1207,7 +1256,7 @@ def generate_attractions(employment: pd.DataFrame,
                          ntem_control_dir: str = None,
                          lad_lookup_dir: str = None,
                          soc_split: bool = True
-                         ) -> pd.DataFrame:
+                         ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Converts employment to attractions using attraction_weights
 
@@ -1285,6 +1334,7 @@ def generate_attractions(employment: pd.DataFrame,
 
     # Generate attractions per year
     yr_ph = dict()
+    yr_ph_nhb = dict()
     for year in all_years:
         print("\nConverting year %s to attractions..." % str(year))
 
@@ -1303,7 +1353,7 @@ def generate_attractions(employment: pd.DataFrame,
         )
 
         # Convert employment to attractions for this year
-        yr_ph[year] = merge_attraction_weights(
+        yr_ph[year], yr_ph_nhb[year] = merge_attraction_weights(
             employment=yr_emp,
             attraction_weights_path=attraction_weights_path,
             mode_splits_path=mode_splits_path,
@@ -1324,7 +1374,13 @@ def generate_attractions(employment: pd.DataFrame,
         unique_col=unique_col,
         p_col=p_col
     )
-    return attractions
+    nhb_attractions = du.combine_yearly_dfs(
+        yr_ph_nhb,
+        unique_col=unique_col,
+        p_col=p_col
+    )
+
+    return attractions, nhb_attractions
 
 
 def build_attraction_imports(import_home: str,

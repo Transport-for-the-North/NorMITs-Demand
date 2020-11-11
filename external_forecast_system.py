@@ -856,7 +856,7 @@ class ExternalForecastSystem:
 
         # # ## ATTRACTION WEIGHT GENERATION ## #
         print("Generating attraction weights...")
-        attraction_weights = generate_attraction_weights(
+        attraction_weights = du.convert_to_weights(
             attraction_dataframe,
             year_list
         )
@@ -1244,15 +1244,17 @@ class ExternalForecastSystem:
         # TODO: Check if NHB matrices exist first
         if overwrite_nhb_od:
             print("Furnessing NHB productions...")
-            nhb_furness(p_import=exports['productions'],
-                        seed_nhb_dist_dir=imports['seed_dists'],
-                        od_export=exports['od_24'],
-                        required_purposes=nhb_purposes_needed,
-                        required_modes=modes_needed,
-                        years_needed=years_needed,
-                        replace_zero_vals=True,
-                        zero_infill=0.01,
-                        use_zone_id_subset=self.use_zone_id_subset)
+            nhb_furness(
+                p_import=exports['productions'],
+                a_import=exports['attractions'],
+                seed_dist_dir=imports['seed_dists'],
+                od_export=exports['od_24'],
+                model_name=self.model_name,
+                p_needed=nhb_purposes_needed,
+                m_needed=modes_needed,
+                years_needed=[str(x) for x in years_needed],
+                seed_infill=0.01
+            )
             print('NHB productions "furnessed"\n')
 
         if overwrite_nhb_tp_od:
@@ -2139,6 +2141,7 @@ class ExternalForecastSystem:
             'productions': os.path.join(export_home, 'Productions'),
             'attractions': os.path.join(export_home, 'Attractions'),
             'sectors': os.path.join(export_home, 'Sectors'),
+            'audits': os.path.join(export_home, 'Audits'),
 
             # Pre-ME
             'pa': os.path.join(matrices_home, pa),
@@ -2208,27 +2211,6 @@ class ExternalForecastSystem:
         self.value_zones = du.get_data_subset(self.value_zones)
         self.area_types = du.get_data_subset(self.area_types)
         self.area_grouping = du.get_data_subset(self.area_grouping)
-
-
-def generate_attraction_weights(attraction_dataframe: pd.DataFrame,
-                                year_list: List[str]
-                                ) -> pd.DataFrame:
-    """
-    TODO: write generate_attraction_weights doc
-    """
-    attraction_weights = attraction_dataframe.copy()
-    purposes = attraction_weights["purpose_id"].unique()
-
-    for purpose in purposes:
-        for year in year_list:
-            mask = (attraction_weights["purpose_id"] == purpose)
-            attraction_weights.loc[mask, year] = (
-                attraction_weights.loc[mask, year]
-                /
-                attraction_weights.loc[mask, year].sum()
-            )
-
-    return attraction_weights
 
 
 def match_attractions_to_productions(attractions: pd.DataFrame,
@@ -2321,35 +2303,100 @@ def _input_checks(iter_num=None,
                          "etc.")
 
 
-def nhb_furness(p_import,
-                seed_nhb_dist_dir,
-                od_export,
-                required_purposes,
-                required_modes,
-                years_needed,
-                replace_zero_vals,
-                zero_infill,
-                nhb_productions_fname=consts.NHB_PRODUCTIONS_FNAME,
-                use_zone_id_subset=False):
+def nhb_furness(p_import: str,
+                a_import: str,
+                seed_dist_dir: str,
+                od_export: str,
+                model_name: str,
+                years_needed: List[str] = consts.ALL_YEARS,
+                p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
+                m_needed: List[int] = consts.MODES_NEEDED,
+                soc_needed: List[int] = None,
+                ns_needed: List[int] = None,
+                ca_needed: List[int] = None,
+                tp_needed: List[int] = None,
+                nhb_productions_fname: str = consts.NHB_PRODUCTIONS_FNAME,
+                zone_col: str = 'model_zone_id',
+                p_col: str = 'purpose_id',
+                m_col: str = 'mode_id',
+                soc_col: str = 'soc',
+                ns_col: str = 'ns',
+                ca_col: str = 'car_availability_id',
+                tp_col: str = 'tp',
+                trip_origin: str = 'nhb',
+                unique_col: str = 'trips',
+                max_iters: int = 5000,
+                seed_infill: float = 1e-5,
+                echo: bool = False,
+                audit_out: str = None
+                ) -> None:
+    # TODO: Write nhb_furness() docs
+    # Productions and attractions need to be in the same zoning system
 
-    """
-    Provides a one-iteration Furness constrained on production
-    with options whether to replace zero values on the seed
+    # Init
+    from functools import reduce
 
-    Essentially distributes the Productions based on the seed nhb dist
-    TODO: Actually add in some furnessing
-    TODO: Fully integrate into EFS
+    # ## GET PRODUCTIONS ## #
+    # Read from disk
+    productions = list()
+    for year in years_needed:
+        year_p_fname = '_'.join(["yr" + str(year), nhb_productions_fname])
+        df = pd.read_csv(os.path.join(p_import, year_p_fname))
+        productions.append(df.rename(columns={
+            unique_col: year,
+            'p_zone': zone_col,
+            'p': p_col,
+            'm': m_col
+        }))
 
-    Return:
-    ----------
-    None
-    """
-    # TODO: Add in file exists checks
+    # merge all productions into one dataframe
+    p_cols = [list(p) for p in productions]
+    merge_cols = reduce(lambda x, y: du.intersection(x, y), p_cols)
+    productions = reduce(lambda x, y: pd.merge(x, y, on=merge_cols), productions)
+
+    # ## GET ATTRACTIONS ##
+    # Read from disk
+    attractions_fname = '_'.join([model_name, 'nhb_attractions.csv'])
+    attractions = pd.read_csv(os.path.join(a_import, attractions_fname))
+
+    # Convert to weights
+    attraction_weights = du.convert_to_weights(attractions, years_needed)
+
+    print(attractions)
+    exit()
+
+    return dm.distribute_pa(
+        productions,
+        attraction_weights,
+        seed_dist_dir,
+        dist_out=od_export,
+        years_needed=years_needed,
+        p_needed=p_needed,
+        m_needed=m_needed,
+        soc_needed=soc_needed,
+        ns_needed=ns_needed,
+        ca_needed=ca_needed,
+        tp_needed=tp_needed,
+        zone_col=zone_col,
+        p_col=p_col,
+        m_col=m_col,
+        soc_col=soc_col,
+        ns_col=ns_col,
+        ca_col=ca_col,
+        tp_col=tp_col,
+        trip_origin=trip_origin,
+        max_iters=max_iters,
+        seed_infill=seed_infill,
+        echo=echo,
+        audit_out=audit_out
+    )
+
+
 
     # For every year, purpose, mode
     loop_iter = itertools.product(years_needed,
-                                  required_purposes,
-                                  required_modes)
+                                  p_needed,
+                                  m_needed)
     for year, purpose, mode in loop_iter:
         # ## Read in Files ## #
         # Create year fname
@@ -2373,7 +2420,7 @@ def nhb_furness(p_import,
             mode=str(mode),
             csv=True
         )
-        nhb_seeds = pd.read_csv(os.path.join(seed_nhb_dist_dir, seed_fname))
+        nhb_seeds = pd.read_csv(os.path.join(seed_dir, seed_fname))
 
         # convert from wide to long format
         nhb_seeds = nhb_seeds.melt(
@@ -2407,9 +2454,8 @@ def nhb_furness(p_import,
                                  "do not match.")
 
         # Infill zero values
-        if replace_zero_vals:
-            mask = (nhb_seeds["seed_vals"] == 0)
-            nhb_seeds.loc[mask, "seed_vals"] = zero_infill
+        mask = (nhb_seeds["seed_vals"] == 0)
+        nhb_seeds.loc[mask, "seed_vals"] = seed_infill
 
         # Calculate seed factors by zone
         # (The sum of zone seed factors should equal 1)
@@ -2527,7 +2573,7 @@ def main():
 
     # Running control
     run_base_efs = True
-    recreate_productions = True
+    recreate_productions = False
     recreate_attractions = True
 
     constrain_population = False
@@ -2572,19 +2618,19 @@ def main():
 
     if run_nhb_efs:
         # Need to convert, ready for NHB generation
-        efs.pa_to_od(
-            output_location=output_location,
-            iter_num=iter_num,
-            overwrite_hb_tp_pa=True,
-            overwrite_hb_tp_od=True,
-            echo=echo
-        )
+        # efs.pa_to_od(
+        #     output_location=output_location,
+        #     iter_num=iter_num,
+        #     overwrite_hb_tp_pa=True,
+        #     overwrite_hb_tp_od=True,
+        #     echo=echo
+        # )
 
         # Generate NHB PA/OD matrices
         efs.run_nhb(
             output_location=output_location,
             iter_num=iter_num,
-            overwrite_nhb_productions=True,
+            overwrite_nhb_productions=False,
             overwrite_nhb_od=True,
             overwrite_nhb_tp_od=True
         )

@@ -180,9 +180,9 @@ def _distribute_pa_internal(productions,
 
     # ## FILTER P/A TO SEGMENTATION ## #
     if calib_params.get('soc') is not None:
-        seg = calib_params['soc']
+        seg = calib_params.get('soc')
     else:
-        seg = calib_params['ns']
+        seg = calib_params.get('ns')
 
     base_filter = {
         p_col: [calib_params.get('p')],
@@ -206,13 +206,13 @@ def _distribute_pa_internal(productions,
     # ## MATCH P/A ZONES ## #
     if productions.empty:
         raise ValueError(
-            "Something has gone wrong. I have no productions. Perhaps none"
+            "Something has gone wrong. I have no productions. Perhaps none "
             "exist for the given segmentation: %s" % str(calib_params)
         )
 
     if a_weights.empty:
         raise ValueError(
-            "Something has gone wrong. I have no attractions. Perhaps none"
+            "Something has gone wrong. I have no attractions. Perhaps none "
             "exist for the given segmentation: %s" % str(calib_params)
         )
 
@@ -416,8 +416,10 @@ def distribute_pa(productions: pd.DataFrame,
     tp_needed = [None] if tp_needed is None else tp_needed
 
     # Make sure the soc and ns columns are strings
-    productions['soc'] = productions['soc'].astype(str)
-    productions['ns'] = productions['ns'].astype(str)
+    if 'soc' in list(productions):
+        productions['soc'] = productions['soc'].astype(str)
+    if 'ns' in list(productions):
+        productions['ns'] = productions['ns'].astype(str)
 
     # ENSURE SEGMENATION GIVEN EXISTS?
 
@@ -440,10 +442,10 @@ def distribute_pa(productions: pd.DataFrame,
     for year in years_needed:
         # Filter P/A for this year
         p_index = p_cols.copy() + [year]
-        productions = productions.reindex(p_index, axis='columns')
+        yr_productions = productions.reindex(p_index, axis='columns')
 
         a_index = a_cols.copy() + [year]
-        attraction_weights = attraction_weights.reindex(a_index, axis='columns')
+        yr_a_weights = attraction_weights.reindex(a_index, axis='columns')
 
         # Loop through segmentations for this year
         loop_generator = du.cp_segmentation_loop_generator(
@@ -471,8 +473,8 @@ def distribute_pa(productions: pd.DataFrame,
             calib_params['yr'] = int(year)
 
             _distribute_pa_internal(
-                productions=productions,
-                attraction_weights=attraction_weights,
+                productions=yr_productions,
+                attraction_weights=yr_a_weights,
                 seed_dist_dir=seed_dist_dir,
                 trip_origin=trip_origin,
                 zone_col=zone_col,
