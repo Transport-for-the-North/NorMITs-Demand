@@ -1,5 +1,6 @@
 import os
 import re
+import json
 from glob import glob
 from typing import List, Union
 from itertools import product
@@ -15,7 +16,7 @@ from matrix_processing import aggregate_matrices
 import efs_constants as consts
 
 
-# Define the possible values for trip origin type - 
+# Define the possible values for trip origin type -
 # homebased or non-homebased
 VALID_TRIP_ORIGIN = ["hb", "nhb"]
 
@@ -27,6 +28,7 @@ def matrix_reporting(matrix_directory: str,
                      segments_needed: dict = {},
                      zone_file: str = None,
                      sectors_file: str = None,
+                     zones_name: str = "model",
                      sectors_name: str = "Sectors",
                      aggregation_method: str = "sum",
                      tld_path: str = None,
@@ -56,6 +58,9 @@ def matrix_reporting(matrix_directory: str,
     if sectors_file is not None and not os.path.isfile(sectors_file):
         raise ValueError(f"{sectors_file} does not exist")
 
+    if not os.path.isdir(output_dir):
+        os.mkdir(output_dir)
+
     if overwrite_dir:
         for file_name in glob(os.path.join(output_dir, "*.csv")):
             os.remove(file_name)
@@ -81,6 +86,7 @@ def matrix_reporting(matrix_directory: str,
         )
 
     # Aggregate the matrices
+    # TODO Do this in a loop so that matrices can be sectored as produced
     try:
         # TODO add aggregation_method to this function
         output_files = aggregate_matrices(
@@ -116,17 +122,17 @@ def matrix_reporting(matrix_directory: str,
 
     # Aggregate sectors if requried
     if sectors_file is not None:
-        sr = SectorReporter(
-            default_zone_file=zone_file,
-            default_sector_grouping_file=sectors_file
-        )
+        sr = SectorReporter()
         valid_files = output_files.copy()
         output_files = []
         for matrix_file in valid_files:
             # Write the sectored matrices in place
             sr.aggregate_matrix_sectors(
                 matrix_file,
-                zone_system_name=sectors_name,
+                zone_system_name=zones_name,
+                zone_system_file=zone_file,
+                sector_grouping_file=sectors_file,
+                sector_system_name=sectors_name,
                 aggregation_method=aggregation_method
             )
             new_file = matrix_file.replace(".csv", "_sector.csv")
@@ -148,8 +154,22 @@ def generate_gis_report(all_files: List[int],
                         purposes_needed: List[int],
                         aggregate_purposes: bool = True,
                         aggregate_years: bool = True):
-    """
-    TODO
+    """Collates aggregated matrices together to create a single report file
+    that can be easily read by GIS programs
+
+    Parameters
+    ----------
+    all_files : List[int]
+        List of all aggregated matrix files to include in the report.
+        Should all be the same format
+    years_needed : List[int]
+        List of years to include.
+    purposes_needed : List[int]
+        List of purposes to include.
+    aggregate_purposes : bool, optional
+        Wh, by default True
+    aggregate_years : bool, optional
+        [description], by default True
     """
 
     # Get the base file names so that purpose and year can be combined to
@@ -181,7 +201,13 @@ def generate_gis_report(all_files: List[int],
                 year=year,
                 purpose=purpose
             )
-            df = pd.read_csv(file_name, index_col=0).stack()
+            try:
+                df = pd.read_csv(file_name, index_col=0).stack()
+            except FileNotFoundError:
+                # Warn that the file was not found, but this is likely
+                # because of a soc/ns segment mismatch
+                print(f"Warning: File {file_name} does not exist")
+                continue
             df.columns = ["v"]
 
             if matrix.empty:
@@ -218,10 +244,22 @@ def generate_gis_report(all_files: List[int],
 
 def parse_segments(required_segments: Union[List[int], str],
                    all_segments: List[int]):
-    """
-    TODO
-    """
+    """Converts required segment strings into those expected by 
+    aggregate_matrices
 
+    Parameters
+    ----------
+    required_segments : Union[List[int], str]
+        Unparsed segment arguments can be a list of segments or 
+        "Keep" or "Agg"
+    all_segments : List[int]
+        List of all possible segments
+
+    Returns
+    -------
+    List[int] or None
+        Parsed segments for the aggregate_matrices function
+    """
     # If the segment is to be aggregated then pass None
     if required_segments == "Agg":
         return None
@@ -429,59 +467,106 @@ def concat_vector_folder(data_dir: str,
     # TODO add option to remove individual files if needed
 
 
+def load_report_params(param_file: str) -> None:
+    """Load report generation parameters from file.
+    Allows a number of options to be set in a json file.
+
+    Parameters
+    ----------
+    param_file : str
+        Path to the options file - json format.
+        Should contain the required keys:
+         - "matrix_directories"
+         - "output_dir"
+         - "matrix_format"
+         - "trip_origin"
+         - "segments_needed": {
+             "years"
+             "p"
+             "m"
+             "soc"
+             "ns"
+             "ca"
+             "tp"
+             }
+         - "zones_file"
+         - "sectors_file"
+         - "cost_path"
+         - "tld_path"
+
+    Raises
+    ------
+    FileNotFoundError
+        If the json file does not exist
+    """
+
+    if os.path.isfile(param_file):
+        with open(param_file) as f:
+            params = json.load(f)
+    else:
+        raise FileNotFoundError("Parameter File Does Not Exist")
+
+    return params
+
+
 def test(param_file):
     """
     TODO: write docs
     Provides test paths
     """
 
-    test_directories = {
-        "pa": r"Y:\NorMITs Demand\norms\v2_2-EFS_Output\iter1\PA Matrices"
-    }
+    params = load_report_params(param_file)
 
-    test_output_dir = (
-        r"C:\Users\Monopoly\Documents\EFS\data\summaries")
-    test_trip_origin = "hb"
-    test_segments_needed = {
-        "years": [2018, 2033, 2035, 2050],
-        "p": "Keep",
-        "m": [6],
-        "soc": "Agg",
-        "ns": "Agg",
-        "ca": "Agg",
-        "tp": "Agg"
-    }
+    # test_directories = {
+    #     "pa": r"Y:\NorMITs Demand\norms\v2_2-EFS_Output\iter1\PA Matrices"
+    # }
 
-    zoning = r"C:\Users\Monopoly\Documents\EFS\data\zoning"
-    test_zones_file = os.path.join(
-        zoning, "msoa_zones.csv"
-    )
-    test_sectors_file = os.path.join(
-        zoning, "tfn_level_one_sectors_norms_grouping.csv"
-    )
+    # test_output_dir = (
+    #     r"C:\Users\Monopoly\Documents\EFS\data\summaries")
+    # test_trip_origin = "hb"
+    # test_segments_needed = {
+    #     "years": [2018],
+    #     "p": "Keep",
+    #     "m": [6],
+    #     "soc": "Agg",
+    #     "ns": "Agg",
+    #     "ca": "Agg",
+    #     "tp": "Agg"
+    # }
+
+    # zoning = r"C:\Users\Monopoly\Documents\EFS\data\zoning"
+    # test_zones_file = os.path.join(
+    #     zoning, "msoa_zones.csv"
+    # )
+    # test_sectors_file = os.path.join(
+    #     zoning, "tfn_level_one_sectors_norms_grouping.csv"
+    # )
 
     errors = []
     overwrite = True
 
-    for test_matrix_format in test_directories.keys():
+    for matrix_format in params["matrix_directories"].keys():
 
-        test_directory = test_directories[test_matrix_format]
+        matrix_directory = params["matrix_directories"][matrix_format]
 
         successful = matrix_reporting(
-            test_directory,
-            test_output_dir,
-            test_trip_origin,
-            test_matrix_format,
-            segments_needed=test_segments_needed,
-            zone_file=test_zones_file,
+            matrix_directory,
+            params["output_dir"],
+            params["trip_origin"],
+            params["matrix_format"],
+            segments_needed=params["segments_needed"],
+            zone_file=params["zones_file"],
+            zones_name="norms",
             sectors_name="tfn_sectors",
-            sectors_file=test_sectors_file,
+            sectors_file=params["sectors_file"],
             aggregation_method="sum",
-            overwrite_dir=overwrite
+            overwrite_dir=overwrite,
+            tld_path=params.get("tld_path"),
+            cost_path=params.get("cost_path")
         )
 
         if not successful:
-            errors.append([test_matrix_format, test_segments_needed])
+            errors.append([matrix_format, params["segments_needed"]])
 
         overwrite = False
 
@@ -490,4 +575,11 @@ def test(param_file):
 
 
 if __name__ == "__main__":
-    test()
+    pa_params = r"C:\Users\Monopoly\Documents\EFS\data\params\pa.json"
+    test(pa_params)
+    tp_pa_params = r"C:\Users\Monopoly\Documents\EFS\data\params\tp_pa.json"
+    test(tp_pa_params)
+    nhb_params = r"C:\Users\Monopoly\Documents\EFS\data\params\nhb_pa.json"
+    test(nhb_params)
+    # test_params = r"C:\Users\Monopoly\Documents\EFS\data\params\test.json"
+    # test(test_params)
