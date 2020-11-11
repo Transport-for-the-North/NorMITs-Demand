@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on: Mon Sep 30 09:42:25 2019
-Updated on: Tues Sep 1 08:56:35 2020
+Created on: Mon Nov 2 08:56:35 2020
+Updated on:
 
-Original Author: Robert Farrar
-Last update made by: Ben Taylor
+Original Author: Ben Taylor
+Last update made by:
 
 File Purpose:
 Module of all distribution functions for EFS
@@ -13,10 +13,10 @@ import os
 
 import pandas as pd
 import numpy as np
-
 from numpy.testing import assert_approx_equal
 
 from typing import List
+from functools import reduce
 
 import audits
 import efs_constants as consts
@@ -111,7 +111,6 @@ def doubly_constrained_furness(seed_vals: np.array,
               "number of loops (%d), while achieving an R^2 difference of "
               "%f. The values returned may not be accurate."
               % (max_iters, cur_diff))
-
 
     return furnessed_mat
 
@@ -604,6 +603,88 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     )
 
     return furnessed_mat
+
+
+def nhb_furness(p_import: str,
+                a_import: str,
+                seed_dist_dir: str,
+                pa_export: str,
+                model_name: str,
+                years_needed: List[str] = consts.ALL_YEARS,
+                p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
+                m_needed: List[int] = consts.MODES_NEEDED,
+                soc_needed: List[int] = None,
+                ns_needed: List[int] = None,
+                ca_needed: List[int] = None,
+                tp_needed: List[int] = None,
+                nhb_productions_fname: str = consts.NHB_PRODUCTIONS_FNAME,
+                zone_col: str = 'model_zone_id',
+                p_col: str = 'purpose_id',
+                m_col: str = 'mode_id',
+                soc_col: str = 'soc',
+                ns_col: str = 'ns',
+                ca_col: str = 'car_availability_id',
+                tp_col: str = 'tp',
+                trip_origin: str = 'nhb',
+                unique_col: str = 'trips',
+                max_iters: int = 5000,
+                seed_infill: float = 1e-5,
+                echo: bool = False,
+                audit_out: str = None
+                ) -> None:
+    # TODO: Write nhb_furness() docs
+    # Productions and attractions need to be in the same zoning system
+    # ## GET PRODUCTIONS ## #
+    # Read from disk
+    productions = list()
+    for year in years_needed:
+        year_p_fname = '_'.join(["yr" + str(year), nhb_productions_fname])
+        df = pd.read_csv(os.path.join(p_import, year_p_fname))
+        productions.append(df.rename(columns={
+            unique_col: year,
+            'p_zone': zone_col,
+            'p': p_col,
+            'm': m_col
+        }))
+
+    # merge all productions into one dataframe
+    p_cols = [list(p) for p in productions]
+    merge_cols = reduce(lambda x, y: du.intersection(x, y), p_cols)
+    productions = reduce(lambda x, y: pd.merge(x, y, on=merge_cols), productions)
+
+    # ## GET ATTRACTIONS ##
+    # Read from disk
+    attractions_fname = '_'.join([model_name, 'nhb_attractions.csv'])
+    attractions = pd.read_csv(os.path.join(a_import, attractions_fname))
+
+    # Convert to weights
+    attraction_weights = du.convert_to_weights(attractions, years_needed)
+
+    return distribute_pa(
+        productions,
+        attraction_weights,
+        seed_dist_dir,
+        dist_out=pa_export,
+        years_needed=years_needed,
+        p_needed=p_needed,
+        m_needed=m_needed,
+        soc_needed=soc_needed,
+        ns_needed=ns_needed,
+        ca_needed=ca_needed,
+        tp_needed=tp_needed,
+        zone_col=zone_col,
+        p_col=p_col,
+        m_col=m_col,
+        soc_col=soc_col,
+        ns_col=ns_col,
+        ca_col=ca_col,
+        tp_col=tp_col,
+        trip_origin=trip_origin,
+        max_iters=max_iters,
+        seed_infill=seed_infill,
+        echo=echo,
+        audit_out=audit_out
+    )
 
 
 def furness_old(productions: pd.DataFrame,

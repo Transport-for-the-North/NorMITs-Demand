@@ -1262,7 +1262,7 @@ class ExternalForecastSystem:
         # TODO: Check if NHB matrices exist first
         if overwrite_nhb_od:
             print("Furnessing NHB productions...")
-            nhb_furness(
+            dm.nhb_furness(
                 p_import=exports['productions'],
                 a_import=exports['attractions'],
                 seed_dist_dir=imports['seed_dists'],
@@ -2319,92 +2319,6 @@ def _input_checks(iter_num=None,
                          "using more than one mode at a time due to "
                          "different zoning systems for NoHAM and NoRMS "
                          "etc.")
-
-
-def nhb_furness(p_import: str,
-                a_import: str,
-                seed_dist_dir: str,
-                pa_export: str,
-                model_name: str,
-                years_needed: List[str] = consts.ALL_YEARS,
-                p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
-                m_needed: List[int] = consts.MODES_NEEDED,
-                soc_needed: List[int] = None,
-                ns_needed: List[int] = None,
-                ca_needed: List[int] = None,
-                tp_needed: List[int] = None,
-                nhb_productions_fname: str = consts.NHB_PRODUCTIONS_FNAME,
-                zone_col: str = 'model_zone_id',
-                p_col: str = 'purpose_id',
-                m_col: str = 'mode_id',
-                soc_col: str = 'soc',
-                ns_col: str = 'ns',
-                ca_col: str = 'car_availability_id',
-                tp_col: str = 'tp',
-                trip_origin: str = 'nhb',
-                unique_col: str = 'trips',
-                max_iters: int = 5000,
-                seed_infill: float = 1e-5,
-                echo: bool = False,
-                audit_out: str = None
-                ) -> None:
-    # TODO: Write nhb_furness() docs
-    # Productions and attractions need to be in the same zoning system
-
-    # Init
-    from functools import reduce
-
-    # ## GET PRODUCTIONS ## #
-    # Read from disk
-    productions = list()
-    for year in years_needed:
-        year_p_fname = '_'.join(["yr" + str(year), nhb_productions_fname])
-        df = pd.read_csv(os.path.join(p_import, year_p_fname))
-        productions.append(df.rename(columns={
-            unique_col: year,
-            'p_zone': zone_col,
-            'p': p_col,
-            'm': m_col
-        }))
-
-    # merge all productions into one dataframe
-    p_cols = [list(p) for p in productions]
-    merge_cols = reduce(lambda x, y: du.intersection(x, y), p_cols)
-    productions = reduce(lambda x, y: pd.merge(x, y, on=merge_cols), productions)
-
-    # ## GET ATTRACTIONS ##
-    # Read from disk
-    attractions_fname = '_'.join([model_name, 'nhb_attractions.csv'])
-    attractions = pd.read_csv(os.path.join(a_import, attractions_fname))
-
-    # Convert to weights
-    attraction_weights = du.convert_to_weights(attractions, years_needed)
-
-    return dm.distribute_pa(
-        productions,
-        attraction_weights,
-        seed_dist_dir,
-        dist_out=pa_export,
-        years_needed=years_needed,
-        p_needed=p_needed,
-        m_needed=m_needed,
-        soc_needed=soc_needed,
-        ns_needed=ns_needed,
-        ca_needed=ca_needed,
-        tp_needed=tp_needed,
-        zone_col=zone_col,
-        p_col=p_col,
-        m_col=m_col,
-        soc_col=soc_col,
-        ns_col=ns_col,
-        ca_col=ca_col,
-        tp_col=tp_col,
-        trip_origin=trip_origin,
-        max_iters=max_iters,
-        seed_infill=seed_infill,
-        echo=echo,
-        audit_out=audit_out
-    )
 
 
 def write_input_info(output_path,
