@@ -62,6 +62,8 @@ class ExternalForecastSystem:
     column_dictionary = consts.EFS_COLUMN_DICTIONARY
 
     def __init__(self,
+                 model_name: str,
+
                  population_value_file: str = "population/base_population_2018.csv",
                  population_growth_file: str = "population/future_population_growth.csv",
                  population_constraint_file: str = "population/future_population_values.csv",
@@ -99,6 +101,7 @@ class ExternalForecastSystem:
         """
         #TODO
         """
+        self.model_name = model_name
         self.use_zone_id_subset = use_zone_id_subset
         self.output_location = output_location
         self.import_location = import_location
@@ -226,7 +229,6 @@ class ExternalForecastSystem:
             alt_worker_growth_assumption_file: str = None,
             alt_pop_split_file: str = None,  # THIS ISN'T USED ANYWHERE
             distribution_method: str = "Furness",
-            distributions: dict = consts.EFS_RUN_DISTRIBUTIONS_DICT,
             purposes_needed: List[int] = consts.PURPOSES_NEEDED,
             modes_needed: List[int] = consts.MODES_NEEDED,
             soc_needed: List[int] = consts.SOC_NEEDED,
@@ -499,7 +501,6 @@ class ExternalForecastSystem:
         minimum_development_certainty = minimum_development_certainty.upper()
         integrate_dlog = dlog_split_file is not None and dlog_file is not None
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(modes_needed[0])
 
         year_list = [str(x) for x in [base_year] + future_years]
 
@@ -508,9 +509,10 @@ class ExternalForecastSystem:
         mode_needed = modes_needed[0]
 
         # ## PREPARE OUTPUTS ## #
+        # TODO: Generate output paths when EFS is initialised
         print("Initialising outputs...")
         imports, exports, _ = self.generate_output_paths(output_location,
-                                                         model_name,
+                                                         self.model_name,
                                                          iter_name)
 
         write_input_info(
@@ -815,7 +817,7 @@ class ExternalForecastSystem:
 
         # ## ATTRACTION GENERATION ###
         print("Generating attractions...")
-        attraction_dataframe = self.attraction_generator.run(
+        attraction_dataframe, nhb_att = self.attraction_generator.run(
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
             employment_growth=worker_growth,
@@ -854,7 +856,7 @@ class ExternalForecastSystem:
 
         # # ## ATTRACTION WEIGHT GENERATION ## #
         print("Generating attraction weights...")
-        attraction_weights = generate_attraction_weights(
+        attraction_weights = du.convert_to_weights(
             attraction_dataframe,
             year_list
         )
@@ -893,20 +895,34 @@ class ExternalForecastSystem:
                 non_split_columns=non_split_columns
             )
 
+            non_split_columns = list(attraction_dataframe.columns)
+            non_split_columns = [x for x in non_split_columns if x not in year_list]
             converted_pure_attractions = self.zone_translator.run(
                 attraction_dataframe,
                 translation_dataframe,
                 self.value_zoning,
                 desired_zoning,
-                non_split_columns=["model_zone_id", "purpose_id"]
+                non_split_columns=non_split_columns
             )
 
+            non_split_columns = list(nhb_att.columns)
+            non_split_columns = [x for x in non_split_columns if x not in year_list]
+            converted_nhb_att = self.zone_translator.run(
+                nhb_att,
+                translation_dataframe,
+                self.value_zoning,
+                desired_zoning,
+                non_split_columns=non_split_columns
+            )
+
+            non_split_columns = list(attraction_weights.columns)
+            non_split_columns = [x for x in non_split_columns if x not in year_list]
             converted_attractions = self.zone_translator.run(
                 attraction_weights,
                 translation_dataframe,
                 self.value_zoning,
                 desired_zoning,
-                non_split_columns=["model_zone_id", "purpose_id"]
+                non_split_columns=non_split_columns
             )
 
             print("Zone translation completed!")
@@ -918,6 +934,7 @@ class ExternalForecastSystem:
             converted_productions = production_trips.copy()
             converted_attractions = attraction_weights.copy()
             converted_pure_attractions = attraction_dataframe.copy()
+            converted_nhb_att = nhb_att.copy()
 
         # Write Translated p/a to file
         fname = desired_zoning + "_productions.csv"
@@ -932,8 +949,11 @@ class ExternalForecastSystem:
             index=False
         )
 
-        # TODO: Add audit_out to export paths
-        audit_out = os.path.join(exports['home'], 'Audits')
+        fname = desired_zoning + "_nhb_attractions.csv"
+        converted_nhb_att.to_csv(
+            os.path.join(exports['attractions'], fname),
+            index=False
+        )
 
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
@@ -949,7 +969,7 @@ class ExternalForecastSystem:
                 ca_needed=car_availabilities_needed,
                 seed_dist_dir=imports['seed_dists'],
                 dist_out=exports['pa_24'],
-                audit_out=audit_out,
+                audit_out=exports['audits'],
                 echo=echo_distribution
             )
             print("Distributions generated!")
@@ -1097,13 +1117,12 @@ class ExternalForecastSystem:
         if output_location is None:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(modes_needed[0])
         _input_checks(iter_num=iter_num, m_needed=modes_needed)
 
         # Generate paths
         imports, exports, _ = self.generate_output_paths(
             output_location=output_location,
-            model_name=model_name,
+            model_name=self.model_name,
             iter_name=iter_name
         )
         # TODO: Add time print outs
@@ -1213,13 +1232,12 @@ class ExternalForecastSystem:
         if output_location is None:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(modes_needed[0])
         _input_checks(iter_num=iter_num, m_needed=modes_needed)
 
         # Generate paths
         imports, exports, _ = self.generate_output_paths(
             output_location=output_location,
-            model_name=model_name,
+            model_name=self.model_name,
             iter_name=iter_name
         )
 
@@ -1244,15 +1262,17 @@ class ExternalForecastSystem:
         # TODO: Check if NHB matrices exist first
         if overwrite_nhb_od:
             print("Furnessing NHB productions...")
-            nhb_furness(p_import=exports['productions'],
-                        seed_nhb_dist_dir=imports['seed_dists'],
-                        od_export=exports['od_24'],
-                        required_purposes=nhb_purposes_needed,
-                        required_modes=modes_needed,
-                        years_needed=years_needed,
-                        replace_zero_vals=True,
-                        zero_infill=0.01,
-                        use_zone_id_subset=self.use_zone_id_subset)
+            dm.nhb_furness(
+                p_import=exports['productions'],
+                a_import=exports['attractions'],
+                seed_dist_dir=imports['seed_dists'],
+                pa_export=exports['pa_24'],
+                model_name=self.model_name,
+                p_needed=nhb_purposes_needed,
+                m_needed=modes_needed,
+                years_needed=[str(x) for x in years_needed],
+                seed_infill=0.01
+            )
             print('NHB productions "furnessed"\n')
 
         if overwrite_nhb_tp_od:
@@ -1336,21 +1356,21 @@ class ExternalForecastSystem:
         if output_location is None:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(m_needed[0])
         _input_checks(iter_num=iter_num, m_needed=m_needed)
 
-        if model_name == 'norms':
+        if self.model_name == 'norms' or self.model_name == 'norms_2015':
             ca_needed = consts.CA_NEEDED
-        elif model_name == 'noham':
+        elif self.model_name == 'noham':
             ca_needed = [None]
         else:
             raise ValueError("Got an unexpected model name. Got %s, expected "
-                             "either 'norms' or 'noham'." % str(model_name))
+                             "either 'norms', 'norms_2015' or 'noham'."
+                             % str(self.model_name))
 
         # Generate paths
         imports, exports, params = self.generate_output_paths(
             output_location=output_location,
-            model_name=model_name,
+            model_name=self.model_name,
             iter_name=iter_name
         )
 
@@ -1456,25 +1476,27 @@ class ExternalForecastSystem:
         if output_location is None:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(m_needed[0])
         _input_checks(iter_num=iter_num, m_needed=m_needed)
 
-        if model_name == 'norms':
+        if self.model_name == 'norms' or self.model_name == 'norms_2015':
             ca_needed = consts.CA_NEEDED
             from_pcu = False
-        elif model_name == 'noham':
+        elif self.model_name == 'noham':
             ca_needed = [None]
             from_pcu = True
         else:
             raise ValueError("Got an unexpected model name. Got %s, expected "
-                             "either 'norms' or 'noham'." % str(model_name))
+                             "either 'norms', 'norms_2015' or 'noham'."
+                             % str(self.model_name))
 
         # Generate paths
         imports, exports, params = self.generate_output_paths(
             output_location=output_location,
-            model_name=model_name,
+            model_name=self.model_name,
             iter_name=iter_name
         )
+
+        # TODO: Fix OD2PA to use norms_2015/norms for zone names
 
         if overwrite_decompiled_od:
             print("Decompiling OD Matrices into purposes...")
@@ -1490,7 +1512,7 @@ class ExternalForecastSystem:
                     year=year,
                     user_class=True,
                     to_wide=True,
-                    wide_col_name=model_name + '_zone_id',
+                    wide_col_name=du.get_model_name(m_needed[0]) + '_zone_id',
                     from_pcu=from_pcu,
                     vehicle_occupancy_import=imports['home']
                 )
@@ -1576,21 +1598,21 @@ class ExternalForecastSystem:
         if output_location is None:
             output_location = self.output_location
         iter_name = 'iter' + str(iter_num)
-        model_name = du.get_model_name(m_needed[0])
         _input_checks(iter_num=iter_num, m_needed=m_needed)
 
-        if model_name == 'norms':
+        if self.model_name == 'norms' or self.model_name == 'norms_2015':
             ca_needed = consts.CA_NEEDED
-        elif model_name == 'noham':
+        elif self.model_name == 'noham':
             ca_needed = [None]
         else:
             raise ValueError("Got an unexpected model name. Got %s, expected "
-                             "either 'norms' or 'noham'." % str(model_name))
+                             "either 'norms', 'norms_2015' or 'noham'."
+                             % str(self.model_name))
 
         # Generate paths
         imports, exports, params = self.generate_output_paths(
             output_location=output_location,
-            model_name=model_name,
+            model_name=self.model_name,
             iter_name=iter_name
         )
 
@@ -2085,10 +2107,11 @@ class ExternalForecastSystem:
         # ## IMPORT PATHS ## #
         # Attraction weights are a bit special, we get these directly from
         # TMS to ensure they are the same - update this on integration
+        temp_model_name = 'norms' if model_name == 'norms_2015' else model_name
         tms_path_parts = [
             import_location,
             "NorMITs Synthesiser",
-            model_name,
+            temp_model_name,
             "Model Zone Lookups",
             "attraction_weights.csv"
         ]
@@ -2136,6 +2159,7 @@ class ExternalForecastSystem:
             'productions': os.path.join(export_home, 'Productions'),
             'attractions': os.path.join(export_home, 'Attractions'),
             'sectors': os.path.join(export_home, 'Sectors'),
+            'audits': os.path.join(export_home, 'Audits'),
 
             # Pre-ME
             'pa': os.path.join(matrices_home, pa),
@@ -2205,27 +2229,6 @@ class ExternalForecastSystem:
         self.value_zones = du.get_data_subset(self.value_zones)
         self.area_types = du.get_data_subset(self.area_types)
         self.area_grouping = du.get_data_subset(self.area_grouping)
-
-
-def generate_attraction_weights(attraction_dataframe: pd.DataFrame,
-                                year_list: List[str]
-                                ) -> pd.DataFrame:
-    """
-    TODO: write generate_attraction_weights doc
-    """
-    attraction_weights = attraction_dataframe.copy()
-    purposes = attraction_weights["purpose_id"].unique()
-
-    for purpose in purposes:
-        for year in year_list:
-            mask = (attraction_weights["purpose_id"] == purpose)
-            attraction_weights.loc[mask, year] = (
-                attraction_weights.loc[mask, year]
-                /
-                attraction_weights.loc[mask, year].sum()
-            )
-
-    return attraction_weights
 
 
 def match_attractions_to_productions(attractions: pd.DataFrame,
@@ -2318,145 +2321,6 @@ def _input_checks(iter_num=None,
                          "etc.")
 
 
-def nhb_furness(p_import,
-                seed_nhb_dist_dir,
-                od_export,
-                required_purposes,
-                required_modes,
-                years_needed,
-                replace_zero_vals,
-                zero_infill,
-                nhb_productions_fname=consts.NHB_PRODUCTIONS_FNAME,
-                use_zone_id_subset=False):
-
-    """
-    Provides a one-iteration Furness constrained on production
-    with options whether to replace zero values on the seed
-
-    Essentially distributes the Productions based on the seed nhb dist
-    TODO: Actually add in some furnessing
-    TODO: Fully integrate into EFS
-
-    Return:
-    ----------
-    None
-    """
-    # TODO: Add in file exists checks
-
-    # For every year, purpose, mode
-    loop_iter = itertools.product(years_needed,
-                                  required_purposes,
-                                  required_modes)
-    for year, purpose, mode in loop_iter:
-        # ## Read in Files ## #
-        # Create year fname
-        year_p_fname = '_'.join(
-            ["yr" + str(year), nhb_productions_fname]
-        )
-
-        # Read in productions
-        p_path = os.path.join(p_import, year_p_fname)
-        productions = pd.read_csv(p_path)
-
-        # select needed productions
-        productions = productions.loc[productions["p"] == purpose]
-        productions = productions.loc[productions["m"] == mode]
-
-        # read in nhb_seeds
-        seed_fname = du.get_dist_name(
-            'nhb',
-            'pa',
-            purpose=str(purpose),
-            mode=str(mode),
-            csv=True
-        )
-        nhb_seeds = pd.read_csv(os.path.join(seed_nhb_dist_dir, seed_fname))
-
-        # convert from wide to long format
-        nhb_seeds = nhb_seeds.melt(
-            id_vars=['p_zone'],
-            var_name='a_zone',
-            value_name='seed_vals'
-        )
-
-        # Need to make sure they are the correct types
-        nhb_seeds['a_zone'] = nhb_seeds['a_zone'].astype(float).astype(int)
-        productions['p_zone'] = productions['p_zone'].astype(int)
-
-        if use_zone_id_subset:
-            zone_subset = [259, 267, 268, 270, 275, 1171, 1173]
-            nhb_seeds = du.get_data_subset(
-                nhb_seeds, 'p_zone', zone_subset)
-            nhb_seeds = du.get_data_subset(
-                nhb_seeds, 'a_zone', zone_subset)
-
-        # Check the productions and seed zones match
-        p_zones = set(productions["p_zone"].tolist())
-        seed_zones = set(nhb_seeds["p_zone"].tolist())
-
-        # Skip check if we're using a subset
-        if use_zone_id_subset:
-            print("WARNING! Using a zone subset. Can't check seed "
-                  "zones are valid!")
-        else:
-            if p_zones != seed_zones:
-                raise ValueError("Production and seed attraction zones "
-                                 "do not match.")
-
-        # Infill zero values
-        if replace_zero_vals:
-            mask = (nhb_seeds["seed_vals"] == 0)
-            nhb_seeds.loc[mask, "seed_vals"] = zero_infill
-
-        # Calculate seed factors by zone
-        # (The sum of zone seed factors should equal 1)
-        unq_zone = nhb_seeds['p_zone'].drop_duplicates()
-        for zone in unq_zone:
-            zone_mask = (nhb_seeds['p_zone'] == zone)
-            nhb_seeds.loc[zone_mask, 'seed_factor'] = (
-                    nhb_seeds[zone_mask]['seed_vals'].values
-                    /
-                    nhb_seeds[zone_mask]['seed_vals'].sum()
-            )
-        nhb_seeds = nhb_seeds.reindex(
-            ['p_zone', 'a_zone', 'seed_factor'],
-            axis=1
-        )
-
-        # Use the seed factors to Init P-A trips
-        init_pa = pd.merge(
-            nhb_seeds,
-            productions,
-            on=["p_zone"])
-        init_pa["trips"] = init_pa["seed_factor"] * init_pa["trips"]
-
-        # TODO: Some actual furnessing should happen here!
-        final_pa = init_pa
-
-        # ## Output the furnessed PA matrix to file ## #
-        # Generate path
-        nhb_dist_fname = du.get_dist_name(
-            'nhb',
-            'od',
-            str(year),
-            str(purpose),
-            str(mode),
-            csv=True
-        )
-        out_path = os.path.join(od_export, nhb_dist_fname)
-
-        # Convert from long to wide format and output
-        # TODO: Generate output name based on model name
-        du.long_to_wide_out(
-            final_pa.rename(columns={'p_zone': 'norms_zone_id'}),
-            v_heading='norms_zone_id',
-            h_heading='a_zone',
-            values='trips',
-            out_path=out_path
-        )
-        print("NHB Distribution %s complete!" % nhb_dist_fname)
-
-
 def write_input_info(output_path,
                      base_year: int,
                      future_years: List[int],
@@ -2538,6 +2402,7 @@ def main():
     iter_num = 0
     import_location = "Y:/"
     output_location = "E:/"
+    model_name = 'norms_2015'   # Make sure the correct mode is being used!!!
 
     # Set up constraints
     if constrain_population:
@@ -2547,6 +2412,7 @@ def main():
 
     # ## RUN START ## #
     efs = ExternalForecastSystem(
+        model_name=model_name,
         use_zone_id_subset=use_zone_id_subset,
         import_location=import_location,
         output_location=output_location
@@ -2566,7 +2432,7 @@ def main():
         )
 
     if run_nhb_efs:
-        # Need to convert, ready for NHB generation
+        # Convert to HB to OD
         efs.pa_to_od(
             output_location=output_location,
             iter_num=iter_num,
@@ -2579,7 +2445,7 @@ def main():
         efs.run_nhb(
             output_location=output_location,
             iter_num=iter_num,
-            overwrite_nhb_productions=True,
+            overwrite_nhb_productions=False,
             overwrite_nhb_od=True,
             overwrite_nhb_tp_od=True
         )
@@ -2612,9 +2478,6 @@ def main():
             overwrite_aggregated_pa=True,
             overwrite_future_year_od=True
         )
-
-    # TODO: Add function to compile post-me PA correctly
-    # efs.compile_post_me_pa?()
 
 
 if __name__ == '__main__':

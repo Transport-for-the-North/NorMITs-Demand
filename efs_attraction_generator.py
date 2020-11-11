@@ -12,6 +12,7 @@ import pandas as pd
 
 from typing import List
 from typing import Dict
+from typing import Tuple
 
 from itertools import product
 
@@ -55,6 +56,7 @@ class EFSAttractionGenerator:
             ntem_control_dir: str = None,
             lad_lookup_dir: str = None,
             control_attractions: bool = True,
+            control_fy_attractions: bool = True,
 
             # D-Log
             d_log: pd.DataFrame = None,
@@ -79,7 +81,8 @@ class EFSAttractionGenerator:
             audits: bool = True,
             out_path: str = None,
             recreate_attractions: bool = True,
-            ) -> pd.DataFrame:
+            aggregate_nhb_tp: bool = True
+            ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Attraction model for the external forecast system. This has been
         written to align with TMS attraction generation, with the addition of
@@ -153,6 +156,11 @@ class EFSAttractionGenerator:
             Whether to control the generated attractions to the constraints
             given in ntem_control_dir or not.
 
+        control_fy_attractions:
+            Whether to control the generated future year attractions to the
+            constraints given in ntem_control_dir or not. When running for
+            scenarios other than the base NTEM, this should be False.
+
         d_log:
             TODO: Clarify what format D_log data comes in as
 
@@ -212,19 +220,31 @@ class EFSAttractionGenerator:
             look in out_path for previously produced attractions and return
             them. If none can be found, they will be generated.
 
+        aggregate_nhb_tp:
+            Whether to aggregate the time period before writing to disk for
+            nhb attractions or not
+
         Returns
         -------
         segmented_attractions:
             Attractions for mode m_needed, segmented by all segments possible
             in the input data.
+
+        segmented_nhb_attractions:
+            NHB attractions for mode m_needed, segmented by all segments
+            possible in the input data.
         """
         # Return previously created productions if we can
         fname = 'MSOA_aggregated_attractions.csv'
+        nhb_fname = 'MSOA_nhb_attractions.csv'
         final_output_path = os.path.join(out_path, fname)
+        nhb_output_path = os.path.join(out_path, nhb_fname)
 
-        if not recreate_attractions and os.path.isfile(final_output_path):
+        if (not recreate_attractions
+                and os.path.isfile(final_output_path)
+                and os.path.isfile(nhb_output_path)):
             print("Found some already produced attractions. Using them!")
-            return pd.read_csv(final_output_path)
+            return pd.read_csv(final_output_path), pd.read_csv(nhb_output_path)
 
         # Init
         internal_zone_col = 'msoa_zone_id'
@@ -351,7 +371,7 @@ class EFSAttractionGenerator:
             mask = (employment[emp_cat_col] == 'E01')
             for year in all_years:
                 total_emp = employment.loc[mask, year].sum()
-                print('. Total population for year %s is: %.4f'
+                print('. Total jobs for year %s is: %.4f'
                       % (str(year), total_emp))
             print('\n')
 
@@ -378,9 +398,10 @@ class EFSAttractionGenerator:
         for unq_col in all_years:
             idx_cols.remove(unq_col)
 
-        attractions = generate_attractions(
+        attractions, nhb_att = generate_attractions(
             employment=employment,
-            all_years=all_years,
+            base_year=base_year,
+            future_years=future_years,
             attraction_weights_path=imports['weights'],
             mode_splits_path=imports['mode_splits'],
             soc_weights_path=imports['soc_weights'],
@@ -389,33 +410,61 @@ class EFSAttractionGenerator:
             p_col=a_weights_p_col,
             m_col=mode_split_m_col,
             ntem_control_dir=imports['ntem_control'],
-            lad_lookup_dir=imports['lad_lookup']
+            lad_lookup_dir=imports['lad_lookup'],
+            control_fy_attractions=control_fy_attractions
         )
+
+        # Aggregate nhb trips if needed
+        if aggregate_nhb_tp:
+            reindex_cols = list(nhb_att)
+            reindex_cols.remove('tp')
+            group_cols = [x for x in reindex_cols.copy() if x not in all_years]
+
+            nhb_att = nhb_att.reindex(reindex_cols, axis='columns')
+            nhb_att = nhb_att.groupby(group_cols).sum().reset_index()
 
         # Write attractions to file
         if out_path is None:
             print("WARNING! No output path given. "
                   "Not writing attractions to file.")
         else:
-            print("Writing productions to file...")
+            print("Writing attractions to file...")
             fname = 'MSOA_attractions.csv'
+            nhb_fname = 'MSOA_nhb_attractions.csv'
             attractions.to_csv(os.path.join(out_path, fname), index=False)
+            nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 
+        # TODO: functionalise conversion to old efs
         # ## CONVERT TO OLD EFS FORMAT ## #
         # Make sure columns are the correct data type
         attractions[a_weights_p_col] = attractions[a_weights_p_col].astype(int)
         attractions[mode_split_m_col] = attractions[mode_split_m_col].astype(int)
         attractions.columns = attractions.columns.astype(str)
 
+        nhb_att[a_weights_p_col] = nhb_att[a_weights_p_col].astype(int)
+        nhb_att[mode_split_m_col] = nhb_att[mode_split_m_col].astype(int)
+        nhb_att.columns = nhb_att.columns.astype(str)
+
         # Extract just the needed mode
         mask = attractions[mode_split_m_col].isin(m_needed)
         attractions = attractions[mask]
         attractions = attractions.drop(mode_split_m_col, axis='columns')
 
+        mask = nhb_att[mode_split_m_col].isin(m_needed)
+        nhb_att = nhb_att[mask]
+        nhb_att = nhb_att.drop(mode_split_m_col, axis='columns')
+
         # Rename columns so output of this function call is the same
         # as it was before the re-write
         attractions = du.convert_msoa_naming(
             attractions,
+            msoa_col_name=internal_zone_col,
+            msoa_path=msoa_conversion_path,
+            to='int'
+        )
+
+        nhb_att = du.convert_msoa_naming(
+            nhb_att,
             msoa_col_name=internal_zone_col,
             msoa_path=msoa_conversion_path,
             to='int'
@@ -428,10 +477,19 @@ class EFSAttractionGenerator:
             }
         )
 
-        fname = 'MSOA_aggregated_attractions.csv'
-        attractions.to_csv(os.path.join(out_path, fname), index=False)
+        nhb_att = nhb_att.rename(
+            columns={
+                internal_zone_col: external_zone_col,
+                a_weights_p_col: 'purpose_id',
+            }
+        )
 
-        return attractions
+        fname = 'MSOA_aggregated_attractions.csv'
+        nhb_fname = 'MSOA_nhb_aggregated_attractions.csv'
+        attractions.to_csv(os.path.join(out_path, fname), index=False)
+        nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
+
+        return attractions, nhb_att
 
     def attraction_generation(self,
                               worker_dataframe: pd.DataFrame,
@@ -1010,7 +1068,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
                              control_path: str = None,
                              lad_lookup_dir: str = None,
                              lad_lookup_name: str = consts.DEFAULT_LAD_LOOKUP,
-                             ) -> pd.DataFrame:
+                             ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Combines employment numbers with attractions weights to produce the
     attractions per purpose.
@@ -1170,6 +1228,25 @@ def merge_attraction_weights(employment: pd.DataFrame,
     attractions[m_col] = attractions[m_col].astype(int)
     attractions[p_col] = attractions[p_col].astype(int)
 
+    # ## GENERATE NHB ATTRACTIONS ## #
+    # Copy and rename Hb attractions
+    nhb_attractions = attractions.copy()
+    nhb_attractions = nhb_attractions[nhb_attractions[p_col] != 1]
+    nhb_attractions = nhb_attractions[nhb_attractions[p_col] != 7]
+    nhb_attractions[p_col] += 10
+
+    # In the meantime hack infill time period in nhb
+    tp_infill = pd.DataFrame({'ph': [1, 1, 1, 1],
+                              'tp': [1, 2, 3, 4]})
+    nhb_attractions['ph'] = 1
+    nhb_attractions = pd.merge(
+        nhb_attractions,
+        tp_infill,
+        how='left',
+        on='ph'
+    ).drop('ph', axis='columns')
+    del tp_infill
+
     # Control if required
     if do_ntem_control:
         # Get ntem totals
@@ -1177,7 +1254,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
         ntem_lad_lookup = pd.read_csv(os.path.join(lad_lookup_dir,
                                                    lad_lookup_name))
 
-        print("Performing NTEM constraint...")
+        print("Performing HB NTEM constraint...")
         # TODO: Allow control_to_ntem() to take flexible col names
         attractions = attractions.rename(columns={p_col: 'p', m_col: 'm'})
         attractions, *_ = du.control_to_ntem(
@@ -1191,11 +1268,25 @@ def merge_attraction_weights(employment: pd.DataFrame,
         )
         attractions = attractions.rename(columns={'p': p_col, 'm': m_col})
 
-    return attractions
+        print("Performing NHB NTEM constraint...")
+        nhb_attractions = nhb_attractions.rename(columns={p_col: 'p', m_col: 'm'})
+        nhb_attractions, *_ = du.control_to_ntem(
+            nhb_attractions,
+            ntem_totals,
+            ntem_lad_lookup,
+            group_cols=['p', 'm', 'tp'],
+            base_value_name='trips',
+            ntem_value_name='Attractions',
+            purpose='nhb'
+        )
+        nhb_attractions = nhb_attractions.rename(columns={'p': p_col, 'm': m_col})
+
+    return attractions, nhb_attractions
 
 
 def generate_attractions(employment: pd.DataFrame,
-                         all_years: List[str],
+                         base_year: str,
+                         future_years: List[str],
                          attraction_weights_path: str,
                          mode_splits_path: str,
                          soc_weights_path: str,
@@ -1206,8 +1297,9 @@ def generate_attractions(employment: pd.DataFrame,
                          m_split_col: str = 'mode_share',
                          ntem_control_dir: str = None,
                          lad_lookup_dir: str = None,
-                         soc_split: bool = True
-                         ) -> pd.DataFrame:
+                         soc_split: bool = True,
+                         control_fy_attractions: bool = True
+                         ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Converts employment to attractions using attraction_weights
 
@@ -1217,8 +1309,12 @@ def generate_attractions(employment: pd.DataFrame,
         Dataframe containing the employment data. This should contain all
         segmentation, and then a separate column for each year
 
-    all_years:
-        A list of all the year columns to be converted
+    base_year:
+        The base year of this model run. This will be prepended to future_years
+        to run attraction generation for all years
+
+    future_years:
+        A list of all the future year columns to be converted
 
     attraction_weights_path:
         Path the the attraction weights file. This file should contain a wide
@@ -1265,6 +1361,11 @@ def generate_attractions(employment: pd.DataFrame,
         Whether to apply the soc splits from soc_weights_path to the
         attractions or not.
 
+    control_fy_attractions:
+        Whether to control the generated future year attractions to the
+        constraints given in ntem_control_dir or not. When running for
+        scenarios other than the base NTEM, this should be False.
+
     Returns
     -------
     attractions:
@@ -1276,6 +1377,7 @@ def generate_attractions(employment: pd.DataFrame,
     idx_cols = idx_cols.copy()
     idx_cols.remove(emp_cat_col)
     ntem_base_fname = 'ntem_pa_ave_wday_%s.csv'
+    all_years = [base_year] + future_years
 
     # Get the soc weights per zone - may want to move this into each year
     # in future
@@ -1285,11 +1387,14 @@ def generate_attractions(employment: pd.DataFrame,
 
     # Generate attractions per year
     yr_ph = dict()
+    yr_ph_nhb = dict()
     for year in all_years:
         print("\nConverting year %s to attractions..." % str(year))
 
-        # Figure out the ntem control path
-        if ntem_control_dir is not None:
+        # Only only set the control path if we need to constrain
+        if not control_fy_attractions and year != base_year:
+            ntem_control_path = None
+        elif ntem_control_dir is not None:
             ntem_fname = ntem_base_fname % year
             ntem_control_path = os.path.join(ntem_control_dir, ntem_fname)
         else:
@@ -1303,7 +1408,7 @@ def generate_attractions(employment: pd.DataFrame,
         )
 
         # Convert employment to attractions for this year
-        yr_ph[year] = merge_attraction_weights(
+        yr_ph[year], yr_ph_nhb[year] = merge_attraction_weights(
             employment=yr_emp,
             attraction_weights_path=attraction_weights_path,
             mode_splits_path=mode_splits_path,
@@ -1324,7 +1429,13 @@ def generate_attractions(employment: pd.DataFrame,
         unique_col=unique_col,
         p_col=p_col
     )
-    return attractions
+    nhb_attractions = du.combine_yearly_dfs(
+        yr_ph_nhb,
+        unique_col=unique_col,
+        p_col=p_col
+    )
+
+    return attractions, nhb_attractions
 
 
 def build_attraction_imports(import_home: str,
