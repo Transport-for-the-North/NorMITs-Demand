@@ -855,7 +855,8 @@ def build_compile_params(import_dir: str,
                          tp_needed: Iterable[int] = None,
                          split_hb_nhb: bool = False,
                          output_headers: List[str] = None,
-                         output_format: str = 'wide'
+                         output_format: str = 'wide',
+                         output_fname: str = None
                          ) -> None:
     """
     Create a compile_params file to be used with compile_od().
@@ -898,6 +899,11 @@ def build_compile_params(import_dir: str,
     output_format:
         What format the compiled matrices should be output as. Usually either
         'wide' or 'long'.
+
+    output_fname:
+        The name to give to the output file. If left as None,
+        du.get_compile_params_name(matrix_format, year) is used to generate
+        the output name.
 
     Returns
     -------
@@ -967,8 +973,9 @@ def build_compile_params(import_dir: str,
                     out_lines.append(line_parts)
 
         # Write outputs for this year
-        out_fname = du.get_compile_params_name(matrix_format, str(year))
-        out_path = os.path.join(export_dir, out_fname)
+        if output_fname is None:
+            output_fname = du.get_compile_params_name(matrix_format, str(year))
+        out_path = os.path.join(export_dir, output_fname)
         du.write_csv(output_headers, out_lines, out_path)
 
 

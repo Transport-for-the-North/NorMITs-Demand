@@ -38,38 +38,81 @@ def main():
     m_needed = [3]
     process_count = 5
     p_needed = consts.ALL_HB_P
-    seg_level = 'distribution'
+    seg_level = 'tms'
+    seg_level = 'vdm'
 
     # Audit as we go
     audit_tol = 0.001
 
-    decompile_od_bool = False
-    gen_tour_proportions_bool = True
+    decompile_od_bool = True
+    gen_tour_proportions_bool = False
     post_me_compile_pa = False
-    pa_back_to_od_check = True
+    pa_back_to_od_check = False
+
+    # Validate inputs
+    seg_level = du.validate_seg_level(seg_level)
 
     if decompile_od_bool:
-        od2pa.convert_to_efs_matrices(
-            import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
-            export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
-            matrix_format='od',
-            year=consts.BASE_YEAR,
-            m_needed=m_needed,
-            user_class=True,
-            to_wide=True,
-            wide_col_name=model_name + '_zone_id',
-            from_pcu=from_pcu,
-            vehicle_occupancy_import=r'Y:\NorMITs Demand\import'
-        )
+        # od2pa.convert_to_efs_matrices(
+        #     import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
+        #     export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
+        #     matrix_format='od',
+        #     year=consts.BASE_YEAR,
+        #     m_needed=m_needed,
+        #     user_class=True,
+        #     to_wide=True,
+        #     wide_col_name=model_name + '_zone_id',
+        #     from_pcu=from_pcu,
+        #     vehicle_occupancy_import=r'Y:\NorMITs Demand\import'
+        # )
+        #
+        # od2pa.decompile_od(
+        #     od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
+        #     od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
+        #     decompile_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params/od_compilation_factors.pickle',
+        #     year=consts.BASE_YEAR,
+        #     audit_tol=audit_tol
+        # )
 
-        od2pa.decompile_od(
-            od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
-            od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
-            decompile_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params/od_compilation_factors.pickle',
-            seg_level=seg_level,
-            year=consts.BASE_YEAR,
-            audit_tol=audit_tol
-        )
+        # Convert matrices to VDM segmentation
+        #  Then output
+        #  HBW,     p1
+        #  HBEB,    p2
+        #  HBO,     p3-8
+        #  NHBEB,   p12,
+        #  NHBO,    p13-16, 18
+
+        if seg_level == 'vdm':
+            # Build path for compile params
+            output_fname = du.get_compile_params_name('vdm_od',
+                                                      consts.BASE_YEAR)
+            compile_param_path = os.path.join(r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Test Compile Params',
+                                              output_fname)
+
+            # Compile to VDM
+            mat_p.build_compile_params(
+                import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
+                export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Test Compile Params',
+                matrix_format='od',
+                years_needed=[consts.BASE_YEAR],
+                m_needed=m_needed,
+                ca_needed=ca_needed,
+                tp_needed=consts.TIME_PERIODS,
+                split_hb_nhb=True,
+                output_fname=output_fname
+            )
+
+            du.compile_od(
+                od_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
+                write_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM OD Matrices',
+                compile_param_path=compile_param_path,
+                build_factor_pickle=False
+            )
+
+        elif seg_level != 'tms':
+            raise ValueError("Got a segmentation that isn't TMS, but I don't "
+                             "know how to compile to it! Given segmentation "
+                             "level: %s" % seg_level)
 
     if gen_tour_proportions_bool:
         mat_p.generate_tour_proportions(
