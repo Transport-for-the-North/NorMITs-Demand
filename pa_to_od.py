@@ -260,7 +260,7 @@ def efs_build_tp_pa(tp_import: str,
                     ns_needed: List[int] = None,
                     ca_needed: List[int] = None,
                     matrix_format: str = 'pa',
-                    process_count: int = -1
+                    process_count: int = -2
                     ) -> None:
     """
     Converts the 24hr matrices in pa_import into time_period segmented

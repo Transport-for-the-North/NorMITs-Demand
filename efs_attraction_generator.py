@@ -81,7 +81,7 @@ class EFSAttractionGenerator:
             out_path: str = None,
             recreate_attractions: bool = True,
             aggregate_nhb_tp: bool = True
-            ) -> pd.DataFrame:
+            ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Attraction model for the external forecast system. This has been
         written to align with TMS attraction generation, with the addition of
@@ -223,14 +223,22 @@ class EFSAttractionGenerator:
         segmented_attractions:
             Attractions for mode m_needed, segmented by all segments possible
             in the input data.
+
+        segmented_nhb_attractions:
+            NHB attractions for mode m_needed, segmented by all segments
+            possible in the input data.
         """
         # Return previously created productions if we can
         fname = 'MSOA_aggregated_attractions.csv'
+        nhb_fname = 'MSOA_nhb_attractions.csv'
         final_output_path = os.path.join(out_path, fname)
+        nhb_output_path = os.path.join(out_path, nhb_fname)
 
-        if not recreate_attractions and os.path.isfile(final_output_path):
+        if (not recreate_attractions
+                and os.path.isfile(final_output_path)
+                and os.path.isfile(nhb_output_path)):
             print("Found some already produced attractions. Using them!")
-            return pd.read_csv(final_output_path)
+            return pd.read_csv(final_output_path), pd.read_csv(nhb_output_path)
 
         # Init
         internal_zone_col = 'msoa_zone_id'
@@ -412,27 +420,44 @@ class EFSAttractionGenerator:
             print("WARNING! No output path given. "
                   "Not writing attractions to file.")
         else:
-            print("Writing productions to file...")
+            print("Writing attractions to file...")
             fname = 'MSOA_attractions.csv'
             nhb_fname = 'MSOA_nhb_attractions.csv'
             attractions.to_csv(os.path.join(out_path, fname), index=False)
             nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 
+
+        # TODO: functionalise conversion to old efs
         # ## CONVERT TO OLD EFS FORMAT ## #
         # Make sure columns are the correct data type
         attractions[a_weights_p_col] = attractions[a_weights_p_col].astype(int)
         attractions[mode_split_m_col] = attractions[mode_split_m_col].astype(int)
         attractions.columns = attractions.columns.astype(str)
 
+        nhb_att[a_weights_p_col] = nhb_att[a_weights_p_col].astype(int)
+        nhb_att[mode_split_m_col] = nhb_att[mode_split_m_col].astype(int)
+        nhb_att.columns = nhb_att.columns.astype(str)
+
         # Extract just the needed mode
         mask = attractions[mode_split_m_col].isin(m_needed)
         attractions = attractions[mask]
         attractions = attractions.drop(mode_split_m_col, axis='columns')
 
+        mask = nhb_att[mode_split_m_col].isin(m_needed)
+        nhb_att = nhb_att[mask]
+        nhb_att = nhb_att.drop(mode_split_m_col, axis='columns')
+
         # Rename columns so output of this function call is the same
         # as it was before the re-write
         attractions = du.convert_msoa_naming(
             attractions,
+            msoa_col_name=internal_zone_col,
+            msoa_path=msoa_conversion_path,
+            to='int'
+        )
+
+        nhb_att = du.convert_msoa_naming(
+            nhb_att,
             msoa_col_name=internal_zone_col,
             msoa_path=msoa_conversion_path,
             to='int'
@@ -445,10 +470,19 @@ class EFSAttractionGenerator:
             }
         )
 
-        fname = 'MSOA_aggregated_attractions.csv'
-        attractions.to_csv(os.path.join(out_path, fname), index=False)
+        nhb_att = nhb_att.rename(
+            columns={
+                internal_zone_col: external_zone_col,
+                a_weights_p_col: 'purpose_id',
+            }
+        )
 
-        return attractions
+        fname = 'MSOA_aggregated_attractions.csv'
+        nhb_fname = 'MSOA_nhb_aggregated_attractions.csv'
+        attractions.to_csv(os.path.join(out_path, fname), index=False)
+        nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
+
+        return attractions, nhb_att
 
     def attraction_generation(self,
                               worker_dataframe: pd.DataFrame,

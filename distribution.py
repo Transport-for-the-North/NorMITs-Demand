@@ -203,6 +203,12 @@ def _distribute_pa_internal(productions,
     productions = productions.rename(columns={str(year): unique_col})
     a_weights = a_weights.rename(columns={str(year): unique_col})
 
+    # Tidy up
+    productions = productions.reindex([zone_col, unique_col], axis='columns')
+    productions = productions.groupby(zone_col).sum().reset_index()
+    a_weights = a_weights.reindex([zone_col, unique_col], axis='columns')
+    a_weights = a_weights.groupby(zone_col).sum().reset_index()
+
     # ## MATCH P/A ZONES ## #
     if productions.empty:
         raise ValueError(
@@ -230,10 +236,6 @@ def _distribute_pa_internal(productions,
         a_weights[unique_col] /= (
             a_weights[unique_col].sum() / productions[unique_col].sum()
         )
-
-    # Tidy up
-    productions = productions.reindex([zone_col, unique_col], axis='columns')
-    a_weights = a_weights.reindex([zone_col, unique_col], axis='columns')
 
     pa_dist = furness_pandas_wrapper(
         row_targets=productions,

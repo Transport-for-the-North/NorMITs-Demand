@@ -817,7 +817,7 @@ class ExternalForecastSystem:
 
         # ## ATTRACTION GENERATION ###
         print("Generating attractions...")
-        attraction_dataframe = self.attraction_generator.run(
+        attraction_dataframe, nhb_att = self.attraction_generator.run(
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
             employment_growth=worker_growth,
@@ -895,20 +895,34 @@ class ExternalForecastSystem:
                 non_split_columns=non_split_columns
             )
 
+            non_split_columns = list(attraction_dataframe.columns)
+            non_split_columns = [x for x in non_split_columns if x not in year_list]
             converted_pure_attractions = self.zone_translator.run(
                 attraction_dataframe,
                 translation_dataframe,
                 self.value_zoning,
                 desired_zoning,
-                non_split_columns=["model_zone_id", "purpose_id"]
+                non_split_columns=non_split_columns
             )
 
+            non_split_columns = list(nhb_att.columns)
+            non_split_columns = [x for x in non_split_columns if x not in year_list]
+            converted_nhb_att = self.zone_translator.run(
+                nhb_att,
+                translation_dataframe,
+                self.value_zoning,
+                desired_zoning,
+                non_split_columns=non_split_columns
+            )
+
+            non_split_columns = list(attraction_weights.columns)
+            non_split_columns = [x for x in non_split_columns if x not in year_list]
             converted_attractions = self.zone_translator.run(
                 attraction_weights,
                 translation_dataframe,
                 self.value_zoning,
                 desired_zoning,
-                non_split_columns=["model_zone_id", "purpose_id"]
+                non_split_columns=non_split_columns
             )
 
             print("Zone translation completed!")
@@ -920,6 +934,7 @@ class ExternalForecastSystem:
             converted_productions = production_trips.copy()
             converted_attractions = attraction_weights.copy()
             converted_pure_attractions = attraction_dataframe.copy()
+            converted_nhb_att = nhb_att.copy()
 
         # Write Translated p/a to file
         fname = desired_zoning + "_productions.csv"
@@ -934,8 +949,11 @@ class ExternalForecastSystem:
             index=False
         )
 
-        # TODO: Add audit_out to export paths
-        audit_out = os.path.join(exports['home'], 'Audits')
+        fname = desired_zoning + "_nhb_attractions.csv"
+        converted_nhb_att.to_csv(
+            os.path.join(exports['attractions'], fname),
+            index=False
+        )
 
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
@@ -951,7 +969,7 @@ class ExternalForecastSystem:
                 ca_needed=car_availabilities_needed,
                 seed_dist_dir=imports['seed_dists'],
                 dist_out=exports['pa_24'],
-                audit_out=audit_out,
+                audit_out=exports['audits'],
                 echo=echo_distribution
             )
             print("Distributions generated!")
@@ -1248,7 +1266,7 @@ class ExternalForecastSystem:
                 p_import=exports['productions'],
                 a_import=exports['attractions'],
                 seed_dist_dir=imports['seed_dists'],
-                od_export=exports['od_24'],
+                pa_export=exports['pa_24'],
                 model_name=self.model_name,
                 p_needed=nhb_purposes_needed,
                 m_needed=modes_needed,
@@ -2306,7 +2324,7 @@ def _input_checks(iter_num=None,
 def nhb_furness(p_import: str,
                 a_import: str,
                 seed_dist_dir: str,
-                od_export: str,
+                pa_export: str,
                 model_name: str,
                 years_needed: List[str] = consts.ALL_YEARS,
                 p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
@@ -2362,14 +2380,11 @@ def nhb_furness(p_import: str,
     # Convert to weights
     attraction_weights = du.convert_to_weights(attractions, years_needed)
 
-    print(attractions)
-    exit()
-
     return dm.distribute_pa(
         productions,
         attraction_weights,
         seed_dist_dir,
-        dist_out=od_export,
+        dist_out=pa_export,
         years_needed=years_needed,
         p_needed=p_needed,
         m_needed=m_needed,
@@ -2572,8 +2587,8 @@ def main():
     echo = False
 
     # Running control
-    run_base_efs = True
-    recreate_productions = False
+    run_base_efs = False
+    recreate_productions = True
     recreate_attractions = True
 
     constrain_population = False
