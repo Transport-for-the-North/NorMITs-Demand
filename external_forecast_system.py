@@ -2387,7 +2387,7 @@ def main():
     echo = False
 
     # Running control
-    run_base_efs = False
+    run_base_efs = True
     recreate_productions = True
     recreate_attractions = True
 
