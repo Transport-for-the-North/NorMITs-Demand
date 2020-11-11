@@ -5,8 +5,11 @@ from typing import List, Union
 from itertools import product
 
 import pandas as pd
+import numpy as np
 from tqdm import tqdm
 
+from demand_utilities import utils as du
+from demand_utilities import reports as dr
 from demand_utilities.sector_reporter_v2 import SectorReporter
 from matrix_processing import aggregate_matrices
 import efs_constants as consts
@@ -26,6 +29,8 @@ def matrix_reporting(matrix_directory: str,
                      sectors_file: str = None,
                      sectors_name: str = "Sectors",
                      aggregation_method: str = "sum",
+                     tld_path: str = None,
+                     cost_path: str = None,
                      overwrite_dir: bool = True):
     """
     TODO: write documentataion
@@ -97,6 +102,17 @@ def matrix_reporting(matrix_directory: str,
         # This should probably be handled in matrix_processing
         print("ERROR::MISSING_SEGMENTS")
         success = False
+
+    # Extract the trip length distributions
+    if cost_path is not None and tld_path is not None:
+        tld_reporting(
+            output_dir,
+            matrix_format,
+            tld_path=tld_path,
+            cost_lookup_path=cost_path
+        )
+
+    output_files = glob(os.path.join(output_dir, "*.csv"))
 
     # Aggregate sectors if requried
     if sectors_file is not None:
@@ -215,7 +231,205 @@ def parse_segments(required_segments: Union[List[int], str],
         return required_segments
 
 
-def test():
+def tld_reporting(matrix_dir: str,
+                  matrix_type: str,
+                  tld_path: str,
+                  cost_lookup_path: str):
+    """TODO"""
+
+    # Create the tld directory if it doesn't exist
+    output_dir = os.path.join(matrix_dir, "tld")
+    if not os.path.isdir(output_dir):
+        os.mkdir(output_dir)
+    else:
+        for file_name in glob(os.path.join(output_dir, "*.csv")):
+            os.remove(file_name)
+
+    # Loop through all matrices, pulling the trip length dists as required
+    matrices = os.listdir(matrix_dir)
+    mat_df = du.parse_mat_output(
+        matrices,
+        sep="_",
+        mat_type=matrix_type,
+        file_format=".csv",
+        file_name="matrix"
+    )
+    for _, mat_desc in mat_df.iterrows():
+        mat_dict = mat_desc.to_dict()
+
+        # Extract trip matrix info for each file
+        matrix = mat_dict.pop("matrix")
+        matrix = pd.read_csv(
+            os.path.join(matrix_dir, matrix)
+        )
+
+        # Extract segments if they exist - remove from calib params if needed
+        # purpose, mode, segment(optional) required in tlb function
+        trip_origin = mat_dict.pop("trip_origin")
+        year = mat_dict.pop("yr")
+        purpose = mat_dict.get("p")
+        mode = mat_dict.get("m")
+        soc = mat_dict.get("soc")
+        ns = mat_dict.get("ns")
+        ca = mat_dict.pop("ca", None)
+
+        # Choose the correct segmentation for tlb and dist names
+        # Non-home based in "standard_segments" can use tp to select tlb
+        # Time period is not an option otherwise
+        if soc is None and ns is None:
+            seg_tld_path = os.path.join(tld_path, "standard_segments")
+            segment = None
+            if trip_origin == "hb":
+                tp = mat_dict.pop("tp", None)
+            else:
+                tp = mat_dict.get("tp")
+        else:
+            seg_tld_path = os.path.join(tld_path, "enhanced_segments")
+            segment = soc if du.is_none_like(ns) else ns
+            tp = mat_dict.pop("tp", None)
+
+        for item, dat in mat_dict.items():
+            if dat.isnumeric():
+                mat_dict.update({item: int(dat)})
+
+        # Get the relevant trip length bands
+        # Some legacy code here - "ntem"
+        # TODO Use the year here to get the forecast/base tlb when they exist
+        print(mat_dict)
+        year_tld_path = seg_tld_path
+        tlb = du.get_trip_length_bands(
+            year_tld_path,
+            mat_dict,
+            "ntem",
+            trip_origin,
+            replace_nan=False,
+            echo=True
+        )
+
+        
+        # Set the string sent to the costs function
+        # TODO fix for NORMS tp costs - do not exist at the moment
+        tp_str = "24hr" if tp is None else "tp"
+        tp_str = "24hr"
+        _ = str(mat_dict.pop("tp", None))
+
+        # Get the cost data for the purpose/mode
+        costs, cost_name = du.get_costs(
+            cost_lookup_path,
+            mat_dict,
+            tp=tp_str,
+            iz_infill=0.5
+        )
+
+        # Convert to a square numpy matrix
+        unq_zones = list(range(1, (costs[list(costs)[0]].max())+1))
+        costs = du.df_to_np(
+            costs,
+            v_heading='p_zone',
+            h_heading='a_zone',
+            values='cost',
+            unq_internal_zones=unq_zones
+        )
+
+        matrix = matrix.drop(list(matrix)[0], axis=1).values
+
+        # This bit matches the shape to the NORMS cost zones
+        # TODO see why this is needed - zoning mismatch
+        pad_matrix = np.zeros((1300, 1300))
+        pad_matrix[:matrix.shape[0], :matrix.shape[1]] = matrix
+
+        # Get trip length by band
+        
+        (trip_lengths_by_band_km,
+         band_shares_by_band,
+         average_trip_length) = dr.get_trip_length_by_band(tlb,
+                                                           costs,
+                                                           pad_matrix)
+
+        # Merge into single dataframe on the band index
+        tld_results = trip_lengths_by_band_km.merge(
+            band_shares_by_band,
+            on="tlb_index"
+        ).fillna(0.0)
+
+        # Save individual bands and band shares to separate csv files
+        out_file = du.get_dist_name(
+            trip_origin,
+            matrix_type,
+            year,
+            purpose,
+            mode,
+            segment=segment,
+            car_availability=ca,
+            tp=tp,
+            csv=True,
+            suffix="_tld"
+        )
+        out_file = os.path.join(output_dir, out_file)
+        tld_results.to_csv(out_file, index=False)
+
+    # Concatenate all files into a single stacked csv
+    concat_vector_folder(
+        output_dir,
+        matrix_type=matrix_type,
+        output_name="tld_dists.csv"
+    )
+
+
+def concat_vector_folder(data_dir: str,
+                         matrix_type: str,
+                         output_name: str = None):
+    """TODO"""
+
+    # Override default file name
+    output_name = output_name or "concatenated_data.csv"
+
+    # Fetch a list of all .csv files in the directory
+    files = os.listdir(data_dir)
+
+    file_df = du.parse_mat_output(
+        files,
+        sep="_",
+        mat_type=matrix_type,
+        file_format=".csv",
+        file_name="file"
+    )
+
+    vector_df = pd.DataFrame()
+
+    for _, row in file_df.iterrows():
+
+        single_vector = pd.read_csv(
+            os.path.join(data_dir, row.pop("file"))
+        )
+
+        # Add additional columns for each segment e.g. purpose, mode, soc/ns
+        for key, value in row.items():
+            single_vector[key] = value
+
+        if vector_df.empty:
+            vector_df = single_vector
+        else:
+            vector_df = pd.concat(
+                (vector_df, single_vector),
+                axis=0
+            )
+            
+    # Remove columns that just contain "none" - e.g. suffixes on the file name
+    vector_df = vector_df[
+        [col for col in vector_df 
+         if next(iter(set(vector_df[col]))) != "none"]
+    ]
+
+    vector_df.to_csv(
+        os.path.join(data_dir, output_name),
+        index=False
+    )
+    
+    # TODO add option to remove individual files if needed
+
+
+def test(param_file):
     """
     TODO: write docs
     Provides test paths
