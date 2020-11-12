@@ -25,7 +25,7 @@ import demand_utilities.vehicle_occupancy as vo
 
 def main():
     model_name = 'noham'
-    if model_name == 'norms':
+    if model_name == 'norms' or model_name == 'norms_2015':
         ca_needed = consts.CA_NEEDED
         from_pcu = False
     elif model_name == 'noham':
@@ -107,16 +107,28 @@ def main():
                              "level: %s" % seg_level)
 
     if gen_tour_proportions_bool:
+        if seg_level == 'vdm':
+            seg_params = {}
+        elif seg_level == 'tms':
+            seg_params = {
+                'p_needed': p_needed,
+                'm_needed': m_needed,
+                'ca_needed': ca_needed,
+            }
+        else:
+            raise NotImplementedError("Do not know the seg_params for '%s'. "
+                                      "Although it is a valid value!"
+                                      % seg_level)
+
         mat_p.generate_tour_proportions(
             od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
             pa_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
             tour_proportions_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             zone_translate_dir=r'Y:\NorMITs Demand\import\zone_translation',
-            p_needed=p_needed,
+            model_name=model_name,
             year=consts.BASE_YEAR,
-            m_needed=m_needed,
-            ca_needed=ca_needed,
             seg_level=seg_level,
+            seg_params=seg_params,
             process_count=process_count
         )
 

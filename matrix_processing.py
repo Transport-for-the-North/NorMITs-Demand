@@ -17,7 +17,9 @@ import numpy as np
 import pandas as pd
 import pickle
 
+from typing import Any
 from typing import List
+from typing import Dict
 from typing import Tuple
 from typing import Iterable
 
@@ -352,24 +354,181 @@ def get_tour_proportion_seed_values(m: int,
     return seed_values
 
 
-def _generate_tour_proportions_internal(od_import: str,
-                                        tour_proportions_export: str,
-                                        pa_export: str,
-                                        trip_origin: str,
-                                        year: int,
-                                        p: int,
-                                        m: int,
-                                        seg: int,
-                                        ca: int,
-                                        tp_needed: List[int],
-                                        tour_prop_tol: float,
-                                        furness_tol: float,
-                                        furness_max_iters: int,
-                                        phi_lookup_folder: str,
-                                        phi_type: str,
-                                        aggregate_to_wday: bool,
-                                        zone_translate_dir: str,
-                                        ) -> Tuple[str, int, float]:
+def furness_tour_proportions(orig_vals,
+                             dest_vals,
+                             fh_mats,
+                             th_mats,
+                             seed_values,
+                             tour_prop_name,
+                             zone_translate_dir,
+                             model_name,
+                             tp_needed,
+                             tour_prop_tol,
+                             furness_tol,
+                             furness_max_iters,
+                             generate_tour_props=True
+                             ):
+    # TODO: Write furness_tour_proportions() docs()
+    # ## INIT LOOP ## #
+    # Create empty matrices for PA outputs
+    pa_out_mats = dict()
+    for tp in tp_needed:
+        pa_out_mats[tp] = pd.DataFrame(0.0,
+                                       index=orig_vals,
+                                       columns=dest_vals)
+
+    # Load the zone aggregation dictionaries for this model
+    model2lad = du.get_zone_translation(
+        import_dir=zone_translate_dir,
+        from_zone=model_name,
+        to_zone='lad'
+    )
+    model2tfn = du.get_zone_translation(
+        import_dir=zone_translate_dir,
+        from_zone=model_name,
+        to_zone='tfn_sectors'
+    )
+
+    # Define the default value for the nested defaultdict
+    def empty_tour_prop():
+        return np.zeros((len(tp_needed), len(tp_needed)))
+
+    # Use function to initialise defaultdicts
+    lad_tour_props = defaultdict(lambda: defaultdict(empty_tour_prop))
+    tfn_tour_props = defaultdict(lambda: defaultdict(empty_tour_prop))
+
+    # TODO: optimise with numpy.
+    # To preserve index/columns use i/j then:
+    # cell_val = array[df.index[i], df.columns[j]]
+
+    # Value Init
+    zero_count = 0
+    report = defaultdict(list)
+    tour_proportions = defaultdict(dict)
+
+    total = len(orig_vals) * len(dest_vals)
+    desc = "Generating tour proportions for %s..." % tour_prop_name
+    for orig, dest in tqdm(product(orig_vals, dest_vals), total=total, desc=desc):
+        # Build the from_home vector
+        fh_target = list()
+        for tp in tp_needed:
+            fh_target.append(fh_mats[tp].loc[orig, dest])
+        fh_target = np.array(fh_target)
+        pre_bal_fh = fh_target.copy()
+
+        # Build the to_home vector
+        th_target = list()
+        for tp in tp_needed:
+            th_target.append(th_mats[tp].loc[orig, dest])
+        th_target = np.array(th_target)
+        pre_bal_th = th_target.copy()
+
+        # ## BALANCE FROM_HOME AND TO_HOME ## #
+        # First use tp4 to bring both vector sums to average
+        fh_th_avg = (fh_target.sum() + th_target.sum()) / 2
+        fh_target[-1] = fh_th_avg - np.sum(fh_target[:-1])
+        th_target[-1] = fh_th_avg - np.sum(th_target[:-1])
+
+        # Correct for the resulting negative value
+        seed_val = seed_values[-1][-1]
+        if fh_target[-1] < 0:
+            th_target[-1] -= (1 + seed_val) * fh_target[-1]
+            fh_target[-1] *= -seed_val
+        elif th_target[-1] < 0:
+            fh_target[-1] -= (1 + seed_val) * th_target[-1]
+            th_target[-1] *= -seed_val
+
+        # ## STORE NEW PA VALS ## #
+        for i, tp in enumerate(tp_needed):
+            pa_out_mats[tp].loc[orig, dest] = fh_target[i]
+
+        # ## Check for unbalanced tour proportions ## #
+        if th_target.sum() != 0:
+            temp_fh_target = fh_target.copy() / fh_target.sum()
+            temp_th_target = th_target.copy() / th_target.sum()
+        else:
+            temp_fh_target = np.array([0] * len(tp_needed))
+            temp_th_target = np.array([0] * len(tp_needed))
+
+        # If tp4 is greater than the tolerance, this usually means the original
+        # to_home and from_home targets were not balanced
+        if(temp_th_target[-1] > tour_prop_tol
+           or temp_fh_target[-1] > tour_prop_tol):
+            report['tour_prop_fname'].append(tour_prop_name)
+            report['OD_pair'].append((orig, dest))
+            report['fh_before'].append(pre_bal_fh)
+            report['fh_after'].append(fh_target)
+            report['th_before'].append(pre_bal_th)
+            report['th_after'].append(th_target)
+
+        # ## FURNESS ## #
+        if not generate_tour_props:
+            # Return all zeroes if we don't need to furness
+            furnessed_mat = np.zeros((len(tp_needed), len(tp_needed)))
+        elif fh_target.sum() == 0 or th_target.sum() == 0:
+            # Skip furness, create matrix of 0s instead
+            zero_count += 1
+            furnessed_mat = np.zeros((len(tp_needed), len(tp_needed)))
+
+        else:
+            furnessed_mat = dm.doubly_constrained_furness(
+                seed_vals=seed_values,
+                row_targets=fh_target,
+                col_targets=th_target,
+                tol=furness_tol,
+                max_iters=furness_max_iters
+            )
+
+        # Store the tour proportions
+        # furnessed_mat = furnessed_mat.astype('float64')
+        tour_proportions[orig][dest] = furnessed_mat
+
+        # TODO: Manually assign the missing aggregation zones
+        # NOTE: Here we are assigning any zone we can't aggregate to
+        # -1. These are usually point zones etc. and won't cause a problem
+        # when we use these aggregated tour proportions later.
+        # Making a note here in case it becomes a problem later
+
+        # Calculate the lad aggregated tour proportions
+        lad_orig = model2lad.get(orig, -1)
+        lad_dest = model2lad.get(dest, -1)
+        lad_tour_props[lad_orig][lad_dest] += furnessed_mat
+
+        # Calculate the tfn aggregated tour proportions
+        tfn_orig = model2tfn.get(orig, -1)
+        tfn_dest = model2tfn.get(dest, -1)
+        tfn_tour_props[tfn_orig][tfn_dest] += furnessed_mat
+
+    return (
+        tour_proportions,
+        lad_tour_props,
+        tfn_tour_props,
+        pa_out_mats,
+        report,
+        zero_count
+    )
+
+
+def _tms_seg_tour_props_internal(od_import: str,
+                                 tour_proportions_export: str,
+                                 pa_export: str,
+                                 model_name: str,
+                                 trip_origin: str,
+                                 year: int,
+                                 p: int,
+                                 m: int,
+                                 seg: int,
+                                 ca: int,
+                                 tp_needed: List[int],
+                                 tour_prop_tol: float,
+                                 furness_tol: float,
+                                 furness_max_iters: int,
+                                 phi_lookup_folder: str,
+                                 phi_type: str,
+                                 aggregate_to_wday: bool,
+                                 zone_translate_dir: str,
+                                 generate_tour_props: bool,
+                                 ) -> Tuple[str, int, float]:
     """
     The internals of generate_tour_proportions().
     Used to implement multiprocessing.
@@ -435,18 +594,6 @@ def _generate_tour_proportions_internal(od_import: str,
         th_mats[tp].columns = th_mats[tp].columns.astype(int)
         th_mats[tp].index = th_mats[tp].index.astype(int)
 
-    # Load the zone aggregation dictionaries for this model
-    model2lad = du.get_zone_translation(
-        import_dir=zone_translate_dir,
-        from_zone=du.get_model_name(m),
-        to_zone='lad'
-    )
-    model2tfn = du.get_zone_translation(
-        import_dir=zone_translate_dir,
-        from_zone=du.get_model_name(m),
-        to_zone='tfn_sectors'
-    )
-
     # Make sure all matrices have the same OD pairs
     n_rows, n_cols = fh_mats[list(fh_mats.keys())[0]].shape
     for mat_dict in [fh_mats, th_mats]:
@@ -466,13 +613,6 @@ def _generate_tour_proportions_internal(od_import: str,
     orig_vals = [int(x) for x in orig_vals]
     dest_vals = [int(x) for x in dest_vals]
 
-    # Create empty matrices for PA outputs
-    pa_out_mats = dict()
-    for tp in tp_needed:
-        pa_out_mats[tp] = pd.DataFrame(0.0,
-                                       index=orig_vals,
-                                       columns=dest_vals)
-
     # Get the seed values for this purpose
     seed_values = get_tour_proportion_seed_values(
         m=m,
@@ -483,116 +623,29 @@ def _generate_tour_proportions_internal(od_import: str,
         infill=0.001,
     )
 
-    # ## FURNESS TOUR PROPORTIONS ## #
-    # Define the default value for the nested defaultdict
-    def empty_tour_prop():
-        return np.zeros((len(tp_needed), len(tp_needed)))
+    # ## CALL INNER FUNCTION ## #
+    furness_return_vals = furness_tour_proportions(
+        orig_vals=orig_vals,
+        dest_vals=dest_vals,
+        fh_mats=fh_mats,
+        th_mats=th_mats,
+        seed_values=seed_values,
+        tour_prop_name=out_fname,
+        zone_translate_dir=zone_translate_dir,
+        model_name=model_name,
+        tp_needed=tp_needed,
+        tour_prop_tol=tour_prop_tol,
+        furness_tol=furness_tol,
+        furness_max_iters=furness_max_iters,
+        generate_tour_props=generate_tour_props
+    )
 
-    # Use function to initialise defaultdicts
-    lad_tour_props = defaultdict(lambda: defaultdict(empty_tour_prop))
-    tfn_tour_props = defaultdict(lambda: defaultdict(empty_tour_prop))
-
-    # TODO: optimise with numpy.
-    # To preserve index/columns use i/j then:
-    # cell_val = array[df.index[i], df.columns[j]]
-
-    # Init
-    zero_count = 0
-    report = defaultdict(list)
-    tour_proportions = defaultdict(dict)
-
-    total = len(orig_vals) * len(dest_vals)
-    desc = "Generating tour proportions for %s..." % out_fname
-    for orig, dest in tqdm(product(orig_vals, dest_vals), total=total, desc=desc):
-        # Build the from_home vector
-        fh_target = list()
-        for tp in tp_needed:
-            fh_target.append(fh_mats[tp].loc[orig, dest])
-        fh_target = np.array(fh_target)
-        pre_bal_fh = fh_target.copy()
-
-        # Build the to_home vector
-        th_target = list()
-        for tp in tp_needed:
-            th_target.append(th_mats[tp].loc[orig, dest])
-        th_target = np.array(th_target)
-        pre_bal_th = th_target.copy()
-
-        # ## BALANCE FROM_HOME AND TO_HOME ## #
-        # First use tp4 to bring both vector sums to average
-        fh_th_avg = (fh_target.sum() + th_target.sum()) / 2
-        fh_target[-1] = fh_th_avg - np.sum(fh_target[:-1])
-        th_target[-1] = fh_th_avg - np.sum(th_target[:-1])
-
-        # Correct for the resulting negative value
-        seed_val = seed_values[-1][-1]
-        if fh_target[-1] < 0:
-            th_target[-1] -= (1 + seed_val) * fh_target[-1]
-            fh_target[-1] *= -seed_val
-        elif th_target[-1] < 0:
-            fh_target[-1] -= (1 + seed_val) * th_target[-1]
-            th_target[-1] *= -seed_val
-
-        # ## STORE NEW PA VALS ## #
-        for i, tp in enumerate(tp_needed):
-            pa_out_mats[tp].loc[orig, dest] = fh_target[i]
-
-        # ## Check for unbalanced tour proportions ## #
-        if th_target.sum() != 0:
-            temp_fh_target = fh_target.copy() / fh_target.sum()
-            temp_th_target = th_target.copy() / th_target.sum()
-        else:
-            temp_fh_target = np.array([0] * len(tp_needed))
-            temp_th_target = np.array([0] * len(tp_needed))
-
-        # If tp4 is greater than the tolerance, this usually means the original
-        # to_home and from_home targets were not balanced
-        if(temp_th_target[-1] > tour_prop_tol
-           or temp_fh_target[-1] > tour_prop_tol):
-            report['tour_prop_fname'].append(out_fname)
-            report['OD_pair'].append((orig, dest))
-            report['fh_before'].append(pre_bal_fh)
-            report['fh_after'].append(fh_target)
-            report['th_before'].append(pre_bal_th)
-            report['th_after'].append(th_target)
-
-        # ## FURNESS ## #
-        if fh_target.sum() == 0 or th_target.sum() == 0:
-            # Skip furness, create matrix of 0s instead
-            zero_count += 1
-            furnessed_mat = np.zeros((len(tp_needed), len(tp_needed)))
-
-        else:
-            furnessed_mat = dm.doubly_constrained_furness(
-                seed_vals=seed_values,
-                row_targets=fh_target,
-                col_targets=th_target,
-                tol=furness_tol,
-                max_iters=furness_max_iters
-            )
-
-        # Store the tour proportions
-        # furnessed_mat = furnessed_mat.astype('float64')
-        tour_proportions[orig][dest] = furnessed_mat
-
-        # TODO: Manually assign the missing aggregation zones
-        # NOTE: Here we are assigning any zone we can't aggregate to
-        # -1. These are usually point zones etc. and won't cause a problem
-        # when we use these aggregated tour proportions later.
-        # Making a note here in case it becomes a problem later
-
-        # Calculate the lad aggregated tour proportions
-        lad_orig = model2lad.get(orig, -1)
-        lad_dest = model2lad.get(dest, -1)
-        lad_tour_props[lad_orig][lad_dest] += furnessed_mat
-
-        # Calculate the tfn aggregated tour proportions
-        tfn_orig = model2tfn.get(orig, -1)
-        tfn_dest = model2tfn.get(dest, -1)
-        tfn_tour_props[tfn_orig][tfn_dest] += furnessed_mat
+    # Split out the return values
+    model_tour_props, lad_tour_props, tfn_tour_props = furness_return_vals[:3]
+    pa_out_mats, report, zero_count = furness_return_vals[3:6]
 
     # Normalise all of the tour proportion matrices to 1
-    for agg_tour_props in [tour_proportions, lad_tour_props, tfn_tour_props]:
+    for agg_tour_props in [model_tour_props, lad_tour_props, tfn_tour_props]:
         for key1, inner_dict in agg_tour_props.items():
             for key2, mat in inner_dict.items():
                 # Avoid warning if 0
@@ -602,7 +655,7 @@ def _generate_tour_proportions_internal(od_import: str,
 
     # ## WRITE TO DISK ## #
     # Can just be normal dicts now - keeps pickle happy
-    tour_proportions = du.defaultdict_to_regular(tour_proportions)
+    model_tour_props = du.defaultdict_to_regular(model_tour_props)
     lad_tour_props = du.defaultdict_to_regular(lad_tour_props)
     tfn_tour_props = du.defaultdict_to_regular(tfn_tour_props)
 
@@ -610,7 +663,7 @@ def _generate_tour_proportions_internal(od_import: str,
     print('Writing outputs to disk for %s' % out_fname)
     out_path = os.path.join(tour_proportions_export, out_fname)
     with open(out_path, 'wb') as f:
-        pickle.dump(tour_proportions, f, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(model_tour_props, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     # Write the LAD tour proportions
     lad_out_fname = out_fname.replace('tour_proportions', 'lad_tour_proportions')
@@ -649,25 +702,139 @@ def _generate_tour_proportions_internal(od_import: str,
     return out_fname, zero_count, zero_percentage
 
 
+def _tms_seg_tour_props(od_import: str,
+                        tour_proportions_export: str,
+                        zone_translate_dir: str,
+                        pa_export: str,
+                        model_name: str,
+                        year: int = consts.BASE_YEAR,
+                        p_needed: List[int] = consts.ALL_HB_P,
+                        m_needed: List[int] = consts.MODES_NEEDED,
+                        soc_needed: List[int] = None,
+                        ns_needed: List[int] = None,
+                        ca_needed: List[int] = None,
+                        tp_needed: List[int] = consts.TIME_PERIODS,
+                        tour_prop_tol: float = 0.5,
+                        furness_tol: float = 1e-9,
+                        furness_max_iters: int = 5000,
+                        phi_lookup_folder: str = None,
+                        phi_type: str = 'fhp',
+                        aggregate_to_wday: bool = True,
+                        generate_tour_props: bool = True,
+                        process_count: int = -2
+                        ) -> None:
+    """
+    TODO: Write _tms_seg_tour_props() docs
+
+    Parameters
+    ----------
+    od_import
+    tour_proportions_export
+    zone_translate_dir
+    pa_export
+    year
+    p_needed
+    m_needed
+    soc_needed
+    ns_needed
+    ca_needed
+    tp_needed
+    tour_prop_tol
+    furness_tol
+    furness_max_iters
+    phi_lookup_folder
+    phi_type
+    aggregate_to_wday
+    process_count
+
+    Returns
+    -------
+
+    """
+    # Init
+    soc_needed = [None] if soc_needed is None else soc_needed
+    ns_needed = [None] if ns_needed is None else ns_needed
+    ca_needed = [None] if ca_needed is None else ca_needed
+
+    # Make sure all purposes are home based
+    for p in p_needed:
+        if p not in consts.ALL_HB_P:
+            raise ValueError("Got purpose '%s' which is not a home based "
+                             "purpose. generate_tour_proportions() cannot "
+                             "handle nhb purposes." % str(p))
+    trip_origin = 'hb'
+
+    loop_generator = du.segmentation_loop_generator(
+        p_list=p_needed,
+        m_list=m_needed,
+        soc_list=soc_needed,
+        ns_list=ns_needed,
+        ca_list=ca_needed
+    )
+
+    # Multiprocessing would go here!
+    zero_counts = list()
+    for p, m, seg, ca in loop_generator:
+        zero_counts.append(_tms_seg_tour_props_internal(
+            od_import=od_import,
+            tour_proportions_export=tour_proportions_export,
+            zone_translate_dir=zone_translate_dir,
+            pa_export=pa_export,
+            model_name=model_name,
+            year=year,
+            p=p,
+            m=m,
+            seg=seg,
+            ca=ca,
+            trip_origin=trip_origin,
+            tp_needed=tp_needed,
+            tour_prop_tol=tour_prop_tol,
+            furness_tol=furness_tol,
+            furness_max_iters=furness_max_iters,
+            phi_lookup_folder=phi_lookup_folder,
+            phi_type=phi_type,
+            aggregate_to_wday=aggregate_to_wday,
+            generate_tour_props=generate_tour_props
+        ))
+
+    # Output a log of the zero counts found
+    header = ['tour_file', 'zero_count', 'percentage']
+    out_name = "yr%d_tour_proportions_log.csv" % year
+    out_path = os.path.join(tour_proportions_export, out_name)
+    du.write_csv(header, zero_counts, out_path)
+
+    # ## COPY OVER NHB MATRICES ## #
+    if pa_export is not None:
+        nhb_mats = [x for x in du.list_files(od_import) if
+                    du.starts_with(x, 'nhb')]
+        for fname in nhb_mats:
+            pa_name = fname.replace('od', 'pa')
+            du.copy_and_rename(
+                src=os.path.join(od_import, fname),
+                dst=os.path.join(pa_export, pa_name)
+            )
+
+
+def _vdm_seg_tour_props():
+    raise NotImplementedError
+
+
 def generate_tour_proportions(od_import: str,
                               tour_proportions_export: str,
                               zone_translate_dir: str,
                               pa_export: str,
+                              model_name: str,
                               seg_level: str,
+                              seg_params: Dict[str, Any],
                               year: int = consts.BASE_YEAR,
-                              p_needed: List[int] = consts.ALL_HB_P,
-                              m_needed: List[int] = consts.MODES_NEEDED,
-                              soc_needed: List[int] = None,
-                              ns_needed: List[int] = None,
-                              ca_needed: List[int] = None,
-                              tp_needed: List[int] = consts.TIME_PERIODS,
                               tour_prop_tol: float = 0.5,
                               furness_tol: float = 1e-9,
                               furness_max_iters: int = 5000,
                               phi_lookup_folder: str = None,
                               phi_type: str = 'fhp',
                               aggregate_to_wday: bool = True,
-                              process_count: int = os.cpu_count() - 1,
+                              generate_tour_props: bool = True,
+                              process_count: int = -2
                               ) -> None:
     """
     Generates the 4x4 matrix of tour proportions for every OD pair for all
@@ -757,72 +924,39 @@ def generate_tour_proportions(od_import: str,
     None
 
     """
+    # TODO: Update generate_tour_proportions() docs
     # Init
-    soc_needed = [None] if soc_needed is None else soc_needed
-    ns_needed = [None] if ns_needed is None else ns_needed
-    ca_needed = [None] if ca_needed is None else ca_needed
+    seg_level = du.validate_seg_level(seg_level)
 
-    # Make sure all purposes are home based
-    for p in p_needed:
-        if p not in consts.ALL_HB_P:
-            raise ValueError("Got purpose '%s' which is not a home based "
-                             "purpose. generate_tour_proportions() cannot "
-                             "handle nhb purposes." % str(p))
-    trip_origin = 'hb'
+    # Call the correct mid-level function to deal with the segmentation
+    if seg_level == 'tms':
+        segmentation_fn = _tms_seg_tour_props
+    elif seg_level == 'vdm':
+        segmentation_fn = _vdm_seg_tour_props
+    else:
+        raise NotImplementedError(
+            "'%s' is a valid segmentation level, however, we do not have a "
+            "mid-level function to deal with it at the moment."
+            % seg_level
+        )
 
-    loop_generator = du.segmentation_loop_generator(
-        p_list=p_needed,
-        m_list=m_needed,
-        soc_list=soc_needed,
-        ns_list=ns_needed,
-        ca_list=ca_needed
+    segmentation_fn(
+        od_import=od_import,
+        tour_proportions_export=tour_proportions_export,
+        zone_translate_dir=zone_translate_dir,
+        pa_export=pa_export,
+        model_name=model_name,
+        year=year,
+        tour_prop_tol=tour_prop_tol,
+        furness_tol=furness_tol,
+        furness_max_iters=furness_max_iters,
+        phi_lookup_folder=phi_lookup_folder,
+        phi_type=phi_type,
+        aggregate_to_wday=aggregate_to_wday,
+        generate_tour_props=generate_tour_props,
+        process_count=process_count,
+        **seg_params
     )
-
-    # Loop Calls
-    unchanging_kwargs = {
-        'od_import': od_import,
-        'tour_proportions_export': tour_proportions_export,
-        'zone_translate_dir': zone_translate_dir,
-        'pa_export': pa_export,
-        'trip_origin': trip_origin,
-        'year': year,
-        'tp_needed': tp_needed,
-        'tour_prop_tol': tour_prop_tol,
-        'furness_tol': furness_tol,
-        'furness_max_iters': furness_max_iters,
-        'phi_lookup_folder': phi_lookup_folder,
-        'phi_type': phi_type,
-        'aggregate_to_wday': aggregate_to_wday
-
-    }
-
-    zero_counts = list()
-    for p, m, seg, ca in loop_generator:
-        kwargs = unchanging_kwargs.copy()
-        kwargs.update({
-            'p': p,
-            'm': m,
-            'seg': seg,
-            'ca': ca,
-        })
-        zero_counts.append(_generate_tour_proportions_internal(**kwargs))
-
-    # Output a log of the zero counts found
-    header = ['tour_file', 'zero_count', 'percentage']
-    out_name = "yr%d_tour_proportions_log.csv" % year
-    out_path = os.path.join(tour_proportions_export, out_name)
-    du.write_csv(header, zero_counts, out_path)
-
-    # ## COPY OVER NHB MATRICES ## #
-    if pa_export is not None:
-        nhb_mats = [x for x in du.list_files(od_import) if
-                    du.starts_with(x, 'nhb')]
-        for fname in nhb_mats:
-            pa_name = fname.replace('od', 'pa')
-            du.copy_and_rename(
-                src=os.path.join(od_import, fname),
-                dst=os.path.join(pa_export, pa_name)
-            )
 
 
 def build_compile_params(import_dir: str,

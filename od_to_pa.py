@@ -304,3 +304,6 @@ def need_to_convert_to_efs_matrices(model_import: str,
     return (len(os.listdir(od_import)) == 0 and
             len(os.listdir(model_import)) > 0)
 
+
+def convert_to_pa():
+    pass

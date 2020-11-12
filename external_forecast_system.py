@@ -2388,7 +2388,7 @@ def main():
     echo = False
 
     # Running control
-    run_base_efs = False
+    run_base_efs = True
     recreate_productions = True
     recreate_attractions = True
 
@@ -2400,7 +2400,7 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    iter_num = 0
+    iter_num = 1
     import_location = "Y:/"
     output_location = "E:/"
     model_name = 'norms_2015'   # Make sure the correct mode is being used!!!
@@ -2451,6 +2451,7 @@ def main():
             overwrite_nhb_tp_od=True
         )
 
+    # TODO: Update Integrated OD2PA codebase
     if run_compile_od:
         # Compiles base year OD matrices
         efs.pre_me_compile_od_matrices(
