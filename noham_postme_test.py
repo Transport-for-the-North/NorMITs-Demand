@@ -39,13 +39,13 @@ def main():
     process_count = 5
     p_needed = consts.ALL_HB_P
     seg_level = 'tms'
-    seg_level = 'vdm'
+    # seg_level = 'vdm'
 
     # Audit as we go
     audit_tol = 0.001
 
-    decompile_od_bool = True
-    gen_tour_proportions_bool = False
+    decompile_od_bool = False
+    gen_tour_proportions_bool = True
     post_me_compile_pa = False
     pa_back_to_od_check = False
 
@@ -53,34 +53,26 @@ def main():
     seg_level = du.validate_seg_level(seg_level)
 
     if decompile_od_bool:
-        # od2pa.convert_to_efs_matrices(
-        #     import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
-        #     export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
-        #     matrix_format='od',
-        #     year=consts.BASE_YEAR,
-        #     m_needed=m_needed,
-        #     user_class=True,
-        #     to_wide=True,
-        #     wide_col_name=model_name + '_zone_id',
-        #     from_pcu=from_pcu,
-        #     vehicle_occupancy_import=r'Y:\NorMITs Demand\import'
-        # )
-        #
-        # od2pa.decompile_od(
-        #     od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
-        #     od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
-        #     decompile_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params/od_compilation_factors.pickle',
-        #     year=consts.BASE_YEAR,
-        #     audit_tol=audit_tol
-        # )
+        od2pa.convert_to_efs_matrices(
+            import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
+            export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
+            matrix_format='od',
+            year=consts.BASE_YEAR,
+            m_needed=m_needed,
+            user_class=True,
+            to_wide=True,
+            wide_col_name=model_name + '_zone_id',
+            from_pcu=from_pcu,
+            vehicle_occupancy_import=r'Y:\NorMITs Demand\import'
+        )
 
-        # Convert matrices to VDM segmentation
-        #  Then output
-        #  HBW,     p1
-        #  HBEB,    p2
-        #  HBO,     p3-8
-        #  NHBEB,   p12,
-        #  NHBO,    p13-16, 18
+        od2pa.decompile_od(
+            od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
+            od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
+            decompile_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params/od_compilation_factors.pickle',
+            year=consts.BASE_YEAR,
+            audit_tol=audit_tol
+        )
 
         if seg_level == 'vdm':
             # Build path for compile params
@@ -124,6 +116,7 @@ def main():
             year=consts.BASE_YEAR,
             m_needed=m_needed,
             ca_needed=ca_needed,
+            seg_level=seg_level,
             process_count=process_count
         )
 

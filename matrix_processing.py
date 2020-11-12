@@ -653,6 +653,7 @@ def generate_tour_proportions(od_import: str,
                               tour_proportions_export: str,
                               zone_translate_dir: str,
                               pa_export: str,
+                              seg_level: str,
                               year: int = consts.BASE_YEAR,
                               p_needed: List[int] = consts.ALL_HB_P,
                               m_needed: List[int] = consts.MODES_NEEDED,
@@ -696,6 +697,10 @@ def generate_tour_proportions(od_import: str,
         Where to export the converted pa_matrices. If left as None,
         no pa matrices are written.
 
+    seg_level:
+        The level of segmentation of the matrices in od_import. This should
+        be one of the values in efs_constants.SEG_LEVELS.
+
     year:
         Which year to generate the tour proportions for. Usually the base year
 
@@ -716,6 +721,12 @@ def generate_tour_proportions(od_import: str,
 
     tp_needed:
         Which time periods to use. Usually 1-4.
+
+    tour_prop_tol:
+        Used for reporting unbalanced from_home and to_home targets when
+        generating tour proportions. If the difference between the total of
+        the two vectors is greater than this value, it will be reported in
+        an output report.
 
     furness_tol:
         What tolerance to use during the furness.
@@ -767,11 +778,7 @@ def generate_tour_proportions(od_import: str,
         ca_list=ca_needed
     )
 
-    # TODO: Can all this faff be put in a function
-    #  It'll make the code a little easier to read
-    #  Maybe integrate into multiprocessing.py?
-
-    # ## MULTIPROCESS EACH SEGMENT ## #
+    # Loop Calls
     unchanging_kwargs = {
         'od_import': od_import,
         'tour_proportions_export': tour_proportions_export,
@@ -789,44 +796,16 @@ def generate_tour_proportions(od_import: str,
 
     }
 
-    # If negative use process_count less than max processes
-    if process_count < 0:
-        if process_count < os.cpu_count():
-            process_count = os.cpu_count() + process_count
-        else:
-            process_count = os.cpu_count() - 1
-
-    if process_count == 0:
-        # Loop as normal
-        zero_counts = list()
-        for p, m, seg, ca in loop_generator:
-            kwargs = unchanging_kwargs.copy()
-            kwargs.update({
-                'p': p,
-                'm': m,
-                'seg': seg,
-                'ca': ca,
-            })
-            zero_counts.append(_generate_tour_proportions_internal(**kwargs))
-    else:
-        # Build all the arguments, and call in ProcessPool
-        kwargs_list = list()
-        for p, m, seg, ca in loop_generator:
-            kwargs = unchanging_kwargs.copy()
-            kwargs.update({
-                'p': p,
-                'm': m,
-                'seg': seg,
-                'ca': ca
-            })
-            kwargs_list.append(kwargs)
-
-        zero_counts = conc.process_pool_wrapper(
-            _generate_tour_proportions_internal,
-            kwargs=kwargs_list,
-            process_count=process_count,
-            in_order=True
-        )
+    zero_counts = list()
+    for p, m, seg, ca in loop_generator:
+        kwargs = unchanging_kwargs.copy()
+        kwargs.update({
+            'p': p,
+            'm': m,
+            'seg': seg,
+            'ca': ca,
+        })
+        zero_counts.append(_generate_tour_proportions_internal(**kwargs))
 
     # Output a log of the zero counts found
     header = ['tour_file', 'zero_count', 'percentage']
