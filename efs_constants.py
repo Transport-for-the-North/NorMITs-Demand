@@ -32,11 +32,21 @@ BASE_YEAR = 2018
 FUTURE_YEARS = [2033, 2035, 2050]
 ALL_YEARS = [BASE_YEAR] + FUTURE_YEARS
 
+# ## VDM/ME2 constants ## #
+VDM_TRIP_ORIGINS = ['hb', 'nhb']
+USER_CLASSES = ['commute', 'business', 'other']
+
 # How do user classes relate to purposes
 USER_CLASS_PURPOSES = {
     'commute': [1],
     'business': [2, 12],
     'other': [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
+}
+
+HB_USER_CLASS_PURPOSES = {
+    'commute': [1],
+    'business': [2],
+    'other': [3, 4, 5, 6, 7, 8]
 }
 
 # Convert between Purpose int and strings

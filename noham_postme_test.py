@@ -39,7 +39,7 @@ def main():
     process_count = 5
     p_needed = consts.ALL_HB_P
     seg_level = 'tms'
-    # seg_level = 'vdm'
+    seg_level = 'vdm'
 
     # Audit as we go
     audit_tol = 0.001
@@ -51,6 +51,8 @@ def main():
 
     # Validate inputs
     seg_level = du.validate_seg_level(seg_level)
+
+    # TODO: Add VDM OD Matrices, VDM PA Matrices into imports
 
     if decompile_od_bool:
         od2pa.convert_to_efs_matrices(
@@ -91,6 +93,7 @@ def main():
                 ca_needed=ca_needed,
                 tp_needed=consts.TIME_PERIODS,
                 split_hb_nhb=True,
+                split_od_from_to=True,
                 output_fname=output_fname
             )
 
@@ -108,21 +111,31 @@ def main():
 
     if gen_tour_proportions_bool:
         if seg_level == 'vdm':
-            seg_params = {}
+            seg_params = {
+                'to_needed': consts.VDM_TRIP_ORIGINS,
+                'uc_needed': consts.USER_CLASSES,
+                'm_needed': m_needed,
+                'ca_needed': ca_needed,
+                'tp_needed': consts.TIME_PERIODS
+            }
+            od_import = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM OD Matrices'
+            pa_export = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM PA Matrices'
         elif seg_level == 'tms':
             seg_params = {
                 'p_needed': p_needed,
                 'm_needed': m_needed,
                 'ca_needed': ca_needed,
             }
+            od_import = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices'
+            pa_export = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices'
         else:
             raise NotImplementedError("Do not know the seg_params for '%s'. "
                                       "Although it is a valid value!"
                                       % seg_level)
 
         mat_p.generate_tour_proportions(
-            od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
-            pa_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
+            od_import=od_import,
+            pa_export=pa_export,
             tour_proportions_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             zone_translate_dir=r'Y:\NorMITs Demand\import\zone_translation',
             model_name=model_name,

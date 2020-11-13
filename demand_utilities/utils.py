@@ -82,6 +82,35 @@ def validate_seg_level(seg_level: str) -> str:
     return seg_level
 
 
+def validate_user_class(user_class: str) -> str:
+    """
+    Tidies up user_class and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    user_class:
+        The name of the user class to validate
+
+    Returns
+    -------
+    seg_level:
+        user_class with both strip and lower applied to remove any whitespace
+        and make it all lowercase
+
+    Raises
+    -------
+    ValueError:
+        If user_class is not a valid name for a level of segmentation
+    """
+    # Init
+    user_class = user_class.strip().lower()
+
+    if user_class not in consts.USER_CLASSES:
+        raise ValueError("%s is not a valid name for user class"
+                         % user_class)
+    return user_class
+
+
 def grow_to_future_years(base_year_df: pd.DataFrame,
                          growth_df: pd.DataFrame,
                          base_year: str,
@@ -628,6 +657,45 @@ def get_data_subset(orig_data: pd.DataFrame,
     return orig_data.loc[subset_mask]
 
 
+def get_vdm_dist_name(trip_origin: str,
+                      matrix_format: str,
+                      year: Union[int, str],
+                      user_class: str,
+                      mode: Union[int, str],
+                      ca: int = None,
+                      tp: Union[int, str] = None,
+                      csv: bool = False,
+                      suffix: str = None
+                      ) -> str:
+    """
+    Wrapper around get_compiled_matrix_name to deal with different ca naming
+    """
+    compiled_name = get_compiled_matrix_name(
+        matrix_format,
+        user_class,
+        str(year),
+        trip_origin=trip_origin,
+        mode=str(mode),
+        ca=ca,
+        tp=str(tp),
+        csv=csv,
+        suffix=suffix
+    )
+
+    # Need to switch over ca naming
+    if ca is not None:
+        if 'nca' in compiled_name:
+            compiled_name = compiled_name.replace('nca', 'ca1')
+        elif 'ca' in compiled_name:
+            compiled_name = compiled_name.replace('ca', 'ca2')
+        else:
+            raise ValueError("Couldn't find ca/nca in name returned from "
+                             "get_compiled_matrix_name(). This shouldn't be "
+                             "able to happen!")
+
+    return compiled_name
+
+
 def get_dist_name(trip_origin: str,
                   matrix_format: str,
                   year: str = None,
@@ -1044,6 +1112,37 @@ def expand_distribution(dist: pd.DataFrame,
     return dist
 
 
+def vdm_segment_loop_generator(to_list: Iterable[str],
+                               uc_list: Iterable[str],
+                               m_list: Iterable[int],
+                               tp_list: Iterable[int] = None
+                               ) -> (Union[Iterator[Tuple[str, str, int, int]],
+                                           Iterator[Tuple[str, str, int]]]):
+    """
+    Simple generator to avoid the need for so many nested loops
+    """
+    for trip_origin, user_class in product(to_list, uc_list):
+        # Not a valid segmentation - skip it
+        if trip_origin == 'nhb' and user_class == 'commute':
+            continue
+
+        for mode in m_list:
+            if tp_list is None:
+                yield (
+                    trip_origin,
+                    user_class,
+                    mode
+                )
+            else:
+                for time_period in tp_list:
+                    yield(
+                        trip_origin,
+                        user_class,
+                        mode,
+                        time_period
+                    )
+
+
 def segmentation_loop_generator(p_list: Iterable[int],
                                 m_list: Iterable[int],
                                 soc_list: Iterable[int],
@@ -1259,7 +1358,8 @@ def get_compiled_matrix_name(matrix_format: str,
                              mode: str = None,
                              ca: int = None,
                              tp: str = None,
-                             csv=False
+                             csv=False,
+                             suffix: str = None,
                              ) -> str:
 
     """
@@ -1295,6 +1395,10 @@ def get_compiled_matrix_name(matrix_format: str,
 
     # Create name string
     final_name = '_'.join(name_parts)
+
+    # Optionally add a custom f_type suffix
+    if suffix is not None:
+        final_name += suffix
 
     # Optionally add on the csv if needed
     if csv:
