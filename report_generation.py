@@ -273,7 +273,19 @@ def tld_reporting(matrix_dir: str,
                   matrix_type: str,
                   tld_path: str,
                   cost_lookup_path: str):
-    """TODO"""
+    """Generates the trip length distributions of a directory of matrices
+
+    Parameters
+    ----------
+    matrix_dir : str
+        Path to the directory containing EFS format matrices
+    matrix_type : str
+        "pa" or "od"
+    tld_path : str
+        Path to the trip length band folder
+    cost_lookup_path : str
+        Path to the base cost folder
+    """
 
     # Create the tld directory if it doesn't exist
     output_dir = os.path.join(matrix_dir, "tld")
@@ -417,7 +429,17 @@ def tld_reporting(matrix_dir: str,
 def concat_vector_folder(data_dir: str,
                          matrix_type: str,
                          output_name: str = None):
-    """TODO"""
+    """Concatenates a folder of "long" format .csv files to a single file
+
+    Parameters
+    ----------
+    data_dir : str
+        Path to the directory containing the CSV files
+    matrix_type : str
+        The matrix type - "pa" or "od"
+    output_name : str, optional
+        Name of the concatenated output file, by default None
+    """
 
     # Override default file name
     output_name = output_name or "concatenated_data.csv"
@@ -510,37 +532,17 @@ def load_report_params(param_file: str) -> None:
 
 
 def test(param_file):
-    """
-    TODO: write docs
-    Provides test paths
+    """Reads in a parameter file (JSON) and creates the defined matrix
+    summaries
+
+    Parameters
+    ----------
+    param_file : str
+        Path to the parameter JSON file. See load_report_params
+        for requirements
     """
 
     params = load_report_params(param_file)
-
-    # test_directories = {
-    #     "pa": r"Y:\NorMITs Demand\norms\v2_2-EFS_Output\iter1\PA Matrices"
-    # }
-
-    # test_output_dir = (
-    #     r"C:\Users\Monopoly\Documents\EFS\data\summaries")
-    # test_trip_origin = "hb"
-    # test_segments_needed = {
-    #     "years": [2018],
-    #     "p": "Keep",
-    #     "m": [6],
-    #     "soc": "Agg",
-    #     "ns": "Agg",
-    #     "ca": "Agg",
-    #     "tp": "Agg"
-    # }
-
-    # zoning = r"C:\Users\Monopoly\Documents\EFS\data\zoning"
-    # test_zones_file = os.path.join(
-    #     zoning, "msoa_zones.csv"
-    # )
-    # test_sectors_file = os.path.join(
-    #     zoning, "tfn_level_one_sectors_norms_grouping.csv"
-    # )
 
     errors = []
     overwrite = True
@@ -575,6 +577,8 @@ def test(param_file):
 
 
 if __name__ == "__main__":
+    # Run the configuration files to produce the report formats required by
+    # Power BI
     pa_params = r"C:\Users\Monopoly\Documents\EFS\data\params\pa.json"
     test(pa_params)
     tp_pa_params = r"C:\Users\Monopoly\Documents\EFS\data\params\tp_pa.json"
