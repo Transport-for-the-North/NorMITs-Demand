@@ -82,7 +82,6 @@ def _build_tp_pa_internal(pa_import,
                           mode,
                           segment,
                           car_availability,
-                          model_zone,
                           tp_import
                           ):
     """
@@ -98,10 +97,12 @@ def _build_tp_pa_internal(pa_import,
         tp_split_fname = 'export_nhb_productions_norms.csv'
         tp_split_path = os.path.join(tp_import, tp_split_fname)
         trip_origin = 'nhb'
+        model_zone = 'o_zone'
     elif purpose in consts.ALL_HB_P:
         tp_split_fname = 'export_productions_norms.csv'
         tp_split_path = os.path.join(tp_import, tp_split_fname)
         trip_origin = 'hb'
+        model_zone = 'p_zone'
     else:
         raise ValueError(
             "%s is neither a home based nor non-home based purpose."
@@ -319,22 +320,11 @@ def efs_build_tp_pa(tp_import: str,
     ns_needed = [None] if ns_needed is None else ns_needed
     ca_needed = [None] if ca_needed is None else ca_needed
 
-    # Loop Init
-    if matrix_format == 'pa':
-        model_zone = 'p_zone'
-    elif matrix_format == 'od':
-        model_zone = 'o_zone'
-    else:
-        # Shouldn't be able to get here
-        raise ValueError("'%s' seems to be a valid matrix format, "
-                         "but build_tp_pa() cannot handle it.")
-
     # ## MULTIPROCESS ## #
     unchanging_kwargs = {
         'pa_import': pa_import,
         'pa_export': pa_export,
         'matrix_format': matrix_format,
-        'model_zone': model_zone,
         'tp_import': tp_import
     }
 

@@ -1280,14 +1280,14 @@ class ExternalForecastSystem:
             print("Converting NHB 24hr OD to time period split OD...")
             pa2od.efs_build_tp_pa(
                 tp_import=imports['tp_splits'],
-                pa_import=exports['od_24'],
-                pa_export=exports['od'],
+                pa_import=exports['pa_24'],
+                pa_export=exports['pa'],
                 years_needed=years_needed,
                 p_needed=nhb_purposes_needed,
                 m_needed=modes_needed,
-                matrix_format='od'
+                matrix_format='pa'
             )
-            print('NHB time period split OD matrices compiled!\n')
+            print('NHB time period split PA matrices compiled!\n')
 
         print("NHB run complete!")
 
@@ -2388,7 +2388,7 @@ def main():
     echo = False
 
     # Running control
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = True
     recreate_attractions = True
 
@@ -2434,20 +2434,20 @@ def main():
 
     if run_nhb_efs:
         # Convert to HB to OD
-        efs.pa_to_od(
-            output_location=output_location,
-            iter_num=iter_num,
-            overwrite_hb_tp_pa=True,
-            overwrite_hb_tp_od=True,
-            echo=echo
-        )
+        # efs.pa_to_od(
+        #     output_location=output_location,
+        #     iter_num=iter_num,
+        #     overwrite_hb_tp_pa=True,
+        #     overwrite_hb_tp_od=True,
+        #     echo=echo
+        # )
 
         # Generate NHB PA/OD matrices
         efs.run_nhb(
             output_location=output_location,
             iter_num=iter_num,
             overwrite_nhb_productions=False,
-            overwrite_nhb_od=True,
+            overwrite_nhb_od=False,
             overwrite_nhb_tp_od=True
         )
 
