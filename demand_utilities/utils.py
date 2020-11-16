@@ -19,14 +19,21 @@ import shutil
 import random
 
 import pandas as pd
+import numpy as np
 
+from typing import Any
 from typing import List
 from typing import Dict
-from typing import Iterable, Union
+from typing import Tuple
+from typing import Union
+from typing import Iterable
+from typing import Iterator
+
 from pathlib import Path
 
 
 from tqdm import tqdm
+from itertools import product
 from collections import defaultdict
 
 
@@ -350,6 +357,11 @@ def get_growth_values(base_year_df: pd.DataFrame,
     if base_year_col in growth_df:
         growth_df = growth_df.drop(base_year_col, axis='columns')
 
+    # Avoid future year clashes
+    base_year_df = base_year_df.drop(future_year_cols,
+                                     axis='columns',
+                                     errors='ignore')
+
     # Merge on merge col
     growth_values = pd.merge(base_year_df,
                              growth_df,
@@ -546,7 +558,7 @@ def is_none_like(o) -> bool:
             return True
 
     if isinstance(o, list):
-        return is_none_like(o[0])
+        return all([is_none_like(x) for x in o])
 
     return False
 
@@ -635,37 +647,27 @@ def get_dist_name(trip_origin: str,
 
 def calib_params_to_dist_name(trip_origin: str,
                               matrix_format: str,
-                              calib_params: dict,
-                              csv: bool = False
+                              calib_params: Dict[str, int],
+                              csv: bool = False,
+                              suffix: str = None,
                               ) -> str:
     """
-        Wrapper for get_distribution_name() using calib params
+    Wrapper for get_distribution_name() using calib params
     """
     segment_str = 'soc' if calib_params['p'] in [1, 2] else 'ns'
 
-    if 'tp' in calib_params:
-        return get_dist_name(
-            trip_origin,
-            matrix_format,
-            str(calib_params.get('yr')),
-            str(calib_params.get('p')),
-            str(calib_params.get('m')),
-            str(calib_params.get(segment_str)),
-            str(calib_params.get('ca')),
-            tp=str(calib_params.get('tp')),
-            csv=csv
-        )
-    else:
-        return get_dist_name(
-            trip_origin,
-            matrix_format,
-            str(calib_params.get('yr')),
-            str(calib_params.get('p')),
-            str(calib_params.get('m')),
-            str(calib_params.get(segment_str)),
-            str(calib_params.get('ca')),
-            csv=csv
-        )
+    return get_dist_name(
+        trip_origin,
+        matrix_format,
+        str(calib_params.get('yr')),
+        str(calib_params.get('p')),
+        str(calib_params.get('m')),
+        str(calib_params.get(segment_str)),
+        str(calib_params.get('ca')),
+        tp=str(calib_params.get('tp')),
+        csv=csv,
+        suffix=suffix
+    )
 
 
 def get_dist_name_parts(dist_name: str) -> List[str]:
@@ -702,23 +704,28 @@ def get_dist_name_parts(dist_name: str) -> List[str]:
     ]
 
 
-def generate_calib_params(year: str,
-                          purpose: int,
-                          mode: int,
-                          segment: int,
-                          ca: int
+def generate_calib_params(year: str = None,
+                          purpose: int = None,
+                          mode: int = None,
+                          segment: int = None,
+                          ca: int = None,
+                          tp: int = None
                           ) -> dict:
     """
     Returns a TMS style calib_params dict
     """
+    # Purpose needs to be set if segment is
+    if segment is not None and purpose is None:
+        raise ValueError("If segment is set, purpose needs to be set too, "
+                         "otherwise segment text cannot be determined.")
+    # Init
     segment_str = 'soc' if purpose in [1, 2] else 'ns'
-    return {
-        'yr': year,
-        'p': purpose,
-        'm': mode,
-        segment_str: segment,
-        'ca': ca
-    }
+
+    keys = ['yr', 'p', 'm', segment_str, 'ca', 'tp']
+    vals = [year, purpose, mode, segment, ca, tp]
+
+    # Add params to dict if they are not None
+    return {k: v for k, v in zip(keys, vals) if v is not None}
 
 
 def starts_with(s: str, x: str) -> bool:
@@ -1005,7 +1012,9 @@ def segmentation_loop_generator(p_list: Iterable[int],
                                 soc_list: Iterable[int],
                                 ns_list: Iterable[int],
                                 ca_list: Iterable[int],
-                                tp_list: Iterable[int] = None):
+                                tp_list: Iterable[int] = None
+                                ) -> (Union[Iterator[Tuple[int, int, int, int, int]],
+                                            Iterator[Tuple[int, int, int, int]]]):
     """
     Simple generator to avoid the need for so many nested loops
     """
@@ -1040,12 +1049,44 @@ def segmentation_loop_generator(p_list: Iterable[int],
                             )
 
 
+def cp_segmentation_loop_generator(p_list: Iterable[int],
+                                   m_list: Iterable[int],
+                                   soc_list: Iterable[int],
+                                   ns_list: Iterable[int],
+                                   ca_list: Iterable[int],
+                                   tp_list: Iterable[int] = None
+                                   ) -> Iterator[Dict[str, int]]:
+    """
+    Wrapper for segmentation_loop_generator() to return TMS style
+    calib params instead of a number of integer
+    """
+    # Init
+    tp_list = [None] if tp_list is None else tp_list
+
+    loop_generator = segmentation_loop_generator(
+        p_list=p_list,
+        m_list=m_list,
+        soc_list=soc_list,
+        ns_list=ns_list,
+        ca_list=ca_list,
+        tp_list=tp_list
+    )
+
+    for p, m, seg, ca, tp in loop_generator:
+        yield generate_calib_params(
+            purpose=p,
+            mode=m,
+            segment=seg,
+            ca=ca,
+            tp=tp
+        )
+
+
 def long_to_wide_out(df: pd.DataFrame,
                      v_heading: str,
                      h_heading: str,
                      values: str,
                      out_path: str,
-                     echo=False,
                      unq_zones: List[str] = None
                      ) -> None:
     """
@@ -1088,19 +1129,17 @@ def long_to_wide_out(df: pd.DataFrame,
         unq_zones = df[v_heading].drop_duplicates().reset_index(drop=True).copy()
         unq_zones = list(range(1, max(unq_zones)+1))
 
-    # Convert to wide format and write to file
-    wide_mat = df_to_np(
+    # Make sure all unq_zones exists in v_heading and h_heading
+    df = ensure_multi_index(
         df=df,
-        values=values,
-        unq_internal_zones=unq_zones,
-        v_heading=v_heading,
-        h_heading=h_heading,
-        echo=echo
+        index_dict={v_heading: unq_zones, h_heading: unq_zones},
     )
-    pd.DataFrame(
-        wide_mat,
-        index=unq_zones,
-        columns=unq_zones
+
+    # Convert to wide format and output
+    df.pivot(
+        index=v_heading,
+        columns=h_heading,
+        values=values
     ).to_csv(out_path)
 
 
@@ -1596,3 +1635,490 @@ def safe_dataframe_to_csv(df, out_path, flatten_header=False, **to_csv_kwargs):
                       "Waiting for permission to write...\n")
                 waiting = True
             time.sleep(1)
+
+
+def fit_filter(df: pd.DataFrame,
+               df_filter: Dict[str, Any],
+               raise_error: bool = False
+               ) -> Dict[str, Any]:
+    """
+    Whittles down filter to only include relevant items
+
+    Any columns that do not exits in the dataframe will be removed from the
+    filter; optionally raises an error if a filter column is not in the given
+    dataframe. Furthermore, any items that are 'none like' as determined by
+    is_none_like() will also be removed.
+
+    Parameters
+    ----------
+    df:
+        The dataframe that the filter is to be applied to.
+
+    df_filter:
+        The filter dictionary in the format of {df_col_name: filter_values}
+
+    raise_error:
+        Whether to raise an error or not when a df_col_name does not exist in
+        the given dataframe.
+
+    Returns
+    -------
+    fitted_filter:
+        A filter with non-relevant (as defined in the function description)
+        items removed.
+    """
+    # Init
+    fitted_filter = dict()
+    df = df.copy()
+    df.columns = df.columns.astype(str)
+
+    # Check each item in the given filter
+    for col, vals in df_filter.items():
+
+        # Check the column exists
+        if col not in df.columns:
+            if raise_error:
+                raise KeyError("'%s' Column not found in given dataframe"
+                               % str(col))
+            else:
+                continue
+
+        # Check the given value isn't None
+        if is_none_like(vals):
+            continue
+
+        # Should only get here for valid combinations
+        fitted_filter[col] = vals
+
+    return fitted_filter
+
+
+def filter_by_segmentation(df: pd.DataFrame,
+                           df_filter: Dict[str, Any],
+                           fit: bool = False,
+                           **kwargs
+                           ) -> pd.DataFrame:
+    """
+    Filters a dataframe down to a given segmentation
+
+    Can handle flexible segmentation if fit is set to True - all unnecessary
+    columns will be removed, and any 'None like' filters will be removed. This
+    follows the convention of settings segmentation splits to None when it
+    is not needed.
+
+    Parameters
+    ----------
+    df:
+        The dataframe that the filter is to be applied to.
+
+    df_filter:
+        The filter dictionary in the format of {df_col_name: filter_values}.
+
+    fit:
+        Whether to try and fit the given filter to the dataframe before
+        application. If using flexible segmentation and filter has not already
+        been fit, set to True.
+
+    kwargs:
+        Any additional kwargs that should be passed to fit_filter() if fit is
+        set to True.
+    Returns
+    -------
+    filtered_df:
+        The original dataframe given, segmented to the given filter level.
+    """
+    # Init
+    df = df.copy()
+
+    if fit:
+        df_filter = fit_filter(df, df_filter.copy(), **kwargs)
+
+    # Figure out the correct mask
+    needed_cols = list(df_filter.keys())
+    mask = df[needed_cols].isin(df_filter).all(axis='columns')
+
+    return df[mask]
+
+
+def intersection(l1: List[Any],
+                 l2: List[Any],
+                 ) -> List[Any]:
+    """
+    Efficient method to return the intersection between l1 and l2
+    """
+    # Want to loop through the smaller list for efficiency
+    if len(l1) > len(l2):
+        big = l1.copy()
+        small = l2
+    else:
+        big = l2
+        small = l1
+
+    # Get the intersection
+    temp = set(big)
+    return [x for x in small if x in temp]
+
+
+def ensure_index(df: pd.DataFrame,
+                 index: List[Any],
+                 index_col: str,
+                 infill: float = 0.0
+                 ) -> pd.DataFrame:
+    """
+    Ensures every value in index exists in index_col of df.
+    Missing values are infilled with infill
+    """
+    # Make a dataframe with just the new index
+    ph = pd.DataFrame({index_col: index})
+
+    # Merge with the given and infill missing
+    return ph.merge(df, how='left', on=index_col).fillna(infill)
+
+
+def ensure_multi_index(df: pd.DataFrame,
+                       index_dict: Dict[str, List[Any]],
+                       infill: float = 0.0
+                       ) -> pd.DataFrame:
+    """
+    Ensures every combination of values in index_list exists in df.
+
+    This function is useful to ensure a conversion from long to wide will
+    happen correctly
+
+    Parameters
+    ----------
+    df:
+        The dataframe to alter.
+
+    index_dict:
+        A dictionary of {column_name: index_vals} to ensure exist in all
+        combinations within df.
+
+    infill:
+        Value to infill any other columns of df where the given indexes
+        don't exist.
+
+    Returns
+    -------
+    df:
+        The given df given with all combinations of the index dict values
+    """
+    # Create a new placeholder df with every combination of the unique columns
+    all_combos = zip(*product(*index_dict.values()))
+    ph = {col: vals for col, vals in zip(index_dict.keys(), all_combos)}
+    ph = pd.DataFrame(ph)
+
+    # Merge with the given and infill missing
+    merge_cols = list(index_dict.keys())
+    return ph.merge(df, how='left', on=merge_cols).fillna(infill)
+
+
+def match_pa_zones(productions: pd.DataFrame,
+                   attractions: pd.DataFrame,
+                   unique_zones: List[Any],
+                   zone_col: str = 'model_zone_id',
+                   infill: float = 0.0,
+                   set_index: bool = False
+                   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Makes sure all unique zones exist in productions and attractions
+
+    Any missing zones will be infilled with infill,
+
+    Parameters
+    ----------
+    productions:
+        Dataframe containing the productions data - must have a zone_col
+
+    attractions:
+        Dataframe containing the productions data - must have a zone_col
+
+    unique_zones:
+        List of the desired zones to have in productions and attractions
+
+    zone_col:
+        Column in productions and attractions that contains the zone data.
+
+    infill:
+        Value to infill missing rows with in productions and attractions when
+        new zone may be added in.
+
+    set_index:
+        Whether to set the zone_col as the index before returning or not.
+
+    Returns
+    -------
+    (productions, attractions):
+        The provided productions and attractions with all zones from
+        unique_zones either as the index, or in zone_col
+    """
+    # Match productions and attractions
+    productions = ensure_index(
+        df=productions,
+        index=unique_zones,
+        index_col=zone_col,
+        infill=infill
+    )
+
+    attractions = ensure_index(
+        df=attractions,
+        index=unique_zones,
+        index_col=zone_col,
+        infill=infill
+    )
+
+    if set_index:
+        productions = productions.set_index(zone_col)
+        attractions = attractions.set_index(zone_col)
+
+    return productions, attractions
+
+
+def get_costs(model_lookup_path,
+              calib_params,
+              tp='24hr',
+              iz_infill = 0.5
+              ):
+    """
+    This function imports distances or costs from a given path.
+
+    Parameters
+    ----------
+    model_lookup_path:
+        Model folder to look in for distances/costs. Should be in call or global.
+
+    calib_params:
+        Calibration parameters dictionary'
+
+    tp:
+        Should ultimately take 24hr & tp, usually 24hr for hb and tp for NHB.
+
+    direction = None:
+        Takes None, 'To', 'From'
+
+    car_available = None:
+        Takes None, True, False
+
+    iz_infill = 0.5:
+        Currently needed for distance but not cost. Add a value of iz_infill *
+        the minimum inter-zonal value to the intra-zonal cells.
+
+    Returns
+    ----------
+    dat:
+        DataFrame containing required cost or distance values.
+    """
+    # units takes different parameters
+    # TODO: Needs a config guide for the costs somewhere
+    # TODO: Adapt model input costs to take time periods
+    # TODO: The name cost_cols is misleading
+    file_sys = os.listdir(os.path.join(model_lookup_path, 'costs'))
+    tp_path = [x for x in file_sys if tp in x]
+
+    dat = pd.read_csv(os.path.join(model_lookup_path,
+                                   'costs',
+                                   tp_path[0]))
+    cols = list(dat)
+
+    # Get purpose and direction from calib_params
+    ca = None
+    purpose = None
+    time_period = None
+
+    for index, param in calib_params.items():
+        # Need a purpose, if a ca is not picked up returns none
+        if index == 'p':
+            purpose = param
+        if index == 'ca':
+            if param == 1:
+                ca = 'nca'
+            elif param == 2:
+                ca = 'ca'
+        if index == 'tp':
+            time_period = param
+
+    # Purpose to string
+    commute = [1]
+    business = [2, 12]
+    other = [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
+    if purpose in commute:
+        str_purpose = 'commute'
+    elif purpose in business:
+        str_purpose = 'business'
+    elif purpose in other:
+        str_purpose = 'other'
+    else:
+        raise ValueError("Cannot convert purpose to string." +
+                         "Got %s" % str(purpose))
+
+    # Filter down on purpose
+    cost_cols = [x for x in cols if str_purpose in x]
+    # Handle if we have numeric purpose costs, hope so, they're better!
+    if len(cost_cols) == 0:
+        cost_cols = [x for x in cols if ('p' + str(purpose)) in x]
+
+    # Filter down on car availability
+    if ca is not None:
+        # Have to be fussy as ca is in nca...
+        if ca == 'ca':
+            cost_cols = [x for x in cost_cols if 'nca' not in x]
+        elif ca == 'nca':
+            cost_cols = [x for x in cost_cols if 'nca' in x]
+
+    if time_period is not None:
+        cost_cols = [x for x in cost_cols if str(time_period) in x]
+
+    target_cols = ['p_zone', 'a_zone']
+    for col in cost_cols:
+        target_cols.append(col)
+
+    cost_return_name = cost_cols[0]
+
+    dat = dat.reindex(target_cols, axis=1)
+    dat = dat.rename(columns={cost_cols[0]: 'cost'})
+
+    # Redefine cols
+    cols = list(dat)
+
+    if iz_infill is not None:
+        dat = dat.copy()
+        min_inter_dat = dat[dat[cols[2]]>0]
+        # Derive minimum intra-zonal
+        min_inter_dat = min_inter_dat.groupby(
+                cols[0]).min().reset_index().drop(cols[1],axis=1)
+        intra_dat = min_inter_dat.copy()
+        intra_dat[cols[2]] = intra_dat[cols[2]]*iz_infill
+        iz = dat[dat[cols[0]] == dat[cols[1]]]
+        non_iz = dat[dat[cols[0]] != dat[cols[1]]]
+        iz = iz.drop(cols[2], axis=1)
+        # Rejoin
+        iz = iz.merge(intra_dat, how='inner', on=cols[0])
+        dat = pd.concat([iz, non_iz], axis=0, sort=True).reset_index(drop=True)
+
+    return dat, cost_return_name
+
+
+def get_trip_length_bands(import_folder,
+                          calib_params,
+                          segmentation,
+                          trip_origin,
+                          replace_nan=False,
+                          echo=True):
+    # TODO: Overwrite the segmentation parameter, sorry Ben
+    """
+    Function to check a folder for trip length band parameters.
+    Returns a subset.
+    """
+    # Index folder
+    target_files = os.listdir(import_folder)
+    # Define file contents, should just be target files - should fix.
+    import_files = target_files.copy()
+
+    # TODO: Fixed for new ntem dists - pointless duplication now
+    if segmentation == 'ntem':
+        for key, value in calib_params.items():
+            # Don't want empty segments, don't want ca
+            if value != 'none' and key != 'ca':
+                # print_w_toggle(key + str(value), echo=echo)
+                import_files = [x for x in import_files if
+                                ('_' + key + str(value)) in x]
+    elif segmentation == 'tfn':
+        for key, value in calib_params.items():
+            # Don't want empty segments, don't want ca
+            if value != 'none' and key != 'ca':
+                # print_w_toggle(key + str(value), echo=echo)
+                import_files = [x for x in import_files if
+                                ('_' + key + str(value)) in x]
+    else:
+        raise ValueError('Non-valid segmentation. How did you get this far?')
+
+    if trip_origin == 'hb':
+        import_files = [x for x in import_files if 'nhb' not in x]
+    elif trip_origin == 'nhb':
+        import_files = [x for x in import_files if 'nhb' in x]
+    else:
+        raise ValueError('Trip length band import failed,' +
+                         'provide valid trip origin')
+    if len(import_files) > 1:
+        raise Warning('Picking from two similar files,' +
+                      ' check import folder')
+
+    # Import
+    tlb = pd.read_csv(import_folder + '/' + import_files[0])
+
+    # Filter to target purpose
+    # TODO: Don't want to have to do this for NTEM anymore. Just keep them individual.
+    # tlb = tlb[tlb[trip_origin +'_purpose']==purpose].copy()
+
+    if replace_nan:
+        for col_name in list(tlb):
+            tlb[col_name] = tlb[col_name].fillna(0)
+
+    return tlb
+
+
+def parse_mat_output(list_dir,
+                     sep='_',
+                     mat_type='dat',
+                     file_format='.csv',
+                     file_name='file'):
+    """
+    """
+    # Get target file format only
+    unq_files = [x for x in list_dir if file_format in x]
+    # If no numbers in then drop
+    unq_files = [x for x in list_dir if any(c.isdigit() for c in x)]
+
+    split_list = []
+    for file in unq_files:
+        split_dict = {file_name:file}
+        file = file.replace(file_format,'')
+        test = str(file).split('_')
+        for item in test:
+            if 'hb' in item:
+                name = 'trip_origin'
+                dat = item
+            elif item == mat_type:
+                name = ''
+                dat = ''
+            else:
+                name = ''
+                dat = ''
+                # name = letters, dat = numbers
+                for char in item:
+                    if char.isalpha():
+                        name += str(char)
+                    else:
+                        dat += str(char)
+            # Return None not nan
+            if len(dat) == 0:
+                dat = 'none'
+            split_dict.update({name: dat})
+        split_list.append(split_dict)           
+
+    segments = pd.DataFrame(split_list)
+    segments = segments.replace({np.nan:'none'})
+
+    return segments
+
+
+def convert_to_weights(df: pd.DataFrame,
+                       year_cols: List[str],
+                       weight_by_col: str = 'purpose_id'
+                       ) -> pd.DataFrame:
+    """
+    TODO: write convert_to_weights() doc
+    """
+    df = df.copy()
+    unq_vals = df[weight_by_col].unique()
+
+    for val in unq_vals:
+        mask = (df[weight_by_col] == val)
+        for year in year_cols:
+            df.loc[mask, year] = (
+                df.loc[mask, year]
+                /
+                df.loc[mask, year].sum()
+            )
+    return df
+

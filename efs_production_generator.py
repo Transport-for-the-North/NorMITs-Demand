@@ -60,6 +60,7 @@ class EFSProductionGenerator:
             ntem_control_dir: str = None,
             lad_lookup_dir: str = None,
             control_productions: bool = True,
+            control_fy_productions: bool = True,
 
             # D-Log
             d_log: pd.DataFrame = None,
@@ -112,13 +113,13 @@ class EFSProductionGenerator:
             The future years to forecast.
 
         population_growth:
-            pandas dataframe containing the future year growth values for
+            dataframe containing the future year growth values for
             growing the base year population. Must be segmented by the same
-            level as land use data (usually msoa_zone_id).
+            zoning system (at least) as land use data (usually msoa_zone_id).
 
         population_constraint:
             TODO: Need to clarify if population constrain is still needed,
-            where the values come from, and how exactly the  constrainer works.
+             where the values come from, and how exactly the constrainer works.
 
         import_home:
             The home directory to find all the production imports. Usually
@@ -150,9 +151,23 @@ class EFSProductionGenerator:
             The path to alternate mode share data. If left as None, the
             production model will use the default mode share data.
 
-        ntem_control_dir
-        lad_lookup_dir
-        control_productions
+        ntem_control_dir:
+            The path to alternate ntem control directory. If left as None, the
+            production model will use the default land use data.
+
+        lad_lookup_dir:
+            The path to alternate lad to msoa import data. If left as None, the
+            production model will use the default land use data.
+
+        control_productions:
+            Whether to control the generated production to the constraints
+            given in ntem_control_dir or not.
+
+        control_fy_productions:
+            Whether to control the generated future year productions to the
+            constraints given in ntem_control_dir or not. When running for
+            scenarios other than the base NTEM, this should be False.
+
         d_log:
             TODO: Clarify what format D_log data comes in as
 
@@ -160,22 +175,22 @@ class EFSProductionGenerator:
             See d_log
 
         constraint_required:
-            See population_constraint
+            See efs_constrainer.ForecastConstrainer()
 
         constraint_method:
-            See population_constraint
+            See efs_constrainer.ForecastConstrainer()
 
         constraint_area:
-            See population_constraint
+            See efs_constrainer.ForecastConstrainer()
 
         constraint_on:
-            See population_constraint
+            See efs_constrainer.ForecastConstrainer()
 
         constraint_source:
-            See population_constraint
+            See efs_constrainer.ForecastConstrainer()
 
         designated_area:
-            See population_constraint
+            See efs_constrainer.ForecastConstrainer()
 
         m_needed:
             Which mode to return productions for.
@@ -198,7 +213,7 @@ class EFSProductionGenerator:
 
         no_neg_growth:
             Whether to ensure there is no negative growth. If True, any growth
-            values below 0 will be replaced with infill.
+            values below 0 will be replaced with population_infill.
 
         population_infill:
             If no_neg_growth is True, this value will be used to replace all
@@ -227,9 +242,7 @@ class EFSProductionGenerator:
         Segmented_productions:
             Productions for mode m_needed, segmented by all segments possible
             in the input data.
-
         """
-
         # Return previously created productions if we can
         fname = 'MSOA_aggregated_productions.csv'
         final_output_path = os.path.join(out_path, fname)
@@ -401,7 +414,8 @@ class EFSProductionGenerator:
             mode_share_path=imports['mode_share'],
             audit_dir=out_path,
             ntem_control_dir=imports['ntem_control'],
-            lad_lookup_dir=imports['lad_lookup']
+            lad_lookup_dir=imports['lad_lookup'],
+            control_fy_productions=control_fy_productions,
         )
 
         # Write productions to file
@@ -1553,7 +1567,8 @@ def generate_productions(population: pd.DataFrame,
                          mode_share_path: str,
                          audit_dir: str,
                          ntem_control_dir: str = None,
-                         lad_lookup_dir: str = None
+                         lad_lookup_dir: str = None,
+                         control_fy_productions: bool = True
                          ) -> pd.DataFrame:
     # TODO: write generate_productions() docs
     # Init
@@ -1564,7 +1579,10 @@ def generate_productions(population: pd.DataFrame,
     # Generate Productions for each year
     yr_ph = dict()
     for year in all_years:
-        if ntem_control_dir is not None:
+        # Only only set the control path if we need to constrain
+        if not control_fy_productions and year != base_year:
+            ntem_control_path = None
+        elif ntem_control_dir is not None:
             ntem_fname = ntem_base_fname % year
             ntem_control_path = os.path.join(ntem_control_dir, ntem_fname)
         else:
@@ -1737,18 +1755,8 @@ def nhb_production(hb_pa_import,
             }
         )
 
-        # Print some audit vals
-        # audit = yr_nhb_productions.groupby(
-        #     ["p", "m"]
-        # )["trips"].sum().reset_index()
-        # print(audit)
-
-        # Create year fname
-        nhb_productions_fname = '_'.join(
-            ["yr" + str(year), out_fname]
-        )
-
         # Output
+        nhb_productions_fname = '_'.join(["yr" + str(year), out_fname])
         yr_nhb_productions.to_csv(
             os.path.join(nhb_export, nhb_productions_fname),
             index=False

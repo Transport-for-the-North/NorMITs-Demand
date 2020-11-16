@@ -319,10 +319,14 @@ EFS_RUN_DISTRIBUTIONS_DICT = {
     },
 }
 
+# By default EFS should no longer constrain to NTEM planning data
+# for populations and employment!
+# WE now trust NorMITs Land Use to provide us with accurate population
+# and employment data
 CONSTRAINT_REQUIRED_DEFAULT = [
-    True,   # initial population metric constraint
-    True,   # post-development constraint
-    True,   # secondary post-development constraint used for matching HH pop
+    False,   # initial population metric constraint
+    False,   # post-development constraint
+    False,   # secondary post-development constraint used for matching HH pop
     False,  # initial worker metric constraint
     False,  # secondary worker metric constraint
     False,  # final trip based constraint
@@ -330,9 +334,9 @@ CONSTRAINT_REQUIRED_DEFAULT = [
 
 # ## Attraction Generation ## #
 DEFAULT_ATTRACTION_CONSTRAINTS = [
-    True,   # initial population metric constraint
-    True,   # post-development constraint
-    True,   # secondary post-development constraint used for matching HH pop
+    False,   # initial population metric constraint
+    False,   # post-development constraint
+    False,   # secondary post-development constraint used for matching HH pop
     False,  # initial worker metric constraint
     False,  # secondary worker metric constraint
     False,  # final trip based constraint
@@ -340,9 +344,9 @@ DEFAULT_ATTRACTION_CONSTRAINTS = [
 
 # ## Production Generations ## #
 DEFAULT_PRODUCTION_CONSTRAINTS = [
-    True,   # initial population metric constraint
-    True,   # post-development constraint
-    True,   # secondary post-development constraint used for matching HH pop
+    False,   # initial population metric constraint
+    False,   # post-development constraint
+    False,   # secondary post-development constraint used for matching HH pop
     False   # final trip based constraint
 ]
 
