@@ -44,8 +44,8 @@ def main():
     # Audit as we go
     audit_tol = 0.001
 
-    decompile_od_bool = False
-    gen_tour_proportions_bool = True
+    decompile_od_bool = True
+    gen_tour_proportions_bool = False
     post_me_compile_pa = False
     pa_back_to_od_check = False
 
@@ -55,26 +55,26 @@ def main():
     # TODO: Add VDM OD Matrices, VDM PA Matrices into imports
 
     if decompile_od_bool:
-        od2pa.convert_to_efs_matrices(
-            import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
-            export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
-            matrix_format='od',
-            year=consts.BASE_YEAR,
-            m_needed=m_needed,
-            user_class=True,
-            to_wide=True,
-            wide_col_name=model_name + '_zone_id',
-            from_pcu=from_pcu,
-            vehicle_occupancy_import=r'Y:\NorMITs Demand\import'
-        )
-
-        od2pa.decompile_od(
-            od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
-            od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
-            decompile_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params/od_compilation_factors.pickle',
-            year=consts.BASE_YEAR,
-            audit_tol=audit_tol
-        )
+        # od2pa.convert_to_efs_matrices(
+        #     import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
+        #     export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
+        #     matrix_format='od',
+        #     year=consts.BASE_YEAR,
+        #     m_needed=m_needed,
+        #     user_class=True,
+        #     to_wide=True,
+        #     wide_col_name=model_name + '_zone_id',
+        #     from_pcu=from_pcu,
+        #     vehicle_occupancy_import=r'Y:\NorMITs Demand\import'
+        # )
+        #
+        # od2pa.decompile_od(
+        #     od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
+        #     od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
+        #     decompile_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params/od_compilation_factors.pickle',
+        #     year=consts.BASE_YEAR,
+        #     audit_tol=audit_tol
+        # )
 
         if seg_level == 'vdm':
             # Build path for compile params
@@ -97,11 +97,12 @@ def main():
                 output_fname=output_fname
             )
 
-            du.compile_od(
-                od_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
-                write_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM OD Matrices',
-                compile_param_path=compile_param_path,
-                build_factor_pickle=False
+            mat_p.compile_matrices(
+                mat_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
+                mat_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM OD Matrices',
+                compile_params_path=compile_param_path,
+                build_factor_pickle=True,
+                factors_fname='test.pkl'
             )
 
         elif seg_level != 'tms':

@@ -1057,29 +1057,42 @@ def _vdm_seg_tour_props(od_import: str,
     # Init
     ca_needed = [None] if ca_needed is None else ca_needed
 
-    # Multiprocessing would go here!
-    zero_counts = list()
+    # ## MULTIPROCESS ## #
+    unchanging_kwargs = {
+        'od_import': od_import,
+        'tour_proportions_export': tour_proportions_export,
+        'zone_translate_dir': zone_translate_dir,
+        'pa_export': pa_export,
+        'model_name': model_name,
+        'year': year,
+        'trip_origin': 'hb',
+        'tp_needed': tp_needed,
+        'tour_prop_tol': tour_prop_tol,
+        'furness_tol': furness_tol,
+        'furness_max_iters': furness_max_iters,
+        'phi_lookup_folder': phi_lookup_folder,
+        'phi_type': phi_type,
+        'aggregate_to_wday': aggregate_to_wday,
+        'generate_tour_props': generate_tour_props
+    }
+
+    # Build a list of the changing arguments
+    kwargs_list = list()
     for uc, m, ca in product(uc_needed, m_needed, ca_needed):
-        zero_counts.append(_vdm_seg_tour_props_internal(
-            od_import=od_import,
-            tour_proportions_export=tour_proportions_export,
-            zone_translate_dir=zone_translate_dir,
-            pa_export=pa_export,
-            model_name=model_name,
-            year=year,
-            trip_origin='hb',
-            uc=uc,
-            m=m,
-            ca=ca,
-            tp_needed=tp_needed,
-            tour_prop_tol=tour_prop_tol,
-            furness_tol=furness_tol,
-            furness_max_iters=furness_max_iters,
-            phi_lookup_folder=phi_lookup_folder,
-            phi_type=phi_type,
-            aggregate_to_wday=aggregate_to_wday,
-            generate_tour_props=generate_tour_props
-        ))
+        kwargs = unchanging_kwargs.copy()
+        kwargs.update({
+            'uc': uc,
+            'm': m,
+            'ca': ca
+        })
+        kwargs_list.append(kwargs)
+
+    # Multiprocess write to disk
+    zero_counts = conc.multiprocess(
+        _vdm_seg_tour_props_internal,
+        kwargs=kwargs_list,
+        process_count=process_count
+    )
 
     # Output a log of the zero counts found
     header = ['tour_file', 'zero_count', 'percentage']
@@ -1567,3 +1580,107 @@ def convert_wide_to_long(import_dir: str,
             out_path
         )
 
+
+def compile_matrices(mat_import: str,
+                     mat_export: str,
+                     compile_params_path: str,
+                     build_factor_pickle: bool = False,
+                     factor_pickle_path: str = None,
+                     factors_fname: str = 'od_compilation_factors.pickle'
+                     ) -> None:
+    """
+    Compiles the matrices in mat_import, writes to mat_export
+
+    Parameters
+    ----------
+    mat_import:
+        Path to the directory containing the matrices to compile
+
+    mat_export:
+        Path to the directory to output the compiled matrices
+
+    compile_params_path:
+        Path to the compile params, as produced by build_compile_params()
+
+    build_factor_pickle:
+        If True, a dictionary of factors that can be used to decompile the
+        compiled matrices will be created. This will be in the format of:
+        factors[compiled_matrix][import_matrix] = np.array(factors)
+
+    factor_pickle_path:
+        Where to export the decompile factors. This should be a path to a
+        directory, not including the filename. If left as None, mat_export
+        will be used in place.
+
+    factors_fname:
+        The filename to give to the exported decompile factors when writing to
+        disk
+
+    Returns
+    -------
+    None
+    """
+    # TODO: Validate the input paths
+    # Validate
+    if not os.path.isdir(mat_import):
+        raise IOError("Matrix import path '%s' does not exist." % mat_import)
+
+    if not os.path.isdir(mat_export):
+        raise IOError("Matrix export path '%s' does not exist." % mat_export)
+
+    # Init
+    compile_params = pd.read_csv(compile_params_path)
+    compiled_names = compile_params['compilation'].unique()
+    factor_pickle_path = mat_export if factor_pickle_path is None else factor_pickle_path
+
+    # Need to get the size of the output matrices
+    check_mat_name = compile_params.loc[0, 'distribution_name']
+    check_mat = pd.read_csv(os.path.join(mat_import, check_mat_name), index_col=0)
+    n_rows = len(check_mat.index)
+    n_cols = len(check_mat.columns)
+
+    # Define the default value for the nested defaultdict
+    def empty_factors():
+        return np.zeros(n_rows, n_cols)
+
+    # Use function to initialise defaultdict
+    decompile_factors = defaultdict(lambda: defaultdict(empty_factors))
+
+    desc = 'Compiling Matrices'
+    for comp_name in tqdm(compiled_names, desc=desc):
+        # ## COMPILE THE MATRICES ## #
+        # Get the input matrices
+        mask = (compile_params['compilation'] == comp_name)
+        subset = compile_params[mask].copy()
+        input_mat_names = subset['distribution_name'].unique()
+
+        # Read in all the matrices
+        in_mats = list()
+        for mat_name in input_mat_names:
+            in_path = os.path.join(mat_import, mat_name)
+            in_mats.append(pd.read_csv(in_path, index_col=0))
+
+        # Combine all matrices together
+        full_mat = reduce(lambda x, y: x.add(y, fill_value=0), in_mats)
+
+        # Output to file
+        full_mat.to_csv(os.path.join(mat_export, comp_name))
+
+        # Go to the next iteration if we don't need the factors
+        if not build_factor_pickle:
+            continue
+
+        # ## CALCULATE THE DECOMPILE FACTORS ## #
+        for part_mat, mat_name in zip(in_mats, input_mat_names):
+            # Avoid divide by zero
+            part_mat = np.where(part_mat == 0, 0.0001, part_mat)
+            decompile_factors[comp_name][mat_name] = part_mat / full_mat
+
+    # Write factors to disk if we made them
+    if build_factor_pickle:
+        print('Writing decompile factors to disk - might take a while...')
+        decompile_factors = du.defaultdict_to_regular(decompile_factors)
+
+        out_path = os.path.join(factor_pickle_path, factors_fname)
+        with open(out_path, 'wb') as f:
+            pickle.dump(decompile_factors, f, protocol=pickle.HIGHEST_PROTOCOL)
