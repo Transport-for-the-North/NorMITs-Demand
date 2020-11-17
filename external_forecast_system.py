@@ -829,7 +829,7 @@ class ExternalForecastSystem:
             output_csv=os.path.join(exports['productions'], 'MSOA_population.csv'),
             data_type='population', base_year=str(base_year)
             )
-        comparison.write_comparisons(exports['reports'])
+        comparison.write_comparisons(exports['reports'], output_as='csv', year_col=True)
 
         last_time = current_time
         current_time = time.time()
@@ -866,7 +866,7 @@ class ExternalForecastSystem:
             output_csv=os.path.join(exports['productions'], 'MSOA_workers.csv'),
             data_type='employment', base_year=str(base_year)
             )
-        comparison.write_comparisons(exports['reports'])
+        comparison.write_comparisons(exports['reports'], output_as='csv', year_col=True)
 
         last_time = current_time
         current_time = time.time()

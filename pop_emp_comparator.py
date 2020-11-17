@@ -302,7 +302,7 @@ class PopEmpComparator:
 
         return output_ratios, total_ratios
 
-    def write_comparisons(self, output_loc: str, output_as: str='excel'):
+    def write_comparisons(self, output_loc: str, output_as: str='excel', year_col: bool=False):
         """Runs each comparison method and writes the output to a csv.
 
         Parameters
@@ -313,6 +313,11 @@ class PopEmpComparator:
             What type of output file(s) should be created options are 'excel' (default)
             or 'csv', if 'excel' is selected any outputs that are too large for a sheet
             will be saved as CSVs instead.
+        year_col : bool, optional
+            Whether or not to include the year as an index or column header, default is False.
+            If True the year will be an index value so there will be multiple rows for each ID,
+            if False (default) the year will be an column header so there will be multiple
+            columns for each value.
         """
         # Check output type
         output_as = output_as.lower()
@@ -337,6 +342,10 @@ class PopEmpComparator:
             # Create tuple for dataframes if func only returns one, so it can be looped through
             dataframes = (func(),) if len(names) == 1 else func()
             for nm, df in zip(names, dataframes):
+                if year_col and nm.lower() != 'totals comparison':
+                    # Move year column to index level and set name to year
+                    df = df.stack(level=0)
+                    df.index.names = df.index.names[:-1] + ['year']
                 # Write to csv if df too large for excel sheet, or csv output type selected
                 if output_as == 'csv' or len(df) > EXCEL_MAX[0] or len(df.columns) > EXCEL_MAX[1]:
                     du.safe_dataframe_to_csv(df, output_dir / f'{nm}.csv', flatten_header=True)
@@ -401,7 +410,7 @@ def test():
                                 import_loc / future_population_ratio_file,
                                 output_loc / population_output_file,
                                 'population', BASE_YEAR)
-    pop_comp.write_comparisons(output_loc / 'Reports', output_as='csv')
+    pop_comp.write_comparisons(output_loc / 'Reports', output_as='csv', year_col=True)
     # Compare the employment inputs and outputs
     emp_comp = PopEmpComparator(import_loc / worker_value_file,
                                 import_loc / worker_growth_file,
@@ -409,7 +418,7 @@ def test():
                                 import_loc / worker_ratio_file,
                                 output_loc / worker_output_file,
                                 'employment', BASE_YEAR)
-    emp_comp.write_comparisons(output_loc / 'Reports', output_as='csv')
+    emp_comp.write_comparisons(output_loc / 'Reports', output_as='csv', year_col=True)
     return
 
 
