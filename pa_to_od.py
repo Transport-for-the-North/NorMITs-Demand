@@ -682,63 +682,18 @@ def maybe_get_aggregated_tour_proportions(orig: int,
     return od_tour_props
 
 
-def _tms_od_from_tour_props_internal(pa_import,
-                                     od_export,
-                                     tour_proportions_dir,
-                                     zone_translate_dir,
-                                     trip_origin,
-                                     base_year,
-                                     year,
-                                     p,
-                                     m,
-                                     seg,
-                                     ca,
-                                     tp_needed
-                                     ) -> None:
-    # TODO: Write _tms_od_from_tour_props_internal docs()
-    # Load in 24hr PA
-    input_dist_name = du.get_dist_name(
-        trip_origin=trip_origin,
-        matrix_format='pa',
-        year=str(year),
-        purpose=str(p),
-        mode=str(m),
-        segment=str(seg),
-        car_availability=str(ca),
-        csv=True
-    )
-    pa_24 = pd.read_csv(os.path.join(pa_import, input_dist_name), index_col=0)
-    pa_24.columns = pa_24.columns.astype(int)
-    pa_24.index = pa_24.index.astype(int)
-
-    # Get a list of the zone names for iterating - make sure integers
-    orig_vals = [int(x) for x in pa_24.index.values]
-    dest_vals = [int(x) for x in list(pa_24)]
-
-    # ## Load the tour proportions - always generated on base year ## #
-    # Load the model zone tour proportions
-    tour_prop_fname = du.get_dist_name(
-        trip_origin=trip_origin,
-        matrix_format='tour_proportions',
-        year=str(base_year),
-        purpose=str(p),
-        mode=str(m),
-        segment=str(seg),
-        car_availability=str(ca),
-        suffix='.pkl'
-    )
-    tour_props = pd.read_pickle(os.path.join(tour_proportions_dir,
-                                             tour_prop_fname))
-
-    print(tour_proportions_dir)
-    print(tour_prop_fname)
-
-    # Load the aggregated tour props
-    lad_fname = tour_prop_fname.replace('tour_proportions', 'lad_tour_proportions')
-    lad_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, lad_fname))
-
-    tfn_fname = tour_prop_fname.replace('tour_proportions', 'tfn_tour_proportions')
-    tfn_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, tfn_fname))
+def to_od_via_tour_props(orig_vals,
+                         dest_vals,
+                         pa_24,
+                         tour_props,
+                         lad_tour_props,
+                         tfn_tour_props,
+                         zone_translate_dir,
+                         tp_needed,
+                         input_dist_name,
+                         model_name,
+                         ):
+    # TODO: Write to_od_via_tour_props() docs
 
     # Make sure tour props are the right shape
     du.check_tour_proportions(
@@ -757,12 +712,12 @@ def _tms_od_from_tour_props_internal(pa_import,
     # Load the zone aggregation dictionaries for this model
     model2lad = du.get_zone_translation(
         import_dir=zone_translate_dir,
-        from_zone=du.get_model_name(m),
+        from_zone=model_name,
         to_zone='lad'
     )
     model2tfn = du.get_zone_translation(
         import_dir=zone_translate_dir,
-        from_zone=du.get_model_name(m),
+        from_zone=model_name,
         to_zone='tfn_sectors'
     )
 
@@ -809,6 +764,78 @@ def _tms_od_from_tour_props_internal(pa_import,
         for i, tp in enumerate(th_mats.keys()):
             th_mats[tp].loc[orig, dest] = pa_24.loc[orig, dest] * th_factors[i]
 
+    return fh_mats, th_mats
+
+
+def _tms_od_from_tour_props_internal(pa_import,
+                                     od_export,
+                                     tour_proportions_dir,
+                                     zone_translate_dir,
+                                     model_name,
+                                     trip_origin,
+                                     base_year,
+                                     year,
+                                     p,
+                                     m,
+                                     seg,
+                                     ca,
+                                     tp_needed
+                                     ) -> None:
+    # TODO: Write _tms_od_from_tour_props_internal docs()
+    # Load in 24hr PA
+    input_dist_name = du.get_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='pa',
+        year=str(year),
+        purpose=str(p),
+        mode=str(m),
+        segment=str(seg),
+        car_availability=str(ca),
+        csv=True
+    )
+    pa_24 = pd.read_csv(os.path.join(pa_import, input_dist_name), index_col=0)
+    pa_24.columns = pa_24.columns.astype(int)
+    pa_24.index = pa_24.index.astype(int)
+
+    # Get a list of the zone names for iterating - make sure integers
+    orig_vals = [int(x) for x in pa_24.index.values]
+    dest_vals = [int(x) for x in list(pa_24)]
+
+    # ## Load the tour proportions - always generated on base year ## #
+    # Load the model zone tour proportions
+    tour_prop_fname = du.get_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='tour_proportions',
+        year=str(base_year),
+        purpose=str(p),
+        mode=str(m),
+        segment=str(seg),
+        car_availability=str(ca),
+        suffix='.pkl'
+    )
+    tour_props = pd.read_pickle(os.path.join(tour_proportions_dir,
+                                             tour_prop_fname))
+
+    # Load the aggregated tour props
+    lad_fname = tour_prop_fname.replace('tour_proportions', 'lad_tour_proportions')
+    lad_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, lad_fname))
+
+    tfn_fname = tour_prop_fname.replace('tour_proportions', 'tfn_tour_proportions')
+    tfn_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, tfn_fname))
+
+    fh_mats, th_mats = to_od_via_tour_props(
+        orig_vals,
+        dest_vals,
+        pa_24,
+        tour_props,
+        lad_tour_props,
+        tfn_tour_props,
+        zone_translate_dir,
+        tp_needed,
+        input_dist_name,
+        model_name=model_name,
+    )
+
     print("Writing %s converted matrices to disk..." % input_dist_name)
 
     # Save the generated from_home matrices
@@ -847,6 +874,7 @@ def _tms_od_from_tour_props(pa_import: str,
                             od_export: str,
                             tour_proportions_dir: str,
                             zone_translate_dir: str,
+                            model_name: str,
                             base_year: str = consts.BASE_YEAR,
                             years_needed: List[int] = consts.FUTURE_YEARS,
                             p_needed: List[int] = consts.ALL_HB_P,
@@ -871,9 +899,6 @@ def _tms_od_from_tour_props(pa_import: str,
                              "handle nhb purposes." % str(p))
     trip_origin = 'hb'
 
-    # TODO: Remove 0 process count once dev over
-    process_count = 0
-
     # MP placed inside this loop to prevent too much Memory being used
     for year in years_needed:
         loop_generator = du.segmentation_loop_generator(
@@ -890,6 +915,7 @@ def _tms_od_from_tour_props(pa_import: str,
             'od_export': od_export,
             'tour_proportions_dir': tour_proportions_dir,
             'zone_translate_dir': zone_translate_dir,
+            'model_name': model_name,
             'trip_origin': trip_origin,
             'base_year': base_year,
             'year': year,
@@ -916,14 +942,170 @@ def _tms_od_from_tour_props(pa_import: str,
         # Repeat loop for every wanted year
 
 
-def _vdm_od_from_tour_props():
-    raise NotImplementedError
+def _vdm_od_from_tour_props_internal(pa_import,
+                                     od_export,
+                                     tour_proportions_dir,
+                                     zone_translate_dir,
+                                     model_name,
+                                     trip_origin,
+                                     base_year,
+                                     year,
+                                     uc,
+                                     m,
+                                     ca,
+                                     tp_needed
+                                     ) -> None:
+    # TODO: Write _vdm_od_from_tour_props_internal docs()
+    # TODO: Is there a way to combine get_vdm_dist_name and get_dist_name?
+    #  Cracking this would make all future code super easy flexible!
+    # Load in 24hr PA
+    input_dist_name = du.get_vdm_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='pa',
+        year=str(year),
+        user_class=str(uc),
+        mode=str(m),
+        ca=ca,
+        csv=True
+    )
+    pa_24 = pd.read_csv(os.path.join(pa_import, input_dist_name), index_col=0)
+    pa_24.columns = pa_24.columns.astype(int)
+    pa_24.index = pa_24.index.astype(int)
+
+    # Get a list of the zone names for iterating - make sure integers
+    orig_vals = [int(x) for x in pa_24.index.values]
+    dest_vals = [int(x) for x in list(pa_24)]
+
+    # ## Load the tour proportions - always generated on base year ## #
+    # Load the model zone tour proportions
+    tour_prop_fname = du.get_vdm_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='tour_proportions',
+        year=str(year),
+        user_class=str(uc),
+        mode=str(m),
+        ca=ca,
+        suffix='.pkl'
+    )
+    tour_props = pd.read_pickle(os.path.join(tour_proportions_dir,
+                                             tour_prop_fname))
+
+    # Load the aggregated tour props
+    lad_fname = tour_prop_fname.replace('tour_proportions', 'lad_tour_proportions')
+    lad_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, lad_fname))
+
+    tfn_fname = tour_prop_fname.replace('tour_proportions', 'tfn_tour_proportions')
+    tfn_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, tfn_fname))
+
+    fh_mats, th_mats = to_od_via_tour_props(
+        orig_vals,
+        dest_vals,
+        pa_24,
+        tour_props,
+        lad_tour_props,
+        tfn_tour_props,
+        zone_translate_dir,
+        tp_needed,
+        input_dist_name,
+        model_name=model_name,
+    )
+
+    print("Writing %s converted matrices to disk..." % input_dist_name)
+
+    # Save the generated from_home matrices
+    for tp, mat in fh_mats.items():
+        dist_name = du.get_vdm_dist_name(
+            trip_origin=trip_origin,
+            matrix_format='od_from',
+            year=str(year),
+            user_class=str(uc),
+            mode=str(m),
+            ca=ca,
+            tp=str(tp),
+            csv=True
+        )
+        mat.to_csv(os.path.join(od_export, dist_name))
+
+    # Save the generated to_home matrices
+    for tp, mat in th_mats.items():
+        dist_name = du.get_vdm_dist_name(
+            trip_origin=trip_origin,
+            matrix_format='od_to',
+            year=str(year),
+            user_class=str(uc),
+            mode=str(m),
+            ca=ca,
+            tp=str(tp),
+            csv=True
+        )
+        # Need to transpose to_home before writing
+        mat.T.to_csv(os.path.join(od_export, dist_name))
+
+
+def _vdm_od_from_tour_props(pa_import: str,
+                            od_export: str,
+                            tour_proportions_dir: str,
+                            zone_translate_dir: str,
+                            model_name: str,
+                            base_year: str = consts.BASE_YEAR,
+                            years_needed: List[int] = consts.FUTURE_YEARS,
+                            to_needed: List[str] = consts.VDM_TRIP_ORIGINS,
+                            uc_needed: List[str] = consts.USER_CLASSES,
+                            m_needed: List[int] = consts.MODES_NEEDED,
+                            ca_needed: List[int] = None,
+                            tp_needed: List[int] = consts.TIME_PERIODS,
+                            process_count: int = os.cpu_count() - 2
+                            ):
+    # TODO: Write _vdm_od_from_tour_props() docs
+    # Init
+    ca_needed = [None] if ca_needed is None else ca_needed
+
+    # MP placed inside this loop to prevent too much Memory being used
+    for year in years_needed:
+        loop_generator = du.vdm_segment_loop_generator(
+            to_list=to_needed,
+            uc_list=uc_needed,
+            m_list=m_needed,
+            ca_list=ca_needed
+        )
+
+        # ## MULTIPROCESS ## #
+        unchanging_kwargs = {
+            'pa_import': pa_import,
+            'od_export': od_export,
+            'tour_proportions_dir': tour_proportions_dir,
+            'zone_translate_dir': zone_translate_dir,
+            'model_name': model_name,
+            'base_year': base_year,
+            'year': year,
+            'tp_needed': tp_needed
+        }
+
+        kwargs_list = list()
+        for to, uc, m, ca in loop_generator:
+            kwargs = unchanging_kwargs.copy()
+            kwargs.update({
+                'trip_origin': to,
+                'uc': uc,
+                'm': m,
+                'ca': ca
+            })
+            kwargs_list.append(kwargs)
+
+        conc.multiprocess(
+            _vdm_od_from_tour_props_internal,
+            kwargs=kwargs_list,
+            process_count=process_count
+        )
+
+        # Repeat loop for every wanted year
 
 
 def build_od_from_tour_proportions(pa_import: str,
                                    od_export: str,
                                    tour_proportions_dir: str,
                                    zone_translate_dir: str,
+                                   model_name: str,
                                    seg_level: str,
                                    seg_params: Dict[str, Any],
                                    base_year: str = consts.BASE_YEAR,
@@ -1003,6 +1185,7 @@ def build_od_from_tour_proportions(pa_import: str,
         od_export=od_export,
         tour_proportions_dir=tour_proportions_dir,
         zone_translate_dir=zone_translate_dir,
+        model_name=model_name,
         base_year=base_year,
         years_needed=years_needed,
         process_count=process_count,

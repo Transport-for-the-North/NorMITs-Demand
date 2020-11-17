@@ -1412,6 +1412,72 @@ def build_compile_params(import_dir: str,
         du.write_csv(output_headers, out_lines, out_path)
 
 
+def build_24hr_vdm_mats(import_dir: str,
+                        export_dir: str,
+                        matrix_format: str,
+                        to_needed: str,
+                        years_needed: List[str],
+                        uc_needed: List[int] = consts.USER_CLASSES,
+                        m_needed: List[int] = consts.MODES_NEEDED,
+                        ca_needed: List[int] = None,
+                        tp_needed: List[int] = consts.TIME_PERIODS
+                        ) -> None:
+    # TODO: Write build_24hr_vdm_mats() docs
+    # Init
+    ca_needed = [None] if ca_needed is None else ca_needed
+
+    # Go through all segmentations, for all years
+    for year in years_needed:
+        for uc, m, ca, to in product(uc_needed, m_needed, ca_needed, to_needed):
+            # Figure out output name to tell user
+            output_dist_name = du.get_vdm_dist_name(
+                trip_origin=to,
+                matrix_format=matrix_format,
+                year=str(year),
+                user_class=str(uc),
+                mode=str(m),
+                ca=ca,
+                csv=True
+            )
+            print("Generating output matrix %s..." % output_dist_name)
+
+            # Read in all time period matrices
+            tp_mats = list()
+            for tp in tp_needed:
+                dist_name = du.get_vdm_dist_name(
+                    trip_origin=to,
+                    matrix_format=matrix_format,
+                    year=str(year),
+                    user_class=str(uc),
+                    mode=str(m),
+                    ca=ca,
+                    tp=str(tp),
+                    csv=True
+                )
+                dist_path = os.path.join(import_dir, dist_name)
+                tp_mats.append(pd.read_csv(dist_path, index_col=0))
+
+                # Check all the input matrices have the same columns and index
+                col_ref = tp_mats[0].columns
+                idx_ref = tp_mats[0].index
+                for i, mat in enumerate(tp_mats):
+                    if len(mat.columns.difference(col_ref)) > 0:
+                        raise ValueError(
+                            "tp matrix %s columns do not match the "
+                            "others." % str(tp_needed[i]))
+
+                    if len(mat.index.difference(idx_ref)) > 0:
+                        raise ValueError(
+                            "tp matrix %s index does not match the "
+                            "others." % str(tp_needed[i]))
+
+                # Combine all matrices together
+                full_mat = reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
+
+                # Output to file
+                full_mat.to_csv(os.path.join(export_dir, output_dist_name))
+
+
 def build_24hr_mats(import_dir: str,
                     export_dir: str,
                     matrix_format: str,

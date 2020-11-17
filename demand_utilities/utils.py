@@ -1115,23 +1115,26 @@ def expand_distribution(dist: pd.DataFrame,
 def vdm_segment_loop_generator(to_list: Iterable[str],
                                uc_list: Iterable[str],
                                m_list: Iterable[int],
-                               tp_list: Iterable[int] = None
-                               ) -> (Union[Iterator[Tuple[str, str, int, int]],
-                                           Iterator[Tuple[str, str, int]]]):
+                               ca_list: Iterable[int],
+                               tp_list: Iterable[int] = None,
+                               ) -> (Union[Iterator[Tuple[str, str, int, int, int]],
+                                           Iterator[Tuple[str, str, int, int]]]):
     """
     Simple generator to avoid the need for so many nested loops
     """
+
     for trip_origin, user_class in product(to_list, uc_list):
         # Not a valid segmentation - skip it
         if trip_origin == 'nhb' and user_class == 'commute':
             continue
 
-        for mode in m_list:
+        for mode, ca in product(m_list, ca_list):
             if tp_list is None:
                 yield (
                     trip_origin,
                     user_class,
-                    mode
+                    mode,
+                    ca,
                 )
             else:
                 for time_period in tp_list:
@@ -1139,6 +1142,7 @@ def vdm_segment_loop_generator(to_list: Iterable[str],
                         trip_origin,
                         user_class,
                         mode,
+                        ca,
                         time_period
                     )
 

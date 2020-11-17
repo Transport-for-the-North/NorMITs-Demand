@@ -107,20 +107,21 @@ def tms_segmentation_tests(model_name,
         )
 
     if pa_back_to_od_check:
-        # mat_p.build_24hr_mats(
-        #     import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
-        #     export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\24hr PA Matrices',
-        #     matrix_format='pa',
-        #     years_needed=[consts.BASE_YEAR],
-        #     m_needed=m_needed,
-        #     ca_needed=ca_needed,
-        # )
+        mat_p.build_24hr_mats(
+            import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
+            export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\24hr PA Matrices',
+            matrix_format='pa',
+            years_needed=[consts.BASE_YEAR],
+            m_needed=m_needed,
+            ca_needed=ca_needed,
+        )
 
         pa2od.build_od_from_tour_proportions(
             pa_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\24hr PA Matrices',
             od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test OD Matrices',
             tour_proportions_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             zone_translate_dir=r'Y:\NorMITs Demand\import\zone_translation',
+            model_name=model_name,
             years_needed=[consts.BASE_YEAR],
             seg_level=seg_level,
             seg_params=seg_params,
@@ -186,14 +187,22 @@ def vdm_segmentation_tests(model_name,
         raise ValueError("I don't know what model this is? %s"
                          % str(model_name))
 
-    decompile_od_bool = True
+    decompile_od_bool = False
     gen_tour_proportions_bool = False
-    pa_back_to_od_check = False
+    pa_back_to_od_check = True
 
     # Validate inputs
     seg_level = du.validate_seg_level(seg_level)
     if seg_level != 'vdm':
         raise ValueError("NOT VDM")
+
+    seg_params = {
+        'to_needed': ['hb'],
+        'uc_needed': consts.USER_CLASSES,
+        'm_needed': m_needed,
+        'ca_needed': ca_needed,
+        'tp_needed': consts.TIME_PERIODS
+    }
 
     # TODO: Add VDM OD Matrices, VDM PA Matrices, VDM 24hr PA Matrices into
     #  imports
@@ -211,8 +220,6 @@ def vdm_segmentation_tests(model_name,
             from_pcu=from_pcu,
             vehicle_occupancy_import=r'Y:\NorMITs Demand\import'
         )
-
-        exit()
 
         od2pa.decompile_od(
             od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
@@ -250,13 +257,6 @@ def vdm_segmentation_tests(model_name,
         )
 
     if gen_tour_proportions_bool:
-        seg_params = {
-            'to_needed': consts.VDM_TRIP_ORIGINS,
-            'uc_needed': consts.USER_CLASSES,
-            'm_needed': m_needed,
-            'ca_needed': ca_needed,
-            'tp_needed': consts.TIME_PERIODS
-        }
         od_import = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM OD Matrices'
         pa_export = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM PA Matrices'
 
@@ -273,33 +273,40 @@ def vdm_segmentation_tests(model_name,
         )
 
     if pa_back_to_od_check:
-        mat_p.build_24hr_mats(
-            import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM PA Matrices',
-            export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
-            matrix_format='pa',
-            years_needed=[consts.BASE_YEAR],
-            m_needed=m_needed,
-            ca_needed=ca_needed,
-        )
+        # TODO: Consolidate build_24hr_vdm_mats() and build_24hr_mats()
+        # mat_p.build_24hr_vdm_mats(
+        #     import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM PA Matrices',
+        #     export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
+        #     matrix_format='pa',
+        #     years_needed=[consts.BASE_YEAR],
+        #     **seg_params
+        # )
 
-        seg_params = {
-            'to_needed': consts.VDM_TRIP_ORIGINS,
-            'uc_needed': consts.USER_CLASSES,
-            'm_needed': m_needed,
-            'ca_needed': ca_needed,
-            'tp_needed': consts.TIME_PERIODS
-        }
-        # TODO: Write this to be Felxible again!
         pa2od.build_od_from_tour_proportions(
             pa_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
             od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM Test OD Matrices',
             tour_proportions_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             zone_translate_dir=r'Y:\NorMITs Demand\import\zone_translation',
+            model_name=model_name,
             years_needed=[consts.BASE_YEAR],
-            p_needed=p_needed,
-            m_needed=m_needed,
-            ca_needed=ca_needed,
+            seg_level=seg_level,
+            seg_params=seg_params,
             process_count=process_count
+        )
+
+        # Compile back to ME2
+        # ME2 seg = VDM hb + nhb, od_from + od_to
+        # Cheat compare -> VDM Test OD Matrices Vs VDM OD Matrices
+
+        # Convert the compiled OD into hourly average PCU
+        vo.people_vehicle_conversion(
+            input_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM Test Compiled OD Matrices',
+            export_folder=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM Test PCU Compiled OD Matrices',
+            import_folder=r'Y:\NorMITs Demand\import',
+            mode=str(m_needed[0]),
+            method='to_vehicles',
+            out_format='wide',
+            hourly_average=True
         )
 
 
@@ -313,8 +320,10 @@ def main():
     audit_tol = 0.001
 
     # Control Flow
-    run_tms_seg_tests = True
-    run_tms_vdm_tests = False
+    run_tms_seg_tests = False
+    run_tms_vdm_tests = True
+
+    # TODO: Check how OD2PA works with new norms/norms_2015
 
     if run_tms_seg_tests:
         tms_segmentation_tests(
