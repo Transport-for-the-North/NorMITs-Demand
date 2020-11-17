@@ -577,22 +577,7 @@ def _tms_seg_tour_props_internal(od_import: str,
                                  zone_translate_dir: str,
                                  generate_tour_props: bool,
                                  ) -> Tuple[str, int, float]:
-    """
-    The internals of generate_tour_proportions().
-    Used to implement multiprocessing.
-
-    Returns
-    -------
-    tour_proportions_fname:
-        THe name of the tour proportions output file
-
-    zero_count:
-        How many tour proportion matrices are full of 0s
-
-    zero_percentage:
-        The percentage of all tour proportion matrices that are full of 0s
-
-    """
+    # TODO: Write _tms_seg_tour_props_internal() docs
     out_fname = du.get_dist_name(
         trip_origin=trip_origin,
         matrix_format='tour_proportions',
@@ -796,30 +781,43 @@ def _tms_seg_tour_props(od_import: str,
         ca_list=ca_needed
     )
 
-    # Multiprocessing would go here!
-    zero_counts = list()
+    # ## MULTIPROCESS ## #
+    unchanging_kwargs = {
+        'od_import': od_import,
+        'tour_proportions_export': tour_proportions_export,
+        'zone_translate_dir': zone_translate_dir,
+        'pa_export': pa_export,
+        'model_name': model_name,
+        'year': year,
+        'trip_origin': trip_origin,
+        'tp_needed': tp_needed,
+        'tour_prop_tol': tour_prop_tol,
+        'furness_tol': furness_tol,
+        'furness_max_iters': furness_max_iters,
+        'phi_lookup_folder': phi_lookup_folder,
+        'phi_type': phi_type,
+        'aggregate_to_wday': aggregate_to_wday,
+        'generate_tour_props': generate_tour_props,
+    }
+
+    # Build a list of the changing arguments
+    kwargs_list = list()
     for p, m, seg, ca in loop_generator:
-        zero_counts.append(_tms_seg_tour_props_internal(
-            od_import=od_import,
-            tour_proportions_export=tour_proportions_export,
-            zone_translate_dir=zone_translate_dir,
-            pa_export=pa_export,
-            model_name=model_name,
-            year=year,
-            p=p,
-            m=m,
-            seg=seg,
-            ca=ca,
-            trip_origin=trip_origin,
-            tp_needed=tp_needed,
-            tour_prop_tol=tour_prop_tol,
-            furness_tol=furness_tol,
-            furness_max_iters=furness_max_iters,
-            phi_lookup_folder=phi_lookup_folder,
-            phi_type=phi_type,
-            aggregate_to_wday=aggregate_to_wday,
-            generate_tour_props=generate_tour_props
-        ))
+        kwargs = unchanging_kwargs.copy()
+        kwargs.update({
+            'p': p,
+            'm': m,
+            'seg': seg,
+            'ca': ca
+        })
+        kwargs_list.append(kwargs)
+
+    # Multiprocess and write final matrices to disk
+    zero_counts = conc.multiprocess(
+        _tms_seg_tour_props_internal,
+        kwargs=kwargs_list,
+        process_count=process_count
+    )
 
     # Output a log of the zero counts found
     header = ['tour_file', 'zero_count', 'percentage']
@@ -1087,7 +1085,7 @@ def _vdm_seg_tour_props(od_import: str,
         })
         kwargs_list.append(kwargs)
 
-    # Multiprocess write to disk
+    # Multiprocess and write final matrices to disk
     zero_counts = conc.multiprocess(
         _vdm_seg_tour_props_internal,
         kwargs=kwargs_list,
@@ -1620,8 +1618,7 @@ def compile_matrices(mat_import: str,
     -------
     None
     """
-    # TODO: Validate the input paths
-    # Validate
+    # TODO: Add in some Audit checks and return the report
     if not os.path.isdir(mat_import):
         raise IOError("Matrix import path '%s' does not exist." % mat_import)
 

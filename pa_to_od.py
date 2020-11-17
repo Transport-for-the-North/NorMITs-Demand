@@ -17,6 +17,7 @@ TODO: After integrations with TMS, combine with pa_to_od.py
 import numpy as np
 import pandas as pd
 
+from typing import Any
 from typing import List
 from typing import Dict
 from itertools import product
@@ -681,27 +682,20 @@ def maybe_get_aggregated_tour_proportions(orig: int,
     return od_tour_props
 
 
-def _build_od_from_tour_prop_internal(pa_import,
-                                      od_export,
-                                      tour_proportions_dir,
-                                      zone_translate_dir,
-                                      trip_origin,
-                                      base_year,
-                                      year,
-                                      p,
-                                      m,
-                                      seg,
-                                      ca,
-                                      tp_needed
-                                      ) -> None:
-    """
-    The internals of build_od_from_tour_proportions() - See for full
-    documentation. Useful for implementing multiprocessing.
-
-    Returns
-    -------
-    None
-    """
+def _tms_od_from_tour_props_internal(pa_import,
+                                     od_export,
+                                     tour_proportions_dir,
+                                     zone_translate_dir,
+                                     trip_origin,
+                                     base_year,
+                                     year,
+                                     p,
+                                     m,
+                                     seg,
+                                     ca,
+                                     tp_needed
+                                     ) -> None:
+    # TODO: Write _tms_od_from_tour_props_internal docs()
     # Load in 24hr PA
     input_dist_name = du.get_dist_name(
         trip_origin=trip_origin,
@@ -735,6 +729,9 @@ def _build_od_from_tour_prop_internal(pa_import,
     )
     tour_props = pd.read_pickle(os.path.join(tour_proportions_dir,
                                              tour_prop_fname))
+
+    print(tour_proportions_dir)
+    print(tour_prop_fname)
 
     # Load the aggregated tour props
     lad_fname = tour_prop_fname.replace('tour_proportions', 'lad_tour_proportions')
@@ -846,18 +843,91 @@ def _build_od_from_tour_prop_internal(pa_import,
         mat.T.to_csv(os.path.join(od_export, dist_name))
 
 
+def _tms_od_from_tour_props(pa_import: str,
+                            od_export: str,
+                            tour_proportions_dir: str,
+                            zone_translate_dir: str,
+                            base_year: str = consts.BASE_YEAR,
+                            years_needed: List[int] = consts.FUTURE_YEARS,
+                            p_needed: List[int] = consts.ALL_HB_P,
+                            m_needed: List[int] = consts.MODES_NEEDED,
+                            soc_needed: List[int] = None,
+                            ns_needed: List[int] = None,
+                            ca_needed: List[int] = None,
+                            tp_needed: List[int] = consts.TIME_PERIODS,
+                            process_count: int = os.cpu_count() - 2
+                            ) -> None:
+    # TODO: Write _tms_od_from_tour_props() docs
+    # Init
+    soc_needed = [None] if soc_needed is None else soc_needed
+    ns_needed = [None] if ns_needed is None else ns_needed
+    ca_needed = [None] if ca_needed is None else ca_needed
+
+    # Make sure all purposes are home based
+    for p in p_needed:
+        if p not in consts.ALL_HB_P:
+            raise ValueError("Got purpose '%s' which is not a home based "
+                             "purpose. generate_tour_proportions() cannot "
+                             "handle nhb purposes." % str(p))
+    trip_origin = 'hb'
+
+    # TODO: Remove 0 process count once dev over
+    process_count = 0
+
+    # MP placed inside this loop to prevent too much Memory being used
+    for year in years_needed:
+        loop_generator = du.segmentation_loop_generator(
+            p_list=p_needed,
+            m_list=m_needed,
+            soc_list=soc_needed,
+            ns_list=ns_needed,
+            ca_list=ca_needed
+        )
+
+        # ## MULTIPROCESS ## #
+        unchanging_kwargs = {
+            'pa_import': pa_import,
+            'od_export': od_export,
+            'tour_proportions_dir': tour_proportions_dir,
+            'zone_translate_dir': zone_translate_dir,
+            'trip_origin': trip_origin,
+            'base_year': base_year,
+            'year': year,
+            'tp_needed': tp_needed
+        }
+
+        kwargs_list = list()
+        for p, m, seg, ca in loop_generator:
+            kwargs = unchanging_kwargs.copy()
+            kwargs.update({
+                'p': p,
+                'm': m,
+                'seg': seg,
+                'ca': ca
+            })
+            kwargs_list.append(kwargs)
+
+        conc.multiprocess(
+            _tms_od_from_tour_props_internal,
+            kwargs=kwargs_list,
+            process_count=process_count
+        )
+
+        # Repeat loop for every wanted year
+
+
+def _vdm_od_from_tour_props():
+    raise NotImplementedError
+
+
 def build_od_from_tour_proportions(pa_import: str,
                                    od_export: str,
                                    tour_proportions_dir: str,
                                    zone_translate_dir: str,
+                                   seg_level: str,
+                                   seg_params: Dict[str, Any],
                                    base_year: str = consts.BASE_YEAR,
                                    years_needed: List[int] = consts.FUTURE_YEARS,
-                                   p_needed: List[int] = consts.ALL_HB_P,
-                                   m_needed: List[int] = consts.MODES_NEEDED,
-                                   soc_needed: List[int] = None,
-                                   ns_needed: List[int] = None,
-                                   ca_needed: List[int] = None,
-                                   tp_needed: List[int] = consts.TIME_PERIODS,
                                    process_count: int = os.cpu_count() - 2
                                    ) -> None:
     """
@@ -912,73 +982,29 @@ def build_od_from_tour_proportions(pa_import: str,
     -------
     None
     """
+    # TODO: Update build_od_from_tour_proportions() docs
     # Init
-    soc_needed = [None] if soc_needed is None else soc_needed
-    ns_needed = [None] if ns_needed is None else ns_needed
-    ca_needed = [None] if ca_needed is None else ca_needed
+    seg_level = du.validate_seg_level(seg_level)
 
-    # Make sure all purposes are home based
-    for p in p_needed:
-        if p not in consts.ALL_HB_P:
-            raise ValueError("Got purpose '%s' which is not a home based "
-                             "purpose. generate_tour_proportions() cannot "
-                             "handle nhb purposes." % str(p))
-    trip_origin = 'hb'
-
-    for year in years_needed:
-        loop_generator = du.segmentation_loop_generator(
-            p_list=p_needed,
-            m_list=m_needed,
-            soc_list=soc_needed,
-            ns_list=ns_needed,
-            ca_list=ca_needed
+    # Call the correct mid-level function to deal with the segmentation
+    if seg_level == 'tms':
+        to_od_fn = _tms_od_from_tour_props
+    elif seg_level == 'vdm':
+        to_od_fn = _vdm_od_from_tour_props
+    else:
+        raise NotImplementedError(
+            "'%s' is a valid segmentation level, however, we do not have a "
+            "mid-level function to deal with it at the moment."
+            % seg_level
         )
 
-        # ## Multiprocess the segmentation loop ## #
-        unchanging_kwargs = {
-            'pa_import': pa_import,
-            'od_export': od_export,
-            'tour_proportions_dir': tour_proportions_dir,
-            'zone_translate_dir': zone_translate_dir,
-            'trip_origin': trip_origin,
-            'base_year': base_year,
-            'year': year,
-            'tp_needed': tp_needed
-        }
-
-        # If negative use process_count less than max processes
-        if process_count < 0:
-            if process_count < os.cpu_count():
-                process_count = os.cpu_count() + process_count
-            else:
-                process_count = os.cpu_count() - 1
-
-        if process_count == 0:
-            # Call in a loop like normal
-            for p, m, seg, ca in loop_generator:
-                kwargs = unchanging_kwargs.copy()
-                kwargs.update({
-                    'p': p,
-                    'm': m,
-                    'seg': seg,
-                    'ca': ca
-                })
-                _build_od_from_tour_prop_internal(**kwargs)
-        else:
-            # Build all the arguments, and call in ProcessPool
-            kwargs_list = list()
-            for p, m, seg, ca in loop_generator:
-                kwargs = unchanging_kwargs.copy()
-                kwargs.update({
-                    'p': p,
-                    'm': m,
-                    'seg': seg,
-                    'ca': ca
-                })
-                kwargs_list.append(kwargs)
-
-            conc.process_pool_wrapper(_build_od_from_tour_prop_internal,
-                                      kwargs=kwargs_list,
-                                      process_count=process_count)
-
-        # Repeat loop for every wanted year
+    to_od_fn(
+        pa_import=pa_import,
+        od_export=od_export,
+        tour_proportions_dir=tour_proportions_dir,
+        zone_translate_dir=zone_translate_dir,
+        base_year=base_year,
+        years_needed=years_needed,
+        process_count=process_count,
+        **seg_params
+    )
