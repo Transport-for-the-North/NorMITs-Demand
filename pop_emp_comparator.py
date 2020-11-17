@@ -112,10 +112,6 @@ class PopEmpComparator:
         self.growth_data[self.years] = self.growth_data[self.years].div(
             self.growth_data[str(self.base_year)], axis=0)
 
-        # Initialise output folder path
-        self.output_dir = Path(output_csv).parent / f'{data_type} comparisons'.title()
-        self.output_dir.mkdir(exist_ok=True)
-
     def compare_totals(self) -> pd.DataFrame:
         """Compares the input and output column totals and produces a summary of the differences.
 
@@ -306,11 +302,13 @@ class PopEmpComparator:
 
         return output_ratios, total_ratios
 
-    def write_comparisons(self, output_as: str='excel'):
+    def write_comparisons(self, output_loc: str, output_as: str='excel'):
         """Runs each comparison method and writes the output to a csv.
 
         Parameters
         ----------
+        output_loc : str
+            Path to the output folder.
         output_as : str, optional
             What type of output file(s) should be created options are 'excel' (default)
             or 'csv', if 'excel' is selected any outputs that are too large for a sheet
@@ -321,6 +319,10 @@ class PopEmpComparator:
         accepted_values = ('excel', 'csv')
         if output_as not in accepted_values:
             raise ValueError(f'output_as should be one of {accepted_values} not "{output_as}"')
+
+        # Create output folder, if it doesn't already exist
+        output_dir = Path(output_loc) / f"{self.data_type} comparisons".title()
+        output_dir.mkdir(exist_ok=True, parents=True)
 
         print(f'Producing {self.data_type.capitalize()} comparisons:')
         # Comparison methods to run with tuple containing names for return DataFrames
@@ -337,13 +339,13 @@ class PopEmpComparator:
             for nm, df in zip(names, dataframes):
                 # Write to csv if df too large for excel sheet, or csv output type selected
                 if output_as == 'csv' or len(df) > EXCEL_MAX[0] or len(df.columns) > EXCEL_MAX[1]:
-                    du.safe_dataframe_to_csv(df, self.output_dir / f'{nm}.csv', flatten_header=True)
+                    du.safe_dataframe_to_csv(df, output_dir / f'{nm}.csv', flatten_header=True)
                 else: # Save to dict ready to write to spreadsheet
                     outputs[nm] = df
 
         if output_as == 'excel':
             # Check path can be written to
-            out_path = self.output_dir / f'{self.data_type.capitalize()}_Comparisons.xlsx'
+            out_path = output_dir / f'{self.data_type.capitalize()}_Comparisons.xlsx'
             out_path = du.file_write_check(out_path)
 
             with pd.ExcelWriter(out_path, engine='openpyxl') as writer:
@@ -367,7 +369,7 @@ class PopEmpComparator:
                     # Update column formats
                     _excel_column_format(writer.sheets[nm], num_format, len(df.columns.names))
 
-        print(f'\tSaved in: "{self.output_dir}"')
+        print(f'\tSaved in: "{output_dir}"')
         return
 
 
@@ -399,7 +401,7 @@ def test():
                                 import_loc / future_population_ratio_file,
                                 output_loc / population_output_file,
                                 'population', BASE_YEAR)
-    pop_comp.write_comparisons(output_as='csv')
+    pop_comp.write_comparisons(output_loc / 'Reports', output_as='csv')
     # Compare the employment inputs and outputs
     emp_comp = PopEmpComparator(import_loc / worker_value_file,
                                 import_loc / worker_growth_file,
@@ -407,7 +409,7 @@ def test():
                                 import_loc / worker_ratio_file,
                                 output_loc / worker_output_file,
                                 'employment', BASE_YEAR)
-    emp_comp.write_comparisons(output_as='csv')
+    emp_comp.write_comparisons(output_loc / 'Reports', output_as='csv')
     return
 
 
