@@ -19,6 +19,7 @@ from tqdm import tqdm
 
 import efs_constants as consts
 from efs_constrainer import ForecastConstrainer
+from demand_utilities import d_log_processer as dlog
 from demand_utilities import utils as du
 # TODO: Move functions that can be static elsewhere.
 #  Maybe utils?
@@ -249,9 +250,9 @@ class EFSProductionGenerator:
         internal_zone_col = 'msoa_zone_id'
         all_years = [str(x) for x in [base_year] + future_years]
         integrate_d_log = d_log is not None and d_log_split is not None
-        if integrate_d_log:
-            d_log = d_log.copy()
-            d_log_split = d_log_split.copy()
+        # if integrate_d_log:
+        #     d_log = d_log.copy()
+        #     d_log_split = d_log_split.copy()
 
         # TODO: Make this more adaptive
         # Set the level of segmentation being used
@@ -343,11 +344,21 @@ class EFSProductionGenerator:
         # ## INTEGRATE D-LOG ## #
         if integrate_d_log:
             print("Integrating the development log...")
-            raise NotImplementedError("D-Log population integration has not "
-                                      "yet been implemented.")
-        else:
-            # If not integrating, no need for another constraint
-            constraint_required[1] = False
+            dlog.apply_d_log_population(
+                population=population,
+                base_year=base_year,
+                future_years=future_years,
+                dlog_path=d_log,
+                constraints=population_constraint,
+                constraints_zone_equivalence=r"Y:\NorMITs Demand\inputs\default\zoning\lad_msoa_grouping.csv",
+                household_factors=2.4,
+                development_zone_lookup=r"C:\Users\Monopoly\Documents\EFS\data\dlog\development_msoa_lookup.csv",
+                msoa_zones=r"C:\Users\Monopoly\Documents\EFS\data\zoning\msoa_zones.csv",
+                perform_constraint=constraint_required[1]
+            )
+        # Post D-Log constraint is now done elsewhere
+        constraint_required[1] = False
+        raise NotImplementedError("Finished DLOG")
 
         # ## POST D-LOG CONSTRAINT ## #
         if constraint_required[1]:
