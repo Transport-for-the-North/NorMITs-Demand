@@ -9,9 +9,9 @@ from demand_utilities import utils as du
 
 
 def set_datetime_types(df: pd.DataFrame,
-                      cols: List[str],
-                      **kwargs
-                      ) -> pd.DataFrame:
+                       cols: List[str],
+                       **kwargs
+                       ) -> pd.DataFrame:
     for col in cols:
         df[col] = pd.to_datetime(
             df[col],
@@ -46,10 +46,45 @@ def apply_d_log_population(population: pd.DataFrame,
 
     Returns a DataFrame of future year population
     """
-    # TODO musch of this should probably be in separate functions to 
+    # TODO musch of this should probably be in separate functions to
     # increase readability
-    
+
     updated_population = population.copy()
+    # Calculate the base year segment shares over each sector
+    print("Calculating Segment Share by Sector")
+    la_equivalence = du.safe_read_csv(constraints_zone_equivalence)
+    la_equivalence.rename(
+        {"model_zone_id": msoa_column},
+        axis=1,
+        inplace=True
+    )
+    # Use map instead of merge as MSOA to sector will be 1 to 1 and likely
+    # faster than merge
+    updated_population["sector_id"] = updated_population[msoa_column].map(
+        la_equivalence.set_index(msoa_column)["grouping_id"]
+    )
+    updated_population["seg_s"] = (
+        updated_population.groupby(
+            ["sector_id", "traveller_type", "soc", "ns", "ca"]
+        )[base_year].transform("sum")
+        / updated_population.groupby(
+            "sector_id"
+        )[base_year].transform("sum")
+    )
+    # Adjust to handle zeroes in the base for some MSOAS within sectors
+    updated_population["adj_seg_s"] = updated_population["seg_s"]
+    updated_population.loc[
+        updated_population[base_year] == 0,
+        "adj_seg_s"
+    ] = 0.0
+    updated_population.loc[
+        updated_population[base_year] != 0.0,
+        "adj_seg_s"
+    ] /= updated_population.loc[
+        updated_population[base_year] != 0.0].groupby(
+            msoa_column
+    )["adj_seg_s"].transform("sum")
+    print(updated_population.head(10))
 
     # Read in development log data
     dlog_data = du.safe_read_csv(dlog_path)
@@ -65,7 +100,7 @@ def apply_d_log_population(population: pd.DataFrame,
         format="%d/%m/%Y",
         errors="coerce"
     )
-    
+
     # Read in development to msoa zone lookup
     zone_lookup = du.safe_read_csv(development_zone_lookup)
     zone_lookup = zone_lookup[[development_id, "msoa11cd"]]
@@ -79,8 +114,9 @@ def apply_d_log_population(population: pd.DataFrame,
     # Convert d-log data to the required format
     # TODO check the format of d-log data after the update
 
-    # Store d-log ids with insufficient data
-    dlog_errors = pd.DataFrame(columns=[development_id, "error"])
+    # Empty dataframe to store d-log ids with insufficient data
+    dlog_errors = pd.DataFrame(columns=[development_id, "errors"])
+    dlog_errors[development_id] = dlog_data[development_id]
 
     # Extract the build out columns
     build_out_cols = [
@@ -98,7 +134,8 @@ def apply_d_log_population(population: pd.DataFrame,
     build_out_years = [year for year in sorted(build_out_years)]
 
     # Calculate the growth factors for each MSOA and year
-    # May be faster to just get the first entry for each MSOA
+    # May be faster to just get the first entry for each MSOA as the factors
+    # are identical
     metric_columns = [base_year] + future_years
     population_factors = population.groupby(msoa_column)[metric_columns].sum()
 
@@ -106,7 +143,7 @@ def apply_d_log_population(population: pd.DataFrame,
     for year in future_years:
 
         print(f"Replacing D-LOG data for {year}")
-        
+
         i_year = int(year)
 
         dlog_subset = dlog_data.copy()
@@ -222,106 +259,100 @@ def apply_d_log_population(population: pd.DataFrame,
             to="int"
         )
         dlog_subset.rename({"msoa11cd": msoa_column}, axis=1, inplace=True)
-        dlog_subset = dlog_subset.groupby(msoa_column, as_index=False)[year].sum()
-
-        # Calculate the original growth factors for this year
-        old_factor = f"{year}_old_factor"
-        new_factor = f"{year}_new_factor"
-        population_factors[old_factor] = (
-            population_factors[year] / population_factors[base_year]
-        )
-        population_factors["abs_growth"] = (
-            population_factors[year] - population_factors[base_year]
-        )
+        dlog_subset = dlog_subset.groupby(
+            msoa_column,
+            as_index=False
+        )[year].sum()
 
         # Calculate the new growth as base year pop + population from dlog
         # TODO should this be done over all segments?
-        dlog_subset.rename({year: "filled_data"}, axis=1, inplace=True)
+        dlog_subset.rename({year: "dlog_data"}, axis=1, inplace=True)
         population_factors = population_factors.merge(
             dlog_subset,
             on=msoa_column,
             how="left"
         )
-        population_factors["filled_data"].fillna(
-            population_factors["abs_growth"],
-            inplace=True
-        )
-        population_factors["filled_data"] += population_factors[base_year]
-        population_factors = population_factors.drop(
-            year, axis=1
-        ).rename(
-            {"filled_data": year}, axis=1
-        )
-        population_factors[new_factor] = (
-            population_factors[year]
-            / population_factors[base_year]
-        )
+        population_factors["dlog_data"].fillna(0.0, inplace=True)
+
+        print(population_factors)
+        print(population_factors.loc[population_factors["dlog_data"] != 0.0])
 
         # Join to population dataframe and replace old values
-        updated_population[year] = (
-            updated_population[base_year]
-            + updated_population[msoa_column].map(
-                population_factors.set_index(msoa_column)[new_factor]
-            )
+        print(f"Previous {year} total = {updated_population[year].sum()}")
+        updated_population[year] += (
+            updated_population["adj_seg_s"]
+            * updated_population[msoa_column].map(
+                population_factors.set_index(msoa_column)["dlog_data"]
+            ).fillna(0.0)
         )
+        print(f"New {year} total = {updated_population[year].sum()}")
+        print(updated_population)
 
         # Constrain to LA TODO Change to growth constraint
-        # pop_constraint = pd.read_csv(constraints)
-        pop_constraint = constraints.copy()
-        la_equivalence = pd.read_csv(constraints_zone_equivalence)
-        la_equivalence.rename(
-            {"model_zone_id": msoa_column},
-            axis=1,
-            inplace=True
+
+        # Calculate pre-constraint sector growth
+        updated_population["growth"] = (
+            updated_population[year]
+            / updated_population[base_year]
         )
-        print(pop_constraint)
-        print(la_equivalence)
+        updated_population["sector_growth"] = (
+            updated_population.groupby("sector_id")[year].transform("sum")
+            /
+            updated_population.groupby("sector_id")[base_year].transform("sum")
+        )
+        # Calculate the constraint growth
+        pop_constraint = constraints.copy()
         pop_constraint = pop_constraint.merge(
             la_equivalence,
             on=msoa_column,
             how="left"
-        )[[msoa_column, "grouping_id", year]]
-        pop_constraint["total"] = pop_constraint.groupby(
+        )[[msoa_column, "grouping_id", base_year, year]]
+
+        # Keep grouping_id as index for mapping later
+        pop_constraint = pop_constraint.groupby(
             "grouping_id"
-        )[year].transform("sum")
-        # Calculate Pre constraint totals
-        # By MSOA
-        pre_constraint_total = updated_population.groupby(
-            msoa_column,
-            as_index=False
-        )[year].sum()
-        pre_constraint_total[msoa_column] = (
-            pre_constraint_total[msoa_column].map(
-                la_equivalence.set_index(msoa_column)["grouping_id"]
-            )
+        )[[base_year, year]].sum()
+
+        pop_constraint["constraint"] = (
+            pop_constraint[year]
+            / pop_constraint[base_year]
         )
-        print("MSOA")
-        print(pre_constraint_total)
-        # By LA
-        pre_constraint_total = pre_constraint_total.groupby(
-            msoa_column,
-            as_index=False
-        )[year].sum()
-        pop_constraint["pre_constraint"] = pop_constraint["grouping_id"].map(
-            pre_constraint_total.set_index(msoa_column)[year]
+        # Merge to the DLOG data
+        updated_population["constraint"] = updated_population["sector_id"].map(
+            pop_constraint["constraint"]
         )
-        print("LA")
-        print(pre_constraint_total)
-        # Calculate adjustment factor
-        pop_constraint["factor"] = (
-            pop_constraint["total"]
-            / pop_constraint["pre_constraint"]
+        # Adjust segment growth factors
+        updated_population["growth"] *= (
+            updated_population["constraint"]
+            / updated_population["sector_growth"]
         )
-        print("FACTORS")
-        print(pop_constraint)
-        # Merge to updated population and adjust
-        updated_population["factor"] = updated_population[msoa_column].map(
-            pop_constraint.set_index(msoa_column)["factor"]
+        # Adjust forecast year by new growth
+        updated_population[year] = (
+            updated_population[base_year]
+            * updated_population["growth"]
         )
-        updated_population[year] *= updated_population["factor"]
-        updated_population.drop("factor", axis=1, inplace=True)
         
+        # Drop any temporary tables
+        updated_population.drop(
+            ["growth", "constraint", "sector_growth"],
+            axis=1,
+            inplace=True
+        )
+        population_factors.drop(
+            ["dlog_data"],
+            axis=1,
+            inplace=True
+        )
+
+    # Drop any temporary tables
+    updated_population.drop(
+        ["sector_id", "seg_s", "adj_seg_s"],
+        axis=1,
+        inplace=True
+    )
+
     population_factors.to_csv("test.csv")
-    updated_population.to_csv("dlog_pop.csv")
+    updated_population.to_csv("post_dlog_pop.csv")
 
     return updated_population
+
