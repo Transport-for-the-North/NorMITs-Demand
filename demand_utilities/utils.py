@@ -111,6 +111,39 @@ def validate_user_class(user_class: str) -> str:
     return user_class
 
 
+def validate_vdm_seg_params(seg_params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validates and cleans seg_params ready for a loop_generator
+
+    Parameters
+    ----------
+    seg_params:
+        Dictionary of vdm seg params to be cleaned.
+
+    Returns
+    -------
+    valid_seg_params:
+        cleaned version of the given seg_params. If a key did not exist that
+        is needed, [None] is added as the value.
+    """
+    # Init
+    seg_params = seg_params.copy()
+    valid_segmentation = [
+        'to_needed',
+        'uc_needed',
+        'm_needed',
+        'ca_needed',
+        'tp_needed'
+    ]
+
+    for seg in valid_segmentation:
+        if seg_params.get(seg) is None:
+            seg_params[seg] = [None]
+
+    return seg_params
+
+
+
 def grow_to_future_years(base_year_df: pd.DataFrame,
                          growth_df: pd.DataFrame,
                          base_year: str,
@@ -809,6 +842,69 @@ def get_dist_name_parts(dist_name: str) -> List[str]:
     ]
 
 
+def get_seg_level_dist_name(seg_level: str,
+                            seg_values: Dict[str, Any],
+                            matrix_format: str,
+                            year: Union[str, int],
+                            trip_origin: str = None,
+                            csv: bool = False,
+                            suffix: str = None
+                            ) -> str:
+    """
+    Generates the distribution name, regardless of segmentation level
+
+    Parameters
+    ----------
+    seg_level:
+        The level of segmentation of the tour proportions to convert. This
+        should be one of the values in efs_constants.SEG_LEVELS.
+
+    seg_values:
+        A dictionary of {seg_name: value} for the segmentation level chosen.
+
+    matrix_format:
+        The format of the matrix. Usually 'pa', 'od', 'od_from', or 'od_to'.
+
+    year:
+        The year of the matrix.
+
+    trip_origin:
+        Usually 'hb or 'nhb'
+
+    csv:
+        Whether to add .csv on the end of the file or not
+
+    suffix:
+        Any additional suffix to add to the end of the filename. This comes
+        before .csv if csv=True.
+
+    Returns
+    -------
+    dist_name:
+        The generated distribution name
+    """
+    # Init
+    seg_level = validate_seg_level(seg_level)
+
+    if seg_level == 'vdm':
+        return get_vdm_dist_name(
+            trip_origin=seg_values.get('to'),
+            matrix_format=matrix_format,
+            year=str(year),
+            user_class=seg_values.get('uc'),
+            mode=seg_values.get('m'),
+            ca=seg_values.get('ca'),
+            tp=seg_values.get('tp'),
+            csv=csv,
+            suffix=suffix
+        )
+
+    else:
+        raise ValueError("'%s' is a valid seg_level, however, we do not have "
+                         "a way of dealing with it right not. You should "
+                         "write it!" % seg_level)
+
+
 def generate_calib_params(year: str = None,
                           purpose: int = None,
                           mode: int = None,
@@ -828,6 +924,22 @@ def generate_calib_params(year: str = None,
 
     keys = ['yr', 'p', 'm', segment_str, 'ca', 'tp']
     vals = [year, purpose, mode, segment, ca, tp]
+
+    # Add params to dict if they are not None
+    return {k: v for k, v in zip(keys, vals) if v is not None}
+
+
+def create_vdm_seg_values(trip_origin: str = None,
+                          user_class: str = None,
+                          mode: int = None,
+                          ca: int = None,
+                          tp: int = None,
+                          ) -> Dict[str, Union[str, int]]:
+    """
+    Returns a TMS style calib_params dict, but for vdm segmentation
+    """
+    keys = ['to', 'uc', 'm', 'ca', 'tp']
+    vals = [trip_origin, user_class, mode, ca, tp]
 
     # Add params to dict if they are not None
     return {k: v for k, v in zip(keys, vals) if v is not None}
@@ -1212,14 +1324,73 @@ def cp_segmentation_loop_generator(p_list: Iterable[int],
         tp_list=tp_list
     )
 
-    for p, m, seg, ca, tp in loop_generator:
-        yield generate_calib_params(
-            purpose=p,
-            mode=m,
-            segment=seg,
-            ca=ca,
-            tp=tp
+    if tp_list is not None:
+        for p, m, seg, ca, tp in loop_generator:
+            yield generate_calib_params(
+                purpose=p,
+                mode=m,
+                segment=seg,
+                ca=ca,
+                tp=tp
+            )
+    else:
+        for p, m, seg, ca in loop_generator:
+            yield generate_calib_params(
+                purpose=p,
+                mode=m,
+                segment=seg,
+                ca=ca
+            )
+
+
+def seg_level_loop_generator(seg_level: str,
+                             seg_params: Dict[str, Any],
+                             ) -> Dict[str, Union[int, str]]:
+    """
+    Yields seg_values dictionary for the seg_level given
+
+    Parameters
+    ----------
+    seg_level:
+        The level of segmentation of the tour proportions to convert. This
+        should be one of the values in efs_constants.SEG_LEVELS.
+
+    seg_params:
+        A dictionary of kwarg: values for the segmentation level chosen. See...
+        Need to Create reference for how seg_params work
+
+    Yields
+    -------
+    seg_values:
+        A dictionary of {seg_name: seg_values}
+    """
+    # Init
+    seg_level = validate_seg_level(seg_level)
+
+    if seg_level == 'vdm':
+        seg_params = validate_vdm_seg_params(seg_params)
+
+        loop_generator = vdm_segment_loop_generator(
+            to_list=seg_params['to_needed'],
+            uc_list=seg_params['uc_needed'],
+            m_list=seg_params['m_needed'],
+            ca_list=seg_params['ca_needed'],
+            tp_list=seg_params['tp_needed'],
         )
+
+        # Convert to dict
+        for to, uc, m, ca, tp in loop_generator:
+            yield create_vdm_seg_values(
+                trip_origin=to,
+                user_class=uc,
+                mode=m,
+                ca=ca,
+                tp=tp
+            )
+    else:
+        raise ValueError("'%s' is a valid seg_level, however, we do not have "
+                         "a way of dealing with it right not. You should "
+                         "write it!" % seg_level)
 
 
 def long_to_wide_out(df: pd.DataFrame,

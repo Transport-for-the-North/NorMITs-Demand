@@ -1417,10 +1417,11 @@ def build_24hr_vdm_mats(import_dir: str,
                         matrix_format: str,
                         to_needed: str,
                         years_needed: List[str],
-                        uc_needed: List[int] = consts.USER_CLASSES,
+                        uc_needed: List[str] = consts.USER_CLASSES,
                         m_needed: List[int] = consts.MODES_NEEDED,
                         ca_needed: List[int] = None,
-                        tp_needed: List[int] = consts.TIME_PERIODS
+                        tp_needed: List[int] = consts.TIME_PERIODS,
+                        split_factors_path: str = None
                         ) -> None:
     # TODO: Write build_24hr_vdm_mats() docs
     # Init
@@ -1428,7 +1429,14 @@ def build_24hr_vdm_mats(import_dir: str,
 
     # Go through all segmentations, for all years
     for year in years_needed:
-        for uc, m, ca, to in product(uc_needed, m_needed, ca_needed, to_needed):
+        loop_generator = du.vdm_segment_loop_generator(
+            to_list=to_needed,
+            uc_list=uc_needed,
+            m_list=m_needed,
+            ca_list=ca_needed
+        )
+
+        for to, uc, m, ca in loop_generator:
             # Figure out output name to tell user
             output_dist_name = du.get_vdm_dist_name(
                 trip_origin=to,
@@ -1457,25 +1465,63 @@ def build_24hr_vdm_mats(import_dir: str,
                 dist_path = os.path.join(import_dir, dist_name)
                 tp_mats.append(pd.read_csv(dist_path, index_col=0))
 
-                # Check all the input matrices have the same columns and index
-                col_ref = tp_mats[0].columns
-                idx_ref = tp_mats[0].index
-                for i, mat in enumerate(tp_mats):
-                    if len(mat.columns.difference(col_ref)) > 0:
-                        raise ValueError(
-                            "tp matrix %s columns do not match the "
-                            "others." % str(tp_needed[i]))
+            # Check all the input matrices have the same columns and index
+            col_ref = tp_mats[0].columns
+            idx_ref = tp_mats[0].index
+            for i, mat in enumerate(tp_mats):
+                if len(mat.columns.difference(col_ref)) > 0:
+                    raise ValueError(
+                        "tp matrix %s columns do not match the "
+                        "others." % str(tp_needed[i]))
 
-                    if len(mat.index.difference(idx_ref)) > 0:
-                        raise ValueError(
-                            "tp matrix %s index does not match the "
-                            "others." % str(tp_needed[i]))
+                if len(mat.index.difference(idx_ref)) > 0:
+                    raise ValueError(
+                        "tp matrix %s index does not match the "
+                        "others." % str(tp_needed[i]))
 
-                # Combine all matrices together
-                full_mat = reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
+            # Combine all matrices together
+            full_mat = reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
 
-                # Output to file
-                full_mat.to_csv(os.path.join(export_dir, output_dist_name))
+            # Output to file
+            full_mat.to_csv(os.path.join(export_dir, output_dist_name))
+
+            # Only Calculate the splitting factors if we need to
+            if split_factors_path is None:
+                continue
+
+            # TODO: Move into output_converter
+            # ## SPLITTING FACTORS ## #
+            # Init
+            splitting_factors = defaultdict(list)
+
+            # Make sure rows and columns are ints
+            full_mat.columns = full_mat.columns.astype(int)
+            full_mat.index = full_mat.index.astype(int)
+
+            orig_vals = [int(x) for x in tp_mats[0].index.values]
+            dest_vals = [int(x) for x in list(tp_mats[0])]
+            desc = 'Generating splitting factors'
+            for tp, tp_mat in enumerate(tqdm(tp_mats, desc=desc), 1):
+                # Make sure rows and columns are ints
+                tp_mat.columns = tp_mat.columns.astype(int)
+                tp_mat.index = tp_mat.index.astype(int)
+
+                for orig, dest in product(orig_vals, dest_vals):
+                    if full_mat.loc[orig, dest] == 0:
+                        tp_split = 0.0
+                    else:
+                        tp_split = tp_mat.loc[orig, dest] / full_mat.loc[orig, dest]
+
+                    splitting_factors['Origin'].append(orig)
+                    splitting_factors['Destination'].append(dest)
+                    splitting_factors['TimePeriod'].append(tp)
+                    splitting_factors['Factor'].append(tp_split)
+
+            # Write to disk
+            out_name = output_dist_name.replace('od', 'split_factors')
+            out_path = os.path.join(split_factors_path, out_name)
+            pd.DataFrame(splitting_factors).to_csv(out_path, index=False)
+
 
 
 def build_24hr_mats(import_dir: str,

@@ -20,6 +20,7 @@ import matrix_processing as mat_p
 
 import efs_constants as consts
 import demand_utilities.utils as du
+import demand_utilities.output_converter as oc
 import demand_utilities.vehicle_occupancy as vo
 
 
@@ -189,7 +190,8 @@ def vdm_segmentation_tests(model_name,
 
     decompile_od_bool = False
     gen_tour_proportions_bool = False
-    pa_back_to_od_check = True
+    create_outputs_for_vdm = True
+    pa_back_to_od_check = False
 
     # Validate inputs
     seg_level = du.validate_seg_level(seg_level)
@@ -270,6 +272,38 @@ def vdm_segmentation_tests(model_name,
             seg_level=seg_level,
             seg_params=seg_params,
             process_count=process_count
+        )
+
+    if create_outputs_for_vdm:
+        # Create 24hr PA HB
+        # mat_p.build_24hr_vdm_mats(
+        #     import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM PA Matrices',
+        #     export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
+        #     matrix_format='pa',
+        #     years_needed=[consts.BASE_YEAR],
+        #     **seg_params
+        # )
+
+        # Convert tour props to systra format
+        # oc.noham_vdm_tour_proportions_out(
+        #     input_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
+        #     output_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Noham Tour Proportions',
+        #     year=consts.BASE_YEAR,
+        #     seg_level=seg_level,
+        #     seg_params=seg_params,
+        # )
+
+
+        # Create 24hr OD NHB - with TP splitting factors
+        out_seg_params = seg_params.copy()
+        out_seg_params['to_needed'] = ['nhb']
+        mat_p.build_24hr_vdm_mats(
+            import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM OD Matrices',
+            export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
+            matrix_format='od',
+            years_needed=[consts.BASE_YEAR],
+            split_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Noham Tour Proportions',
+            **out_seg_params
         )
 
     if pa_back_to_od_check:
