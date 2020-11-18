@@ -1,7 +1,7 @@
 
 import os
 
-from typing import List
+from typing import List, Tuple
 
 import pandas as pd
 
@@ -17,6 +17,261 @@ def set_datetime_types(df: pd.DataFrame,
             df[col],
             **kwargs
         )
+    return df
+
+
+def parse_dlog_build_out(dlog: pd.DataFrame,
+                         year: str,
+                         dlog_columns: List[str]
+                         ) -> pd.DataFrame:
+    """Parses the data in the build out columns of the development log.
+    TODO Currently assumes that the first year in the d-log is the base
+    Does contain some repitition if this is done for all years but only small
+    tasks.
+
+    Parameters
+    ----------
+    dlog : pd.DataFrame
+        The subset of the dlog (excess columns removed)
+    year : str
+        Future year that the build-out information will be calculated to
+    dlog_columns : List[str]
+        All required columns to be present in the returned dataframe
+
+    Returns
+    -------
+    pd.DataFrame
+        The same dataframe as dlog, with only the columns in 
+        dlog_columns + a column with the name given in year that contains
+        the estimated development
+    """
+
+    dlog_subset = dlog.copy()
+
+    # Extract the build out columns
+    build_out_cols = [
+        col for col in dlog_subset.columns
+        if "units_" in col and any([c for c in col if c.isdigit()])
+    ]
+    # Extract the first year in the range
+    build_out_years = [int(x.replace("units_", "").split("_")[0])
+                       for x in build_out_cols]
+    # Ensure these are sorted
+    build_out_cols = [
+        col for col, year in sorted(zip(build_out_cols, build_out_years),
+                                    key=lambda pair: pair[1])
+    ]
+    build_out_years = [year for year in sorted(build_out_years)]
+
+    # Get the position in the build out profile
+    for i, band_start in enumerate(build_out_years[:-1]):
+        next_band_start = build_out_years[i+1]
+        future_year = int(year)
+        if future_year > band_start and future_year <= next_band_start:
+
+            band_width = next_band_start - band_start
+            build_out_factor = (future_year - band_start) / band_width
+
+            build_out_idx = i
+            break
+
+    # Calculate the number of additional households from the base year
+    final_year_col = build_out_cols[build_out_idx]
+    required_year_cols = build_out_cols[:build_out_idx+1]
+    subset_columns = dlog_columns + required_year_cols
+    dlog_subset = dlog_subset[subset_columns]
+
+    # Any missing build out can be infilled as 0
+    dlog_subset.fillna(
+        {col: 0.0 for col in required_year_cols},
+        inplace=True
+    )
+
+    # Assume a linear build out for the final band using previously
+    # calculated factor
+    dlog_subset[final_year_col] *= build_out_factor
+    dlog_subset[year] = dlog_subset[required_year_cols].sum(axis=1)
+
+    return dlog_subset
+
+
+def infill_dlog_build_out(dlog: pd.DataFrame,
+                          year: str,
+                          start_date_col: str,
+                          end_date_col: str,
+                          development_id_col: str,
+                          total_column: str
+                          ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Fill in gaps where no build out data was provided in the development
+    log. This is done using the entire development phase total and the start /
+    end dates. A linear build out is assumed.
+    TODO This does not return anything currently as more than half the 
+    developments are missing some of this data.
+
+    Parameters
+    ----------
+    dlog : pd.DataFrame
+        Development Log with estimated values already calculated from the 
+        build out years.
+    year : str
+        Future year column that contains the known data. (from build out)
+    start_date_col : str
+        Column containing the development start date
+    end_date_col : str
+        Column containing the development end date
+    development_id_col : str
+        Column containing the ID of the development. Used to report 
+        developments with errors.
+    total_column : str
+        Column containing the total number of units during the development
+        phase.
+
+    Returns
+    -------
+    Tuple[pd.DataFrame, pd.DataFrame]
+        A dataframe containing only developments where the data can be infilled
+        A dataframe listing the developments where data cannot be estimated 
+        (missing dates or missing totals)
+    """
+    start_date = start_date_col
+    end_date = end_date_col
+    development_id = development_id_col
+    i_year = int(year)
+
+    no_build_out = dlog.copy()
+    # Empty dataframe to store d-log ids with insufficient data
+    dlog_errors = pd.DataFrame(columns=[development_id, "errors"])
+    dlog_errors[development_id] = dlog[development_id]
+
+    # TODO check that this is correct way to identify no data
+    no_build_out = no_build_out.loc[no_build_out[year] == 0]
+    # Just flag the number of errors for now
+    print(f"No build out data for {no_build_out.shape[0]}")
+    # Check for missing totals
+    missing_totals = no_build_out.loc[
+        no_build_out[total_column] == 0
+    ][development_id]
+    dlog_errors["errors"] = ""
+    dlog_errors.loc[
+        dlog_errors[development_id].isin(missing_totals), "errors"
+    ] = "missing_total"
+    # Remove missing data from no_build_out
+    no_build_out = no_build_out.loc[
+        ~no_build_out[development_id].isin(missing_totals)
+    ]
+    # Check for missing start / end dates
+    missing_dates = no_build_out.loc[
+        (no_build_out[start_date].isna())
+        | (no_build_out[end_date].isna())
+    ][development_id]
+    dlog_errors.loc[
+        dlog_errors[development_id].isin(missing_dates), "errors"
+    ] = "missing_date"
+    # Remove missing data from no_build_out
+    no_build_out = no_build_out.loc[
+        ~no_build_out[development_id].isin(missing_dates)
+    ]
+    # Ignore data where the year is outside of the start / end range
+    # these will be zero for this year
+    no_build_out[start_date] = no_build_out[start_date].dt.year
+    no_build_out[end_date] = no_build_out[end_date].dt.year
+    no_build_out = no_build_out.loc[
+        (i_year >= no_build_out[start_date])
+        & (i_year <= no_build_out[end_date])
+    ]
+    # Estimate the build out for the year - linear between start
+    # and end dates
+    no_build_out[year] = (
+        no_build_out[total_column]
+        * (
+            (i_year - no_build_out[start_date])
+            / (no_build_out[end_date] - no_build_out[start_date])
+        )
+    )
+    # Merge back to the subset
+    no_build_out.rename({year: "filled_data"}, axis=1, inplace=True)
+
+    return no_build_out, dlog_errors
+
+
+def constrain_post_dlog(df: pd.DataFrame,
+                        constraint: pd.DataFrame,
+                        la_equivalence: pd.DataFrame,
+                        base_year: str,
+                        year: str,
+                        msoa_column: str
+                        ):
+    """Perform a constraint on the post d-log data. Constraint is on the 
+    total growth at sector level.
+    TODO Check that this is correct. Sometimes will result in zones decreasing
+    in later years.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The post d-log dataframe. Containing data for the base year and 
+        future year
+    constraint : pd.DataFrame
+        Constraint data. Should contain absolute values for the base year and
+        future year. Zoning system should be the same as df (MSOA)
+    la_equivalence : pd.DataFrame
+        Equivalence lookup table of MSOA to sector (LA). Should contain 
+        msoa_zone_id and grouping_id
+    base_year : str
+        The base year column containing pop / emp
+    year : str
+        The future year column containing pop / emp
+    msoa_column : str
+        MSOA zone id column (msoa_zone_id)
+
+    Returns
+    -------
+    pd.DataFrame
+        The constrained dataframe
+    """
+
+    # Calculate pre-constraint sector growth
+    df["growth"] = (
+        df[year]
+        / df[base_year]
+    )
+    df["sector_growth"] = (
+        df.groupby("sector_id")[year].transform("sum")
+        /
+        df.groupby("sector_id")[base_year].transform("sum")
+    )
+    # Calculate the constraint growth
+    pop_constraint = constraint.copy()
+    pop_constraint = pop_constraint.merge(
+        la_equivalence,
+        on=msoa_column,
+        how="left"
+    )[[msoa_column, "grouping_id", base_year, year]]
+
+    # Keep grouping_id as index for mapping later
+    pop_constraint = pop_constraint.groupby(
+        "grouping_id"
+    )[[base_year, year]].sum()
+
+    pop_constraint["constraint"] = (
+        pop_constraint[year]
+        / pop_constraint[base_year]
+    )
+    # Merge to the DLOG data
+    df["constraint"] = df["sector_id"].map(
+        pop_constraint["constraint"]
+    )
+    # Adjust segment growth factors
+    df["growth"] *= (
+        df["constraint"]
+        / df["sector_growth"]
+    )
+    # Adjust forecast year by new growth
+    df[year] = (
+        df[base_year]
+        * df["growth"]
+    )
+
     return df
 
 
@@ -50,6 +305,7 @@ def apply_d_log_population(population: pd.DataFrame,
     # increase readability
 
     updated_population = population.copy()
+    print(updated_population)
     # Calculate the base year segment shares over each sector
     print("Calculating Segment Share by Sector")
     la_equivalence = du.safe_read_csv(constraints_zone_equivalence)
@@ -84,7 +340,6 @@ def apply_d_log_population(population: pd.DataFrame,
         updated_population[base_year] != 0.0].groupby(
             msoa_column
     )["adj_seg_s"].transform("sum")
-    print(updated_population.head(10))
 
     # Read in development log data
     dlog_data = du.safe_read_csv(dlog_path)
@@ -114,25 +369,6 @@ def apply_d_log_population(population: pd.DataFrame,
     # Convert d-log data to the required format
     # TODO check the format of d-log data after the update
 
-    # Empty dataframe to store d-log ids with insufficient data
-    dlog_errors = pd.DataFrame(columns=[development_id, "errors"])
-    dlog_errors[development_id] = dlog_data[development_id]
-
-    # Extract the build out columns
-    build_out_cols = [
-        col for col in dlog_data.columns
-        if "units_" in col and any([c for c in col if c.isdigit()])
-    ]
-    # Extract the first year in the range
-    build_out_years = [int(x.replace("units_", "").split("_")[0])
-                       for x in build_out_cols]
-    # Ensure these are sorted
-    build_out_cols = [
-        col for col, year in sorted(zip(build_out_cols, build_out_years),
-                                    key=lambda pair: pair[1])
-    ]
-    build_out_years = [year for year in sorted(build_out_years)]
-
     # Calculate the growth factors for each MSOA and year
     # May be faster to just get the first entry for each MSOA as the factors
     # are identical
@@ -144,96 +380,34 @@ def apply_d_log_population(population: pd.DataFrame,
 
         print(f"Replacing D-LOG data for {year}")
 
-        i_year = int(year)
-
         dlog_subset = dlog_data.copy()
         dlog_columns = [development_id,
                         "units_of_properties",
                         start_date,
                         end_date]
 
-        # Get the position in the build out profile
-        for i, band_start in enumerate(build_out_years[:-1]):
-            next_band_start = build_out_years[i+1]
-            future_year = int(year)
-            if future_year > band_start and future_year <= next_band_start:
-
-                band_width = next_band_start - band_start
-                build_out_factor = (future_year - band_start) / band_width
-
-                build_out_idx = i
-                break
-
-        # Calculate the number of additional households from the base year
-        final_year_col = build_out_cols[build_out_idx]
-        required_year_cols = build_out_cols[:build_out_idx+1]
-        subset_columns = dlog_columns + required_year_cols
-        dlog_subset = dlog_subset[subset_columns]
-
-        # Any missing build out can be infilled as 0
-        dlog_subset.fillna(
-            {col: 0.0 for col in required_year_cols},
-            inplace=True
+        dlog_subset = parse_dlog_build_out(
+            dlog=dlog_subset,
+            year=year,
+            dlog_columns=dlog_columns
         )
-
-        # Assume a linear build out for the final band using previously
-        # calculated factor
-        dlog_subset[final_year_col] *= build_out_factor
-        dlog_subset[year] = dlog_subset[required_year_cols].sum(axis=1)
+        print(f"D-LOG data contains {dlog_subset[year].sum()} units")
 
         # Where the build out profile contains nothing, check the start
         # and end dates, if relevant then use these
-        # TODO implement this method as a fallback
         if (dlog_subset[year] == 0).sum() > 0:
-            no_build_out = dlog_subset.copy()
-            no_build_out = no_build_out.loc[no_build_out[year] == 0]
-            # Just flag the number of errors for now
-            print(f"No build out data for {no_build_out.shape[0]}")
-            # Check for missing totals
-            missing_totals = no_build_out.loc[
-                no_build_out["units_of_properties"] == 0
-            ][development_id]
-            dlog_errors["errors"] = ""
-            dlog_errors.loc[
-                dlog_errors[development_id].isin(missing_totals), "errors"
-            ] = "missing_total"
-            # Remove missing data from no_build_out
-            no_build_out = no_build_out.loc[
-                ~no_build_out[development_id].isin(missing_totals)
-            ]
-            # Check for missing start / end dates
-            missing_dates = no_build_out.loc[
-                (no_build_out[start_date].isna())
-                | (no_build_out[end_date].isna())
-            ][development_id]
-            dlog_errors.loc[
-                dlog_errors[development_id].isin(missing_dates), "errors"
-            ] = "missing_date"
-            # Remove missing data from no_build_out
-            no_build_out = no_build_out.loc[
-                ~no_build_out[development_id].isin(missing_dates)
-            ]
-            # Ignore data where the year is outside of the start / end range
-            # these will be zero for this year
-            no_build_out[start_date] = no_build_out[start_date].dt.year
-            no_build_out[end_date] = no_build_out[end_date].dt.year
-            no_build_out = no_build_out.loc[
-                (i_year >= no_build_out[start_date])
-                & (i_year <= no_build_out[end_date])
-            ]
-            # Estimate the build out for the year - linear between start
-            # and end dates
-            no_build_out[year] = (
-                no_build_out["units_of_properties"]
-                * (
-                    (i_year - no_build_out[start_date])
-                    / (no_build_out[end_date] - no_build_out[start_date])
-                )
+
+            infill_data, dlog_errors = infill_dlog_build_out(
+                dlog=dlog_subset,
+                year=year,
+                start_date_col=start_date,
+                end_date_col=end_date,
+                development_id_col=development_id,
+                total_column="units_of_properties"
             )
-            # Merge back to the subset
-            no_build_out.rename({year: "filled_data"}, axis=1, inplace=True)
+
             dlog_subset = dlog_subset.merge(
-                no_build_out[[development_id, "filled_data"]],
+                infill_data[[development_id, "filled_data"]],
                 on=development_id,
                 how="left"
             )
@@ -243,9 +417,12 @@ def apply_d_log_population(population: pd.DataFrame,
             ).rename(
                 {"filled_data": year}, axis=1
             )
-            print(f"Overriding {no_build_out.shape[0]} developments")
+            print(f"Overriding {infill_data.shape[0]} developments")
             # Write Errors to file
             dlog_errors.to_csv("dlog_errors.csv")
+
+            print(f"Infill data contains {infill_data['filled_data'].sum()} units")
+            print(f"D-LOG data contains {dlog_subset[year].sum()} units")
 
         # Convert to population
         dlog_subset[year] *= household_factors
@@ -274,9 +451,6 @@ def apply_d_log_population(population: pd.DataFrame,
         )
         population_factors["dlog_data"].fillna(0.0, inplace=True)
 
-        print(population_factors)
-        print(population_factors.loc[population_factors["dlog_data"] != 0.0])
-
         # Join to population dataframe and replace old values
         print(f"Previous {year} total = {updated_population[year].sum()}")
         updated_population[year] += (
@@ -286,52 +460,18 @@ def apply_d_log_population(population: pd.DataFrame,
             ).fillna(0.0)
         )
         print(f"New {year} total = {updated_population[year].sum()}")
-        print(updated_population)
 
-        # Constrain to LA TODO Change to growth constraint
+        if perform_constraint:
+            updated_population = constrain_post_dlog(
+                df=updated_population,
+                constraint=constraints,
+                la_equivalence=la_equivalence,
+                base_year=base_year,
+                year=year,
+                msoa_column=msoa_column
+            )
+        print(f"Post constraint total = {updated_population[year].sum()}")
 
-        # Calculate pre-constraint sector growth
-        updated_population["growth"] = (
-            updated_population[year]
-            / updated_population[base_year]
-        )
-        updated_population["sector_growth"] = (
-            updated_population.groupby("sector_id")[year].transform("sum")
-            /
-            updated_population.groupby("sector_id")[base_year].transform("sum")
-        )
-        # Calculate the constraint growth
-        pop_constraint = constraints.copy()
-        pop_constraint = pop_constraint.merge(
-            la_equivalence,
-            on=msoa_column,
-            how="left"
-        )[[msoa_column, "grouping_id", base_year, year]]
-
-        # Keep grouping_id as index for mapping later
-        pop_constraint = pop_constraint.groupby(
-            "grouping_id"
-        )[[base_year, year]].sum()
-
-        pop_constraint["constraint"] = (
-            pop_constraint[year]
-            / pop_constraint[base_year]
-        )
-        # Merge to the DLOG data
-        updated_population["constraint"] = updated_population["sector_id"].map(
-            pop_constraint["constraint"]
-        )
-        # Adjust segment growth factors
-        updated_population["growth"] *= (
-            updated_population["constraint"]
-            / updated_population["sector_growth"]
-        )
-        # Adjust forecast year by new growth
-        updated_population[year] = (
-            updated_population[base_year]
-            * updated_population["growth"]
-        )
-        
         # Drop any temporary tables
         updated_population.drop(
             ["growth", "constraint", "sector_growth"],
@@ -352,7 +492,9 @@ def apply_d_log_population(population: pd.DataFrame,
     )
 
     population_factors.to_csv("test.csv")
-    updated_population.to_csv("post_dlog_pop.csv")
+    updated_population.to_csv("post_dlog_pop.csv", index=False)
+
+    print(updated_population)
 
     return updated_population
 
