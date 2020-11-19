@@ -92,65 +92,79 @@ def matrix_reporting(matrix_directory: str,
         )
 
     # Aggregate the matrices
-    # TODO Do this in a loop so that matrices can be sectored as produced
-    try:
-        # TODO add aggregation_method to this function
-        output_files = aggregate_matrices(
-            import_dir=matrix_directory,
-            export_dir=output_dir,
-            trip_origin=trip_origin,
-            matrix_format=matrix_format,
-            years_needed=parsed_segments["years"],
-            p_needed=parsed_segments["p"],
-            m_needed=parsed_segments["m"],
-            soc_needed=parsed_segments["soc"],
-            ns_needed=parsed_segments["ns"],
-            ca_needed=parsed_segments["ca"],
-            tp_needed=parsed_segments["tp"],
-            return_paths=True
-        )
-    except AttributeError:
-        # If there are no matrices available for these segments
-        # This should probably be handled in matrix_processing
-        print("ERROR::MISSING_SEGMENTS")
-        success = False
+    sectored_output_files = []
+    overwrite_tld = True
+    for year in tqdm(parsed_segments["years"]):
+        try:
+            # TODO add aggregation_method to this function
+            output_files = aggregate_matrices(
+                import_dir=matrix_directory,
+                export_dir=output_dir,
+                trip_origin=trip_origin,
+                matrix_format=matrix_format,
+                years_needed=[year],
+                p_needed=parsed_segments["p"],
+                m_needed=parsed_segments["m"],
+                soc_needed=parsed_segments["soc"],
+                ns_needed=parsed_segments["ns"],
+                ca_needed=parsed_segments["ca"],
+                tp_needed=parsed_segments["tp"],
+                return_paths=True
+            )
+        except AttributeError as e:
+            # If there are no matrices available for these segments
+            # This should probably be handled in matrix_processing
+            print("ERROR::MISSING_SEGMENTS")
+            print(e)
+            success = False
 
-    # Extract the trip length distributions
-    if cost_path is not None and tld_path is not None:
-        tld_reporting(
-            output_dir,
-            matrix_format,
-            tld_path=tld_path,
-            cost_lookup_path=cost_path
-        )
+        output_files = glob(os.path.join(output_dir, "*.csv"))
+        output_files = [
+            x for x in output_files 
+            if not any(sectors_name in x for sectors_name in sectors_names)
+        ]
+        mat_files = [os.path.basename(x) for x in output_files]
 
-    output_files = glob(os.path.join(output_dir, "*.csv"))
+        # Extract the trip length distributions
+        if cost_path is not None and tld_path is not None:
+            tld_reporting(
+                output_dir,
+                mat_files,
+                matrix_format,
+                tld_path=tld_path,
+                cost_lookup_path=cost_path,
+                overwrite=overwrite_tld
+            )
+            overwrite_tld = False
 
-    # Aggregate sectors if requried
-    if sectors_files is not None:
-        sr = SectorReporter()
-        valid_files = output_files.copy()
-        output_files = []
-        for sectors_file, sectors_name in zip(sectors_files, sectors_names):
-            for matrix_file in valid_files:
-                # Write the sectored matrices in place
-                sr.aggregate_matrix_sectors(
-                    matrix_file,
-                    zone_system_name=zones_name,
-                    zone_system_file=zone_file,
-                    sector_grouping_file=sectors_file,
-                    sector_system_name=sectors_name,
-                    aggregation_method=aggregation_method
-                )
-                suffix = f"_{sectors_name}.csv"
-                new_file = matrix_file.replace(".csv", suffix)
-                output_files.append(new_file)
-                os.replace(matrix_file, new_file)
+        # Aggregate sectors if requried
+        if sectors_files is not None:
+            sr = SectorReporter()
+            valid_files = output_files.copy()
+            output_files = []
+            for sectors_file, sectors_name in zip(sectors_files,
+                                                  sectors_names):
+                for matrix_file in valid_files:
+                    if matrix_file in sectored_output_files:
+                        continue
+                    # Write the sectored matrices in place
+                    sr.aggregate_matrix_sectors(
+                        matrix_file,
+                        zone_system_name=zones_name,
+                        zone_system_file=zone_file,
+                        sector_grouping_file=sectors_file,
+                        sector_system_name=sectors_name,
+                        aggregation_method=aggregation_method
+                    )
+                    suffix = f"_{sectors_name}.csv"
+                    new_file = matrix_file.replace(".csv", suffix)
+                    sectored_output_files.append(new_file)
+                    os.replace(matrix_file, new_file)
 
     if collate_years:
         # Create a GIS format report
         generate_gis_report(
-            output_files,
+            sectored_output_files,
             parsed_segments["years"],
             parsed_segments["p"]
         )
@@ -279,9 +293,11 @@ def parse_segments(required_segments: Union[List[int], str],
 
 
 def tld_reporting(matrix_dir: str,
+                  matrix_files: List[str],
                   matrix_type: str,
                   tld_path: str,
-                  cost_lookup_path: str):
+                  cost_lookup_path: str,
+                  overwrite: bool = True):
     """Generates the trip length distributions of a directory of matrices
 
     Parameters
@@ -296,16 +312,18 @@ def tld_reporting(matrix_dir: str,
         Path to the base cost folder
     """
 
+    print("Getting trip length distributions")
     # Create the tld directory if it doesn't exist
     output_dir = os.path.join(matrix_dir, "tld")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
-    else:
+    if overwrite:
         for file_name in glob(os.path.join(output_dir, "*.csv")):
             os.remove(file_name)
 
     # Loop through all matrices, pulling the trip length dists as required
-    matrices = os.listdir(matrix_dir)
+    # matrices = os.listdir(matrix_dir)
+    matrices = matrix_files
     mat_df = du.parse_mat_output(
         matrices,
         sep="_",
@@ -313,7 +331,7 @@ def tld_reporting(matrix_dir: str,
         file_format=".csv",
         file_name="matrix"
     )
-    for _, mat_desc in mat_df.iterrows():
+    for _, mat_desc in tqdm(mat_df.iterrows(), total=mat_df.shape[0]):
         mat_dict = mat_desc.to_dict()
 
         # Extract trip matrix info for each file
@@ -354,7 +372,6 @@ def tld_reporting(matrix_dir: str,
         # Get the relevant trip length bands
         # Some legacy code here - "ntem"
         # TODO Use the year here to get the forecast/base tlb when they exist
-        print(mat_dict)
         year_tld_path = seg_tld_path
         tlb = du.get_trip_length_bands(
             year_tld_path,
@@ -386,7 +403,8 @@ def tld_reporting(matrix_dir: str,
             v_heading='p_zone',
             h_heading='a_zone',
             values='cost',
-            unq_internal_zones=unq_zones
+            unq_internal_zones=unq_zones,
+            echo=False
         )
 
         matrix = matrix.drop(list(matrix)[0], axis=1).values
