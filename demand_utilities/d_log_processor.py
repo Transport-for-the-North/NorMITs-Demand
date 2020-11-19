@@ -140,7 +140,7 @@ def infill_dlog_build_out(dlog: pd.DataFrame,
 
     no_build_out = dlog.copy()
     # Empty dataframe to store d-log ids with insufficient data
-    dlog_errors = pd.DataFrame(columns=[development_id, "errors"])
+    dlog_errors = pd.DataFrame(columns=[development_id, year])
     dlog_errors[development_id] = dlog[development_id]
 
     # TODO check that this is correct way to identify no data
@@ -151,9 +151,9 @@ def infill_dlog_build_out(dlog: pd.DataFrame,
     missing_totals = no_build_out.loc[
         no_build_out[total_column] == 0
     ][development_id]
-    dlog_errors["errors"] = ""
+    dlog_errors[year] = ""
     dlog_errors.loc[
-        dlog_errors[development_id].isin(missing_totals), "errors"
+        dlog_errors[development_id].isin(missing_totals), year
     ] = "missing_total"
     # Remove missing data from no_build_out
     no_build_out = no_build_out.loc[
@@ -165,7 +165,7 @@ def infill_dlog_build_out(dlog: pd.DataFrame,
         | (no_build_out[end_date].isna())
     ][development_id]
     dlog_errors.loc[
-        dlog_errors[development_id].isin(missing_dates), "errors"
+        dlog_errors[development_id].isin(missing_dates), year
     ] = "missing_date"
     # Remove missing data from no_build_out
     no_build_out = no_build_out.loc[
@@ -275,18 +275,21 @@ def constrain_post_dlog(df: pd.DataFrame,
     return df
 
 
-def apply_d_log_population(population: pd.DataFrame,
-                           base_year:  str,
-                           future_years: List[str],
-                           dlog_path: str,
-                           constraints: pd.DataFrame,
-                           constraints_zone_equivalence: str,
-                           household_factors: float,
-                           development_zone_lookup: str,
-                           msoa_zones: str,
-                           msoa_column: str = "msoa_zone_id",
-                           perform_constraint: bool = True
-                           ) -> pd.DataFrame:
+def apply_d_log(pre_dlog_df: pd.DataFrame,
+                base_year:  str,
+                future_years: List[str],
+                dlog_path: str,
+                constraints: pd.DataFrame,
+                constraints_zone_equivalence: str,
+                segment_cols: List[str],
+                dlog_conversion_factor: float,
+                development_zone_lookup: str,
+                msoa_zones: str,
+                msoa_column: str = "msoa_zone_id",
+                total_column: str = "units_of_properties",
+                perform_constraint: bool = True,
+                audit_location: str = None
+                ) -> pd.DataFrame:
     """TODO - Write docs when complete
     Should be done as base year population is read in - before growth is applied
 
@@ -301,11 +304,9 @@ def apply_d_log_population(population: pd.DataFrame,
 
     Returns a DataFrame of future year population
     """
-    # TODO musch of this should probably be in separate functions to
-    # increase readability
 
-    updated_population = population.copy()
-    print(updated_population)
+    post_dlog_df = pre_dlog_df.copy()
+    print(post_dlog_df)
     # Calculate the base year segment shares over each sector
     print("Calculating Segment Share by Sector")
     la_equivalence = du.safe_read_csv(constraints_zone_equivalence)
@@ -316,17 +317,17 @@ def apply_d_log_population(population: pd.DataFrame,
     )
     # Use map instead of merge as MSOA to sector will be 1 to 1 and likely
     # faster than merge
-    updated_population["sector_id"] = updated_population[msoa_column].map(
+    post_dlog_df["sector_id"] = post_dlog_df[msoa_column].map(
         la_equivalence.set_index(msoa_column)["grouping_id"]
     )
     # Calculate the split for each sector
-    segment_split = updated_population.groupby(
-        [msoa_column, "sector_id", "soc", "ns", "ca"],
+    segment_split = post_dlog_df.groupby(
+        [msoa_column, "sector_id"] + segment_cols,
         as_index=False
     )[[base_year] + future_years].sum()
     segment_split["seg_s"] = (
         segment_split.groupby(
-            ["sector_id", "soc", "ns", "ca"]
+            ["sector_id"] + segment_cols
         )[base_year].transform("sum")
         / segment_split.groupby("sector_id")[base_year].transform("sum")
     )
@@ -350,20 +351,21 @@ def apply_d_log_population(population: pd.DataFrame,
     zone_lookup = du.safe_read_csv(development_zone_lookup)
     zone_lookup = zone_lookup[[development_id, "msoa11cd"]]
 
-    # Check that the population dataframe contains the correct columns
+    # Check that the dataframe contains the correct columns
     pop_required_cols = ["msoa_zone_id", base_year] + future_years
-    if not all(col in population.columns for col in pop_required_cols):
-        raise ValueError("Population Dataframe does not contain the required"
+    if not all(col in pre_dlog_df.columns for col in pop_required_cols):
+        raise ValueError("Dataframe does not contain the required"
                          " columns")
 
     # Convert d-log data to the required format
     # TODO check the format of d-log data after the update
+    dlog_missing_data = pd.DataFrame()
 
     # Calculate the growth factors for each MSOA and year
     # May be faster to just get the first entry for each MSOA as the factors
     # are identical
     metric_columns = [base_year] + future_years
-    population_factors = population.groupby(msoa_column)[metric_columns].sum()
+    dlog_additions = pre_dlog_df.groupby(msoa_column)[metric_columns].sum()
 
     # Calculate a new column with the estimated new households for each year
     for year in future_years:
@@ -372,7 +374,7 @@ def apply_d_log_population(population: pd.DataFrame,
 
         dlog_subset = dlog_data.copy()
         dlog_columns = [development_id,
-                        "units_of_properties",
+                        total_column,
                         start_date,
                         end_date]
 
@@ -393,7 +395,7 @@ def apply_d_log_population(population: pd.DataFrame,
                 start_date_col=start_date,
                 end_date_col=end_date,
                 development_id_col=development_id,
-                total_column="units_of_properties"
+                total_column=total_column
             )
 
             dlog_subset = dlog_subset.merge(
@@ -408,14 +410,20 @@ def apply_d_log_population(population: pd.DataFrame,
                 {"filled_data": year}, axis=1
             )
             print(f"Overriding {infill_data.shape[0]} developments")
-            # Write Errors to file
-            dlog_errors.to_csv("dlog_errors.csv")
+            # Collate errors
+            if dlog_missing_data.empty:
+                dlog_missing_data = dlog_errors
+            else:
+                dlog_missing_data = dlog_missing_data.merge(
+                    dlog_errors,
+                    on=development_id
+                )
 
             print(f"Infill data contains {infill_data['filled_data'].sum()} units")
             print(f"D-LOG data contains {dlog_subset[year].sum()} units")
 
-        # Convert to population
-        dlog_subset[year] *= household_factors
+        # Convert to population / employment
+        dlog_subset[year] *= dlog_conversion_factor
 
         # Map to MSOA zones
         dlog_subset = dlog_subset.merge(zone_lookup, on=development_id)
@@ -431,18 +439,19 @@ def apply_d_log_population(population: pd.DataFrame,
             as_index=False
         )[year].sum()
 
-        # Calculate the new growth as base year pop + population from dlog
-        dlog_subset.rename({year: "dlog_data"}, axis=1, inplace=True)
-        population_factors = population_factors.merge(
+        # Calculate the new growth as base year absolute + data from dlog
+        dlog_data_col = f"dlog_add_{year}"
+        dlog_subset.rename({year: dlog_data_col}, axis=1, inplace=True)
+        dlog_additions = dlog_additions.merge(
             dlog_subset,
             on=msoa_column,
             how="left"
         )
-        population_factors["dlog_data"].fillna(0.0, inplace=True)
+        dlog_additions[dlog_data_col].fillna(0.0, inplace=True)
 
         # Join to population dataframe and replace old values
         
-        print(f"Previous {year} total = {updated_population[year].sum()}")
+        print(f"Previous {year} total = {post_dlog_df[year].sum()}")
         # Calculate the new growth factors by segment share
         post_dlog = f"dlog_{year}"
         adj_growth = f"adj_growth_{year}"
@@ -451,7 +460,7 @@ def apply_d_log_population(population: pd.DataFrame,
             + (
                 segment_split["seg_s"]
                 * segment_split[msoa_column].map(
-                    population_factors.set_index(msoa_column)["dlog_data"]
+                    dlog_additions.set_index(msoa_column)[dlog_data_col]
                 )
             )
         )
@@ -462,54 +471,58 @@ def apply_d_log_population(population: pd.DataFrame,
         )
         segment_split.loc[segment_split[base_year] == 0, adj_growth] = 0
         # Update original data with new segment growth
-        merge_cols = [msoa_column, "soc", "ns", "ca"]
-        updated_population = pd.merge(
-            updated_population,
+        merge_cols = [msoa_column] + segment_cols
+        post_dlog_df = pd.merge(
+            post_dlog_df,
             segment_split[merge_cols + [adj_growth]],
             on=merge_cols,
             how="left"
         )
-        updated_population[year] = (
-            updated_population[base_year]
-            * updated_population[adj_growth]
+        post_dlog_df[year] = (
+            post_dlog_df[base_year]
+            * post_dlog_df[adj_growth]
         )
 
-        print(f"New {year} total = {updated_population[year].sum()}")
+        print(f"New {year} total = {post_dlog_df[year].sum()}")
 
         if perform_constraint:
-            updated_population = constrain_post_dlog(
-                df=updated_population,
+            post_dlog_df = constrain_post_dlog(
+                df=post_dlog_df,
                 constraint=constraints,
                 la_equivalence=la_equivalence,
                 base_year=base_year,
                 year=year,
                 msoa_column=msoa_column
             )
-            print(f"Post constraint total = {updated_population[year].sum()}")
+            print(f"Post constraint total = {post_dlog_df[year].sum()}")
 
         # Drop any temporary columns
-        updated_population.drop(
+        post_dlog_df.drop(
             ["growth", "constraint", "sector_growth"],
-            axis=1,
-            inplace=True
-        )
-        population_factors.drop(
-            ["dlog_data"],
             axis=1,
             inplace=True
         )
 
     # Drop any temporary columns
-    updated_population.drop(
+    post_dlog_df.drop(
         ["sector_id"],
         axis=1,
         inplace=True
     )
 
-    population_factors.to_csv("test.csv")
-    updated_population.to_csv("post_dlog_pop.csv", index=False)
+    # Save outputs for sense checks
+    dlog_additions.to_csv(
+        os.path.join(audit_location, "dlog_extra.csv"),
+        index=False
+    )
+    post_dlog_df.to_csv(
+        os.path.join(audit_location, "post_dlog_data.csv"),
+        index=False
+    )
+    dlog_missing_data.to_csv(
+        os.path.join(audit_location, "dlog_errors.csv"),
+        index=False
+    )
 
-    print(updated_population)
-
-    return updated_population
+    return post_dlog_df
 
