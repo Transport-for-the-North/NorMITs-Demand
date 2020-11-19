@@ -43,6 +43,107 @@ from old_tms.utils import *
 # TODO: Utils is getting big. Refactor into smaller, more specific modules
 
 
+class NormitsDemandError(Exception):
+    """
+    Base Exception for all custom NotMITS demand errors
+    """
+
+    def __init__(self, message=None):
+        self.message = message
+        super().__init__(self.message)
+
+
+def validate_seg_level(seg_level: str) -> str:
+    """
+    Tidies up seg_level and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    seg_level:
+        The name of the segmentation level to validate
+
+    Returns
+    -------
+    seg_level:
+        seg_level with both strip and lower applied to remove any whitespace
+        and make it all lowercase
+
+    Raises
+    -------
+    ValueError:
+        If seg_level is not a valid name for a level of segmentation
+    """
+    # Init
+    seg_level = seg_level.strip().lower()
+
+    if seg_level not in consts.SEG_LEVELS:
+        raise ValueError("%s is not a valid name for a level of segmentation"
+                         % seg_level)
+    return seg_level
+
+
+def validate_user_class(user_class: str) -> str:
+    """
+    Tidies up user_class and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    user_class:
+        The name of the user class to validate
+
+    Returns
+    -------
+    seg_level:
+        user_class with both strip and lower applied to remove any whitespace
+        and make it all lowercase
+
+    Raises
+    -------
+    ValueError:
+        If user_class is not a valid name for a level of segmentation
+    """
+    # Init
+    user_class = user_class.strip().lower()
+
+    if user_class not in consts.USER_CLASSES:
+        raise ValueError("%s is not a valid name for user class"
+                         % user_class)
+    return user_class
+
+
+def validate_vdm_seg_params(seg_params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validates and cleans seg_params ready for a loop_generator
+
+    Parameters
+    ----------
+    seg_params:
+        Dictionary of vdm seg params to be cleaned.
+
+    Returns
+    -------
+    valid_seg_params:
+        cleaned version of the given seg_params. If a key did not exist that
+        is needed, [None] is added as the value.
+    """
+    # Init
+    seg_params = seg_params.copy()
+    valid_segmentation = [
+        'to_needed',
+        'uc_needed',
+        'm_needed',
+        'ca_needed',
+        'tp_needed'
+    ]
+
+    for seg in valid_segmentation:
+        if seg_params.get(seg) is None:
+            seg_params[seg] = [None]
+
+    return seg_params
+
+
+
 def grow_to_future_years(base_year_df: pd.DataFrame,
                          growth_df: pd.DataFrame,
                          base_year: str,
@@ -589,6 +690,45 @@ def get_data_subset(orig_data: pd.DataFrame,
     return orig_data.loc[subset_mask]
 
 
+def get_vdm_dist_name(trip_origin: str,
+                      matrix_format: str,
+                      year: Union[int, str],
+                      user_class: str,
+                      mode: Union[int, str],
+                      ca: int = None,
+                      tp: Union[int, str] = None,
+                      csv: bool = False,
+                      suffix: str = None
+                      ) -> str:
+    """
+    Wrapper around get_compiled_matrix_name to deal with different ca naming
+    """
+    compiled_name = get_compiled_matrix_name(
+        matrix_format,
+        user_class,
+        str(year),
+        trip_origin=trip_origin,
+        mode=str(mode),
+        ca=ca,
+        tp=str(tp),
+        csv=csv,
+        suffix=suffix
+    )
+
+    # Need to switch over ca naming
+    if ca is not None:
+        if 'nca' in compiled_name:
+            compiled_name = compiled_name.replace('nca', 'ca1')
+        elif 'ca' in compiled_name:
+            compiled_name = compiled_name.replace('ca', 'ca2')
+        else:
+            raise ValueError("Couldn't find ca/nca in name returned from "
+                             "get_compiled_matrix_name(). This shouldn't be "
+                             "able to happen!")
+
+    return compiled_name
+
+
 def get_dist_name(trip_origin: str,
                   matrix_format: str,
                   year: str = None,
@@ -702,6 +842,69 @@ def get_dist_name_parts(dist_name: str) -> List[str]:
     ]
 
 
+def get_seg_level_dist_name(seg_level: str,
+                            seg_values: Dict[str, Any],
+                            matrix_format: str,
+                            year: Union[str, int],
+                            trip_origin: str = None,
+                            csv: bool = False,
+                            suffix: str = None
+                            ) -> str:
+    """
+    Generates the distribution name, regardless of segmentation level
+
+    Parameters
+    ----------
+    seg_level:
+        The level of segmentation of the tour proportions to convert. This
+        should be one of the values in efs_constants.SEG_LEVELS.
+
+    seg_values:
+        A dictionary of {seg_name: value} for the segmentation level chosen.
+
+    matrix_format:
+        The format of the matrix. Usually 'pa', 'od', 'od_from', or 'od_to'.
+
+    year:
+        The year of the matrix.
+
+    trip_origin:
+        Usually 'hb or 'nhb'
+
+    csv:
+        Whether to add .csv on the end of the file or not
+
+    suffix:
+        Any additional suffix to add to the end of the filename. This comes
+        before .csv if csv=True.
+
+    Returns
+    -------
+    dist_name:
+        The generated distribution name
+    """
+    # Init
+    seg_level = validate_seg_level(seg_level)
+
+    if seg_level == 'vdm':
+        return get_vdm_dist_name(
+            trip_origin=seg_values.get('to'),
+            matrix_format=matrix_format,
+            year=str(year),
+            user_class=seg_values.get('uc'),
+            mode=seg_values.get('m'),
+            ca=seg_values.get('ca'),
+            tp=seg_values.get('tp'),
+            csv=csv,
+            suffix=suffix
+        )
+
+    else:
+        raise ValueError("'%s' is a valid seg_level, however, we do not have "
+                         "a way of dealing with it right not. You should "
+                         "write it!" % seg_level)
+
+
 def generate_calib_params(year: str = None,
                           purpose: int = None,
                           mode: int = None,
@@ -721,6 +924,22 @@ def generate_calib_params(year: str = None,
 
     keys = ['yr', 'p', 'm', segment_str, 'ca', 'tp']
     vals = [year, purpose, mode, segment, ca, tp]
+
+    # Add params to dict if they are not None
+    return {k: v for k, v in zip(keys, vals) if v is not None}
+
+
+def create_vdm_seg_values(trip_origin: str = None,
+                          user_class: str = None,
+                          mode: int = None,
+                          ca: int = None,
+                          tp: int = None,
+                          ) -> Dict[str, Union[str, int]]:
+    """
+    Returns a TMS style calib_params dict, but for vdm segmentation
+    """
+    keys = ['to', 'uc', 'm', 'ca', 'tp']
+    vals = [trip_origin, user_class, mode, ca, tp]
 
     # Add params to dict if they are not None
     return {k: v for k, v in zip(keys, vals) if v is not None}
@@ -810,7 +1029,7 @@ def fname_to_calib_params(fname: str,
                           get_matrix_format: bool = False,
                           get_user_class: bool = False,
                           force_ca_exists: bool = False,
-                          ) -> Dict[str, str]:
+                          ) -> Dict[str, Union[str, int]]:
     """
     Convert the filename into a calib_params dict, with the following keys
     (if they exist in the filename):
@@ -1005,6 +1224,41 @@ def expand_distribution(dist: pd.DataFrame,
     return dist
 
 
+def vdm_segment_loop_generator(to_list: Iterable[str],
+                               uc_list: Iterable[str],
+                               m_list: Iterable[int],
+                               ca_list: Iterable[int],
+                               tp_list: Iterable[int] = None,
+                               ) -> (Union[Iterator[Tuple[str, str, int, int, int]],
+                                           Iterator[Tuple[str, str, int, int]]]):
+    """
+    Simple generator to avoid the need for so many nested loops
+    """
+
+    for trip_origin, user_class in product(to_list, uc_list):
+        # Not a valid segmentation - skip it
+        if trip_origin == 'nhb' and user_class == 'commute':
+            continue
+
+        for mode, ca in product(m_list, ca_list):
+            if tp_list is None:
+                yield (
+                    trip_origin,
+                    user_class,
+                    mode,
+                    ca,
+                )
+            else:
+                for time_period in tp_list:
+                    yield(
+                        trip_origin,
+                        user_class,
+                        mode,
+                        ca,
+                        time_period
+                    )
+
+
 def segmentation_loop_generator(p_list: Iterable[int],
                                 m_list: Iterable[int],
                                 soc_list: Iterable[int],
@@ -1070,14 +1324,73 @@ def cp_segmentation_loop_generator(p_list: Iterable[int],
         tp_list=tp_list
     )
 
-    for p, m, seg, ca, tp in loop_generator:
-        yield generate_calib_params(
-            purpose=p,
-            mode=m,
-            segment=seg,
-            ca=ca,
-            tp=tp
+    if tp_list is not None:
+        for p, m, seg, ca, tp in loop_generator:
+            yield generate_calib_params(
+                purpose=p,
+                mode=m,
+                segment=seg,
+                ca=ca,
+                tp=tp
+            )
+    else:
+        for p, m, seg, ca in loop_generator:
+            yield generate_calib_params(
+                purpose=p,
+                mode=m,
+                segment=seg,
+                ca=ca
+            )
+
+
+def seg_level_loop_generator(seg_level: str,
+                             seg_params: Dict[str, Any],
+                             ) -> Dict[str, Union[int, str]]:
+    """
+    Yields seg_values dictionary for the seg_level given
+
+    Parameters
+    ----------
+    seg_level:
+        The level of segmentation of the tour proportions to convert. This
+        should be one of the values in efs_constants.SEG_LEVELS.
+
+    seg_params:
+        A dictionary of kwarg: values for the segmentation level chosen. See...
+        Need to Create reference for how seg_params work
+
+    Yields
+    -------
+    seg_values:
+        A dictionary of {seg_name: seg_values}
+    """
+    # Init
+    seg_level = validate_seg_level(seg_level)
+
+    if seg_level == 'vdm':
+        seg_params = validate_vdm_seg_params(seg_params)
+
+        loop_generator = vdm_segment_loop_generator(
+            to_list=seg_params['to_needed'],
+            uc_list=seg_params['uc_needed'],
+            m_list=seg_params['m_needed'],
+            ca_list=seg_params['ca_needed'],
+            tp_list=seg_params['tp_needed'],
         )
+
+        # Convert to dict
+        for to, uc, m, ca, tp in loop_generator:
+            yield create_vdm_seg_values(
+                trip_origin=to,
+                user_class=uc,
+                mode=m,
+                ca=ca,
+                tp=tp
+            )
+    else:
+        raise ValueError("'%s' is a valid seg_level, however, we do not have "
+                         "a way of dealing with it right not. You should "
+                         "write it!" % seg_level)
 
 
 def long_to_wide_out(df: pd.DataFrame,
@@ -1108,9 +1421,6 @@ def long_to_wide_out(df: pd.DataFrame,
     out_path:
         Where to write the converted matrix.
 
-    echo:
-        Indicates whether to print a log of the process to the terminal.
-
     unq_zones:
         A list of all the zone names that should exist in the output matrix.
         If zones in this list are not in the given df, they are infilled with
@@ -1139,6 +1449,25 @@ def long_to_wide_out(df: pd.DataFrame,
         columns=h_heading,
         values=values
     ).to_csv(out_path)
+
+
+def wide_to_long_out(df: pd.DataFrame,
+                     id_vars: str,
+                     var_name: str,
+                     value_name: str,
+                     out_path: str
+                     ) -> None:
+    # TODO: Write wide_to_long_out() docs
+    # This way we can avoid the name of the first col
+    df = df.melt(
+        id_vars=df.columns[:1],
+        var_name=var_name,
+        value_name=value_name
+    )
+    id_vars = id_vars[0] if isinstance(id_vars, list) else id_vars
+    df.columns.values[0] = id_vars
+
+    df.to_csv(out_path, index=False)
 
 
 def get_compile_params_name(matrix_format: str, year: str) -> str:
@@ -1204,7 +1533,8 @@ def get_compiled_matrix_name(matrix_format: str,
                              mode: str = None,
                              ca: int = None,
                              tp: str = None,
-                             csv=False
+                             csv=False,
+                             suffix: str = None,
                              ) -> str:
 
     """
@@ -1240,6 +1570,10 @@ def get_compiled_matrix_name(matrix_format: str,
 
     # Create name string
     final_name = '_'.join(name_parts)
+
+    # Optionally add a custom f_type suffix
+    if suffix is not None:
+        final_name += suffix
 
     # Optionally add on the csv if needed
     if csv:

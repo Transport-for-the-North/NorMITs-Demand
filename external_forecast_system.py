@@ -1149,15 +1149,16 @@ class ExternalForecastSystem:
             pa2od.efs_build_od(
                 pa_import=exports['pa'],
                 od_export=exports['od'],
-                required_purposes=purposes_needed,
-                required_modes=modes_needed,
-                required_soc=soc_needed,
-                required_ns=ns_needed,
-                required_car_availabilities=ca_needed,
-                year_string_list=years_needed,
+                p_needed=purposes_needed,
+                m_needed=modes_needed,
+                soc_needed=soc_needed,
+                ns_needed=ns_needed,
+                ca_needed=ca_needed,
+                years_needed=years_needed,
                 phi_type='fhp_tp',
                 aggregate_to_wday=True,
-                echo=echo)
+                echo=echo
+            )
             print('HB OD matrices compiled!\n')
             # TODO: Create 24hr OD for HB
 
@@ -1279,14 +1280,14 @@ class ExternalForecastSystem:
             print("Converting NHB 24hr OD to time period split OD...")
             pa2od.efs_build_tp_pa(
                 tp_import=imports['tp_splits'],
-                pa_import=exports['od_24'],
-                pa_export=exports['od'],
+                pa_import=exports['pa_24'],
+                pa_export=exports['pa'],
                 years_needed=years_needed,
                 p_needed=nhb_purposes_needed,
                 m_needed=modes_needed,
-                matrix_format='od'
+                matrix_format='pa'
             )
-            print('NHB time period split OD matrices compiled!\n')
+            print('NHB time period split PA matrices compiled!\n')
 
         print("NHB run complete!")
 
@@ -2399,7 +2400,7 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    iter_num = 0
+    iter_num = 1
     import_location = "Y:/"
     output_location = "E:/"
     model_name = 'norms_2015'   # Make sure the correct mode is being used!!!
@@ -2446,10 +2447,11 @@ def main():
             output_location=output_location,
             iter_num=iter_num,
             overwrite_nhb_productions=False,
-            overwrite_nhb_od=True,
+            overwrite_nhb_od=False,
             overwrite_nhb_tp_od=True
         )
 
+    # TODO: Update Integrated OD2PA codebase
     if run_compile_od:
         # Compiles base year OD matrices
         efs.pre_me_compile_od_matrices(
