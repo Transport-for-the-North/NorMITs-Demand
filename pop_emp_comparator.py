@@ -34,10 +34,18 @@ class PopEmpComparator:
     """
     ZONE_COL = 'model_zone_id'
 
-    def __init__(self, input_csv: str, growth_csv: str,
-                 constraint_csv: str, ratio_csv: str,
-                 output_csv: str, data_type: {'population', 'employment'},
-                 base_year: str):
+    def __init__(self,
+                 input_csv: str,
+                 growth_csv: str,
+                 constraint_csv: str,
+                 ratio_csv: str,
+                 output_csv: str,
+                 data_type: {'population', 'employment'},
+                 base_year: str,
+                 msoa_lookup_file: str,
+                 zone_system_name: str = 'msoa',
+                 sector_grouping_file: str = None,
+                 sector_system_name: str = 'tfn_sectors_zone',):
         """Reads and checks the csvs required for the comparisons.
 
         Parameters
@@ -61,6 +69,15 @@ class PopEmpComparator:
             Whether 'population' or 'employment' data is given for the comparison.
         base_year : str
             Base year of the model.
+        msoa_lookup_file : str
+            Path to the lookup between MSOA model ID and MSOA code.
+        zone_system_name : str, optional
+            Name of the zone system being used for the msoa_lookup_file, default 'msoa'.
+        sector_grouping_file : str, optional
+            Path to the sector grouping file to use, if None (default) uses the default
+            one present in the SectorReporter class.
+        sector_system_name : str, optional
+            Name of the sector system being used, defaul 'tfn_sectors_zone'.
 
         Raises
         ------
@@ -111,6 +128,12 @@ class PopEmpComparator:
         # Normalise the growth data against the base year
         self.growth_data[self.years] = self.growth_data[self.years].div(
             self.growth_data[str(self.base_year)], axis=0)
+
+        # Create dictionary of sector reporter parameters
+        self.msoa_lookup_file = msoa_lookup_file
+        self.sector_params = {'sector_grouping_file': str(sector_grouping_file),
+                              'sector_system_name': str(sector_system_name),
+                              'zone_system_name': str(zone_system_name)}
 
     def compare_totals(self) -> pd.DataFrame:
         """Compares the input and output column totals and produces a summary of the differences.
@@ -211,17 +234,70 @@ class PopEmpComparator:
         pd.DataFrame
             Differences between the input and output values at sector level.
         """
+        # Convert from MSOA zone id to MSOA code
+        msoa_lookup = pd.read_csv(self.msoa_lookup_file,
+                                  usecols=['model_zone_code', 'model_zone_id'])
+        msoa_coded_data = {}
+        for nm, df in {'input': self.input_data,
+                       'constraint': self.constraint_data,
+                       'output': self.output,
+                       'growth': self.growth_data}.items():
+            df = msoa_lookup.merge(df, on='model_zone_id', validate='1:m')
+            df = df.drop(columns='model_zone_id').rename(
+                columns={'model_zone_code': 'model_zone_id'}
+            )
+            msoa_coded_data[nm] = df
+
         # Calculate sectors totals (or means) for the comparison data
+        SPLIT_COL = 'overlap_msoa_split_factor'
         sector_rep = SectorReporter()
-        input_sec = sector_rep.calculate_sector_totals_v2(self.input_data, [self.base_year])
-        constraint_sec = sector_rep.calculate_sector_totals_v2(self.constraint_data, self.years)
-        output_sec = sector_rep.calculate_sector_totals_v2(self.output, self.years)
-        growth_sec = sector_rep.calculate_sector_totals_v2(self.growth_data, self.years,
-                                                           aggregation_method='mean')
+        sector_data = {}
+        metric_cols = {}
+        for (nm, df), met_cols in zip(msoa_coded_data.items(),
+                                      [[self.base_year]] + [self.years] * 3):
+            original_cols = [c for c in df.columns if c != 'model_zone_id']
+            df = sector_rep.calculate_sector_totals_v2(
+                df, met_cols, **self.sector_params, aggregation_method=None
+            )
+            df = df.rename(columns={self.sector_params['sector_system_name'] + '_id':
+                                    self.sector_params['sector_system_name']})
+            sector_data[nm] = df[[self.sector_params['sector_system_name'],
+                                  SPLIT_COL,
+                                  *original_cols]]
+            metric_cols[nm] = met_cols
+        del msoa_coded_data
+        # Remove population/employment type columns from output data
+        if self.data_type == 'population':
+            sector_data['output'].drop(
+                columns=['property_type_id', 'traveller_type_id'], inplace=True
+                )
+        else:
+            sector_data['output'].drop(columns=['employment_class'], inplace=True)
+
+        # Aggregate the sectors together, accounting for the split column
+        grouped = {}
+        grouping_cols = [self.sector_params['sector_system_name']]
+        for (nm, df), agg in zip(sector_data.items(), 3 * ['sum'] + ['mean']):
+            if agg == 'sum':
+                # Mutliply metric columns by split factor
+                for c in metric_cols[nm]:
+                    df[c] = df[c] * df[SPLIT_COL]
+                df = df.drop(columns=SPLIT_COL)
+                grouped[nm] = df.groupby(grouping_cols, as_index=False).sum()
+            else:
+                # Calculate the weighted average
+                weighted_avg = lambda x: pd.Series(
+                    np.average(x[metric_cols[nm]], axis=0, weights=x[SPLIT_COL]), metric_cols[nm]
+                    )
+                df = df.groupby(grouping_cols).apply(weighted_avg).reset_index()
+                grouped[nm] = df
+        del sector_data
 
         # Concatentate dataframes and create comparison columns
-        sector_comp = self._compare_dataframes('grouping_id', input_sec, constraint_sec, growth_sec,
-                                               output_sec)
+        sector_comp = self._compare_dataframes(
+            self.sector_params['sector_system_name'],
+            grouped['input'], grouped['constraint'], grouped['growth'], grouped['output']
+        )
         sector_comp.index.name = 'sector'
         return sector_comp
 
@@ -319,6 +395,7 @@ class PopEmpComparator:
             if False (default) the year will be an column header so there will be multiple
             columns for each value.
         """
+        start = time.perf_counter()
         # Check output type
         output_as = output_as.lower()
         accepted_values = ('excel', 'csv')
@@ -343,9 +420,13 @@ class PopEmpComparator:
             dataframes = (func(),) if len(names) == 1 else func()
             for nm, df in zip(names, dataframes):
                 if year_col and nm.lower() != 'totals comparison':
-                    # Move year column to index level and set name to year
+                    # Move year column to index level and set name to year, keep column order
+                    col_order = df.loc[:, df.columns.get_level_values(0)[0]].columns.tolist()
                     df = df.stack(level=0)
                     df.index.names = df.index.names[:-1] + ['year']
+                    # Make sure no columns are missing from column order
+                    missing = [c for c in df.columns if c not in col_order]
+                    df = df[col_order + missing]
                 # Write to csv if df too large for excel sheet, or csv output type selected
                 if output_as == 'csv' or len(df) > EXCEL_MAX[0] or len(df.columns) > EXCEL_MAX[1]:
                     du.safe_dataframe_to_csv(df, output_dir / f'{nm}.csv', flatten_header=True)
@@ -378,7 +459,9 @@ class PopEmpComparator:
                     # Update column formats
                     _excel_column_format(writer.sheets[nm], num_format, len(df.columns.names))
 
-        print(f'\tSaved in: "{output_dir}"')
+        print(f'\tSaved in: "{output_dir}"',
+              f'\tDone in {time.perf_counter()-start:.0f}s',
+              sep='\n')
         return
 
 
@@ -395,6 +478,8 @@ def test():
     population_growth_file = "population/future_population_growth.csv"
     population_constraint_file = "population/future_population_values.csv"
     future_population_ratio_file = "traveller_type/traveller_type_splits.csv"
+    # FIXME temporary location to speed up access
+    future_population_ratio_file = r'C:\WSP_Projects\TfN EFS\02 Delivery\00 - EFS Test Run\traveller_type_splits.csv'
     population_output_file = 'Productions/MSOA_population.csv'
     # Employment csv files
     worker_value_file = "employment/base_workers_2018.csv"
@@ -404,20 +489,30 @@ def test():
     worker_output_file = 'Attractions/MSOA_workers.csv'
 
     # Compare the population inputs and outputs
-    pop_comp = PopEmpComparator(import_loc / population_value_file,
-                                import_loc / population_growth_file,
-                                import_loc / population_constraint_file,
-                                import_loc / future_population_ratio_file,
-                                output_loc / population_output_file,
-                                'population', BASE_YEAR)
+    pop_comp = PopEmpComparator(
+        import_loc / population_value_file,
+        import_loc / population_growth_file,
+        import_loc / population_constraint_file,
+        import_loc / future_population_ratio_file,
+        output_loc / population_output_file,
+        'population',
+        BASE_YEAR,
+        msoa_lookup_file=import_loc / "zoning/msoa_zones.csv",
+        sector_grouping_file=import_loc / "zoning/tfn_sector_msoa_pop_weighted_lookup.csv"
+    )
     pop_comp.write_comparisons(output_loc / 'Reports', output_as='csv', year_col=True)
     # Compare the employment inputs and outputs
-    emp_comp = PopEmpComparator(import_loc / worker_value_file,
-                                import_loc / worker_growth_file,
-                                import_loc / worker_constraint_file,
-                                import_loc / worker_ratio_file,
-                                output_loc / worker_output_file,
-                                'employment', BASE_YEAR)
+    emp_comp = PopEmpComparator(
+        import_loc / worker_value_file,
+        import_loc / worker_growth_file,
+        import_loc / worker_constraint_file,
+        import_loc / worker_ratio_file,
+        output_loc / worker_output_file,
+        'employment',
+        BASE_YEAR,
+        msoa_lookup_file=import_loc / "zoning/msoa_zones.csv",
+        sector_grouping_file=import_loc / "zoning/tfn_sector_msoa_emp_weighted_lookup.csv"
+    )
     emp_comp.write_comparisons(output_loc / 'Reports', output_as='csv', year_col=True)
     return
 

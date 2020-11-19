@@ -214,14 +214,26 @@ class ExternalForecastSystem:
 
         # Initialise parameters for population and employment comparisons
         self.pop_emp_inputs = {
-            'population': {'input_csv': os.path.join(input_dir, population_value_file),
-                           'growth_csv': os.path.join(input_dir, population_growth_file),
-                           'constraint_csv': os.path.join(input_dir, population_constraint_file),
-                           'ratio_csv': os.path.join(input_dir, future_population_ratio_file)},
-            'employment': {'input_csv': os.path.join(input_dir, worker_value_file),
-                           'growth_csv': os.path.join(input_dir, worker_growth_file),
-                           'constraint_csv': os.path.join(input_dir, worker_constraint_file),
-                           'ratio_csv': os.path.join(input_dir, worker_ratio_file)}
+            'population': {
+                'input_csv': os.path.join(input_dir, population_value_file),
+                'growth_csv': os.path.join(input_dir, population_growth_file),
+                'constraint_csv': os.path.join(input_dir, population_constraint_file),
+                'ratio_csv': os.path.join(input_dir, future_population_ratio_file),
+                'msoa_lookup_file': os.path.join(input_dir, 'zoning/msoa_zones.csv'),
+                'sector_grouping_file': os.path.join(
+                    input_dir, 'zoning/tfn_sector_msoa_pop_weighted_lookup.csv'
+                    ),
+                },
+            'employment': {
+                'input_csv': os.path.join(input_dir, worker_value_file),
+                'growth_csv': os.path.join(input_dir, worker_growth_file),
+                'constraint_csv': os.path.join(input_dir, worker_constraint_file),
+                'ratio_csv': os.path.join(input_dir, worker_ratio_file),
+                'msoa_lookup_file': os.path.join(input_dir, 'zoning/msoa_zones.csv'),
+                'sector_grouping_file': os.path.join(
+                    input_dir, 'zoning/tfn_sector_msoa_emp_weighted_lookup.csv'
+                    )
+                }
             }
 
         print("External Forecast System initiated!")
