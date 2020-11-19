@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 import efs_constants as consts
 from efs_constrainer import ForecastConstrainer
-from demand_utilities import d_log_processer as dlog
+from demand_utilities import d_log_processor as dlog
 from demand_utilities import utils as du
 # TODO: Move functions that can be static elsewhere.
 #  Maybe utils?
@@ -344,7 +344,7 @@ class EFSProductionGenerator:
         # ## INTEGRATE D-LOG ## #
         if integrate_d_log:
             print("Integrating the development log...")
-            dlog.apply_d_log_population(
+            population = dlog.apply_d_log_population(
                 population=population,
                 base_year=base_year,
                 future_years=future_years,
