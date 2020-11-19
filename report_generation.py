@@ -14,6 +14,7 @@ from demand_utilities import reports as dr
 from demand_utilities.sector_reporter_v2 import SectorReporter
 from matrix_processing import aggregate_matrices
 import efs_constants as consts
+import external_forecast_system as efs
 
 
 # Define the possible values for trip origin type -
@@ -27,13 +28,14 @@ def matrix_reporting(matrix_directory: str,
                      matrix_format: str,
                      segments_needed: dict = {},
                      zone_file: str = None,
-                     sectors_file: str = None,
+                     sectors_files: List[str] = None,
                      zones_name: str = "model",
-                     sectors_name: str = "Sectors",
+                     sectors_names: List[str] = ["sector"],
                      aggregation_method: str = "sum",
                      tld_path: str = None,
                      cost_path: str = None,
-                     overwrite_dir: bool = True):
+                     overwrite_dir: bool = True,
+                     collate_years: bool = False):
     """
     TODO: write documentataion
     Options to aggregate any matrix segment.
@@ -55,8 +57,12 @@ def matrix_reporting(matrix_directory: str,
         raise ValueError(f"{trip_origin} is not a valid option")
     if matrix_format not in consts.VALID_MATRIX_FORMATS:
         raise ValueError(f"{matrix_format} is not a valid option")
-    if sectors_file is not None and not os.path.isfile(sectors_file):
-        raise ValueError(f"{sectors_file} does not exist")
+    if len(sectors_files) != len(sectors_names):
+        raise AttributeError("Number of sector files must match the number "
+                             "of sector names")
+    for sectors_file in sectors_files:
+        if sectors_file is not None and not os.path.isfile(sectors_file):
+            raise ValueError(f"{sectors_file} does not exist")
 
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
@@ -121,30 +127,33 @@ def matrix_reporting(matrix_directory: str,
     output_files = glob(os.path.join(output_dir, "*.csv"))
 
     # Aggregate sectors if requried
-    if sectors_file is not None:
+    if sectors_files is not None:
         sr = SectorReporter()
         valid_files = output_files.copy()
         output_files = []
-        for matrix_file in valid_files:
-            # Write the sectored matrices in place
-            sr.aggregate_matrix_sectors(
-                matrix_file,
-                zone_system_name=zones_name,
-                zone_system_file=zone_file,
-                sector_grouping_file=sectors_file,
-                sector_system_name=sectors_name,
-                aggregation_method=aggregation_method
-            )
-            new_file = matrix_file.replace(".csv", "_sector.csv")
-            output_files.append(new_file)
-            os.replace(matrix_file, new_file)
+        for sectors_file, sectors_name in zip(sectors_files, sectors_names):
+            for matrix_file in valid_files:
+                # Write the sectored matrices in place
+                sr.aggregate_matrix_sectors(
+                    matrix_file,
+                    zone_system_name=zones_name,
+                    zone_system_file=zone_file,
+                    sector_grouping_file=sectors_file,
+                    sector_system_name=sectors_name,
+                    aggregation_method=aggregation_method
+                )
+                suffix = f"_{sectors_name}.csv"
+                new_file = matrix_file.replace(".csv", suffix)
+                output_files.append(new_file)
+                os.replace(matrix_file, new_file)
 
-    # Create a GIS format report
-    generate_gis_report(
-        output_files,
-        parsed_segments["years"],
-        parsed_segments["p"]
-    )
+    if collate_years:
+        # Create a GIS format report
+        generate_gis_report(
+            output_files,
+            parsed_segments["years"],
+            parsed_segments["p"]
+        )
 
     return success
 
@@ -356,7 +365,6 @@ def tld_reporting(matrix_dir: str,
             echo=True
         )
 
-        
         # Set the string sent to the costs function
         # TODO fix for NORMS tp costs - do not exist at the moment
         tp_str = "24hr" if tp is None else "tp"
@@ -385,7 +393,8 @@ def tld_reporting(matrix_dir: str,
 
         # This bit matches the shape to the NORMS cost zones
         # TODO see why this is needed - zoning mismatch
-        pad_matrix = np.zeros((1300, 1300))
+        fill_shape = 1246
+        pad_matrix = np.zeros((fill_shape, fill_shape))
         pad_matrix[:matrix.shape[0], :matrix.shape[1]] = matrix
 
         # Get trip length by band
@@ -531,7 +540,7 @@ def load_report_params(param_file: str) -> None:
     return params
 
 
-def test(param_file):
+def main(param_file, imports, exports):
     """Reads in a parameter file (JSON) and creates the defined matrix
     summaries
 
@@ -546,25 +555,39 @@ def test(param_file):
 
     errors = []
     overwrite = True
+    
+    output_dir = os.path.join(exports["reports"], params["output_dir"])
+    zones_file = os.path.join(imports["zoning"], params["zones_file"])
+    sectors_files = [os.path.join(imports["zone_translation"], x) 
+                    for x in params["sectors_files"]]
+    tld_path = os.path.join(imports["home"], params["tld_path"])
+    cost_path = os.path.join(imports["home"], params["cost_path"])
+    
+    overwrite = params["overwrite_outputs"]
+    collate_years = params["collate_years"]
+    
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
 
     for matrix_format in params["matrix_directories"].keys():
 
-        matrix_directory = params["matrix_directories"][matrix_format]
+        matrix_dir = exports[params["matrix_directories"][matrix_format]]
 
         successful = matrix_reporting(
-            matrix_directory,
-            params["output_dir"],
-            params["trip_origin"],
-            params["matrix_format"],
+            matrix_directory=matrix_dir,
+            output_dir=output_dir,
+            trip_origin=params["trip_origin"],
+            matrix_format=params["matrix_format"],
             segments_needed=params["segments_needed"],
-            zone_file=params["zones_file"],
-            zones_name="norms",
-            sectors_name="tfn_sectors",
-            sectors_file=params["sectors_file"],
+            zone_file=zones_file,
+            zones_name=params["zones_name"],
+            sectors_names=params["sectors_names"],
+            sectors_files=sectors_files,
             aggregation_method="sum",
             overwrite_dir=overwrite,
-            tld_path=params.get("tld_path"),
-            cost_path=params.get("cost_path")
+            tld_path=tld_path,
+            cost_path=cost_path,
+            collate_years=collate_years
         )
 
         if not successful:
@@ -579,11 +602,30 @@ def test(param_file):
 if __name__ == "__main__":
     # Run the configuration files to produce the report formats required by
     # Power BI
-    pa_params = r"C:\Users\Monopoly\Documents\EFS\data\params\pa.json"
-    test(pa_params)
-    tp_pa_params = r"C:\Users\Monopoly\Documents\EFS\data\params\tp_pa.json"
-    test(tp_pa_params)
-    nhb_params = r"C:\Users\Monopoly\Documents\EFS\data\params\nhb_pa.json"
-    test(nhb_params)
+    
+    import_location = "Y:/"
+    output_location = "C:/"
+    model_name = "norms_2015"
+    iter_num = 1
+    iter_name = f"iter{iter_num}"
+    
+    efs_main = efs.ExternalForecastSystem(
+        model_name=model_name,
+        import_location=import_location,
+        output_location=output_location
+    )
+    
+    imports, exports, _ = efs_main.generate_output_paths(
+        output_location,
+        model_name,
+        iter_name
+    )
+    
+    pa_params = r"C:\Users\Monopoly\Documents\EFS\data\params\pav2.json"
+    main(pa_params, imports, exports)
+    # tp_pa_params = r"C:\Users\Monopoly\Documents\EFS\data\params\tp_pa.json"
+    # main(tp_pa_params)
+    # nhb_params = r"C:\Users\Monopoly\Documents\EFS\data\params\nhb_pa.json"
+    # main(nhb_params)
     # test_params = r"C:\Users\Monopoly\Documents\EFS\data\params\test.json"
-    # test(test_params)
+    # main(test_params)
