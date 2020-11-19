@@ -1668,29 +1668,6 @@ def copy_nhb_matrices(import_dir: str,
         )
 
 
-def convert_wide_to_long(import_dir: str,
-                         export_dir: str,
-                         id_vars: str = 'o_zone',
-                         var_name: str = 'd_zone',
-                         value_name: str = 'trips',
-                         echo: bool = True
-                         ) -> None:
-    # TODO: Write convert_wide_to_long() docs
-    desc = 'Converting Matrices'
-    for mat_name in tqdm(du.list_files(import_dir), desc=desc, disable=(not echo)):
-        in_path = os.path.join(import_dir, mat_name)
-        out_path = os.path.join(export_dir, mat_name)
-
-        df = pd.read_csv(in_path)
-        du.wide_to_long_out(
-            df,
-            id_vars,
-            var_name,
-            value_name,
-            out_path
-        )
-
-
 def compile_matrices(mat_import: str,
                      mat_export: str,
                      compile_params_path: str,

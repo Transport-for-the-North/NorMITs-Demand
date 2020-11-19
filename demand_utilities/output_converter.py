@@ -96,3 +96,26 @@ def noham_vdm_tour_proportions_out(input_path: str,
 
         print("Writing %s to disk..." % csv_tour_props_name)
         pd.DataFrame(output_ph).to_csv(out_path, index=False)
+
+
+def convert_wide_to_long(import_dir: str,
+                         export_dir: str,
+                         id_vars: str = 'o_zone',
+                         var_name: str = 'd_zone',
+                         value_name: str = 'trips',
+                         echo: bool = True
+                         ) -> None:
+    # TODO: Write convert_wide_to_long() docs
+    desc = 'Converting Matrices'
+    for mat_name in tqdm(du.list_files(import_dir), desc=desc, disable=(not echo)):
+        in_path = os.path.join(import_dir, mat_name)
+        out_path = os.path.join(export_dir, mat_name)
+
+        df = pd.read_csv(in_path)
+        du.wide_to_long_out(
+            df,
+            id_vars,
+            var_name,
+            value_name,
+            out_path
+        )

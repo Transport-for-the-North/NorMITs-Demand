@@ -276,23 +276,22 @@ def vdm_segmentation_tests(model_name,
 
     if create_outputs_for_vdm:
         # Create 24hr PA HB
-        # mat_p.build_24hr_vdm_mats(
-        #     import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM PA Matrices',
-        #     export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
-        #     matrix_format='pa',
-        #     years_needed=[consts.BASE_YEAR],
-        #     **seg_params
-        # )
+        mat_p.build_24hr_vdm_mats(
+            import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM PA Matrices',
+            export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
+            matrix_format='pa',
+            years_needed=[consts.BASE_YEAR],
+            **seg_params
+        )
 
-        # Convert tour props to systra format
-        # oc.noham_vdm_tour_proportions_out(
-        #     input_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
-        #     output_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Noham Tour Proportions',
-        #     year=consts.BASE_YEAR,
-        #     seg_level=seg_level,
-        #     seg_params=seg_params,
-        # )
-
+        # Convert tour props to noham vdm format
+        oc.noham_vdm_tour_proportions_out(
+            input_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
+            output_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Noham Tour Proportions',
+            year=consts.BASE_YEAR,
+            seg_level=seg_level,
+            seg_params=seg_params,
+        )
 
         # Create 24hr OD NHB - with TP splitting factors
         out_seg_params = seg_params.copy()
@@ -308,13 +307,13 @@ def vdm_segmentation_tests(model_name,
 
     if pa_back_to_od_check:
         # TODO: Consolidate build_24hr_vdm_mats() and build_24hr_mats()
-        # mat_p.build_24hr_vdm_mats(
-        #     import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM PA Matrices',
-        #     export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
-        #     matrix_format='pa',
-        #     years_needed=[consts.BASE_YEAR],
-        #     **seg_params
-        # )
+        mat_p.build_24hr_vdm_mats(
+            import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM PA Matrices',
+            export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
+            matrix_format='pa',
+            years_needed=[consts.BASE_YEAR],
+            **seg_params
+        )
 
         pa2od.build_od_from_tour_proportions(
             pa_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
