@@ -319,27 +319,17 @@ def apply_d_log_population(population: pd.DataFrame,
     updated_population["sector_id"] = updated_population[msoa_column].map(
         la_equivalence.set_index(msoa_column)["grouping_id"]
     )
-    updated_population["seg_s"] = (
-        updated_population.groupby(
-            ["sector_id", "traveller_type", "soc", "ns", "ca"]
+    # Calculate the split for each sector
+    segment_split = updated_population.groupby(
+        [msoa_column, "sector_id", "soc", "ns", "ca"],
+        as_index=False
+    )[[base_year] + future_years].sum()
+    segment_split["seg_s"] = (
+        segment_split.groupby(
+            ["sector_id", "soc", "ns", "ca"]
         )[base_year].transform("sum")
-        / updated_population.groupby(
-            "sector_id"
-        )[base_year].transform("sum")
+        / segment_split.groupby("sector_id")[base_year].transform("sum")
     )
-    # Adjust to handle zeroes in the base for some MSOAS within sectors
-    updated_population["adj_seg_s"] = updated_population["seg_s"]
-    updated_population.loc[
-        updated_population[base_year] == 0,
-        "adj_seg_s"
-    ] = 0.0
-    updated_population.loc[
-        updated_population[base_year] != 0.0,
-        "adj_seg_s"
-    ] /= updated_population.loc[
-        updated_population[base_year] != 0.0].groupby(
-            msoa_column
-    )["adj_seg_s"].transform("sum")
 
     # Read in development log data
     dlog_data = du.safe_read_csv(dlog_path)
@@ -442,7 +432,6 @@ def apply_d_log_population(population: pd.DataFrame,
         )[year].sum()
 
         # Calculate the new growth as base year pop + population from dlog
-        # TODO should this be done over all segments?
         dlog_subset.rename({year: "dlog_data"}, axis=1, inplace=True)
         population_factors = population_factors.merge(
             dlog_subset,
@@ -452,13 +441,39 @@ def apply_d_log_population(population: pd.DataFrame,
         population_factors["dlog_data"].fillna(0.0, inplace=True)
 
         # Join to population dataframe and replace old values
+        
         print(f"Previous {year} total = {updated_population[year].sum()}")
-        updated_population[year] += (
-            updated_population["adj_seg_s"]
-            * updated_population[msoa_column].map(
-                population_factors.set_index(msoa_column)["dlog_data"]
-            ).fillna(0.0)
+        # Calculate the new growth factors by segment share
+        post_dlog = f"dlog_{year}"
+        adj_growth = f"adj_growth_{year}"
+        segment_split[post_dlog] = (
+            segment_split[year]
+            + (
+                segment_split["seg_s"]
+                * segment_split[msoa_column].map(
+                    population_factors.set_index(msoa_column)["dlog_data"]
+                )
+            )
         )
+        # Set default to zero
+        segment_split[adj_growth] = (
+            segment_split[post_dlog] 
+            / segment_split[base_year]
+        )
+        segment_split.loc[segment_split[base_year] == 0, adj_growth] = 0
+        # Update original data with new segment growth
+        merge_cols = [msoa_column, "soc", "ns", "ca"]
+        updated_population = pd.merge(
+            updated_population,
+            segment_split[merge_cols + [adj_growth]],
+            on=merge_cols,
+            how="left"
+        )
+        updated_population[year] = (
+            updated_population[base_year]
+            * updated_population[adj_growth]
+        )
+
         print(f"New {year} total = {updated_population[year].sum()}")
 
         if perform_constraint:
@@ -470,9 +485,9 @@ def apply_d_log_population(population: pd.DataFrame,
                 year=year,
                 msoa_column=msoa_column
             )
-        print(f"Post constraint total = {updated_population[year].sum()}")
+            print(f"Post constraint total = {updated_population[year].sum()}")
 
-        # Drop any temporary tables
+        # Drop any temporary columns
         updated_population.drop(
             ["growth", "constraint", "sector_growth"],
             axis=1,
@@ -484,9 +499,9 @@ def apply_d_log_population(population: pd.DataFrame,
             inplace=True
         )
 
-    # Drop any temporary tables
+    # Drop any temporary columns
     updated_population.drop(
-        ["sector_id", "seg_s", "adj_seg_s"],
+        ["sector_id"],
         axis=1,
         inplace=True
     )
