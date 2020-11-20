@@ -1979,7 +1979,7 @@ class ExternalForecastSystem:
         # Generate import and export paths
         model_home = os.path.join(self.import_location, self._out_dir)
         import_home = os.path.join(model_home, 'import')
-        input_home = os.path.join(model_home, 'inputs', 'default')
+        input_home = os.path.join(import_home, 'default')
 
         imports = {
             'home': import_home,

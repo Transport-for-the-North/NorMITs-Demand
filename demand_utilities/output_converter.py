@@ -26,8 +26,6 @@ from tqdm import tqdm
 import demand_utilities.utils as du
 
 
-
-
 def noham_vdm_tour_proportions_out(input_path: str,
                                    output_path: str,
                                    year: Union[str, int],
