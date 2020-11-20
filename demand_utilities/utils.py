@@ -143,6 +143,165 @@ def validate_vdm_seg_params(seg_params: Dict[str, Any]) -> Dict[str, Any]:
     return seg_params
 
 
+def build_io_paths(import_location: str,
+                   export_location: str,
+                   model_name: str,
+                   iter_name: str,
+                   demand_version: str,
+                   demand_dir_name: str = 'NorMITs Demand',
+                   ) -> Tuple[dict, dict, dict]:
+    """
+    Builds three dictionaries of paths to the locations of all inputs and
+    outputs for EFS
+
+    Parameters
+    ----------
+    import_location:
+        The directory the import directory exists - a dir named
+        self._out_dir (NorMITs Demand) should exist here. Usually
+        a drive name e.g. Y:/
+
+    export_location:
+        The directory to create the new output directory in - a dir named
+        self._out_dir (NorMITs Demand) should exist here. Usually
+        a drive name e.g. Y:/
+
+    model_name:
+        TfN model name in use e.g. norms or noham
+
+    iter_name:
+        The name of the iteration being run. Usually of the format iterx,
+        where x is a number, e.g. iter3
+
+    demand_version:
+        Version number of NorMITs Demand being run - this is used to generate
+        the correct output path.
+
+    demand_dir_name:
+        The name used for the NorMITs Demand input/output directories.
+
+
+    Returns
+    -------
+    imports:
+        Dictionary of import paths with the following keys:
+        imports, lookups, seed_dists, default
+
+    exports:
+        Dictionary of export paths with the following keys:
+        productions, attractions, pa, od, pa_24, od_24, sectors
+
+    params:
+        Dictionary of parameter export paths with the following keys:
+        compile, tours
+
+    """
+    # TODO: Tidy up Y:/ drive imports/inputs folders after contract
+    # Init
+    model_name = model_name.lower()
+
+    # ## IMPORT PATHS ## #
+    # Attraction weights are a bit special, we get these directly from
+    # TMS to ensure they are the same - update this on integration
+    temp_model_name = 'norms' if model_name == 'norms_2015' else model_name
+    tms_path_parts = [
+        import_location,
+        "NorMITs Synthesiser",
+        temp_model_name,
+        "Model Zone Lookups",
+        "attraction_weights.csv"
+    ]
+    a_weights_path = os.path.join(*tms_path_parts)
+
+    # Generate import and export paths
+    model_home = os.path.join(import_location, demand_dir_name)
+    import_home = os.path.join(model_home, 'import')
+    input_home = os.path.join(model_home, 'inputs', 'default')
+
+    imports = {
+        'home': import_home,
+        'default_inputs': input_home,
+        'tp_splits': os.path.join(import_home, 'tp_splits'),
+        'zone_translation': os.path.join(import_home, 'zone_translation'),
+        'lookups': os.path.join(model_home, 'lookup'),
+        'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
+        'zoning': os.path.join(input_home, 'zoning'),
+        'a_weights': a_weights_path
+    }
+
+    #  ## EXPORT PATHS ## #
+    # Create home paths
+    fname_parts = [
+        export_location,
+        demand_dir_name,
+        model_name,
+        demand_version + "-EFS_Output",
+        iter_name,
+    ]
+    export_home = os.path.join(*fname_parts)
+    matrices_home = os.path.join(export_home, 'Matrices')
+    post_me_home = os.path.join(matrices_home, 'Post-ME Matrices')
+
+    # Create consistent filenames
+    pa = 'PA Matrices'
+    pa_24 = '24hr PA Matrices'
+    od = 'OD Matrices'
+    od_24 = '24hr OD Matrices'
+    compiled = 'Compiled'
+    aggregated = 'Aggregated'
+
+    exports = {
+        'home': export_home,
+        'productions': os.path.join(export_home, 'Productions'),
+        'attractions': os.path.join(export_home, 'Attractions'),
+        'sectors': os.path.join(export_home, 'Sectors'),
+        'audits': os.path.join(export_home, 'Audits'),
+
+        # Pre-ME
+        'pa': os.path.join(matrices_home, pa),
+        'pa_24': os.path.join(matrices_home, pa_24),
+        'od': os.path.join(matrices_home, od),
+        'od_24': os.path.join(matrices_home, od_24),
+
+        'compiled_od': os.path.join(matrices_home, ' '.join([compiled, od])),
+
+        'aggregated_pa_24': os.path.join(matrices_home, ' '.join([aggregated, pa_24])),
+        'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
+    }
+
+    for _, path in exports.items():
+        create_folder(path, chDir=False)
+
+    # Post-ME
+    compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
+    post_me_exports = {
+        'pa': os.path.join(post_me_home, pa),
+        'pa_24': os.path.join(post_me_home, pa_24),
+        'od': os.path.join(post_me_home, od),
+        'od_24': os.path.join(post_me_home, od_24),
+        'compiled_od': compiled_od_path,
+        'model_output': os.path.join(compiled_od_path, ''.join(['from_', model_name]))
+    }
+
+    for _, path in post_me_exports.items():
+        create_folder(path, chDir=False)
+
+    # Combine into full export dict
+    exports['post_me'] = post_me_exports
+
+    # ## PARAMS OUT ## #
+    param_home = os.path.join(export_home, 'Params')
+
+    params = {
+        'home': param_home,
+        'compile': os.path.join(param_home, 'Compile Params'),
+        'tours': os.path.join(param_home, 'Tour Proportions')
+    }
+    for _, path in params.items():
+        create_folder(path, chDir=False)
+
+    return imports, exports, params
+
 
 def grow_to_future_years(base_year_df: pd.DataFrame,
                          growth_df: pd.DataFrame,
@@ -609,7 +768,7 @@ def add_fname_suffix(fname: str, suffix: str):
 
 
 def safe_read_csv(file_path: str,
-                  **kwargs
+                  kwargs: Dict[str, Any] = None
                   ) -> pd.DataFrame:
     """
     Reads in the file and performs some simple file checks
@@ -627,6 +786,10 @@ def safe_read_csv(file_path: str,
     dataframe:
         The data from file_path
     """
+    # Init
+    if kwargs is None:
+        kwargs = dict()
+
     # TODO: Add any more error checks here
     # Check file exists
     if not os.path.exists(file_path):
@@ -2145,6 +2308,7 @@ def get_costs(model_lookup_path,
     Returns
     ----------
     dat:
+        DataFrame containing required cost or distance values.
         DataFrame containing required cost or distance values.
     """
     # units takes different parameters

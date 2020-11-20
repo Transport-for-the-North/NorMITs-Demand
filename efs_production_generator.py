@@ -96,7 +96,7 @@ class EFSProductionGenerator:
         Performs the following functions:
             - Reads in the base year land use data to create the base year
               population numbers
-            - Grows the base year population by population_growth factors,
+            - Grows the base year population by pop_growth factors,
               resulting in future year population numbers.
             - Combines base and future year population numbers with trip_rates
               (currently the same across all years) to produce the base and
