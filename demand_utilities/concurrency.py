@@ -20,6 +20,8 @@ import traceback
 
 from typing import Any
 from typing import List
+from typing import Dict
+from typing import Iterable
 from typing import Callable
 
 from multiprocessing import Event
@@ -282,8 +284,8 @@ def _process_pool_wrapper_kwargs_out_order(fn,
 
 
 def multiprocess(fn: Callable,
-                 args: List[Any] = None,
-                 kwargs: List[Any] = None,
+                 args: List[Iterable[Any]] = None,
+                 kwargs: List[Dict[str, Any]] = None,
                  process_count: int = os.cpu_count()-1,
                  pool_maxtasksperchild: int = 4,
                  in_order: bool = False,
