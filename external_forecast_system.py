@@ -81,16 +81,15 @@ class ExternalForecastSystem:
                  import_home: str = "Y:/",
                  export_home: str = "E:/"
                  ):
-        """
-        #TODO
-        """
+        # TODO: Write EFS constructor docs
+        # TODO: Re-write constraints handling in the base year
+        #  Current method is confusing, will only get worse with scenarios
         # Initialise the timer
         begin_time = time.time()
         current_time = begin_time
         print("Initiating External Forecast System...")
 
         # TODO: Infer filenames/paths based on scenario
-
         # Initialise
         self.model_name = model_name
         self.iter_name = 'iter' + str(iter_num)
@@ -137,23 +136,23 @@ class ExternalForecastSystem:
 
         # Read in population files
         file_path = os.path.join(input_dir, self.base_pop_path)
-        self.population_values = du.safe_read_csv(file_path)
+        self.base_pop = du.safe_read_csv(file_path)
 
         file_path = os.path.join(input_dir, self.pop_growth_path)
-        self.population_growth = du.safe_read_csv(file_path)
+        self.pop_growth = du.safe_read_csv(file_path)
 
         file_path = os.path.join(input_dir, self.pop_constraint_path)
-        self.population_constraint = du.safe_read_csv(file_path)
+        self.pop_constraint = du.safe_read_csv(file_path)
 
         # Worker files
         file_path = os.path.join(input_dir, self.base_emp_path)
-        self.worker_values = du.safe_read_csv(file_path)
+        self.base_emp = du.safe_read_csv(file_path)
 
         file_path = os.path.join(input_dir, self.emp_growth_path)
-        self.worker_growth = du.safe_read_csv(file_path)
+        self.emp_growth = du.safe_read_csv(file_path)
 
         file_path = os.path.join(input_dir, self.emp_constraint_path)
-        self.worker_constraint = du.safe_read_csv(file_path)
+        self.emp_constraint = du.safe_read_csv(file_path)
 
         # Zone and area files
         file_path = os.path.join(input_dir, self.msoa_lookup_path)
@@ -542,10 +541,10 @@ class ExternalForecastSystem:
 
             population_values = integrated_assumptions[0][base_year_pop_cols]
             # households_values = integrated_assumptions[1][base_year_hh_cols]
-            worker_values = integrated_assumptions[2][base_year_workers_cols]
-            population_growth = integrated_assumptions[3][pop_cols]
+            base_emp = integrated_assumptions[2][base_year_workers_cols]
+            pop_growth = integrated_assumptions[3][pop_cols]
             # households_growth = integrated_assumptions[4][hh_cols]
-            worker_growth = integrated_assumptions[5][emp_cols]
+            emp_growth = integrated_assumptions[5][emp_cols]
 
             # TODO: Remove unneeded files
             # population_split = self.future_population_ratio[pop_ratio_cols].copy()
@@ -586,8 +585,8 @@ class ExternalForecastSystem:
             # # COPY OVER VALUES # #
             print("No need to integrate alternative assumptions.")
             print("Reading in default values...")
-            population_values = self.population_values[base_year_pop_cols].copy()
-            population_growth = self.population_growth[pop_cols].copy()
+            base_pop = self.base_pop[base_year_pop_cols].copy()
+            pop_growth = self.pop_growth[pop_cols].copy()
             # population_split = self.future_population_ratio[pop_ratio_cols].copy()
 
             # households_values = self.households_values[base_year_hh_cols].copy()
@@ -595,8 +594,8 @@ class ExternalForecastSystem:
             # housing_type_split = self.housing_type_split[hh_occupancy_cols].copy()
             # housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
 
-            worker_values = self.worker_values[base_year_workers_cols].copy()
-            worker_growth = self.worker_growth[emp_cols].copy()
+            base_emp = self.base_emp[base_year_workers_cols].copy()
+            emp_growth = self.emp_growth[emp_cols].copy()
             # worker_split = self.worker_splits[emp_ratio_cols].copy()
 
             # # Need to rename cols to names used in code
@@ -668,13 +667,13 @@ class ExternalForecastSystem:
         if constraint_source == "default":
             print("Constraint 'default' selected, retrieving constraint "
                   + "data...")
-            population_constraint = self.population_constraint[pop_cols].copy()
+            pop_constraint = self.pop_constraint[pop_cols].copy()
 
             # households_constraint = self.households_constraint[hh_cols].copy()
 
-            worker_constraint = self.worker_constraint[emp_cols].copy()
-            worker_constraint = self.constrainer.convert_constraint_off_base_year(
-                worker_constraint,
+            emp_constraint = self.emp_constraint[emp_cols].copy()
+            emp_constraint = self.constrainer.convert_constraint_off_base_year(
+                emp_constraint,
                 str(base_year),
                 year_list
             )
@@ -688,10 +687,10 @@ class ExternalForecastSystem:
         elif constraint_source == "grown base":
             print("Constraint 'grown base' source selected, growing given "
                   "base by default growth factors...")
-            population_constraint = self.population_constraint[pop_cols].copy()
-            population_constraint = constrainer.grow_constraint(
-                population_constraint,
-                population_growth,
+            pop_constraint = self.pop_constraint[pop_cols].copy()
+            pop_constraint = constrainer.grow_constraint(
+                pop_constraint,
+                pop_growth,
                 str(base_year),
                 [str(x) for x in future_years]
             )
@@ -705,17 +704,17 @@ class ExternalForecastSystem:
             # )
 
             # Update this with attraction model updates
-            worker_constraint = self.worker_growth[emp_cols].copy()
+            emp_constraint = self.emp_growth[emp_cols].copy()
 
-            worker_constraint = du.convert_growth_off_base_year(
-                worker_constraint,
+            emp_constraint = du.convert_growth_off_base_year(
+                emp_constraint,
                 str(base_year),
                 year_list
             )
-            worker_constraint = du.get_grown_values(worker_values,
-                                                    worker_constraint,
+            emp_constraint = du.get_grown_values(base_emp,
+                                                 emp_constraint,
                                                     "base_year_workers",
-                                                    year_list)
+                                                 year_list)
             print("Constraint generated!")
             last_time = current_time
             current_time = time.time()
@@ -734,8 +733,8 @@ class ExternalForecastSystem:
         production_trips = self.production_generator.run(
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
-            population_growth=population_growth,
-            population_constraint=population_constraint,
+            population_growth=pop_growth,
+            population_constraint=pop_constraint,
             import_home=self.imports['home'],
             msoa_conversion_path=self.msoa_zones_path,
             control_productions=True,
@@ -763,8 +762,8 @@ class ExternalForecastSystem:
         attraction_dataframe, nhb_att = self.attraction_generator.run(
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
-            employment_growth=worker_growth,
-            employment_constraint=worker_constraint,
+            employment_growth=emp_growth,
+            employment_constraint=emp_constraint,
             import_home=self.imports['home'],
             msoa_conversion_path=self.msoa_zones_path,
             attraction_weights_path=self.imports['a_weights'],
@@ -1542,7 +1541,7 @@ class ExternalForecastSystem:
         if alt_pop_base_year_file is not None:
             alt_pop_base_year = pd.read_csv(alt_pop_base_year_file)
         else:
-            alt_pop_base_year = self.population_values.copy()
+            alt_pop_base_year = self.base_pop.copy()
 
         if alt_households_base_year_file is not None:
             alt_households_base_year = pd.read_csv(alt_households_base_year_file)
@@ -1552,12 +1551,12 @@ class ExternalForecastSystem:
         if alt_worker_base_year_file is not None:
             alt_worker_base_year = pd.read_csv(alt_worker_base_year_file)
         else:
-            alt_worker_base_year = self.worker_values.copy()
+            alt_worker_base_year = self.base_emp.copy()
 
         if alt_pop_growth_file is not None:
             alt_pop_growth = pd.read_csv(alt_pop_growth_file)
         else:
-            alt_pop_growth = self.population_growth.copy()
+            alt_pop_growth = self.pop_growth.copy()
 
         if alt_households_growth_file is not None:
             alt_households_growth = pd.read_csv(alt_households_growth_file)
@@ -1567,7 +1566,7 @@ class ExternalForecastSystem:
         if alt_worker_growth_file is not None:
             alt_worker_growth = pd.read_csv(alt_worker_growth_file)
         else:
-            alt_worker_growth = self.worker_growth.copy()
+            alt_worker_growth = self.emp_growth.copy()
 
         # ## ZONE TRANSLATION OF ALTERNATE ASSUMPTIONS ## #
         # TODO: Maybe allow zone translation, maybe requiring sticking to base
@@ -1575,7 +1574,7 @@ class ExternalForecastSystem:
         # ## COMBINE BASE & ALTERNATE ASSUMPTIONS ## #
         # integrate alternate population base
         if alt_pop_base_year_file is not None:
-            default_pop_vals = self.population_values[base_year_pop_cols].copy()
+            default_pop_vals = self.base_pop[base_year_pop_cols].copy()
 
             # Create a mask of the overlaps
             mask = (default_pop_vals["model_zone_id"].isin(
@@ -1610,7 +1609,7 @@ class ExternalForecastSystem:
         if alt_worker_base_year_file is not None:
             alt_worker_base_year = pd.read_csv(alt_worker_base_year_file)
             alternate_worker_base_year_zones = alt_worker_base_year["model_zone_id"].values
-            default_worker_values = self.worker_values[base_year_pop_cols].copy()
+            default_worker_values = self.base_emp[base_year_pop_cols].copy()
             default_worker_values.loc[
                 default_worker_values["model_zone_id"].isin(alternate_worker_base_year_zones),
                 "base_year_population"
@@ -1630,7 +1629,7 @@ class ExternalForecastSystem:
                 alt_pop_growth[year] = alt_pop_growth[year].astype(float)
                 alt_pop_growth[year + "_difference"] = None
 
-            default_pop_growth = self.population_growth.copy()
+            default_pop_growth = self.pop_growth.copy()
 
             for zone in alt_pop_growth_zones:
                 for year in columns:
@@ -1720,7 +1719,7 @@ class ExternalForecastSystem:
                 alt_worker_growth[year] = alt_worker_growth[year].astype(float)
                 alt_worker_growth[year + "_difference"] = None
 
-            default_worker_growth = self.worker_growth.copy()
+            default_worker_growth = self.emp_growth.copy()
 
             for zone in alternate_worker_growth_zones:
                 for year in columns:
@@ -2224,7 +2223,7 @@ def main():
 
     # Running control
     run_base_efs = True
-    recreate_productions = True
+    recreate_productions = False
     recreate_attractions = True
 
     constrain_population = False
