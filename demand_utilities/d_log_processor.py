@@ -275,6 +275,47 @@ def constrain_post_dlog(df: pd.DataFrame,
     return df
 
 
+def estimate_dlog_build_out(dlog: pd.DataFrame,
+                            year: str,
+                            start_date_col: str,
+                            end_date_col: str,
+                            data_key: str,
+                            ) -> pd.DataFrame:
+    
+    parsed_dlog = dlog.copy()
+    
+    # Get the total development impact (population or employees)
+    data_columns = [col for col in parsed_dlog.columns if data_key in col]
+    parsed_dlog["total"] = parsed_dlog[data_columns].sum(axis=1)
+    
+    # Add a column to represent the forecast date
+    parsed_dlog["future_year"] = pd.to_datetime(
+        f"{year}-01-01",
+        format="%Y-%m-%d"
+    )
+    
+    # Handle forecast year inside of development dates
+    parsed_dlog[year] = (
+        (parsed_dlog["future_year"] - parsed_dlog[start_date_col]).dt.days
+        / (parsed_dlog[end_date_col] - parsed_dlog[start_date_col]).dt.days
+        * parsed_dlog["total"]
+    )
+    
+    # Handle forecast year before development dates
+    mask = parsed_dlog["future_year"] <= parsed_dlog[start_date_col]
+    parsed_dlog.loc[mask, year] = 0.0
+    
+    # Handle forecast year after development dates
+    mask = parsed_dlog[end_date_col] <= parsed_dlog["future_year"]
+    parsed_dlog.loc[mask, year] = parsed_dlog.loc[mask, "total"]
+    
+    # Check for errors
+    errors = parsed_dlog.loc[parsed_dlog.isna().any(axis=1)]
+    
+    return parsed_dlog, errors
+    
+    
+
 def apply_d_log(pre_dlog_df: pd.DataFrame,
                 base_year:  str,
                 future_years: List[str],
@@ -286,7 +327,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
                 development_zone_lookup: str,
                 msoa_zones: str,
                 msoa_column: str = "msoa_zone_id",
-                total_column: str = "units_of_properties",
+                dlog_data_column_key: str = "population",
                 perform_constraint: bool = True,
                 audit_location: str = None
                 ) -> pd.DataFrame:
@@ -343,7 +384,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     dlog_data = set_datetime_types(
         dlog_data,
         [start_date, end_date],
-        format="%d/%m/%Y",
+        format="%Y-%m-%d",
         errors="coerce"
     )
 
@@ -373,67 +414,74 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         print(f"Replacing D-LOG data for {year}")
 
         dlog_subset = dlog_data.copy()
-        dlog_columns = [development_id,
-                        total_column,
-                        start_date,
-                        end_date]
+        # dlog_columns = [development_id,
+        #                 total_column,
+        #                 start_date,
+        #                 end_date]
 
-        dlog_subset = parse_dlog_build_out(
+        # dlog_subset = parse_dlog_build_out(
+        #     dlog=dlog_subset,
+        #     year=year,
+        #     dlog_columns=dlog_columns
+        # )
+        dlog_subset, dlog_missing_data = estimate_dlog_build_out(
             dlog=dlog_subset,
             year=year,
-            dlog_columns=dlog_columns
+            start_date_col=start_date,
+            end_date_col=end_date,
+            data_key=dlog_data_column_key
         )
         print(f"D-LOG data contains {dlog_subset[year].sum()} units")
 
         # Where the build out profile contains nothing, check the start
         # and end dates, if relevant then use these
-        if (dlog_subset[year] == 0).sum() > 0:
+        # if (dlog_subset[year] == 0).sum() > 0:
 
-            infill_data, dlog_errors = infill_dlog_build_out(
-                dlog=dlog_subset,
-                year=year,
-                start_date_col=start_date,
-                end_date_col=end_date,
-                development_id_col=development_id,
-                total_column=total_column
-            )
+        #     infill_data, dlog_errors = infill_dlog_build_out(
+        #         dlog=dlog_subset,
+        #         year=year,
+        #         start_date_col=start_date,
+        #         end_date_col=end_date,
+        #         development_id_col=development_id,
+        #         total_column=total_column
+        #     )
 
-            dlog_subset = dlog_subset.merge(
-                infill_data[[development_id, "filled_data"]],
-                on=development_id,
-                how="left"
-            )
-            dlog_subset["filled_data"].fillna(dlog_subset[year], inplace=True)
-            dlog_subset = dlog_subset.drop(
-                year, axis=1
-            ).rename(
-                {"filled_data": year}, axis=1
-            )
-            print(f"Overriding {infill_data.shape[0]} developments")
-            # Collate errors
-            if dlog_missing_data.empty:
-                dlog_missing_data = dlog_errors
-            else:
-                dlog_missing_data = dlog_missing_data.merge(
-                    dlog_errors,
-                    on=development_id
-                )
+        #     dlog_subset = dlog_subset.merge(
+        #         infill_data[[development_id, "filled_data"]],
+        #         on=development_id,
+        #         how="left"
+        #     )
+        #     dlog_subset["filled_data"].fillna(dlog_subset[year], inplace=True)
+        #     dlog_subset = dlog_subset.drop(
+        #         year, axis=1
+        #     ).rename(
+        #         {"filled_data": year}, axis=1
+        #     )
+        #     print(f"Overriding {infill_data.shape[0]} developments")
+        #     # Collate errors
+        #     if dlog_missing_data.empty:
+        #         dlog_missing_data = dlog_errors
+        #     else:
+        #         dlog_missing_data = dlog_missing_data.merge(
+        #             dlog_errors,
+        #             on=development_id
+        #         )
 
-            print(f"Infill data contains {infill_data['filled_data'].sum()} units")
-            print(f"D-LOG data contains {dlog_subset[year].sum()} units")
+        #     print(f"Infill data contains {infill_data['filled_data'].sum()} units")
+        #     print(f"D-LOG data contains {dlog_subset[year].sum()} units")
 
         # Convert to population / employment
         dlog_subset[year] *= dlog_conversion_factor
 
         # Map to MSOA zones
-        dlog_subset = dlog_subset.merge(zone_lookup, on=development_id)
-        dlog_subset = du.convert_msoa_naming(
-            dlog_subset,
-            msoa_col_name="msoa11cd",
-            msoa_path=msoa_zones,
-            to="int"
-        )
-        dlog_subset.rename({"msoa11cd": msoa_column}, axis=1, inplace=True)
+        # dlog_subset = dlog_subset.merge(zone_lookup, on=development_id)
+        # dlog_subset = du.convert_msoa_naming(
+        #     dlog_subset,
+        #     msoa_col_name="msoa11cd",
+        #     msoa_path=msoa_zones,
+        #     to="int"
+        # )
+        # dlog_subset.rename({"msoa11cd": msoa_column}, axis=1, inplace=True)
         dlog_subset = dlog_subset.groupby(
             msoa_column,
             as_index=False
@@ -521,6 +569,10 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     )
     dlog_missing_data.to_csv(
         os.path.join(audit_location, "dlog_errors.csv"),
+        index=False
+    )
+    segment_split.to_csv(
+        os.path.join(audit_location, "segment_splits.csv"),
         index=False
     )
 
