@@ -17,6 +17,21 @@ import pandas as pd
 
 from collections import defaultdict
 
+import demand_utilities.utils as du
+
+
+class AuditError(du.NormitsDemandError):
+    """
+    Exception raised for errors when auditing values
+    """
+
+    def __init__(self, message=None):
+        self.message = message
+        super().__init__(self.message)
+
+    def __str__(self):
+        return self.message
+
 
 def audit_furness(row_targets: pd.DataFrame,
                   col_targets: pd.DataFrame,

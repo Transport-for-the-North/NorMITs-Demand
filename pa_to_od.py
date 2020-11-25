@@ -17,6 +17,7 @@ TODO: After integrations with TMS, combine with pa_to_od.py
 import numpy as np
 import pandas as pd
 
+from typing import Any
 from typing import List
 from typing import Dict
 from itertools import product
@@ -82,7 +83,6 @@ def _build_tp_pa_internal(pa_import,
                           mode,
                           segment,
                           car_availability,
-                          model_zone,
                           tp_import
                           ):
     """
@@ -98,10 +98,12 @@ def _build_tp_pa_internal(pa_import,
         tp_split_fname = 'export_nhb_productions_norms.csv'
         tp_split_path = os.path.join(tp_import, tp_split_fname)
         trip_origin = 'nhb'
+        model_zone = 'o_zone'
     elif purpose in consts.ALL_HB_P:
         tp_split_fname = 'export_productions_norms.csv'
         tp_split_path = os.path.join(tp_import, tp_split_fname)
         trip_origin = 'hb'
+        model_zone = 'p_zone'
     else:
         raise ValueError(
             "%s is neither a home based nor non-home based purpose."
@@ -319,22 +321,11 @@ def efs_build_tp_pa(tp_import: str,
     ns_needed = [None] if ns_needed is None else ns_needed
     ca_needed = [None] if ca_needed is None else ca_needed
 
-    # Loop Init
-    if matrix_format == 'pa':
-        model_zone = 'p_zone'
-    elif matrix_format == 'od':
-        model_zone = 'o_zone'
-    else:
-        # Shouldn't be able to get here
-        raise ValueError("'%s' seems to be a valid matrix format, "
-                         "but build_tp_pa() cannot handle it.")
-
     # ## MULTIPROCESS ## #
     unchanging_kwargs = {
         'pa_import': pa_import,
         'pa_export': pa_export,
         'matrix_format': matrix_format,
-        'model_zone': model_zone,
         'tp_import': tp_import
     }
 
@@ -399,6 +390,10 @@ def _build_od_internal(pa_import,
 
     model_name = du.get_model_name(mode)
     model_zone_col = model_name + '_zone_id'
+
+    # Print out some info
+    dist_name = du.calib_params_to_dist_name('hb', 'od', calib_params)
+    print("Generating %s..." % dist_name)
 
     # Get appropriate phis and filter
     phi_factors = get_time_period_splits(
@@ -523,6 +518,7 @@ def _build_od_internal(pa_import,
         output_to_path = os.path.join(od_export, output_to_name)
         output_od_path = os.path.join(od_export, output_od_name)
 
+        # TODO: Add tidality checks into efs_build_od()
         # Auditing checks - tidality
         # OD from = PA
         # OD to = if it leaves it should come back
@@ -534,55 +530,93 @@ def _build_od_internal(pa_import,
 
         matrix_totals.append([output_name, from_total, to_total])
 
-    dist_name = du.calib_params_to_dist_name('hb', 'od', calib_params)
-    print("INFO: OD Matrices for %s written to file." % dist_name)
     return matrix_totals
 
 
-def efs_build_od(pa_import,
-                 od_export,
-                 required_purposes,
-                 required_modes,
-                 required_soc,
-                 required_ns,
-                 required_car_availabilities,
-                 year_string_list,
-                 phi_lookup_folder=None,
-                 phi_type='fhp_tp',
-                 aggregate_to_wday=True,
-                 echo=True):
+def efs_build_od(pa_import: str,
+                 od_export: str,
+                 p_needed: List[int],
+                 m_needed: List[int],
+                 soc_needed: List[int],
+                 ns_needed: List[int],
+                 ca_needed: List[int],
+                 years_needed: List[int],
+                 phi_lookup_folder: str = None,
+                 phi_type: str = 'fhp_tp',
+                 aggregate_to_wday: bool = True,
+                 echo: bool = True,
+                 process_count: int = -2
+                 ) -> None:
     """
-    This function imports time period split factors from a given path.W
+     This function imports time period split factors from a given path.
+    TODO: write efs_build_od() docs
+
+    Parameters
+    ----------
+    pa_import
+    od_export
+    p_needed
+    m_needed
+    soc_needed
+    ns_needed
+    ca_needed
+    years_needed
+    phi_lookup_folder
+    phi_type
+    aggregate_to_wday
+    echo
+    process_count:
+        The number of processes to use when multiprocessing. Set to 0 to not
+        use multiprocessing at all. Set to -1 to use all expect 1 available
+        CPU.
+
+    Returns
+    -------
+    None
     """
     # Init
     if phi_lookup_folder is None:
         phi_lookup_folder = 'Y:/NorMITs Demand/import/phi_factors'
 
-    # For every: Year, purpose, mode, segment, ca
-    matrix_totals = list()
-    for year in year_string_list:
-        for purpose in required_purposes:
-            required_segments = required_soc if purpose in [1, 2] else required_ns
-            for mode in required_modes:
-                for segment in required_segments:
-                    for ca in required_car_availabilities:
-                        calib_params = du.generate_calib_params(
-                            year,
-                            purpose,
-                            mode,
-                            segment,
-                            ca
-                        )
-                        segmented_matrix_totals = _build_od_internal(
-                            pa_import,
-                            od_export,
-                            calib_params,
-                            phi_lookup_folder,
-                            phi_type,
-                            aggregate_to_wday,
-                            echo=echo)
-                        matrix_totals += segmented_matrix_totals
-    return matrix_totals
+    # ## MULTIPROCESS ## #
+    unchanging_kwargs = {
+       'pa_import': pa_import,
+       'od_export': od_export,
+       'phi_lookup_folder': phi_lookup_folder,
+       'phi_type': phi_type,
+       'aggregate_to_wday': aggregate_to_wday,
+       'echo': echo
+    }
+
+    # Build a list of the changing arguments
+    kwargs_list = list()
+    for year in years_needed:
+        loop_generator = du.cp_segmentation_loop_generator(
+            p_needed,
+            m_needed,
+            soc_needed,
+            ns_needed,
+            ca_needed
+        )
+
+        for calib_params in loop_generator:
+            calib_params['yr'] = year
+            kwargs = unchanging_kwargs.copy()
+            kwargs.update({
+                'calib_params': calib_params,
+            })
+            kwargs_list.append(kwargs)
+
+    # Multiprocess - split by time period and write to disk
+    matrix_totals = conc.multiprocess(
+        _build_od_internal,
+        kwargs=kwargs_list,
+        process_count=process_count,
+        in_order=True
+    )
+
+    # Make sure individual process outputs are concatenated together
+    return [y for x in matrix_totals for y in x]
 
 
 def maybe_get_aggregated_tour_proportions(orig: int,
@@ -648,67 +682,18 @@ def maybe_get_aggregated_tour_proportions(orig: int,
     return od_tour_props
 
 
-def _build_od_from_tour_prop_internal(pa_import,
-                                      od_export,
-                                      tour_proportions_dir,
-                                      zone_translate_dir,
-                                      trip_origin,
-                                      base_year,
-                                      year,
-                                      p,
-                                      m,
-                                      seg,
-                                      ca,
-                                      tp_needed
-                                      ) -> None:
-    """
-    The internals of build_od_from_tour_proportions() - See for full
-    documentation. Useful for implementing multiprocessing.
-
-    Returns
-    -------
-    None
-    """
-    # Load in 24hr PA
-    input_dist_name = du.get_dist_name(
-        trip_origin=trip_origin,
-        matrix_format='pa',
-        year=str(year),
-        purpose=str(p),
-        mode=str(m),
-        segment=str(seg),
-        car_availability=str(ca),
-        csv=True
-    )
-    pa_24 = pd.read_csv(os.path.join(pa_import, input_dist_name), index_col=0)
-    pa_24.columns = pa_24.columns.astype(int)
-    pa_24.index = pa_24.index.astype(int)
-
-    # Get a list of the zone names for iterating - make sure integers
-    orig_vals = [int(x) for x in pa_24.index.values]
-    dest_vals = [int(x) for x in list(pa_24)]
-
-    # ## Load the tour proportions - always generated on base year ## #
-    # Load the model zone tour proportions
-    tour_prop_fname = du.get_dist_name(
-        trip_origin=trip_origin,
-        matrix_format='tour_proportions',
-        year=str(base_year),
-        purpose=str(p),
-        mode=str(m),
-        segment=str(seg),
-        car_availability=str(ca),
-        suffix='.pkl'
-    )
-    tour_props = pd.read_pickle(os.path.join(tour_proportions_dir,
-                                             tour_prop_fname))
-
-    # Load the aggregated tour props
-    lad_fname = tour_prop_fname.replace('tour_proportions', 'lad_tour_proportions')
-    lad_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, lad_fname))
-
-    tfn_fname = tour_prop_fname.replace('tour_proportions', 'tfn_tour_proportions')
-    tfn_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, tfn_fname))
+def to_od_via_tour_props(orig_vals,
+                         dest_vals,
+                         pa_24,
+                         tour_props,
+                         lad_tour_props,
+                         tfn_tour_props,
+                         zone_translate_dir,
+                         tp_needed,
+                         input_dist_name,
+                         model_name,
+                         ):
+    # TODO: Write to_od_via_tour_props() docs
 
     # Make sure tour props are the right shape
     du.check_tour_proportions(
@@ -727,12 +712,12 @@ def _build_od_from_tour_prop_internal(pa_import,
     # Load the zone aggregation dictionaries for this model
     model2lad = du.get_zone_translation(
         import_dir=zone_translate_dir,
-        from_zone=du.get_model_name(m),
+        from_zone=model_name,
         to_zone='lad'
     )
     model2tfn = du.get_zone_translation(
         import_dir=zone_translate_dir,
-        from_zone=du.get_model_name(m),
+        from_zone=model_name,
         to_zone='tfn_sectors'
     )
 
@@ -779,6 +764,78 @@ def _build_od_from_tour_prop_internal(pa_import,
         for i, tp in enumerate(th_mats.keys()):
             th_mats[tp].loc[orig, dest] = pa_24.loc[orig, dest] * th_factors[i]
 
+    return fh_mats, th_mats
+
+
+def _tms_od_from_tour_props_internal(pa_import,
+                                     od_export,
+                                     tour_proportions_dir,
+                                     zone_translate_dir,
+                                     model_name,
+                                     trip_origin,
+                                     base_year,
+                                     year,
+                                     p,
+                                     m,
+                                     seg,
+                                     ca,
+                                     tp_needed
+                                     ) -> None:
+    # TODO: Write _tms_od_from_tour_props_internal docs()
+    # Load in 24hr PA
+    input_dist_name = du.get_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='pa',
+        year=str(year),
+        purpose=str(p),
+        mode=str(m),
+        segment=str(seg),
+        car_availability=str(ca),
+        csv=True
+    )
+    pa_24 = pd.read_csv(os.path.join(pa_import, input_dist_name), index_col=0)
+    pa_24.columns = pa_24.columns.astype(int)
+    pa_24.index = pa_24.index.astype(int)
+
+    # Get a list of the zone names for iterating - make sure integers
+    orig_vals = [int(x) for x in pa_24.index.values]
+    dest_vals = [int(x) for x in list(pa_24)]
+
+    # ## Load the tour proportions - always generated on base year ## #
+    # Load the model zone tour proportions
+    tour_prop_fname = du.get_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='tour_proportions',
+        year=str(base_year),
+        purpose=str(p),
+        mode=str(m),
+        segment=str(seg),
+        car_availability=str(ca),
+        suffix='.pkl'
+    )
+    tour_props = pd.read_pickle(os.path.join(tour_proportions_dir,
+                                             tour_prop_fname))
+
+    # Load the aggregated tour props
+    lad_fname = tour_prop_fname.replace('tour_proportions', 'lad_tour_proportions')
+    lad_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, lad_fname))
+
+    tfn_fname = tour_prop_fname.replace('tour_proportions', 'tfn_tour_proportions')
+    tfn_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, tfn_fname))
+
+    fh_mats, th_mats = to_od_via_tour_props(
+        orig_vals,
+        dest_vals,
+        pa_24,
+        tour_props,
+        lad_tour_props,
+        tfn_tour_props,
+        zone_translate_dir,
+        tp_needed,
+        input_dist_name,
+        model_name=model_name,
+    )
+
     print("Writing %s converted matrices to disk..." % input_dist_name)
 
     # Save the generated from_home matrices
@@ -813,19 +870,247 @@ def _build_od_from_tour_prop_internal(pa_import,
         mat.T.to_csv(os.path.join(od_export, dist_name))
 
 
+def _tms_od_from_tour_props(pa_import: str,
+                            od_export: str,
+                            tour_proportions_dir: str,
+                            zone_translate_dir: str,
+                            model_name: str,
+                            base_year: str = consts.BASE_YEAR,
+                            years_needed: List[int] = consts.FUTURE_YEARS,
+                            p_needed: List[int] = consts.ALL_HB_P,
+                            m_needed: List[int] = consts.MODES_NEEDED,
+                            soc_needed: List[int] = None,
+                            ns_needed: List[int] = None,
+                            ca_needed: List[int] = None,
+                            tp_needed: List[int] = consts.TIME_PERIODS,
+                            process_count: int = os.cpu_count() - 2
+                            ) -> None:
+    # TODO: Write _tms_od_from_tour_props() docs
+    # Init
+    soc_needed = [None] if soc_needed is None else soc_needed
+    ns_needed = [None] if ns_needed is None else ns_needed
+    ca_needed = [None] if ca_needed is None else ca_needed
+
+    # Make sure all purposes are home based
+    for p in p_needed:
+        if p not in consts.ALL_HB_P:
+            raise ValueError("Got purpose '%s' which is not a home based "
+                             "purpose. generate_tour_proportions() cannot "
+                             "handle nhb purposes." % str(p))
+    trip_origin = 'hb'
+
+    # MP placed inside this loop to prevent too much Memory being used
+    for year in years_needed:
+        loop_generator = du.segmentation_loop_generator(
+            p_list=p_needed,
+            m_list=m_needed,
+            soc_list=soc_needed,
+            ns_list=ns_needed,
+            ca_list=ca_needed
+        )
+
+        # ## MULTIPROCESS ## #
+        unchanging_kwargs = {
+            'pa_import': pa_import,
+            'od_export': od_export,
+            'tour_proportions_dir': tour_proportions_dir,
+            'zone_translate_dir': zone_translate_dir,
+            'model_name': model_name,
+            'trip_origin': trip_origin,
+            'base_year': base_year,
+            'year': year,
+            'tp_needed': tp_needed
+        }
+
+        kwargs_list = list()
+        for p, m, seg, ca in loop_generator:
+            kwargs = unchanging_kwargs.copy()
+            kwargs.update({
+                'p': p,
+                'm': m,
+                'seg': seg,
+                'ca': ca
+            })
+            kwargs_list.append(kwargs)
+
+        conc.multiprocess(
+            _tms_od_from_tour_props_internal,
+            kwargs=kwargs_list,
+            process_count=process_count
+        )
+
+        # Repeat loop for every wanted year
+
+
+def _vdm_od_from_tour_props_internal(pa_import,
+                                     od_export,
+                                     tour_proportions_dir,
+                                     zone_translate_dir,
+                                     model_name,
+                                     trip_origin,
+                                     base_year,
+                                     year,
+                                     uc,
+                                     m,
+                                     ca,
+                                     tp_needed
+                                     ) -> None:
+    # TODO: Write _vdm_od_from_tour_props_internal docs()
+    # TODO: Is there a way to combine get_vdm_dist_name and get_dist_name?
+    #  Cracking this would make all future code super easy flexible!
+    # Load in 24hr PA
+    input_dist_name = du.get_vdm_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='pa',
+        year=str(year),
+        user_class=str(uc),
+        mode=str(m),
+        ca=ca,
+        csv=True
+    )
+    pa_24 = pd.read_csv(os.path.join(pa_import, input_dist_name), index_col=0)
+    pa_24.columns = pa_24.columns.astype(int)
+    pa_24.index = pa_24.index.astype(int)
+
+    # Get a list of the zone names for iterating - make sure integers
+    orig_vals = [int(x) for x in pa_24.index.values]
+    dest_vals = [int(x) for x in list(pa_24)]
+
+    # ## Load the tour proportions - always generated on base year ## #
+    # Load the model zone tour proportions
+    tour_prop_fname = du.get_vdm_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='tour_proportions',
+        year=str(year),
+        user_class=str(uc),
+        mode=str(m),
+        ca=ca,
+        suffix='.pkl'
+    )
+    tour_props = pd.read_pickle(os.path.join(tour_proportions_dir,
+                                             tour_prop_fname))
+
+    # Load the aggregated tour props
+    lad_fname = tour_prop_fname.replace('tour_proportions', 'lad_tour_proportions')
+    lad_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, lad_fname))
+
+    tfn_fname = tour_prop_fname.replace('tour_proportions', 'tfn_tour_proportions')
+    tfn_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, tfn_fname))
+
+    fh_mats, th_mats = to_od_via_tour_props(
+        orig_vals,
+        dest_vals,
+        pa_24,
+        tour_props,
+        lad_tour_props,
+        tfn_tour_props,
+        zone_translate_dir,
+        tp_needed,
+        input_dist_name,
+        model_name=model_name,
+    )
+
+    print("Writing %s converted matrices to disk..." % input_dist_name)
+
+    # Save the generated from_home matrices
+    for tp, mat in fh_mats.items():
+        dist_name = du.get_vdm_dist_name(
+            trip_origin=trip_origin,
+            matrix_format='od_from',
+            year=str(year),
+            user_class=str(uc),
+            mode=str(m),
+            ca=ca,
+            tp=str(tp),
+            csv=True
+        )
+        mat.to_csv(os.path.join(od_export, dist_name))
+
+    # Save the generated to_home matrices
+    for tp, mat in th_mats.items():
+        dist_name = du.get_vdm_dist_name(
+            trip_origin=trip_origin,
+            matrix_format='od_to',
+            year=str(year),
+            user_class=str(uc),
+            mode=str(m),
+            ca=ca,
+            tp=str(tp),
+            csv=True
+        )
+        # Need to transpose to_home before writing
+        mat.T.to_csv(os.path.join(od_export, dist_name))
+
+
+def _vdm_od_from_tour_props(pa_import: str,
+                            od_export: str,
+                            tour_proportions_dir: str,
+                            zone_translate_dir: str,
+                            model_name: str,
+                            base_year: str = consts.BASE_YEAR,
+                            years_needed: List[int] = consts.FUTURE_YEARS,
+                            to_needed: List[str] = consts.VDM_TRIP_ORIGINS,
+                            uc_needed: List[str] = consts.USER_CLASSES,
+                            m_needed: List[int] = consts.MODES_NEEDED,
+                            ca_needed: List[int] = None,
+                            tp_needed: List[int] = consts.TIME_PERIODS,
+                            process_count: int = os.cpu_count() - 2
+                            ):
+    # TODO: Write _vdm_od_from_tour_props() docs
+    # Init
+    ca_needed = [None] if ca_needed is None else ca_needed
+
+    # MP placed inside this loop to prevent too much Memory being used
+    for year in years_needed:
+        loop_generator = du.vdm_segment_loop_generator(
+            to_list=to_needed,
+            uc_list=uc_needed,
+            m_list=m_needed,
+            ca_list=ca_needed
+        )
+
+        # ## MULTIPROCESS ## #
+        unchanging_kwargs = {
+            'pa_import': pa_import,
+            'od_export': od_export,
+            'tour_proportions_dir': tour_proportions_dir,
+            'zone_translate_dir': zone_translate_dir,
+            'model_name': model_name,
+            'base_year': base_year,
+            'year': year,
+            'tp_needed': tp_needed
+        }
+
+        kwargs_list = list()
+        for to, uc, m, ca in loop_generator:
+            kwargs = unchanging_kwargs.copy()
+            kwargs.update({
+                'trip_origin': to,
+                'uc': uc,
+                'm': m,
+                'ca': ca
+            })
+            kwargs_list.append(kwargs)
+
+        conc.multiprocess(
+            _vdm_od_from_tour_props_internal,
+            kwargs=kwargs_list,
+            process_count=process_count
+        )
+
+        # Repeat loop for every wanted year
+
+
 def build_od_from_tour_proportions(pa_import: str,
                                    od_export: str,
                                    tour_proportions_dir: str,
                                    zone_translate_dir: str,
+                                   model_name: str,
+                                   seg_level: str,
+                                   seg_params: Dict[str, Any],
                                    base_year: str = consts.BASE_YEAR,
                                    years_needed: List[int] = consts.FUTURE_YEARS,
-                                   p_needed: List[int] = consts.ALL_HB_P,
-                                   m_needed: List[int] = consts.MODES_NEEDED,
-                                   soc_needed: List[int] = None,
-                                   ns_needed: List[int] = None,
-                                   ca_needed: List[int] = None,
-                                   tp_needed: List[int] = consts.TIME_PERIODS,
-                                   process_count: int = os.cpu_count() - 1
+                                   process_count: int = os.cpu_count() - 2
                                    ) -> None:
     """
     Builds future year OD matrices based on the base year tour proportions
@@ -879,73 +1164,30 @@ def build_od_from_tour_proportions(pa_import: str,
     -------
     None
     """
+    # TODO: Update build_od_from_tour_proportions() docs
     # Init
-    soc_needed = [None] if soc_needed is None else soc_needed
-    ns_needed = [None] if ns_needed is None else ns_needed
-    ca_needed = [None] if ca_needed is None else ca_needed
+    seg_level = du.validate_seg_level(seg_level)
 
-    # Make sure all purposes are home based
-    for p in p_needed:
-        if p not in consts.ALL_HB_P:
-            raise ValueError("Got purpose '%s' which is not a home based "
-                             "purpose. generate_tour_proportions() cannot "
-                             "handle nhb purposes." % str(p))
-    trip_origin = 'hb'
-
-    for year in years_needed:
-        loop_generator = du.segmentation_loop_generator(
-            p_list=p_needed,
-            m_list=m_needed,
-            soc_list=soc_needed,
-            ns_list=ns_needed,
-            ca_list=ca_needed
+    # Call the correct mid-level function to deal with the segmentation
+    if seg_level == 'tms':
+        to_od_fn = _tms_od_from_tour_props
+    elif seg_level == 'vdm':
+        to_od_fn = _vdm_od_from_tour_props
+    else:
+        raise NotImplementedError(
+            "'%s' is a valid segmentation level, however, we do not have a "
+            "mid-level function to deal with it at the moment."
+            % seg_level
         )
 
-        # ## Multiprocess the segmentation loop ## #
-        unchanging_kwargs = {
-            'pa_import': pa_import,
-            'od_export': od_export,
-            'tour_proportions_dir': tour_proportions_dir,
-            'zone_translate_dir': zone_translate_dir,
-            'trip_origin': trip_origin,
-            'base_year': base_year,
-            'year': year,
-            'tp_needed': tp_needed
-        }
-
-        # If negative use process_count less than max processes
-        if process_count < 0:
-            if process_count < os.cpu_count():
-                process_count = os.cpu_count() + process_count
-            else:
-                process_count = os.cpu_count() - 1
-
-        if process_count == 0:
-            # Call in a loop like normal
-            for p, m, seg, ca in loop_generator:
-                kwargs = unchanging_kwargs.copy()
-                kwargs.update({
-                    'p': p,
-                    'm': m,
-                    'seg': seg,
-                    'ca': ca
-                })
-                _build_od_from_tour_prop_internal(**kwargs)
-        else:
-            # Build all the arguments, and call in ProcessPool
-            kwargs_list = list()
-            for p, m, seg, ca in loop_generator:
-                kwargs = unchanging_kwargs.copy()
-                kwargs.update({
-                    'p': p,
-                    'm': m,
-                    'seg': seg,
-                    'ca': ca
-                })
-                kwargs_list.append(kwargs)
-
-            conc.process_pool_wrapper(_build_od_from_tour_prop_internal,
-                                      kwargs=kwargs_list,
-                                      process_count=process_count)
-
-        # Repeat loop for every wanted year
+    to_od_fn(
+        pa_import=pa_import,
+        od_export=od_export,
+        tour_proportions_dir=tour_proportions_dir,
+        zone_translate_dir=zone_translate_dir,
+        model_name=model_name,
+        base_year=base_year,
+        years_needed=years_needed,
+        process_count=process_count,
+        **seg_params
+    )
