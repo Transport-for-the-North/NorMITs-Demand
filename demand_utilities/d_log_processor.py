@@ -329,6 +329,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
                 development_zone_lookup: str,
                 msoa_zones: str,
                 msoa_column: str = "msoa_zone_id",
+                min_growth_limit: float = 0.25,
                 dlog_data_column_key: str = "population",
                 perform_constraint: bool = True,
                 audit_location: str = None
@@ -407,9 +408,10 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         raise ValueError("Dataframe does not contain the required"
                          " columns")
 
-    # Convert d-log data to the required format
-    # TODO check the format of d-log data after the update
+    # Save dlog rows where data is missing
     dlog_missing_data = pd.DataFrame()
+    # Identify zones where estimated growth was invalid
+    invalid_growth_zones = pd.DataFrame()
 
     # Calculate the growth factors for each MSOA and year
     # May be faster to just get the first entry for each MSOA as the factors
@@ -423,16 +425,6 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         print(f"Replacing D-LOG data for {year}")
 
         dlog_subset = dlog_data.copy()
-        # dlog_columns = [development_id,
-        #                 total_column,
-        #                 start_date,
-        #                 end_date]
-
-        # dlog_subset = parse_dlog_build_out(
-        #     dlog=dlog_subset,
-        #     year=year,
-        #     dlog_columns=dlog_columns
-        # )
         dlog_subset, dlog_missing_data = estimate_dlog_build_out(
             dlog=dlog_subset,
             year=year,
@@ -442,55 +434,9 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         )
         print(f"D-LOG data contains {dlog_subset[year].sum()} units")
 
-        # Where the build out profile contains nothing, check the start
-        # and end dates, if relevant then use these
-        # if (dlog_subset[year] == 0).sum() > 0:
-
-        #     infill_data, dlog_errors = infill_dlog_build_out(
-        #         dlog=dlog_subset,
-        #         year=year,
-        #         start_date_col=start_date,
-        #         end_date_col=end_date,
-        #         development_id_col=development_id,
-        #         total_column=total_column
-        #     )
-
-        #     dlog_subset = dlog_subset.merge(
-        #         infill_data[[development_id, "filled_data"]],
-        #         on=development_id,
-        #         how="left"
-        #     )
-        #     dlog_subset["filled_data"].fillna(dlog_subset[year], inplace=True)
-        #     dlog_subset = dlog_subset.drop(
-        #         year, axis=1
-        #     ).rename(
-        #         {"filled_data": year}, axis=1
-        #     )
-        #     print(f"Overriding {infill_data.shape[0]} developments")
-        #     # Collate errors
-        #     if dlog_missing_data.empty:
-        #         dlog_missing_data = dlog_errors
-        #     else:
-        #         dlog_missing_data = dlog_missing_data.merge(
-        #             dlog_errors,
-        #             on=development_id
-        #         )
-
-        #     print(f"Infill data contains {infill_data['filled_data'].sum()} units")
-        #     print(f"D-LOG data contains {dlog_subset[year].sum()} units")
-
         # Convert to population / employment
         dlog_subset[year] *= dlog_conversion_factor
 
-        # Map to MSOA zones
-        # dlog_subset = dlog_subset.merge(zone_lookup, on=development_id)
-        # dlog_subset = du.convert_msoa_naming(
-        #     dlog_subset,
-        #     msoa_col_name="msoa11cd",
-        #     msoa_path=msoa_zones,
-        #     to="int"
-        # )
-        # dlog_subset.rename({"msoa11cd": msoa_column}, axis=1, inplace=True)
         dlog_subset = dlog_subset.groupby(
             msoa_column,
             as_index=False
@@ -527,6 +473,26 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
             / segment_split[base_year]
         )
         segment_split.loc[segment_split[base_year] == 0, adj_growth] = 0
+        
+        # Handle cases where addition of the dlog data (negative) leaves 
+        # a zone with negative or very low population / employment
+        # TODO check that this is correct - could instead adjust all segments
+        # in the zone to preserver spatial distribution
+        invalid_growth = segment_split[adj_growth] < min_growth_limit
+        audit_zones = segment_split[invalid_growth][
+            [msoa_column] + segment_cols + [adj_growth]
+        ].copy()
+        audit_zones = audit_zones.loc[audit_zones[adj_growth] != 0]
+        audit_zones["year"] = year
+        audit_zones.rename({adj_growth: "growth_factor"}, axis=1, inplace=True)
+        segment_split.loc[invalid_growth, adj_growth] = min_growth_limit
+        if invalid_growth_zones.empty:
+            invalid_growth_zones = audit_zones.drop_duplicates()
+        else:
+            invalid_growth_zones = invalid_growth_zones.append(
+                audit_zones.drop_duplicates()
+            )
+        
         # Update original data with new segment growth
         merge_cols = [msoa_column] + segment_cols
         post_dlog_df = pd.merge(
@@ -575,8 +541,6 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
             [base_year] + future_years
         ].sum()
         emp_cat1["employment_cat"] = "E01"
-        print(post_dlog_df)
-        print(emp_cat1)
         # Append back to the post_dlog dataframe and sort by zone/segment
         post_dlog_df = post_dlog_df.append(emp_cat1)
         post_dlog_df.sort_values(by=[msoa_column, "employment_cat"],
@@ -599,6 +563,10 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     )
     segment_split.to_csv(
         os.path.join(audit_location, "segment_splits.csv"),
+        index=False
+    )
+    invalid_growth_zones.to_csv(
+        os.path.join(audit_location, "invalid_growth_zones.csv"),
         index=False
     )
     
