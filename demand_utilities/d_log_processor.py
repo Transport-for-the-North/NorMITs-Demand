@@ -271,6 +271,8 @@ def constrain_post_dlog(df: pd.DataFrame,
         df[base_year]
         * df["growth"]
     )
+    # Handle NaN values that are reintroduced when calculating growth
+    df[year].fillna(0.0, inplace=True)
 
     return df
 
@@ -346,8 +348,15 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     Returns a DataFrame of future year population
     """
 
-    post_dlog_df = pre_dlog_df.copy()
-    print(post_dlog_df)
+    post_dlog_df = pre_dlog_df.copy()[
+        [msoa_column, base_year] + segment_cols + future_years
+    ]
+    # If we are applying to the employment data - remove the totals category
+    # (will be added back in afterwards)
+    if "employment_cat" in segment_cols:
+        post_dlog_df = post_dlog_df.loc[
+            post_dlog_df["employment_cat"] != "E01"
+        ]
     # Calculate the base year segment shares over each sector
     print("Calculating Segment Share by Sector")
     la_equivalence = du.safe_read_csv(constraints_zone_equivalence)
@@ -553,10 +562,27 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
 
     # Drop any temporary columns
     post_dlog_df.drop(
-        ["sector_id"],
+        ["sector_id"] + [col for col in post_dlog_df.columns 
+                         if "adj_growth" in col],
         axis=1,
         inplace=True
     )
+    # If we are applying to the employment data - add the totals category
+    # back in
+    if "employment_cat" in segment_cols:
+        # Calculate the totals for each zone
+        emp_cat1 = post_dlog_df.groupby(msoa_column, as_index=False)[
+            [base_year] + future_years
+        ].sum()
+        emp_cat1["employment_cat"] = "E01"
+        print(post_dlog_df)
+        print(emp_cat1)
+        # Append back to the post_dlog dataframe and sort by zone/segment
+        post_dlog_df = post_dlog_df.append(emp_cat1)
+        post_dlog_df.sort_values(by=[msoa_column, "employment_cat"],
+                                 inplace=True)
+        post_dlog_df.reset_index(drop=True, inplace=True)
+
 
     # Save outputs for sense checks
     dlog_additions.to_csv(
@@ -575,6 +601,6 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         os.path.join(audit_location, "segment_splits.csv"),
         index=False
     )
-
+    
     return post_dlog_df
 
