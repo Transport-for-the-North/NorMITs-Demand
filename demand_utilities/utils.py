@@ -82,6 +82,64 @@ def validate_seg_level(seg_level: str) -> str:
     return seg_level
 
 
+def validate_zoning_system(zoning_system: str) -> str:
+    """
+    Tidies up zoning_system and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    zoning_system:
+        The name of the zoning system to validate
+
+    Returns
+    -------
+    zoning_system:
+        zoning_system with both strip and lower applied to remove any
+        whitespace and make it all lowercase
+
+    Raises
+    -------
+    ValueError:
+        If zoning_system is not a valid name for a zoning system
+    """
+    # Init
+    zoning_system = zoning_system.strip().lower()
+
+    if zoning_system not in consts.ZONING_SYSTEMS:
+        raise ValueError("%s is not a valid name for a zoning system"
+                         % zoning_system)
+    return zoning_system
+
+
+def validate_model_name(model_name: str) -> str:
+    """
+    Tidies up model_name and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    model_name:
+        The the model name to validate
+
+    Returns
+    -------
+    model_name:
+        model_name with both strip and lower applied to remove any
+        whitespace and make it all lowercase
+
+    Raises
+    -------
+    ValueError:
+        If model_name is not a valid name for a model
+    """
+    # Init
+    model_name = model_name.strip().lower()
+
+    if model_name not in consts.MODEL_NAMES:
+        raise ValueError("%s is not a valid name for a model"
+                         % model_name)
+    return model_name
+
+
 def validate_user_class(user_class: str) -> str:
     """
     Tidies up user_class and raises an exception if not a valid name
@@ -1506,9 +1564,32 @@ def cp_segmentation_loop_generator(p_list: Iterable[int],
             )
 
 
+def segment_loop_generator(seg_dict: Dict[str, List[Any]],
+                           ) -> Iterator[Dict[str, Any]]:
+    """
+    Yields seg_values dictionary for all unique combinations of seg_dict
+
+    Parameters
+    ----------
+    seg_dict:
+        Dictionary of {seg_names: [seg_vals]}. All possible combinations of
+        seg_values will be iterated through
+
+    Returns
+    -------
+    seg_values:
+        A dictionary of {seg_name: seg_value}
+    """
+    # Separate keys and values
+    keys, vals = zip(*seg_dict.items())
+
+    for unq_seg in product(*vals):
+        yield {keys[i]: unq_seg[i] for i in range(len(keys))}
+
+
 def seg_level_loop_generator(seg_level: str,
                              seg_params: Dict[str, Any],
-                             ) -> Dict[str, Union[int, str]]:
+                             ) -> Iterator[Dict[str, Union[int, str]]]:
     """
     Yields seg_values dictionary for the seg_level given
 
@@ -1525,7 +1606,7 @@ def seg_level_loop_generator(seg_level: str,
     Yields
     -------
     seg_values:
-        A dictionary of {seg_name: seg_values}
+        A dictionary of {seg_name: seg_value}
     """
     # Init
     seg_level = validate_seg_level(seg_level)
@@ -2131,6 +2212,12 @@ def filter_by_segmentation(df: pd.DataFrame,
     """
     # Init
     df = df.copy()
+    df_filter = df_filter.copy()
+
+    # Wrap each item if a list to avoid errors
+    for k, v in df_filter.items():
+        if not pd.api.types.is_list_like(v):
+            df_filter[k] = [v]
 
     if fit:
         df_filter = fit_filter(df, df_filter.copy(), **kwargs)
@@ -2274,6 +2361,64 @@ def match_pa_zones(productions: pd.DataFrame,
         attractions = attractions.set_index(zone_col)
 
     return productions, attractions
+
+
+def balance_a_to_p(productions: pd.DataFrame,
+                   attractions: pd.DataFrame,
+                   unique_cols: List[str],
+                   significant: int = 5
+                   ) -> pd.DataFrame:
+    """
+    Balances the attractions total to productions total, keeping the same
+    attraction distribution across segments
+
+    Parameters
+    ----------
+    productions:
+        Dataframe containing the productions data
+
+    attractions:
+        Dataframe containing the attractions data
+
+    unique_cols:
+        A list of the columns in productions and attractions to balance to
+        one another
+
+    significant:
+        The number of significant places to check when ensuring the balancing
+        has succeeded.
+
+    Returns
+    -------
+    balanced_attractions
+
+    """
+    # Init
+    attractions = attractions.copy()
+
+    # Balance Attractions for each year
+    for col in unique_cols:
+        # Only balance if needed
+        if productions[col].sum() == attractions[col].sum():
+            continue
+
+        if productions[col].sum() == 0:
+            attractions[col] = 0
+        else:
+            attractions[col] /= attractions[col].sum() / productions[col].sum()
+
+        # Throw an error if we somehow don't match
+        np.testing.assert_approx_equal(
+            productions[col].sum(),
+            attractions[col].sum(),
+            significant=significant,
+            err_msg="Row and Column target totals do not match. Cannot Furness."
+        )
+
+    return attractions
+
+
+# ## BELOW HERE IS OLD TMS CODE ## #
 
 
 def get_costs(model_lookup_path,

@@ -2223,12 +2223,13 @@ def main():
 
     # Running control
     run_base_efs = True
-    recreate_productions = False
+    recreate_productions = True
     recreate_attractions = True
 
     constrain_population = False
 
     run_nhb_efs = True
+    run_hb_pa_to_od = True
     run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False
@@ -2264,14 +2265,8 @@ def main():
             constraint_required=constraints
         )
 
-    if run_nhb_efs:
-        # Convert to HB to OD
-        efs.pa_to_od(
-            overwrite_hb_tp_pa=True,
-            overwrite_hb_tp_od=True,
-            echo=echo
-        )
 
+    if run_nhb_efs:
         # Generate NHB PA/OD matrices
         efs.run_nhb(
             overwrite_nhb_productions=False,
@@ -2279,6 +2274,13 @@ def main():
             overwrite_nhb_tp_od=True
         )
 
+    if run_hb_pa_to_od:
+        # Convert to HB to OD
+        efs.pa_to_od(
+            overwrite_hb_tp_pa=True,
+            overwrite_hb_tp_od=True,
+            echo=echo
+        )
     # TODO: Update Integrated OD2PA codebase
     if run_compile_od:
         # Compiles base year OD matrices
