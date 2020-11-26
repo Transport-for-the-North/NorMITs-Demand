@@ -630,14 +630,12 @@ if __name__ == "__main__":
     efs_main = efs.ExternalForecastSystem(
         model_name=model_name,
         import_location=import_location,
-        output_location=output_location
+        output_location=output_location,
+        iter_num=iter_num
     )
     
-    imports, exports, _ = efs_main.generate_output_paths(
-        output_location,
-        model_name,
-        iter_name
-    )
+    imports = efs_main.imports
+    exports = efs_main.exports
     
     pa_params = r"C:\Users\Monopoly\Documents\EFS\data\params\pav2.json"
     main(pa_params, imports, exports)
