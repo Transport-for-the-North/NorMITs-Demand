@@ -63,8 +63,8 @@ class EFSProductionGenerator:
             control_productions: bool = True,
 
             # D-Log
-            d_log: pd.DataFrame = None,
-            d_log_split: pd.DataFrame = None,
+            d_log: str = None,
+            d_log_split: str = None,
 
             # Population constraints
             constraint_required: List[bool] = consts.DEFAULT_PRODUCTION_CONSTRAINTS,
@@ -250,6 +250,7 @@ class EFSProductionGenerator:
         internal_zone_col = 'msoa_zone_id'
         all_years = [str(x) for x in [base_year] + future_years]
         integrate_d_log = d_log is not None and d_log_split is not None
+        # Dlog is now passed as the path to the d-log file
         # if integrate_d_log:
         #     d_log = d_log.copy()
         #     d_log_split = d_log_split.copy()
@@ -344,21 +345,27 @@ class EFSProductionGenerator:
         # ## INTEGRATE D-LOG ## #
         if integrate_d_log:
             print("Integrating the development log...")
-            population = dlog.apply_d_log_population(
-                population=population,
+            population, hg_zones = dlog.apply_d_log(
+                pre_dlog_df=population,
                 base_year=base_year,
                 future_years=future_years,
                 dlog_path=d_log,
                 constraints=population_constraint,
-                constraints_zone_equivalence=r"Y:\NorMITs Demand\inputs\default\zoning\lad_msoa_grouping.csv",
-                household_factors=2.4,
-                development_zone_lookup=r"C:\Users\Monopoly\Documents\EFS\data\dlog\development_msoa_lookup.csv",
-                msoa_zones=r"C:\Users\Monopoly\Documents\EFS\data\zoning\msoa_zones.csv",
-                perform_constraint=constraint_required[1]
+                constraints_zone_equivalence=designated_area,
+                dlog_conversion_factor=1.0,
+                segment_cols=["soc", "ns", "ca"],
+                dlog_data_column_key="population",
+                perform_constraint=constraint_required[1],
+                audit_location=out_path
             )
-        # Post D-Log constraint is now done elsewhere
+            # Save High Growth (Exceptional) zones to file
+            hg_zones.to_csv(
+                os.path.join(out_path, "exceptional_zones.csv"),
+                index=False
+            )
+            
+        # Post D-Log constraint is done when applying the dlog
         constraint_required[1] = False
-        raise NotImplementedError("Finished DLOG")
 
         # ## POST D-LOG CONSTRAINT ## #
         if constraint_required[1]:

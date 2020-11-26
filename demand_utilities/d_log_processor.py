@@ -7,6 +7,60 @@ import pandas as pd
 
 from demand_utilities import utils as du
 
+def identify_exceptional_zones(pre_df: pd.DataFrame,
+                               post_df: pd.DataFrame,
+                               growth_cutoff: float,
+                               base_year: str,
+                               future_years: List[str],
+                               absolute_cutoff: float = None,
+                               cutoff_method: str = "growth"
+                               ) -> pd.DataFrame:
+    
+    # Return a dataframe of the highest growth zones and their associated 
+    # growth
+
+    # Check that both dataframes have the same index
+    if not pre_df.index.identical(post_df.index):
+        raise AttributeError("Pre and Post dataframe index do not align")
+
+    # Empty dataframe to store which zones meat the cutoff
+    growth_diff = pd.DataFrame(columns=future_years, index=pre_df.index)
+    absolute_cols = []
+    for year in future_years:
+        # Calculate growth difference pre -> post
+        growth_diff[year] = (
+            (post_df[year] / post_df[base_year])
+            - (pre_df[year] / pre_df[base_year])
+        )
+        print(growth_diff)
+        # Change to a boolean series
+        growth_diff[year] = growth_diff[year] > growth_cutoff
+        
+        # Calculate absolute differences pre -> post
+        abs_diff_col = f"{year}_abs"
+        absolute_cols.append(abs_diff_col)
+        growth_diff[abs_diff_col] = (
+            (post_df[year] - post_df[base_year])
+            - (pre_df[year] - pre_df[base_year])
+        )
+        # Change to a boolean series
+        if absolute_cutoff is not None:
+            growth_diff[abs_diff_col] = (
+                growth_diff[abs_diff_col] > absolute_cutoff
+            )
+
+    if cutoff_method == "growth":
+        e_zones = growth_diff.loc[growth_diff[future_years].any(axis=1)].index
+    elif cutoff_method == "absolute":
+        e_zones = growth_diff.loc[growth_diff[abs_diff_col].any(axis=1)].index
+    elif cutoff_method == "both":
+        e_zones = growth_diff.loc[growth_diff.any(axis=1)].index
+    else:
+        raise ValueError("Cutoff method must be 'growth', 'absolute', "
+                         "or 'both'")
+
+    return pd.Series(e_zones)
+
 
 def set_datetime_types(df: pd.DataFrame,
                        cols: List[str],
@@ -107,6 +161,7 @@ def infill_dlog_build_out(dlog: pd.DataFrame,
     end dates. A linear build out is assumed.
     TODO This does not return anything currently as more than half the 
     developments are missing some of this data.
+    Fix the date check - only checks if between
 
     Parameters
     ----------
@@ -323,15 +378,14 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
                 future_years: List[str],
                 dlog_path: str,
                 constraints: pd.DataFrame,
-                constraints_zone_equivalence: str,
+                constraints_zone_equivalence: pd.DataFrame,
                 segment_cols: List[str],
-                dlog_conversion_factor: float,
-                development_zone_lookup: str,
-                msoa_zones: str,
+                dlog_conversion_factor: float = 1.0,
                 msoa_column: str = "msoa_zone_id",
                 min_growth_limit: float = 0.25,
                 dlog_data_column_key: str = "population",
                 perform_constraint: bool = True,
+                audit_outputs: bool = False,
                 audit_location: str = None
                 ) -> pd.DataFrame:
     """TODO - Write docs when complete
@@ -358,10 +412,16 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         post_dlog_df = post_dlog_df.loc[
             post_dlog_df["employment_cat"] != "E01"
         ]
+    # Save the initial growth by MSOA to use in identifying exceptional zones
+    pre_dlog_growth = post_dlog_df.groupby(msoa_column)[
+        [base_year] + future_years
+    ].sum()
+    post_dlog_growth = pre_dlog_growth.copy()
+
     # Calculate the base year segment shares over each sector
     print("Calculating Segment Share by Sector")
-    la_equivalence = du.safe_read_csv(constraints_zone_equivalence)
-    la_equivalence.rename(
+    sector_equivalence = constraints_zone_equivalence.copy()
+    sector_equivalence.rename(
         {"model_zone_id": msoa_column},
         axis=1,
         inplace=True
@@ -369,7 +429,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     # Use map instead of merge as MSOA to sector will be 1 to 1 and likely
     # faster than merge
     post_dlog_df["sector_id"] = post_dlog_df[msoa_column].map(
-        la_equivalence.set_index(msoa_column)["grouping_id"]
+        sector_equivalence.set_index(msoa_column)["grouping_id"]
     )
     # Calculate the split for each sector
     segment_split = post_dlog_df.groupby(
@@ -386,7 +446,6 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     # Read in development log data
     dlog_data = du.safe_read_csv(dlog_path)
     # Define column names
-    development_id = "development_site_id"
     start_date = "start_date"
     end_date = "expected_completion_date"
     # Set the start and end as datetime type
@@ -397,10 +456,6 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         format="%Y-%m-%d",
         errors="coerce"
     )
-
-    # Read in development to msoa zone lookup
-    zone_lookup = du.safe_read_csv(development_zone_lookup)
-    zone_lookup = zone_lookup[[development_id, "msoa11cd"]]
 
     # Check that the dataframe contains the correct columns
     pop_required_cols = ["msoa_zone_id", base_year] + future_years
@@ -508,11 +563,14 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
 
         print(f"New {year} total = {post_dlog_df[year].sum()}")
 
+        # Save the pre-constraint values to identify exceptional zones
+        post_dlog_growth[year] = post_dlog_df.groupby(msoa_column)[year].sum()
+
         if perform_constraint:
             post_dlog_df = constrain_post_dlog(
                 df=post_dlog_df,
                 constraint=constraints,
-                la_equivalence=la_equivalence,
+                la_equivalence=sector_equivalence,
                 base_year=base_year,
                 year=year,
                 msoa_column=msoa_column
@@ -526,6 +584,15 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
             inplace=True
         )
 
+    # Use pre and post dlog growth to identify exceptional zones
+    e_zones = identify_exceptional_zones(
+        pre_df=pre_dlog_growth,
+        post_df=post_dlog_growth,
+        growth_cutoff=0.75,
+        base_year=base_year,
+        future_years=future_years
+    )
+    
     # Drop any temporary columns
     post_dlog_df.drop(
         ["sector_id"] + [col for col in post_dlog_df.columns 
@@ -548,27 +615,33 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         post_dlog_df.reset_index(drop=True, inplace=True)
 
 
-    # Save outputs for sense checks
-    dlog_additions.to_csv(
-        os.path.join(audit_location, "dlog_extra.csv"),
-        index=False
-    )
-    post_dlog_df.to_csv(
-        os.path.join(audit_location, "post_dlog_data.csv"),
-        index=False
-    )
-    dlog_missing_data.to_csv(
-        os.path.join(audit_location, "dlog_errors.csv"),
-        index=False
-    )
-    segment_split.to_csv(
-        os.path.join(audit_location, "segment_splits.csv"),
-        index=False
-    )
-    invalid_growth_zones.to_csv(
-        os.path.join(audit_location, "invalid_growth_zones.csv"),
-        index=False
-    )
+    if audit_outputs:
+        # Save outputs for sense checks
+        dlog_additions.to_csv(
+            os.path.join(audit_location, "dlog_extra.csv"),
+            index=False
+        )
+        post_dlog_df.to_csv(
+            os.path.join(audit_location, "post_dlog_data.csv"),
+            index=False
+        )
+        dlog_missing_data.to_csv(
+            os.path.join(audit_location, "dlog_errors.csv"),
+            index=False
+        )
+        segment_split.to_csv(
+            os.path.join(audit_location, "segment_splits.csv"),
+            index=False
+        )
+        invalid_growth_zones.to_csv(
+            os.path.join(audit_location, "invalid_growth_zones.csv"),
+            index=False
+        )
+        e_zones.to_csv(
+            os.path.join(audit_location, "exceptional_zones.csv"),
+            index=False
+        )
+
     
-    return post_dlog_df
+    return post_dlog_df, e_zones
 

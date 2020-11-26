@@ -57,8 +57,8 @@ class EFSAttractionGenerator:
             control_attractions: bool = True,
 
             # D-Log
-            d_log: pd.DataFrame = None,
-            d_log_split: pd.DataFrame = None,
+            d_log: str = None,
+            d_log_split: str = None,
 
             # Employment constraints
             constraint_required: List[bool] = consts.DEFAULT_ATTRACTION_CONSTRAINTS,
@@ -233,9 +233,10 @@ class EFSAttractionGenerator:
         emp_cat_col = 'employment_cat'
         all_years = [str(x) for x in [base_year] + future_years]
         integrate_d_log = d_log is not None and d_log_split is not None
-        if integrate_d_log:
-            d_log = d_log.copy()
-            d_log_split = d_log_split.copy()
+        # Dlog is now passed as the path to the d-log file
+        # if integrate_d_log:
+        #     d_log = d_log.copy()
+        #     d_log_split = d_log_split.copy()
 
         # TODO: Make this more adaptive
         # Set the level of segmentation being used
@@ -318,11 +319,26 @@ class EFSAttractionGenerator:
         # ## INTEGRATE D-LOG ## #
         if integrate_d_log:
             print("Integrating the development log...")
-            raise NotImplementedError("D-Log population integration has not "
-                                      "yet been implemented.")
-        else:
-            # If not integrating, no need for another constraint
-            constraint_required[4] = False
+            employment, hg_zones = dlog.apply_d_log(
+                pre_dlog_df=employment,
+                base_year=base_year,
+                future_years=future_years,
+                dlog_path=d_log,
+                constraints=employment_constraint,
+                constraints_zone_equivalence=designated_area,
+                dlog_conversion_factor=1.0,
+                segment_cols=["employment_cat"],
+                dlog_data_column_key="employees",
+                perform_constraint=constraint_required[1],
+                audit_location=out_path
+            )
+            # Save High Growth (Exceptional) zones to file
+            hg_zones.to_csv(
+                os.path.join(out_path, "exceptional_zones.csv"),
+                index=False
+            )
+        # Post D-Log constraint is done when applying the dlog
+        constraint_required[4] = False
 
         # ## POST D-LOG CONSTRAINT ## #
         if constraint_required[4]:
