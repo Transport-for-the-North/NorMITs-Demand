@@ -1587,6 +1587,101 @@ def segment_loop_generator(seg_dict: Dict[str, List[Any]],
         yield {keys[i]: unq_seg[i] for i in range(len(keys))}
 
 
+def build_seg_params(seg_level: str,
+                     df: pd.DataFrame,
+                     raise_error: bool = False
+                     ) -> Dict[str, Any]:
+    """
+    Builds a dictionary of seg_params from df for seg_level
+
+    Parameters
+    ----------
+    seg_level:
+        The level of segmentation of the tour proportions to convert. This
+        should be one of the values in efs_constants.SEG_LEVELS.
+
+    df:
+        The dataframe to pull the unique segments from and build the seg_params
+
+    raise_error:
+        Whether to raise an error or not when a segmentation does not exist in
+        df.
+
+    Returns
+    -------
+    seg_params:
+        A dictionary of {kwarg: values} for the segmentation level chosen. See...
+        Need to Create reference for how seg_params work
+    """
+    # Init
+    seg_level = validate_seg_level(seg_level)
+
+    # Choose the segments to look for
+    if seg_level == 'tfn':
+        segments = ['p', 'm', 'soc', 'ns', 'ca']
+    else:
+        raise ValueError(
+            "Cannot determine the unique segments for seg_level '%s', we don't "
+            "have a branch for it!" % str(seg_level)
+        )
+
+    # Get the unique values for each segment
+    unq_segs = dict()
+    for segment in segments:
+        if segment not in df and raise_error:
+            raise KeyError(
+                "Segment '%s' does not exist in df" % segment
+            )
+
+        # Ignore none-like splits
+        unique = df[segment].unique().tolist()
+        unique = [x for x in unique if not is_none_like(x)]
+        unq_segs[segment] = unique
+
+    # Build the seg_params
+    if seg_level == 'tfn':
+        seg_params = {
+            'p_needed': unq_segs.get('p', None),
+            'm_needed': unq_segs.get('m', None),
+            'soc_needed': unq_segs.get('soc', None),
+            'ns_needed': unq_segs.get('ns', None),
+            'ca_needed': unq_segs.get('ca', None),
+        }
+    else:
+        raise ValueError(
+            "Cannot determine the unique segments for seg_level '%s', we don't "
+            "have a branch for it!" % str(seg_level)
+        )
+
+    return seg_params
+
+
+def seg_level_loop_length(seg_level: str,
+                          seg_params: Dict[str, Any],
+                          ) -> int:
+    """
+    Returns the length of the generator that would be created if
+    seg_level_loop_generator() was called with the same arguments
+
+    Parameters
+    ----------
+    seg_level:
+        The level of segmentation of the tour proportions to convert. This
+        should be one of the values in efs_constants.SEG_LEVELS.
+
+    seg_params:
+        A dictionary of kwarg: values for the segmentation level chosen. See...
+        Need to Create reference for how seg_params work
+
+    Yields
+    -------
+    generator_length:
+        The total number of items that will be yielded from
+        seg_level_loop_generator() when called with the same arguments
+    """
+    return len(list(seg_level_loop_generator(seg_level, seg_params)))
+
+
 def seg_level_loop_generator(seg_level: str,
                              seg_params: Dict[str, Any],
                              ) -> Iterator[Dict[str, Union[int, str]]]:
@@ -1615,11 +1710,11 @@ def seg_level_loop_generator(seg_level: str,
         seg_params = validate_vdm_seg_params(seg_params)
 
         loop_generator = vdm_segment_loop_generator(
-            to_list=seg_params['to_needed'],
-            uc_list=seg_params['uc_needed'],
-            m_list=seg_params['m_needed'],
-            ca_list=seg_params['ca_needed'],
-            tp_list=seg_params['tp_needed'],
+            to_list=seg_params.get('to_needed', [None]),
+            uc_list=seg_params.get('uc_needed', [None]),
+            m_list=seg_params.get('m_needed', [None]),
+            ca_list=seg_params.get('ca_needed', [None]),
+            tp_list=seg_params.get('tp_needed', [None]),
         )
 
         # Convert to dict
@@ -1631,6 +1726,20 @@ def seg_level_loop_generator(seg_level: str,
                 ca=ca,
                 tp=tp
             )
+
+    if seg_level == 'tfn':
+        loop_gen = cp_segmentation_loop_generator(
+            p_list=seg_params.get('p_needed', [None]),
+            m_list=seg_params.get('m_needed', [None]),
+            soc_list=seg_params.get('soc_needed', [None]),
+            ns_list=seg_params.get('ns_needed', [None]),
+            ca_list=seg_params.get('ca_needed', [None]),
+            tp_list=seg_params.get('tp_needed', [None]),
+        )
+
+        for seg_params in loop_gen:
+            yield seg_params
+
     else:
         raise ValueError("'%s' is a valid seg_level, however, we do not have "
                          "a way of dealing with it right not. You should "
@@ -2176,6 +2285,30 @@ def fit_filter(df: pd.DataFrame,
     return fitted_filter
 
 
+def remove_none_like_filter(df_filter: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Removes all None-like items from df_filter
+
+    Parameters
+    ----------
+    df_filter:
+        The filter dictionary in the format of {df_col_name: filter_values}
+
+    Returns
+    -------
+    df_filter:
+        df_filter with None-like items removed
+    """
+    # Init
+    new_df_filter = dict()
+
+    for k, v in df_filter.items():
+        if not is_none_like(v):
+            new_df_filter[k] = v
+
+    return new_df_filter
+
+
 def filter_by_segmentation(df: pd.DataFrame,
                            df_filter: Dict[str, Any],
                            fit: bool = False,
@@ -2218,6 +2351,9 @@ def filter_by_segmentation(df: pd.DataFrame,
     for k, v in df_filter.items():
         if not pd.api.types.is_list_like(v):
             df_filter[k] = [v]
+
+    # Ignore none-like filters to avoid dropping trips
+    df_filter = remove_none_like_filter(df_filter)
 
     if fit:
         df_filter = fit_filter(df, df_filter.copy(), **kwargs)
@@ -2398,6 +2534,7 @@ def balance_a_to_p(productions: pd.DataFrame,
 
     # Balance Attractions for each year
     for col in unique_cols:
+
         # Only balance if needed
         if productions[col].sum() == attractions[col].sum():
             continue
@@ -2416,6 +2553,50 @@ def balance_a_to_p(productions: pd.DataFrame,
         )
 
     return attractions
+
+
+def compile_efficient_df(eff_df: List[Dict[str, Any]],
+                         unique_cols: List[Any] = None
+                         ) -> pd.DataFrame:
+    """
+    Compiles an 'efficient df' and makes it a full dataframe.
+
+    A efficient dataframe is a list of dictionaries, where each dictionary
+    contains a df under the key 'df'. All other keys in this dictionary should
+    be in the format {col_name, col_val}. All dataframes are expanded with
+    the other columns from the dictionary then concatenated together
+
+    Parameters
+    ----------
+    eff_df:
+        Efficient df structure as described in the function description.
+
+    unique_cols:
+        List of column names containing data that shouldn't be sorted.
+        We will try sort to optimise the concat
+
+    Returns
+    -------
+    compiled_df:
+        eff_df compiled into a full dataframe
+    """
+    # Init
+    concat_ph = list()
+
+    for part_df in eff_df:
+        # Grab the dataframe
+        df = part_df.pop('df')
+
+        # Add all segmentation cols back into df
+        for col_name, col_val in part_df.items():
+            df[col_name] = col_val
+
+        # Sort the indexers
+
+        concat_ph.append(df)
+
+    # Stick all the dfs together and return
+    return pd.concat(concat_ph)
 
 
 # ## BELOW HERE IS OLD TMS CODE ## #

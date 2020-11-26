@@ -1523,7 +1523,6 @@ def build_24hr_vdm_mats(import_dir: str,
             pd.DataFrame(splitting_factors).to_csv(out_path, index=False)
 
 
-
 def build_24hr_mats(import_dir: str,
                     export_dir: str,
                     matrix_format: str,

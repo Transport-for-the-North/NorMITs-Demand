@@ -117,8 +117,11 @@ TAG_CERTAINTY_BOUNDS = {
 
 # ## File Names and Paths ## #
 # Zone_system, trip_origin
-HB_PRODS_FNAME = '%s_%s_productions.csv'
-HB_ATTRS_FNAME = '%s_%s_attractions.csv'
+PRODS_FNAME = '%s_%s_productions.csv'
+ATTRS_FNAME = '%s_%s_attractions.csv'
+
+# year
+NTEM_CONTROL_FNAME = 'ntem_pa_ave_wday_%s.csv'
 
 
 NHB_PRODUCTIONS_FNAME = 'nhb_productions.csv'

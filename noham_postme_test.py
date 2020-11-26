@@ -117,6 +117,18 @@ def tms_segmentation_tests(model_name,
             ca_needed=ca_needed,
         )
 
+        mat_p.build_24hr_mats(
+            import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
+            export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\24hr PA Matrices',
+            matrix_format='pa',
+            years_needed=[consts.BASE_YEAR],
+            m_needed=m_needed,
+            p_needed=consts.ALL_NHB_P,
+            ca_needed=ca_needed,
+        )
+
+        exit()
+
         pa2od.build_od_from_tour_proportions(
             pa_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\24hr PA Matrices',
             od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test OD Matrices',
@@ -353,8 +365,8 @@ def main():
     audit_tol = 0.001
 
     # Control Flow
-    run_tms_seg_tests = False
-    run_tms_vdm_tests = True
+    run_tms_seg_tests = True
+    run_tms_vdm_tests = False
 
     # TODO: Check how OD2PA works with new norms/norms_2015
 

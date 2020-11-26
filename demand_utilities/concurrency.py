@@ -176,7 +176,7 @@ def _check_args_kwargs(args: List[Any],
     """
     # Init
     args_default = list() if args_default is None else args_default
-    kwargs_default = list() if kwargs_default is None else kwargs_default
+    kwargs_default = dict() if kwargs_default is None else kwargs_default
 
     if args is not None and kwargs is None:
         kwargs = [kwargs_default for _ in range(len(args))]
@@ -575,7 +575,7 @@ def process_pool_tests():
     assert (du.equal_ignore_order(result, baseline_results_kw))
 
     result = process_pool_wrapper(sorted, args, in_order=False)
-    assert (du.equal_ignore_order(result, baseline_results_kw))
+    assert (du.equal_ignore_order(result, baseline_results))
 
     # Kwargs only set up
     kwargs_dict = {'reverse': True, 'iterator': arg_val.copy()}
