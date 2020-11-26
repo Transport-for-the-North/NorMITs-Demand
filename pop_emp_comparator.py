@@ -8,7 +8,7 @@
 import re
 import time
 from pathlib import Path
-from typing import Tuple, List
+from typing import List
 
 # Third party imports
 import pandas as pd
@@ -28,9 +28,9 @@ EXCEL_MAX = (10000, 1000) # Maximum size of dataframe to be written to excel
 class PopEmpComparator:
     """Class to read the input MSOA population (or employment) data and compare it to the output.
 
-    Reads the input values, growth, constraints and type ratios and compares these to the
-    output population (or employment) data at various levels of aggregation. Csvs are produced
-    with the comparisons for checking.
+    Reads the input values, growth and constraints and compares these to the
+    output population (or employment) data at various levels of aggregation.
+    Excel file or CSVs are produced with the comparisons for checking.
     """
     ZONE_COL = 'model_zone_id'
 
@@ -38,7 +38,6 @@ class PopEmpComparator:
                  input_csv: str,
                  growth_csv: str,
                  constraint_csv: str,
-                 ratio_csv: str,
                  output_csv: str,
                  data_type: {'population', 'employment'},
                  base_year: str,
@@ -58,9 +57,6 @@ class PopEmpComparator:
             at MSOA level for all output years.
         constraint_csv : str
             Path to the csv containing the input constraints for population (or employment)
-            at MSOA level for all output years.
-        ratio_csv : str
-            Path to the csv containing the ratios between the population (or employment) types
             at MSOA level for all output years.
         output_csv : str
             Path to the output population (or employment) data produced by the
@@ -89,17 +85,15 @@ class PopEmpComparator:
         def read_print(csv, **kwargs):
             start = time.perf_counter()
             print(f'\tReading "{csv}"', end='')
-            df = du.safe_read_csv(csv, **kwargs)
+            df = du.safe_read_csv(csv, kwargs)
             print(f' - Done in {time.perf_counter() - start:,.1f}s')
             return df
 
         # Check data_type is allowed and initialise variables for that type
         self.data_type = data_type.lower()
         if self.data_type == 'population':
-            ratio_cols = [self.ZONE_COL, 'property_type_id', 'traveller_type_id']
             base_yr_col  = 'base_year_population'
         elif self.data_type == 'employment':
-            ratio_cols = [self.ZONE_COL, 'employment_class']
             base_yr_col = 'base_year_workers'
         else:
             raise ValueError('data_type parameter should be "population" or "employment" '
@@ -122,8 +116,6 @@ class PopEmpComparator:
         cols = [self.ZONE_COL, *self.years]
         self.growth_data = read_print(growth_csv, skipinitialspace=True, usecols=cols)
         self.constraint_data = read_print(constraint_csv, skipinitialspace=True, usecols=cols)
-        self.ratio_data = read_print(ratio_csv, skipinitialspace=True,
-                                     usecols=ratio_cols + self.years)
 
         # Normalise the growth data against the base year
         self.growth_data[self.years] = self.growth_data[self.years].div(
@@ -301,83 +293,6 @@ class PopEmpComparator:
         sector_comp.index.name = 'sector'
         return sector_comp
 
-    def ratio_comparison(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """Calculates the ratio of types in the output and compares to ratio input.
-
-        The ratio of the outputs is calculated for traveller type (or employment class)
-        and summarised at MSOA level and matrix total.
-
-        Returns
-        -------
-        : pd.DataFrame
-            Comparisons between the input and output ratios at MSOA level.
-        : pd.DataFrame
-            Comparisons between the input and output ratios for column totals with information
-            on the number of MSOAs which are the same.
-        """
-        # Initialise variables dependant on data_type being processed
-        if self.data_type == 'population':
-            # Calculate total population per MSOA property type
-            join_cols = [self.ZONE_COL, 'property_type_id']
-            output_totals = self.output.groupby(join_cols, as_index=False).sum()
-            class_col = 'traveller_type_id'
-            # Precision given in population ratio input
-            RATIO_DIFFERENCE = 1E-17
-        elif self.data_type == 'employment':
-            class_col = 'employment_class'
-            join_cols = [self.ZONE_COL]
-            # Get the total employment per MSOA from E01 column
-            output_totals = self.output.loc[self.output[class_col] == 'E01']
-            # Precision given in employment ratio input
-            RATIO_DIFFERENCE = 1E-9
-
-        # Join total data to outputs to calculate ratios of outputs
-        suff = '_totals'
-        output_ratios = self.output.merge(output_totals.drop(columns=class_col), on=join_cols,
-                                          how='left', validate='m:m', suffixes=('', suff))
-        for yr in self.years:
-            output_ratios[yr] = output_ratios[yr] / output_ratios[yr + suff]
-            output_ratios.drop(columns=yr + suff, inplace=True)
-
-        # Join input ratios
-        output_ratios = output_ratios.merge(self.ratio_data, on=[*join_cols, class_col],
-                                            how='left', validate='1:1',
-                                            suffixes=('_output', '_input'))
-        output_ratios.set_index([*join_cols, class_col], inplace=True)
-        # Create multiple levels for column names
-        cols = (i.split('_') for i in output_ratios.columns)
-        output_ratios.columns = pd.MultiIndex.from_tuples(cols)
-
-        # Create comparison column, checking they're the same within precision given in input
-        col_nm = f'within {RATIO_DIFFERENCE}'
-        for yr in self.years:
-            output_ratios[(yr, 'difference')] = (output_ratios[(yr, 'input')]
-                                                    - output_ratios[(yr, 'output')]).abs()
-            output_ratios[(yr, col_nm)] = output_ratios[(yr, 'difference')] < RATIO_DIFFERENCE
-        output_ratios.sort_index(axis=1, level=0, sort_remaining=False, inplace=True)
-
-        # Function to combine two lists so all items are paired into all unique pairs
-        combine_lists = lambda l1, l2: zip(np.repeat(l1, len(l2)), np.tile(l2, len(l1)))
-        # Produce summary showing various statistics across all MSOAs
-        agg = ['median', 'mean', 'std', 'min', 'max']
-        aggregate = {
-            **dict.fromkeys(combine_lists(self.years, ['input', 'output']), agg),
-            **dict.fromkeys(combine_lists(self.years, ['difference']), ['mean', 'max']),
-            **dict.fromkeys(combine_lists(self.years, [col_nm]), ['sum', 'count'])
-            }
-        group_cols = [i for i in [*join_cols, class_col] if i != self.ZONE_COL]
-        total_ratios = output_ratios.groupby(group_cols).agg(aggregate)
-        # Calculate percentage of MSOAs that are within the precision given in input
-        for yr in self.years:
-            total_ratios[(yr, col_nm, '% total')] = (total_ratios[(yr, col_nm, 'sum')]
-                                                      / total_ratios[(yr, col_nm, 'count')])
-        # Sort and rename columns
-        total_ratios.sort_index(axis=1, level=0, sort_remaining=False, inplace=True)
-        total_ratios.rename(columns={col_nm: 'MSOAs', 'sum': col_nm, 'count': 'total'},
-                            inplace=True)
-
-        return output_ratios, total_ratios
-
     def write_comparisons(self, output_loc: str, output_as: str='excel', year_col: bool=False):
         """Runs each comparison method and writes the output to a csv.
 
@@ -410,9 +325,7 @@ class PopEmpComparator:
         # Comparison methods to run with tuple containing names for return DataFrames
         comparisons = ((self.compare_totals, ('Totals Comparison',)),
                        (self.compare_msoa_totals, ('MSOA Totals Comparison',)),
-                       (self.compare_sector_totals, ('Sector Totals Comparison',)),
-                       (self.ratio_comparison, ('Ratio Comparison MSOA',
-                                                'Ratio Comparison Totals')))
+                       (self.compare_sector_totals, ('Sector Totals Comparison',)))
         # Run all comparisons and save each dataframe
         outputs = {}
         for func, names in comparisons:
@@ -477,15 +390,11 @@ def test():
     population_value_file = "population/base_population_2018.csv"
     population_growth_file = "population/future_population_growth.csv"
     population_constraint_file = "population/future_population_values.csv"
-    future_population_ratio_file = "traveller_type/traveller_type_splits.csv"
-    # FIXME temporary location to speed up access
-    future_population_ratio_file = r'C:\WSP_Projects\TfN EFS\02 Delivery\00 - EFS Test Run\traveller_type_splits.csv'
     population_output_file = 'Productions/MSOA_population.csv'
     # Employment csv files
     worker_value_file = "employment/base_workers_2018.csv"
     worker_growth_file = "employment/future_workers_growth.csv"
     worker_constraint_file = "employment/future_workers_growth_values.csv"
-    worker_ratio_file = "employment/future_worker_splits.csv"
     worker_output_file = 'Attractions/MSOA_workers.csv'
 
     # Compare the population inputs and outputs
@@ -493,7 +402,6 @@ def test():
         import_loc / population_value_file,
         import_loc / population_growth_file,
         import_loc / population_constraint_file,
-        import_loc / future_population_ratio_file,
         output_loc / population_output_file,
         'population',
         BASE_YEAR,
@@ -501,12 +409,12 @@ def test():
         sector_grouping_file=import_loc / "zoning/tfn_sector_msoa_pop_weighted_lookup.csv"
     )
     pop_comp.write_comparisons(output_loc / 'Reports', output_as='csv', year_col=True)
+    pop_comp.write_comparisons(output_loc / 'Reports', output_as='excel', year_col=True)
     # Compare the employment inputs and outputs
     emp_comp = PopEmpComparator(
         import_loc / worker_value_file,
         import_loc / worker_growth_file,
         import_loc / worker_constraint_file,
-        import_loc / worker_ratio_file,
         output_loc / worker_output_file,
         'employment',
         BASE_YEAR,
@@ -514,6 +422,7 @@ def test():
         sector_grouping_file=import_loc / "zoning/tfn_sector_msoa_emp_weighted_lookup.csv"
     )
     emp_comp.write_comparisons(output_loc / 'Reports', output_as='csv', year_col=True)
+    emp_comp.write_comparisons(output_loc / 'Reports', output_as='excel', year_col=True)
     return
 
 
