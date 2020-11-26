@@ -258,6 +258,7 @@ def build_io_paths(import_location: str,
         'attractions': os.path.join(export_home, 'Attractions'),
         'sectors': os.path.join(export_home, 'Sectors'),
         'audits': os.path.join(export_home, 'Audits'),
+        'reports': os.path.join(export_home, 'Reports'),
 
         # Pre-ME
         'pa': os.path.join(matrices_home, pa),

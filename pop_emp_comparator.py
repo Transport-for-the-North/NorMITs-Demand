@@ -379,53 +379,6 @@ class PopEmpComparator:
 
 
 ##### FUNCTIONS #####
-def test():
-    """Tests the PopEmpComparator class on data from previous run of EFS. """
-    # Input and output paths hardcoded for testing
-    import_loc = Path('Y:/NorMITs Demand/inputs/default')
-    output_loc = Path('C:/WSP_Projects/TfN EFS/02 Delivery/00 - EFS Test Run/NorMITs Demand'
-                      '/norms/v2_2-EFS_Output/iter2')
-    BASE_YEAR = '2018'
-    # Population csv files
-    population_value_file = "population/base_population_2018.csv"
-    population_growth_file = "population/future_population_growth.csv"
-    population_constraint_file = "population/future_population_values.csv"
-    population_output_file = 'Productions/MSOA_population.csv'
-    # Employment csv files
-    worker_value_file = "employment/base_workers_2018.csv"
-    worker_growth_file = "employment/future_workers_growth.csv"
-    worker_constraint_file = "employment/future_workers_growth_values.csv"
-    worker_output_file = 'Attractions/MSOA_workers.csv'
-
-    # Compare the population inputs and outputs
-    pop_comp = PopEmpComparator(
-        import_loc / population_value_file,
-        import_loc / population_growth_file,
-        import_loc / population_constraint_file,
-        output_loc / population_output_file,
-        'population',
-        BASE_YEAR,
-        msoa_lookup_file=import_loc / "zoning/msoa_zones.csv",
-        sector_grouping_file=import_loc / "zoning/tfn_sector_msoa_pop_weighted_lookup.csv"
-    )
-    pop_comp.write_comparisons(output_loc / 'Reports', output_as='csv', year_col=True)
-    pop_comp.write_comparisons(output_loc / 'Reports', output_as='excel', year_col=True)
-    # Compare the employment inputs and outputs
-    emp_comp = PopEmpComparator(
-        import_loc / worker_value_file,
-        import_loc / worker_growth_file,
-        import_loc / worker_constraint_file,
-        output_loc / worker_output_file,
-        'employment',
-        BASE_YEAR,
-        msoa_lookup_file=import_loc / "zoning/msoa_zones.csv",
-        sector_grouping_file=import_loc / "zoning/tfn_sector_msoa_emp_weighted_lookup.csv"
-    )
-    emp_comp.write_comparisons(output_loc / 'Reports', output_as='csv', year_col=True)
-    emp_comp.write_comparisons(output_loc / 'Reports', output_as='excel', year_col=True)
-    return
-
-
 def _excel_column_format(sheet: Worksheet, formats: List[str], ignore_rows: int=0):
     """Updates the formats of all columns in given sheet based on list of formats.
 
@@ -453,8 +406,3 @@ def _excel_column_format(sheet: Worksheet, formats: List[str], ignore_rows: int=
             if r < ignore_rows:
                 continue
             cell.style = form
-
-
-##### MAIN #####
-if __name__ == '__main__':
-    test()

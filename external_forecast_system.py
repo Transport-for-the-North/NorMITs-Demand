@@ -128,27 +128,25 @@ class ExternalForecastSystem:
 
         # Initialise parameters for population and employment comparisons
         self.pop_emp_inputs = {
-            'population': {
-                'input_csv': os.path.join(input_dir, population_value_file),
-                'growth_csv': os.path.join(input_dir, population_growth_file),
-                'constraint_csv': os.path.join(input_dir, population_constraint_file),
-                'ratio_csv': os.path.join(input_dir, future_population_ratio_file),
-                'msoa_lookup_file': os.path.join(input_dir, 'zoning/msoa_zones.csv'),
-                'sector_grouping_file': os.path.join(
-                    input_dir, 'zoning/tfn_sector_msoa_pop_weighted_lookup.csv'
-                    ),
-                },
-            'employment': {
-                'input_csv': os.path.join(input_dir, worker_value_file),
-                'growth_csv': os.path.join(input_dir, worker_growth_file),
-                'constraint_csv': os.path.join(input_dir, worker_constraint_file),
-                'ratio_csv': os.path.join(input_dir, worker_ratio_file),
-                'msoa_lookup_file': os.path.join(input_dir, 'zoning/msoa_zones.csv'),
-                'sector_grouping_file': os.path.join(
-                    input_dir, 'zoning/tfn_sector_msoa_emp_weighted_lookup.csv'
-                    )
-                }
-            }
+            "population": {
+                "input_csv": os.path.join(self.imports["default_inputs"], base_pop_path),
+                "growth_csv": os.path.join(self.imports["default_inputs"], pop_growth_path),
+                "constraint_csv": os.path.join(self.imports["default_inputs"], pop_constraint_path),
+                "msoa_lookup_file": os.path.join(self.imports["zoning"], "msoa_zones.csv"),
+                "sector_grouping_file": os.path.join(
+                    self.imports["zoning"], "tfn_sector_msoa_pop_weighted_lookup.csv"
+                ),
+            },
+            "employment": {
+                "input_csv": os.path.join(self.imports["default_inputs"], base_emp_path),
+                "growth_csv": os.path.join(self.imports["default_inputs"], emp_growth_path),
+                "constraint_csv": os.path.join(self.imports["default_inputs"], emp_constraint_path),
+                "msoa_lookup_file": os.path.join(self.imports["zoning"], "msoa_zones.csv"),
+                "sector_grouping_file": os.path.join(
+                    self.imports["zoning"], "tfn_sector_msoa_emp_weighted_lookup.csv"
+                ),
+            },
+        }
 
         print("External Forecast System initiated!")
         last_time = current_time
@@ -780,10 +778,11 @@ class ExternalForecastSystem:
         # Compare productions output to inputs
         comparison = PopEmpComparator(
             **self.pop_emp_inputs['population'],
-            output_csv=os.path.join(exports['productions'], 'MSOA_population.csv'),
-            data_type='population', base_year=str(base_year)
+            output_csv=os.path.join(self.exports['productions'], 'MSOA_population.csv'),
+            data_type='population',
+            base_year=str(base_year)
             )
-        comparison.write_comparisons(exports['reports'], output_as='csv', year_col=True)
+        comparison.write_comparisons(self.exports['reports'], output_as='csv', year_col=True)
 
         last_time = current_time
         current_time = time.time()
@@ -817,10 +816,11 @@ class ExternalForecastSystem:
         # Compare attractions output to inputs
         comparison = PopEmpComparator(
             **self.pop_emp_inputs['employment'],
-            output_csv=os.path.join(exports['productions'], 'MSOA_workers.csv'),
-            data_type='employment', base_year=str(base_year)
+            output_csv=os.path.join(self.exports['attractions'], 'MSOA_workers.csv'),
+            data_type='employment',
+            base_year=str(base_year)
             )
-        comparison.write_comparisons(exports['reports'], output_as='csv', year_col=True)
+        comparison.write_comparisons(self.exports['reports'], output_as='csv', year_col=True)
 
         last_time = current_time
         current_time = time.time()
