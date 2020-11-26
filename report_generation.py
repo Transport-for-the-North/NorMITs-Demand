@@ -637,11 +637,12 @@ if __name__ == "__main__":
     imports = efs_main.imports
     exports = efs_main.exports
     
-    pa_params = r"C:\Users\Monopoly\Documents\EFS\data\params\pav2.json"
+    pa_params = os.path.join(imports["default_inputs"], 
+                             "reports", "params", "pa.json")
     main(pa_params, imports, exports)
-    # tp_pa_params = r"C:\Users\Monopoly\Documents\EFS\data\params\tp_pa.json"
-    # main(tp_pa_params)
-    # nhb_params = r"C:\Users\Monopoly\Documents\EFS\data\params\nhb_pa.json"
-    # main(nhb_params)
-    # test_params = r"C:\Users\Monopoly\Documents\EFS\data\params\test.json"
-    # main(test_params)
+    tp_pa_params = os.path.join(imports["default_inputs"], 
+                                "reports", "params", "tp_pa.json")
+    main(tp_pa_params)
+    nhb_params = os.path.join(imports["default_inputs"], 
+                              "reports", "params", "nhb_pa.json")
+    main(nhb_params)
