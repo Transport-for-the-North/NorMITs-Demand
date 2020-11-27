@@ -816,7 +816,7 @@ class ExternalForecastSystem:
         # Compare attractions output to inputs
         comparison = PopEmpComparator(
             **self.pop_emp_inputs['employment'],
-            output_csv=os.path.join(self.exports['attractions'], 'MSOA_workers.csv'),
+            output_csv=os.path.join(self.exports['attractions'], 'MSOA_employment.csv'),
             data_type='employment',
             base_year=str(base_year)
             )

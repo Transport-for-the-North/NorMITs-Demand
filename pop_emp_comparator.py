@@ -121,12 +121,40 @@ class PopEmpComparator:
         self.growth_data[self.years] = self.growth_data[self.years].div(
             self.growth_data[str(self.base_year)], axis=0)
 
+        # Convert the input, constraint and growth datasets to use MSOA area codes same as output
+        msoa_lookup = pd.read_csv(msoa_lookup_file, usecols=['model_zone_code', 'model_zone_id'])
+        self.input_data = self.zone_lookup(msoa_lookup, self.input_data)
+        self.constraint_data = self.zone_lookup(msoa_lookup, self.constraint_data)
+        self.growth_data = self.zone_lookup(msoa_lookup, self.growth_data)
+        # Rename output columns to be consistent with the input data
+        self.output.rename(columns={'msoa_zone_id': self.ZONE_COL}, inplace=True)
+
         # Create dictionary of sector reporter parameters
-        self.msoa_lookup_file = msoa_lookup_file
         self.sector_params = {'sector_grouping_file': str(sector_grouping_file),
                               'sector_system_name': str(sector_system_name),
                               'zone_system_name': str(zone_system_name)}
 
+    def zone_lookup(self, msoa_lookup: pd.DataFrame, data: pd.DataFrame) -> pd.DataFrame:
+        """Uses given lookup to convert model zone ID column into MSOA area code.
+
+        Parameters
+        ----------
+        msoa_lookup : pd.DataFrame
+            MSOA to model zone ID lookup data.
+        data : pd.DataFrame
+            The dataset which is being converted.
+
+        Returns
+        -------
+        pd.DataFrame
+            Dataset using the MSOA area code.
+        """
+        data = msoa_lookup.merge(data, on='model_zone_id', validate='1:m')
+        data = data.drop(columns='model_zone_id').rename(
+            columns={'model_zone_code': 'model_zone_id'}
+        )
+        return data
+    
     def compare_totals(self) -> pd.DataFrame:
         """Compares the input and output column totals and produces a summary of the differences.
 
@@ -136,12 +164,10 @@ class PopEmpComparator:
             DataFrame containing differences between the input and output column totals.
         """
         # Calculate totals for each input and output for each year column
-        totals = pd.DataFrame({'input total': self.input_data.sum(),
-                               'constraint total': self.constraint_data.sum(),
-                               'mean growth input': self.growth_data.mean(),
-                               'output total': self.output.sum()})
-        drop_index = [i for i in totals.index if i not in self.years]
-        totals = totals.drop(index=drop_index)
+        totals = pd.DataFrame({'input total': self.input_data[self.base_year].sum(),
+                               'constraint total': self.constraint_data[self.years].sum(),
+                               'mean growth input': self.growth_data[self.years].mean(),
+                               'output total': self.output[self.years].sum()})
         totals.index.name = 'year'
 
         # Calculate comparison columns
@@ -188,6 +214,7 @@ class PopEmpComparator:
             df.columns = pd.MultiIndex.from_tuples([(i, nm) for i in df.columns])
             concat.append(df)
         comp = pd.concat(concat, axis=1)
+        comp.index.name = index_col
 
         # Calculate comparison columns
         for yr in self.years:
@@ -226,20 +253,13 @@ class PopEmpComparator:
         pd.DataFrame
             Differences between the input and output values at sector level.
         """
-        # Convert from MSOA zone id to MSOA code
-        msoa_lookup = pd.read_csv(self.msoa_lookup_file,
-                                  usecols=['model_zone_code', 'model_zone_id'])
-        msoa_coded_data = {}
-        for nm, df in {'input': self.input_data,
-                       'constraint': self.constraint_data,
-                       'output': self.output,
-                       'growth': self.growth_data}.items():
-            df = msoa_lookup.merge(df, on='model_zone_id', validate='1:m')
-            df = df.drop(columns='model_zone_id').rename(
-                columns={'model_zone_code': 'model_zone_id'}
-            )
-            msoa_coded_data[nm] = df
-
+        cols = [self.ZONE_COL, *self.years]
+        msoa_coded_data = {
+            'input': self.input_data[[self.ZONE_COL, self.base_year]],
+            'constraint': self.constraint_data[cols],
+            'output': self.output[cols],
+            'growth': self.growth_data[cols]
+        }
         # Calculate sectors totals (or means) for the comparison data
         SPLIT_COL = 'overlap_msoa_split_factor'
         sector_rep = SectorReporter()
@@ -258,13 +278,6 @@ class PopEmpComparator:
                                   *original_cols]]
             metric_cols[nm] = met_cols
         del msoa_coded_data
-        # Remove population/employment type columns from output data
-        if self.data_type == 'population':
-            sector_data['output'].drop(
-                columns=['property_type_id', 'traveller_type_id'], inplace=True
-                )
-        else:
-            sector_data['output'].drop(columns=['employment_class'], inplace=True)
 
         # Aggregate the sectors together, accounting for the split column
         grouped = {}

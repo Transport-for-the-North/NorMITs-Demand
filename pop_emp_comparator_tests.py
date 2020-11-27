@@ -16,8 +16,8 @@ from external_forecast_system import ExternalForecastSystem
 
 ##### CONSTANTS #####
 # Constants for running the test function
-MODEL_NAME = "norms"
-ITER_NUM = 2
+MODEL_NAME = "norms_2015"
+ITER_NUM = 1
 IMPORT_LOC = "Y:/"
 EXPORT_LOC = "Y:/"
 BASE_YEAR = "2018"
@@ -63,7 +63,7 @@ def test():
         os.path.join(imports["default_inputs"], worker_value_file),
         os.path.join(imports["default_inputs"], worker_growth_file),
         os.path.join(imports["default_inputs"], worker_constraint_file),
-        os.path.join(exports["attractions"], "MSOA_workers.csv"),
+        os.path.join(exports["attractions"], "MSOA_employment.csv"),
         "employment",
         BASE_YEAR,
         msoa_lookup_file=os.path.join(imports["zoning"], "msoa_zones.csv"),
