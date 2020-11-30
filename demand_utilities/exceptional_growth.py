@@ -69,28 +69,84 @@ def segment_employement(employment: pd.DataFrame,
     return soc_employment
 
 
-def calculate_exceptional_trip_rates(observed_base_prod: pd.DataFrame,
-                                     observed_base_attr: pd.DataFrame,
-                                     population: pd.DataFrame,
-                                     employment: pd.DataFrame,
+def attraction_exceptional_trip_rate(observed_base: pd.DataFrame,
+                                     land_use: pd.DataFrame,
+                                     e_zones: pd.DataFrame,
+                                     soc_weights_path: str,
+                                     base_year: str,
+                                     segment_cols: List[str],
+                                     zone_column: str,
+                                     sector_lookup: str = None,
+                                     purpose_column: str = "purpose_id"
+                                     ) -> pd.DataFrame:
+    
+    
+    emp_group_cols = ["sector_id"] + segment_cols
+    if sector_lookup is not None:
+        sector_map = pd.read_csv(sector_lookup)
+        sector_map = sector_map.set_index("model_zone_id")["grouping_id"]
+    else:
+        sector_map = lambda x: x
+
+    tr_e = None
+    
+    print("Calculating Attraction Weights")
+    emp_sub = land_use.loc[land_use["employment_cat"] == "E01"]
+    emp_sub = emp_sub[[zone_column, base_year]]
+    emp = segment_employement(
+        emp_sub,
+        soc_weights_path=soc_weights_path,
+        zone_column=zone_column,
+        data_col=base_year
+    )
+    emp["sector_id"] = emp[zone_column].map(sector_map)
+    emp = emp.groupby(["sector_id", "soc"], as_index=False)[base_year].sum()
+    emp["soc"] = emp["soc"].astype("int")
+    emp.rename({base_year: "land_use"}, axis=1, inplace=True)
+    
+    observed = observed_base.copy()
+    observed["sector_id"] = observed[zone_column].map(sector_map)
+    observed = observed.groupby(
+        emp_group_cols,
+        as_index=False
+    )[base_year].sum()
+    
+    emp_group_cols.remove(purpose_column)
+    
+    tr_e = observed.merge(
+        emp,
+        on=emp_group_cols
+    )
+    
+    emp_group_cols.insert(1, purpose_column)
+    tr_e.set_index(emp_group_cols, inplace=True)
+    tr_e.sort_index(inplace=True)
+    tr_e.reset_index(inplace=True)
+    
+    tr_e["a_tr"] = tr_e[base_year] / tr_e["land_use"]
+    
+    print(tr_e)
+    
+    emp.to_csv("emp.csv")
+    
+    return tr_e
+
+
+def production_exceptional_trip_rate(observed_base: pd.DataFrame,
+                                     land_use: pd.DataFrame,
                                      e_zones: pd.DataFrame,
                                      base_year: str,
-                                     pop_segment_cols: List[str],
-                                     emp_segment_cols: List[str],
+                                     segment_cols: List[str],
                                      zone_column: str,
-                                     soc_weights_path: str,
                                      sector_lookup: str = None,
-                                     purpose_column: str = "purpose_id",
-                                     do_emp: bool = True,
-                                     do_pop: bool = True
+                                     purpose_column: str = "purpose_id"
                                      ) -> pd.DataFrame:
     # observed_base dataframes are vectors of productions and attractions at
     # TfN enhanced segmentation and model zone system
 
     # Convert population segmentation to production segmentation
 
-    pop_group_cols = ["sector_id"] + pop_segment_cols
-    emp_group_cols = ["sector_id"] + emp_segment_cols
+    pop_group_cols = ["sector_id"] + segment_cols
 
     pop_group_cols.remove(purpose_column)
     
@@ -101,102 +157,60 @@ def calculate_exceptional_trip_rates(observed_base_prod: pd.DataFrame,
         sector_map = lambda x: x
 
     tr_p = None
-    tr_e = None
 
-    if do_pop:
-        print("Caclulating Production Trip Rates")
+    print("Caclulating Production Trip Rates")
 
-        # Convert to the trip segementation
-        # Deal with mismatched types
-        pop = population.copy()
-        pop["ns"] = pop["ns"].astype("int")
-        pop["soc"] = pop["soc"].astype("int")
-        pop["ns"] = "none"
-        pop["ns"] = pop["ns"].astype("str")
-        pop["soc"] = pop["soc"].astype("str")
-        pop["sector_id"] = pop[zone_column].map(sector_map)
-        pop_g = pop.groupby(pop_group_cols)[base_year].sum()
-        pop = population.copy()
-        pop["ns"] = pop["ns"].astype("int")
-        pop["soc"] = pop["soc"].astype("int")
-        pop["soc"] = "none"
-        pop["soc"] = pop["soc"].astype("str")
-        pop["ns"] = pop["ns"].astype("str")
-        pop["sector_id"] = pop[zone_column].map(sector_map)
-        pop_g = pop_g.append(pop.groupby(pop_group_cols)[base_year].sum())
+    # Convert to the trip segementation
+    # Deal with mismatched types
+    pop = land_use.copy()
+    pop["ns"] = pop["ns"].astype("int")
+    pop["soc"] = pop["soc"].astype("int")
+    pop["ns"] = "none"
+    pop["ns"] = pop["ns"].astype("str")
+    pop["soc"] = pop["soc"].astype("str")
+    pop["sector_id"] = pop[zone_column].map(sector_map)
+    pop_g = pop.groupby(pop_group_cols)[base_year].sum()
+    pop = land_use.copy()
+    pop["ns"] = pop["ns"].astype("int")
+    pop["soc"] = pop["soc"].astype("int")
+    pop["soc"] = "none"
+    pop["soc"] = pop["soc"].astype("str")
+    pop["ns"] = pop["ns"].astype("str")
+    pop["sector_id"] = pop[zone_column].map(sector_map)
+    pop_g = pop_g.append(pop.groupby(pop_group_cols)[base_year].sum())
 
-        # Tidy up
-        pop_g = pop_g.sort_index()
-        pop_g = pop_g.reset_index()
-        pop_g = pop_g.rename({base_year: "land_use"}, axis=1)
-        
-        # Group observed data
-        observed = observed_base_prod.copy()
-        observed["sector_id"] = observed[zone_column].map(sector_map)
-        observed = observed.groupby(
-            pop_group_cols + [purpose_column],
-            as_index=False
-        )[base_year].sum()
-
-        tr_p = observed.merge(
-            pop_g,
-            on=pop_group_cols
-        )
-
-        tr_p["p_tr"] = tr_p[base_year] / tr_p["land_use"]
-
-        pop_group_cols.insert(1, purpose_column)
-        tr_p.set_index(pop_group_cols, inplace=True)
-        tr_p.sort_index(inplace=True)
-        tr_p.reset_index(inplace=True)
-
-        print("Saving to files")
-        observed_base_prod.to_csv("observed_base_prod.csv", index=False)
-        pop_g.to_csv("pop_g.csv", index=False)
-        
-        print(tr_p)
+    # Tidy up
+    pop_g = pop_g.sort_index()
+    pop_g = pop_g.reset_index()
+    pop_g = pop_g.rename({base_year: "land_use"}, axis=1)
     
-    if do_emp:
-        print("Calculating Attraction Weights")
-        emp_sub = employment.loc[employment["employment_cat"] == "E01"]
-        emp_sub = emp_sub[[zone_column, base_year]]
-        emp = segment_employement(
-            emp_sub,
-            soc_weights_path=soc_weights_path,
-            zone_column=zone_column,
-            data_col=base_year
-        )
-        emp["sector_id"] = emp[zone_column].map(sector_map)
-        emp = emp.groupby(["sector_id", "soc"], as_index=False)[base_year].sum()
-        emp["soc"] = emp["soc"].astype("int")
-        emp.rename({base_year: "land_use"}, axis=1, inplace=True)
-        
-        observed = observed_base_attr.copy()
-        observed["sector_id"] = observed[zone_column].map(sector_map)
-        observed = observed.groupby(
-            emp_group_cols,
-            as_index=False
-        )[base_year].sum()
-        
-        emp_group_cols.remove(purpose_column)
-        
-        tr_e = observed.merge(
-            emp,
-            on=emp_group_cols
-        )
-        
-        emp_group_cols.insert(1, purpose_column)
-        tr_e.set_index(emp_group_cols, inplace=True)
-        tr_e.sort_index(inplace=True)
-        tr_e.reset_index(inplace=True)
-        
-        tr_e["a_tr"] = tr_e[base_year] / tr_e["land_use"]
-        
-        print(tr_e)
-        
-        emp.to_csv("emp.csv")
+    # Group observed data
+    observed = observed_base.copy()
+    observed["sector_id"] = observed[zone_column].map(sector_map)
+    observed = observed.groupby(
+        pop_group_cols + [purpose_column],
+        as_index=False
+    )[base_year].sum()
 
-    return tr_p, tr_e
+    tr_p = observed.merge(
+        pop_g,
+        on=pop_group_cols
+    )
+
+    tr_p["p_tr"] = tr_p[base_year] / tr_p["land_use"]
+
+    pop_group_cols.insert(1, purpose_column)
+    tr_p.set_index(pop_group_cols, inplace=True)
+    tr_p.sort_index(inplace=True)
+    tr_p.reset_index(inplace=True)
+
+    print("Saving to files")
+    observed.to_csv("observed_base_prod.csv", index=False)
+    pop_g.to_csv("pop_g.csv", index=False)
+    
+    print(tr_p)
+
+    return tr_p
 
 
 def handle_exceptional_growth(synth_future: pd.DataFrame,
@@ -315,15 +329,23 @@ def test():
     print("Finished loading")
 
 
-    tr_p, tr_e = calculate_exceptional_trip_rates(
-        observed_base_prod=obs_base_p,
-        observed_base_attr=obs_base_e,
-        population=population,
-        employment=employment,
+    tr_p = production_exceptional_trip_rate(
+        observed_base=obs_base_p,
+        land_use=population,
         e_zones=pd.DataFrame,
         base_year=base_year,
-        pop_segment_cols=seg_cols_p,
-        emp_segment_cols=seg_cols_e,
+        segment_cols=seg_cols_p,
+        zone_column=zone_col,
+        purpose_column="purpose_id",
+        sector_lookup=r"Y:\NorMITs Demand\inputs\default\zoning\lad_msoa_grouping.csv"
+    )
+
+    tr_e = attraction_exceptional_trip_rate(
+        observed_base=obs_base_e,
+        land_use=employment,
+        e_zones=pd.DataFrame,
+        base_year=base_year,
+        segment_cols=seg_cols_e,
         zone_column=zone_col,
         soc_weights_path=soc_weights_path,
         purpose_column="purpose_id",
