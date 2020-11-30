@@ -22,20 +22,22 @@ import external_forecast_system as efs
 VALID_TRIP_ORIGIN = ["hb", "nhb"]
 
 
-def matrix_reporting(matrix_directory: str,
-                     output_dir: str,
-                     trip_origin: str,
-                     matrix_format: str,
-                     segments_needed: dict = {},
-                     zone_file: str = None,
-                     sectors_files: List[str] = None,
-                     zones_name: str = "model",
-                     sectors_names: List[str] = ["sector"],
-                     aggregation_method: str = "sum",
-                     tld_path: str = None,
-                     cost_path: str = None,
-                     overwrite_dir: bool = True,
-                     collate_years: bool = False):
+def matrix_reporting(
+    matrix_directory: str,
+    output_dir: str,
+    trip_origin: str,
+    matrix_format: str,
+    segments_needed: dict = {},
+    zone_file: str = None,
+    sectors_files: List[str] = None,
+    zones_name: str = "model",
+    sectors_names: List[str] = ["sector"],
+    aggregation_method: str = "sum",
+    tld_path: str = None,
+    cost_path: str = None,
+    overwrite_dir: bool = True,
+    collate_years: bool = False,
+):
     """
     TODO: write documentataion
     Options to aggregate any matrix segment.
@@ -58,8 +60,9 @@ def matrix_reporting(matrix_directory: str,
     if matrix_format not in consts.VALID_MATRIX_FORMATS:
         raise ValueError(f"{matrix_format} is not a valid option")
     if len(sectors_files) != len(sectors_names):
-        raise AttributeError("Number of sector files must match the number "
-                             "of sector names")
+        raise AttributeError(
+            "Number of sector files must match the number " "of sector names"
+        )
     for sectors_file in sectors_files:
         if sectors_file is not None and not os.path.isfile(sectors_file):
             raise ValueError(f"{sectors_file} does not exist")
@@ -79,7 +82,7 @@ def matrix_reporting(matrix_directory: str,
         "soc": consts.SOC_NEEDED,
         "ns": consts.NS_NEEDED,
         "ca": consts.CA_NEEDED,
-        "tp": consts.TIME_PERIODS
+        "tp": consts.TIME_PERIODS,
     }
 
     # Parse the input segments
@@ -87,8 +90,7 @@ def matrix_reporting(matrix_directory: str,
     parsed_segments = {}
     for segment in all_segments:
         parsed_segments[segment] = parse_segments(
-            segments_needed.get(segment),
-            all_segments[segment]
+            segments_needed.get(segment), all_segments[segment]
         )
 
     # Aggregate the matrices
@@ -109,7 +111,7 @@ def matrix_reporting(matrix_directory: str,
                 ns_needed=parsed_segments["ns"],
                 ca_needed=parsed_segments["ca"],
                 tp_needed=parsed_segments["tp"],
-                return_paths=True
+                return_paths=True,
             )
         except AttributeError as e:
             # If there are no matrices available for these segments
@@ -120,7 +122,8 @@ def matrix_reporting(matrix_directory: str,
 
         output_files = glob(os.path.join(output_dir, "*.csv"))
         output_files = [
-            x for x in output_files 
+            x
+            for x in output_files
             if not any(sectors_name in x for sectors_name in sectors_names)
         ]
         mat_files = [os.path.basename(x) for x in output_files]
@@ -133,7 +136,7 @@ def matrix_reporting(matrix_directory: str,
                 matrix_format,
                 tld_path=tld_path,
                 cost_lookup_path=cost_path,
-                overwrite=overwrite_tld
+                overwrite=overwrite_tld,
             )
             overwrite_tld = False
 
@@ -142,8 +145,7 @@ def matrix_reporting(matrix_directory: str,
             sr = SectorReporter()
             valid_files = output_files.copy()
             output_files = []
-            for sectors_file, sectors_name in zip(sectors_files,
-                                                  sectors_names):
+            for sectors_file, sectors_name in zip(sectors_files, sectors_names):
                 for matrix_file in valid_files:
                     if matrix_file in sectored_output_files:
                         continue
@@ -154,7 +156,7 @@ def matrix_reporting(matrix_directory: str,
                         zone_system_file=zone_file,
                         sector_grouping_file=sectors_file,
                         sector_system_name=sectors_name,
-                        aggregation_method=aggregation_method
+                        aggregation_method=aggregation_method,
                     )
                     suffix = f"_{sectors_name}.csv"
                     new_file = matrix_file.replace(".csv", suffix)
@@ -164,19 +166,19 @@ def matrix_reporting(matrix_directory: str,
     if collate_years:
         # Create a GIS format report
         generate_gis_report(
-            sectored_output_files,
-            parsed_segments["years"],
-            parsed_segments["p"]
+            sectored_output_files, parsed_segments["years"], parsed_segments["p"]
         )
 
     return success
 
 
-def generate_gis_report(all_files: List[int],
-                        years_needed: List[int],
-                        purposes_needed: List[int],
-                        aggregate_purposes: bool = True,
-                        aggregate_years: bool = True):
+def generate_gis_report(
+    all_files: List[int],
+    years_needed: List[int],
+    purposes_needed: List[int],
+    aggregate_purposes: bool = True,
+    aggregate_years: bool = True,
+):
     """Collates aggregated matrices together to create a single report file
     that can be easily read by GIS programs
 
@@ -197,18 +199,12 @@ def generate_gis_report(all_files: List[int],
 
     # Get the base file names so that purpose and year can be combined to
     # one file
-    replaces = (
-        ("_p", "{purpose}"),
-        ("_yr", "{year}")
-    )
+    replaces = (("_p", "{purpose}"), ("_yr", "{year}"))
     re_string = r"(?<={old})(\d+)"
     base_files = all_files.copy()
     for old, new in replaces:
         base_files = set(
-            [
-                re.sub(re_string.format(old=old), new, x)
-                for x in base_files
-            ]
+            [re.sub(re_string.format(old=old), new, x) for x in base_files]
         )
 
     # Loop over all required segments and aggregate to a stacked matrix for GIS
@@ -220,10 +216,7 @@ def generate_gis_report(all_files: List[int],
 
         for year, purpose in tqdm(product(years_needed, purposes_needed)):
 
-            file_name = file_base.format(
-                year=year,
-                purpose=purpose
-            )
+            file_name = file_base.format(year=year, purpose=purpose)
             try:
                 df = pd.read_csv(file_name, index_col=0).stack()
             except FileNotFoundError:
@@ -253,11 +246,15 @@ def generate_gis_report(all_files: List[int],
                     [col for col in matrix.columns if f"_p{purpose}" in col]
                 ].sum(axis=1)
 
-        trip_ends = matrix.groupby(level=0).sum().merge(
-            matrix.groupby(level=1).sum(),
-            left_index=True,
-            right_index=True,
-            suffixes=("_o", "_d"),
+        trip_ends = (
+            matrix.groupby(level=0)
+            .sum()
+            .merge(
+                matrix.groupby(level=1).sum(),
+                left_index=True,
+                right_index=True,
+                suffixes=("_o", "_d"),
+            )
         )
 
         out_file = file_base.format(year="_all", purpose="_all")
@@ -265,15 +262,14 @@ def generate_gis_report(all_files: List[int],
         matrix.to_csv(out_file.replace(".csv", "_gis_report.csv"))
 
 
-def parse_segments(required_segments: Union[List[int], str],
-                   all_segments: List[int]):
-    """Converts required segment strings into those expected by 
+def parse_segments(required_segments: Union[List[int], str], all_segments: List[int]):
+    """Converts required segment strings into those expected by
     aggregate_matrices
 
     Parameters
     ----------
     required_segments : Union[List[int], str]
-        Unparsed segment arguments can be a list of segments or 
+        Unparsed segment arguments can be a list of segments or
         "Keep" or "Agg"
     all_segments : List[int]
         List of all possible segments
@@ -292,12 +288,14 @@ def parse_segments(required_segments: Union[List[int], str],
         return required_segments
 
 
-def tld_reporting(matrix_dir: str,
-                  matrix_files: List[str],
-                  matrix_type: str,
-                  tld_path: str,
-                  cost_lookup_path: str,
-                  overwrite: bool = True):
+def tld_reporting(
+    matrix_dir: str,
+    matrix_files: List[str],
+    matrix_type: str,
+    tld_path: str,
+    cost_lookup_path: str,
+    overwrite: bool = True,
+):
     """Generates the trip length distributions of a directory of matrices
 
     Parameters
@@ -325,20 +323,14 @@ def tld_reporting(matrix_dir: str,
     # matrices = os.listdir(matrix_dir)
     matrices = matrix_files
     mat_df = du.parse_mat_output(
-        matrices,
-        sep="_",
-        mat_type=matrix_type,
-        file_format=".csv",
-        file_name="matrix"
+        matrices, sep="_", mat_type=matrix_type, file_format=".csv", file_name="matrix"
     )
     for _, mat_desc in tqdm(mat_df.iterrows(), total=mat_df.shape[0]):
         mat_dict = mat_desc.to_dict()
 
         # Extract trip matrix info for each file
         matrix = mat_dict.pop("matrix")
-        matrix = pd.read_csv(
-            os.path.join(matrix_dir, matrix)
-        )
+        matrix = pd.read_csv(os.path.join(matrix_dir, matrix))
 
         # Extract segments if they exist - remove from calib params if needed
         # purpose, mode, segment(optional) required in tlb function
@@ -374,12 +366,7 @@ def tld_reporting(matrix_dir: str,
         # TODO Use the year here to get the forecast/base tlb when they exist
         year_tld_path = seg_tld_path
         tlb = du.get_trip_length_bands(
-            year_tld_path,
-            mat_dict,
-            "ntem",
-            trip_origin,
-            replace_nan=False,
-            echo=True
+            year_tld_path, mat_dict, "ntem", trip_origin, replace_nan=False, echo=True
         )
 
         # Set the string sent to the costs function
@@ -390,21 +377,18 @@ def tld_reporting(matrix_dir: str,
 
         # Get the cost data for the purpose/mode
         costs, cost_name = du.get_costs(
-            cost_lookup_path,
-            mat_dict,
-            tp=tp_str,
-            iz_infill=0.5
+            cost_lookup_path, mat_dict, tp=tp_str, iz_infill=0.5
         )
 
         # Convert to a square numpy matrix
-        unq_zones = list(range(1, (costs[list(costs)[0]].max())+1))
+        unq_zones = list(range(1, (costs[list(costs)[0]].max()) + 1))
         costs = du.df_to_np(
             costs,
-            v_heading='p_zone',
-            h_heading='a_zone',
-            values='cost',
+            v_heading="p_zone",
+            h_heading="a_zone",
+            values="cost",
             unq_internal_zones=unq_zones,
-            echo=False
+            echo=False,
         )
 
         matrix = matrix.drop(list(matrix)[0], axis=1).values
@@ -413,20 +397,19 @@ def tld_reporting(matrix_dir: str,
         # TODO see why this is needed - zoning mismatch
         fill_shape = 1246
         pad_matrix = np.zeros((fill_shape, fill_shape))
-        pad_matrix[:matrix.shape[0], :matrix.shape[1]] = matrix
+        pad_matrix[: matrix.shape[0], : matrix.shape[1]] = matrix
 
         # Get trip length by band
-        
-        (trip_lengths_by_band_km,
-         band_shares_by_band,
-         average_trip_length) = dr.get_trip_length_by_band(tlb,
-                                                           costs,
-                                                           pad_matrix)
+
+        (
+            trip_lengths_by_band_km,
+            band_shares_by_band,
+            average_trip_length,
+        ) = dr.get_trip_length_by_band(tlb, costs, pad_matrix)
 
         # Merge into single dataframe on the band index
         tld_results = trip_lengths_by_band_km.merge(
-            band_shares_by_band,
-            on="tlb_index"
+            band_shares_by_band, on="tlb_index"
         ).fillna(0.0)
 
         # Save individual bands and band shares to separate csv files
@@ -440,22 +423,18 @@ def tld_reporting(matrix_dir: str,
             car_availability=ca,
             tp=tp,
             csv=True,
-            suffix="_tld"
+            suffix="_tld",
         )
         out_file = os.path.join(output_dir, out_file)
         tld_results.to_csv(out_file, index=False)
 
     # Concatenate all files into a single stacked csv
     concat_vector_folder(
-        output_dir,
-        matrix_type=matrix_type,
-        output_name="tld_dists.csv"
+        output_dir, matrix_type=matrix_type, output_name="tld_dists.csv"
     )
 
 
-def concat_vector_folder(data_dir: str,
-                         matrix_type: str,
-                         output_name: str = None):
+def concat_vector_folder(data_dir: str, matrix_type: str, output_name: str = None):
     """Concatenates a folder of "long" format .csv files to a single file
 
     Parameters
@@ -475,20 +454,14 @@ def concat_vector_folder(data_dir: str,
     files = os.listdir(data_dir)
 
     file_df = du.parse_mat_output(
-        files,
-        sep="_",
-        mat_type=matrix_type,
-        file_format=".csv",
-        file_name="file"
+        files, sep="_", mat_type=matrix_type, file_format=".csv", file_name="file"
     )
 
     vector_df = pd.DataFrame()
 
     for _, row in file_df.iterrows():
 
-        single_vector = pd.read_csv(
-            os.path.join(data_dir, row.pop("file"))
-        )
+        single_vector = pd.read_csv(os.path.join(data_dir, row.pop("file")))
 
         # Add additional columns for each segment e.g. purpose, mode, soc/ns
         for key, value in row.items():
@@ -497,22 +470,15 @@ def concat_vector_folder(data_dir: str,
         if vector_df.empty:
             vector_df = single_vector
         else:
-            vector_df = pd.concat(
-                (vector_df, single_vector),
-                axis=0
-            )
-            
+            vector_df = pd.concat((vector_df, single_vector), axis=0)
+
     # Remove columns that just contain "none" - e.g. suffixes on the file name
     vector_df = vector_df[
-        [col for col in vector_df 
-         if next(iter(set(vector_df[col]))) != "none"]
+        [col for col in vector_df if next(iter(set(vector_df[col]))) != "none"]
     ]
 
-    vector_df.to_csv(
-        os.path.join(data_dir, output_name),
-        index=False
-    )
-    
+    vector_df.to_csv(os.path.join(data_dir, output_name), index=False)
+
     # TODO add option to remove individual files if needed
 
 
@@ -573,17 +539,18 @@ def main(param_file, imports, exports):
 
     errors = []
     overwrite = True
-    
+
     output_dir = os.path.join(exports["reports"], params["output_dir"])
     zones_file = os.path.join(imports["zoning"], params["zones_file"])
-    sectors_files = [os.path.join(imports["zone_translation"], x) 
-                    for x in params["sectors_files"]]
+    sectors_files = [
+        os.path.join(imports["zone_translation"], x) for x in params["sectors_files"]
+    ]
     tld_path = os.path.join(imports["home"], params["tld_path"])
     cost_path = os.path.join(imports["home"], params["cost_path"])
-    
+
     overwrite = params["overwrite_outputs"]
     collate_years = params["collate_years"]
-    
+
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
 
@@ -605,7 +572,7 @@ def main(param_file, imports, exports):
             overwrite_dir=overwrite,
             tld_path=tld_path,
             cost_path=cost_path,
-            collate_years=collate_years
+            collate_years=collate_years,
         )
 
         if not successful:
@@ -620,29 +587,30 @@ def main(param_file, imports, exports):
 if __name__ == "__main__":
     # Run the configuration files to produce the report formats required by
     # Power BI
-    
+
     import_location = "Y:/"
     output_location = "C:/"
     model_name = "norms_2015"
     iter_num = 1
     iter_name = f"iter{iter_num}"
-    
+
     efs_main = efs.ExternalForecastSystem(
         model_name=model_name,
         import_location=import_location,
         output_location=output_location,
-        iter_num=iter_num
+        iter_num=iter_num,
     )
-    
+
     imports = efs_main.imports
     exports = efs_main.exports
-    
-    pa_params = os.path.join(imports["default_inputs"], 
-                             "reports", "params", "pa.json")
+
+    pa_params = os.path.join(imports["default_inputs"], "reports", "params", "pa.json")
     main(pa_params, imports, exports)
-    tp_pa_params = os.path.join(imports["default_inputs"], 
-                                "reports", "params", "tp_pa.json")
+    tp_pa_params = os.path.join(
+        imports["default_inputs"], "reports", "params", "tp_pa.json"
+    )
     main(tp_pa_params)
-    nhb_params = os.path.join(imports["default_inputs"], 
-                              "reports", "params", "nhb_pa.json")
+    nhb_params = os.path.join(
+        imports["default_inputs"], "reports", "params", "nhb_pa.json"
+    )
     main(nhb_params)
