@@ -32,7 +32,6 @@ def identify_exceptional_zones(pre_df: pd.DataFrame,
             (post_df[year] / post_df[base_year])
             - (pre_df[year] / pre_df[base_year])
         )
-        print(growth_diff)
         # Change to a boolean series
         growth_diff[year] = growth_diff[year] > growth_cutoff
         
@@ -380,6 +379,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
                 constraints: pd.DataFrame,
                 constraints_zone_equivalence: pd.DataFrame,
                 segment_cols: List[str],
+                segment_groups: List[str] = None,
                 dlog_conversion_factor: float = 1.0,
                 msoa_column: str = "msoa_zone_id",
                 min_growth_limit: float = 0.25,
@@ -402,6 +402,9 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
 
     Returns a DataFrame of future year population
     """
+
+    # Use segment columns if no value provided for segment groups
+    segment_groups = segment_groups or segment_cols
 
     post_dlog_df = pre_dlog_df.copy()[
         [msoa_column, base_year] + segment_cols + future_years
@@ -433,12 +436,12 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     )
     # Calculate the split for each sector
     segment_split = post_dlog_df.groupby(
-        [msoa_column, "sector_id"] + segment_cols,
+        [msoa_column, "sector_id"] + segment_groups,
         as_index=False
     )[[base_year] + future_years].sum()
     segment_split["seg_s"] = (
         segment_split.groupby(
-            ["sector_id"] + segment_cols
+            ["sector_id"] + segment_groups
         )[base_year].transform("sum")
         / segment_split.groupby("sector_id")[base_year].transform("sum")
     )
@@ -535,7 +538,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         # in the zone to preserver spatial distribution
         invalid_growth = segment_split[adj_growth] < min_growth_limit
         audit_zones = segment_split[invalid_growth][
-            [msoa_column] + segment_cols + [adj_growth]
+            [msoa_column] + segment_groups + [adj_growth]
         ].copy()
         audit_zones = audit_zones.loc[audit_zones[adj_growth] != 0]
         audit_zones["year"] = year
@@ -549,7 +552,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
             )
         
         # Update original data with new segment growth
-        merge_cols = [msoa_column] + segment_cols
+        merge_cols = [msoa_column] + segment_groups
         post_dlog_df = pd.merge(
             post_dlog_df,
             segment_split[merge_cols + [adj_growth]],
@@ -577,12 +580,12 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
             )
             print(f"Post constraint total = {post_dlog_df[year].sum()}")
 
-        # Drop any temporary columns
-        post_dlog_df.drop(
-            ["growth", "constraint", "sector_growth"],
-            axis=1,
-            inplace=True
-        )
+            # Drop any temporary columns
+            post_dlog_df.drop(
+                ["growth", "constraint", "sector_growth"],
+                axis=1,
+                inplace=True
+            )
 
     # Use pre and post dlog growth to identify exceptional zones
     e_zones = identify_exceptional_zones(

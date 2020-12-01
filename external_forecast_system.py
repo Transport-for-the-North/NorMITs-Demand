@@ -232,8 +232,8 @@ class ExternalForecastSystem:
             soc_needed: List[int] = consts.SOC_NEEDED,
             ns_needed: List[int] = consts.NS_NEEDED,
             car_availabilities_needed: List[int] = consts.CA_NEEDED,
-            dlog_file: str = None,
-            dlog_split_file: str = None,
+            dlog_file_pop: str = None,
+            dlog_file_emp: str = None,
             minimum_development_certainty: str = "MTL",
             population_metric: str = "Population",  # Households, Population
             constraint_required: List[bool] = consts.CONSTRAINT_REQUIRED_DEFAULT,
@@ -497,7 +497,7 @@ class ExternalForecastSystem:
         distribution_method = distribution_method.lower()
         population_metric = population_metric.lower()
         minimum_development_certainty = minimum_development_certainty.upper()
-        integrate_dlog = dlog_split_file is not None and dlog_file is not None
+        integrate_dlog = dlog_file_pop is not None and dlog_file_emp is not None
         iter_name = 'iter' + str(iter_num)
         model_name = du.get_model_name(modes_needed[0])
 
@@ -712,12 +712,19 @@ class ExternalForecastSystem:
                   (current_time - last_time))
 
         # ## D-LOG READ-IN
-        if integrate_dlog:
-            development_log = pd.read_csv(dlog_file)
-            development_log_split = pd.read_csv(dlog_split_file)
-        else:
-            development_log = None
-            development_log_split = None
+        if dlog_file_pop is None:
+            dlog_file_pop = os.path.join(
+                imports["default_inputs"],
+                "population",
+                "dlog_residential.csv"
+            )
+        if dlog_file_emp is None:
+            dlog_file_emp = os.path.join(
+                imports["default_inputs"],
+                "employment",
+                "dlog_nonresidential.csv"
+            )
+
 
         # ## CONSTRAINT BUILDING
         if constraint_source == "default":
@@ -794,8 +801,7 @@ class ExternalForecastSystem:
             import_home=imports['home'],
             msoa_conversion_path=self.msoa_zones_path,
             control_productions=True,
-            d_log=development_log,
-            d_log_split=development_log_split,
+            d_log=dlog_file_pop,
             constraint_required=constraint_required,
             constraint_method=constraint_method,
             constraint_area=constraint_area,
@@ -824,8 +830,7 @@ class ExternalForecastSystem:
             msoa_conversion_path=self.msoa_zones_path,
             attraction_weights_path=imports['a_weights'],
             control_attractions=True,
-            d_log=development_log,
-            d_log_split=development_log_split,
+            d_log=dlog_file_emp,
             constraint_required=constraint_required,
             constraint_method=constraint_method,
             constraint_area=constraint_area,

@@ -18,6 +18,7 @@ from itertools import product
 from tqdm import tqdm
 
 import efs_constants as consts
+from demand_utilities import d_log_processor as dlog
 from efs_constrainer import ForecastConstrainer
 
 import demand_utilities.utils as du
@@ -58,7 +59,6 @@ class EFSAttractionGenerator:
 
             # D-Log
             d_log: str = None,
-            d_log_split: str = None,
 
             # Employment constraints
             constraint_required: List[bool] = consts.DEFAULT_ATTRACTION_CONSTRAINTS,
@@ -232,7 +232,7 @@ class EFSAttractionGenerator:
         mode_split_m_col = 'mode'
         emp_cat_col = 'employment_cat'
         all_years = [str(x) for x in [base_year] + future_years]
-        integrate_d_log = d_log is not None and d_log_split is not None
+        integrate_d_log = d_log is not None
         # Dlog is now passed as the path to the d-log file
         # if integrate_d_log:
         #     d_log = d_log.copy()
@@ -329,7 +329,7 @@ class EFSAttractionGenerator:
                 dlog_conversion_factor=1.0,
                 segment_cols=["employment_cat"],
                 dlog_data_column_key="employees",
-                perform_constraint=constraint_required[1],
+                perform_constraint=constraint_required[4],
                 audit_location=out_path
             )
             # Save High Growth (Exceptional) zones to file

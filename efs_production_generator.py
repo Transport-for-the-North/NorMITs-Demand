@@ -64,7 +64,6 @@ class EFSProductionGenerator:
 
             # D-Log
             d_log: str = None,
-            d_log_split: str = None,
 
             # Population constraints
             constraint_required: List[bool] = consts.DEFAULT_PRODUCTION_CONSTRAINTS,
@@ -249,7 +248,7 @@ class EFSProductionGenerator:
         # Init
         internal_zone_col = 'msoa_zone_id'
         all_years = [str(x) for x in [base_year] + future_years]
-        integrate_d_log = d_log is not None and d_log_split is not None
+        integrate_d_log = d_log is not None
         # Dlog is now passed as the path to the d-log file
         # if integrate_d_log:
         #     d_log = d_log.copy()
@@ -353,7 +352,8 @@ class EFSProductionGenerator:
                 constraints=population_constraint,
                 constraints_zone_equivalence=designated_area,
                 dlog_conversion_factor=1.0,
-                segment_cols=["soc", "ns", "ca"],
+                segment_cols=["area_type", "traveller_type", "soc", "ns", "ca"],
+                segment_groups=["soc", "ns", "ca"],
                 dlog_data_column_key="population",
                 perform_constraint=constraint_required[1],
                 audit_location=out_path
