@@ -313,7 +313,7 @@ def build_io_paths(import_location: str,
         'productions': os.path.join(export_home, 'Productions'),
         'attractions': os.path.join(export_home, 'Attractions'),
         'sectors': os.path.join(export_home, 'Sectors'),
-        'audits': os.path.join(export_home, 'Audits'),
+        'print_audits': os.path.join(export_home, 'Audits'),
 
         # Pre-ME
         'pa': os.path.join(matrices_home, pa),
@@ -2556,7 +2556,7 @@ def balance_a_to_p(productions: pd.DataFrame,
 
 
 def compile_efficient_df(eff_df: List[Dict[str, Any]],
-                         unique_cols: List[Any] = None
+                         col_names: List[Any]
                          ) -> pd.DataFrame:
     """
     Compiles an 'efficient df' and makes it a full dataframe.
@@ -2571,9 +2571,8 @@ def compile_efficient_df(eff_df: List[Dict[str, Any]],
     eff_df:
         Efficient df structure as described in the function description.
 
-    unique_cols:
-        List of column names containing data that shouldn't be sorted.
-        We will try sort to optimise the concat
+    col_names:
+        asdasda
 
     Returns
     -------
@@ -2582,6 +2581,7 @@ def compile_efficient_df(eff_df: List[Dict[str, Any]],
     """
     # Init
     concat_ph = list()
+    stack_ph = list()
 
     for part_df in eff_df:
         # Grab the dataframe
@@ -2592,10 +2592,13 @@ def compile_efficient_df(eff_df: List[Dict[str, Any]],
             df[col_name] = col_val
 
         # Sort the indexers
+        df = df.reindex(columns=col_names)
 
         concat_ph.append(df)
+        # stack_ph.append(df.values)
 
-    # Stick all the dfs together and return
+    # Stick all the dfs together and put back into a df
+    # return pd.DataFrame(data=np.vstack(stack_ph), columns=col_names)
     return pd.concat(concat_ph)
 
 

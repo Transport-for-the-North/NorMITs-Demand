@@ -31,7 +31,12 @@ TIME_PERIOD_STRS = ['tp' + str(x) for x in TIME_PERIODS]
 BASE_YEAR = 2018
 FUTURE_YEARS = [2033, 2035, 2050]
 ALL_YEARS = [BASE_YEAR] + FUTURE_YEARS
+
+BASE_YEAR_STR = str(BASE_YEAR)
+FUTURE_YEARS_STR = [str(x) for x in FUTURE_YEARS]
 ALL_YEARS_STR = [str(x) for x in ALL_YEARS]
+
+PROCESS_COUNT = -2
 
 # ## VDM/ME2 constants ## #
 VDM_TRIP_ORIGINS = ['hb', 'nhb']
@@ -90,6 +95,7 @@ MODEL_NAMES = [
 ]
 
 # DIRECTORY NAMES
+AUDITS_DIRNAME = 'Audits'
 PRODUCTIONS_DIRNAME = 'Productions'
 ATTRACTIONS_DIRNAME = 'Attractions'
 NHB_PARAMS_DIRNAME = 'nhb_factors'

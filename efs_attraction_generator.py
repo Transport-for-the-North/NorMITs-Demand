@@ -207,7 +207,7 @@ class EFSAttractionGenerator:
             values that are less than 0.
 
         audits:
-            Whether to output audits to the terminal during running. This can
+            Whether to output print_audits to the terminal during running. This can
             be used to monitor the employment and attraction numbers being
             generated and constrained.
 

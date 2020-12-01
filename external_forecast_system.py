@@ -911,7 +911,7 @@ class ExternalForecastSystem:
                 ca_needed=car_availabilities_needed,
                 seed_dist_dir=self.imports['seed_dists'],
                 dist_out=self.exports['pa_24'],
-                audit_out=self.exports['audits'],
+                audit_out=self.exports['print_audits'],
                 echo=echo_distribution
             )
             print("Distributions generated!")
@@ -2018,7 +2018,7 @@ class ExternalForecastSystem:
             'productions': os.path.join(export_home, 'Productions'),
             'attractions': os.path.join(export_home, 'Attractions'),
             'sectors': os.path.join(export_home, 'Sectors'),
-            'audits': os.path.join(export_home, 'Audits'),
+            'print_audits': os.path.join(export_home, 'Audits'),
 
             # Pre-ME
             'pa': os.path.join(matrices_home, pa),
