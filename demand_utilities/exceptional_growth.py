@@ -11,8 +11,7 @@ import efs_constants as consts
 
 
 def load_exceptional_zones(productions_export: str,
-                           attractions_export: str,
-                           zone_conversion_path: str
+                           attractions_export: str
                            ):
     e_zones = pd.read_csv(
         os.path.join(productions_export, "exceptional_zones.csv")
@@ -72,44 +71,65 @@ def segment_employement(employment: pd.DataFrame,
 def attraction_exceptional_trip_rate(observed_base: pd.DataFrame,
                                      land_use: pd.DataFrame,
                                      e_zones: pd.DataFrame,
-                                     soc_weights_path: str,
                                      base_year: str,
                                      segment_cols: List[str],
                                      zone_column: str,
                                      sector_lookup: str = None,
-                                     purpose_column: str = "purpose_id"
+                                     purpose_column: str = "purpose_id",
+                                     zone_sys_name: str = "model_zone_id",
+                                     sector_sys_name: str = "grouping_id",
+                                     soc_weights_path: str = None
                                      ) -> pd.DataFrame:
     
     
     emp_group_cols = ["sector_id"] + segment_cols
     if sector_lookup is not None:
         sector_map = pd.read_csv(sector_lookup)
-        sector_map = sector_map.set_index("model_zone_id")["grouping_id"]
+        sector_map = sector_map.set_index(zone_sys_name)[sector_sys_name]
     else:
         sector_map = lambda x: x
 
     tr_e = None
     
     print("Calculating Attraction Weights")
-    emp_sub = land_use.loc[land_use["employment_cat"] == "E01"]
-    emp_sub = emp_sub[[zone_column, base_year]]
-    emp = segment_employement(
-        emp_sub,
-        soc_weights_path=soc_weights_path,
-        zone_column=zone_column,
-        data_col=base_year
-    )
-    emp["sector_id"] = emp[zone_column].map(sector_map)
-    emp = emp.groupby(["sector_id", "soc"], as_index=False)[base_year].sum()
-    emp["soc"] = emp["soc"].astype("int")
-    emp.rename({base_year: "land_use"}, axis=1, inplace=True)
     
     observed = observed_base.copy()
     observed["sector_id"] = observed[zone_column].map(sector_map)
+    
+    emp_sub = land_use.loc[land_use["employment_cat"] == "E01"]
+    emp_sub = emp_sub[[zone_column, base_year]]
+    
+    if soc_weights_path is not None:
+        emp = segment_employement(
+            emp_sub,
+            soc_weights_path=soc_weights_path,
+            zone_column=zone_column,
+            data_col=base_year
+        )
+        observed["soc"] = observed["soc"].astype("int")
+    else:
+        emp = emp_sub.copy()
+    
+    emp["sector_id"] = emp[zone_column].map(sector_map)
+    if soc_weights_path is not None:
+        emp = emp.groupby(["sector_id", "soc"], as_index=False)[base_year].sum()
+        emp["soc"] = emp["soc"].astype("int")
+    else:
+        emp = emp.groupby(["sector_id"], as_index=False)[base_year].sum()
+    emp.rename({base_year: "land_use"}, axis=1, inplace=True)
+    
+    print("Split Employment")
+    print(emp)
+    
+    observed.to_csv("observed_pre_group.csv")
+    
     observed = observed.groupby(
         emp_group_cols,
         as_index=False
     )[base_year].sum()
+    
+    print("Observed Attractions")
+    print(observed)
     
     emp_group_cols.remove(purpose_column)
     
@@ -123,14 +143,48 @@ def attraction_exceptional_trip_rate(observed_base: pd.DataFrame,
     tr_e.sort_index(inplace=True)
     tr_e.reset_index(inplace=True)
     
-    tr_e["a_tr"] = tr_e[base_year] / tr_e["land_use"]
+    tr_e["trip_rate"] = tr_e[base_year] / tr_e["land_use"]
+    
+    tr_e = tr_e[emp_group_cols + ["trip_rate"]]
     
     print(tr_e)
     
-    emp.to_csv("emp.csv")
+    tr_e.to_csv("tr_e.csv")
     
     return tr_e
 
+
+def convert_pop_segmentation(population: pd.DataFrame,
+                             grouping_cols: List[str],
+                             value_cols: List[str],
+                             sector_map: pd.DataFrame = None,
+                             zone_column: str = "model_zone_id",
+                             sector_column: str = "sector_id"
+                             ):
+    
+    pop = population.copy()
+    pop["ns"] = pop["ns"].astype("int")
+    pop["soc"] = pop["soc"].astype("int")
+    pop["ns"] = "none"
+    pop["ns"] = pop["ns"].astype("str")
+    pop["soc"] = pop["soc"].astype("str")
+    if sector_map is not None:
+        pop[sector_column] = pop[zone_column].map(sector_map)
+    pop_g = pop.groupby(grouping_cols)[value_cols].sum()
+    pop = population.copy()
+    pop["ns"] = pop["ns"].astype("int")
+    pop["soc"] = pop["soc"].astype("int")
+    pop["soc"] = "none"
+    pop["soc"] = pop["soc"].astype("str")
+    pop["ns"] = pop["ns"].astype("str")
+    if sector_map is not None:
+        pop[sector_column] = pop[zone_column].map(sector_map)
+    pop_g = pop_g.append(pop.groupby(grouping_cols)[value_cols].sum())
+    
+    pop_g = pop_g.sort_index()
+    pop_g = pop_g.reset_index()
+    
+    return pop_g
 
 def production_exceptional_trip_rate(observed_base: pd.DataFrame,
                                      land_use: pd.DataFrame,
@@ -139,7 +193,9 @@ def production_exceptional_trip_rate(observed_base: pd.DataFrame,
                                      segment_cols: List[str],
                                      zone_column: str,
                                      sector_lookup: str = None,
-                                     purpose_column: str = "purpose_id"
+                                     purpose_column: str = "purpose_id",
+                                     zone_sys_name: str = "model_zone_id",
+                                     sector_sys_name: str = "grouping_id"
                                      ) -> pd.DataFrame:
     # observed_base dataframes are vectors of productions and attractions at
     # TfN enhanced segmentation and model zone system
@@ -152,7 +208,7 @@ def production_exceptional_trip_rate(observed_base: pd.DataFrame,
     
     if sector_lookup is not None:
         sector_map = pd.read_csv(sector_lookup)
-        sector_map = sector_map.set_index("model_zone_id")["grouping_id"]
+        sector_map = sector_map.set_index(zone_sys_name)[sector_sys_name]
     else:
         sector_map = lambda x: x
 
@@ -162,26 +218,15 @@ def production_exceptional_trip_rate(observed_base: pd.DataFrame,
 
     # Convert to the trip segementation
     # Deal with mismatched types
-    pop = land_use.copy()
-    pop["ns"] = pop["ns"].astype("int")
-    pop["soc"] = pop["soc"].astype("int")
-    pop["ns"] = "none"
-    pop["ns"] = pop["ns"].astype("str")
-    pop["soc"] = pop["soc"].astype("str")
-    pop["sector_id"] = pop[zone_column].map(sector_map)
-    pop_g = pop.groupby(pop_group_cols)[base_year].sum()
-    pop = land_use.copy()
-    pop["ns"] = pop["ns"].astype("int")
-    pop["soc"] = pop["soc"].astype("int")
-    pop["soc"] = "none"
-    pop["soc"] = pop["soc"].astype("str")
-    pop["ns"] = pop["ns"].astype("str")
-    pop["sector_id"] = pop[zone_column].map(sector_map)
-    pop_g = pop_g.append(pop.groupby(pop_group_cols)[base_year].sum())
+    pop_g = convert_pop_segmentation(
+        land_use,
+        pop_group_cols,
+        value_cols=base_year,
+        sector_map=sector_map,
+        zone_column=zone_column
+    )
 
     # Tidy up
-    pop_g = pop_g.sort_index()
-    pop_g = pop_g.reset_index()
     pop_g = pop_g.rename({base_year: "land_use"}, axis=1)
     
     # Group observed data
@@ -197,7 +242,7 @@ def production_exceptional_trip_rate(observed_base: pd.DataFrame,
         on=pop_group_cols
     )
 
-    tr_p["p_tr"] = tr_p[base_year] / tr_p["land_use"]
+    tr_p["trip_rate"] = tr_p[base_year] / tr_p["land_use"]
 
     pop_group_cols.insert(1, purpose_column)
     tr_p.set_index(pop_group_cols, inplace=True)
@@ -207,6 +252,8 @@ def production_exceptional_trip_rate(observed_base: pd.DataFrame,
     print("Saving to files")
     observed.to_csv("observed_base_prod.csv", index=False)
     pop_g.to_csv("pop_g.csv", index=False)
+    
+    tr_p = tr_p[pop_group_cols + ["trip_rate"]]
     
     print(tr_p)
 
@@ -219,13 +266,14 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
                               zone_column: str,
                               segment_columns: List[str],
                               value_column: str,
+                              base_year: str,
                               exceptional_zones: pd.DataFrame = None,
                               land_use: pd.DataFrame = None, # model_zone level
                               trip_rates: pd.DataFrame = None, # Sector level
                               sector_lookup: pd.DataFrame = None, # Contains zone_column and grouping_id
                               force_soc_type: bool = False
                               ) -> pd.DataFrame:
-
+    
     # TODO This could result in lower trips generated than before. Should this 
     # be handled
     
@@ -235,14 +283,14 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
     # Join and calculate growth - will likely need changing
     merge_cols = [zone_column] + segment_columns
     forecast_vector = pd.merge(
-        synth_base.rename({value_column: "s_b"}, axis=1),
+        synth_base.rename({base_year: "s_b"}, axis=1),
         synth_future.rename({value_column: "s_f"}, axis=1),
         how="outer",
         on=merge_cols
     )
     forecast_vector = pd.merge(
         forecast_vector,
-        calib_base.rename({value_column: "b_c"}, axis=1),
+        observed_base.rename({base_year: "b_c"}, axis=1),
         how="outer",
         on=merge_cols
     )
@@ -457,7 +505,9 @@ def test():
         segment_cols=seg_cols_p,
         zone_column=zone_col,
         purpose_column="purpose_id",
-        sector_lookup=r"Y:\NorMITs Demand\inputs\default\zoning\lad_msoa_grouping.csv"
+        sector_lookup=r"Y:\NorMITs Demand\import\zone_translation\norms_2015_to_tfn_sectors.csv",
+        zone_sys_name="norms_zone_id",
+        sector_sys_name="tfn_sectors_zone_id"
     )
 
     tr_e = attraction_exceptional_trip_rate(
@@ -469,7 +519,109 @@ def test():
         zone_column=zone_col,
         soc_weights_path=soc_weights_path,
         purpose_column="purpose_id",
-        sector_lookup=r"Y:\NorMITs Demand\inputs\default\zoning\lad_msoa_grouping.csv"
+        sector_lookup=r"Y:\NorMITs Demand\import\zone_translation\norms_2015_to_tfn_sectors.csv",
+        zone_sys_name="norms_zone_id",
+        sector_sys_name="tfn_sectors_zone_id"
     )
     
+    print("Productions")
+    
+    year = "2033"
+    base_year = "2018"
+    synth_future = synthetic_p.rename({year: "value"}, axis=1)
+    synth_future = synth_future[[zone_col] + seg_cols_p + ["value"]]
+    synth_base = synthetic_p.rename({base_year: "value"}, axis=1)
+    synth_base = synth_base[[zone_col] + seg_cols_p + ["value"]]
+    observed_base = obs_base_p.rename({base_year: "value"}, axis=1)
+    sector_lookup = pd.read_csv(r"Y:\NorMITs Demand\import\zone_translation\norms_2015_to_tfn_sectors.csv")
+    sector_lookup.rename({"norms_zone_id": "model_zone_id",
+                          "tfn_sectors_zone_id": "grouping_id"},
+                         axis=1,
+                         inplace=True)
+    
+    population = convert_pop_segmentation(
+        population,
+        grouping_cols=["model_zone_id", "soc", "ns", "car_availability_id"],
+        value_cols="2033"
+    )
+    population.rename({"2033": "value"}, axis=1, inplace=True)
+    
+    print("Synthetic Future")
+    print(synth_future)
+    print("Synthetic Base")
+    print(synth_base)
+    print("Observed Base")
+    print(observed_base)
+    print("Land Use")
+    print(population)
+    print("Trip Rates")
+    print(tr_p)
+    tr_p.to_csv("tr.csv")
+    
+    handle_exceptional_growth(
+        synth_future=synth_future,
+        synth_base=synth_base,
+        observed_base=observed_base,
+        zone_column="model_zone_id",
+        segment_columns=["purpose_id", "soc", "ns", "car_availability_id"],
+        value_column="value",
+        exceptional_zones=exceptional_zones,
+        land_use=population,
+        trip_rates=tr_p,
+        sector_lookup=sector_lookup
+    )
+    
+    print("Attractions")
+    
+    year = "2033"
+    base_year = "2018"
+    synth_future = synthetic_e.rename({year: "value"}, axis=1)
+    synth_future = synth_future[[zone_col] + seg_cols_e + ["value"]]
+    synth_base = synthetic_e.rename({base_year: "value"}, axis=1)
+    synth_base = synth_base[[zone_col] + seg_cols_e + ["value"]]
+    observed_base = obs_base_e.rename({base_year: "value"}, axis=1)
+    sector_lookup = pd.read_csv(r"Y:\NorMITs Demand\import\zone_translation\norms_2015_to_tfn_sectors.csv")
+    sector_lookup.rename({"norms_zone_id": "model_zone_id",
+                          "tfn_sectors_zone_id": "grouping_id"},
+                         axis=1,
+                         inplace=True)
+    
+    employment = segment_employement(
+        employment.loc[employment["employment_cat"] == "E01"],
+        soc_weights_path=soc_weights_path,
+        zone_column=zone_col,
+        data_col="2033"
+    )
+    employment.drop(
+        ["p", "employment_cat", base_year],
+        axis=1,
+        inplace=True
+    )
+    employment.rename({"2033": "value"}, axis=1, inplace=True)
+    
+    print("Synthetic Future")
+    print(synth_future)
+    print("Synthetic Base")
+    print(synth_base)
+    print("Observed Base")
+    print(observed_base)
+    print("Land Use")
+    print(employment)
+    print("Trip Rates")
+    print(tr_e)
+    tr_e.to_csv("tr.csv")
+    
+    handle_exceptional_growth(
+        synth_future=synth_future,
+        synth_base=synth_base,
+        observed_base=observed_base,
+        zone_column="model_zone_id",
+        segment_columns=["purpose_id", "soc"],
+        value_column="value",
+        exceptional_zones=exceptional_zones,
+        land_use=employment,
+        trip_rates=tr_e,
+        sector_lookup=sector_lookup,
+        force_soc_type=True
+    )
     
