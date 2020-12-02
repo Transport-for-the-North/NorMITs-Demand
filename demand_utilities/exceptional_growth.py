@@ -5,7 +5,7 @@ import pandas as pd
 
 # Import attraction generator to access soc splits
 import efs_attraction_generator as attr
-from demand_utilities import sector_reporter_v2 as sr
+from zone_translator import ZoneTranslator
 from demand_utilities import utils as du
 import efs_constants as consts
 
@@ -220,12 +220,17 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
                               segment_columns: List[str],
                               value_column: str,
                               exceptional_zones: pd.DataFrame = None,
-                              trip_rate_path: str = None,
-                              trip_type: str = "productions"
+                              land_use: pd.DataFrame = None, # model_zone level
+                              trip_rates: pd.DataFrame = None, # Sector level
+                              sector_lookup: pd.DataFrame = None, # Contains zone_column and grouping_id
+                              force_soc_type: bool = False
                               ) -> pd.DataFrame:
 
-    # Read in data on exceptional zones
-    e_zones = exceptional_zones or pd.DataFrame()
+    # TODO This could result in lower trips generated than before. Should this 
+    # be handled
+    
+    # Setup sector lookup
+    sector_map = sector_lookup.set_index(zone_column)["grouping_id"]
 
     # Join and calculate growth - will likely need changing
     merge_cols = [zone_column] + segment_columns
@@ -242,6 +247,7 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
         on=merge_cols
     )
 
+    # Setup default growth values
     forecast_vector[value_column] = (
         forecast_vector["b_c"]
         * forecast_vector["s_f"]
@@ -249,16 +255,59 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
     )
 
     # Handle Exceptional Zones
-    
-    if trip_rate_path is None:
-        # Calculate trip rates
+    if trip_rates is None:
+        # TODO Calculate trip rates here?
         pass
+    # Get the relevant land use data
+    e_land_use = land_use.loc[
+        land_use[zone_column
+                 ].isin(exceptional_zones[zone_column])]
+    # Map the land use to the sector used for the trip rates
+    e_land_use["sector_id"] = e_land_use[zone_column].map(sector_map)
+    # Join to the relevant trip rate
+    print("Exceptional Land Use")
+    print(e_land_use)
+    e_land_use.to_csv("e_land_use.csv")
+    print("Trip Rates")
+    print(trip_rates)
+    trip_rate_merge_cols = merge_cols.copy()
+    trip_rate_merge_cols.remove(zone_column)
+    trip_rate_merge_cols.remove("purpose_id")
+    trip_rate_merge_cols.insert(0, "sector_id")
     
-    mask = forecast_vector[zone_column].isin(e_zones[zone_column])
-    forecast_vector.loc[mask, value_column] = (
-        forecast_vector.loc[mask, "s_f"]
+    # Required to ensure a complete merge on soc column - only for attractions
+    if force_soc_type:
+        e_land_use["soc"] = e_land_use["soc"].astype("int")
+        
+    print("Merging on ", trip_rate_merge_cols)
+    e_infill = pd.merge(
+        e_land_use,
+        trip_rates,
+        how="left",
+        on=trip_rate_merge_cols
     )
+    e_infill["s_f_exceptional"] = e_infill[value_column] * e_infill["trip_rate"]
+    e_infill.drop(["trip_rate", "sector_id", value_column], 
+                  axis=1, inplace=True)
+    print("Exceptional Forecast")
+    print(e_infill)
+    
+    forecast_vector = pd.merge(
+        forecast_vector,
+        e_infill,
+        how="left",
+        on=merge_cols
+    )
+    
+    mask = forecast_vector[zone_column].isin(exceptional_zones[zone_column])
+    forecast_vector.loc[mask, value_column] = (
+        forecast_vector.loc[mask, "s_f_exceptional"]
+    )
+    forecast_vector.drop(["s_f_exceptional"], axis=1, inplace=True)
 
+    print("Final Forecast")
+    print(forecast_vector)
+    forecast_vector.to_csv("test.csv")
     # Constrain?
 
     return forecast_vector
@@ -268,6 +317,8 @@ def test():
     # Test productions
 
     print("Loading files")
+
+    zt = ZoneTranslator()
 
     population = None
     employment = None
@@ -319,6 +370,75 @@ def test():
         msoa_col_name=zone_col,
         msoa_path=r"Y:\NorMITs Demand\inputs\default\zoning\msoa_zones.csv",
         to='int'
+    )
+    
+    exceptional_zones = pd.read_csv(
+        r"C:\NorMITs Demand\norms\v2_3-EFS_Output\iter1\Productions\exceptional_zones.csv"
+    ).rename({"msoa_zone_id": "model_zone_id"}, axis=1)
+    
+    output_path = os.path.join(r"Y:\NorMITs Demand\inputs\default\zoning\norms_2015.csv")
+    translation_dataframe = pd.read_csv(output_path)
+    
+    exceptional_zones = zt.run(
+        exceptional_zones,
+        translation_dataframe,
+        "MSOA",
+        "norms_2015",
+        non_split_columns=["model_zone_id"]
+    )
+    
+    population = zt.run(
+        population,
+        translation_dataframe,
+        "MSOA",
+        "norms_2015",
+        non_split_columns=["model_zone_id",
+                            "car_availability_id",
+                            "soc",
+                            "ns",
+                            "area_type",
+                            "traveller_type"]
+    )
+    employment = zt.run(
+        employment,
+        translation_dataframe,
+        "MSOA",
+        "norms_2015",
+        non_split_columns=["model_zone_id",
+                            "employment_cat"]
+    )
+    synthetic_p = zt.run(
+        synthetic_p,
+        translation_dataframe,
+        "MSOA",
+        "norms_2015",
+        non_split_columns=[
+                "model_zone_id",
+                "purpose_id",
+                "car_availability_id",
+                "soc",
+                "ns"
+                ]
+    )
+    obs_base_p = zt.run(
+        obs_base_p,
+        translation_dataframe,
+        "MSOA",
+        "norms_2015",
+        non_split_columns=[
+                "model_zone_id",
+                "purpose_id",
+                "car_availability_id",
+                "soc",
+                "ns"
+                ]
+    )
+    synthetic_e = zt.run(
+        synthetic_e,
+        translation_dataframe,
+        "MSOA",
+        "norms_2015",
+        non_split_columns=["model_zone_id", "purpose_id", "soc"]
     )
     
     obs_base_e = synthetic_e[[zone_col] + seg_cols_e + [base_year]]
