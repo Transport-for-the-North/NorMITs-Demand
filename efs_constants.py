@@ -152,18 +152,15 @@ EFS_COLUMN_DICTIONARY = {
         "base_year_workers"
     ],
     "population": [
-        "model_zone_id"
+        "msoa_zone_id"
     ],
     "population_ratio": [
         "model_zone_id",
         "property_type_id",
         "traveller_type_id"
     ],
-    "households": [
-        "model_zone_id"
-    ],
     "employment": [
-        "model_zone_id"
+        "msoa_zone_id"
     ],
     "housing_occupancy": [
         "model_zone_id",

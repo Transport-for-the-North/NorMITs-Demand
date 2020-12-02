@@ -295,7 +295,6 @@ class EFSAttractionGenerator:
             import_path=imports['base_employment'],
             zone_col=internal_zone_col,
             emp_cat_col=emp_cat_col,
-            msoa_path=msoa_conversion_path,
             return_format='long',
             value_col=base_year,
         )
@@ -308,12 +307,16 @@ class EFSAttractionGenerator:
 
         # ## FUTURE YEAR EMPLOYMENT ## #
         print("Generating future year employment data...")
+        # Merge on all possible segmentations - not years
+        merge_cols = du.intersection(list(base_year_emp), list(employment_growth))
+        merge_cols = du.list_safe_remove(merge_cols, all_years)
+
         employment = du.grow_to_future_years(
             base_year_df=base_year_emp,
             growth_df=employment_growth,
             base_year=base_year,
             future_years=future_years,
-            growth_merge_col=internal_zone_col,
+            growth_merge_cols=merge_cols,
             no_neg_growth=no_neg_growth,
             infill=employment_infill
         )

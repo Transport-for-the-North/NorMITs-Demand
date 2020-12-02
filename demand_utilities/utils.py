@@ -29,6 +29,7 @@ from typing import Union
 from typing import Iterable
 from typing import Iterator
 
+from math import isclose
 
 from tqdm import tqdm
 from itertools import product
@@ -365,7 +366,7 @@ def grow_to_future_years(base_year_df: pd.DataFrame,
                          growth_df: pd.DataFrame,
                          base_year: str,
                          future_years: List[str],
-                         growth_merge_col: str = 'msoa_zone_id',
+                         growth_merge_cols: Union[str, List[str]] = 'msoa_zone_id',
                          no_neg_growth: bool = True,
                          infill: float = 0.001,
                          ) -> pd.DataFrame:
@@ -393,9 +394,10 @@ def grow_to_future_years(base_year_df: pd.DataFrame,
     future_years:
         The columns names containing the future year data in growth_df.
 
-    growth_merge_col:
-        The name of the column to merge the base_year_df and growth_df
-        dataframes. This is usually the model_zone column
+    growth_merge_cols:
+        The name of the column(s) to merge the base_year_df and growth_df
+        dataframes. This is usually the model_zone column plus any further
+        segmentation
 
     no_neg_growth:
         Whether to ensure there is no negative growth. If True, any growth
@@ -427,7 +429,7 @@ def grow_to_future_years(base_year_df: pd.DataFrame,
         growth_df,
         base_year,
         future_years,
-        merge_col=growth_merge_col
+        merge_cols=growth_merge_cols
     )
 
     # Ensure there is no minus growth
@@ -501,10 +503,10 @@ def convert_msoa_naming(df: pd.DataFrame,
         }
     )
 
-    if to == 'string':
+    if to == 'string' or to == 'str':
         merge_col = 'msoa_int'
         keep_col = 'msoa_string'
-    elif to == 'int':
+    elif to == 'integer' or to == 'int':
         merge_col = 'msoa_string'
         keep_col = 'msoa_int'
     else:
@@ -629,7 +631,7 @@ def get_growth_values(base_year_df: pd.DataFrame,
                       growth_df: pd.DataFrame,
                       base_year_col: str,
                       future_year_cols: List[str],
-                      merge_col: str = 'model_zone_id'
+                      merge_cols: Union[str, List[str]] = 'model_zone_id'
                       ) -> pd.DataFrame:
     """
     Returns base_year_df extended to include the growth values in
@@ -653,8 +655,8 @@ def get_growth_values(base_year_df: pd.DataFrame,
     future_year_cols:
         The columns names that contain the future year growth factor data.
 
-    merge_col:
-        Name of the column to merge base_year_df and growth_df on.
+    merge_cols:
+        Name of the column(s) to merge base_year_df and growth_df on.
 
     Returns
     -------
@@ -665,6 +667,7 @@ def get_growth_values(base_year_df: pd.DataFrame,
     # Init
     base_year_df = base_year_df.copy()
     growth_df = growth_df.copy()
+    base_year_pop = base_year_df[base_year_col].sum()
 
     base_year_df.columns = base_year_df.columns.astype(str)
     growth_df.columns = growth_df.columns.astype(str)
@@ -679,17 +682,27 @@ def get_growth_values(base_year_df: pd.DataFrame,
                                      errors='ignore')
 
     # Merge on merge col
-    growth_values = pd.merge(base_year_df,
-                             growth_df,
-                             on=merge_col)
+    growth_values = pd.merge(base_year_df, growth_df, on=merge_cols)
 
     # Grow base year value by values given in growth_df - 1
     # -1 so we get growth values. NOT growth values + base year
     for year in future_year_cols:
         growth_values[year] = (
-            (growth_values[year] - 1)
-            *
-            growth_values[base_year_col]
+                (growth_values[year] - 1)
+                *
+                growth_values[base_year_col]
+        )
+
+    # If these don't match, something has gone wrong
+    new_by_pop = growth_values[base_year_col].sum()
+    if not is_almost_equal(base_year_pop, new_by_pop):
+        raise NormitsDemandError(
+            "Base year totals have changed before and after growing the "
+            "future years - something must have gone wrong. Perhaps the "
+            "merge columns are wrong and data is being replicated.\n"
+            "Total base year before growth:\t %.4f\n"
+            "Total base year after growth:\t %.4f\n"
+            % (base_year_pop, new_by_pop)
         )
 
     return growth_values
@@ -826,7 +839,7 @@ def add_fname_suffix(fname: str, suffix: str):
 
 
 def safe_read_csv(file_path: str,
-                  kwargs: Dict[str, Any] = None
+                  **kwargs
                   ) -> pd.DataFrame:
     """
     Reads in the file and performs some simple file checks
@@ -2600,6 +2613,74 @@ def compile_efficient_df(eff_df: List[Dict[str, Any]],
     # Stick all the dfs together and put back into a df
     # return pd.DataFrame(data=np.vstack(stack_ph), columns=col_names)
     return pd.concat(concat_ph)
+
+
+def list_safe_remove(lst: List[Any],
+                     remove: List[Any],
+                     raise_error: bool = False,
+                     inplace: bool = False
+                     ) -> List[Any]:
+    """
+    Removes remove items from lst without raising an error
+
+    Parameters
+    ----------
+    lst:
+        The list to remove items from
+
+    remove:
+        The items to remove from lst
+
+    raise_error:
+        Whether to raise and error or not when an item is not contained in
+        lst
+
+    inplace:
+        Whether to remove the items in-place, or return a copy of lst
+
+    Returns
+    -------
+    lst:
+        lst with removed items removed from it
+    """
+    # Init
+    if not inplace:
+        lst = lst.copy()
+
+    for item in remove:
+        try:
+            lst.remove(item)
+        except ValueError as e:
+            if raise_error:
+                raise e
+
+    return lst
+
+
+def is_almost_equal(v1: float,
+                    v2: float,
+                    significant: int = 7
+                    ) -> bool:
+    """
+    Checks v1 and v2 are equal to significant places
+
+    Parameters
+    ----------
+    v1:
+        The first value to compare
+
+    v2:
+        The second value to compare
+
+    significant:
+        The number of significant bits to compare over
+
+    Returns
+    -------
+    almost_equal:
+        True if v1 and v2 are equal to significant bits, else False
+    """
+    return isclose(v1, v2, abs_tol=10 ** -significant)
 
 
 # ## BELOW HERE IS OLD TMS CODE ## #

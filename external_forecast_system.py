@@ -134,25 +134,28 @@ class ExternalForecastSystem:
     def _read_in_default_inputs(self):
         input_dir = self.imports['default_inputs']
 
+        # Read in soc and ns as strings if in inputs
+        dtypes = {'soc': str, 'ns': str}
+
         # Read in population files
         file_path = os.path.join(input_dir, self.base_pop_path)
-        self.base_pop = du.safe_read_csv(file_path)
+        self.base_pop = du.safe_read_csv(file_path, dtype=dtypes)
 
         file_path = os.path.join(input_dir, self.pop_growth_path)
-        self.pop_growth = du.safe_read_csv(file_path)
+        self.pop_growth = du.safe_read_csv(file_path, dtype=dtypes)
 
         file_path = os.path.join(input_dir, self.pop_constraint_path)
-        self.pop_constraint = du.safe_read_csv(file_path)
+        self.pop_constraint = du.safe_read_csv(file_path, dtype=dtypes)
 
         # Worker files
         file_path = os.path.join(input_dir, self.base_emp_path)
-        self.base_emp = du.safe_read_csv(file_path)
+        self.base_emp = du.safe_read_csv(file_path, dtype=dtypes)
 
         file_path = os.path.join(input_dir, self.emp_growth_path)
-        self.emp_growth = du.safe_read_csv(file_path)
+        self.emp_growth = du.safe_read_csv(file_path, dtype=dtypes)
 
         file_path = os.path.join(input_dir, self.emp_constraint_path)
-        self.emp_constraint = du.safe_read_csv(file_path)
+        self.emp_constraint = du.safe_read_csv(file_path, dtype=dtypes)
 
         # Zone and area files
         file_path = os.path.join(input_dir, self.msoa_lookup_path)
@@ -586,7 +589,7 @@ class ExternalForecastSystem:
             print("No need to integrate alternative assumptions.")
             print("Reading in default values...")
             base_pop = self.base_pop[base_year_pop_cols].copy()
-            pop_growth = self.pop_growth[pop_cols].copy()
+            pop_growth = self.pop_growth.copy()
             # population_split = self.future_population_ratio[pop_ratio_cols].copy()
 
             # households_values = self.households_values[base_year_hh_cols].copy()
@@ -687,7 +690,7 @@ class ExternalForecastSystem:
         elif constraint_source == "grown base":
             print("Constraint 'grown base' source selected, growing given "
                   "base by default growth factors...")
-            pop_constraint = self.pop_constraint[pop_cols].copy()
+            pop_constraint = self.pop_constraint.copy()
             pop_constraint = constrainer.grow_constraint(
                 pop_constraint,
                 pop_growth,

@@ -317,7 +317,6 @@ class EFSProductionGenerator:
         # ## BASE YEAR POPULATION ## #
         print("Loading the base year population data...")
         base_year_pop = get_land_use_data(imports['land_use'],
-                                          msoa_path=msoa_conversion_path,
                                           segmentation_cols=segmentation_cols)
         base_year_pop = base_year_pop.rename(columns={'people': base_year})
 
@@ -328,13 +327,18 @@ class EFSProductionGenerator:
 
         # ## FUTURE YEAR POPULATION ## #
         print("Generating future year population data...")
+        # Merge on all possible segmentations - not years
+        merge_cols = du.intersection(list(base_year_pop), list(population_growth))
+        merge_cols = du.list_safe_remove(merge_cols, all_years)
+
         population = du.grow_to_future_years(
             base_year_df=base_year_pop,
             growth_df=population_growth,
             base_year=base_year,
             future_years=future_years,
             no_neg_growth=no_neg_growth,
-            infill=population_infill
+            infill=population_infill,
+            growth_merge_cols=merge_cols
         )
 
         # ## CONSTRAIN POPULATION ## #
@@ -393,14 +397,6 @@ class EFSProductionGenerator:
                 print('. Total population for year %s is: %.4f'
                       % (year, population[year].sum()))
             print('\n')
-
-        # Convert back to MSOA codes for output and productions
-        population = du.convert_msoa_naming(
-            population,
-            msoa_col_name=internal_zone_col,
-            msoa_path=msoa_conversion_path,
-            to='string'
-        )
 
         # Write the produced population to file
         if out_path is None:
@@ -512,7 +508,7 @@ class EFSProductionGenerator:
             population_growth,
             base_year,
             future_years,
-            merge_col=growth_merge_col
+            merge_cols=growth_merge_col
         )
 
         # Make sure there is no minus growth
@@ -829,13 +825,14 @@ class EFSProductionGenerator:
                 year_string_list
                 )
         print("Adjusted population growth to base year!")
-        
-        
+
         print("Growing population from base year...")
-        grown_population = du.get_growth_values(population_values,
-                                                population_growth,
-                                                base_year,
-                                                year_string_list)
+        grown_population = du.get_growth_values(
+            population_values,
+            population_growth,
+            base_year,
+            year_string_list
+        )
         print("Grown population from base year!")
         
         return grown_population
@@ -2100,13 +2097,13 @@ def get_land_use_data(land_use_path: str,
     # Read in Land use
     with warnings.catch_warnings():
         warnings.simplefilter(action='ignore')
-        land_use = pd.read_csv(land_use_path)
+        dtypes = {'soc': str, 'ns': str}
+        land_use = pd.read_csv(land_use_path, dtype=dtypes)
 
     # Drop a lot of columns, group and sum the remaining
-
-    land_use = land_use.reindex(land_use_cols, axis=1).groupby(
-        group_cols
-    ).sum().reset_index().sort_values(land_use_cols).reset_index()
+    land_use = land_use.reindex(land_use_cols, axis=1)
+    land_use = land_use.groupby(group_cols).sum().reset_index()
+    land_use = land_use.sort_values(land_use_cols).reset_index(drop=True)
     del group_cols
 
     # Convert to msoa zone numbers if needed
@@ -2224,7 +2221,7 @@ def merge_pop_trip_rates(population: pd.DataFrame,
         if p in consts.SOC_P:
             # Update ns with none
             ph['ns'] = 'none'
-            ph['soc'] = ph['soc'].astype(int)
+            ph['soc'] = ph['soc'].astype(float).astype(int)
             # Insurance policy
             trip_rate_subset['ns'] = 'none'
             trip_rate_subset['soc'] = trip_rate_subset['soc'].astype(int)
@@ -2232,7 +2229,7 @@ def merge_pop_trip_rates(population: pd.DataFrame,
         elif p in consts.NS_P:
             # Update soc with none
             ph['soc'] = 'none'
-            ph['ns'] = ph['ns'].astype(int)
+            ph['ns'] = ph['ns'].astype(float).astype(int)
             # Insurance policy
             trip_rate_subset['soc'] = 'none'
             trip_rate_subset['ns'] = trip_rate_subset['ns'].astype(int)
