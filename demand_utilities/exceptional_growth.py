@@ -1,5 +1,6 @@
 import os
 from typing import List
+from typing import Tuple
 
 import pandas as pd
 
@@ -27,7 +28,7 @@ def load_exceptional_zones(productions_export: str,
     return e_zones
 
 
-def segment_employement(employment: pd.DataFrame,
+def segment_employment(employment: pd.DataFrame,
                         soc_weights_path: str,
                         zone_column: str,
                         data_col: str

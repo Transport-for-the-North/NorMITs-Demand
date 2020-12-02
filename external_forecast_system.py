@@ -36,6 +36,7 @@ from zone_translator import ZoneTranslator
 
 from demand_utilities import utils as du
 from demand_utilities.sector_reporter_v2 import SectorReporter
+from demand_utilities import exceptional_growth as eg
 
 # TODO: Implement multiprocessing
 # TODO: Determine the TfN model name based on the given mode
