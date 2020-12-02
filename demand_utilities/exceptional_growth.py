@@ -76,18 +76,15 @@ def attraction_exceptional_trip_rate(observed_base: pd.DataFrame,
                                      zone_column: str,
                                      sector_lookup: str = None,
                                      purpose_column: str = "purpose_id",
-                                     zone_sys_name: str = "model_zone_id",
-                                     sector_sys_name: str = "grouping_id",
                                      soc_weights_path: str = None
                                      ) -> pd.DataFrame:
     
     
     emp_group_cols = ["sector_id"] + segment_cols
-    if sector_lookup is not None:
-        sector_map = pd.read_csv(sector_lookup)
-        sector_map = sector_map.set_index(zone_sys_name)[sector_sys_name]
-    else:
+    if sector_lookup is None:
         sector_map = lambda x: x
+    else:
+        sector_map = sector_lookup.copy()
 
     tr_e = None
     
@@ -100,7 +97,7 @@ def attraction_exceptional_trip_rate(observed_base: pd.DataFrame,
     emp_sub = emp_sub[[zone_column, base_year]]
     
     if soc_weights_path is not None:
-        emp = segment_employement(
+        emp = segment_employment(
             emp_sub,
             soc_weights_path=soc_weights_path,
             zone_column=zone_column,
@@ -192,10 +189,8 @@ def production_exceptional_trip_rate(observed_base: pd.DataFrame,
                                      base_year: str,
                                      segment_cols: List[str],
                                      zone_column: str,
-                                     sector_lookup: str = None,
-                                     purpose_column: str = "purpose_id",
-                                     zone_sys_name: str = "model_zone_id",
-                                     sector_sys_name: str = "grouping_id"
+                                     sector_lookup: pd.DataFrame = None,
+                                     purpose_column: str = "purpose_id"
                                      ) -> pd.DataFrame:
     # observed_base dataframes are vectors of productions and attractions at
     # TfN enhanced segmentation and model zone system
@@ -206,11 +201,10 @@ def production_exceptional_trip_rate(observed_base: pd.DataFrame,
 
     pop_group_cols.remove(purpose_column)
     
-    if sector_lookup is not None:
-        sector_map = pd.read_csv(sector_lookup)
-        sector_map = sector_map.set_index(zone_sys_name)[sector_sys_name]
-    else:
+    if sector_lookup is None:
         sector_map = lambda x: x
+    else:
+        sector_map = sector_lookup.copy()
 
     tr_p = None
 
@@ -270,7 +264,7 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
                               exceptional_zones: pd.DataFrame = None,
                               land_use: pd.DataFrame = None, # model_zone level
                               trip_rates: pd.DataFrame = None, # Sector level
-                              sector_lookup: pd.DataFrame = None, # Contains zone_column and grouping_id
+                              sector_lookup: pd.Series = None, # Contains zone_column and grouping_id
                               force_soc_type: bool = False
                               ) -> pd.DataFrame:
     
@@ -278,7 +272,7 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
     # be handled
     
     # Setup sector lookup
-    sector_map = sector_lookup.set_index(zone_column)["grouping_id"]
+    sector_map = sector_lookup.copy()
 
     # Join and calculate growth - will likely need changing
     merge_cols = [zone_column] + segment_columns
@@ -309,7 +303,7 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
     # Get the relevant land use data
     e_land_use = land_use.loc[
         land_use[zone_column
-                 ].isin(exceptional_zones[zone_column])]
+                 ].isin(exceptional_zones[zone_column])].copy()
     # Map the land use to the sector used for the trip rates
     e_land_use["sector_id"] = e_land_use[zone_column].map(sector_map)
     # Join to the relevant trip rate
@@ -586,7 +580,7 @@ def test():
                          axis=1,
                          inplace=True)
     
-    employment = segment_employement(
+    employment = segment_employment(
         employment.loc[employment["employment_cat"] == "E01"],
         soc_weights_path=soc_weights_path,
         zone_column=zone_col,
