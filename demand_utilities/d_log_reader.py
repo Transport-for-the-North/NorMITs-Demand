@@ -94,12 +94,12 @@ def get_dlog_data(cursor):
     """
 
     # Hit residential table
-    cursor.execute('select * from dlog_residential')
+    cursor.execute('select * from gis_data.dlog_residential')
     
     res_data = unpack_query(cursor)
 
     # Hit non residential table
-    cursor.execute('select * from dlog_non_residential')
+    cursor.execute('select * from gis_data.dlog_non_residential')
     non_res_data = unpack_query(cursor)
 
     return(res_data, non_res_data)

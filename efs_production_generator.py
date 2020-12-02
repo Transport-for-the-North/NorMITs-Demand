@@ -61,6 +61,7 @@ class EFSProductionGenerator:
             ntem_control_dir: str = None,
             lad_lookup_dir: str = None,
             control_productions: bool = True,
+            control_fy_productions: bool = True,
 
             # D-Log
             d_log: str = None,
@@ -95,7 +96,7 @@ class EFSProductionGenerator:
         Performs the following functions:
             - Reads in the base year land use data to create the base year
               population numbers
-            - Grows the base year population by population_growth factors,
+            - Grows the base year population by pop_growth factors,
               resulting in future year population numbers.
             - Combines base and future year population numbers with trip_rates
               (currently the same across all years) to produce the base and
@@ -158,9 +159,14 @@ class EFSProductionGenerator:
             The path to alternate lad to msoa import data. If left as None, the
             production model will use the default land use data.
 
-        control_attractions:
+        control_productions:
             Whether to control the generated production to the constraints
             given in ntem_control_dir or not.
+
+        control_fy_productions:
+            Whether to control the generated future year productions to the
+            constraints given in ntem_control_dir or not. When running for
+            scenarios other than the base NTEM, this should be False.
 
         d_log:
             TODO: Clarify what format D_log data comes in as
@@ -426,7 +432,8 @@ class EFSProductionGenerator:
             mode_share_path=imports['mode_share'],
             audit_dir=out_path,
             ntem_control_dir=imports['ntem_control'],
-            lad_lookup_dir=imports['lad_lookup']
+            lad_lookup_dir=imports['lad_lookup'],
+            control_fy_productions=control_fy_productions,
         )
 
         # Write productions to file
@@ -1578,7 +1585,8 @@ def generate_productions(population: pd.DataFrame,
                          mode_share_path: str,
                          audit_dir: str,
                          ntem_control_dir: str = None,
-                         lad_lookup_dir: str = None
+                         lad_lookup_dir: str = None,
+                         control_fy_productions: bool = True
                          ) -> pd.DataFrame:
     # TODO: write generate_productions() docs
     # Init
@@ -1589,7 +1597,10 @@ def generate_productions(population: pd.DataFrame,
     # Generate Productions for each year
     yr_ph = dict()
     for year in all_years:
-        if ntem_control_dir is not None:
+        # Only only set the control path if we need to constrain
+        if not control_fy_productions and year != base_year:
+            ntem_control_path = None
+        elif ntem_control_dir is not None:
             ntem_fname = ntem_base_fname % year
             ntem_control_path = os.path.join(ntem_control_dir, ntem_fname)
         else:
@@ -1762,18 +1773,8 @@ def nhb_production(hb_pa_import,
             }
         )
 
-        # Print some audit vals
-        # audit = yr_nhb_productions.groupby(
-        #     ["p", "m"]
-        # )["trips"].sum().reset_index()
-        # print(audit)
-
-        # Create year fname
-        nhb_productions_fname = '_'.join(
-            ["yr" + str(year), out_fname]
-        )
-
         # Output
+        nhb_productions_fname = '_'.join(["yr" + str(year), out_fname])
         yr_nhb_productions.to_csv(
             os.path.join(nhb_export, nhb_productions_fname),
             index=False

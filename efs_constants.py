@@ -32,11 +32,21 @@ BASE_YEAR = 2018
 FUTURE_YEARS = [2033, 2035, 2050]
 ALL_YEARS = [BASE_YEAR] + FUTURE_YEARS
 
+# ## VDM/ME2 constants ## #
+VDM_TRIP_ORIGINS = ['hb', 'nhb']
+USER_CLASSES = ['commute', 'business', 'other']
+
 # How do user classes relate to purposes
 USER_CLASS_PURPOSES = {
     'commute': [1],
     'business': [2, 12],
     'other': [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
+}
+
+HB_USER_CLASS_PURPOSES = {
+    'commute': [1],
+    'business': [2],
+    'other': [3, 4, 5, 6, 7, 8]
 }
 
 # Convert between Purpose int and strings
@@ -52,6 +62,14 @@ _p_str_int = [
 ]
 P_STR2INT = {s: i for s, i in _p_str_int}
 P_INT2STR = {i: s for s, i in _p_str_int}
+
+# Valid levels of segmentation
+SEG_LEVELS = [
+    'tms',      # Distribution segmentation - only p/m
+    'me2',      # Compiled for Matrix Estimation. User classes + time periods
+    'vdm',      # Similar to ME but split by trip origin 3 HB, and 2 NHB
+    'tfn',      # Segment as much as possible - likely TfN segmentation
+]
 
 # HB consts
 PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -79,6 +97,7 @@ NHB_PRODUCTIONS_FNAME = 'nhb_productions.csv'
 
 DEFAULT_LAD_LOOKUP = 'lad_to_msoa.csv'
 
+# TODO: can likely remove lots of EFS_COLUMN_DICTIONARY
 EFS_COLUMN_DICTIONARY = {
     "base_year_population": [
         "model_zone_id",
@@ -147,182 +166,15 @@ DEFAULT_ZONE_SUBSET = [1, 2, 1055, 1056, 1057, 1058, 1059, 1060, 1061, 1062]
 # ### Default Function Arguments ### #
 
 # ## EFS_RUN ## #
-# Nested as P, SOC/NS, CA
-EFS_RUN_DISTRIBUTIONS_DICT = {
-    1: {
-        0: {
-            1: "hb_pa_p1_m6_soc0_ca1.csv",
-            2: "hb_pa_p1_m6_soc0_ca2.csv",
-            },
-        1: {
-            1: "hb_pa_p1_m6_soc1_ca1.csv",
-            2: "hb_pa_p1_m6_soc1_ca2.csv",
-            },
-        2: {
-            1: "hb_pa_p1_m6_soc2_ca1.csv",
-            2: "hb_pa_p1_m6_soc2_ca2.csv",
-            },
-        3: {
-            1: "hb_pa_p1_m6_soc3_ca1.csv",
-            2: "hb_pa_p1_m6_soc3_ca2.csv",
-            },
-    },
-    2: {
-        0: {
-            1: "hb_pa_p2_m6_soc0_ca1.csv",
-            2: "hb_pa_p2_m6_soc0_ca2.csv",
-            },
-        1: {
-            1: "hb_pa_p2_m6_soc1_ca1.csv",
-            2: "hb_pa_p2_m6_soc1_ca2.csv",
-            },
-        2: {
-            1: "hb_pa_p2_m6_soc2_ca1.csv",
-            2: "hb_pa_p2_m6_soc2_ca2.csv",
-            },
-        3: {
-            1: "hb_pa_p2_m6_soc3_ca1.csv",
-            2: "hb_pa_p2_m6_soc3_ca2.csv",
-            },
-        },
-    3: {
-        1: {
-            1: "hb_pa_p3_m6_ns1_ca1.csv",
-            2: "hb_pa_p3_m6_ns1_ca2.csv",
-            },
-        2: {
-            1: "hb_pa_p3_m6_ns2_ca1.csv",
-            2: "hb_pa_p3_m6_ns2_ca2.csv",
-            },
-        3: {
-            1: "hb_pa_p3_m6_ns3_ca1.csv",
-            2: "hb_pa_p3_m6_ns3_ca2.csv",
-            },
-        4: {
-            1: "hb_pa_p3_m6_ns4_ca1.csv",
-            2: "hb_pa_p3_m6_ns4_ca2.csv",
-            },
-        5: {
-            1: "hb_pa_p3_m6_ns5_ca1.csv",
-            2: "hb_pa_p3_m6_ns5_ca2.csv",
-            },
-        },
-    4: {
-        1: {
-            1: "hb_pa_p4_m6_ns1_ca1.csv",
-            2: "hb_pa_p4_m6_ns1_ca2.csv",
-            },
-        2: {
-            1: "hb_pa_p4_m6_ns2_ca1.csv",
-            2: "hb_pa_p4_m6_ns2_ca2.csv",
-            },
-        3: {
-            1: "hb_pa_p4_m6_ns3_ca1.csv",
-            2: "hb_pa_p4_m6_ns3_ca2.csv",
-            },
-        4: {
-            1: "hb_pa_p4_m6_ns4_ca1.csv",
-            2: "hb_pa_p4_m6_ns4_ca2.csv",
-            },
-        5: {
-            1: "hb_pa_p4_m6_ns5_ca1.csv",
-            2: "hb_pa_p4_m6_ns5_ca2.csv",
-            },
-        },
-    5: {
-        1: {
-            1: "hb_pa_p5_m6_ns1_ca1.csv",
-            2: "hb_pa_p5_m6_ns1_ca2.csv",
-            },
-        2: {
-            1: "hb_pa_p5_m6_ns2_ca1.csv",
-            2: "hb_pa_p5_m6_ns2_ca2.csv",
-            },
-        3: {
-            1: "hb_pa_p5_m6_ns3_ca1.csv",
-            2: "hb_pa_p5_m6_ns3_ca2.csv",
-            },
-        4: {
-            1: "hb_pa_p5_m6_ns4_ca1.csv",
-            2: "hb_pa_p5_m6_ns4_ca2.csv",
-            },
-        5: {
-            1: "hb_pa_p5_m6_ns5_ca1.csv",
-            2: "hb_pa_p5_m6_ns5_ca2.csv",
-             },
-        },
-    6: {
-        1: {
-            1: "hb_pa_p6_m6_ns1_ca1.csv",
-            2: "hb_pa_p6_m6_ns1_ca2.csv",
-            },
-        2: {
-            1: "hb_pa_p6_m6_ns2_ca1.csv",
-            2: "hb_pa_p6_m6_ns2_ca2.csv",
-            },
-        3: {
-            1: "hb_pa_p6_m6_ns3_ca1.csv",
-            2: "hb_pa_p6_m6_ns3_ca2.csv",
-            },
-        4: {
-            1: "hb_pa_p6_m6_ns4_ca1.csv",
-            2: "hb_pa_p6_m6_ns4_ca2.csv",
-            },
-        5: {
-            1: "hb_pa_p6_m6_ns5_ca1.csv",
-            2: "hb_pa_p6_m6_ns5_ca2.csv",
-             },
-        },
-    7: {
-        1: {
-            1: "hb_pa_p7_m6_ns1_ca1.csv",
-            2: "hb_pa_p7_m6_ns1_ca2.csv",
-            },
-        2: {
-            1: "hb_pa_p7_m6_ns2_ca1.csv",
-            2: "hb_pa_p7_m6_ns2_ca2.csv",
-            },
-        3: {
-            1: "hb_pa_p7_m6_ns3_ca1.csv",
-            2: "hb_pa_p7_m6_ns3_ca2.csv",
-            },
-        4: {
-            1: "hb_pa_p7_m6_ns4_ca1.csv",
-            2: "hb_pa_p7_m6_ns4_ca2.csv",
-            },
-        5: {
-            1: "hb_pa_p7_m6_ns5_ca1.csv",
-            2: "hb_pa_p7_m6_ns5_ca2.csv",
-             },
-        },
-    8: {
-        1: {
-            1: "hb_pa_p8_m6_ns1_ca1.csv",
-            2: "hb_pa_p8_m6_ns1_ca2.csv",
-            },
-        2: {
-            1: "hb_pa_p8_m6_ns2_ca1.csv",
-            2: "hb_pa_p8_m6_ns2_ca2.csv",
-            },
-        3: {
-            1: "hb_pa_p8_m6_ns3_ca1.csv",
-            2: "hb_pa_p8_m6_ns3_ca2.csv",
-            },
-        4: {
-            1: "hb_pa_p8_m6_ns4_ca1.csv",
-            2: "hb_pa_p8_m6_ns4_ca2.csv",
-            },
-        5: {
-            1: "hb_pa_p8_m6_ns5_ca1.csv",
-            2: "hb_pa_p8_m6_ns5_ca2.csv",
-        },
-    },
-}
 
+# By default EFS should no longer constrain to NTEM planning data
+# for populations and employment!
+# WE now trust NorMITs Land Use to provide us with accurate population
+# and employment data
 CONSTRAINT_REQUIRED_DEFAULT = [
-    True,   # initial population metric constraint
-    True,   # post-development constraint
-    True,   # secondary post-development constraint used for matching HH pop
+    False,   # initial population metric constraint
+    False,   # post-development constraint
+    False,   # secondary post-development constraint used for matching HH pop
     False,  # initial worker metric constraint
     False,  # secondary worker metric constraint
     False,  # final trip based constraint
@@ -330,9 +182,9 @@ CONSTRAINT_REQUIRED_DEFAULT = [
 
 # ## Attraction Generation ## #
 DEFAULT_ATTRACTION_CONSTRAINTS = [
-    True,   # initial population metric constraint
-    True,   # post-development constraint
-    True,   # secondary post-development constraint used for matching HH pop
+    False,   # initial population metric constraint
+    False,   # post-development constraint
+    False,   # secondary post-development constraint used for matching HH pop
     False,  # initial worker metric constraint
     False,  # secondary worker metric constraint
     False,  # final trip based constraint
@@ -340,9 +192,9 @@ DEFAULT_ATTRACTION_CONSTRAINTS = [
 
 # ## Production Generations ## #
 DEFAULT_PRODUCTION_CONSTRAINTS = [
-    True,   # initial population metric constraint
-    True,   # post-development constraint
-    True,   # secondary post-development constraint used for matching HH pop
+    False,   # initial population metric constraint
+    False,   # post-development constraint
+    False,   # secondary post-development constraint used for matching HH pop
     False   # final trip based constraint
 ]
 

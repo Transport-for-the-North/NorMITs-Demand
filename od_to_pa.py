@@ -10,6 +10,8 @@ import efs_constants as consts
 import demand_utilities.utils as du
 import demand_utilities.vehicle_occupancy as vo
 
+from audits import AuditError
+
 
 def decompile_od(od_import: str,
                  od_export: str,
@@ -35,6 +37,16 @@ def decompile_od(od_import: str,
 
     decompile_factors_path:
         Full path to the pickle file containing the decompile factors to use.
+
+    audit:
+        Whether to perform audits to make sure the decompiled matrices are
+        sufficiently similar to the compiled matrices when reversing the
+        process.
+
+    audit_tol:
+        The tolerance to apply when auditing. If the total absolute difference
+        between the original and audit matrices is greater than this value, an
+        error will be thrown.
 
     Returns
     -------
@@ -87,6 +99,7 @@ def decompile_od(od_import: str,
                 calib_params=part_calib_params,
                 csv=True
             )
+
             part_mat.to_csv(os.path.join(od_export, mat_name))
 
             # Save for audit later
@@ -102,7 +115,7 @@ def decompile_od(od_import: str,
             abs_diff = np.absolute((mats_sum - comp_mat).values).sum()
 
             if abs_diff > audit_tol:
-                raise ValueError(
+                raise AuditError(
                     "While decompiling matrices from %s, the absolute "
                     "difference between the original and decompiled matrices "
                     "exceeded the tolerance. Tolerance: %s, Absolute "
@@ -291,3 +304,6 @@ def need_to_convert_to_efs_matrices(model_import: str,
     return (len(os.listdir(od_import)) == 0 and
             len(os.listdir(model_import)) > 0)
 
+
+def convert_to_pa():
+    pass

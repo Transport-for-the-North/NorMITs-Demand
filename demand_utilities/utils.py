@@ -19,14 +19,19 @@ import shutil
 import random
 
 import pandas as pd
+import numpy as np
 
 from typing import Any
 from typing import List
 from typing import Dict
+from typing import Tuple
+from typing import Union
 from typing import Iterable
+from typing import Iterator
 
 
 from tqdm import tqdm
+from itertools import product
 from collections import defaultdict
 
 
@@ -36,6 +41,266 @@ import efs_constants as consts
 from old_tms.utils import *
 
 # TODO: Utils is getting big. Refactor into smaller, more specific modules
+
+
+class NormitsDemandError(Exception):
+    """
+    Base Exception for all custom NotMITS demand errors
+    """
+
+    def __init__(self, message=None):
+        self.message = message
+        super().__init__(self.message)
+
+
+def validate_seg_level(seg_level: str) -> str:
+    """
+    Tidies up seg_level and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    seg_level:
+        The name of the segmentation level to validate
+
+    Returns
+    -------
+    seg_level:
+        seg_level with both strip and lower applied to remove any whitespace
+        and make it all lowercase
+
+    Raises
+    -------
+    ValueError:
+        If seg_level is not a valid name for a level of segmentation
+    """
+    # Init
+    seg_level = seg_level.strip().lower()
+
+    if seg_level not in consts.SEG_LEVELS:
+        raise ValueError("%s is not a valid name for a level of segmentation"
+                         % seg_level)
+    return seg_level
+
+
+def validate_user_class(user_class: str) -> str:
+    """
+    Tidies up user_class and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    user_class:
+        The name of the user class to validate
+
+    Returns
+    -------
+    seg_level:
+        user_class with both strip and lower applied to remove any whitespace
+        and make it all lowercase
+
+    Raises
+    -------
+    ValueError:
+        If user_class is not a valid name for a level of segmentation
+    """
+    # Init
+    user_class = user_class.strip().lower()
+
+    if user_class not in consts.USER_CLASSES:
+        raise ValueError("%s is not a valid name for user class"
+                         % user_class)
+    return user_class
+
+
+def validate_vdm_seg_params(seg_params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validates and cleans seg_params ready for a loop_generator
+
+    Parameters
+    ----------
+    seg_params:
+        Dictionary of vdm seg params to be cleaned.
+
+    Returns
+    -------
+    valid_seg_params:
+        cleaned version of the given seg_params. If a key did not exist that
+        is needed, [None] is added as the value.
+    """
+    # Init
+    seg_params = seg_params.copy()
+    valid_segmentation = [
+        'to_needed',
+        'uc_needed',
+        'm_needed',
+        'ca_needed',
+        'tp_needed'
+    ]
+
+    for seg in valid_segmentation:
+        if seg_params.get(seg) is None:
+            seg_params[seg] = [None]
+
+    return seg_params
+
+
+def build_io_paths(import_location: str,
+                   export_location: str,
+                   model_name: str,
+                   iter_name: str,
+                   demand_version: str,
+                   demand_dir_name: str = 'NorMITs Demand',
+                   ) -> Tuple[dict, dict, dict]:
+    """
+    Builds three dictionaries of paths to the locations of all inputs and
+    outputs for EFS
+
+    Parameters
+    ----------
+    import_location:
+        The directory the import directory exists - a dir named
+        self._out_dir (NorMITs Demand) should exist here. Usually
+        a drive name e.g. Y:/
+
+    export_location:
+        The directory to create the new output directory in - a dir named
+        self._out_dir (NorMITs Demand) should exist here. Usually
+        a drive name e.g. Y:/
+
+    model_name:
+        TfN model name in use e.g. norms or noham
+
+    iter_name:
+        The name of the iteration being run. Usually of the format iterx,
+        where x is a number, e.g. iter3
+
+    demand_version:
+        Version number of NorMITs Demand being run - this is used to generate
+        the correct output path.
+
+    demand_dir_name:
+        The name used for the NorMITs Demand input/output directories.
+
+
+    Returns
+    -------
+    imports:
+        Dictionary of import paths with the following keys:
+        imports, lookups, seed_dists, default
+
+    exports:
+        Dictionary of export paths with the following keys:
+        productions, attractions, pa, od, pa_24, od_24, sectors
+
+    params:
+        Dictionary of parameter export paths with the following keys:
+        compile, tours
+
+    """
+    # TODO: Tidy up Y:/ drive imports/inputs folders after contract
+    # Init
+    model_name = model_name.lower()
+
+    # ## IMPORT PATHS ## #
+    # Attraction weights are a bit special, we get these directly from
+    # TMS to ensure they are the same - update this on integration
+    temp_model_name = 'norms' if model_name == 'norms_2015' else model_name
+    tms_path_parts = [
+        import_location,
+        "NorMITs Synthesiser",
+        temp_model_name,
+        "Model Zone Lookups",
+        "attraction_weights.csv"
+    ]
+    a_weights_path = os.path.join(*tms_path_parts)
+
+    # Generate import and export paths
+    model_home = os.path.join(import_location, demand_dir_name)
+    import_home = os.path.join(model_home, 'import')
+    input_home = os.path.join(model_home, 'inputs', 'default')
+
+    imports = {
+        'home': import_home,
+        'default_inputs': input_home,
+        'tp_splits': os.path.join(import_home, 'tp_splits'),
+        'zone_translation': os.path.join(import_home, 'zone_translation'),
+        'lookups': os.path.join(model_home, 'lookup'),
+        'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
+        'zoning': os.path.join(input_home, 'zoning'),
+        'a_weights': a_weights_path
+    }
+
+    #  ## EXPORT PATHS ## #
+    # Create home paths
+    fname_parts = [
+        export_location,
+        demand_dir_name,
+        model_name,
+        demand_version + "-EFS_Output",
+        iter_name,
+    ]
+    export_home = os.path.join(*fname_parts)
+    matrices_home = os.path.join(export_home, 'Matrices')
+    post_me_home = os.path.join(matrices_home, 'Post-ME Matrices')
+
+    # Create consistent filenames
+    pa = 'PA Matrices'
+    pa_24 = '24hr PA Matrices'
+    od = 'OD Matrices'
+    od_24 = '24hr OD Matrices'
+    compiled = 'Compiled'
+    aggregated = 'Aggregated'
+
+    exports = {
+        'home': export_home,
+        'productions': os.path.join(export_home, 'Productions'),
+        'attractions': os.path.join(export_home, 'Attractions'),
+        'sectors': os.path.join(export_home, 'Sectors'),
+        'audits': os.path.join(export_home, 'Audits'),
+
+        # Pre-ME
+        'pa': os.path.join(matrices_home, pa),
+        'pa_24': os.path.join(matrices_home, pa_24),
+        'od': os.path.join(matrices_home, od),
+        'od_24': os.path.join(matrices_home, od_24),
+
+        'compiled_od': os.path.join(matrices_home, ' '.join([compiled, od])),
+
+        'aggregated_pa_24': os.path.join(matrices_home, ' '.join([aggregated, pa_24])),
+        'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
+    }
+
+    for _, path in exports.items():
+        create_folder(path, chDir=False)
+
+    # Post-ME
+    compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
+    post_me_exports = {
+        'pa': os.path.join(post_me_home, pa),
+        'pa_24': os.path.join(post_me_home, pa_24),
+        'od': os.path.join(post_me_home, od),
+        'od_24': os.path.join(post_me_home, od_24),
+        'compiled_od': compiled_od_path,
+        'model_output': os.path.join(compiled_od_path, ''.join(['from_', model_name]))
+    }
+
+    for _, path in post_me_exports.items():
+        create_folder(path, chDir=False)
+
+    # Combine into full export dict
+    exports['post_me'] = post_me_exports
+
+    # ## PARAMS OUT ## #
+    param_home = os.path.join(export_home, 'Params')
+
+    params = {
+        'home': param_home,
+        'compile': os.path.join(param_home, 'Compile Params'),
+        'tours': os.path.join(param_home, 'Tour Proportions')
+    }
+    for _, path in params.items():
+        create_folder(path, chDir=False)
+
+    return imports, exports, params
 
 
 def grow_to_future_years(base_year_df: pd.DataFrame,
@@ -350,6 +615,11 @@ def get_growth_values(base_year_df: pd.DataFrame,
     if base_year_col in growth_df:
         growth_df = growth_df.drop(base_year_col, axis='columns')
 
+    # Avoid future year clashes
+    base_year_df = base_year_df.drop(future_year_cols,
+                                     axis='columns',
+                                     errors='ignore')
+
     # Merge on merge col
     growth_values = pd.merge(base_year_df,
                              growth_df,
@@ -498,7 +768,7 @@ def add_fname_suffix(fname: str, suffix: str):
 
 
 def safe_read_csv(file_path: str,
-                  **kwargs
+                  kwargs: Dict[str, Any] = None
                   ) -> pd.DataFrame:
     """
     Reads in the file and performs some simple file checks
@@ -516,6 +786,10 @@ def safe_read_csv(file_path: str,
     dataframe:
         The data from file_path
     """
+    # Init
+    if kwargs is None:
+        kwargs = dict()
+
     # TODO: Add any more error checks here
     # Check file exists
     if not os.path.exists(file_path):
@@ -546,7 +820,7 @@ def is_none_like(o) -> bool:
             return True
 
     if isinstance(o, list):
-        return is_none_like(o[0])
+        return all([is_none_like(x) for x in o])
 
     return False
 
@@ -577,6 +851,45 @@ def get_data_subset(orig_data: pd.DataFrame,
     """
     subset_mask = orig_data[split_col_name].isin(subset_vals)
     return orig_data.loc[subset_mask]
+
+
+def get_vdm_dist_name(trip_origin: str,
+                      matrix_format: str,
+                      year: Union[int, str],
+                      user_class: str,
+                      mode: Union[int, str],
+                      ca: int = None,
+                      tp: Union[int, str] = None,
+                      csv: bool = False,
+                      suffix: str = None
+                      ) -> str:
+    """
+    Wrapper around get_compiled_matrix_name to deal with different ca naming
+    """
+    compiled_name = get_compiled_matrix_name(
+        matrix_format,
+        user_class,
+        str(year),
+        trip_origin=trip_origin,
+        mode=str(mode),
+        ca=ca,
+        tp=str(tp),
+        csv=csv,
+        suffix=suffix
+    )
+
+    # Need to switch over ca naming
+    if ca is not None:
+        if 'nca' in compiled_name:
+            compiled_name = compiled_name.replace('nca', 'ca1')
+        elif 'ca' in compiled_name:
+            compiled_name = compiled_name.replace('ca', 'ca2')
+        else:
+            raise ValueError("Couldn't find ca/nca in name returned from "
+                             "get_compiled_matrix_name(). This shouldn't be "
+                             "able to happen!")
+
+    return compiled_name
 
 
 def get_dist_name(trip_origin: str,
@@ -635,37 +948,27 @@ def get_dist_name(trip_origin: str,
 
 def calib_params_to_dist_name(trip_origin: str,
                               matrix_format: str,
-                              calib_params: dict,
-                              csv: bool = False
+                              calib_params: Dict[str, int],
+                              csv: bool = False,
+                              suffix: str = None,
                               ) -> str:
     """
-        Wrapper for get_distribution_name() using calib params
+    Wrapper for get_distribution_name() using calib params
     """
     segment_str = 'soc' if calib_params['p'] in [1, 2] else 'ns'
 
-    if 'tp' in calib_params:
-        return get_dist_name(
-            trip_origin,
-            matrix_format,
-            str(calib_params.get('yr')),
-            str(calib_params.get('p')),
-            str(calib_params.get('m')),
-            str(calib_params.get(segment_str)),
-            str(calib_params.get('ca')),
-            tp=str(calib_params.get('tp')),
-            csv=csv
-        )
-    else:
-        return get_dist_name(
-            trip_origin,
-            matrix_format,
-            str(calib_params.get('yr')),
-            str(calib_params.get('p')),
-            str(calib_params.get('m')),
-            str(calib_params.get(segment_str)),
-            str(calib_params.get('ca')),
-            csv=csv
-        )
+    return get_dist_name(
+        trip_origin,
+        matrix_format,
+        str(calib_params.get('yr')),
+        str(calib_params.get('p')),
+        str(calib_params.get('m')),
+        str(calib_params.get(segment_str)),
+        str(calib_params.get('ca')),
+        tp=str(calib_params.get('tp')),
+        csv=csv,
+        suffix=suffix
+    )
 
 
 def get_dist_name_parts(dist_name: str) -> List[str]:
@@ -702,23 +1005,107 @@ def get_dist_name_parts(dist_name: str) -> List[str]:
     ]
 
 
-def generate_calib_params(year: str,
-                          purpose: int,
-                          mode: int,
-                          segment: int,
-                          ca: int
+def get_seg_level_dist_name(seg_level: str,
+                            seg_values: Dict[str, Any],
+                            matrix_format: str,
+                            year: Union[str, int],
+                            trip_origin: str = None,
+                            csv: bool = False,
+                            suffix: str = None
+                            ) -> str:
+    """
+    Generates the distribution name, regardless of segmentation level
+
+    Parameters
+    ----------
+    seg_level:
+        The level of segmentation of the tour proportions to convert. This
+        should be one of the values in efs_constants.SEG_LEVELS.
+
+    seg_values:
+        A dictionary of {seg_name: value} for the segmentation level chosen.
+
+    matrix_format:
+        The format of the matrix. Usually 'pa', 'od', 'od_from', or 'od_to'.
+
+    year:
+        The year of the matrix.
+
+    trip_origin:
+        Usually 'hb or 'nhb'
+
+    csv:
+        Whether to add .csv on the end of the file or not
+
+    suffix:
+        Any additional suffix to add to the end of the filename. This comes
+        before .csv if csv=True.
+
+    Returns
+    -------
+    dist_name:
+        The generated distribution name
+    """
+    # Init
+    seg_level = validate_seg_level(seg_level)
+
+    if seg_level == 'vdm':
+        return get_vdm_dist_name(
+            trip_origin=seg_values.get('to'),
+            matrix_format=matrix_format,
+            year=str(year),
+            user_class=seg_values.get('uc'),
+            mode=seg_values.get('m'),
+            ca=seg_values.get('ca'),
+            tp=seg_values.get('tp'),
+            csv=csv,
+            suffix=suffix
+        )
+
+    else:
+        raise ValueError("'%s' is a valid seg_level, however, we do not have "
+                         "a way of dealing with it right not. You should "
+                         "write it!" % seg_level)
+
+
+def generate_calib_params(year: str = None,
+                          purpose: int = None,
+                          mode: int = None,
+                          segment: int = None,
+                          ca: int = None,
+                          tp: int = None
                           ) -> dict:
     """
     Returns a TMS style calib_params dict
     """
+    # Purpose needs to be set if segment is
+    if segment is not None and purpose is None:
+        raise ValueError("If segment is set, purpose needs to be set too, "
+                         "otherwise segment text cannot be determined.")
+    # Init
     segment_str = 'soc' if purpose in [1, 2] else 'ns'
-    return {
-        'yr': year,
-        'p': purpose,
-        'm': mode,
-        segment_str: segment,
-        'ca': ca
-    }
+
+    keys = ['yr', 'p', 'm', segment_str, 'ca', 'tp']
+    vals = [year, purpose, mode, segment, ca, tp]
+
+    # Add params to dict if they are not None
+    return {k: v for k, v in zip(keys, vals) if v is not None}
+
+
+def create_vdm_seg_values(trip_origin: str = None,
+                          user_class: str = None,
+                          mode: int = None,
+                          ca: int = None,
+                          tp: int = None,
+                          ) -> Dict[str, Union[str, int]]:
+    """
+    Returns a TMS style calib_params dict, but for vdm segmentation
+    """
+    keys = ['to', 'uc', 'm', 'ca', 'tp']
+    vals = [trip_origin, user_class, mode, ca, tp]
+
+    # Add params to dict if they are not None
+    return {k: v for k, v in zip(keys, vals) if v is not None}
 
 
 def starts_with(s: str, x: str) -> bool:
@@ -805,7 +1192,7 @@ def fname_to_calib_params(fname: str,
                           get_matrix_format: bool = False,
                           get_user_class: bool = False,
                           force_ca_exists: bool = False,
-                          ) -> Dict[str, str]:
+                          ) -> Dict[str, Union[str, int]]:
     """
     Convert the filename into a calib_params dict, with the following keys
     (if they exist in the filename):
@@ -1000,12 +1387,49 @@ def expand_distribution(dist: pd.DataFrame,
     return dist
 
 
+def vdm_segment_loop_generator(to_list: Iterable[str],
+                               uc_list: Iterable[str],
+                               m_list: Iterable[int],
+                               ca_list: Iterable[int],
+                               tp_list: Iterable[int] = None,
+                               ) -> (Union[Iterator[Tuple[str, str, int, int, int]],
+                                           Iterator[Tuple[str, str, int, int]]]):
+    """
+    Simple generator to avoid the need for so many nested loops
+    """
+
+    for trip_origin, user_class in product(to_list, uc_list):
+        # Not a valid segmentation - skip it
+        if trip_origin == 'nhb' and user_class == 'commute':
+            continue
+
+        for mode, ca in product(m_list, ca_list):
+            if tp_list is None:
+                yield (
+                    trip_origin,
+                    user_class,
+                    mode,
+                    ca,
+                )
+            else:
+                for time_period in tp_list:
+                    yield(
+                        trip_origin,
+                        user_class,
+                        mode,
+                        ca,
+                        time_period
+                    )
+
+
 def segmentation_loop_generator(p_list: Iterable[int],
                                 m_list: Iterable[int],
                                 soc_list: Iterable[int],
                                 ns_list: Iterable[int],
                                 ca_list: Iterable[int],
-                                tp_list: Iterable[int] = None):
+                                tp_list: Iterable[int] = None
+                                ) -> (Union[Iterator[Tuple[int, int, int, int, int]],
+                                            Iterator[Tuple[int, int, int, int]]]):
     """
     Simple generator to avoid the need for so many nested loops
     """
@@ -1040,12 +1464,103 @@ def segmentation_loop_generator(p_list: Iterable[int],
                             )
 
 
+def cp_segmentation_loop_generator(p_list: Iterable[int],
+                                   m_list: Iterable[int],
+                                   soc_list: Iterable[int],
+                                   ns_list: Iterable[int],
+                                   ca_list: Iterable[int],
+                                   tp_list: Iterable[int] = None
+                                   ) -> Iterator[Dict[str, int]]:
+    """
+    Wrapper for segmentation_loop_generator() to return TMS style
+    calib params instead of a number of integer
+    """
+    # Init
+    tp_list = [None] if tp_list is None else tp_list
+
+    loop_generator = segmentation_loop_generator(
+        p_list=p_list,
+        m_list=m_list,
+        soc_list=soc_list,
+        ns_list=ns_list,
+        ca_list=ca_list,
+        tp_list=tp_list
+    )
+
+    if tp_list is not None:
+        for p, m, seg, ca, tp in loop_generator:
+            yield generate_calib_params(
+                purpose=p,
+                mode=m,
+                segment=seg,
+                ca=ca,
+                tp=tp
+            )
+    else:
+        for p, m, seg, ca in loop_generator:
+            yield generate_calib_params(
+                purpose=p,
+                mode=m,
+                segment=seg,
+                ca=ca
+            )
+
+
+def seg_level_loop_generator(seg_level: str,
+                             seg_params: Dict[str, Any],
+                             ) -> Dict[str, Union[int, str]]:
+    """
+    Yields seg_values dictionary for the seg_level given
+
+    Parameters
+    ----------
+    seg_level:
+        The level of segmentation of the tour proportions to convert. This
+        should be one of the values in efs_constants.SEG_LEVELS.
+
+    seg_params:
+        A dictionary of kwarg: values for the segmentation level chosen. See...
+        Need to Create reference for how seg_params work
+
+    Yields
+    -------
+    seg_values:
+        A dictionary of {seg_name: seg_values}
+    """
+    # Init
+    seg_level = validate_seg_level(seg_level)
+
+    if seg_level == 'vdm':
+        seg_params = validate_vdm_seg_params(seg_params)
+
+        loop_generator = vdm_segment_loop_generator(
+            to_list=seg_params['to_needed'],
+            uc_list=seg_params['uc_needed'],
+            m_list=seg_params['m_needed'],
+            ca_list=seg_params['ca_needed'],
+            tp_list=seg_params['tp_needed'],
+        )
+
+        # Convert to dict
+        for to, uc, m, ca, tp in loop_generator:
+            yield create_vdm_seg_values(
+                trip_origin=to,
+                user_class=uc,
+                mode=m,
+                ca=ca,
+                tp=tp
+            )
+    else:
+        raise ValueError("'%s' is a valid seg_level, however, we do not have "
+                         "a way of dealing with it right not. You should "
+                         "write it!" % seg_level)
+
+
 def long_to_wide_out(df: pd.DataFrame,
                      v_heading: str,
                      h_heading: str,
                      values: str,
                      out_path: str,
-                     echo=False,
                      unq_zones: List[str] = None
                      ) -> None:
     """
@@ -1069,9 +1584,6 @@ def long_to_wide_out(df: pd.DataFrame,
     out_path:
         Where to write the converted matrix.
 
-    echo:
-        Indicates whether to print a log of the process to the terminal.
-
     unq_zones:
         A list of all the zone names that should exist in the output matrix.
         If zones in this list are not in the given df, they are infilled with
@@ -1088,20 +1600,37 @@ def long_to_wide_out(df: pd.DataFrame,
         unq_zones = df[v_heading].drop_duplicates().reset_index(drop=True).copy()
         unq_zones = list(range(1, max(unq_zones)+1))
 
-    # Convert to wide format and write to file
-    wide_mat = df_to_np(
+    # Make sure all unq_zones exists in v_heading and h_heading
+    df = ensure_multi_index(
         df=df,
-        values=values,
-        unq_internal_zones=unq_zones,
-        v_heading=v_heading,
-        h_heading=h_heading,
-        echo=echo
+        index_dict={v_heading: unq_zones, h_heading: unq_zones},
     )
-    pd.DataFrame(
-        wide_mat,
-        index=unq_zones,
-        columns=unq_zones
+
+    # Convert to wide format and output
+    df.pivot(
+        index=v_heading,
+        columns=h_heading,
+        values=values
     ).to_csv(out_path)
+
+
+def wide_to_long_out(df: pd.DataFrame,
+                     id_vars: str,
+                     var_name: str,
+                     value_name: str,
+                     out_path: str
+                     ) -> None:
+    # TODO: Write wide_to_long_out() docs
+    # This way we can avoid the name of the first col
+    df = df.melt(
+        id_vars=df.columns[:1],
+        var_name=var_name,
+        value_name=value_name
+    )
+    id_vars = id_vars[0] if isinstance(id_vars, list) else id_vars
+    df.columns.values[0] = id_vars
+
+    df.to_csv(out_path, index=False)
 
 
 def get_compile_params_name(matrix_format: str, year: str) -> str:
@@ -1167,7 +1696,8 @@ def get_compiled_matrix_name(matrix_format: str,
                              mode: str = None,
                              ca: int = None,
                              tp: str = None,
-                             csv=False
+                             csv=False,
+                             suffix: str = None,
                              ) -> str:
 
     """
@@ -1203,6 +1733,10 @@ def get_compiled_matrix_name(matrix_format: str,
 
     # Create name string
     final_name = '_'.join(name_parts)
+
+    # Optionally add a custom f_type suffix
+    if suffix is not None:
+        final_name += suffix
 
     # Optionally add on the csv if needed
     if csv:
@@ -1505,6 +2039,109 @@ def defaultdict_to_regular(d):
     return d
 
 
+def fit_filter(df: pd.DataFrame,
+               df_filter: Dict[str, Any],
+               raise_error: bool = False
+               ) -> Dict[str, Any]:
+    """
+    Whittles down filter to only include relevant items
+
+    Any columns that do not exits in the dataframe will be removed from the
+    filter; optionally raises an error if a filter column is not in the given
+    dataframe. Furthermore, any items that are 'none like' as determined by
+    is_none_like() will also be removed.
+
+    Parameters
+    ----------
+    df:
+        The dataframe that the filter is to be applied to.
+
+    df_filter:
+        The filter dictionary in the format of {df_col_name: filter_values}
+
+    raise_error:
+        Whether to raise an error or not when a df_col_name does not exist in
+        the given dataframe.
+
+    Returns
+    -------
+    fitted_filter:
+        A filter with non-relevant (as defined in the function description)
+        items removed.
+    """
+    # Init
+    fitted_filter = dict()
+    df = df.copy()
+    df.columns = df.columns.astype(str)
+
+    # Check each item in the given filter
+    for col, vals in df_filter.items():
+
+        # Check the column exists
+        if col not in df.columns:
+            if raise_error:
+                raise KeyError("'%s' Column not found in given dataframe"
+                               % str(col))
+            else:
+                continue
+
+        # Check the given value isn't None
+        if is_none_like(vals):
+            continue
+
+        # Should only get here for valid combinations
+        fitted_filter[col] = vals
+
+    return fitted_filter
+
+
+def filter_by_segmentation(df: pd.DataFrame,
+                           df_filter: Dict[str, Any],
+                           fit: bool = False,
+                           **kwargs
+                           ) -> pd.DataFrame:
+    """
+    Filters a dataframe down to a given segmentation
+
+    Can handle flexible segmentation if fit is set to True - all unnecessary
+    columns will be removed, and any 'None like' filters will be removed. This
+    follows the convention of settings segmentation splits to None when it
+    is not needed.
+
+    Parameters
+    ----------
+    df:
+        The dataframe that the filter is to be applied to.
+
+    df_filter:
+        The filter dictionary in the format of {df_col_name: filter_values}.
+
+    fit:
+        Whether to try and fit the given filter to the dataframe before
+        application. If using flexible segmentation and filter has not already
+        been fit, set to True.
+
+    kwargs:
+        Any additional kwargs that should be passed to fit_filter() if fit is
+        set to True.
+    Returns
+    -------
+    filtered_df:
+        The original dataframe given, segmented to the given filter level.
+    """
+    # Init
+    df = df.copy()
+
+    if fit:
+        df_filter = fit_filter(df, df_filter.copy(), **kwargs)
+
+    # Figure out the correct mask
+    needed_cols = list(df_filter.keys())
+    mask = df[needed_cols].isin(df_filter).all(axis='columns')
+
+    return df[mask]
+
+
 def intersection(l1: List[Any],
                  l2: List[Any],
                  ) -> List[Any]:
@@ -1522,3 +2159,369 @@ def intersection(l1: List[Any],
     # Get the intersection
     temp = set(big)
     return [x for x in small if x in temp]
+
+
+def ensure_index(df: pd.DataFrame,
+                 index: List[Any],
+                 index_col: str,
+                 infill: float = 0.0
+                 ) -> pd.DataFrame:
+    """
+    Ensures every value in index exists in index_col of df.
+    Missing values are infilled with infill
+    """
+    # Make a dataframe with just the new index
+    ph = pd.DataFrame({index_col: index})
+
+    # Merge with the given and infill missing
+    return ph.merge(df, how='left', on=index_col).fillna(infill)
+
+
+def ensure_multi_index(df: pd.DataFrame,
+                       index_dict: Dict[str, List[Any]],
+                       infill: float = 0.0
+                       ) -> pd.DataFrame:
+    """
+    Ensures every combination of values in index_list exists in df.
+
+    This function is useful to ensure a conversion from long to wide will
+    happen correctly
+
+    Parameters
+    ----------
+    df:
+        The dataframe to alter.
+
+    index_dict:
+        A dictionary of {column_name: index_vals} to ensure exist in all
+        combinations within df.
+
+    infill:
+        Value to infill any other columns of df where the given indexes
+        don't exist.
+
+    Returns
+    -------
+    df:
+        The given df given with all combinations of the index dict values
+    """
+    # Create a new placeholder df with every combination of the unique columns
+    all_combos = zip(*product(*index_dict.values()))
+    ph = {col: vals for col, vals in zip(index_dict.keys(), all_combos)}
+    ph = pd.DataFrame(ph)
+
+    # Merge with the given and infill missing
+    merge_cols = list(index_dict.keys())
+    return ph.merge(df, how='left', on=merge_cols).fillna(infill)
+
+
+def match_pa_zones(productions: pd.DataFrame,
+                   attractions: pd.DataFrame,
+                   unique_zones: List[Any],
+                   zone_col: str = 'model_zone_id',
+                   infill: float = 0.0,
+                   set_index: bool = False
+                   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Makes sure all unique zones exist in productions and attractions
+
+    Any missing zones will be infilled with infill,
+
+    Parameters
+    ----------
+    productions:
+        Dataframe containing the productions data - must have a zone_col
+
+    attractions:
+        Dataframe containing the productions data - must have a zone_col
+
+    unique_zones:
+        List of the desired zones to have in productions and attractions
+
+    zone_col:
+        Column in productions and attractions that contains the zone data.
+
+    infill:
+        Value to infill missing rows with in productions and attractions when
+        new zone may be added in.
+
+    set_index:
+        Whether to set the zone_col as the index before returning or not.
+
+    Returns
+    -------
+    (productions, attractions):
+        The provided productions and attractions with all zones from
+        unique_zones either as the index, or in zone_col
+    """
+    # Match productions and attractions
+    productions = ensure_index(
+        df=productions,
+        index=unique_zones,
+        index_col=zone_col,
+        infill=infill
+    )
+
+    attractions = ensure_index(
+        df=attractions,
+        index=unique_zones,
+        index_col=zone_col,
+        infill=infill
+    )
+
+    if set_index:
+        productions = productions.set_index(zone_col)
+        attractions = attractions.set_index(zone_col)
+
+    return productions, attractions
+
+
+def get_costs(model_lookup_path,
+              calib_params,
+              tp='24hr',
+              iz_infill = 0.5
+              ):
+    """
+    This function imports distances or costs from a given path.
+
+    Parameters
+    ----------
+    model_lookup_path:
+        Model folder to look in for distances/costs. Should be in call or global.
+
+    calib_params:
+        Calibration parameters dictionary'
+
+    tp:
+        Should ultimately take 24hr & tp, usually 24hr for hb and tp for NHB.
+
+    direction = None:
+        Takes None, 'To', 'From'
+
+    car_available = None:
+        Takes None, True, False
+
+    iz_infill = 0.5:
+        Currently needed for distance but not cost. Add a value of iz_infill *
+        the minimum inter-zonal value to the intra-zonal cells.
+
+    Returns
+    ----------
+    dat:
+        DataFrame containing required cost or distance values.
+        DataFrame containing required cost or distance values.
+    """
+    # units takes different parameters
+    # TODO: Needs a config guide for the costs somewhere
+    # TODO: Adapt model input costs to take time periods
+    # TODO: The name cost_cols is misleading
+    file_sys = os.listdir(os.path.join(model_lookup_path, 'costs'))
+    tp_path = [x for x in file_sys if tp in x]
+
+    dat = pd.read_csv(os.path.join(model_lookup_path,
+                                   'costs',
+                                   tp_path[0]))
+    cols = list(dat)
+
+    # Get purpose and direction from calib_params
+    ca = None
+    purpose = None
+    time_period = None
+
+    for index, param in calib_params.items():
+        # Need a purpose, if a ca is not picked up returns none
+        if index == 'p':
+            purpose = param
+        if index == 'ca':
+            if param == 1:
+                ca = 'nca'
+            elif param == 2:
+                ca = 'ca'
+        if index == 'tp':
+            time_period = param
+
+    # Purpose to string
+    commute = [1]
+    business = [2, 12]
+    other = [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
+    if purpose in commute:
+        str_purpose = 'commute'
+    elif purpose in business:
+        str_purpose = 'business'
+    elif purpose in other:
+        str_purpose = 'other'
+    else:
+        raise ValueError("Cannot convert purpose to string." +
+                         "Got %s" % str(purpose))
+
+    # Filter down on purpose
+    cost_cols = [x for x in cols if str_purpose in x]
+    # Handle if we have numeric purpose costs, hope so, they're better!
+    if len(cost_cols) == 0:
+        cost_cols = [x for x in cols if ('p' + str(purpose)) in x]
+
+    # Filter down on car availability
+    if ca is not None:
+        # Have to be fussy as ca is in nca...
+        if ca == 'ca':
+            cost_cols = [x for x in cost_cols if 'nca' not in x]
+        elif ca == 'nca':
+            cost_cols = [x for x in cost_cols if 'nca' in x]
+
+    if time_period is not None:
+        cost_cols = [x for x in cost_cols if str(time_period) in x]
+
+    target_cols = ['p_zone', 'a_zone']
+    for col in cost_cols:
+        target_cols.append(col)
+
+    cost_return_name = cost_cols[0]
+
+    dat = dat.reindex(target_cols, axis=1)
+    dat = dat.rename(columns={cost_cols[0]: 'cost'})
+
+    # Redefine cols
+    cols = list(dat)
+
+    if iz_infill is not None:
+        dat = dat.copy()
+        min_inter_dat = dat[dat[cols[2]]>0]
+        # Derive minimum intra-zonal
+        min_inter_dat = min_inter_dat.groupby(
+                cols[0]).min().reset_index().drop(cols[1],axis=1)
+        intra_dat = min_inter_dat.copy()
+        intra_dat[cols[2]] = intra_dat[cols[2]]*iz_infill
+        iz = dat[dat[cols[0]] == dat[cols[1]]]
+        non_iz = dat[dat[cols[0]] != dat[cols[1]]]
+        iz = iz.drop(cols[2], axis=1)
+        # Rejoin
+        iz = iz.merge(intra_dat, how='inner', on=cols[0])
+        dat = pd.concat([iz, non_iz], axis=0, sort=True).reset_index(drop=True)
+
+    return dat, cost_return_name
+
+
+def get_trip_length_bands(import_folder,
+                          calib_params,
+                          segmentation,
+                          trip_origin,
+                          replace_nan=False,
+                          echo=True):
+    # TODO: Overwrite the segmentation parameter, sorry Ben
+    """
+    Function to check a folder for trip length band parameters.
+    Returns a subset.
+    """
+    # Index folder
+    target_files = os.listdir(import_folder)
+    # Define file contents, should just be target files - should fix.
+    import_files = target_files.copy()
+
+    # TODO: Fixed for new ntem dists - pointless duplication now
+    if segmentation == 'ntem':
+        for key, value in calib_params.items():
+            # Don't want empty segments, don't want ca
+            if value != 'none' and key != 'ca':
+                # print_w_toggle(key + str(value), echo=echo)
+                import_files = [x for x in import_files if
+                                ('_' + key + str(value)) in x]
+    elif segmentation == 'tfn':
+        for key, value in calib_params.items():
+            # Don't want empty segments, don't want ca
+            if value != 'none' and key != 'ca':
+                # print_w_toggle(key + str(value), echo=echo)
+                import_files = [x for x in import_files if
+                                ('_' + key + str(value)) in x]
+    else:
+        raise ValueError('Non-valid segmentation. How did you get this far?')
+
+    if trip_origin == 'hb':
+        import_files = [x for x in import_files if 'nhb' not in x]
+    elif trip_origin == 'nhb':
+        import_files = [x for x in import_files if 'nhb' in x]
+    else:
+        raise ValueError('Trip length band import failed,' +
+                         'provide valid trip origin')
+    if len(import_files) > 1:
+        raise Warning('Picking from two similar files,' +
+                      ' check import folder')
+
+    # Import
+    tlb = pd.read_csv(import_folder + '/' + import_files[0])
+
+    # Filter to target purpose
+    # TODO: Don't want to have to do this for NTEM anymore. Just keep them individual.
+    # tlb = tlb[tlb[trip_origin +'_purpose']==purpose].copy()
+
+    if replace_nan:
+        for col_name in list(tlb):
+            tlb[col_name] = tlb[col_name].fillna(0)
+
+    return tlb
+
+
+def parse_mat_output(list_dir,
+                     sep='_',
+                     mat_type='dat',
+                     file_format='.csv',
+                     file_name='file'):
+    """
+    """
+    # Get target file format only
+    unq_files = [x for x in list_dir if file_format in x]
+    # If no numbers in then drop
+    unq_files = [x for x in list_dir if any(c.isdigit() for c in x)]
+
+    split_list = []
+    for file in unq_files:
+        split_dict = {file_name:file}
+        file = file.replace(file_format,'')
+        test = str(file).split('_')
+        for item in test:
+            if 'hb' in item:
+                name = 'trip_origin'
+                dat = item
+            elif item == mat_type:
+                name = ''
+                dat = ''
+            else:
+                name = ''
+                dat = ''
+                # name = letters, dat = numbers
+                for char in item:
+                    if char.isalpha():
+                        name += str(char)
+                    else:
+                        dat += str(char)
+            # Return None not nan
+            if len(dat) == 0:
+                dat = 'none'
+            split_dict.update({name: dat})
+        split_list.append(split_dict)           
+
+    segments = pd.DataFrame(split_list)
+    segments = segments.replace({np.nan:'none'})
+
+    return segments
+
+
+def convert_to_weights(df: pd.DataFrame,
+                       year_cols: List[str],
+                       weight_by_col: str = 'purpose_id'
+                       ) -> pd.DataFrame:
+    """
+    TODO: write convert_to_weights() doc
+    """
+    df = df.copy()
+    unq_vals = df[weight_by_col].unique()
+
+    for val in unq_vals:
+        mask = (df[weight_by_col] == val)
+        for year in year_cols:
+            df.loc[mask, year] = (
+                df.loc[mask, year]
+                /
+                df.loc[mask, year].sum()
+            )
+    return df
+
