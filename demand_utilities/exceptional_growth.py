@@ -355,6 +355,194 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
     return forecast_vector
 
 
+def growth_criteria(synth_productions: pd.DataFrame,
+                    synth_attractions: pd.DataFrame,
+                    observed_prod_path: str,
+                    observed_attr_path: str,
+                    population_path: str,
+                    employment_path: str,
+                    msoa_lookup_path: str,
+                    segments: dict,
+                    future_years: List[str],
+                    base_year: str,
+                    zone_translator: ZoneTranslator = None,
+                    zone_translator_args: dict = None,
+                    exceptional_zones: pd.DataFrame = None,
+                    trip_rate_sectors: str = None
+                    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    
+    # Load files and sort inputs
+    print("Loading Files")
+    population = du.safe_read_csv(population_path)
+    employment = du.safe_read_csv(employment_path)
+    observed_productions = du.safe_read_csv(observed_prod_path)
+    observed_attractions = du.safe_read_csv(observed_attr_path)
+    
+    pop_segments = [x for x in segments["pop"] if x != "model_zone_id"]
+    emp_segments = [x for x in segments["emp"] if x != "model_zone_id"]
+    prod_segments = [x for x in segments["prod"] if x != "model_zone_id"]
+    attr_segments = [x for x in segments["attr"] if x != "model_zone_id"]
+    
+    
+    
+    print("Population")
+    print(population)
+    population.rename(
+        {"msoa_zone_id": "model_zone_id",
+         "area_type": "area_type_id",
+        "ca": "car_availability_id"},
+        axis=1,
+        inplace=True)
+    population = du.convert_msoa_naming(
+        population,
+        msoa_col_name="model_zone_id",
+        msoa_path=msoa_lookup_path,
+        to='int'
+    )
+    print("Employment")
+    print(employment)
+    employment.rename(
+        {"msoa_zone_id": "model_zone_id"},
+        axis=1,
+        inplace=True)
+    employment = du.convert_msoa_naming(
+        employment,
+        msoa_col_name="model_zone_id",
+        msoa_path=msoa_lookup_path,
+        to='int'
+    )
+    
+    if zone_translator is not None:
+        
+        population = zone_translator.run(
+            population,
+            non_split_columns=segments["pop"],
+            **zone_translator_args
+        )
+        
+        employment = zone_translator.run(
+            employment,
+            non_split_columns=segments["emp"],
+            **zone_translator_args
+        )
+        
+        if exceptional_zones is not None:
+            converted_e_zones = zone_translator.run(
+                exceptional_zones,
+                non_split_columns=["model_zone_id"],
+                **zone_translator_args
+            )
+        else:
+            converted_e_zones = pd.DataFrame(columns=["model_zone_id"])
+            
+    print("Converted Population")
+    print(population)
+    print("Employment")
+    print(employment)
+    print("Obs Productions")
+    print(observed_productions)
+    print("Obs Attractions")
+    print(observed_attractions)
+    print("Exceptional Zones")
+    print(converted_e_zones)
+            
+    observed_prod_base = observed_productions[segments["prod"] + [base_year]]
+    observed_attr_base = observed_attractions[segments["attr"] + [base_year]]
+            
+    prod_trip_rates = production_exceptional_trip_rate(
+        observed_base=observed_prod_base,
+        land_use=population,
+        e_zones=pd.DataFrame,
+        base_year=base_year,
+        segment_cols=prod_segments,
+        zone_column="model_zone_id",
+        purpose_column="purpose_id",
+        sector_lookup=trip_rate_sectors
+    )
+    attr_trip_rates = attraction_exceptional_trip_rate(
+        observed_base=observed_attr_base,
+        land_use=employment,
+        e_zones=exceptional_zones,
+        base_year=base_year,
+        segment_cols=attr_segments,
+        zone_column="model_zone_id",
+        purpose_column="purpose_id",
+        sector_lookup=trip_rate_sectors
+    )
+    
+    population = convert_pop_segmentation(
+        population,
+        grouping_cols=segments["pop"],
+        value_cols=future_years
+    )
+    
+    grown_productions = {}
+    grown_attractions = {}
+    
+    synth_prod_base = synth_productions[segments["prod"] + [base_year]]
+    synth_attr_base = synth_attractions[segments["attr"] + [base_year]]
+    
+    for year in future_years:
+        synth_prod_subset = synth_productions[segments["prod"] + [year]]
+        synth_attr_subset = synth_attractions[segments["attr"] + [year]]
+        
+        pop_subset = population[segments["pop"] + [year]]
+        emp_subset = employment[segments["emp"] + [year]]
+        emp_subset = emp_subset.loc[
+            emp_subset["employment_cat"] == "E01"
+        ].drop("employment_cat", axis=1)
+        # Apply the growth criteria for exceptional zones
+        grown_productions[year] = handle_exceptional_growth(
+            synth_future=synth_prod_subset,
+            synth_base=synth_prod_base,
+            observed_base=observed_prod_base,
+            zone_column="model_zone_id",
+            segment_columns=prod_segments,
+            value_column=year,
+            base_year=base_year,
+            exceptional_zones=converted_e_zones,
+            land_use=pop_subset,
+            trip_rates=prod_trip_rates,
+            sector_lookup=trip_rate_sectors
+        )
+        grown_attractions[year] = handle_exceptional_growth(
+            synth_future=synth_attr_subset,
+            synth_base=synth_attr_base,
+            observed_base=observed_attractions,
+            zone_column="model_zone_id",
+            segment_columns=attr_segments,
+            value_column=year,
+            base_year=base_year,
+            exceptional_zones=converted_e_zones,
+            land_use=emp_subset,
+            trip_rates=attr_trip_rates,
+            sector_lookup=trip_rate_sectors
+        )
+        
+    converted_productions = pd.DataFrame()
+    converted_pure_attractions = pd.DataFrame()
+    for year in future_years:
+        prod = grown_productions[year][segments["prod"] + [year]]
+        attr = grown_attractions[year][segments["attr"] + [year]]
+        if converted_productions.empty:
+            converted_productions = prod
+            converted_pure_attractions = attr
+        else:
+            converted_productions = pd.merge(
+                converted_productions,
+                prod,
+                on=segments["prod"]
+            )
+            converted_pure_attractions = pd.merge(
+                converted_pure_attractions,
+                attr,
+                on=segments["attr"]
+            )
+    converted_productions.to_csv("grown_productions.csv", index=False)
+    converted_pure_attractions.to_csv("grown_attractions.csv", index=False)
+    
+    return (converted_productions, converted_pure_attractions)
+
 def test():
     # Test productions
 

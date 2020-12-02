@@ -660,13 +660,13 @@ class ExternalForecastSystem:
         # ## D-LOG READ-IN
         if dlog_file_pop is None:
             dlog_file_pop = os.path.join(
-                imports["default_inputs"],
+                self.imports["default_inputs"],
                 "population",
                 "dlog_residential.csv"
             )
         if dlog_file_emp is None:
             dlog_file_emp = os.path.join(
-                imports["default_inputs"],
+                self.imports["default_inputs"],
                 "employment",
                 "dlog_nonresidential.csv"
             )
@@ -903,6 +903,115 @@ class ExternalForecastSystem:
             os.path.join(self.exports['attractions'], fname),
             index=False
         )
+
+        # Load the exceptional zone definitions from production/attraction
+        # generation
+        print("Loading Exceptional Growth Datafiles")
+        exceptional_zones = eg.load_exceptional_zones(
+            productions_export=self.exports["productions"],
+            attractions_export=self.exports["attractions"]
+        )
+        # Reload aggregated population and employment data to calculate
+        # sector level trip rates
+        grown_population_path = os.path.join(
+            self.exports["productions"],
+            "MSOA_population.csv"
+        )
+        grown_employment_path = os.path.join(
+            self.exports["attractions"],
+            "MSOA_employment.csv"
+        )
+
+        # For testing purposes - use the previously generated trip outputs -
+        # same as the synthetic base
+        obs_production_path = r"Y:\NorMITs Demand\norms_2015\v2_3-EFS_Output\iter1\Productions\norms_2015_productions.csv"
+        obs_attraction_path = r"Y:\NorMITs Demand\norms_2015\v2_3-EFS_Output\iter1\Attractions\norms_2015_attractions.csv"
+
+        # For testing purposes - use the converted productions/attractions
+        # from a previous run (same as observed placeholders)
+        # converted_productions = pd.read_csv(obs_production_path)
+        # converted_pure_attractions = pd.read_csv(obs_attraction_path)
+
+        # Detect the segment columns for PAs and Pop/Emp
+        production_segments = list(converted_productions.columns)
+        attraction_segments = list(converted_pure_attractions.columns)
+
+        for year in year_list:
+            production_segments.remove(year)
+            attraction_segments.remove(year)
+
+        population_segments = [seg for seg in production_segments
+                               if seg != "purpose_id"]
+        employment_segments = ["model_zone_id", "employment_cat"]
+
+        growth_criteria_segments = {
+            "pop": population_segments,
+            "emp": employment_segments,
+            "prod": production_segments,
+            "attr": attraction_segments
+        }
+
+        # ## APPLY GROWTH CRITERIA ## #
+
+        # Placeholder sector file definition
+        # TODO Integrate into EFS inputs
+        model_zone_to_sector_path = r"Y:\NorMITs Demand\import\zone_translation\norms_2015_to_tfn_sectors.csv"
+        from_zone_column = "norms_zone_id"
+        to_sector_column = "tfn_sectors_zone_id"
+
+        # Load sector mapping for calculating the exceptional zone trip rates
+        sector_lookup = pd.read_csv(model_zone_to_sector_path)
+        sector_lookup.rename({from_zone_column: "model_zone_id",
+                              to_sector_column: "grouping_id"},
+                             axis=1,
+                             inplace=True)
+        sector_lookup = sector_lookup.set_index("model_zone_id")["grouping_id"]
+
+        # Zone translation arguments for population/employment and
+        # exceptional zone translation - reduces number of arguments required
+        zone_translator_args = {
+            "translation_dataframe": translation_dataframe,
+            "start_zoning_system_name": self.input_zone_system,
+            "end_zoning_system_name": desired_zoning,
+        }
+
+        # MSOA path to translate population and employment zones
+        msoa_lookup_path = os.path.join(
+            self.imports["default_inputs"],
+            self.msoa_lookup_path
+        )
+
+        # Apply growth criteria to "normal" and "exceptional" zones
+        (converted_productions,
+         converted_pure_attractions) = eg.growth_criteria(
+            synth_productions=converted_productions,
+            synth_attractions=converted_pure_attractions,
+            observed_prod_path=production_path,
+            observed_attr_path=attraction_path,
+            population_path=grown_population_path,
+            employment_path=grown_employment_path,
+            msoa_lookup_path=msoa_lookup_path,
+            segments=growth_criteria_segments,
+            future_years=[str(x) for x in future_years if x != 2050],
+            base_year=str(base_year),
+            zone_translator=self.zone_translator,
+            zone_translator_args=zone_translator_args,
+            exceptional_zones=exceptional_zones,
+            trip_rate_sectors=sector_lookup
+        )
+
+        # # ## REPEAT ATTRACTION WEIGHT GENERATION ## #
+        print("Generating attraction weights...")
+        converted_attractions = du.convert_to_weights(
+            attraction_dataframe,
+            year_list
+        )
+
+        print("Attraction weights generated!")
+        last_time = current_time
+        current_time = time.time()
+        print("Attraction weight generation took: %.2f seconds" %
+              (current_time - last_time))
 
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
