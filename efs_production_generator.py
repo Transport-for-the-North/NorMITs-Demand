@@ -22,6 +22,8 @@ from tqdm import tqdm
 
 import efs_constants as consts
 from efs_constrainer import ForecastConstrainer
+
+from demand_utilities import timing
 from demand_utilities import utils as du
 from demand_utilities import concurrency as conc
 
@@ -158,11 +160,11 @@ class EFSProductionGenerator:
 
         ntem_control_dir:
             The path to alternate ntem control directory. If left as None, the
-            production model will use the default land use data.
+            production model will use the default path.
 
         lad_lookup_dir:
             The path to alternate lad to msoa import data. If left as None, the
-            production model will use the default land use data.
+            production model will use the default path.
 
         control_productions:
             Whether to control the generated production to the constraints
@@ -1137,7 +1139,131 @@ class NhbProductionModel:
                  audits: bool = True,
                  process_count: int = consts.PROCESS_COUNT
                  ):
-        # TODO: Write NhbProductionModel docs
+        """
+        Parameters
+        ----------
+        import_home:
+            Path to the import home of NorMITs Demand. This can be gotten from
+            an instance of the ExternalForecastSystem. Usually
+            'Y:/NorMITs Demand/import'
+
+        export_home:
+            Path to the export home of this instance of outputs. This is
+            usually related to a specific run of the ExternalForecastSystem,
+            and should be gotten from there.
+            e.g. 'E:/NorMITs Demand/norms_2015/v2_3-EFS_Output/iter1'
+
+        model_name:
+            The name of the model being run. This is usually something like:
+            norms, norms_2015, or noham.
+
+        seg_level:
+            The level of segmentation to run at. This is used to determine
+            how to produce the NHB Productions. Should be one of the values
+            from consts.SEG_LEVELS
+
+        return_segments:
+            Which segmentation to use when returning the NHB productions.
+            If left as None, it is automatically determined based on seg_level.
+
+        base_year:
+            The base year of the hb productions and attractions
+
+        future_years:
+            The future years of nhb productions to create - these years must
+            also exist in the hb productions and attractions.
+
+        m_needed:
+            The modes to return when calling run.
+
+        hb_prods_path:
+            An alternate path to hb productions. If left as None, the NHB
+            production model will look in the default output location of
+            ProductionModel.
+
+        hb_attrs_path:
+            An alternate path to hb attractions. If left as None, the NHB
+            production model will look in the default output location of
+            AttractionModel.
+        
+        trip_rates_path:
+            An alternate path to nhb trip rates. Any alternate inputs must be
+            in the same format as the default. If left as None, the NHB
+            production model will look in the default import location.
+        
+        mode_splits_path:
+            An alternate path to nhb mode splits. Any alternate inputs must be
+            in the same format as the default. If left as None, the NHB
+            production model will look in the default import location.
+
+        time_splits_path:
+            An alternate path to nhb time splits. Any alternate inputs must be
+            in the same format as the default. If left as None, the NHB
+            production model will look in the default import location.
+        
+        ntem_control_dir:
+            The path to alternate ntem control directory. If left as None, the
+            production model will use the default import location.
+
+        lad_lookup_dir:
+            The path to alternate lad to msoa import data. If left as None, the
+            production model will use the default import location.
+
+        control_productions:
+            Whether to control the generated productions to the constraints
+            given in ntem_control_dir or not.
+
+        control_fy_productions:
+            Whether to control the generated future year productions to the
+            constraints given in ntem_control_dir or not. When running for
+            scenarios other than the base NTEM, this should be False.
+
+        audit_write_dir:
+            Alternate path to write the audits. If left as None, the default
+            location is used.
+
+        m_col:
+            The name of the column in the mode_splits and time_splits that
+            relate to mode.
+
+        m_share_col:
+            The name of the column in mode_splits that contains the mode
+            share amount.
+
+        tp_col:
+            The name of the column in time_splits that contains the time_period
+            id
+        
+        tp_share_col:
+            The name of the column in time_splits that contains the time
+            share amount.
+        
+        soc_col:
+            The name of the column in trip_rates that contains the soc
+            data.
+        
+        ns_col:
+            The name of the column in trip_rates that contains the ns
+            data.
+        
+        nhb_p_col:
+            The name of the column in trip_rates that contains the nhb purpose
+            data.
+        
+        trip_rate_col:
+            The name of the column in trip_rates that contains the trip_rate
+            data.
+        
+        zoning_system:
+            The zoning system being used by the import files
+
+        audits:
+            Whether to print out audits or not.
+
+        process_count:
+            The number of processes to use in the NHB production model when
+            multiprocessing is available.
+        """
         # Validate inputs
         zoning_system = du.validate_zoning_system(zoning_system)
         model_name = du.validate_model_name(model_name)
@@ -1196,7 +1322,6 @@ class NhbProductionModel:
                 "one!" % seg_level
             )
 
-
     def _build_paths(self,
                      import_home: str,
                      export_home: str,
@@ -1254,6 +1379,7 @@ class NhbProductionModel:
                                            'Productions')
         du.create_folder(audit_write_dir, chDir=False)
 
+        # Build the imports dictionary
         imports = {
             'productions': hb_prods_path,
             'attractions': hb_attrs_path,
@@ -1264,11 +1390,28 @@ class NhbProductionModel:
             'lad_lookup': lad_lookup_dir
         }
 
+        # Make sure all import paths exit
+        for key, path in imports.items():
+            if not os.path.exists(path):
+                raise IOError(
+                    "NHB Production Model Imports: The path for %s does not "
+                    "exist.\nFull path: %s" % (key, path)
+                )
+
+        # Build the exports dictionary
         exports = {
             'productions': os.path.join(export_home, consts.PRODUCTIONS_DIRNAME),
             'attractions': os.path.join(export_home, consts.ATTRACTIONS_DIRNAME),
             'audits': audit_write_dir
         }
+
+        # Make sure all export paths exit
+        for key, path in imports.items():
+            if not os.path.exists(path):
+                raise IOError(
+                    "NHB Production Model Exports: The path for %s does not "
+                    "exist.\nFull path: %s" % (key, path)
+                )
 
         return imports, exports
 
@@ -1276,7 +1419,24 @@ class NhbProductionModel:
                            nhb_prods: pd.DataFrame,
                            verbose: bool = True
                            ) -> pd.DataFrame:
-        # TODO: Write NhbProductionModel.apply_mode_splits() docs
+        """
+        Applies Mode splits on the given NHB productions
+
+        Parameters
+        ----------
+        nhb_prods:
+            Dataframe containing the NHB productions to split.
+            Needs the following column names to merge with the mode splits:
+            ['area_type', 'p', 'ca', 'nhb_p']
+
+        verbose:
+            Whether to print a progress bar while applying the splits or not
+
+        Returns
+        -------
+        mode_split_nhb_prods:
+            The given nhb_prods additionally split by mode
+        """
         # Init
         m_col = self.m_col
         m_share_col = self.m_share_col
@@ -1335,7 +1495,24 @@ class NhbProductionModel:
                            nhb_prods: pd.DataFrame,
                            verbose: bool = True
                            ) -> pd.DataFrame:
-        # TODO: Write NhbProductionModel.apply_time_splits() docs
+        """
+        Applies time periods splits to NHB Productions
+
+        Parameters
+        ----------
+        nhb_prods:
+            Dataframe containing the NHB productions to split.
+            Needs the following column names to merge with the mode splits:
+            ['area_type', 'ca', 'nhb_p', 'm']
+
+        verbose:
+            Whether to print a progress bar while applying the splits or not
+
+        Returns
+        -------
+        time_split_nhb_prods:
+            The given nhb_prods additionally split by time periods
+        """
         # Init
         tp_col = self.tp_col
         tp_share_col = self.tp_share_col
@@ -1390,8 +1567,29 @@ class NhbProductionModel:
         col_names += [tp_col]
         return du.compile_efficient_df(eff_tp_split, col_names=col_names)
 
-    def _gen_base_productions(self, verbose=True) -> pd.DataFrame:
-        # TODO: Write NhbProductionModel._gen_base_productions() docs
+    def _gen_base_productions(self,
+                              verbose=True
+                              ) -> pd.DataFrame:
+        """
+        Generates the base NHB Productions from HB Productions and Attractions
+
+        Performs a kind of pseudo distribution in order to retain the HB
+        production segmentation in the attractions. The segmentation needs
+        to be retained in order to apply the NHB trip rates (Gathered from
+        NTS data).
+
+        Parameters
+        ----------
+        verbose:
+            Whether to print progress bars during processing or not.
+
+        Returns
+        -------
+        NHB_productions:
+            A base set of NHB productions based on the HB productions and
+            attractions. Return will be segmented by level passed into class
+            constructor.
+        """
 
         # Read in files
         dtypes = {'soc': str, 'ns': str}
@@ -1458,11 +1656,43 @@ class NhbProductionModel:
         return du.compile_efficient_df(eff_nhb_prods, col_names=col_names)
 
     def run(self,
-            verbose: bool = True
+            output_raw: bool = True,
+            verbose: bool = True,
             ) -> pd.DataFrame:
-        # TODO: Write NhbProductionModel.run() docs
-        
-        # TODO: Add timing
+        """
+        Runs the whole NHB production model
+
+        Performs the following actions:
+          - Pseudo distributes the HB productions and attractions, retaining
+            the productions segmentation in the attractions
+          - Applies the NHB Trip Rates to produce segmented NHB Productions
+          - Applies mode spits the the NHB productions
+          - Applies time period splits to the NHB productions
+          - Optionally Controls to NTEM
+          - Extracts the requested mode, and returns NHB Productions at the
+            requested segmentation level (as defined in the class constructor)
+
+        Parameters
+        ----------
+        output_raw:
+            Whether to output the raw nhb productions before aggregating to
+            the requiroed segmentation and mode.
+
+        verbose:
+            Whether to print progress bars during processing or not.
+
+        Returns
+        -------
+        NHB_Productions:
+            NHB productions for the mode and segmentation requested in the
+            class constructor
+        """
+        # Initialise timing
+        start_time = timing.current_milli_time()
+        du.print_w_toggle(
+            "Starting NHB Production Model at: %s" % timing.get_datetime(),
+            echo=verbose
+        )
 
         nhb_prods = self._gen_base_productions(verbose=verbose)
 
@@ -1544,17 +1774,23 @@ class NhbProductionModel:
 
         # Write the audit to disk
         if len(audits) > 0:
-            fname = consts.PRODS_FNAME % ('nhb', 'hb')
+            fname = consts.PRODS_FNAME % ('msoa', 'nhb')
             path = os.path.join(self.exports['audits'], fname)
             pd.DataFrame(audits).to_csv(path, index=False)
 
+        # Output productions before any aggregation
+        if output_raw:
+            print("Writing raw NHB Productions to disk...")
+            fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_nhb')
+            path = os.path.join(self.exports['productions'], fname)
+            nhb_prods.to_csv(path, index=False)
+
         # ## TIDY UP AND AGGREGATE ## #
+        print("Aggregating to required output format...")
         group_cols = list(nhb_prods)
         for year in self.all_years:
             group_cols.remove(year)
         nhb_prods = nhb_prods.groupby(group_cols).sum().reset_index()
-
-        # TODO: Output all nhb production modes
 
         # Extract just the needed mode
         mask = nhb_prods['m'].isin([str(x) for x in self.m_needed])
@@ -1568,10 +1804,23 @@ class NhbProductionModel:
         nhb_prods = nhb_prods.reindex(index_cols, axis='columns')
         nhb_prods = nhb_prods.groupby(group_cols).sum().reset_index()
 
-        print(nhb_prods)
-        print(list(nhb_prods))
+        # Output the aggregated productions
+        print("Writing NHB Productions to disk...")
+        fname = consts.PRODS_FNAME % (self.zoning_system, 'nhb')
+        path = os.path.join(self.exports['productions'], fname)
+        nhb_prods.to_csv(path, index=False)
 
-        sys.exit()
+        # End timing
+        end_time = timing.current_milli_time()
+        du.print_w_toggle(
+            "Finished NHB Production Model at: %s" % timing.get_datetime(),
+            echo=verbose
+        )
+        du.print_w_toggle(
+            "NHB Production Model took: %s"
+            % timing.time_taken(start_time, end_time),
+            echo=verbose
+        )
 
         return nhb_prods
 

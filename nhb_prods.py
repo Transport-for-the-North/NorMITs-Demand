@@ -7,7 +7,9 @@ def main():
         export_home=r'Y:\NorMITs Demand\norms_2015\v2_3-EFS_Output\iter1',
         model_name='norms',
     )
-    nhb_pm.run()
+    prods = nhb_pm.run()
+
+    print(prods)
 
 
 if __name__ == '__main__':
