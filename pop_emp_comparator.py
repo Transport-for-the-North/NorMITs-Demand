@@ -33,7 +33,7 @@ class PopEmpComparator:
     Excel file or CSVs are produced with the comparisons for checking.
     """
 
-    ZONE_COL = "model_zone_id"
+    ZONE_COL = "msoa_zone_id"
 
     def __init__(
         self,
@@ -43,8 +43,6 @@ class PopEmpComparator:
         output_csv: str,
         data_type: {"population", "employment"},
         base_year: str,
-        msoa_lookup_file: str,
-        zone_system_name: str = "msoa",
         sector_grouping_file: str = None,
         sector_system_name: str = "tfn_sectors_zone",
     ):
@@ -68,10 +66,6 @@ class PopEmpComparator:
             Whether 'population' or 'employment' data is given for the comparison.
         base_year : str
             Base year of the model.
-        msoa_lookup_file : str
-            Path to the lookup between MSOA model ID and MSOA code.
-        zone_system_name : str, optional
-            Name of the zone system being used for the msoa_lookup_file, default 'msoa'.
         sector_grouping_file : str, optional
             Path to the sector grouping file to use, if None (default) uses the default
             one present in the SectorReporter class.
@@ -131,45 +125,12 @@ class PopEmpComparator:
             self.growth_data[str(self.base_year)], axis=0
         )
 
-        # Convert the input, constraint and growth datasets to use MSOA area codes same as output
-        msoa_lookup = pd.read_csv(
-            msoa_lookup_file, usecols=["model_zone_code", "model_zone_id"]
-        )
-        self.input_data = self.zone_lookup(msoa_lookup, self.input_data)
-        self.constraint_data = self.zone_lookup(msoa_lookup, self.constraint_data)
-        self.growth_data = self.zone_lookup(msoa_lookup, self.growth_data)
-        # Rename output columns to be consistent with the input data
-        self.output.rename(columns={"msoa_zone_id": self.ZONE_COL}, inplace=True)
-
         # Create dictionary of sector reporter parameters
         self.sector_params = {
             "sector_grouping_file": str(sector_grouping_file),
             "sector_system_name": str(sector_system_name),
-            "zone_system_name": str(zone_system_name),
+            "zone_system_name": "msoa",
         }
-
-    def zone_lookup(
-        self, msoa_lookup: pd.DataFrame, data: pd.DataFrame
-    ) -> pd.DataFrame:
-        """Uses given lookup to convert model zone ID column into MSOA area code.
-
-        Parameters
-        ----------
-        msoa_lookup : pd.DataFrame
-            MSOA to model zone ID lookup data.
-        data : pd.DataFrame
-            The dataset which is being converted.
-
-        Returns
-        -------
-        pd.DataFrame
-            Dataset using the MSOA area code.
-        """
-        data = msoa_lookup.merge(data, on="model_zone_id", validate="1:m")
-        data = data.drop(columns="model_zone_id").rename(
-            columns={"model_zone_code": "model_zone_id"}
-        )
-        return data
 
     def compare_totals(self) -> pd.DataFrame:
         """Compares the input and output column totals and produces a summary of the differences.

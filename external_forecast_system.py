@@ -134,9 +134,6 @@ class ExternalForecastSystem:
                 "constraint_csv": os.path.join(
                     self.imports["default_inputs"], pop_constraint_path
                 ),
-                "msoa_lookup_file": os.path.join(
-                    self.imports["zoning"], "msoa_zones.csv"
-                ),
                 "sector_grouping_file": os.path.join(
                     self.imports["zoning"], "tfn_sector_msoa_pop_weighted_lookup.csv"
                 ),
@@ -150,9 +147,6 @@ class ExternalForecastSystem:
                 ),
                 "constraint_csv": os.path.join(
                     self.imports["default_inputs"], emp_constraint_path
-                ),
-                "msoa_lookup_file": os.path.join(
-                    self.imports["zoning"], "msoa_zones.csv"
                 ),
                 "sector_grouping_file": os.path.join(
                     self.imports["zoning"], "tfn_sector_msoa_emp_weighted_lookup.csv"
