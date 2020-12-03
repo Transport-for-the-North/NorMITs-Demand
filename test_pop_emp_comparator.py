@@ -8,8 +8,13 @@
 # Standard imports
 import os
 
+# Third party imports
+import pytest
+import numpy as np
+from openpyxl import Workbook
+
 # Local imports
-from pop_emp_comparator import PopEmpComparator
+from pop_emp_comparator import PopEmpComparator, _excel_column_format
 from demand_utilities import utils as du
 from external_forecast_system import ExternalForecastSystem
 
@@ -24,7 +29,8 @@ BASE_YEAR = "2018"
 
 
 ##### FUNCTIONS #####
-def test():
+@pytest.mark.skip(reason="test on real data which can be run by running this module")
+def test_real_data():
     """Tests the PopEmpComparator class on data from previous run of EFS. """
     imports, exports, _ = du.build_io_paths(
         IMPORT_LOC,
@@ -76,6 +82,36 @@ def test():
     return
 
 
+@pytest.mark.parametrize("style", ["Percent", "Comma [0]", None, "Normal"])
+@pytest.mark.parametrize("ignore_rows", [0, 1])
+def test_excel_column_format(style: str, ignore_rows: int):
+    """Test the _excel_column_format function with different parameters.
+
+    Parameters
+    ----------
+    style : str
+        The style to convert column format to, passed to _excel_column_format.
+    ignore_rows : int
+        The number of rows to ignore, passed to _excel_column_format.
+    """
+    wb = Workbook()
+    ws = wb.active
+    rows = 2
+
+    # Fill some cells
+    for r in range(rows):
+        ws.cell(row=r + 1, column=1, value=np.random.randint(100))
+
+    _excel_column_format(ws, [style], ignore_rows=ignore_rows)
+
+    style = "Normal" if style is None else style
+    # Check styles
+    for r in range(rows):
+        this_style = "Normal" if r < ignore_rows else style
+        new_style = ws.cell(row=r + 1, column=1).style
+        assert new_style == this_style, f"'{new_style}' != '{this_style}' for row {r}"
+
+
 ##### MAIN #####
 if __name__ == "__main__":
-    test()
+    test_real_data()
