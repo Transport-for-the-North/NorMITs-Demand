@@ -85,6 +85,7 @@ class EFSProductionGenerator:
             m_needed: List[int] = consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
+            zoning_system: str = 'msoa',
             lu_year: int = 2018,
             no_neg_growth: bool = True,
             population_infill: float = 0.001,
@@ -260,6 +261,7 @@ class EFSProductionGenerator:
 
         # Init
         internal_zone_col = 'msoa_zone_id'
+        zoning_system = du.validate_zoning_system(zoning_system)
         all_years = [str(x) for x in [base_year] + future_years]
         integrate_d_log = d_log is not None and d_log_split is not None
         if integrate_d_log:
@@ -320,7 +322,8 @@ class EFSProductionGenerator:
         base_year_pop = base_year_pop.rename(columns={'people': base_year})
 
         # Audit population numbers
-        du.print_w_toggle("Base Year Population: %d" % base_year_pop[base_year].sum(),
+        du.print_w_toggle("Base Year Population: %d"
+                          % base_year_pop[base_year].sum(),
                           echo=audits)
 
         # ## FUTURE YEAR POPULATION ## #
@@ -405,8 +408,8 @@ class EFSProductionGenerator:
                   "Not writing populations to file.")
         else:
             print("Writing population to file...")
-            population.to_csv(os.path.join(out_path, "MSOA_population.csv"),
-                              index=False)
+            path = os.path.join(out_path, consts.POP_FNAME % zoning_system)
+            population.to_csv(path, index=False)
 
         # ## CREATE PRODUCTIONS ## #
         print("Population generated. Converting to productions...")
@@ -431,8 +434,9 @@ class EFSProductionGenerator:
                   "Not writing productions to file.")
         else:
             print("Writing productions to file...")
-            fname = 'MSOA_production_trips.csv'
-            productions.to_csv(os.path.join(out_path, fname), index=False)
+            fname = consts.PRODS_FNAME % (zoning_system, 'raw_hb')
+            path = os.path.join(out_path, fname)
+            productions.to_csv(path, index=False)
 
         # ## CONVERT TO OLD EFS FORMAT ## #
         # Make sure columns are the correct data type
@@ -477,8 +481,10 @@ class EFSProductionGenerator:
             }
         )
 
-        fname = 'MSOA_aggregated_productions.csv'
-        productions.to_csv(os.path.join(out_path, fname), index=False)
+        print("Writing HB productions to disk...")
+        fname = consts.PRODS_FNAME % (zoning_system, 'hb')
+        path = os.path.join(out_path, fname)
+        productions.to_csv(path, index=False)
 
         return productions
 
@@ -1340,13 +1346,13 @@ class NhbProductionModel:
         """
         # Set all unset import paths to default values
         if hb_prods_path is None:
-            fname = consts.PRODS_FNAME % (self.zoning_system, 'hb')
+            fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_hb')
             hb_prods_path = os.path.join(export_home,
                                          consts.PRODUCTIONS_DIRNAME,
                                          fname)
 
         if hb_attrs_path is None:
-            fname = consts.ATTRS_FNAME % (self.zoning_system, 'hb')
+            fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_hb')
             hb_attrs_path = os.path.join(export_home,
                                          consts.ATTRACTIONS_DIRNAME,
                                          fname)

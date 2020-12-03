@@ -74,6 +74,7 @@ class EFSAttractionGenerator:
             m_needed: List[int] = consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
+            zoning_system: str = 'msoa',
             no_neg_growth: bool = True,
             employment_infill: float = 0.001,
 
@@ -248,6 +249,7 @@ class EFSAttractionGenerator:
 
         # Init
         internal_zone_col = 'msoa_zone_id'
+        zoning_system = du.validate_zoning_system(zoning_system)
         a_weights_p_col = 'purpose'
         mode_split_m_col = 'mode'
         emp_cat_col = 'employment_cat'
@@ -389,8 +391,8 @@ class EFSAttractionGenerator:
                   "Not writing employment to file.")
         else:
             print("Writing employment to file...")
-            fname = "MSOA_employment.csv"
-            employment.to_csv(os.path.join(out_path, fname), index=False)
+            path = os.path.join(out_path, consts.EMP_FNAME % zoning_system)
+            employment.to_csv(path, index=False)
 
         # ## CREATE ATTRACTIONS ## #
         # Index by as much segmentation as possible
@@ -423,36 +425,43 @@ class EFSAttractionGenerator:
             nhb_att = nhb_att.reindex(reindex_cols, axis='columns')
             nhb_att = nhb_att.groupby(group_cols).sum().reset_index()
 
+        # Align purpose and mode columns to standards
+        p_col = 'p'
+        m_col = 'm'
+        columns = {a_weights_p_col: p_col, mode_split_m_col: m_col}
+        attractions = attractions.rename(columns=columns)
+        nhb_att = nhb_att.rename(columns=columns)
+
         # Write attractions to file
         if out_path is None:
             print("WARNING! No output path given. "
                   "Not writing attractions to file.")
         else:
             print("Writing attractions to file...")
-            fname = 'MSOA_attractions.csv'
-            nhb_fname = 'MSOA_nhb_attractions.csv'
+            fname = consts.ATTRS_FNAME % (zoning_system, 'raw_hb')
+            nhb_fname = consts.ATTRS_FNAME % (zoning_system, 'raw_nhb')
             attractions.to_csv(os.path.join(out_path, fname), index=False)
             nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 
         # TODO: functionalise conversion to old efs
         # ## CONVERT TO OLD EFS FORMAT ## #
         # Make sure columns are the correct data type
-        attractions[a_weights_p_col] = attractions[a_weights_p_col].astype(int)
-        attractions[mode_split_m_col] = attractions[mode_split_m_col].astype(int)
+        attractions[p_col] = attractions[p_col].astype(int)
+        attractions[m_col] = attractions[m_col].astype(int)
         attractions.columns = attractions.columns.astype(str)
 
-        nhb_att[a_weights_p_col] = nhb_att[a_weights_p_col].astype(int)
-        nhb_att[mode_split_m_col] = nhb_att[mode_split_m_col].astype(int)
+        nhb_att[p_col] = nhb_att[p_col].astype(int)
+        nhb_att[m_col] = nhb_att[m_col].astype(int)
         nhb_att.columns = nhb_att.columns.astype(str)
 
         # Extract just the needed mode
-        mask = attractions[mode_split_m_col].isin(m_needed)
+        mask = attractions[m_col].isin(m_needed)
         attractions = attractions[mask]
-        attractions = attractions.drop(mode_split_m_col, axis='columns')
+        attractions = attractions.drop(m_col, axis='columns')
 
-        mask = nhb_att[mode_split_m_col].isin(m_needed)
+        mask = nhb_att[m_col].isin(m_needed)
         nhb_att = nhb_att[mask]
-        nhb_att = nhb_att.drop(mode_split_m_col, axis='columns')
+        nhb_att = nhb_att.drop(m_col, axis='columns')
 
         # Rename columns so output of this function call is the same
         # as it was before the re-write
@@ -470,22 +479,13 @@ class EFSAttractionGenerator:
             to='int'
         )
 
-        attractions = attractions.rename(
-            columns={
-                internal_zone_col: external_zone_col,
-                a_weights_p_col: 'purpose_id',
-            }
-        )
+        # Re-align col names for returning
+        columns = {internal_zone_col: external_zone_col, p_col: 'purpose_id'}
+        attractions = attractions.rename(columns=columns)
+        nhb_att = nhb_att.rename(columns=columns)
 
-        nhb_att = nhb_att.rename(
-            columns={
-                internal_zone_col: external_zone_col,
-                a_weights_p_col: 'purpose_id',
-            }
-        )
-
-        fname = 'MSOA_aggregated_attractions.csv'
-        nhb_fname = 'MSOA_nhb_aggregated_attractions.csv'
+        fname = consts.ATTRS_FNAME % (zoning_system, 'hb')
+        nhb_fname = consts.ATTRS_FNAME % (zoning_system, 'nhb')
         attractions.to_csv(os.path.join(out_path, fname), index=False)
         nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 

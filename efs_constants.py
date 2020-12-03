@@ -126,6 +126,9 @@ TAG_CERTAINTY_BOUNDS = {
 PRODS_FNAME = '%s_%s_productions.csv'
 ATTRS_FNAME = '%s_%s_attractions.csv'
 
+POP_FNAME = '%s_population.csv'
+EMP_FNAME = '%s_employment.csv'
+
 # year
 NTEM_CONTROL_FNAME = 'ntem_pa_ave_wday_%s.csv'
 

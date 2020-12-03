@@ -2218,7 +2218,6 @@ def write_input_info(output_path,
 
 
 def main():
-    use_zone_id_subset = False
     echo = False
 
     # Running control
