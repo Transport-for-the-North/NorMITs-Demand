@@ -252,7 +252,8 @@ class EFSProductionGenerator:
             in the input data.
         """
         # Return previously created productions if we can
-        fname = 'MSOA_aggregated_productions.csv'
+        fname = consts.PRODS_FNAME % (zoning_system, 'hb')
+        path = os.path.join(out_path, fname)
         final_output_path = os.path.join(out_path, fname)
 
         if not recreate_productions and os.path.isfile(final_output_path):

@@ -21,7 +21,7 @@ def main2():
     # Running control
     run_base_efs = True
     recreate_productions = False
-    recreate_attractions = True
+    recreate_attractions = False
 
     constrain_population = False
 

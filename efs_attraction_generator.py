@@ -13,6 +13,7 @@ import pandas as pd
 from typing import List
 from typing import Dict
 from typing import Tuple
+from typing import Union
 
 from itertools import product
 
@@ -236,8 +237,8 @@ class EFSAttractionGenerator:
             possible in the input data.
         """
         # Return previously created productions if we can
-        fname = 'MSOA_aggregated_attractions.csv'
-        nhb_fname = 'MSOA_nhb_attractions.csv'
+        fname = consts.ATTRS_FNAME % (zoning_system, 'hb')
+        nhb_fname = consts.ATTRS_FNAME % (zoning_system, 'nhb')
         final_output_path = os.path.join(out_path, fname)
         nhb_output_path = os.path.join(out_path, nhb_fname)
 
@@ -307,6 +308,22 @@ class EFSAttractionGenerator:
 
         # ## FUTURE YEAR EMPLOYMENT ## #
         print("Generating future year employment data...")
+        # If soc splits in the growth factors, we have a few extra steps
+        if 'soc' in employment_growth:
+            # Add Soc splits into the base year
+            base_year_emp = split_by_soc(
+                df=base_year_emp,
+                soc_weights=get_soc_weights(imports['soc_weights']),
+                unique_col=base_year
+            )
+
+            # Aggregate the growth factors to remove extra segmentation
+            group_cols = [internal_zone_col, 'soc']
+            index_cols = group_cols.copy() + all_years
+
+            employment_growth = employment_growth.reindex(columns=index_cols)
+            employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
+
         # Merge on all possible segmentations - not years
         merge_cols = du.intersection(list(base_year_emp), list(employment_growth))
         merge_cols = du.list_safe_remove(merge_cols, all_years)
@@ -320,6 +337,10 @@ class EFSAttractionGenerator:
             no_neg_growth=no_neg_growth,
             infill=employment_infill
         )
+
+        # Now need te remove soc splits
+        if 'soc' in employment_growth:
+            pass
 
         # ## CONSTRAIN POPULATION ## #
         if constraint_required[3] and (constraint_source != "model grown base"):
@@ -1029,9 +1050,16 @@ def split_by_soc(df: pd.DataFrame,
     soc_cats = list(soc_weights.columns)
 
     # Figure out which rows need splitting
-    mask = (df[p_col].isin(consts.SOC_P))
-    split_df = df[mask].copy()
-    retain_df = df[~mask].copy()
+    if p_col in df:
+        mask = (df[p_col].isin(consts.SOC_P))
+        split_df = df[mask].copy()
+        retain_df = df[~mask].copy()
+        id_cols = [zone_col, p_col]
+    else:
+        # Split on all data
+        split_df = df.copy()
+        retain_df = None
+        id_cols = [zone_col]
 
     # Split by soc weights
     split_df = pd.merge(
@@ -1039,17 +1067,22 @@ def split_by_soc(df: pd.DataFrame,
         soc_weights,
         on=zone_col
     )
+
     for soc in soc_cats:
         split_df[soc] *= split_df[unique_col]
 
     # Tidy up the split dataframe ready to re-merge
     split_df = split_df.drop(unique_col, axis='columns')
     split_df = split_df.melt(
-        id_vars=[zone_col, p_col],
+        id_vars=id_cols,
         value_vars=soc_cats,
         var_name=soc_col,
         value_name=unique_col,
     )
+
+    # Don't need to stick back together
+    if retain_df is None:
+        return split_df
 
     # Add the soc col to the retained values to match
     retain_df[soc_col] = 0

@@ -598,7 +598,7 @@ class ExternalForecastSystem:
             # housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
 
             base_emp = self.base_emp[base_year_workers_cols].copy()
-            emp_growth = self.emp_growth[emp_cols].copy()
+            emp_growth = self.emp_growth.copy()
             # worker_split = self.worker_splits[emp_ratio_cols].copy()
 
             # # Need to rename cols to names used in code
@@ -670,11 +670,11 @@ class ExternalForecastSystem:
         if constraint_source == "default":
             print("Constraint 'default' selected, retrieving constraint "
                   + "data...")
-            pop_constraint = self.pop_constraint[pop_cols].copy()
+            pop_constraint = self.pop_constraint.copy()
 
             # households_constraint = self.households_constraint[hh_cols].copy()
 
-            emp_constraint = self.emp_constraint[emp_cols].copy()
+            emp_constraint = self.emp_constraint.copy()
             emp_constraint = self.constrainer.convert_constraint_off_base_year(
                 emp_constraint,
                 str(base_year),
@@ -707,7 +707,7 @@ class ExternalForecastSystem:
             # )
 
             # Update this with attraction model updates
-            emp_constraint = self.emp_growth[emp_cols].copy()
+            emp_constraint = self.emp_growth.copy()
 
             emp_constraint = du.convert_growth_off_base_year(
                 emp_constraint,
