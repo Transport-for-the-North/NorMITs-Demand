@@ -2562,7 +2562,9 @@ def balance_a_to_p(productions: pd.DataFrame,
             productions[col].sum(),
             attractions[col].sum(),
             significant=significant,
-            err_msg="Row and Column target totals do not match. Cannot Furness."
+            err_msg="After balancing Attraction to Productions the totals do"
+                    "not match somehow. Might need to double check the "
+                    "balancing function."
         )
 
     return attractions

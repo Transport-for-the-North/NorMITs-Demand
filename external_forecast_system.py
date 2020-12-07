@@ -789,15 +789,9 @@ class ExternalForecastSystem:
         print("Employment and Attraction generation took: %.2f seconds" %
               (current_time - last_time))
 
-        # # ## ATTRACTION MATCHING ## #
-        print("Matching attractions...")
-        attraction_dataframe = match_attractions_to_productions(
-            attraction_dataframe, production_trips, year_list)
-        print("Attractions matched!")
-        last_time = current_time
-        current_time = time.time()
-        print("Attraction matching took: %.2f seconds" %
-              (current_time - last_time))
+        # ## Generate NHB Productions ## #
+
+
 
         # # ## ATTRACTION WEIGHT GENERATION ## #
         print("Generating attraction weights...")
@@ -1172,14 +1166,14 @@ class ExternalForecastSystem:
         if overwrite_nhb_productions:
             print("Generating NHB Productions...")
             pm.old_nhb_production(hb_pa_import=self.exports['pa_24'],
-                              nhb_export=self.exports['productions'],
-                              required_purposes=hb_purposes_needed,
-                              required_modes=modes_needed,
-                              required_soc=hb_soc_needed,
-                              required_ns=hb_ns_needed,
-                              required_car_availabilities=hb_ca_needed,
-                              years_needed=years_needed,
-                              nhb_factor_import=self.imports['home'])
+                                  nhb_export=self.exports['productions'],
+                                  required_purposes=hb_purposes_needed,
+                                  required_modes=modes_needed,
+                                  required_soc=hb_soc_needed,
+                                  required_ns=hb_ns_needed,
+                                  required_car_availabilities=hb_ca_needed,
+                                  years_needed=years_needed,
+                                  nhb_factor_import=self.imports['home'])
             print('NHB productions generated!\n')
 
         # TODO: Check if NHB matrices exist first
@@ -2067,78 +2061,6 @@ class ExternalForecastSystem:
             du.create_folder(path, chDir=False)
 
         return imports, exports, params
-
-
-def match_attractions_to_productions(attractions: pd.DataFrame,
-                                     productions: pd.DataFrame,
-                                     year_list: List[str],
-                                     infill: float = 0.001,
-                                     echo: bool = False
-                                     ) -> pd.DataFrame:
-    """
-    TODO: Write match_attractions_to_productions doc
-    """
-    attractions = attractions.copy()
-    productions = productions.copy()
-
-    # Make sure all column names are strings
-    productions.columns = productions.columns.astype(str)
-    attractions.columns = attractions.columns.astype(str)
-
-    purposes = attractions["purpose_id"].unique()
-
-    if echo:
-        print("Balancing Attractions...")
-        print("Before:")
-        for year in year_list:
-            print("Year: %s\tProductions: %.2f\tAttractions: %.2f"
-                  % (year, productions[year].sum(), attractions[year].sum()))
-
-    attractions = pd.merge(
-        attractions,
-        productions,
-        on=["model_zone_id", "purpose_id"],
-        how='outer',
-        suffixes=("", "_productions")
-    )
-
-    # Infill where P/A don't match
-    attractions_cols = year_list.copy()
-    productions_cols = [x + '_productions' for x in year_list]
-    for col in attractions_cols + productions_cols:
-        attractions[col] = attractions[col].fillna(infill)
-
-    # Balance the attractions to the productions
-    for purpose in purposes:
-        for year in year_list:
-            mask = (attractions["purpose_id"] == purpose)
-            attractions.loc[mask, year] = (
-                    attractions.loc[mask, year].values
-                    /
-                    (
-                        attractions.loc[mask, year].sum()
-                        /
-                        attractions.loc[mask, year + '_productions'].sum()
-                    )
-            )
-
-    group_by_cols = ["model_zone_id", "purpose_id"]
-    needed_columns = group_by_cols.copy()
-    needed_columns.extend(year_list)
-
-    attractions = attractions[needed_columns]
-    attractions = attractions.groupby(
-        by=group_by_cols,
-        as_index=False
-    ).sum()
-
-    if echo:
-        print("After:")
-        for year in year_list:
-            print("Year: %s\tProductions: %.2f\tAttractions: %.2f"
-                  % (year, productions[year].sum(), attractions[year].sum()))
-
-    return attractions
 
 
 def _input_checks(iter_num=None,
