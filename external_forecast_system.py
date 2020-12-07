@@ -2271,8 +2271,8 @@ def main():
     if run_nhb_efs:
         # Generate NHB PA/OD matrices
         efs.run_nhb(
-            overwrite_nhb_productions=False,
-            overwrite_nhb_od=False,
+            overwrite_nhb_productions=True,
+            overwrite_nhb_od=True,
             overwrite_nhb_tp_od=True
         )
 

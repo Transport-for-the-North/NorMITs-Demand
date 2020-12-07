@@ -306,6 +306,8 @@ class EFSAttractionGenerator:
         du.print_w_toggle("Base Year Employment: %d" % total_base_year_emp,
                           echo=audits)
 
+        print(base_year_emp)
+
         # ## FUTURE YEAR EMPLOYMENT ## #
         print("Generating future year employment data...")
         # If soc splits in the growth factors, we have a few extra steps
@@ -314,7 +316,8 @@ class EFSAttractionGenerator:
             base_year_emp = split_by_soc(
                 df=base_year_emp,
                 soc_weights=get_soc_weights(imports['soc_weights']),
-                unique_col=base_year
+                unique_col=base_year,
+                split_cols=[internal_zone_col, emp_cat_col]
             )
 
             # Aggregate the growth factors to remove extra segmentation
@@ -324,6 +327,10 @@ class EFSAttractionGenerator:
             employment_growth = employment_growth.reindex(columns=index_cols)
             # TODO: Remove ns splits from growth factors
             employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
+
+            # Make sure both soc columns are the same format
+            base_year_emp['soc'] = base_year_emp['soc'].astype('float').astype('int')
+            employment_growth['soc'] = employment_growth['soc'].astype('float').astype('int')
 
         # Merge on all possible segmentations - not years
         merge_cols = du.intersection(list(base_year_emp), list(employment_growth))
@@ -1004,7 +1011,8 @@ def split_by_soc(df: pd.DataFrame,
                  zone_col: str = 'msoa_zone_id',
                  p_col: str = 'p',
                  unique_col: str = 'trips',
-                 soc_col: str = 'soc'
+                 soc_col: str = 'soc',
+                 split_cols: str = None
                  ) -> pd.DataFrame:
     """
     Splits df purposes by the soc_weights given.
@@ -1034,6 +1042,10 @@ def split_by_soc(df: pd.DataFrame,
     soc_col:
         The name to give to the added soc column in the return dataframe.
 
+    split_cols:
+        Which columns are being split by soc. If left as None, only zone_col
+        is used.
+
     Returns
     -------
     soc_split_df:
@@ -1042,18 +1054,19 @@ def split_by_soc(df: pd.DataFrame,
     """
     # Init
     soc_cats = list(soc_weights.columns)
+    split_cols = [zone_col] if split_cols is None else split_cols
 
     # Figure out which rows need splitting
     if p_col in df:
         mask = (df[p_col].isin(consts.SOC_P))
         split_df = df[mask].copy()
         retain_df = df[~mask].copy()
-        id_cols = [zone_col, p_col]
+        id_cols = split_cols + [p_col]
     else:
         # Split on all data
         split_df = df.copy()
         retain_df = None
-        id_cols = [zone_col]
+        id_cols = split_cols
 
     # Split by soc weights
     split_df = pd.merge(

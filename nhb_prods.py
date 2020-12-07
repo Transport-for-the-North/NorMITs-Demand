@@ -20,7 +20,7 @@ def main2():
     # TESTING SCENARIOS INPUTS
     # Running control
     run_base_efs = True
-    recreate_productions = False
+    recreate_productions = True
     recreate_attractions = True
 
     constrain_population = False
