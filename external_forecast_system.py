@@ -1171,7 +1171,7 @@ class ExternalForecastSystem:
         # TODO: Check if nhb productions exist first
         if overwrite_nhb_productions:
             print("Generating NHB Productions...")
-            pm.nhb_production(hb_pa_import=self.exports['pa_24'],
+            pm.old_nhb_production(hb_pa_import=self.exports['pa_24'],
                               nhb_export=self.exports['productions'],
                               required_purposes=hb_purposes_needed,
                               required_modes=modes_needed,
@@ -2266,7 +2266,6 @@ def main():
             echo_distribution=echo,
             constraint_required=constraints
         )
-
 
     if run_nhb_efs:
         # Generate NHB PA/OD matrices

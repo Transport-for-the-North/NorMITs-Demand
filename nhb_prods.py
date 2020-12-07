@@ -19,9 +19,11 @@ def main():
 def main2():
     # TESTING SCENARIOS INPUTS
     # Running control
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = True
     recreate_attractions = True
+
+    run_nhb = True
 
     constrain_population = False
 
@@ -62,6 +64,13 @@ def main2():
             recreate_attractions=recreate_attractions,
             echo_distribution=False,
             constraint_required=constraints
+        )
+
+    if run_nhb:
+        efs.run_nhb(
+            overwrite_nhb_productions=True,
+            overwrite_nhb_od=True,
+            overwrite_nhb_tp_od=True
         )
 
 
