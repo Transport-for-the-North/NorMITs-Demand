@@ -14,12 +14,19 @@ import pandas as pd
 
 from typing import List
 from typing import Dict
+from typing import Tuple
+
+from functools import reduce
 
 from tqdm import tqdm
 
 import efs_constants as consts
 from efs_constrainer import ForecastConstrainer
+
+from demand_utilities import timing
 from demand_utilities import utils as du
+from demand_utilities import concurrency as conc
+
 # TODO: Move functions that can be static elsewhere.
 #  Maybe utils?
 
@@ -78,6 +85,7 @@ class EFSProductionGenerator:
             m_needed: List[int] = consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
+            zoning_system: str = 'msoa',
             lu_year: int = 2018,
             no_neg_growth: bool = True,
             population_infill: float = 0.001,
@@ -153,11 +161,11 @@ class EFSProductionGenerator:
 
         ntem_control_dir:
             The path to alternate ntem control directory. If left as None, the
-            production model will use the default land use data.
+            production model will use the default path.
 
         lad_lookup_dir:
             The path to alternate lad to msoa import data. If left as None, the
-            production model will use the default land use data.
+            production model will use the default path.
 
         control_productions:
             Whether to control the generated production to the constraints
@@ -220,7 +228,7 @@ class EFSProductionGenerator:
             values that are less than 0.
 
         audits:
-            Whether to output audits to the terminal during running. This can
+            Whether to output print_audits to the terminal during running. This can
             be used to monitor the population and production numbers being
             generated and constrained.
 
@@ -244,7 +252,7 @@ class EFSProductionGenerator:
             in the input data.
         """
         # Return previously created productions if we can
-        fname = 'MSOA_aggregated_productions.csv'
+        fname = consts.PRODS_FNAME % (zoning_system, 'hb')
         final_output_path = os.path.join(out_path, fname)
 
         if not recreate_productions and os.path.isfile(final_output_path):
@@ -253,6 +261,7 @@ class EFSProductionGenerator:
 
         # Init
         internal_zone_col = 'msoa_zone_id'
+        zoning_system = du.validate_zoning_system(zoning_system)
         all_years = [str(x) for x in [base_year] + future_years]
         integrate_d_log = d_log is not None and d_log_split is not None
         if integrate_d_log:
@@ -308,23 +317,28 @@ class EFSProductionGenerator:
         # ## BASE YEAR POPULATION ## #
         print("Loading the base year population data...")
         base_year_pop = get_land_use_data(imports['land_use'],
-                                          msoa_path=msoa_conversion_path,
                                           segmentation_cols=segmentation_cols)
         base_year_pop = base_year_pop.rename(columns={'people': base_year})
 
         # Audit population numbers
-        du.print_w_toggle("Base Year Population: %d" % base_year_pop[base_year].sum(),
+        du.print_w_toggle("Base Year Population: %d"
+                          % base_year_pop[base_year].sum(),
                           echo=audits)
 
         # ## FUTURE YEAR POPULATION ## #
         print("Generating future year population data...")
+        # Merge on all possible segmentations - not years
+        merge_cols = du.intersection(list(base_year_pop), list(population_growth))
+        merge_cols = du.list_safe_remove(merge_cols, all_years)
+
         population = du.grow_to_future_years(
             base_year_df=base_year_pop,
             growth_df=population_growth,
             base_year=base_year,
             future_years=future_years,
             no_neg_growth=no_neg_growth,
-            infill=population_infill
+            infill=population_infill,
+            growth_merge_cols=merge_cols
         )
 
         # ## CONSTRAIN POPULATION ## #
@@ -384,22 +398,14 @@ class EFSProductionGenerator:
                       % (year, population[year].sum()))
             print('\n')
 
-        # Convert back to MSOA codes for output and productions
-        population = du.convert_msoa_naming(
-            population,
-            msoa_col_name=internal_zone_col,
-            msoa_path=msoa_conversion_path,
-            to='string'
-        )
-
         # Write the produced population to file
         if out_path is None:
             print("WARNING! No output path given. "
                   "Not writing populations to file.")
         else:
             print("Writing population to file...")
-            population.to_csv(os.path.join(out_path, "MSOA_population.csv"),
-                              index=False)
+            path = os.path.join(out_path, consts.POP_FNAME % zoning_system)
+            population.to_csv(path, index=False)
 
         # ## CREATE PRODUCTIONS ## #
         print("Population generated. Converting to productions...")
@@ -424,8 +430,9 @@ class EFSProductionGenerator:
                   "Not writing productions to file.")
         else:
             print("Writing productions to file...")
-            fname = 'MSOA_production_trips.csv'
-            productions.to_csv(os.path.join(out_path, fname), index=False)
+            fname = consts.PRODS_FNAME % (zoning_system, 'raw_hb')
+            path = os.path.join(out_path, fname)
+            productions.to_csv(path, index=False)
 
         # ## CONVERT TO OLD EFS FORMAT ## #
         # Make sure columns are the correct data type
@@ -470,8 +477,10 @@ class EFSProductionGenerator:
             }
         )
 
-        fname = 'MSOA_aggregated_productions.csv'
-        productions.to_csv(os.path.join(out_path, fname), index=False)
+        print("Writing HB productions to disk...")
+        fname = consts.PRODS_FNAME % (zoning_system, 'hb')
+        path = os.path.join(out_path, fname)
+        productions.to_csv(path, index=False)
 
         return productions
 
@@ -499,7 +508,7 @@ class EFSProductionGenerator:
             population_growth,
             base_year,
             future_years,
-            merge_col=growth_merge_col
+            merge_cols=growth_merge_col
         )
 
         # Make sure there is no minus growth
@@ -816,13 +825,14 @@ class EFSProductionGenerator:
                 year_string_list
                 )
         print("Adjusted population growth to base year!")
-        
-        
+
         print("Growing population from base year...")
-        grown_population = du.get_growth_values(population_values,
-                                                population_growth,
-                                                base_year,
-                                                year_string_list)
+        grown_population = du.get_growth_values(
+            population_values,
+            population_growth,
+            base_year,
+            year_string_list
+        )
         print("Grown population from base year!")
         
         return grown_population
@@ -1087,6 +1097,843 @@ class EFSProductionGenerator:
         return combined_households
 
 
+class NhbProductionModel:
+
+    def __init__(self,
+                 import_home: str,
+                 export_home: str,
+                 model_name: str,
+                 seg_level: str = 'tfn',
+                 return_segments: List[str] = None,
+
+                 base_year: str = consts.BASE_YEAR_STR,
+                 future_years: List[str] = consts.FUTURE_YEARS_STR,
+                 m_needed: List[int] = consts.MODES_NEEDED,
+
+                 # Alternate input paths
+                 hb_prods_path: str = None,
+                 hb_attrs_path: str = None,
+                 trip_rates_path: str = None,
+                 mode_splits_path: str = None,
+                 time_splits_path: str = None,
+
+                 # Production control file
+                 ntem_control_dir: str = None,
+                 lad_lookup_dir: str = None,
+                 control_productions: bool = True,
+                 control_fy_productions: bool = True,
+
+                 # Alternate output paths
+                 audit_write_dir: str = None,
+
+                 # Alternate col names from inputs
+                 m_col: str = 'm',
+                 m_share_col: str = 'mode_share',
+                 tp_col: str = 'tp',
+                 tp_share_col: str = 'time_share',
+
+                 # Col names for nhb trip rates
+                 soc_col: str = 'soc',
+                 ns_col: str = 'ns',
+                 nhb_p_col: str = 'nhb_p',
+                 trip_rate_col: str = 'trip_rate',
+
+                 zoning_system: str = 'msoa',
+                 audits: bool = True,
+                 process_count: int = consts.PROCESS_COUNT
+                 ):
+        """
+        Parameters
+        ----------
+        import_home:
+            Path to the import home of NorMITs Demand. This can be gotten from
+            an instance of the ExternalForecastSystem. Usually
+            'Y:/NorMITs Demand/import'
+
+        export_home:
+            Path to the export home of this instance of outputs. This is
+            usually related to a specific run of the ExternalForecastSystem,
+            and should be gotten from there.
+            e.g. 'E:/NorMITs Demand/norms_2015/v2_3-EFS_Output/iter1'
+
+        model_name:
+            The name of the model being run. This is usually something like:
+            norms, norms_2015, or noham.
+
+        seg_level:
+            The level of segmentation to run at. This is used to determine
+            how to produce the NHB Productions. Should be one of the values
+            from consts.SEG_LEVELS
+
+        return_segments:
+            Which segmentation to use when returning the NHB productions.
+            If left as None, it is automatically determined based on seg_level.
+
+        base_year:
+            The base year of the hb productions and attractions
+
+        future_years:
+            The future years of nhb productions to create - these years must
+            also exist in the hb productions and attractions.
+
+        m_needed:
+            The modes to return when calling run.
+
+        hb_prods_path:
+            An alternate path to hb productions. If left as None, the NHB
+            production model will look in the default output location of
+            ProductionModel.
+
+        hb_attrs_path:
+            An alternate path to hb attractions. If left as None, the NHB
+            production model will look in the default output location of
+            AttractionModel.
+        
+        trip_rates_path:
+            An alternate path to nhb trip rates. Any alternate inputs must be
+            in the same format as the default. If left as None, the NHB
+            production model will look in the default import location.
+        
+        mode_splits_path:
+            An alternate path to nhb mode splits. Any alternate inputs must be
+            in the same format as the default. If left as None, the NHB
+            production model will look in the default import location.
+
+        time_splits_path:
+            An alternate path to nhb time splits. Any alternate inputs must be
+            in the same format as the default. If left as None, the NHB
+            production model will look in the default import location.
+        
+        ntem_control_dir:
+            The path to alternate ntem control directory. If left as None, the
+            production model will use the default import location.
+
+        lad_lookup_dir:
+            The path to alternate lad to msoa import data. If left as None, the
+            production model will use the default import location.
+
+        control_productions:
+            Whether to control the generated productions to the constraints
+            given in ntem_control_dir or not.
+
+        control_fy_productions:
+            Whether to control the generated future year productions to the
+            constraints given in ntem_control_dir or not. When running for
+            scenarios other than the base NTEM, this should be False.
+
+        audit_write_dir:
+            Alternate path to write the audits. If left as None, the default
+            location is used.
+
+        m_col:
+            The name of the column in the mode_splits and time_splits that
+            relate to mode.
+
+        m_share_col:
+            The name of the column in mode_splits that contains the mode
+            share amount.
+
+        tp_col:
+            The name of the column in time_splits that contains the time_period
+            id
+        
+        tp_share_col:
+            The name of the column in time_splits that contains the time
+            share amount.
+        
+        soc_col:
+            The name of the column in trip_rates that contains the soc
+            data.
+        
+        ns_col:
+            The name of the column in trip_rates that contains the ns
+            data.
+        
+        nhb_p_col:
+            The name of the column in trip_rates that contains the nhb purpose
+            data.
+        
+        trip_rate_col:
+            The name of the column in trip_rates that contains the trip_rate
+            data.
+        
+        zoning_system:
+            The zoning system being used by the import files
+
+        audits:
+            Whether to print out audits or not.
+
+        process_count:
+            The number of processes to use in the NHB production model when
+            multiprocessing is available.
+        """
+        # Validate inputs
+        zoning_system = du.validate_zoning_system(zoning_system)
+        model_name = du.validate_model_name(model_name)
+        seg_level = du.validate_seg_level(seg_level)
+
+        # Assign
+        self.model_name = model_name
+        self.seg_level = seg_level
+        self.return_segments = return_segments
+
+        self.base_year = base_year
+        self.future_years = future_years
+        self.all_years = [str(x) for x in [base_year] + future_years]
+        self.m_needed = m_needed
+
+        self.zoning_system = zoning_system
+        self.zone_col = '%s_zone_id' % zoning_system
+
+        self.control_productions = control_productions
+        self.control_fy_productions = control_fy_productions
+
+        self.m_col = m_col
+        self.m_share_col = m_share_col
+        self.tp_col = tp_col
+        self.tp_share_col = tp_share_col
+
+        self.soc_col = soc_col
+        self.ns_col = ns_col
+        self.nhb_p_col = nhb_p_col
+        self.trip_rate_col = trip_rate_col
+
+        self.print_audits = audits
+        self.process_count = process_count
+
+        self.imports, self.exports = self._build_paths(
+            import_home=import_home,
+            export_home=export_home,
+            hb_prods_path=hb_prods_path,
+            hb_attrs_path=hb_attrs_path,
+            trip_rates_path=trip_rates_path,
+            mode_splits_path=mode_splits_path,
+            time_splits_path=time_splits_path,
+            ntem_control_dir=ntem_control_dir,
+            lad_lookup_dir=lad_lookup_dir,
+            audit_write_dir=audit_write_dir,
+        )
+        
+        if seg_level == 'tfn':
+            self.segments = ['area_type', 'p', 'soc', 'ns', 'ca']
+            self.return_segments = [self.zone_col] + self.segments + [self.tp_col]
+            self.return_segments.remove('area_type')
+        else:
+            raise ValueError(
+                "'%s' is a valid segmentation level, but I don't have a way "
+                "of determining which segments to use for it. You should add "
+                "one!" % seg_level
+            )
+
+    def _build_paths(self,
+                     import_home: str,
+                     export_home: str,
+                     hb_prods_path: str,
+                     hb_attrs_path: str,
+                     trip_rates_path: str,
+                     mode_splits_path: str,
+                     time_splits_path: str,
+                     ntem_control_dir: str,
+                     lad_lookup_dir: str,
+                     audit_write_dir: str,
+                     ) -> Tuple[Dict[str, str], Dict[str, str]]:
+        """
+        Builds a dictionary of import paths, forming a standard calling
+        procedure for imports. Arguments allow default paths to be replaced.
+        """
+        # Set all unset import paths to default values
+        if hb_prods_path is None:
+            fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_hb')
+            hb_prods_path = os.path.join(export_home,
+                                         consts.PRODUCTIONS_DIRNAME,
+                                         fname)
+
+        if hb_attrs_path is None:
+            fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_hb')
+            hb_attrs_path = os.path.join(export_home,
+                                         consts.ATTRACTIONS_DIRNAME,
+                                         fname)
+
+        if trip_rates_path is None:
+            trip_rates_path = os.path.join(import_home,
+                                           consts.NHB_PARAMS_DIRNAME,
+                                           'nhb_ave_wday_enh_trip_rates.csv')
+
+        if mode_splits_path is None:
+            mode_splits_path = os.path.join(import_home,
+                                            consts.NHB_PARAMS_DIRNAME,
+                                            'nhb_ave_wday_mode_split.csv')
+
+        if time_splits_path is None:
+            time_splits_path = os.path.join(import_home,
+                                            consts.NHB_PARAMS_DIRNAME,
+                                            'nhb_ave_wday_time_split.csv')
+
+        if ntem_control_dir is None:
+            path = 'ntem_constraints'
+            ntem_control_dir = os.path.join(import_home, path)
+
+        if lad_lookup_dir is None:
+            lad_lookup_dir = import_home
+
+        if audit_write_dir is None:
+            audit_write_dir = os.path.join(export_home,
+                                           consts.AUDITS_DIRNAME,
+                                           'Productions')
+        du.create_folder(audit_write_dir, chDir=False)
+
+        # Build the imports dictionary
+        imports = {
+            'productions': hb_prods_path,
+            'attractions': hb_attrs_path,
+            'trip_rates': trip_rates_path,
+            'mode_splits': mode_splits_path,
+            'time_splits': time_splits_path,
+            'ntem_control': ntem_control_dir,
+            'lad_lookup': lad_lookup_dir
+        }
+
+        # Make sure all import paths exit
+        for key, path in imports.items():
+            if not os.path.exists(path):
+                raise IOError(
+                    "NHB Production Model Imports: The path for %s does not "
+                    "exist.\nFull path: %s" % (key, path)
+                )
+
+        # Build the exports dictionary
+        exports = {
+            'productions': os.path.join(export_home, consts.PRODUCTIONS_DIRNAME),
+            'attractions': os.path.join(export_home, consts.ATTRACTIONS_DIRNAME),
+            'audits': audit_write_dir
+        }
+
+        # Make sure all export paths exit
+        for key, path in imports.items():
+            if not os.path.exists(path):
+                raise IOError(
+                    "NHB Production Model Exports: The path for %s does not "
+                    "exist.\nFull path: %s" % (key, path)
+                )
+
+        return imports, exports
+
+    def _apply_mode_splits(self,
+                           nhb_prods: pd.DataFrame,
+                           verbose: bool = True
+                           ) -> pd.DataFrame:
+        """
+        Applies Mode splits on the given NHB productions
+
+        Parameters
+        ----------
+        nhb_prods:
+            Dataframe containing the NHB productions to split.
+            Needs the following column names to merge with the mode splits:
+            ['area_type', 'p', 'ca', 'nhb_p']
+
+        verbose:
+            Whether to print a progress bar while applying the splits or not
+
+        Returns
+        -------
+        mode_split_nhb_prods:
+            The given nhb_prods additionally split by mode
+        """
+        # Init
+        m_col = self.m_col
+        m_share_col = self.m_share_col
+        col_names = list(nhb_prods)
+
+        mode_splits = pd.read_csv(self.imports['mode_splits'])
+        unq_m = mode_splits[m_col].unique()
+
+        merge_cols = du.intersection(list(nhb_prods), list(mode_splits))
+        expected_merge_cols = ['area_type', 'p', 'ca', 'nhb_p']
+
+        # Validate the merge columns
+        if not du.equal_ignore_order(merge_cols, expected_merge_cols):
+            raise du.NormitsDemandError(
+                "Expecting to merge on %s, but only found %s columns. Has "
+                "something gone wrong?"
+                % (str(expected_merge_cols), str(merge_cols))
+            )
+
+        # Apply the mode splits
+        eff_m_split = list()
+        desc = 'Splitting by mode'
+        for mode in tqdm(unq_m, desc=desc, disable=not verbose):
+            # Get just this mode share
+            needed_cols = merge_cols.copy() + [m_col, m_share_col]
+            m_subset = mode_splits.reindex(needed_cols, axis='columns').copy()
+
+            mask = (mode_splits[m_col] == mode)
+            m_subset = m_subset[mask]
+
+            # Merge and infill missing modes with 0
+            m_split = pd.merge(
+                nhb_prods.copy(),
+                m_subset,
+                how='left',
+                on=merge_cols
+            ).fillna(0)
+
+            # Multiply by mode share
+            for year in self.all_years:
+                m_split[year] *= m_split[m_share_col]
+
+            # Drop the unneeded cols
+            m_split = m_split.drop([m_col, m_share_col], axis='columns')
+
+            eff_m_split.append({
+                'm': mode,
+                'df': m_split
+            })
+
+        # Compile back into a fill mat and return
+        col_names += [m_col]
+        return du.compile_efficient_df(eff_m_split, col_names=col_names)
+
+    def _apply_time_splits(self,
+                           nhb_prods: pd.DataFrame,
+                           verbose: bool = True
+                           ) -> pd.DataFrame:
+        """
+        Applies time periods splits to NHB Productions
+
+        Parameters
+        ----------
+        nhb_prods:
+            Dataframe containing the NHB productions to split.
+            Needs the following column names to merge with the mode splits:
+            ['area_type', 'ca', 'nhb_p', 'm']
+
+        verbose:
+            Whether to print a progress bar while applying the splits or not
+
+        Returns
+        -------
+        time_split_nhb_prods:
+            The given nhb_prods additionally split by time periods
+        """
+        # Init
+        tp_col = self.tp_col
+        tp_share_col = self.tp_share_col
+        col_names = list(nhb_prods)
+
+        time_splits = pd.read_csv(self.imports['time_splits'])
+        unq_tp = time_splits[tp_col].unique()
+
+        merge_cols = du.intersection(list(nhb_prods), list(time_splits))
+        expected_merge_cols = ['area_type', 'ca', 'nhb_p', 'm']
+
+        # Validate the merge columns
+        if not du.equal_ignore_order(merge_cols, expected_merge_cols):
+            raise du.NormitsDemandError(
+                "Expecting to merge on %s, but only found %s columns. Has "
+                "something gone wrong?"
+                % (str(expected_merge_cols), str(merge_cols))
+            )
+
+        # Apply the mode splits
+        eff_tp_split = list()
+        desc = 'Splitting by time period'
+        for tp in tqdm(unq_tp, desc=desc, disable=not verbose):
+            # Get just this mode share
+            needed_cols = merge_cols.copy() + [tp_col, tp_share_col]
+            tp_subset = time_splits.reindex(needed_cols, axis='columns').copy()
+
+            mask = (time_splits[tp_col] == tp)
+            tp_subset = tp_subset[mask]
+
+            # Merge and infill missing modes with 0
+            tp_split = pd.merge(
+                nhb_prods.copy(),
+                tp_subset,
+                how='left',
+                on=merge_cols
+            ).fillna(0)
+
+            # Multiply by mode share
+            for year in self.all_years:
+                tp_split[year] *= tp_split[tp_share_col]
+
+            # Drop the unneeded cols
+            tp_split = tp_split.drop([tp_col, tp_share_col], axis='columns')
+
+            eff_tp_split.append({
+                'tp': tp,
+                'df': tp_split
+            })
+
+        # Compile back into a fill mat and return
+        col_names += [tp_col]
+        return du.compile_efficient_df(eff_tp_split, col_names=col_names)
+
+    def _gen_base_productions(self,
+                              verbose=True
+                              ) -> pd.DataFrame:
+        """
+        Generates the base NHB Productions from HB Productions and Attractions
+
+        Performs a kind of pseudo distribution in order to retain the HB
+        production segmentation in the attractions. The segmentation needs
+        to be retained in order to apply the NHB trip rates (Gathered from
+        NTS data).
+
+        Parameters
+        ----------
+        verbose:
+            Whether to print progress bars during processing or not.
+
+        Returns
+        -------
+        NHB_productions:
+            A base set of NHB productions based on the HB productions and
+            attractions. Return will be segmented by level passed into class
+            constructor.
+        """
+
+        # Read in files
+        dtypes = {'soc': str, 'ns': str}
+        prods = pd.read_csv(self.imports['productions'], dtype=dtypes)
+        attrs = pd.read_csv(self.imports['attractions'], dtype=dtypes)
+
+        # Ensure correct column types
+        if self.soc_col in prods:
+            prods[self.soc_col] = prods[self.soc_col].astype('str')
+
+        if self.ns_col in prods:
+            prods[self.ns_col] = prods[self.ns_col].astype('str')
+
+        # Determine all unique segments - ignore mode
+        seg_params = du.build_seg_params(self.seg_level, prods)
+
+        # We ignore mode here because it saves us many many loop iterations.
+        # We believe the same results come out the other side whether we include
+        # mode in the loop or not - If we run into some weird problems, this
+        # should be looked at again
+        if 'm_needed' in seg_params:
+            seg_params['m_needed'] = [None]
+
+        # Area Type is a special one here - make it the outer loop
+        unique_at = prods['area_type'].unique().tolist()
+
+        # ## MULTIPROCESS ## #
+        # Build the unchanging arguments
+        unchanging_kwargs = {
+            'area_type': unique_at[0],
+            'seg_level': self.seg_level,
+            'seg_params': seg_params,
+            'segments': self.segments,
+            'trip_rates_path': self.imports['trip_rates'],
+            'all_years': self.all_years,
+            'prods': prods,
+            'attrs': attrs,
+            'zone_col': self.zone_col,
+            'nhb_p_col': self.nhb_p_col,
+            'trip_rate_col': self.trip_rate_col,
+            'verbose': verbose
+        }
+
+        # Add in the changing kwargs
+        kwargs_list = list()
+        for area_type in unique_at:
+            kwargs = unchanging_kwargs.copy()
+            kwargs['area_type'] = area_type
+            kwargs_list.append(kwargs)
+
+        returns = conc.multiprocess(
+            _gen_base_productions_internal,
+            kwargs=kwargs_list,
+            process_count=self.process_count
+        )
+        eff_nhb_prods = reduce(lambda x, y: x + y, returns)
+
+        # Compile segmented
+        print("Compiling full NHB Productions...")
+
+        segments = list(eff_nhb_prods[0].keys())
+        segments.remove('df')
+        col_names = [self.zone_col] + segments + self.all_years
+        return du.compile_efficient_df(eff_nhb_prods, col_names=col_names)
+
+    def run(self,
+            output_raw: bool = True,
+            verbose: bool = True,
+            ) -> pd.DataFrame:
+        """
+        Runs the whole NHB production model
+
+        Performs the following actions:
+          - Pseudo distributes the HB productions and attractions, retaining
+            the productions segmentation in the attractions
+          - Applies the NHB Trip Rates to produce segmented NHB Productions
+          - Applies mode spits the the NHB productions
+          - Applies time period splits to the NHB productions
+          - Optionally Controls to NTEM
+          - Extracts the requested mode, and returns NHB Productions at the
+            requested segmentation level (as defined in the class constructor)
+
+        Parameters
+        ----------
+        output_raw:
+            Whether to output the raw nhb productions before aggregating to
+            the requiroed segmentation and mode.
+
+        verbose:
+            Whether to print progress bars during processing or not.
+
+        Returns
+        -------
+        NHB_Productions:
+            NHB productions for the mode and segmentation requested in the
+            class constructor
+        """
+        # Initialise timing
+        start_time = timing.current_milli_time()
+        du.print_w_toggle(
+            "Starting NHB Production Model at: %s" % timing.get_datetime(),
+            echo=verbose
+        )
+
+        nhb_prods = self._gen_base_productions(verbose=verbose)
+
+        # Reindex and tidy
+        group_cols = [self.zone_col] + self.segments + ['nhb_p']
+        index_cols = group_cols.copy() + self.all_years
+
+        nhb_prods = nhb_prods.reindex(index_cols, axis='columns')
+        nhb_prods = nhb_prods.groupby(group_cols).sum().reset_index()
+
+        # ## SPLIT PRODUCTIONS BY MODE AND TIME ## #
+        print("Splitting NHB productions by mode and time...")
+        nhb_prods = self._apply_mode_splits(nhb_prods, verbose=verbose)
+
+        # No longer need HB purpose
+        extra_segments = [self.m_col, 'nhb_p']
+        group_cols = [self.zone_col] + self.segments + extra_segments
+        group_cols.remove('p')
+        index_cols = group_cols.copy() + self.all_years
+
+        nhb_prods = nhb_prods.reindex(index_cols, axis='columns')
+        nhb_prods = nhb_prods.groupby(group_cols).sum().reset_index()
+
+        nhb_prods = self._apply_time_splits(nhb_prods, verbose=verbose)
+
+        # Reindex and tidy
+        group_cols += [self.tp_col]
+        index_cols = group_cols.copy() + self.all_years
+
+        nhb_prods = nhb_prods.reindex(index_cols, axis='columns')
+        nhb_prods = nhb_prods.groupby(group_cols).sum().reset_index()
+
+        nhb_prods = nhb_prods.rename(columns={'nhb_p': 'p'})
+
+        # Population Audit
+        if self.print_audits:
+            print('\n', '-' * 15, 'Uncorrected NHB Production Audit', '-' * 15)
+            for year in self.all_years:
+                print('. Total population for year %s is: %.4f'
+                      % (year, nhb_prods[year].sum()))
+            print('\n')
+
+        # ## OPTIONALLY CONSTRAIN TO NTEM ## #
+        control_years = list()
+        if self.control_productions:
+            control_years.append(self.base_year)
+        if self.control_fy_productions:
+            control_years += self.future_years
+
+        audits = list()
+        for year in control_years:
+            # Init Audit
+            year_audit = {'year': year}
+
+            # Setup paths
+            ntem_fname = consts.NTEM_CONTROL_FNAME % year
+            control_path = os.path.join(self.imports['ntem_control'], ntem_fname)
+            lad_lookup_path = os.path.join(self.imports['lad_lookup'],
+                                           consts.DEFAULT_LAD_LOOKUP)
+
+            # Read in control files
+            ntem_totals = pd.read_csv(control_path)
+            ntem_lad_lookup = pd.read_csv(lad_lookup_path)
+
+            print("\nPerforming NTEM constraint for %s..." % year)
+            nhb_prods, audit, _, = du.control_to_ntem(
+                nhb_prods,
+                ntem_totals,
+                ntem_lad_lookup,
+                group_cols=['p', 'm', 'tp'],
+                base_value_name=year,
+                ntem_value_name='Productions',
+                purpose='nhb'
+            )
+
+            # Update Audits for output
+            year_audit.update(audit)
+            audits.append(year_audit)
+
+        # Write the audit to disk
+        if len(audits) > 0:
+            fname = consts.PRODS_FNAME % ('msoa', 'nhb')
+            path = os.path.join(self.exports['audits'], fname)
+            pd.DataFrame(audits).to_csv(path, index=False)
+
+        # Output productions before any aggregation
+        if output_raw:
+            print("Writing raw NHB Productions to disk...")
+            fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_nhb')
+            path = os.path.join(self.exports['productions'], fname)
+            nhb_prods.to_csv(path, index=False)
+
+        # ## TIDY UP AND AGGREGATE ## #
+        print("Aggregating to required output format...")
+        group_cols = list(nhb_prods)
+        for year in self.all_years:
+            group_cols.remove(year)
+        nhb_prods = nhb_prods.groupby(group_cols).sum().reset_index()
+
+        # Extract just the needed mode
+        mask = nhb_prods['m'].isin([str(x) for x in self.m_needed])
+        nhb_prods = nhb_prods[mask]
+        nhb_prods = nhb_prods.drop('m', axis='columns')
+
+        # Reindex to just the wanted return cols
+        group_cols = self.return_segments
+        index_cols = group_cols.copy() + self.all_years
+
+        nhb_prods = nhb_prods.reindex(index_cols, axis='columns')
+        nhb_prods = nhb_prods.groupby(group_cols).sum().reset_index()
+
+        # Output the aggregated productions
+        print("Writing NHB Productions to disk...")
+        fname = consts.PRODS_FNAME % (self.zoning_system, 'nhb')
+        path = os.path.join(self.exports['productions'], fname)
+        nhb_prods.to_csv(path, index=False)
+
+        # End timing
+        end_time = timing.current_milli_time()
+        du.print_w_toggle(
+            "Finished NHB Production Model at: %s" % timing.get_datetime(),
+            echo=verbose
+        )
+        du.print_w_toggle(
+            "NHB Production Model took: %s"
+            % timing.time_taken(start_time, end_time),
+            echo=verbose
+        )
+
+        return nhb_prods
+
+
+def _gen_base_productions_internal(area_type,
+                                   seg_level,
+                                   seg_params,
+                                   segments,
+                                   trip_rates_path,
+                                   all_years,
+                                   prods,
+                                   attrs,
+                                   zone_col,
+                                   nhb_p_col,
+                                   trip_rate_col,
+                                   verbose
+                                   ):
+    # init
+    nhb_trip_rates = pd.read_csv(trip_rates_path)
+
+    total = du.seg_level_loop_length(seg_level, seg_params)
+    desc = "Calculating NHB Productions at %s" % str(area_type)
+    p_bar = tqdm(total=total, desc=desc, disable=not verbose)
+
+    eff_nhb_prods = list()
+    for seg_vals in du.seg_level_loop_generator(seg_level, seg_params):
+        # Add in area type - check our segments are correct
+        seg_vals['area_type'] = area_type
+        if not all([k in segments for k in seg_vals.keys()]):
+            raise KeyError(
+                "Our seg_vals and segments disagree on which segments "
+                "should be used. Has one been changed without the "
+                "other?"
+            )
+
+        # ## PSEUDO DISTRIBUTE EACH SEGMENT ## #
+        # We do this to retain segments from productions
+
+        # Filter the productions and attractions
+        p_subset = du.filter_by_segmentation(prods, seg_vals, fit=True)
+
+        # Soc is always special - do this to avoid dropping demand
+        if seg_vals.get('soc', -1) == '0':
+            temp_seg_vals = seg_vals.copy()
+            temp_seg_vals.pop('soc')
+            a_subset = du.filter_by_segmentation(attrs, temp_seg_vals, fit=True)
+        else:
+            a_subset = du.filter_by_segmentation(attrs, seg_vals, fit=True)
+
+        # Remove all segmentation from the attractions
+        group_cols = [zone_col]
+        index_cols = group_cols.copy() + all_years
+        a_subset = a_subset.reindex(index_cols, axis='columns')
+        a_subset = a_subset.groupby(group_cols).sum().reset_index()
+
+        # Balance P/A to pseudo distribute
+        a_subset = du.balance_a_to_p(
+            productions=p_subset,
+            attractions=a_subset,
+            unique_cols=all_years,
+        )
+
+        # ## APPLY NHB TRIP RATES ## #
+        # Subset the trip_rates
+        tr_index = [nhb_p_col, trip_rate_col]
+        tr_subset = du.filter_by_segmentation(nhb_trip_rates, seg_vals,
+                                              fit=True)
+        tr_subset = tr_subset.reindex(tr_index, axis='columns')
+
+        # Validate
+        if len(tr_subset) > len(consts.ALL_NHB_P):
+            raise du.NormitsDemandError(
+                "We have more than %d rows after filtering the nhb trip "
+                "rates. There are probably duplicates in the filter "
+                "somehow" % len(consts.ALL_NHB_P)
+            )
+
+        # Convert to a dictionary for speed
+        tr_dict = dict(zip(tr_subset[nhb_p_col].values,
+                           tr_subset[trip_rate_col].values))
+        del tr_subset
+
+        # Build the trip rates data for this segment
+        for p, trip_rate in tr_dict.items():
+            # Get the actual productions
+            nhb_prods_df = a_subset.copy()
+            for year in all_years:
+                nhb_prods_df[year] *= trip_rate
+
+            # Store for compile later
+            seg_nhb_prods = seg_vals.copy()
+            seg_nhb_prods.update({
+                'nhb_p': p,
+                'df': nhb_prods_df,
+            })
+
+            # Add soc/ns in as needed
+            if 'soc' in seg_nhb_prods and 'ns' not in seg_nhb_prods:
+                seg_nhb_prods['ns'] = 'none'
+            if 'ns' in seg_nhb_prods and 'soc' not in seg_nhb_prods:
+                seg_nhb_prods['soc'] = 'none'
+
+            eff_nhb_prods.append(seg_nhb_prods)
+
+        p_bar.update(1)
+
+    p_bar.close()
+    return eff_nhb_prods
+
+
 def build_production_imports(import_home: str,
                              lu_import_path: str = None,
                              trip_rates_path: str = None,
@@ -1250,13 +2097,13 @@ def get_land_use_data(land_use_path: str,
     # Read in Land use
     with warnings.catch_warnings():
         warnings.simplefilter(action='ignore')
-        land_use = pd.read_csv(land_use_path)
+        dtypes = {'soc': str, 'ns': str}
+        land_use = pd.read_csv(land_use_path, dtype=dtypes)
 
     # Drop a lot of columns, group and sum the remaining
-
-    land_use = land_use.reindex(land_use_cols, axis=1).groupby(
-        group_cols
-    ).sum().reset_index().sort_values(land_use_cols).reset_index()
+    land_use = land_use.reindex(land_use_cols, axis=1)
+    land_use = land_use.groupby(group_cols).sum().reset_index()
+    land_use = land_use.sort_values(land_use_cols).reset_index(drop=True)
     del group_cols
 
     # Convert to msoa zone numbers if needed
@@ -1374,7 +2221,7 @@ def merge_pop_trip_rates(population: pd.DataFrame,
         if p in consts.SOC_P:
             # Update ns with none
             ph['ns'] = 'none'
-            ph['soc'] = ph['soc'].astype(int)
+            ph['soc'] = ph['soc'].astype(float).astype(int)
             # Insurance policy
             trip_rate_subset['ns'] = 'none'
             trip_rate_subset['soc'] = trip_rate_subset['soc'].astype(int)
@@ -1382,7 +2229,7 @@ def merge_pop_trip_rates(population: pd.DataFrame,
         elif p in consts.NS_P:
             # Update soc with none
             ph['soc'] = 'none'
-            ph['ns'] = ph['ns'].astype(int)
+            ph['ns'] = ph['ns'].astype(float).astype(int)
             # Insurance policy
             trip_rate_subset['soc'] = 'none'
             trip_rate_subset['ns'] = trip_rate_subset['ns'].astype(int)
@@ -1576,6 +2423,7 @@ def generate_productions(population: pd.DataFrame,
     audit_base_fname = 'yr%s_production_topline.csv'
     ntem_base_fname = 'ntem_pa_ave_wday_%s.csv'
 
+    # TODO: Multiprocess yearly productions
     # Generate Productions for each year
     yr_ph = dict()
     for year in all_years:
@@ -1592,14 +2440,17 @@ def generate_productions(population: pd.DataFrame,
 
         yr_pop = population.copy().reindex(group_cols + [year], axis='columns')
         yr_pop = yr_pop.rename(columns={year: 'people'})
-        yr_prod = merge_pop_trip_rates(yr_pop, group_cols=group_cols,
-                                       trip_rates_path=trip_rates_path,
-                                       time_splits_path=time_splits_path,
-                                       mean_time_splits_path=mean_time_splits_path,
-                                       mode_share_path=mode_share_path,
-                                       audit_out=audit_out,
-                                       control_path=ntem_control_path,
-                                       lad_lookup_dir=lad_lookup_dir)
+        yr_prod = merge_pop_trip_rates(
+            yr_pop,
+            group_cols=group_cols,
+            trip_rates_path=trip_rates_path,
+            time_splits_path=time_splits_path,
+            mean_time_splits_path=mean_time_splits_path,
+            mode_share_path=mode_share_path,
+            audit_out=audit_out,
+            control_path=ntem_control_path,
+            lad_lookup_dir=lad_lookup_dir
+        )
         yr_ph[year] = yr_prod
 
     # Join all productions into one big matrix
@@ -1677,7 +2528,7 @@ def _nhb_production_internal(hb_pa_import,
     return nhb_prods
 
 
-def nhb_production(hb_pa_import,
+def old_nhb_production(hb_pa_import,
                    nhb_export,
                    required_purposes,
                    required_modes,

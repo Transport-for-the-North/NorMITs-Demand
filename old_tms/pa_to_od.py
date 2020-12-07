@@ -1440,7 +1440,7 @@ def resplit_24hr_pa(model_lookup_path,
         print('subset after re-split: ' + str(ph_dat['dt'].sum()))
 
         # Loop to subset by given model categories for PA level writes
-        # Needed for Norms output audits (Norms does its own PA-OD conversion)
+        # Needed for Norms output print_audits (Norms does its own PA-OD conversion)
 
         # Define core aggregations
         format_list = ['p_zone',
