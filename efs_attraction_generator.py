@@ -322,6 +322,7 @@ class EFSAttractionGenerator:
             index_cols = group_cols.copy() + all_years
 
             employment_growth = employment_growth.reindex(columns=index_cols)
+            # TODO: Remove ns splits from growth factors
             employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
 
         # Merge on all possible segmentations - not years
@@ -386,6 +387,7 @@ class EFSAttractionGenerator:
             )
 
         # Reindex and sum
+        # Removes soc splits - attractions weights can't cope
         group_cols = [internal_zone_col] + segmentation_cols
         index_cols = group_cols.copy() + all_years
         employment = employment.reindex(index_cols, axis='columns')
@@ -400,14 +402,6 @@ class EFSAttractionGenerator:
                 print('. Total jobs for year %s is: %.4f'
                       % (str(year), total_emp))
             print('\n')
-
-        # Convert back to MSOA codes for output and attractions
-        employment = du.convert_msoa_naming(
-            employment,
-            msoa_col_name=internal_zone_col,
-            msoa_path=msoa_conversion_path,
-            to='string'
-        )
 
         # Write the produced employment to file
         if out_path is None:
