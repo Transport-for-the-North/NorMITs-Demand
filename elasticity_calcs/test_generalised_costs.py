@@ -12,7 +12,7 @@ import pytest
 import numpy as np
 
 # Local imports
-from generalised_costs import (
+from .generalised_costs import (
     _average_matrices,
     gen_cost_car_mins,
     gen_cost_rail_mins,
