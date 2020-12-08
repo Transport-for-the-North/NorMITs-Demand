@@ -6,14 +6,15 @@
 ##### IMPORTS #####
 # Standard imports
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, List
 
 # Third party imports
 import pytest
 import pandas as pd
+import numpy as np
 
 # Local imports
-from .utils import read_segments_file, read_elasticity_file
+from .utils import read_segments_file, read_elasticity_file, get_constraint_matrices
 
 
 ##### CONSTANTS #####
@@ -50,6 +51,100 @@ ELASTICITY_DATA = {
     "OwnElast": [-0.3, 0.06, 0.07, 0.02, 0.01, 0.16, -0.8, 0.17, 0.02, -0.3, 0.06],
     "CstrMatrixName": ["all_trips"] * 11,
 }
+
+
+##### CLASSES #####
+class TestGetConstraintMatrices:
+    """Tests for the `get_constraint_matrices` function. """
+
+    NON_CSV_FILES = [Path("test.txt")]
+    CSV_FILES = [Path(f"{i}.csv") for i in range(3)]
+    MATRICES = [np.random.rand(3, 3) for i in range(3)]
+
+    @pytest.fixture(name="constraint_folder", scope="class")
+    def fixture_constraint_folder(self, tmp_path_factory) -> Tuple[Path, List[Path]]:
+        """Create matrix CSV files for testing.
+
+        Parameters
+        ----------
+        tmp_path_factory : Path
+            Temporary folder provided by pytest.
+
+        Returns
+        -------
+        Path
+            Path to the folder containing the test files.
+        List[Path]
+            Absolute paths of all the files that should be found.
+        """
+        folder = tmp_path_factory.mktemp("constraint_matrices")
+        # Write non_csv files
+        for path in self.NON_CSV_FILES:
+            with open(folder / path, "wt"):
+                pass
+
+        # Write matrices for CSV files
+        paths = []
+        for i, path in enumerate(self.CSV_FILES):
+            path = (folder / path).absolute()
+            paths.append(path)
+            with open(path, "wt") as f:
+                np.savetxt(f, self.MATRICES[i])
+        return folder, paths
+
+    def test_get_constraint_matrices(self, constraint_folder: Tuple[Path, List[Path]]):
+        """Test that `get_constaint_matrices` finds the correct file paths.
+
+        Parameters
+        ----------
+        constraint_folder : Tuple[Path, List[Path]]
+            Folder containing the testing contraint matrices and a list of
+            all the expected paths.
+        """
+        matrices = get_constraint_matrices(constraint_folder[0])
+        # Check non_csv files aren't present
+        for path in self.NON_CSV_FILES:
+            assert path.stem.lower() not in matrices
+
+        # Check csv files are present
+        for path in constraint_folder[1]:
+            assert matrices[path.stem.lower()] == path
+
+    def test_read_constraint_matrices(self, constraint_folder: Tuple[Path, List[Path]]):
+        """Test that `get_contraint_matrices` reads the files correctly.
+
+        Parameters
+        ----------
+        constraint_folder : Tuple[Path, List[Path]]
+            Folder containing the testing contraint matrices and a list of
+            all the expected paths.
+        """
+        names = [i.stem for i in self.CSV_FILES[:2]]
+        matrices = get_constraint_matrices(constraint_folder[0], names)
+        assert names == list(matrices.keys())
+        for i, n in enumerate(names):
+            np.testing.assert_array_equal(matrices[n], self.MATRICES[i])
+
+    @staticmethod
+    @pytest.mark.parametrize("test", ["file", "nothing"])
+    def test_get_constraint_matrices_error(tmp_path, test):
+        """Test the `get_constraint_matrices` function produces expected errors.
+
+        Parameters
+        ----------
+        tmp_path : Path
+            Temporary folder path provided by pytest.
+        test : str
+            What test to run.
+        """
+        if test == "file":
+            path = tmp_path / "test.csv"
+            with open(path, "wt"):
+                pass
+        else:
+            path = tmp_path / "folder"
+        with pytest.raises(FileNotFoundError):
+            get_constraint_matrices(path)
 
 
 ##### FUNCTIONS #####

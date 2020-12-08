@@ -6,9 +6,10 @@
 ##### IMPORTS #####
 # Standard imports
 from pathlib import Path
-from typing import Union
+from typing import Union, Dict, List
 
 # Third party imports
+import numpy as np
 import pandas as pd
 
 # Local imports
@@ -107,3 +108,44 @@ def read_elasticity_file(
             raise ValueError(f"Value '{val}' not found in column '{col}'")
 
     return df
+
+
+def get_constraint_matrices(
+    folder: Path, get_files: List[str] = None
+) -> Dict[str, Union[Path, np.array]]:
+    """Search the given folder for any CSV files.
+
+    Parameters
+    ----------
+    folder : Path
+        Folder containing the constraint matrices as CSV files.
+    get_files : List[str], optional
+        The names of the matrices to read, if None (default) then
+        the paths of all CSVs found will be returned.
+
+    Returns
+    -------
+    Dict[str, Union[Path, np.array]]
+        The lowercase name of the file and the absolute path to it
+        (if get_files is None). If get_files is a list of names then
+        those files will be read and returned.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the folder given doesn't exist or isn't a folder.
+    """
+    matrices = {}
+    if not folder.is_dir():
+        raise FileNotFoundError(f"Not a folder, or doesn't exist: {folder}")
+    get_files = [i.lower() for i in get_files] if get_files is not None else get_files
+
+    for path in folder.iterdir():
+        if path.suffix.lower() != ".csv":
+            continue
+        nm = path.stem.lower()
+        if get_files is None:
+            matrices[nm] = path.absolute()
+        elif nm in get_files:
+            matrices[nm] = np.loadtxt(path)
+    return matrices
