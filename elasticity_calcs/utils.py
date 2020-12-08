@@ -42,7 +42,7 @@ def read_segments_file(path: Path) -> pd.DataFrame:
         "Elast_Purp": str,
         "Elast_MarketShare": str,
     }
-    return safe_read_csv(path, {"dtype": dtypes, "usecols": dtypes.keys()})
+    return safe_read_csv(path, dtype=dtypes, usecols=dtypes.keys())
 
 
 def read_elasticity_file(
@@ -92,7 +92,7 @@ def read_elasticity_file(
     if isinstance(data, pd.DataFrame):
         df = data.copy()[dtypes.keys()]
     else:
-        df = safe_read_csv(data, {"dtype": dtypes, "usecols": dtypes.keys()})
+        df = safe_read_csv(data, dtype=dtypes, usecols=dtypes.keys())
 
     # Filter required values
     for col, val in [
