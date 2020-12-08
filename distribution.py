@@ -128,6 +128,7 @@ def _distribute_pa_internal(productions,
                             tp_col,
                             max_iters,
                             seed_infill,
+                            seed_mat_format,
                             echo,
                             audit_out,
                             dist_out,
@@ -161,7 +162,7 @@ def _distribute_pa_internal(productions,
     # Read in the seed distribution - ignoring year
     seed_fname = du.calib_params_to_dist_name(
         trip_origin=trip_origin,
-        matrix_format='pa',
+        matrix_format=seed_mat_format,
         calib_params=calib_params,
         csv=True
     )
@@ -184,19 +185,24 @@ def _distribute_pa_internal(productions,
         seg = calib_params.get('ns')
 
     base_filter = {
-        p_col: [calib_params.get('p')],
-        m_col: [calib_params.get('m')],
-        seg_col: [str(seg)],
-        ca_col: [calib_params.get('ca')],
-        tp_col: [calib_params.get('tp')]
+        p_col: calib_params.get('p'),
+        m_col: calib_params.get('m'),
+        seg_col: str(seg),
+        ca_col: calib_params.get('ca'),
+        tp_col: calib_params.get('tp')
     }
 
     productions = du.filter_by_segmentation(productions,
                                             df_filter=base_filter,
                                             fit=True)
-    a_weights = du.filter_by_segmentation(a_weights,
-                                          df_filter=base_filter,
-                                          fit=True)
+
+    # Soc0 is always special - do this to avoid dropping demand
+    if base_filter.get('soc', -1) == '0':
+        base_filter_t = base_filter.copy()
+        base_filter_t.pop('soc')
+        a_weights = du.filter_by_segmentation(a_weights, base_filter_t, fit=True)
+    else:
+        a_weights = du.filter_by_segmentation(a_weights, base_filter, fit=True)
 
     # Rename columns for furness
     productions = productions.rename(columns={str(year): unique_col})
@@ -281,15 +287,16 @@ def distribute_pa(productions: pd.DataFrame,
                   ca_needed: List[int] = None,
                   tp_needed: List[int] = None,
                   zone_col: str = 'model_zone_id',
-                  p_col: str = 'purpose_id',
-                  m_col: str = 'mode_id',
+                  p_col: str = 'p',
+                  m_col: str = 'm',
                   soc_col: str = 'soc',
                   ns_col: str = 'ns',
-                  ca_col: str = 'car_availability_id',
+                  ca_col: str = 'ca',
                   tp_col: str = 'tp',
                   trip_origin: str = 'hb',
                   max_iters: int = 5000,
                   seed_infill: float = 1e-5,
+                  seed_mat_format: str = 'enhpa',
                   echo: bool = False,
                   audit_out: str = None
                   ) -> None:
@@ -396,6 +403,9 @@ def distribute_pa(productions: pd.DataFrame,
     seed_infill:
         The value to infill any seed values that are 0.
 
+    seed_mat_format:
+        The format of the seed matrices. Usually 'enhpa' from TMS disaggregator
+
     echo:
         Controls the amount of printing to the terminal. If False, most of the
         print outs will be ignored.
@@ -407,7 +417,6 @@ def distribute_pa(productions: pd.DataFrame,
     -------
     None
     """
-    # TODO: Make sure distribute_pa() works for NHB trips
     # Init
     productions = productions.copy()
     attraction_weights = attraction_weights.copy()
@@ -433,10 +442,10 @@ def distribute_pa(productions: pd.DataFrame,
     for year in years_needed:
         a_cols.remove(year)
 
-    # TODO: Fix area_type_id in production model
+    # TODO: Fix area_type in production model
     if 'area_type_id' in p_cols:
-        p_cols.remove('area_type_id')
-        productions = productions.drop('area_type_id', axis='columns')
+        p_cols.remove('area_type')
+        productions = productions.drop('area_type', axis='columns')
         productions = productions.groupby(p_cols).sum().reset_index()
 
     # Distribute P/A per segmentation required
@@ -464,11 +473,9 @@ def distribute_pa(productions: pd.DataFrame,
                 seg_col = soc_col
             elif calib_params['p'] in consts.NS_P:
                 seg_col = ns_col
-            elif calib_params['p'] in consts.ALL_NHB_P:
-                seg_col = None
             else:
-                raise ValueError("'%s' does not seem to be a valid soc, ns, or "
-                                 "nhb purpose." % str(calib_params['p']))
+                raise ValueError("'%s' does not seem to be a valid soc or ns "
+                                 "purpose." % str(calib_params['p']))
 
             # Add in year
             calib_params['yr'] = int(year)
@@ -487,6 +494,7 @@ def distribute_pa(productions: pd.DataFrame,
                 tp_col=tp_col,
                 max_iters=max_iters,
                 seed_infill=seed_infill,
+                seed_mat_format=seed_mat_format,
                 echo=echo,
                 audit_out=audit_out,
                 dist_out=dist_out,

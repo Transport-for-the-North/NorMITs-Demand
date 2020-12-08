@@ -18,7 +18,7 @@ import os
 
 # General
 SOC_P = [1, 2, 12]
-NS_P = [3, 4, 5, 6, 7, 8]
+NS_P = [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
 ALL_HB_P = [1, 2, 3, 4, 5, 6, 7, 8]
 ALL_NHB_P = [12, 13, 14, 15, 16, 18]
 ALL_P = ALL_HB_P + ALL_NHB_P

@@ -8,8 +8,9 @@ from external_forecast_system import ExternalForecastSystem
 def main():
     nhb_pm = pm.NhbProductionModel(
         import_home=r'Y:\NorMITs Demand\import',
-        export_home=r'Y:\NorMITs Demand\norms_2015\v2_3-EFS_Output\iter1',
+        export_home=r'E:\NorMITs Demand\norms_2015\v2_4-EFS_Output\iter1',
         model_name='norms',
+        msoa_conversion_path=r"Y:\NorMITs Demand\import\default\zoning\msoa_zones.csv"
     )
     prods = nhb_pm.run()
 
@@ -75,4 +76,4 @@ def main2():
 
 
 if __name__ == '__main__':
-    main2()
+    main()

@@ -505,7 +505,7 @@ class EFSAttractionGenerator:
         )
 
         # Re-align col names for returning
-        columns = {internal_zone_col: external_zone_col, p_col: 'purpose_id'}
+        columns = {internal_zone_col: external_zone_col}
         attractions = attractions.rename(columns=columns)
         nhb_att = nhb_att.rename(columns=columns)
 
