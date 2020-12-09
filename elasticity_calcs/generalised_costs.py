@@ -56,12 +56,53 @@ def _average_matrices(
     return averages
 
 
+def _check_matrices(
+    matrices: Dict[str, np.array], expected: List[str]
+) -> Dict[str, float]:
+    """Check if all expected matrices are given and are the same shape.
+
+    Parameters
+    ----------
+    matrices : Dict[str, np.array]
+        Matrices to check.
+    expected : List[str]
+        List of names of matrices to expect, will raise KeyError if any
+        values in this list aren't present as keys in `matrices`.
+
+    Returns
+    -------
+    Dict[str, float]
+        Copies of the original matrices given.
+
+    Raises
+    ------
+    KeyError
+        If any of the expected matrices aren't provided.
+    ValueError
+        If all the matrices aren't the same shape.
+    """
+    mats = {}
+    missing = []
+    shapes = []
+    for nm in expected:
+        try:
+            mats[nm] = matrices[nm].copy()
+            shapes.append(matrices[nm].shape)
+        except KeyError:
+            missing.append(nm)
+    if missing:
+        raise KeyError(f"The following matrices are missing: {missing!s}")
+    if not all(s == shapes[0] for s in shapes):
+        msg = ", ".join(f"{nm} = {shapes[i]}" for i, nm in enumerate(mats))
+        raise ValueError(f"Matrices are not all the same shape: {msg}")
+    return mats
+
+
 def gen_cost_car_mins(
     matrices: Dict[str, np.array],
     vc: float,
     vt: float,
-    weights: np.array = None,
-) -> float:
+) -> np.array:
     """Calculate the generalised cost for cars in minutes.
 
     Parameters
@@ -82,7 +123,7 @@ def gen_cost_car_mins(
 
     Returns
     -------
-    float
+    np.array
         The generalised cost in minutes.
 
     Raises
@@ -90,12 +131,12 @@ def gen_cost_car_mins(
     KeyError
         If any of the expected matrices aren't provided.
     """
-    averages = _average_matrices(matrices, ["time", "dist", "toll"], weights=weights)
+    matrices = _check_matrices(matrices, ["time", "dist", "toll"])
 
     return (
-        (averages["time"] / 60)
-        + ((vc / vt) * (averages["dist"] / 1000))
-        + (averages["toll"] / vt)
+        (matrices["time"] / 60)
+        + ((vc / vt) * (matrices["dist"] / 1000))
+        + (matrices["toll"] / vt)
     )
 
 
@@ -104,7 +145,7 @@ def gen_cost_rail_mins(
     vt: float,
     factors: Dict[str, float] = None,
     num_interchanges: int = 0,
-) -> float:
+) -> np.array:
     """Calculate the generalised cost for rail in minutes.
 
     Parameters
@@ -126,7 +167,7 @@ def gen_cost_rail_mins(
 
     Returns
     -------
-    float
+    np.array
         The generalised cost in minutes.
 
     Raises
@@ -134,20 +175,20 @@ def gen_cost_rail_mins(
     KeyError
         If any of the expected matrices aren't provided.
     """
-    averages = _average_matrices(matrices, ["walk", "wait", "ride", "fare"])
+    matrices = _check_matrices(matrices, ["walk", "wait", "ride", "fare"])
 
-    # Multply averages by given (or default) weighting factors
+    # Multply matrices by given (or default) weighting factors
     factors = RAIL_GC_FACTORS if factors is None else factors
     for nm in ["walk", "wait"]:
         fac = RAIL_GC_FACTORS[nm] if nm not in factors.keys() else factors[nm]
-        averages[nm] = averages[nm] * fac
+        matrices[nm] = matrices[nm] * fac
 
     nm = "interchange_penalty"
     inter_factor = RAIL_GC_FACTORS[nm] if nm not in factors.keys() else factors[nm]
     return (
-        averages["walk"]
-        + averages["wait"]
-        + averages["ride"]
-        + (averages["fare"] / vt)
+        matrices["walk"]
+        + matrices["wait"]
+        + matrices["ride"]
+        + (matrices["fare"] / vt)
         + (num_interchanges * inter_factor)
     )

@@ -14,6 +14,7 @@ import numpy as np
 # Local imports
 from .generalised_costs import (
     _average_matrices,
+    _check_matrices,
     gen_cost_car_mins,
     gen_cost_rail_mins,
     RAIL_GC_FACTORS,
@@ -43,104 +44,127 @@ class TestAverageMatrices:
         assert averages == {"test": answer}
 
 
+class TestCheckMatrices:
+    """Tests for the `_check_matrices` function. """
+
+    @staticmethod
+    def test_missing_matrices():
+        """Test that the correct error is raised when matrices are missing. """
+        with pytest.raises(KeyError) as e:
+            _check_matrices({"test": np.zeros((2, 2))}, ["test", "test2"])
+        assert e.value.args[0] == "The following matrices are missing: ['test2']"
+
+    @staticmethod
+    def test_different_shapes():
+        """Test that the correct error is raised when matrices are different shapes. """
+        with pytest.raises(ValueError) as e:
+            _check_matrices(
+                {"test": np.zeros((2, 2)), "test2": np.zeros((3, 3))}, ["test", "test2"]
+            )
+        msg = "Matrices are not all the same shape: " "test = (2, 2), test2 = (3, 3)"
+        assert e.value.args[0] == msg
+
+
 class TestGenCostCarMins:
     """Tests for the `gen_costs_car_mins` function. """
 
-    TIME_MAT = np.array(
-        [
-            [98.16714318, 92.38193922, 69.20872894],
-            [5.87348448, 43.54886814, 30.68318242],
-            [59.40738931, 89.52624922, 61.89571624],
-        ]
-    )
-    DIST_MAT = np.array(
-        [
-            [473.99133543, 517.76911753, 358.41564964],
-            [103.66007206, 416.25154913, 932.40644355],
-            [519.39186653, 391.45504159, 171.02775983],
-        ]
-    )
-    TOLL_MAT = np.array(
-        [
-            [4.53284724, 4.8140093, 8.47547131],
-            [6.57339959, 6.56382552, 3.25431721],
-            [3.5610022, 5.39221686, 0.10560566],
-        ]
-    )
-    WEIGHTS = np.array(
-        [
-            [7.39231584, 62.03557062, 92.54597502],
-            [69.86590459, 29.75576107, 0.91098305],
-            [89.81080133, 19.12336751, 86.02823059],
-        ]
-    )
+    TIME_MAT = np.array([[98.16, 92.38], [5.87, 43.54]])
+    DIST_MAT = np.array([[473.99, 517.76], [103.66, 416.25]])
+    TOLL_MAT = np.array([[4.53, 4.81], [6.57, 6.56]])
     VC = 7.39
     VT = 6.33
 
     def test_missing_matrices(self):
-        """Test that the correct error is raised if matrices are missing when calling. """
+        """Test that the correct error is raised if matrices are missing. """
         with pytest.raises(KeyError) as e:
             gen_cost_car_mins({"time": self.TIME_MAT}, self.VC, self.VT)
         assert e.value.args[0] == "The following matrices are missing: ['dist', 'toll']"
 
-    @pytest.mark.parametrize(
-        "weights,answer",
-        [
-            (None, 2.2832413648256646),
-            (np.full((3, 3), 1.0), 2.2832413648256646),
-            (WEIGHTS, 2.1478463049790033),
-        ],
-    )
-    def test_calculation(self, weights, answer):
-        """Test that the calculation produces the correct values.
+    def test_different_shapes(self):
+        """Test that the correct error is raised if matrices aren't the same shape. """
+        with pytest.raises(ValueError) as e:
+            gen_cost_car_mins(
+                {
+                    "time": self.TIME_MAT,
+                    "dist": self.DIST_MAT,
+                    "toll": np.zeros((3, 3)),
+                },
+                self.VC,
+                self.VT,
+            )
+        msg = (
+            "Matrices are not all the same shape: "
+            "time = (2, 2), dist = (2, 2), toll = (3, 3)"
+        )
+        assert e.value.args[0] == msg
 
-        Tested with and without weights.
-
-        Parameters
-        ----------
-        weights : np.array
-            Weights to be passed to the calculation function.
-        answer : float
-            The expected answer from the function.
-        """
+    def test_calculation(self):
+        """Test that the calculation produces the correct values. """
         test = gen_cost_car_mins(
             {"time": self.TIME_MAT, "dist": self.DIST_MAT, "toll": self.TOLL_MAT},
             self.VC,
             self.VT,
-            weights=weights,
         )
-        assert test == answer
+        answer = np.array(
+            [
+                [2.905002543443918, 2.9040025908372824],
+                [1.2567665718799368, 2.2479553712480254],
+            ]
+        )
+        np.testing.assert_array_equal(
+            test, answer, err_msg="Incorrect calculation for gen_cost_car_mins"
+        )
 
 
 class TestGenCostRailMins:
     """Tests for the `gen_cost_rail_mins` function. """
 
     MATRICES = {
-        "walk": np.array([[5.13540686, 5.14771908], [5.31881756, 0.80650462]]),
-        "wait": np.array([[7.73676407, 2.07717374], [3.83748466, 2.83424161]]),
-        "ride": np.array([[18.8577773, 0.59300399], [72.5284892, 38.11644619]]),
+        "walk": np.array([[5.13, 5.14], [5.31, 0.80]]),
+        "wait": np.array([[7.73, 2.07], [3.83, 2.83]]),
+        "ride": np.array([[18.85, 0.59], [72.52, 38.11]]),
         "fare": np.array([[113, 103], [275, 459]]),
     }
-    VT = 83.073
+    VT = 83.07
+    TEST_FACTORS = [None, {"walk": 1, "interchange_penalty": 10}]
+    TEST_ANSWERS = [
+        np.array(
+            [
+                [44.64779854339714, 14.96491814132659],
+                [92.78296105693993, 50.695460455037924],
+            ]
+        ),
+        np.array(
+            [
+                [40.80029854339713, 11.109918141326592],
+                [88.80046105693992, 50.09546045503792],
+            ]
+        ),
+    ]
 
     def test_missing_matrices(self):
-        """Test that the correct error is raised if matrices are missing when calling. """
+        """Test that the correct error is raised if matrices are missing. """
         with pytest.raises(KeyError) as e:
             gen_cost_rail_mins({}, self.VT)
         msg = "The following matrices are missing: ['walk', 'wait', 'ride', 'fare']"
         assert e.value.args[0] == msg
 
-    @pytest.mark.parametrize(
-        "factors,answer",
-        [
-            (None, 50.804388563885524),
-            ({"walk": 2.5, "wait": 3}, 58.00238860638553),
-            ({"walk": 1, "interchange_penalty": 10}, 47.72780454138553),
-        ],
-    )
+    def test_different_shapes(self):
+        """Test that the correct error is raised if matrices aren't the same shape. """
+        matrices = self.MATRICES.copy()
+        matrices["fare"] = np.zeros((3, 3))
+        with pytest.raises(ValueError) as e:
+            gen_cost_rail_mins(matrices, self.VT)
+        msg = (
+            "Matrices are not all the same shape: "
+            "walk = (2, 2), wait = (2, 2), ride = (2, 2), fare = (3, 3)"
+        )
+        assert e.value.args[0] == msg
+
+    @pytest.mark.parametrize("factors,answer", zip(TEST_FACTORS, TEST_ANSWERS))
     @pytest.mark.parametrize("num_interchanges", [0, 1])
     def test_calculation(
-        self, factors: Dict[str, float], answer: float, num_interchanges: int
+        self, factors: Dict[str, float], answer: np.array, num_interchanges: int
     ):
         """Tests the calculation with different weighting factors. """
         factors = RAIL_GC_FACTORS if factors is None else factors
@@ -151,7 +175,7 @@ class TestGenCostRailMins:
                 RAIL_GC_FACTORS[nm] if nm not in factors.keys() else factors[nm]
             )
             answer += num_interchanges * interchange_penalty
-        assert (
-            gen_cost_rail_mins(self.MATRICES, self.VT, factors, num_interchanges)
-            == answer
+        np.testing.assert_array_equal(
+            gen_cost_rail_mins(self.MATRICES, self.VT, factors, num_interchanges),
+            answer,
         )
