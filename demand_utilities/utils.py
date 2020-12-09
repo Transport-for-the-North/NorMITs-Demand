@@ -2221,6 +2221,34 @@ def get_zone_translation(import_dir: str,
     return translation
 
 
+def zone_translation_df(import_dir: str, from_zone: str, to_zone: str) -> pd.DataFrame:
+    """Wraps the `get_zone_translation` function and produces DataFrame lookup.
+
+    Parameters
+    ----------
+    import_dir : str
+        The directory to find the zone translation files.
+    from_zone : str
+        The name of the zoning system to convert from, e.g. noham.
+    to_zone : str
+        The name of the zoning system to convert to, e.g. lad.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing '{from_zone}_zone_id' and '{to_zone}_zone_id'
+        columns, which can be used for converting between zone systems.
+    """
+    translation = get_zone_translation(import_dir, from_zone, to_zone)
+    name = "{}_zone_id"
+    return pd.DataFrame(
+        {
+            name.format(from_zone): translation.keys(),
+            name.format(to_zone): translation.values(),
+        }
+    )
+
+
 def defaultdict_to_regular(d):
     """
     Iteratively converts nested default dicts to nested regular dicts.
