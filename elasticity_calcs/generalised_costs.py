@@ -192,3 +192,39 @@ def gen_cost_rail_mins(
         + (matrices["fare"] / vt)
         + (num_interchanges * inter_factor)
     )
+
+
+def gen_cost_elasticity_mins(
+    elasticity: float,
+    gen_cost: np.array,
+    cost: np.array,
+    demand: np.array,
+    cost_factor: float = None,
+) -> float:
+    """Calculate the weighted average generalised cost elasticity.
+
+    Parameters
+    ----------
+    elasticity : float
+        Implied elasticity value.
+    gen_cost : np.array
+        Generalised cost in minutes.
+    cost : np.array
+        Cost in either minutes or monetary units.
+    demand : np.array
+        Demand for calculating the weighted average.
+    cost_factor : float, optional
+        Factor to convert cost into minutes, if None (default)
+        uses a factor of 1.0.
+
+    Returns
+    -------
+    float
+        The generalised cost elasticity in minutes.
+    """
+    averages = _average_matrices(
+        {"gc": gen_cost, "cost": cost}, ["gc", "cost"], weights=demand
+    )
+    if cost_factor is None:
+        cost_factor = 1.0
+    return elasticity * (averages["gc"] / (averages["cost"] * cost_factor))

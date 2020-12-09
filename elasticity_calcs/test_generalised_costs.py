@@ -18,6 +18,7 @@ from .generalised_costs import (
     gen_cost_car_mins,
     gen_cost_rail_mins,
     RAIL_GC_FACTORS,
+    gen_cost_elasticity_mins,
 )
 
 
@@ -179,3 +180,21 @@ class TestGenCostRailMins:
             gen_cost_rail_mins(self.MATRICES, self.VT, factors, num_interchanges),
             answer,
         )
+
+
+##### FUNCTIONS #####
+@pytest.mark.parametrize(
+    "cost_factor,answer", [(None, 0.26649522280649446), (2.0, 0.13324761140324723)]
+)
+def test_gen_cost_elasticity_mins(cost_factor: float, answer: float):
+    """Test that the `gen_cost_elasticity_mins` calulation is correct with various factors. """
+    test_params = {
+        "elasticity": 0.8,
+        "gen_cost": np.array([[2.8, 1.67], [4.49, 0.1]]),
+        "cost": np.array([[7.72, 9.29], [6.92, 5.9]]),
+        "demand": np.array([[42.66, 83.66], [77.28, 31.84]]),
+    }
+    test = gen_cost_elasticity_mins(**test_params, cost_factor=cost_factor)
+    np.testing.assert_array_equal(
+        test, answer, "Incorrect answer for `gen_cost_elasticity_mins`"
+    )
