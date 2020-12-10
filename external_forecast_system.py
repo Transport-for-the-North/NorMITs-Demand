@@ -943,23 +943,21 @@ class ExternalForecastSystem:
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
             print("Generating HB distributions...")
-            # dm.distribute_pa(
-            #     productions=converted_productions,
-            #     attraction_weights=converted_attractions,
-            #     trip_origin='hb',
-            #     years_needed=year_list,
-            #     p_needed=purposes_needed,
-            #     m_needed=modes_needed,
-            #     soc_needed=soc_needed,
-            #     ns_needed=ns_needed,
-            #     ca_needed=car_availabilities_needed,
-            #     seed_dist_dir=self.imports['seed_dists'],
-            #     dist_out=self.exports['pa_24'],
-            #     audit_out=self.exports['print_audits'],
-            #     echo=echo_distribution
-            # )
-
-            print(converted_nhb_productions)
+            dm.distribute_pa(
+                productions=converted_productions,
+                attraction_weights=converted_attractions,
+                trip_origin='hb',
+                years_needed=year_list,
+                p_needed=purposes_needed,
+                m_needed=modes_needed,
+                soc_needed=soc_needed,
+                ns_needed=ns_needed,
+                ca_needed=car_availabilities_needed,
+                seed_dist_dir=self.imports['seed_dists'],
+                dist_out=self.exports['pa_24'],
+                audit_out=self.exports['print_audits'],
+                echo=echo_distribution
+            )
 
             print("Generating NHB distributions...")
             print("Distributions generated!")
@@ -978,7 +976,6 @@ class ExternalForecastSystem:
                 audit_out=self.exports['print_audits'],
                 echo=echo_distribution
             )
-
 
             last_time = current_time
             current_time = time.time()

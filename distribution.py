@@ -21,6 +21,7 @@ from functools import reduce
 import audits
 import efs_constants as consts
 from demand_utilities import utils as du
+from demand_utilities import concurrency as conc
 
 
 def doubly_constrained_furness(seed_vals: np.array,
@@ -298,7 +299,8 @@ def distribute_pa(productions: pd.DataFrame,
                   seed_infill: float = 1e-5,
                   seed_mat_format: str = 'enhpa',
                   echo: bool = False,
-                  audit_out: str = None
+                  audit_out: str = None,
+                  process_count: int = consts.PROCESS_COUNT
                   ) -> None:
     """
     Furnesses the given productions and attractions
@@ -443,7 +445,7 @@ def distribute_pa(productions: pd.DataFrame,
         a_cols.remove(year)
 
     # TODO: Fix area_type in production model
-    if 'area_type_id' in p_cols:
+    if 'area_type' in p_cols:
         p_cols.remove('area_type')
         productions = productions.drop('area_type', axis='columns')
         productions = productions.groupby(p_cols).sum().reset_index()
@@ -467,8 +469,29 @@ def distribute_pa(productions: pd.DataFrame,
             tp_list=tp_needed,
         )
 
-        # TODO: Multiprocess furnessing - by year?
+        # ## MULTIPROCESS ## #
+        unchanging_kwargs = {
+            'productions': yr_productions,
+            'attraction_weights': yr_a_weights,
+            'seed_dist_dir': seed_dist_dir,
+            'trip_origin': trip_origin,
+            'zone_col': zone_col,
+            'p_col': p_col,
+            'm_col': m_col,
+            'ca_col': ca_col,
+            'tp_col': tp_col,
+            'max_iters': max_iters,
+            'seed_infill': seed_infill,
+            'seed_mat_format': seed_mat_format,
+            'echo': echo,
+            'audit_out': audit_out,
+            'dist_out': dist_out,
+        }
+
+        # Build a list of all kw arguments
+        kwargs_list = list()
         for calib_params in loop_generator:
+            # Set the column name of the ns/soc column
             if calib_params['p'] in consts.SOC_P:
                 seg_col = soc_col
             elif calib_params['p'] in consts.NS_P:
@@ -480,25 +503,18 @@ def distribute_pa(productions: pd.DataFrame,
             # Add in year
             calib_params['yr'] = int(year)
 
-            _distribute_pa_internal(
-                productions=yr_productions,
-                attraction_weights=yr_a_weights,
-                seed_dist_dir=seed_dist_dir,
-                trip_origin=trip_origin,
-                zone_col=zone_col,
-                calib_params=calib_params,
-                p_col=p_col,
-                m_col=m_col,
-                seg_col=seg_col,
-                ca_col=ca_col,
-                tp_col=tp_col,
-                max_iters=max_iters,
-                seed_infill=seed_infill,
-                seed_mat_format=seed_mat_format,
-                echo=echo,
-                audit_out=audit_out,
-                dist_out=dist_out,
-            )
+            kwargs = unchanging_kwargs.copy()
+            kwargs.update({
+                'calib_params': calib_params,
+                'seg_col': seg_col,
+            })
+            kwargs_list.append(kwargs)
+
+        conc.multiprocess(
+            fn=_distribute_pa_internal,
+            kwargs=kwargs_list,
+            process_count=process_count
+        )
 
 
 def furness_pandas_wrapper(seed_values: pd.DataFrame,

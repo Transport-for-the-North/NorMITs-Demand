@@ -1837,6 +1837,10 @@ class NhbProductionModel:
             to='int'
         )
 
+        # Rename to the external zone column name
+        col_rename = {self.internal_zone_col: self.external_zone_col}
+        nhb_prods = nhb_prods.rename(columns=col_rename)
+
         # Output the aggregated productions
         print("Writing NHB Productions to disk...")
         fname = consts.PRODS_FNAME % (self.zoning_system, 'nhb')
