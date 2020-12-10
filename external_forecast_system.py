@@ -1155,6 +1155,7 @@ class ExternalForecastSystem:
             print('HB OD matrices compiled!\n')
             # TODO: Create 24hr OD for HB
 
+    # TODO: Remove efs.run_nhb(). Has been superseeded by new model
     def run_nhb(self,
                 years_needed: List[int] = consts.ALL_YEARS,
                 modes_needed: List[int] = consts.MODES_NEEDED,
@@ -2212,20 +2213,19 @@ def main():
 
     # Running control
     run_base_efs = True
-    recreate_productions = False
-    recreate_attractions = False
-    recreate_nhb_productions = False
+    recreate_productions = True
+    recreate_attractions = True
+    recreate_nhb_productions = True
 
     constrain_population = False
 
-    run_nhb_efs = False
     run_hb_pa_to_od = False
     run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False
 
     # Controls I/O
-    iter_num = 1
+    iter_num = 0
     import_home = "Y:/"
     export_home = "E:/"
     model_name = 'norms_2015'   # Make sure the correct mode is being used!!!
@@ -2256,14 +2256,7 @@ def main():
             constraint_required=constraints
         )
 
-    if run_nhb_efs:
-        # Generate NHB PA/OD matrices
-        efs.run_nhb(
-            overwrite_nhb_productions=True,
-            overwrite_nhb_od=True,
-            overwrite_nhb_tp_od=True
-        )
-
+    # TODO: Get PA2OD to compile HB and NHB mats
     if run_hb_pa_to_od:
         # Convert to HB to OD
         efs.pa_to_od(
@@ -2271,6 +2264,7 @@ def main():
             overwrite_hb_tp_od=True,
             echo=echo
         )
+
     # TODO: Update Integrated OD2PA codebase
     if run_compile_od:
         # Compiles base year OD matrices

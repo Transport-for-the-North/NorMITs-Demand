@@ -67,13 +67,6 @@ def main2():
             constraint_required=constraints
         )
 
-    if run_nhb:
-        efs.run_nhb(
-            overwrite_nhb_productions=True,
-            overwrite_nhb_od=True,
-            overwrite_nhb_tp_od=True
-        )
-
 
 if __name__ == '__main__':
     main()
