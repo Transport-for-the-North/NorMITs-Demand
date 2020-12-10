@@ -331,6 +331,47 @@ def constrain_post_dlog(df: pd.DataFrame,
     return df
 
 
+def constrain_forecast(pre_constraint_df: pd.DataFrame,
+                       constraint_df: pd.DataFrame,
+                       constraint_zone_equivalence: pd.DataFrame,
+                       base_year: str,
+                       future_years: List[str],
+                       zone_column: str
+                       ) -> pd.DataFrame:
+
+    df = pre_constraint_df.copy()
+
+    sector_equivalence = constraint_zone_equivalence.copy()
+    sector_equivalence.rename(
+        {"model_zone_id": zone_column},
+        axis=1,
+        inplace=True
+    )
+    sector_equivalence = sector_equivalence.set_index(
+        "model_zone_id"
+    )["grouping_id"]
+    df["sector_id"] = df[zone_column].map(sector_equivalence)
+
+    for year in future_years:
+        year_df = df.drop(
+            [col for col in future_years if col != year],
+            axis=1
+        )
+        year_constrained = constrain_post_dlog(
+            year_df,
+            constraint_df,
+            sector_equivalence.reset_index(),
+            base_year,
+            year,
+            zone_column
+        )
+
+        col = f"{year}_constrained"
+        df[col] = year_constrained[year]
+
+    return df
+
+
 def estimate_dlog_build_out(dlog: pd.DataFrame,
                             year: str,
                             start_date_col: str,
