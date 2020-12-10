@@ -415,6 +415,14 @@ def distribute_pa(productions: pd.DataFrame,
     audit_out:
         Path to a directory to output all audit checks.
 
+    process_count:
+        The number of processes to use when distributing all segmentations.
+        Positive numbers equate to the number of processes to call - this
+        should not usually be more than the number of cores available.
+        Negative numbers equate to the maximum number of cores available, less
+        that amount. If Multiprocessing should not be used, set this value to
+        0.
+
     Returns
     -------
     None
