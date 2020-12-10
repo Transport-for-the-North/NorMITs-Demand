@@ -29,6 +29,7 @@ from typing import Union
 from typing import Iterable
 from typing import Iterator
 
+from math import isclose
 
 from tqdm import tqdm
 from itertools import product
@@ -80,6 +81,64 @@ def validate_seg_level(seg_level: str) -> str:
         raise ValueError("%s is not a valid name for a level of segmentation"
                          % seg_level)
     return seg_level
+
+
+def validate_zoning_system(zoning_system: str) -> str:
+    """
+    Tidies up zoning_system and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    zoning_system:
+        The name of the zoning system to validate
+
+    Returns
+    -------
+    zoning_system:
+        zoning_system with both strip and lower applied to remove any
+        whitespace and make it all lowercase
+
+    Raises
+    -------
+    ValueError:
+        If zoning_system is not a valid name for a zoning system
+    """
+    # Init
+    zoning_system = zoning_system.strip().lower()
+
+    if zoning_system not in consts.ZONING_SYSTEMS:
+        raise ValueError("%s is not a valid name for a zoning system"
+                         % zoning_system)
+    return zoning_system
+
+
+def validate_model_name(model_name: str) -> str:
+    """
+    Tidies up model_name and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    model_name:
+        The the model name to validate
+
+    Returns
+    -------
+    model_name:
+        model_name with both strip and lower applied to remove any
+        whitespace and make it all lowercase
+
+    Raises
+    -------
+    ValueError:
+        If model_name is not a valid name for a model
+    """
+    # Init
+    model_name = model_name.strip().lower()
+
+    if model_name not in consts.MODEL_NAMES:
+        raise ValueError("%s is not a valid name for a model"
+                         % model_name)
+    return model_name
 
 
 def validate_user_class(user_class: str) -> str:
@@ -255,7 +314,7 @@ def build_io_paths(import_location: str,
         'productions': os.path.join(export_home, 'Productions'),
         'attractions': os.path.join(export_home, 'Attractions'),
         'sectors': os.path.join(export_home, 'Sectors'),
-        'audits': os.path.join(export_home, 'Audits'),
+        'print_audits': os.path.join(export_home, 'Audits'),
 
         # Pre-ME
         'pa': os.path.join(matrices_home, pa),
@@ -307,7 +366,7 @@ def grow_to_future_years(base_year_df: pd.DataFrame,
                          growth_df: pd.DataFrame,
                          base_year: str,
                          future_years: List[str],
-                         growth_merge_col: str = 'msoa_zone_id',
+                         growth_merge_cols: Union[str, List[str]] = 'msoa_zone_id',
                          no_neg_growth: bool = True,
                          infill: float = 0.001,
                          ) -> pd.DataFrame:
@@ -335,9 +394,10 @@ def grow_to_future_years(base_year_df: pd.DataFrame,
     future_years:
         The columns names containing the future year data in growth_df.
 
-    growth_merge_col:
-        The name of the column to merge the base_year_df and growth_df
-        dataframes. This is usually the model_zone column
+    growth_merge_cols:
+        The name of the column(s) to merge the base_year_df and growth_df
+        dataframes. This is usually the model_zone column plus any further
+        segmentation
 
     no_neg_growth:
         Whether to ensure there is no negative growth. If True, any growth
@@ -369,7 +429,7 @@ def grow_to_future_years(base_year_df: pd.DataFrame,
         growth_df,
         base_year,
         future_years,
-        merge_col=growth_merge_col
+        merge_cols=growth_merge_cols
     )
 
     # Ensure there is no minus growth
@@ -443,10 +503,10 @@ def convert_msoa_naming(df: pd.DataFrame,
         }
     )
 
-    if to == 'string':
+    if to == 'string' or to == 'str':
         merge_col = 'msoa_int'
         keep_col = 'msoa_string'
-    elif to == 'int':
+    elif to == 'integer' or to == 'int':
         merge_col = 'msoa_string'
         keep_col = 'msoa_int'
     else:
@@ -571,7 +631,7 @@ def get_growth_values(base_year_df: pd.DataFrame,
                       growth_df: pd.DataFrame,
                       base_year_col: str,
                       future_year_cols: List[str],
-                      merge_col: str = 'model_zone_id'
+                      merge_cols: Union[str, List[str]] = 'model_zone_id'
                       ) -> pd.DataFrame:
     """
     Returns base_year_df extended to include the growth values in
@@ -595,8 +655,8 @@ def get_growth_values(base_year_df: pd.DataFrame,
     future_year_cols:
         The columns names that contain the future year growth factor data.
 
-    merge_col:
-        Name of the column to merge base_year_df and growth_df on.
+    merge_cols:
+        Name of the column(s) to merge base_year_df and growth_df on.
 
     Returns
     -------
@@ -607,6 +667,7 @@ def get_growth_values(base_year_df: pd.DataFrame,
     # Init
     base_year_df = base_year_df.copy()
     growth_df = growth_df.copy()
+    base_year_pop = base_year_df[base_year_col].sum()
 
     base_year_df.columns = base_year_df.columns.astype(str)
     growth_df.columns = growth_df.columns.astype(str)
@@ -621,17 +682,27 @@ def get_growth_values(base_year_df: pd.DataFrame,
                                      errors='ignore')
 
     # Merge on merge col
-    growth_values = pd.merge(base_year_df,
-                             growth_df,
-                             on=merge_col)
+    growth_values = pd.merge(base_year_df, growth_df, on=merge_cols)
 
     # Grow base year value by values given in growth_df - 1
     # -1 so we get growth values. NOT growth values + base year
     for year in future_year_cols:
         growth_values[year] = (
-            (growth_values[year] - 1)
-            *
-            growth_values[base_year_col]
+                (growth_values[year] - 1)
+                *
+                growth_values[base_year_col]
+        )
+
+    # If these don't match, something has gone wrong
+    new_by_pop = growth_values[base_year_col].sum()
+    if not is_almost_equal(base_year_pop, new_by_pop):
+        raise NormitsDemandError(
+            "Base year totals have changed before and after growing the "
+            "future years - something must have gone wrong. Perhaps the "
+            "merge columns are wrong and data is being replicated.\n"
+            "Total base year before growth:\t %.4f\n"
+            "Total base year after growth:\t %.4f\n"
+            % (base_year_pop, new_by_pop)
         )
 
     return growth_values
@@ -768,7 +839,7 @@ def add_fname_suffix(fname: str, suffix: str):
 
 
 def safe_read_csv(file_path: str,
-                  kwargs: Dict[str, Any] = None
+                  **kwargs
                   ) -> pd.DataFrame:
     """
     Reads in the file and performs some simple file checks
@@ -1506,9 +1577,127 @@ def cp_segmentation_loop_generator(p_list: Iterable[int],
             )
 
 
+def segment_loop_generator(seg_dict: Dict[str, List[Any]],
+                           ) -> Iterator[Dict[str, Any]]:
+    """
+    Yields seg_values dictionary for all unique combinations of seg_dict
+
+    Parameters
+    ----------
+    seg_dict:
+        Dictionary of {seg_names: [seg_vals]}. All possible combinations of
+        seg_values will be iterated through
+
+    Returns
+    -------
+    seg_values:
+        A dictionary of {seg_name: seg_value}
+    """
+    # Separate keys and values
+    keys, vals = zip(*seg_dict.items())
+
+    for unq_seg in product(*vals):
+        yield {keys[i]: unq_seg[i] for i in range(len(keys))}
+
+
+def build_seg_params(seg_level: str,
+                     df: pd.DataFrame,
+                     raise_error: bool = False
+                     ) -> Dict[str, Any]:
+    """
+    Builds a dictionary of seg_params from df for seg_level
+
+    Parameters
+    ----------
+    seg_level:
+        The level of segmentation of the tour proportions to convert. This
+        should be one of the values in efs_constants.SEG_LEVELS.
+
+    df:
+        The dataframe to pull the unique segments from and build the seg_params
+
+    raise_error:
+        Whether to raise an error or not when a segmentation does not exist in
+        df.
+
+    Returns
+    -------
+    seg_params:
+        A dictionary of {kwarg: values} for the segmentation level chosen. See...
+        Need to Create reference for how seg_params work
+    """
+    # Init
+    seg_level = validate_seg_level(seg_level)
+
+    # Choose the segments to look for
+    if seg_level == 'tfn':
+        segments = ['p', 'm', 'soc', 'ns', 'ca']
+    else:
+        raise ValueError(
+            "Cannot determine the unique segments for seg_level '%s', we don't "
+            "have a branch for it!" % str(seg_level)
+        )
+
+    # Get the unique values for each segment
+    unq_segs = dict()
+    for segment in segments:
+        if segment not in df and raise_error:
+            raise KeyError(
+                "Segment '%s' does not exist in df" % segment
+            )
+
+        # Ignore none-like splits
+        unique = df[segment].unique().tolist()
+        unique = [x for x in unique if not is_none_like(x)]
+        unq_segs[segment] = unique
+
+    # Build the seg_params
+    if seg_level == 'tfn':
+        seg_params = {
+            'p_needed': unq_segs.get('p', None),
+            'm_needed': unq_segs.get('m', None),
+            'soc_needed': unq_segs.get('soc', None),
+            'ns_needed': unq_segs.get('ns', None),
+            'ca_needed': unq_segs.get('ca', None),
+        }
+    else:
+        raise ValueError(
+            "Cannot determine the unique segments for seg_level '%s', we don't "
+            "have a branch for it!" % str(seg_level)
+        )
+
+    return seg_params
+
+
+def seg_level_loop_length(seg_level: str,
+                          seg_params: Dict[str, Any],
+                          ) -> int:
+    """
+    Returns the length of the generator that would be created if
+    seg_level_loop_generator() was called with the same arguments
+
+    Parameters
+    ----------
+    seg_level:
+        The level of segmentation of the tour proportions to convert. This
+        should be one of the values in efs_constants.SEG_LEVELS.
+
+    seg_params:
+        A dictionary of kwarg: values for the segmentation level chosen. See...
+        Need to Create reference for how seg_params work
+
+    Yields
+    -------
+    generator_length:
+        The total number of items that will be yielded from
+        seg_level_loop_generator() when called with the same arguments
+    """
+    return len(list(seg_level_loop_generator(seg_level, seg_params)))
+
+
 def seg_level_loop_generator(seg_level: str,
                              seg_params: Dict[str, Any],
-                             ) -> Dict[str, Union[int, str]]:
+                             ) -> Iterator[Dict[str, Union[int, str]]]:
     """
     Yields seg_values dictionary for the seg_level given
 
@@ -1525,7 +1714,7 @@ def seg_level_loop_generator(seg_level: str,
     Yields
     -------
     seg_values:
-        A dictionary of {seg_name: seg_values}
+        A dictionary of {seg_name: seg_value}
     """
     # Init
     seg_level = validate_seg_level(seg_level)
@@ -1534,11 +1723,11 @@ def seg_level_loop_generator(seg_level: str,
         seg_params = validate_vdm_seg_params(seg_params)
 
         loop_generator = vdm_segment_loop_generator(
-            to_list=seg_params['to_needed'],
-            uc_list=seg_params['uc_needed'],
-            m_list=seg_params['m_needed'],
-            ca_list=seg_params['ca_needed'],
-            tp_list=seg_params['tp_needed'],
+            to_list=seg_params.get('to_needed', [None]),
+            uc_list=seg_params.get('uc_needed', [None]),
+            m_list=seg_params.get('m_needed', [None]),
+            ca_list=seg_params.get('ca_needed', [None]),
+            tp_list=seg_params.get('tp_needed', [None]),
         )
 
         # Convert to dict
@@ -1550,6 +1739,20 @@ def seg_level_loop_generator(seg_level: str,
                 ca=ca,
                 tp=tp
             )
+
+    if seg_level == 'tfn':
+        loop_gen = cp_segmentation_loop_generator(
+            p_list=seg_params.get('p_needed', [None]),
+            m_list=seg_params.get('m_needed', [None]),
+            soc_list=seg_params.get('soc_needed', [None]),
+            ns_list=seg_params.get('ns_needed', [None]),
+            ca_list=seg_params.get('ca_needed', [None]),
+            tp_list=seg_params.get('tp_needed', [None]),
+        )
+
+        for seg_params in loop_gen:
+            yield seg_params
+
     else:
         raise ValueError("'%s' is a valid seg_level, however, we do not have "
                          "a way of dealing with it right not. You should "
@@ -2095,6 +2298,30 @@ def fit_filter(df: pd.DataFrame,
     return fitted_filter
 
 
+def remove_none_like_filter(df_filter: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Removes all None-like items from df_filter
+
+    Parameters
+    ----------
+    df_filter:
+        The filter dictionary in the format of {df_col_name: filter_values}
+
+    Returns
+    -------
+    df_filter:
+        df_filter with None-like items removed
+    """
+    # Init
+    new_df_filter = dict()
+
+    for k, v in df_filter.items():
+        if not is_none_like(v):
+            new_df_filter[k] = v
+
+    return new_df_filter
+
+
 def filter_by_segmentation(df: pd.DataFrame,
                            df_filter: Dict[str, Any],
                            fit: bool = False,
@@ -2131,6 +2358,15 @@ def filter_by_segmentation(df: pd.DataFrame,
     """
     # Init
     df = df.copy()
+    df_filter = df_filter.copy()
+
+    # Wrap each item if a list to avoid errors
+    for k, v in df_filter.items():
+        if not pd.api.types.is_list_like(v):
+            df_filter[k] = [v]
+
+    # Ignore none-like filters to avoid dropping trips
+    df_filter = remove_none_like_filter(df_filter)
 
     if fit:
         df_filter = fit_filter(df, df_filter.copy(), **kwargs)
@@ -2274,6 +2510,180 @@ def match_pa_zones(productions: pd.DataFrame,
         attractions = attractions.set_index(zone_col)
 
     return productions, attractions
+
+
+def balance_a_to_p(productions: pd.DataFrame,
+                   attractions: pd.DataFrame,
+                   unique_cols: List[str],
+                   significant: int = 5
+                   ) -> pd.DataFrame:
+    """
+    Balances the attractions total to productions total, keeping the same
+    attraction distribution across segments
+
+    Parameters
+    ----------
+    productions:
+        Dataframe containing the productions data
+
+    attractions:
+        Dataframe containing the attractions data
+
+    unique_cols:
+        A list of the columns in productions and attractions to balance to
+        one another
+
+    significant:
+        The number of significant places to check when ensuring the balancing
+        has succeeded.
+
+    Returns
+    -------
+    balanced_attractions
+
+    """
+    # Init
+    attractions = attractions.copy()
+
+    # Balance Attractions for each year
+    for col in unique_cols:
+
+        # Only balance if needed
+        if productions[col].sum() == attractions[col].sum():
+            continue
+
+        if productions[col].sum() == 0:
+            attractions[col] = 0
+        else:
+            attractions[col] /= attractions[col].sum() / productions[col].sum()
+
+        # Throw an error if we somehow don't match
+        np.testing.assert_approx_equal(
+            productions[col].sum(),
+            attractions[col].sum(),
+            significant=significant,
+            err_msg="Row and Column target totals do not match. Cannot Furness."
+        )
+
+    return attractions
+
+
+def compile_efficient_df(eff_df: List[Dict[str, Any]],
+                         col_names: List[Any]
+                         ) -> pd.DataFrame:
+    """
+    Compiles an 'efficient df' and makes it a full dataframe.
+
+    A efficient dataframe is a list of dictionaries, where each dictionary
+    contains a df under the key 'df'. All other keys in this dictionary should
+    be in the format {col_name, col_val}. All dataframes are expanded with
+    the other columns from the dictionary then concatenated together
+
+    Parameters
+    ----------
+    eff_df:
+        Efficient df structure as described in the function description.
+
+    col_names:
+        asdasda
+
+    Returns
+    -------
+    compiled_df:
+        eff_df compiled into a full dataframe
+    """
+    # Init
+    concat_ph = list()
+    stack_ph = list()
+
+    for part_df in eff_df:
+        # Grab the dataframe
+        df = part_df.pop('df')
+
+        # Add all segmentation cols back into df
+        for col_name, col_val in part_df.items():
+            df[col_name] = col_val
+
+        # Sort the indexers
+        df = df.reindex(columns=col_names)
+
+        concat_ph.append(df)
+        # stack_ph.append(df.values)
+
+    # Stick all the dfs together and put back into a df
+    # return pd.DataFrame(data=np.vstack(stack_ph), columns=col_names)
+    return pd.concat(concat_ph)
+
+
+def list_safe_remove(lst: List[Any],
+                     remove: List[Any],
+                     raise_error: bool = False,
+                     inplace: bool = False
+                     ) -> List[Any]:
+    """
+    Removes remove items from lst without raising an error
+
+    Parameters
+    ----------
+    lst:
+        The list to remove items from
+
+    remove:
+        The items to remove from lst
+
+    raise_error:
+        Whether to raise and error or not when an item is not contained in
+        lst
+
+    inplace:
+        Whether to remove the items in-place, or return a copy of lst
+
+    Returns
+    -------
+    lst:
+        lst with removed items removed from it
+    """
+    # Init
+    if not inplace:
+        lst = lst.copy()
+
+    for item in remove:
+        try:
+            lst.remove(item)
+        except ValueError as e:
+            if raise_error:
+                raise e
+
+    return lst
+
+
+def is_almost_equal(v1: float,
+                    v2: float,
+                    significant: int = 7
+                    ) -> bool:
+    """
+    Checks v1 and v2 are equal to significant places
+
+    Parameters
+    ----------
+    v1:
+        The first value to compare
+
+    v2:
+        The second value to compare
+
+    significant:
+        The number of significant bits to compare over
+
+    Returns
+    -------
+    almost_equal:
+        True if v1 and v2 are equal to significant bits, else False
+    """
+    return isclose(v1, v2, abs_tol=10 ** -significant)
+
+
+# ## BELOW HERE IS OLD TMS CODE ## #
 
 
 def get_costs(model_lookup_path,

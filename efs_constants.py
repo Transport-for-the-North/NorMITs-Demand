@@ -32,6 +32,12 @@ BASE_YEAR = 2018
 FUTURE_YEARS = [2033, 2035, 2050]
 ALL_YEARS = [BASE_YEAR] + FUTURE_YEARS
 
+BASE_YEAR_STR = str(BASE_YEAR)
+FUTURE_YEARS_STR = [str(x) for x in FUTURE_YEARS]
+ALL_YEARS_STR = [str(x) for x in ALL_YEARS]
+
+PROCESS_COUNT = -2
+
 # ## VDM/ME2 constants ## #
 VDM_TRIP_ORIGINS = ['hb', 'nhb']
 USER_CLASSES = ['commute', 'business', 'other']
@@ -71,6 +77,29 @@ SEG_LEVELS = [
     'tfn',      # Segment as much as possible - likely TfN segmentation
 ]
 
+# Valid zoning systems
+ZONING_SYSTEMS = [
+    'msoa',
+    'lad',
+    'tfn_sector',
+    'noham',
+    'norms',
+    'norms_2015'
+]
+
+# Valid model names
+MODEL_NAMES = [
+    'noham',
+    'norms',
+    'norms_2015'
+]
+
+# DIRECTORY NAMES
+AUDITS_DIRNAME = 'Audits'
+PRODUCTIONS_DIRNAME = 'Productions'
+ATTRACTIONS_DIRNAME = 'Attractions'
+NHB_PARAMS_DIRNAME = 'nhb_factors'
+
 # HB consts
 PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]
 MODES_NEEDED = [6]
@@ -93,6 +122,17 @@ TAG_CERTAINTY_BOUNDS = {
 }
 
 # ## File Names and Paths ## #
+# Zone_system, trip_origin
+PRODS_FNAME = '%s_%s_productions.csv'
+ATTRS_FNAME = '%s_%s_attractions.csv'
+
+POP_FNAME = '%s_population.csv'
+EMP_FNAME = '%s_employment.csv'
+
+# year
+NTEM_CONTROL_FNAME = 'ntem_pa_ave_wday_%s.csv'
+
+
 NHB_PRODUCTIONS_FNAME = 'nhb_productions.csv'
 
 DEFAULT_LAD_LOOKUP = 'lad_to_msoa.csv'
@@ -112,18 +152,15 @@ EFS_COLUMN_DICTIONARY = {
         "base_year_workers"
     ],
     "population": [
-        "model_zone_id"
+        "msoa_zone_id"
     ],
     "population_ratio": [
         "model_zone_id",
         "property_type_id",
         "traveller_type_id"
     ],
-    "households": [
-        "model_zone_id"
-    ],
     "employment": [
-        "model_zone_id"
+        "msoa_zone_id"
     ],
     "housing_occupancy": [
         "model_zone_id",

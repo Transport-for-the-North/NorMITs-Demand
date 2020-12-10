@@ -135,25 +135,28 @@ class ExternalForecastSystem:
     def _read_in_default_inputs(self):
         input_dir = self.imports['default_inputs']
 
+        # Read in soc and ns as strings if in inputs
+        dtypes = {'soc': str, 'ns': str}
+
         # Read in population files
         file_path = os.path.join(input_dir, self.base_pop_path)
-        self.base_pop = du.safe_read_csv(file_path)
+        self.base_pop = du.safe_read_csv(file_path, dtype=dtypes)
 
         file_path = os.path.join(input_dir, self.pop_growth_path)
-        self.pop_growth = du.safe_read_csv(file_path)
+        self.pop_growth = du.safe_read_csv(file_path, dtype=dtypes)
 
         file_path = os.path.join(input_dir, self.pop_constraint_path)
-        self.pop_constraint = du.safe_read_csv(file_path)
+        self.pop_constraint = du.safe_read_csv(file_path, dtype=dtypes)
 
         # Worker files
         file_path = os.path.join(input_dir, self.base_emp_path)
-        self.base_emp = du.safe_read_csv(file_path)
+        self.base_emp = du.safe_read_csv(file_path, dtype=dtypes)
 
         file_path = os.path.join(input_dir, self.emp_growth_path)
-        self.emp_growth = du.safe_read_csv(file_path)
+        self.emp_growth = du.safe_read_csv(file_path, dtype=dtypes)
 
         file_path = os.path.join(input_dir, self.emp_constraint_path)
-        self.emp_constraint = du.safe_read_csv(file_path)
+        self.emp_constraint = du.safe_read_csv(file_path, dtype=dtypes)
 
         # Zone and area files
         file_path = os.path.join(input_dir, self.msoa_lookup_path)
@@ -589,7 +592,7 @@ class ExternalForecastSystem:
             print("No need to integrate alternative assumptions.")
             print("Reading in default values...")
             base_pop = self.base_pop[base_year_pop_cols].copy()
-            pop_growth = self.pop_growth[pop_cols].copy()
+            pop_growth = self.pop_growth.copy()
             # population_split = self.future_population_ratio[pop_ratio_cols].copy()
 
             # households_values = self.households_values[base_year_hh_cols].copy()
@@ -598,7 +601,7 @@ class ExternalForecastSystem:
             # housing_occupancy = self.housing_occupancy[hh_occupancy_cols].copy()
 
             base_emp = self.base_emp[base_year_workers_cols].copy()
-            emp_growth = self.emp_growth[emp_cols].copy()
+            emp_growth = self.emp_growth.copy()
             # worker_split = self.worker_splits[emp_ratio_cols].copy()
 
             # # Need to rename cols to names used in code
@@ -677,11 +680,11 @@ class ExternalForecastSystem:
         if constraint_source == "default":
             print("Constraint 'default' selected, retrieving constraint "
                   + "data...")
-            pop_constraint = self.pop_constraint[pop_cols].copy()
+            pop_constraint = self.pop_constraint.copy()
 
             # households_constraint = self.households_constraint[hh_cols].copy()
 
-            emp_constraint = self.emp_constraint[emp_cols].copy()
+            emp_constraint = self.emp_constraint.copy()
             emp_constraint = self.constrainer.convert_constraint_off_base_year(
                 emp_constraint,
                 str(base_year),
@@ -697,7 +700,7 @@ class ExternalForecastSystem:
         elif constraint_source == "grown base":
             print("Constraint 'grown base' source selected, growing given "
                   "base by default growth factors...")
-            pop_constraint = self.pop_constraint[pop_cols].copy()
+            pop_constraint = self.pop_constraint.copy()
             pop_constraint = constrainer.grow_constraint(
                 pop_constraint,
                 pop_growth,
@@ -714,7 +717,7 @@ class ExternalForecastSystem:
             # )
 
             # Update this with attraction model updates
-            emp_constraint = self.emp_growth[emp_cols].copy()
+            emp_constraint = self.emp_growth.copy()
 
             emp_constraint = du.convert_growth_off_base_year(
                 emp_constraint,
@@ -1028,7 +1031,7 @@ class ExternalForecastSystem:
                 ca_needed=car_availabilities_needed,
                 seed_dist_dir=self.imports['seed_dists'],
                 dist_out=self.exports['pa_24'],
-                audit_out=self.exports['audits'],
+                audit_out=self.exports['print_audits'],
                 echo=echo_distribution
             )
             print("Distributions generated!")
@@ -1285,7 +1288,7 @@ class ExternalForecastSystem:
         # TODO: Check if nhb productions exist first
         if overwrite_nhb_productions:
             print("Generating NHB Productions...")
-            pm.nhb_production(hb_pa_import=self.exports['pa_24'],
+            pm.old_nhb_production(hb_pa_import=self.exports['pa_24'],
                               nhb_export=self.exports['productions'],
                               required_purposes=hb_purposes_needed,
                               required_modes=modes_needed,
@@ -2135,7 +2138,7 @@ class ExternalForecastSystem:
             'productions': os.path.join(export_home, 'Productions'),
             'attractions': os.path.join(export_home, 'Attractions'),
             'sectors': os.path.join(export_home, 'Sectors'),
-            'audits': os.path.join(export_home, 'Audits'),
+            'print_audits': os.path.join(export_home, 'Audits'),
 
             # Pre-ME
             'pa': os.path.join(matrices_home, pa),
@@ -2335,17 +2338,17 @@ def write_input_info(output_path,
 
 
 def main():
-    use_zone_id_subset = False
     echo = False
 
     # Running control
     run_base_efs = True
-    recreate_productions = False
+    recreate_productions = True
     recreate_attractions = True
 
     constrain_population = False
 
     run_nhb_efs = True
+    run_hb_pa_to_od = True
     run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False
@@ -2382,20 +2385,20 @@ def main():
         )
 
     if run_nhb_efs:
+        # Generate NHB PA/OD matrices
+        efs.run_nhb(
+            overwrite_nhb_productions=True,
+            overwrite_nhb_od=True,
+            overwrite_nhb_tp_od=True
+        )
+
+    if run_hb_pa_to_od:
         # Convert to HB to OD
         efs.pa_to_od(
             overwrite_hb_tp_pa=True,
             overwrite_hb_tp_od=True,
             echo=echo
         )
-
-        # Generate NHB PA/OD matrices
-        efs.run_nhb(
-            overwrite_nhb_productions=False,
-            overwrite_nhb_od=False,
-            overwrite_nhb_tp_od=True
-        )
-
     # TODO: Update Integrated OD2PA codebase
     if run_compile_od:
         # Compiles base year OD matrices
