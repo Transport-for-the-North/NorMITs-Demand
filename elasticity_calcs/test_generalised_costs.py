@@ -125,20 +125,21 @@ class TestGenCostRailMins:
         "wait": np.array([[7.73, 2.07], [3.83, 2.83]]),
         "ride": np.array([[18.85, 0.59], [72.52, 38.11]]),
         "fare": np.array([[113, 103], [275, 459]]),
+        "num_int": np.array([[1, 0], [0, 2]]),
     }
     VT = 83.07
     TEST_FACTORS = [None, {"walk": 1, "interchange_penalty": 10}]
     TEST_ANSWERS = [
         np.array(
             [
-                [44.64779854339714, 14.96491814132659],
-                [92.78296105693993, 50.695460455037924],
+                [49.64779854339714, 14.96491814132659],
+                [92.78296105693993, 60.695460455037924],
             ]
         ),
         np.array(
             [
-                [40.80029854339713, 11.109918141326592],
-                [88.80046105693992, 50.09546045503792],
+                [50.80029854339713, 11.109918141326592],
+                [88.80046105693992, 70.09546045503792],
             ]
         ),
     ]
@@ -147,7 +148,10 @@ class TestGenCostRailMins:
         """Test that the correct error is raised if matrices are missing. """
         with pytest.raises(KeyError) as e:
             gen_cost_rail_mins({}, self.VT)
-        msg = "The following matrices are missing: ['walk', 'wait', 'ride', 'fare']"
+        msg = (
+            "The following matrices are missing: "
+            "['walk', 'wait', 'ride', 'fare', 'num_int']"
+        )
         assert e.value.args[0] == msg
 
     def test_different_shapes(self):
@@ -158,27 +162,17 @@ class TestGenCostRailMins:
             gen_cost_rail_mins(matrices, self.VT)
         msg = (
             "Matrices are not all the same shape: "
-            "walk = (2, 2), wait = (2, 2), ride = (2, 2), fare = (3, 3)"
+            "walk = (2, 2), wait = (2, 2), ride = (2, 2), "
+            "fare = (3, 3), num_int = (2, 2)"
         )
         assert e.value.args[0] == msg
 
     @pytest.mark.parametrize("factors,answer", zip(TEST_FACTORS, TEST_ANSWERS))
-    @pytest.mark.parametrize("num_interchanges", [0, 1])
-    def test_calculation(
-        self, factors: Dict[str, float], answer: np.array, num_interchanges: int
-    ):
+    def test_calculation(self, factors: Dict[str, float], answer: np.array):
         """Tests the calculation with different weighting factors. """
         factors = RAIL_GC_FACTORS if factors is None else factors
-        if num_interchanges != 0:
-            # Add interchange penalty onto answer
-            nm = "interchange_penalty"
-            interchange_penalty = (
-                RAIL_GC_FACTORS[nm] if nm not in factors.keys() else factors[nm]
-            )
-            answer += num_interchanges * interchange_penalty
         np.testing.assert_array_equal(
-            gen_cost_rail_mins(self.MATRICES, self.VT, factors, num_interchanges),
-            answer,
+            gen_cost_rail_mins(self.MATRICES, self.VT, factors), answer
         )
 
 

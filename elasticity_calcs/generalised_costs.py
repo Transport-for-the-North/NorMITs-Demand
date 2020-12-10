@@ -144,7 +144,6 @@ def gen_cost_rail_mins(
     matrices: Dict[str, np.array],
     vt: float,
     factors: Dict[str, float] = None,
-    num_interchanges: int = 0,
 ) -> np.array:
     """Calculate the generalised cost for rail in minutes.
 
@@ -154,16 +153,15 @@ def gen_cost_rail_mins(
         The matrices expected are as follows:
         - walk: the walk time, in minutes;
         - wait: the wait time, in minutes;
-        - ride: the in-vehicle time, in minutes; and
-        - fare: the fare, in pence.
+        - ride: the in-vehicle time, in minutes;
+        - fare: the fare, in pence; and
+        - num_int: the number of interchanges.
     vt : float
         Value of time in pence per minute.
     factors : Dict[str, float], optional
         The weighting factors for walk and wait matrices and the interchange
         penalty in minutes, by default None. The default values given in
         `RAIL_GC_FACTORS` will be used for any that are missing.
-    num_interchanges : int, optional
-        The number of interchanges made, by default 0.
 
     Returns
     -------
@@ -175,7 +173,7 @@ def gen_cost_rail_mins(
     KeyError
         If any of the expected matrices aren't provided.
     """
-    matrices = _check_matrices(matrices, ["walk", "wait", "ride", "fare"])
+    matrices = _check_matrices(matrices, ["walk", "wait", "ride", "fare", "num_int"])
 
     # Multply matrices by given (or default) weighting factors
     factors = RAIL_GC_FACTORS if factors is None else factors
@@ -190,7 +188,7 @@ def gen_cost_rail_mins(
         + matrices["wait"]
         + matrices["ride"]
         + (matrices["fare"] / vt)
-        + (num_interchanges * inter_factor)
+        + (matrices["num_int"] * inter_factor)
     )
 
 
