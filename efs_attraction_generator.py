@@ -326,6 +326,7 @@ class EFSAttractionGenerator:
 
             employment_growth = employment_growth.reindex(columns=index_cols)
             # TODO: Remove ns splits from growth factors
+            # TODO: Remove soc0 too
             employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
 
             # Make sure both soc columns are the same format
@@ -505,7 +506,7 @@ class EFSAttractionGenerator:
         )
 
         # Re-align col names for returning
-        columns = {internal_zone_col: external_zone_col, p_col: 'purpose_id'}
+        columns = {internal_zone_col: external_zone_col}
         attractions = attractions.rename(columns=columns)
         nhb_att = nhb_att.rename(columns=columns)
 
