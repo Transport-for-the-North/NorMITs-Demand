@@ -13,6 +13,7 @@ import pandas as pd
 from typing import List
 from typing import Dict
 from typing import Tuple
+from typing import Union
 
 from itertools import product
 
@@ -77,6 +78,7 @@ class EFSAttractionGenerator:
             m_needed: List[int] = consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
+            zoning_system: str = 'msoa',
             no_neg_growth: bool = True,
             employment_infill: float = 0.001,
 
@@ -210,7 +212,7 @@ class EFSAttractionGenerator:
             values that are less than 0.
 
         audits:
-            Whether to output audits to the terminal during running. This can
+            Whether to output print_audits to the terminal during running. This can
             be used to monitor the employment and attraction numbers being
             generated and constrained.
 
@@ -238,8 +240,8 @@ class EFSAttractionGenerator:
             possible in the input data.
         """
         # Return previously created productions if we can
-        fname = 'MSOA_aggregated_attractions.csv'
-        nhb_fname = 'MSOA_nhb_attractions.csv'
+        fname = consts.ATTRS_FNAME % (zoning_system, 'hb')
+        nhb_fname = consts.ATTRS_FNAME % (zoning_system, 'nhb')
         final_output_path = os.path.join(out_path, fname)
         nhb_output_path = os.path.join(out_path, nhb_fname)
 
@@ -251,6 +253,7 @@ class EFSAttractionGenerator:
 
         # Init
         internal_zone_col = 'msoa_zone_id'
+        zoning_system = du.validate_zoning_system(zoning_system)
         a_weights_p_col = 'purpose'
         mode_split_m_col = 'mode'
         emp_cat_col = 'employment_cat'
@@ -296,7 +299,6 @@ class EFSAttractionGenerator:
             import_path=imports['base_employment'],
             zone_col=internal_zone_col,
             emp_cat_col=emp_cat_col,
-            msoa_path=msoa_conversion_path,
             return_format='long',
             value_col=base_year,
         )
@@ -307,17 +309,50 @@ class EFSAttractionGenerator:
         du.print_w_toggle("Base Year Employment: %d" % total_base_year_emp,
                           echo=audits)
 
+        print(base_year_emp)
+
         # ## FUTURE YEAR EMPLOYMENT ## #
         print("Generating future year employment data...")
+        # If soc splits in the growth factors, we have a few extra steps
+        if 'soc' in employment_growth:
+            # Add Soc splits into the base year
+            base_year_emp = split_by_soc(
+                df=base_year_emp,
+                soc_weights=get_soc_weights(imports['soc_weights']),
+                unique_col=base_year,
+                split_cols=[internal_zone_col, emp_cat_col]
+            )
+
+            # Aggregate the growth factors to remove extra segmentation
+            group_cols = [internal_zone_col, 'soc']
+            index_cols = group_cols.copy() + all_years
+
+            employment_growth = employment_growth.reindex(columns=index_cols)
+            # TODO: Remove ns splits from growth factors
+            # TODO: Remove soc0 too
+            employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
+
+            # Make sure both soc columns are the same format
+            base_year_emp['soc'] = base_year_emp['soc'].astype('float').astype('int')
+            employment_growth['soc'] = employment_growth['soc'].astype('float').astype('int')
+
+        # Merge on all possible segmentations - not years
+        merge_cols = du.intersection(list(base_year_emp), list(employment_growth))
+        merge_cols = du.list_safe_remove(merge_cols, all_years)
+
         employment = du.grow_to_future_years(
             base_year_df=base_year_emp,
             growth_df=employment_growth,
             base_year=base_year,
             future_years=future_years,
-            growth_merge_col=internal_zone_col,
+            growth_merge_cols=merge_cols,
             no_neg_growth=no_neg_growth,
             infill=employment_infill
         )
+
+        # Now need te remove soc splits
+        if 'soc' in employment_growth:
+            pass
 
         # ## CONSTRAIN POPULATION ## #
         if constraint_required[3] and (constraint_source != "model grown base"):
@@ -363,6 +398,7 @@ class EFSAttractionGenerator:
             )
 
         # Reindex and sum
+        # Removes soc splits - attractions weights can't cope
         group_cols = [internal_zone_col] + segmentation_cols
         index_cols = group_cols.copy() + all_years
         employment = employment.reindex(index_cols, axis='columns')
@@ -378,21 +414,14 @@ class EFSAttractionGenerator:
                       % (str(year), total_emp))
             print('\n')
 
-        # Convert back to MSOA codes for output and attractions
-        employment = du.convert_msoa_naming(
-            employment,
-            msoa_col_name=internal_zone_col,
-            msoa_path=msoa_conversion_path,
-            to='string'
-        )
-
         # Write the produced employment to file
         if out_path is None:
             print("WARNING! No output path given. "
                   "Not writing employment to file.")
         else:
             print("Writing employment to file...")
-            employment.to_csv(os.path.join(out_path, EMPLOYMENT_OUTPUT_NAME), index=False)
+            path = os.path.join(out_path, consts.EMP_FNAME % zoning_system)
+            employment.to_csv(path, index=False)
 
         # ## CREATE ATTRACTIONS ## #
         # Index by as much segmentation as possible
@@ -425,36 +454,43 @@ class EFSAttractionGenerator:
             nhb_att = nhb_att.reindex(reindex_cols, axis='columns')
             nhb_att = nhb_att.groupby(group_cols).sum().reset_index()
 
+        # Align purpose and mode columns to standards
+        p_col = 'p'
+        m_col = 'm'
+        columns = {a_weights_p_col: p_col, mode_split_m_col: m_col}
+        attractions = attractions.rename(columns=columns)
+        nhb_att = nhb_att.rename(columns=columns)
+
         # Write attractions to file
         if out_path is None:
             print("WARNING! No output path given. "
                   "Not writing attractions to file.")
         else:
             print("Writing attractions to file...")
-            fname = 'MSOA_attractions.csv'
-            nhb_fname = 'MSOA_nhb_attractions.csv'
+            fname = consts.ATTRS_FNAME % (zoning_system, 'raw_hb')
+            nhb_fname = consts.ATTRS_FNAME % (zoning_system, 'raw_nhb')
             attractions.to_csv(os.path.join(out_path, fname), index=False)
             nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 
         # TODO: functionalise conversion to old efs
         # ## CONVERT TO OLD EFS FORMAT ## #
         # Make sure columns are the correct data type
-        attractions[a_weights_p_col] = attractions[a_weights_p_col].astype(int)
-        attractions[mode_split_m_col] = attractions[mode_split_m_col].astype(int)
+        attractions[p_col] = attractions[p_col].astype(int)
+        attractions[m_col] = attractions[m_col].astype(int)
         attractions.columns = attractions.columns.astype(str)
 
-        nhb_att[a_weights_p_col] = nhb_att[a_weights_p_col].astype(int)
-        nhb_att[mode_split_m_col] = nhb_att[mode_split_m_col].astype(int)
+        nhb_att[p_col] = nhb_att[p_col].astype(int)
+        nhb_att[m_col] = nhb_att[m_col].astype(int)
         nhb_att.columns = nhb_att.columns.astype(str)
 
         # Extract just the needed mode
-        mask = attractions[mode_split_m_col].isin(m_needed)
+        mask = attractions[m_col].isin(m_needed)
         attractions = attractions[mask]
-        attractions = attractions.drop(mode_split_m_col, axis='columns')
+        attractions = attractions.drop(m_col, axis='columns')
 
-        mask = nhb_att[mode_split_m_col].isin(m_needed)
+        mask = nhb_att[m_col].isin(m_needed)
         nhb_att = nhb_att[mask]
-        nhb_att = nhb_att.drop(mode_split_m_col, axis='columns')
+        nhb_att = nhb_att.drop(m_col, axis='columns')
 
         # Rename columns so output of this function call is the same
         # as it was before the re-write
@@ -472,22 +508,13 @@ class EFSAttractionGenerator:
             to='int'
         )
 
-        attractions = attractions.rename(
-            columns={
-                internal_zone_col: external_zone_col,
-                a_weights_p_col: 'purpose_id',
-            }
-        )
+        # Re-align col names for returning
+        columns = {internal_zone_col: external_zone_col}
+        attractions = attractions.rename(columns=columns)
+        nhb_att = nhb_att.rename(columns=columns)
 
-        nhb_att = nhb_att.rename(
-            columns={
-                internal_zone_col: external_zone_col,
-                a_weights_p_col: 'purpose_id',
-            }
-        )
-
-        fname = 'MSOA_aggregated_attractions.csv'
-        nhb_fname = 'MSOA_nhb_aggregated_attractions.csv'
+        fname = consts.ATTRS_FNAME % (zoning_system, 'hb')
+        nhb_fname = consts.ATTRS_FNAME % (zoning_system, 'nhb')
         attractions.to_csv(os.path.join(out_path, fname), index=False)
         nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 
@@ -988,7 +1015,8 @@ def split_by_soc(df: pd.DataFrame,
                  zone_col: str = 'msoa_zone_id',
                  p_col: str = 'p',
                  unique_col: str = 'trips',
-                 soc_col: str = 'soc'
+                 soc_col: str = 'soc',
+                 split_cols: str = None
                  ) -> pd.DataFrame:
     """
     Splits df purposes by the soc_weights given.
@@ -1018,6 +1046,10 @@ def split_by_soc(df: pd.DataFrame,
     soc_col:
         The name to give to the added soc column in the return dataframe.
 
+    split_cols:
+        Which columns are being split by soc. If left as None, only zone_col
+        is used.
+
     Returns
     -------
     soc_split_df:
@@ -1026,11 +1058,19 @@ def split_by_soc(df: pd.DataFrame,
     """
     # Init
     soc_cats = list(soc_weights.columns)
+    split_cols = [zone_col] if split_cols is None else split_cols
 
     # Figure out which rows need splitting
-    mask = (df[p_col].isin(consts.SOC_P))
-    split_df = df[mask].copy()
-    retain_df = df[~mask].copy()
+    if p_col in df:
+        mask = (df[p_col].isin(consts.SOC_P))
+        split_df = df[mask].copy()
+        retain_df = df[~mask].copy()
+        id_cols = split_cols + [p_col]
+    else:
+        # Split on all data
+        split_df = df.copy()
+        retain_df = None
+        id_cols = split_cols
 
     # Split by soc weights
     split_df = pd.merge(
@@ -1038,17 +1078,22 @@ def split_by_soc(df: pd.DataFrame,
         soc_weights,
         on=zone_col
     )
+
     for soc in soc_cats:
         split_df[soc] *= split_df[unique_col]
 
     # Tidy up the split dataframe ready to re-merge
     split_df = split_df.drop(unique_col, axis='columns')
     split_df = split_df.melt(
-        id_vars=[zone_col, p_col],
+        id_vars=id_cols,
         value_vars=soc_cats,
         var_name=soc_col,
         value_name=unique_col,
     )
+
+    # Don't need to stick back together
+    if retain_df is None:
+        return split_df
 
     # Add the soc col to the retained values to match
     retain_df[soc_col] = 0

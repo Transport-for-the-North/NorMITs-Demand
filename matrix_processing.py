@@ -1546,18 +1546,17 @@ def build_24hr_vdm_mats(
             pd.DataFrame(splitting_factors).to_csv(out_path, index=False)
 
 
-def build_24hr_mats(
-    import_dir: str,
-    export_dir: str,
-    matrix_format: str,
-    years_needed: List[str],
-    p_needed: List[int] = consts.ALL_HB_P,
-    m_needed: List[int] = consts.MODES_NEEDED,
-    soc_needed: List[int] = None,
-    ns_needed: List[int] = None,
-    ca_needed: List[int] = None,
-    tp_needed: List[int] = consts.TIME_PERIODS,
-) -> None:
+def build_24hr_mats(import_dir: str,
+                    export_dir: str,
+                    matrix_format: str,
+                    years_needed: List[str],
+                    p_needed: List[int] = consts.ALL_HB_P,
+                    m_needed: List[int] = consts.MODES_NEEDED,
+                    soc_needed: List[int] = None,
+                    ns_needed: List[int] = None,
+                    ca_needed: List[int] = None,
+                    tp_needed: List[int] = consts.TIME_PERIODS
+                    ) -> None:
     """
     Compiles time period split matrices int import_dir into 24hr Matrices,
     saving them back to export dir

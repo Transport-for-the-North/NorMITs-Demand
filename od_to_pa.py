@@ -39,7 +39,7 @@ def decompile_od(od_import: str,
         Full path to the pickle file containing the decompile factors to use.
 
     audit:
-        Whether to perform audits to make sure the decompiled matrices are
+        Whether to perform print_audits to make sure the decompiled matrices are
         sufficiently similar to the compiled matrices when reversing the
         process.
 
