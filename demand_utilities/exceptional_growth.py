@@ -762,6 +762,9 @@ def growth_criteria(synth_productions: pd.DataFrame,
 
     synth_prod_base = synth_productions[segments["prod"] + [base_year]]
     synth_attr_base = synth_attractions[segments["attr"] + [base_year]]
+    
+    grown_productions[base_year] = synth_prod_base
+    grown_attractions[base_year] = synth_attr_base
 
     # Calculate separately for each year and combine at the end
     for year in future_years:
@@ -804,7 +807,7 @@ def growth_criteria(synth_productions: pd.DataFrame,
     # Combine forecast vectors
     converted_productions = pd.DataFrame()
     converted_pure_attractions = pd.DataFrame()
-    for year in future_years:
+    for year in grown_productions.keys():
         prod = grown_productions[year][segments["prod"] + [year]]
         attr = grown_attractions[year][segments["attr"] + [year]]
         if converted_productions.empty:

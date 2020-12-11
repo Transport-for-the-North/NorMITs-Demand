@@ -453,7 +453,7 @@ class ExternalForecastSystem:
         population_metric = population_metric.lower()
         minimum_development_certainty = minimum_development_certainty.upper()
         integrate_dlog = dlog_file_pop is not None and dlog_file_emp is not None
-        iter_name = 'iter' + str(iter_num)
+        iter_name = self.iter_name
         model_name = du.get_model_name(modes_needed[0])
 
         year_list = [str(x) for x in [base_year] + future_years]
@@ -685,11 +685,11 @@ class ExternalForecastSystem:
             # households_constraint = self.households_constraint[hh_cols].copy()
 
             emp_constraint = self.emp_constraint.copy()
-            emp_constraint = self.constrainer.convert_constraint_off_base_year(
-                emp_constraint,
-                str(base_year),
-                year_list
-            )
+            # emp_constraint = self.constrainer.convert_constraint_off_base_year(
+            #     emp_constraint,
+            #     str(base_year),
+            #     year_list
+            # )
 
             print("Constraint retrieved!")
             last_time = current_time
@@ -919,11 +919,11 @@ class ExternalForecastSystem:
         # sector level trip rates
         grown_population_path = os.path.join(
             self.exports["productions"],
-            "MSOA_population.csv"
+            consts.POP_FNAME % "MSOA"
         )
         grown_employment_path = os.path.join(
             self.exports["attractions"],
-            "MSOA_employment.csv"
+            consts.EMP_FNAME % "MSOA"
         )
 
         # For testing purposes - use the previously generated trip outputs -
@@ -990,13 +990,13 @@ class ExternalForecastSystem:
          converted_pure_attractions) = eg.growth_criteria(
             synth_productions=converted_productions,
             synth_attractions=converted_pure_attractions,
-            observed_prod_path=production_path,
-            observed_attr_path=attraction_path,
+            observed_prod_path=obs_production_path,
+            observed_attr_path=obs_attraction_path,
             population_path=grown_population_path,
             employment_path=grown_employment_path,
             msoa_lookup_path=msoa_lookup_path,
             segments=growth_criteria_segments,
-            future_years=[str(x) for x in future_years if x != 2050],
+            future_years=[str(x) for x in future_years],
             base_year=str(base_year),
             zone_translator=self.zone_translator,
             zone_translator_args=zone_translator_args,
