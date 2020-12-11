@@ -176,6 +176,7 @@ def translate_matrix(
     level_names = [matrix.columns.name, matrix.index.name]
     # Make sure the matrix is in list format
     if square_format:
+        matrix_total = np.sum(matrix.values)
         matrix = matrix.melt(ignore_index=False, var_name="d")
         matrix.index.name = "o"
         matrix.reset_index(inplace=True)
@@ -185,6 +186,7 @@ def translate_matrix(
         rename = {zone_cols[0]: "o", zone_cols[1]: "d"}
         matrix = matrix.rename(columns=rename)
         splitting_cols = set(original_columns) - set(zone_cols)
+        matrix_total = matrix[splitting_cols].sum()
     zone_cols = ["o", "d"]
 
     # Convert both columns to new zone system
@@ -203,9 +205,19 @@ def translate_matrix(
     # Convert back to input format and reset column/index names
     if square_format:
         matrix = matrix.pivot(zone_cols[0], zone_cols[1], "value")
+        new_total = np.sum(matrix.values)
     else:
         matrix.rename(columns={v: k for k, v in rename.items()}, inplace=True)
         matrix = matrix[original_columns]
+        new_total = matrix[splitting_cols].sum()
     matrix.columns.name = level_names[0]
     matrix.index.name = level_names[1]
+
+    # Check matrix totals
+    if not np.allclose(matrix_total, new_total, rtol=0, atol=1e-15):
+        diff = abs(matrix_total - new_total)
+        raise ValueError(
+            "The matrix total after translation differs "
+            f"from input matrix by: {diff:.1E}"
+        )
     return matrix

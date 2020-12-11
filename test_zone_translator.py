@@ -54,6 +54,17 @@ class TestTranslateMatrix:
         test = translate_matrix(mat, lookup, lookup_cols, split_column=split_col)
         assert np.sum(test.values) == np.sum(expected.values)
 
+    def test_incorrect_totals(self):
+        """Test that the correct error is raised if changes matrix total changes. """
+        lookup = self.NORMS_2_NOHAM.copy()
+        lookup["split"] = [0.8, 0.3, 1]
+        with pytest.raises(ValueError) as e:
+            translate_matrix(
+                self.NORMS_MAT, lookup, ["norms", "noham"], split_column="split"
+            )
+        msg = "The matrix total after translation differs from input matrix by: 1.2E+00"
+        assert e.value.args[0] == msg
+
     @staticmethod
     @pytest.mark.parametrize(PARAMETER_STR, PARAMETERS)
     def test_square_matrix(
