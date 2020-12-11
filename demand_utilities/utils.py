@@ -278,7 +278,7 @@ def build_io_paths(
     # Generate import and export paths
     model_home = os.path.join(import_location, demand_dir_name)
     import_home = os.path.join(model_home, "import")
-    input_home = os.path.join(model_home, "inputs", "default")
+    input_home = os.path.join(import_home, "default")
 
     imports = {
         "home": import_home,
