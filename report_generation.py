@@ -2,7 +2,7 @@ import os
 import re
 import json
 from glob import glob
-from typing import List, Union
+from typing import List, Union, Dict
 from itertools import product
 
 import pandas as pd
@@ -17,11 +17,6 @@ import efs_constants as consts
 import external_forecast_system as efs
 
 
-# Define the possible values for trip origin type -
-# homebased or non-homebased
-VALID_TRIP_ORIGIN = ["hb", "nhb"]
-
-
 def matrix_reporting(
     matrix_directory: str,
     output_dir: str,
@@ -29,17 +24,16 @@ def matrix_reporting(
     matrix_format: str,
     segments_needed: dict = {},
     zone_file: str = None,
-    sectors_files: List[str] = None,
+    sectors_files: Dict[str, str] = None,
     zones_name: str = "model",
-    sectors_names: List[str] = ["sector"],
     aggregation_method: str = "sum",
     tld_path: str = None,
     cost_path: str = None,
     overwrite_dir: bool = True,
     collate_years: bool = False,
+    model_name: str = "norms_2015"
 ):
     """
-    TODO: write documentataion
     Options to aggregate any matrix segment.
     Either select the segment names to keep or supply "Agg"
     to keep disaggregated or "Keep" to aggregate this field
@@ -55,17 +49,14 @@ def matrix_reporting(
     success = True
 
     # Check Inputs are valid
-    if trip_origin not in VALID_TRIP_ORIGIN:
+    if trip_origin not in consts.VDM_TRIP_ORIGINS:
         raise ValueError(f"{trip_origin} is not a valid option")
     if matrix_format not in consts.VALID_MATRIX_FORMATS:
         raise ValueError(f"{matrix_format} is not a valid option")
-    if len(sectors_files) != len(sectors_names):
-        raise AttributeError(
-            "Number of sector files must match the number " "of sector names"
-        )
-    for sectors_file in sectors_files:
+    for sectors_file in sectors_files.values():
         if sectors_file is not None and not os.path.isfile(sectors_file):
             raise ValueError(f"{sectors_file} does not exist")
+    sectors_names = list(sectors_files.keys())
 
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
@@ -96,7 +87,7 @@ def matrix_reporting(
     # Aggregate the matrices
     sectored_output_files = []
     overwrite_tld = True
-    for year in tqdm(parsed_segments["years"]):
+    for year in tqdm(parsed_segments["years"], desc="Aggregating by Year"):
         try:
             # TODO add aggregation_method to this function
             output_files = aggregate_matrices(
@@ -145,7 +136,7 @@ def matrix_reporting(
             sr = SectorReporter()
             valid_files = output_files.copy()
             output_files = []
-            for sectors_file, sectors_name in zip(sectors_files, sectors_names):
+            for sectors_name, sectors_file in sectors_files.items():
                 for matrix_file in valid_files:
                     if matrix_file in sectored_output_files:
                         continue
@@ -209,7 +200,7 @@ def generate_gis_report(
 
     # Loop over all required segments and aggregate to a stacked matrix for GIS
     # format
-    for file_base in tqdm(base_files):
+    for file_base in tqdm(base_files, desc="Generating GIS Reports"):
 
         trip_ends = pd.DataFrame()
         matrix = pd.DataFrame()
@@ -325,7 +316,8 @@ def tld_reporting(
     mat_df = du.parse_mat_output(
         matrices, sep="_", mat_type=matrix_type, file_format=".csv", file_name="matrix"
     )
-    for _, mat_desc in tqdm(mat_df.iterrows(), total=mat_df.shape[0]):
+    pbar = tqdm(mat_df.iterrows(), total=mat_df.shape[0])
+    for _, mat_desc in pbar:
         mat_dict = mat_desc.to_dict()
 
         # Extract trip matrix info for each file
@@ -393,11 +385,16 @@ def tld_reporting(
 
         matrix = matrix.drop(list(matrix)[0], axis=1).values
 
-        # This bit matches the shape to the NORMS cost zones
-        # TODO see why this is needed - zoning mismatch
-        fill_shape = 1246
-        pad_matrix = np.zeros((fill_shape, fill_shape))
-        pad_matrix[: matrix.shape[0], : matrix.shape[1]] = matrix
+        # This matches the shape to the NORMS cost zones
+        if costs.shape != matrix.shape:
+            pbar.set_description(
+                "WARNING - Padded matrix to match costs shape "
+                + str(matrix.shape) + " -> " + str(costs.shape)
+            )
+            pad_matrix = np.zeros(costs.shape)
+            pad_matrix[: matrix.shape[0], : matrix.shape[1]] = matrix
+        else:
+            pad_matrix = matrix
 
         # Get trip length by band
 
@@ -491,23 +488,30 @@ def load_report_params(param_file: str) -> None:
     param_file : str
         Path to the options file - json format.
         Should contain the required keys:
-         - "matrix_directories"
-         - "output_dir"
-         - "matrix_format"
-         - "trip_origin"
+         - "matrix_directories" - dictionary containing a key of either pa or 
+            od, with the corresponding key in the exports dictionary from the 
+            EFS
+         - "output_dir" - Subdirectory within EFS exports["reports"] that the
+            reports will be saved to
+         - "matrix_format" - One of "pa" or "od"
+         - "trip_origin" - "One of "hb" or "nhb"
          - "segments_needed": {
-             "years"
-             "p"
-             "m"
-             "soc"
-             "ns"
-             "ca"
-             "tp"
-             }
-         - "zones_file"
-         - "sectors_file"
-         - "cost_path"
-         - "tld_path"
+             "years": List of years to keep
+             "p": List of purpose ids to keep
+             "m": List of mode ids to keep
+             "soc": List of soc to keep
+             "ns": List of ns to keep
+             "ca": List of ca to keep
+             "tp": List of tp to keep
+             } - Any segment can be "Keep" or "Agg" to either keep disaggregated
+                or to aggregate all of that segment together
+         - "zones_file" - Dummy zones fileto supply to sector reporter
+         - "sectors_files" - List of sector files within 
+            imports["zone_translation"] that is used as the output zone systems
+         - "cost_path" - Path within imports["home"] that contains the relevant
+            costs for the matrices.
+         - "tld_path" - Path within imports["home"] that contains the trip 
+            length bands.
 
     Raises
     ------
@@ -524,7 +528,77 @@ def load_report_params(param_file: str) -> None:
     return params
 
 
-def main(param_file, imports, exports):
+def check_params(parameters: dict,
+                 imports: dict,
+                 exports: dict
+                 ):
+
+    segments = [
+        "years",
+        "p",
+        "m",
+        "soc",
+        "ns",
+        "ca",
+        "tp"
+    ]
+
+    # 
+    required_keys = {
+        "matrix_directories": ["keys", ["pa", "od"], 
+                               "values", ["pa", "od", "pa_24", "od_24"]],
+        "trip_origin": ["str", consts.VDM_TRIP_ORIGINS],
+        "matrix_format": ["str", consts.VALID_MATRIX_FORMATS],
+        "segments_needed": ["keys", segments, 
+                            "values", ["Keep", "Agg"]],
+        "output_dir": ["str", []],
+        "zones_file": ["path", imports["zoning"]],
+        "tld_path": ["path", imports["home"]],
+        "cost_path": ["path", imports["home"]],
+        "overwrite_outputs": ["bool", []],
+        "collate_years": ["bool", []],
+        "sectors_names": ["str", []],
+        "sectors_files": ["path", imports["zone_translation"]]
+    }
+    
+    for param, check in required_keys.items():
+        if param not in parameters:
+            raise ValueError(f"{param} not in the parameter file "
+                             f"- should be {check[0]}")
+        param_type = check[0]
+        if param_type == "str" and len(check[1]) > 0:
+            value = parameters[param]
+            if value not in check[1]:
+                raise ValueError(f"Invalid value for {param}: {value}")
+        elif param_type == "path":
+            paths = parameters[param]
+            if not isinstance(paths, list):
+                paths = [paths]
+            for path in paths:
+                value = os.path.join(check[1], path)
+                if not os.path.exists(value):
+                    raise ValueError(f"Invalid path for {param}: {value}")
+        elif param_type == "keys":
+            valid_keys = check[1]
+            valid_values = check[3]
+            param_keys = list(parameters[param].keys())
+            param_values = list(parameters[param].values())
+            if not all([key in valid_keys for key in param_keys]):
+                print(f"{param} must contain only: ", valid_keys)
+                raise ValueError(f"Invalid value for {param}")
+            if not all([value in valid_values or isinstance(value, list)
+                        for value in param_values]):
+                print(f"{param} must contain only: ", valid_values)
+                raise ValueError(f"Invalid value for {param}")
+
+    print("Parameters OK")
+            
+
+
+def main(param_file: str,
+         imports: dict,
+         exports: dict,
+         model_name: str):
     """Reads in a parameter file (JSON) and creates the defined matrix
     summaries
 
@@ -534,17 +608,19 @@ def main(param_file, imports, exports):
         Path to the parameter JSON file. See load_report_params
         for requirements
     """
-
     params = load_report_params(param_file)
+
+    check_params(params, imports, exports)
 
     errors = []
     overwrite = True
 
     output_dir = os.path.join(exports["reports"], params["output_dir"])
     zones_file = os.path.join(imports["zoning"], params["zones_file"])
-    sectors_files = [
-        os.path.join(imports["zone_translation"], x) for x in params["sectors_files"]
-    ]
+    sectors_files = {
+        name: os.path.join(imports["zone_translation"], x)
+        for name, x in zip(params["sectors_names"], params["sectors_files"])
+    }
     tld_path = os.path.join(imports["home"], params["tld_path"])
     cost_path = os.path.join(imports["home"], params["cost_path"])
 
@@ -566,13 +642,13 @@ def main(param_file, imports, exports):
             segments_needed=params["segments_needed"],
             zone_file=zones_file,
             zones_name=params["zones_name"],
-            sectors_names=params["sectors_names"],
             sectors_files=sectors_files,
             aggregation_method="sum",
             overwrite_dir=overwrite,
             tld_path=tld_path,
             cost_path=cost_path,
             collate_years=collate_years,
+            model_name=model_name
         )
 
         if not successful:
@@ -596,21 +672,23 @@ if __name__ == "__main__":
 
     efs_main = efs.ExternalForecastSystem(
         model_name=model_name,
-        import_location=import_location,
-        output_location=output_location,
+        import_home=import_location,
+        export_home=output_location,
         iter_num=iter_num,
     )
 
     imports = efs_main.imports
     exports = efs_main.exports
 
-    pa_params = os.path.join(imports["default_inputs"], "reports", "params", "pa.json")
-    main(pa_params, imports, exports)
+    pa_params = os.path.join(
+        imports["default_inputs"], "reports", "params", "pa.json"
+    )
+    main(pa_params, imports, exports, model_name)
     tp_pa_params = os.path.join(
         imports["default_inputs"], "reports", "params", "tp_pa.json"
     )
-    main(tp_pa_params)
+    main(tp_pa_params, imports, exports, model_name)
     nhb_params = os.path.join(
         imports["default_inputs"], "reports", "params", "nhb_pa.json"
     )
-    main(nhb_params)
+    main(nhb_params, imports, exports, model_name)
