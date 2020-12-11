@@ -354,17 +354,35 @@ class EFSAttractionGenerator:
         # ## CONSTRAIN POPULATION ## #
         if constraint_required[3] and (constraint_source != "model grown base"):
             print("Performing the first constraint on employment...")
-            employment = self.efs_constrainer.run(
+            print("Pre Constraint")
+            print(employment[future_years].sum())
+            constraint_segments = [col for col in segmentation_cols
+                                  if col in employment_constraint]
+            if "ns" in constraint_segments:
+                constraint_segments.remove("ns")
+            employment = dlog.constrain_forecast(
                 employment,
-                constraint_method,
-                constraint_area,
-                constraint_on,
                 employment_constraint,
-                base_year,
-                all_years,
                 designated_area,
-                internal_zone_col
+                base_year,
+                future_years,
+                internal_zone_col,
+                msoa_path=msoa_conversion_path,
+                segment_cols=constraint_segments
             )
+            print("Post Constraint")
+            print(employment[future_years].sum())
+            # employment = self.efs_constrainer.run(
+            #     employment,
+            #     constraint_method,
+            #     constraint_area,
+            #     constraint_on,
+            #     employment_constraint,
+            #     base_year,
+            #     all_years,
+            #     designated_area,
+            #     internal_zone_col
+            # )
         elif constraint_source == "model grown base":
             print("Generating model grown base constraint for use on "
                   "development constraints...")
@@ -373,6 +391,9 @@ class EFSAttractionGenerator:
         # ## INTEGRATE D-LOG ## #
         if integrate_d_log:
             print("Integrating the development log...")
+            dlog_segments = ["employment_cat"]
+            if "soc" in employment_growth:
+                dlog_segments.append("soc")
             employment, hg_zones = dlog.apply_d_log(
                 pre_dlog_df=employment,
                 base_year=base_year,
@@ -381,9 +402,10 @@ class EFSAttractionGenerator:
                 constraints=employment_constraint,
                 constraints_zone_equivalence=designated_area,
                 dlog_conversion_factor=1.0,
-                segment_cols=["employment_cat"],
+                msoa_zones=msoa_conversion_path,
+                segment_cols=dlog_segments,
                 dlog_data_column_key="employees",
-                perform_constraint=constraint_required[4],
+                perform_constraint=False,
                 audit_location=out_path
             )
             # Save High Growth (Exceptional) zones to file
@@ -391,23 +413,40 @@ class EFSAttractionGenerator:
                 os.path.join(out_path, "exceptional_zones.csv"),
                 index=False
             )
-        # Post D-Log constraint is done when applying the dlog
-        constraint_required[4] = False
 
         # ## POST D-LOG CONSTRAINT ## #
         if constraint_required[4]:
             print("Performing the post-development log constraint on employment...")
-            employment = self.efs_constrainer.run(
+            print("Pre Constraint")
+            print(employment[future_years].sum())
+            constraint_segments = [col for col in segmentation_cols
+                                  if col in employment_constraint]
+            if "ns" in constraint_segments:
+                constraint_segments.remove("ns")
+            employment = dlog.constrain_forecast(
                 employment,
-                constraint_method,
-                constraint_area,
-                constraint_on,
                 employment_constraint,
-                base_year,
-                all_years,
                 designated_area,
-                internal_zone_col
+                base_year,
+                future_years,
+                internal_zone_col,
+                msoa_path=msoa_conversion_path,
+                segment_cols=constraint_segments
             )
+            print("Post Constraint")
+            print(employment[future_years].sum())
+            raise NotImplementedError("Finished Constraint Test")
+            # employment = self.efs_constrainer.run(
+            #     employment,
+            #     constraint_method,
+            #     constraint_area,
+            #     constraint_on,
+            #     employment_constraint,
+            #     base_year,
+            #     all_years,
+            #     designated_area,
+            #     internal_zone_col
+            # )
 
         # Reindex and sum
         # Removes soc splits - attractions weights can't cope

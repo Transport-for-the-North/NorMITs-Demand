@@ -1,5 +1,6 @@
 
 import os
+from tqdm import tqdm
 
 from typing import List, Tuple
 
@@ -253,7 +254,9 @@ def constrain_post_dlog(df: pd.DataFrame,
                         la_equivalence: pd.DataFrame,
                         base_year: str,
                         year: str,
-                        msoa_column: str
+                        msoa_column: str,
+                        segment_cols: List[str],
+                        grouping_column: str = "grouping_id"
                         ):
     """Perform a constraint on the post d-log data. Constraint is on the 
     total growth at sector level.
@@ -284,15 +287,17 @@ def constrain_post_dlog(df: pd.DataFrame,
         The constrained dataframe
     """
 
+    grouping_columns = [grouping_column] + segment_cols
+
     # Calculate pre-constraint sector growth
     df["growth"] = (
         df[year]
         / df[base_year]
     )
     df["sector_growth"] = (
-        df.groupby("sector_id")[year].transform("sum")
+        df.groupby(grouping_columns)[year].transform("sum")
         /
-        df.groupby("sector_id")[base_year].transform("sum")
+        df.groupby(grouping_columns)[base_year].transform("sum")
     )
     # Calculate the constraint growth
     pop_constraint = constraint.copy()
@@ -300,20 +305,25 @@ def constrain_post_dlog(df: pd.DataFrame,
         la_equivalence,
         on=msoa_column,
         how="left"
-    )[[msoa_column, "grouping_id", base_year, year]]
+    )[[msoa_column] + grouping_columns + [base_year, year]]
 
     # Keep grouping_id as index for mapping later
     pop_constraint = pop_constraint.groupby(
-        "grouping_id"
+        grouping_columns,
+        as_index=False
     )[[base_year, year]].sum()
 
     pop_constraint["constraint"] = (
         pop_constraint[year]
         / pop_constraint[base_year]
     )
-    # Merge to the DLOG data
-    df["constraint"] = df["sector_id"].map(
-        pop_constraint["constraint"]
+    pop_constraint = pop_constraint[grouping_columns + ["constraint"]]
+    # Merge to the df data
+    df = pd.merge(
+        df,
+        pop_constraint,
+        on=grouping_columns,
+        how="left"
     )
     # Adjust segment growth factors
     df["growth"] *= (
@@ -336,10 +346,34 @@ def constrain_forecast(pre_constraint_df: pd.DataFrame,
                        constraint_zone_equivalence: pd.DataFrame,
                        base_year: str,
                        future_years: List[str],
-                       zone_column: str
+                       zone_column: str,
+                       msoa_path: str = None,
+                       segment_cols: List[str] = None
                        ) -> pd.DataFrame:
 
     df = pre_constraint_df.copy()
+    constraint = constraint_df.copy()
+    constraint_seg = segment_cols or []
+
+    if msoa_path is not None:
+        df = du.convert_msoa_naming(
+            df,
+            msoa_col_name=zone_column,
+            msoa_path=msoa_path,
+            to='int'
+        )
+        constraint = du.convert_msoa_naming(
+            constraint,
+            msoa_col_name=zone_column,
+            msoa_path=msoa_path,
+            to='int'
+        )
+
+    print("Input Dataframe")
+    print(df)
+    
+    print("Constraint")
+    print(constraint)
 
     sector_equivalence = constraint_zone_equivalence.copy()
     sector_equivalence.rename(
@@ -348,26 +382,36 @@ def constrain_forecast(pre_constraint_df: pd.DataFrame,
         inplace=True
     )
     sector_equivalence = sector_equivalence.set_index(
-        "model_zone_id"
+        zone_column
     )["grouping_id"]
-    df["sector_id"] = df[zone_column].map(sector_equivalence)
+    df["grouping_id"] = df[zone_column].map(sector_equivalence)
 
-    for year in future_years:
+    for year in tqdm(future_years, desc="Constraining by year"):
         year_df = df.drop(
             [col for col in future_years if col != year],
             axis=1
         )
         year_constrained = constrain_post_dlog(
             year_df,
-            constraint_df,
+            constraint,
             sector_equivalence.reset_index(),
             base_year,
             year,
-            zone_column
+            zone_column,
+            constraint_seg,
+            grouping_column="grouping_id"
         )
 
-        col = f"{year}_constrained"
-        df[col] = year_constrained[year]
+        df[year] = year_constrained[year]
+
+    # Copnvert back to MSOA codes
+    if msoa_path is not None:
+        df = du.convert_msoa_naming(
+            df,
+            msoa_col_name=zone_column,
+            msoa_path=msoa_path,
+            to="string"
+        )
 
     return df
 
@@ -423,6 +467,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
                 segment_groups: List[str] = None,
                 dlog_conversion_factor: float = 1.0,
                 msoa_column: str = "msoa_zone_id",
+                msoa_zones: str = None,
                 min_growth_limit: float = 0.25,
                 dlog_data_column_key: str = "population",
                 perform_constraint: bool = True,
@@ -450,6 +495,13 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     post_dlog_df = pre_dlog_df.copy()[
         [msoa_column, base_year] + segment_cols + future_years
     ]
+    if msoa_zones is not None:
+        post_dlog_df = du.convert_msoa_naming(
+            post_dlog_df,
+            msoa_col_name=msoa_column,
+            msoa_path=msoa_zones,
+            to='int'
+        )
     # If we are applying to the employment data - remove the totals category
     # (will be added back in afterwards)
     if "employment_cat" in segment_cols:
@@ -516,7 +568,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     # May be faster to just get the first entry for each MSOA as the factors
     # are identical
     metric_columns = [base_year] + future_years
-    dlog_additions = pre_dlog_df.groupby(msoa_column)[metric_columns].sum()
+    dlog_additions = post_dlog_df.groupby(msoa_column)[metric_columns].sum()
 
     # Calculate a new column with the estimated new households for each year
     for year in future_years:
@@ -617,7 +669,8 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
                 la_equivalence=sector_equivalence,
                 base_year=base_year,
                 year=year,
-                msoa_column=msoa_column
+                msoa_column=msoa_column,
+                segment_cols=segment_cols
             )
             print(f"Post constraint total = {post_dlog_df[year].sum()}")
 
@@ -648,7 +701,9 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     # back in
     if "employment_cat" in segment_cols:
         # Calculate the totals for each zone
-        emp_cat1 = post_dlog_df.groupby(msoa_column, as_index=False)[
+        group_cols = [msoa_column] + [seg for seg in segment_cols
+                                      if seg != "employment_cat"]
+        emp_cat1 = post_dlog_df.groupby(group_cols, as_index=False)[
             [base_year] + future_years
         ].sum()
         emp_cat1["employment_cat"] = "E01"
@@ -658,6 +713,15 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
                                  inplace=True)
         post_dlog_df.reset_index(drop=True, inplace=True)
 
+
+    # Convert back to string - as expected by the next steps
+    if msoa_zones is not None:
+        post_dlog_df = du.convert_msoa_naming(
+            post_dlog_df,
+            msoa_col_name=msoa_column,
+            msoa_path=msoa_zones,
+            to="string"
+        )
 
     if audit_outputs:
         # Save outputs for sense checks

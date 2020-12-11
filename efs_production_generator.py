@@ -345,17 +345,22 @@ class EFSProductionGenerator:
         # ## CONSTRAIN POPULATION ## #
         if constraint_required[0] and (constraint_source != "model grown base"):
             print("Performing the first constraint on population...")
-            population = self.efs_constrainer.run(
+            print("Pre Constraint")
+            print(population[future_years].sum())
+            constraint_segments = [col for col in segmentation_cols
+                                  if col in population_constraint]
+            population = dlog.constrain_forecast(
                 population,
-                constraint_method,
-                constraint_area,
-                constraint_on,
                 population_constraint,
-                base_year,
-                all_years,
                 designated_area,
-                internal_zone_col
+                base_year,
+                future_years,
+                internal_zone_col,
+                msoa_path=msoa_conversion_path,
+                segment_cols=constraint_segments
             )
+            print("Post Constraint")
+            print(population[future_years].sum())
         elif constraint_source == "model grown base":
             print("Generating model grown base constraint for use on "
                   "development constraints...")
@@ -364,6 +369,11 @@ class EFSProductionGenerator:
         # ## INTEGRATE D-LOG ## #
         if integrate_d_log:
             print("Integrating the development log...")
+            # Remove the columns not used to split the dlog ndata
+            dlog_segmentation_groups = [
+                col for col in segmentation_cols
+                if col not in ["area_type", "traveller_type"]
+            ]
             population, hg_zones = dlog.apply_d_log(
                 pre_dlog_df=population,
                 base_year=base_year,
@@ -372,10 +382,11 @@ class EFSProductionGenerator:
                 constraints=population_constraint,
                 constraints_zone_equivalence=designated_area,
                 dlog_conversion_factor=1.0,
-                segment_cols=["area_type", "traveller_type", "soc", "ns", "ca"],
-                segment_groups=["soc", "ns", "ca"],
+                msoa_zones=msoa_conversion_path,
+                segment_cols=segmentation_cols,
+                segment_groups=dlog_segmentation_groups,
                 dlog_data_column_key="population",
-                perform_constraint=constraint_required[1],
+                perform_constraint=False,
                 audit_location=out_path
             )
             # Save High Growth (Exceptional) zones to file
@@ -383,24 +394,37 @@ class EFSProductionGenerator:
                 os.path.join(out_path, "exceptional_zones.csv"),
                 index=False
             )
-            
-        # Post D-Log constraint is done when applying the dlog
-        constraint_required[1] = False
 
         # ## POST D-LOG CONSTRAINT ## #
         if constraint_required[1]:
             print("Performing the post-development log constraint on population...")
-            population = self.efs_constrainer.run(
+            print("Pre Constraint")
+            print(population[future_years].sum())
+            constraint_segments = [col for col in segmentation_cols
+                                  if col in population_constraint]
+            population = dlog.constrain_forecast(
                 population,
-                constraint_method,
-                constraint_area,
-                constraint_on,
                 population_constraint,
-                base_year,
-                all_years,
                 designated_area,
-                internal_zone_col
+                base_year,
+                future_years,
+                internal_zone_col,
+                msoa_path=msoa_conversion_path,
+                segment_cols=constraint_segments
             )
+            print("Post Constraint")
+            print(population[future_years].sum())
+            # population = self.efs_constrainer.run(
+            #     population,
+            #     constraint_method,
+            #     constraint_area,
+            #     constraint_on,
+            #     population_constraint,
+            #     base_year,
+            #     all_years,
+            #     designated_area,
+            #     internal_zone_col
+            # )
 
         # Reindex and sum
         group_cols = [internal_zone_col] + segmentation_cols
