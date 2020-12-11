@@ -8,7 +8,7 @@
 import re
 import time
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 # Third party imports
 import pandas as pd
@@ -78,21 +78,9 @@ class PopEmpComparator:
             If the data_type parameter isn't 'population' or 'employment' or the base_year
             isn't found as a column in the output csv.
         """
-        # Function to provide information on reading inputs
-        def read_print(csv, **kwargs):
-            start = time.perf_counter()
-            print(f'\tReading "{csv}"', end="")
-            df = du.safe_read_csv(csv, kwargs)
-            print(f" - Done in {time.perf_counter() - start:,.1f}s")
-            return df
-
-        # Check data_type is allowed and initialise variables for that type
+        # Check data_type is allowed
         self.data_type = data_type.lower()
-        if self.data_type == "population":
-            base_yr_col = "base_year_population"
-        elif self.data_type == "employment":
-            base_yr_col = "base_year_workers"
-        else:
+        if self.data_type not in ("population", "employment"):
             raise ValueError(
                 'data_type parameter should be "population" or "employment" '
                 f'not "{data_type}"'
@@ -100,9 +88,7 @@ class PopEmpComparator:
         print(f"Initialising {self.data_type.capitalize()} comparisons:")
 
         # Read the output data and extract years columns
-        self.output = read_print(output_csv)
-        pat = re.compile(r"\d{4}")
-        self.years = [i for i in self.output.columns if pat.match(i.strip())]
+        self.output, self.years = self._read_output(output_csv)
         # Check base year is present in output
         self.base_year = base_year
         if str(self.base_year) not in self.years:
@@ -112,17 +98,8 @@ class PopEmpComparator:
             )
 
         # Read the required columns for input csvs
-        self.input_data = read_print(input_csv, skipinitialspace=True)
-        self.input_data.rename(columns={base_yr_col: str(self.base_year)}, inplace=True)
-        cols = [self.ZONE_COL, *self.years]
-        self.growth_data = read_print(growth_csv, skipinitialspace=True, usecols=cols)
-        self.constraint_data = read_print(
-            constraint_csv, skipinitialspace=True, usecols=cols
-        )
-
-        # Normalise the growth data against the base year
-        self.growth_data[self.years] = self.growth_data[self.years].div(
-            self.growth_data[str(self.base_year)], axis=0
+        self.input_data, self.constraint_data, self.growth_data = self._read_inputs(
+            input_csv, constraint_csv, growth_csv
         )
 
         # Create dictionary of sector reporter parameters
@@ -131,6 +108,89 @@ class PopEmpComparator:
             "sector_system_name": str(sector_system_name),
             "zone_system_name": "msoa",
         }
+
+    @staticmethod
+    def _read_print(path: Path, **kwargs) -> pd.DataFrame:
+        """Reads given CSV file and outputs time taken.
+
+        Parameters
+        ----------
+        path : Path
+            Path to the CSV file to read.
+        kwargs :
+            Keyword arguments to pass to `du.safe_read_csv`.
+
+        Returns
+        -------
+        pd.DataFrame
+            The data read from the CSV.
+        """
+        start = time.perf_counter()
+        print(f'\tReading "{path}"', end="")
+        df = du.safe_read_csv(path, **kwargs)
+        print(f" - Done in {time.perf_counter() - start:,.1f}s")
+        return df
+
+    def _read_output(self, output_csv: str) -> Tuple[pd.DataFrame, List[str]]:
+        """Reads the output CSV file and gets the year columns present.
+
+        Parameters
+        ----------
+        output_csv : str
+            Path to the output CSV file.
+
+        Returns
+        -------
+        pd.DataFrame
+            The output data.
+        List[str]
+            List of the year columns present in the output.
+        """
+        output = self._read_print(output_csv)
+        pat = re.compile(r"\d{4}")
+        years = [i for i in output.columns if pat.match(i.strip())]
+        return output, years
+
+    def _read_inputs(
+        self, input_csv: str, constraint_csv: str, growth_csv: str
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """Reads the input, constraint and growth CSV files.
+
+        Performs some checks on the inputs and normalises the growth.
+
+        Parameters
+        ----------
+        input_csv : str
+            Path to the input CSV file.
+        constraint_csv : str
+            Path to the constraint CSV file.
+        growth_csv : str
+            Path to the growth CSV file.
+
+        Returns
+        -------
+        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+            The input, constraint and growth data from the
+            given files.
+        """
+        if self.data_type == "population":
+            base_yr_col = "base_year_population"
+        else:
+            base_yr_col = "base_year_workers"
+        input_data = self._read_print(input_csv, skipinitialspace=True)
+        input_data.rename(columns={base_yr_col: str(self.base_year)}, inplace=True)
+
+        cols = [self.ZONE_COL, *self.years]
+        constraint_data = self._read_print(
+            constraint_csv, skipinitialspace=True, usecols=cols
+        )
+
+        growth_data = self._read_print(growth_csv, skipinitialspace=True, usecols=cols)
+        # Normalise the growth data against the base year
+        growth_data[self.years] = growth_data[self.years].div(
+            growth_data[str(self.base_year)], axis=0
+        )
+        return input_data, constraint_data, growth_data
 
     def compare_totals(self) -> pd.DataFrame:
         """Compares the input and output column totals and produces a summary of the differences.
@@ -424,7 +484,6 @@ class PopEmpComparator:
             f"\tDone in {time.perf_counter()-start:.0f}s",
             sep="\n",
         )
-        return
 
 
 ##### FUNCTIONS #####
