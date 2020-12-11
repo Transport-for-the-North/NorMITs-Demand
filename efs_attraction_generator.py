@@ -26,14 +26,40 @@ import demand_utilities.utils as du
 
 
 class EFSAttractionGenerator:
-    
+
     def __init__(self,
-                 tag_certainty_bounds=consts.TAG_CERTAINTY_BOUNDS):
+                 model_name: str,
+                 seg_level: str = 'tfn',
+                 zoning_system: str = 'msoa',
+                 tag_certainty_bounds=consts.TAG_CERTAINTY_BOUNDS
+                 ):
         """
         #TODO
         """
+        # Validate inputs
+        seg_level = du.validate_seg_level(seg_level)
+        model_name = du.validate_model_name(model_name)
+        zoning_system = du.validate_zoning_system(zoning_system)
+
+        # Assign
         self.efs_constrainer = ForecastConstrainer()
         self.tag_certainty_bounds = tag_certainty_bounds
+
+        self.model_name = model_name
+
+        self.zoning_system = zoning_system
+        self.zone_col = '%s_zone_id' % zoning_system
+
+        # Define the segmentation we're using
+        if seg_level == 'tfn':
+            self.segments = ['p', 'soc']
+            self.return_segments = [self.zone_col] + self.segments
+        else:
+            raise ValueError(
+                "'%s' is a valid segmentation level, but I don't have a way "
+                "of determining which segments to use for it. You should add "
+                "one!" % seg_level
+            )
     
     def run(self,
             base_year: str,
@@ -75,7 +101,6 @@ class EFSAttractionGenerator:
             m_needed: List[int] = consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
-            zoning_system: str = 'msoa',
             no_neg_growth: bool = True,
             employment_infill: float = 0.001,
 
@@ -237,8 +262,8 @@ class EFSAttractionGenerator:
             possible in the input data.
         """
         # Return previously created productions if we can
-        fname = consts.ATTRS_FNAME % (zoning_system, 'hb')
-        nhb_fname = consts.ATTRS_FNAME % (zoning_system, 'nhb')
+        fname = consts.ATTRS_FNAME % (self.zoning_system, 'hb')
+        nhb_fname = consts.ATTRS_FNAME % (self.zoning_system, 'nhb')
         final_output_path = os.path.join(out_path, fname)
         nhb_output_path = os.path.join(out_path, nhb_fname)
 
@@ -250,7 +275,7 @@ class EFSAttractionGenerator:
 
         # Init
         internal_zone_col = 'msoa_zone_id'
-        zoning_system = du.validate_zoning_system(zoning_system)
+        zoning_system = du.validate_zoning_system(self.zoning_system)
         a_weights_p_col = 'purpose'
         mode_split_m_col = 'mode'
         emp_cat_col = 'employment_cat'
@@ -306,8 +331,6 @@ class EFSAttractionGenerator:
         du.print_w_toggle("Base Year Employment: %d" % total_base_year_emp,
                           echo=audits)
 
-        print(base_year_emp)
-
         # ## FUTURE YEAR EMPLOYMENT ## #
         print("Generating future year employment data...")
         # If soc splits in the growth factors, we have a few extra steps
@@ -332,6 +355,10 @@ class EFSAttractionGenerator:
             # Make sure both soc columns are the same format
             base_year_emp['soc'] = base_year_emp['soc'].astype('float').astype('int')
             employment_growth['soc'] = employment_growth['soc'].astype('float').astype('int')
+        else:
+            # We're not using soc, remove it from our segmentations
+            self.segments.remove('soc')
+            self.return_segments.remove('soc')
 
         # Merge on all possible segmentations - not years
         merge_cols = du.intersection(list(base_year_emp), list(employment_growth))
@@ -347,7 +374,7 @@ class EFSAttractionGenerator:
             infill=employment_infill
         )
 
-        # Now need te remove soc splits
+        # Now need te remove soc splits?
         if 'soc' in employment_growth:
             pass
 
@@ -488,6 +515,15 @@ class EFSAttractionGenerator:
         mask = nhb_att[m_col].isin(m_needed)
         nhb_att = nhb_att[mask]
         nhb_att = nhb_att.drop(m_col, axis='columns')
+
+        # Reindex to just the wanted return cols
+        group_cols = self.return_segments
+        index_cols = group_cols.copy() + all_years
+
+        attractions = attractions.reindex(index_cols, axis='columns')
+        attractions = attractions.groupby(group_cols).sum().reset_index()
+        nhb_att = nhb_att.reindex(index_cols, axis='columns')
+        nhb_att = nhb_att.groupby(group_cols).sum().reset_index()
 
         # Rename columns so output of this function call is the same
         # as it was before the re-write

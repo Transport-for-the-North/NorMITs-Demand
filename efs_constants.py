@@ -102,7 +102,7 @@ NHB_PARAMS_DIRNAME = 'nhb_factors'
 
 # HB consts
 PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]
-MODES_NEEDED = [6]
+MODES_NEEDED = [3]
 SOC_NEEDED = [0, 1, 2, 3]
 NS_NEEDED = [1, 2, 3, 4, 5]
 CA_NEEDED = [1, 2]
@@ -126,15 +126,19 @@ TAG_CERTAINTY_BOUNDS = {
 PRODS_FNAME = '%s_%s_productions.csv'
 ATTRS_FNAME = '%s_%s_attractions.csv'
 
+# zone_system
 POP_FNAME = '%s_population.csv'
 EMP_FNAME = '%s_employment.csv'
 
+# ## Zone Translations
+
+# from_zone_system, to_zone_system
+POP_TRANSLATION_FNAME = '%s_%s_pop_weighted_lookup.csv'
+EMP_TRANSLATION_FNAME = '%s_%s_emp_weighted_lookup.csv'
+
+# ## NTEM Controls
 # year
 NTEM_CONTROL_FNAME = 'ntem_pa_ave_wday_%s.csv'
-
-
-NHB_PRODUCTIONS_FNAME = 'nhb_productions.csv'
-
 DEFAULT_LAD_LOOKUP = 'lad_to_msoa.csv'
 
 # TODO: can likely remove lots of EFS_COLUMN_DICTIONARY

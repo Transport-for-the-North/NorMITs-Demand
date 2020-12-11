@@ -492,6 +492,11 @@ def convert_msoa_naming(df: pd.DataFrame,
     column_order = list(df)
     to = to.strip().lower()
 
+    # Validate
+    if msoa_col_name not in df:
+        raise KeyError("Column '%s' not in given dataframe to convert."
+                       % msoa_col_name)
+
     # Rename everything to make sure there are no clashes
     df = df.rename(columns={msoa_col_name: 'df_msoa'})
 
