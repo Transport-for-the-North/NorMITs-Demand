@@ -33,8 +33,6 @@ from demand_utilities import concurrency as conc
 # TODO: Tidy up the no longer needed functions -
 #  Production model was re-written to use TMS method
 
-POPULATION_OUTPUT_NAME = "MSOA_population.csv"
-
 
 class EFSProductionGenerator:
     
@@ -97,7 +95,7 @@ class EFSProductionGenerator:
             out_path: str = None,
             recreate_productions: bool = True,
             population_metric: str = "Population",  # Households, Population
-            ) -> pd.DataFrame:
+            ) -> Tuple[pd.DataFrame, str]:
         """
         Production model for the external forecast system. This has been
         written to align with TMS production generation, with the addition of
@@ -252,6 +250,8 @@ class EFSProductionGenerator:
         Segmented_productions:
             Productions for mode m_needed, segmented by all segments possible
             in the input data.
+        population_output:
+            Path to the population output CSV.
         """
         # Return previously created productions if we can
         fname = consts.PRODS_FNAME % (zoning_system, 'hb')
@@ -406,8 +406,8 @@ class EFSProductionGenerator:
                   "Not writing populations to file.")
         else:
             print("Writing population to file...")
-            path = os.path.join(out_path, consts.POP_FNAME % zoning_system)
-            population.to_csv(path, index=False)
+            population_output = os.path.join(out_path, consts.POP_FNAME % zoning_system)
+            population.to_csv(population_output, index=False)
 
         # ## CREATE PRODUCTIONS ## #
         print("Population generated. Converting to productions...")
@@ -475,7 +475,7 @@ class EFSProductionGenerator:
         path = os.path.join(out_path, fname)
         productions.to_csv(path, index=False)
 
-        return productions
+        return productions, population_output
 
     def grow_population(self,
                         population_values: pd.DataFrame,

@@ -25,9 +25,6 @@ from efs_constrainer import ForecastConstrainer
 import demand_utilities.utils as du
 
 
-EMPLOYMENT_OUTPUT_NAME = "MSOA_employment.csv"
-
-
 class EFSAttractionGenerator:
     
     def __init__(self,
@@ -87,7 +84,7 @@ class EFSAttractionGenerator:
             out_path: str = None,
             recreate_attractions: bool = True,
             aggregate_nhb_tp: bool = True
-            ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+            ) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
         """
         Attraction model for the external forecast system. This has been
         written to align with TMS attraction generation, with the addition of
@@ -238,6 +235,9 @@ class EFSAttractionGenerator:
         segmented_nhb_attractions:
             NHB attractions for mode m_needed, segmented by all segments
             possible in the input data.
+        
+        employment_output: str
+            Path to the employment output CSV.
         """
         # Return previously created productions if we can
         fname = consts.ATTRS_FNAME % (zoning_system, 'hb')
@@ -420,8 +420,8 @@ class EFSAttractionGenerator:
                   "Not writing employment to file.")
         else:
             print("Writing employment to file...")
-            path = os.path.join(out_path, consts.EMP_FNAME % zoning_system)
-            employment.to_csv(path, index=False)
+            employment_output = os.path.join(out_path, consts.EMP_FNAME % zoning_system)
+            employment.to_csv(employment_output, index=False)
 
         # ## CREATE ATTRACTIONS ## #
         # Index by as much segmentation as possible
@@ -518,7 +518,7 @@ class EFSAttractionGenerator:
         attractions.to_csv(os.path.join(out_path, fname), index=False)
         nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 
-        return attractions, nhb_att
+        return attractions, nhb_att, employment_output
 
     def attraction_generation(self,
                               worker_dataframe: pd.DataFrame,

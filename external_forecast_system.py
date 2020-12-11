@@ -768,7 +768,7 @@ class ExternalForecastSystem:
 
         # ## PRODUCTION GENERATION ## #
         print("Generating productions...")
-        production_trips = self.production_generator.run(
+        production_trips, population_output = self.production_generator.run(
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
             population_growth=pop_growth,
@@ -792,7 +792,7 @@ class ExternalForecastSystem:
         # Compare productions output to inputs
         comparison = PopEmpComparator(
             **self.pop_emp_inputs["population"],
-            output_csv=os.path.join(self.exports["productions"], pm.POPULATION_OUTPUT_NAME),
+            output_csv=population_output,
             data_type="population",
             base_year=str(base_year)
         )
@@ -806,7 +806,7 @@ class ExternalForecastSystem:
 
         # ## ATTRACTION GENERATION ###
         print("Generating attractions...")
-        attraction_dataframe, nhb_att = self.attraction_generator.run(
+        attraction_dataframe, nhb_att, employment_output = self.attraction_generator.run(
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
             employment_growth=emp_growth,
@@ -831,7 +831,7 @@ class ExternalForecastSystem:
         # Compare attractions output to inputs
         comparison = PopEmpComparator(
             **self.pop_emp_inputs["employment"],
-            output_csv=os.path.join(self.exports["attractions"], am.EMPLOYMENT_OUTPUT_NAME),
+            output_csv=employment_output,
             data_type="employment",
             base_year=str(base_year)
         )
