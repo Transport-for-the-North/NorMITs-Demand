@@ -26,6 +26,8 @@ from demand_utilities import utils as du
 # TODO: Tidy up the no longer needed functions -
 #  Production model was re-written to use TMS method
 
+POPULATION_OUTPUT_NAME = "MSOA_population.csv"
+
 
 class EFSProductionGenerator:
     
@@ -398,7 +400,7 @@ class EFSProductionGenerator:
                   "Not writing populations to file.")
         else:
             print("Writing population to file...")
-            population.to_csv(os.path.join(out_path, "MSOA_population.csv"),
+            population.to_csv(os.path.join(out_path, POPULATION_OUTPUT_NAME),
                               index=False)
 
         # ## CREATE PRODUCTIONS ## #

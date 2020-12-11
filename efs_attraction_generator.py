@@ -24,6 +24,9 @@ from efs_constrainer import ForecastConstrainer
 import demand_utilities.utils as du
 
 
+EMPLOYMENT_OUTPUT_NAME = "MSOA_employment.csv"
+
+
 class EFSAttractionGenerator:
     
     def __init__(self,
@@ -389,8 +392,7 @@ class EFSAttractionGenerator:
                   "Not writing employment to file.")
         else:
             print("Writing employment to file...")
-            fname = "MSOA_employment.csv"
-            employment.to_csv(os.path.join(out_path, fname), index=False)
+            employment.to_csv(os.path.join(out_path, EMPLOYMENT_OUTPUT_NAME), index=False)
 
         # ## CREATE ATTRACTIONS ## #
         # Index by as much segmentation as possible

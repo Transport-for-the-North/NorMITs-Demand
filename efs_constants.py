@@ -198,5 +198,7 @@ DEFAULT_PRODUCTION_CONSTRAINTS = [
     False   # final trip based constraint
 ]
 
-
-
+TFN_MSOA_SECTOR_LOOKUPS = {
+    "population": "tfn_sector_msoa_pop_weighted_lookup.csv",
+    "employment": "tfn_sector_msoa_emp_weighted_lookup.csv"
+}

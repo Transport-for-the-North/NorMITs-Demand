@@ -135,7 +135,7 @@ class ExternalForecastSystem:
                     self.imports["default_inputs"], pop_constraint_path
                 ),
                 "sector_grouping_file": os.path.join(
-                    self.imports["zoning"], "tfn_sector_msoa_pop_weighted_lookup.csv"
+                    self.imports["zoning"], consts.TFN_MSOA_SECTOR_LOOKUPS["population"]
                 ),
             },
             "employment": {
@@ -149,7 +149,7 @@ class ExternalForecastSystem:
                     self.imports["default_inputs"], emp_constraint_path
                 ),
                 "sector_grouping_file": os.path.join(
-                    self.imports["zoning"], "tfn_sector_msoa_emp_weighted_lookup.csv"
+                    self.imports["zoning"], consts.TFN_MSOA_SECTOR_LOOKUPS["employment"]
                 ),
             },
         }
@@ -787,7 +787,7 @@ class ExternalForecastSystem:
         # Compare productions output to inputs
         comparison = PopEmpComparator(
             **self.pop_emp_inputs["population"],
-            output_csv=os.path.join(self.exports["productions"], "MSOA_population.csv"),
+            output_csv=os.path.join(self.exports["productions"], pm.POPULATION_OUTPUT_NAME),
             data_type="population",
             base_year=str(base_year)
         )
@@ -826,7 +826,7 @@ class ExternalForecastSystem:
         # Compare attractions output to inputs
         comparison = PopEmpComparator(
             **self.pop_emp_inputs["employment"],
-            output_csv=os.path.join(self.exports["attractions"], "MSOA_employment.csv"),
+            output_csv=os.path.join(self.exports["attractions"], am.EMPLOYMENT_OUTPUT_NAME),
             data_type="employment",
             base_year=str(base_year)
         )
