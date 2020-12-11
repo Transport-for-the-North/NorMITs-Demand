@@ -326,6 +326,7 @@ class EFSAttractionGenerator:
 
             employment_growth = employment_growth.reindex(columns=index_cols)
             # TODO: Remove ns splits from growth factors
+            # TODO: Remove soc0 too
             employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
 
             # Make sure both soc columns are the same format

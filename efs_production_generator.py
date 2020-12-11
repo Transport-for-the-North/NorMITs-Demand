@@ -468,15 +468,6 @@ class EFSProductionGenerator:
             to='int'
         )
 
-        productions = productions.rename(
-            columns={
-                internal_zone_col: external_zone_col,
-                'ca': 'car_availability_id',
-                'p': 'purpose_id',
-                'area_type': 'area_type_id'
-            }
-        )
-
         print("Writing HB productions to disk...")
         fname = consts.PRODS_FNAME % (zoning_system, 'hb')
         path = os.path.join(out_path, fname)
