@@ -7,13 +7,33 @@
 ##### IMPORTS #####
 # Standard imports
 from typing import Dict, List
+from pathlib import Path
 
 # Third party imports
 import numpy as np
+import pandas as pd
 
 
 ##### CONSTANTS #####
 RAIL_GC_FACTORS = {"walk": 1.75, "wait": 2, "interchange_penalty": 5}
+COST_LOOKUP = {
+    "rail": {
+        "origin": "from_model_zone_id",
+        "destination": "to_model_zone_id",
+        "walk": "AE_cost",
+        "wait": "Wait_Actual_cost",
+        "ride": "IVT_cost",
+        "fare": "fare_cost",
+        "num_int": "Interchange_cost",
+    },
+    "car": {
+        "origin": "from_model_zone_id",
+        "destination": "to_model_zone_id",
+        "time": "time",
+        "dist": "distance",
+        "toll": "toll",
+    },
+}
 
 
 ##### FUNCTIONS #####
@@ -226,3 +246,31 @@ def gen_cost_elasticity_mins(
     if cost_factor is None:
         cost_factor = 1.0
     return elasticity * (averages["gc"] / (averages["cost"] * cost_factor))
+
+
+def get_costs(cost_file: Path, mode: str) -> pd.DataFrame:
+    """Reads the given cost file, expected columns are in `COST_LOOKUP`.
+
+    Parameters
+    ----------
+    cost_file : Path
+        Path to the CSV file containing cost data.
+    mode : str
+        The mode of the costs, either rail or car.
+
+    Returns
+    -------
+    pd.DataFrame
+        Costs using the expected columns in `COST_LOOKUP`.
+
+    Raises
+    ------
+    ValueError
+        If any expected columns are missing.
+    """
+    try:
+        return pd.read_csv(cost_file, usecols=COST_LOOKUP[mode.lower()].values())
+    except ValueError as e:
+        loc = str(e).find("columns expected")
+        e_str = str(e)[loc:] if loc != -1 else str(e)
+        raise ValueError(f"Columns missing from {mode} cost, {e_str}") from e

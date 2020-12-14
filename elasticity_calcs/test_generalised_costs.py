@@ -6,10 +6,12 @@
 ##### IMPORTS #####
 # Standard imports
 from typing import Dict
+from pathlib import Path
 
 # Third party imports
 import pytest
 import numpy as np
+import pandas as pd
 
 # Local imports
 from .generalised_costs import (
@@ -19,6 +21,7 @@ from .generalised_costs import (
     gen_cost_rail_mins,
     RAIL_GC_FACTORS,
     gen_cost_elasticity_mins,
+    get_costs,
 )
 
 
@@ -174,6 +177,82 @@ class TestGenCostRailMins:
         np.testing.assert_array_equal(
             gen_cost_rail_mins(self.MATRICES, self.VT, factors), answer
         )
+
+
+class TestGetCosts:
+    """Tests for the `get_costs` function. """
+
+    COSTS = {
+        "car": pd.DataFrame(
+            {
+                "from_model_zone_id": range(10),
+                "to_model_zone_id": range(10),
+                "time": np.random.rand(10),
+                "distance": np.random.rand(10),
+                "toll": np.random.rand(10),
+            }
+        ),
+        "rail": pd.DataFrame(
+            {
+                "from_model_zone_id": range(10),
+                "to_model_zone_id": range(10),
+                "AE_cost": np.random.rand(10),
+                "Wait_Actual_cost": np.random.rand(10),
+                "IVT_cost": np.random.rand(10),
+                "fare_cost": np.random.rand(10),
+                "Interchange_cost": np.random.rand(10),
+            }
+        ),
+    }
+    COSTS["missing_car"] = COSTS["car"].drop(columns="toll")
+
+    @pytest.fixture(name="costs", scope="class")
+    def fixture_costs(self, tmp_path_factory) -> Dict[str, Path]:
+        """Create temporary test folder containing cost files.
+
+        Parameters
+        ----------
+        tmp_path_factory :
+            Temporary test folder provided by pytest.
+
+        Returns
+        -------
+        Dict[str, Path]
+            Paths to the car and rail cost files.
+        """
+        folder = tmp_path_factory.mktemp("costs")
+        paths = {}
+        for nm, df in self.COSTS.items():
+            paths[nm] = folder / f"{nm}.csv"
+            df.to_csv(paths[nm], index=False)
+        return paths
+
+    @pytest.mark.parametrize("mode", ["car", "rail"])
+    def test_read(self, costs: Dict[str, Path], mode: str):
+        """Test that the function reads the costs correctly.
+
+        Parameters
+        ----------
+        costs : Dict[str, Path]
+            Paths to the car and rail cost files.
+        mode : str
+            Which mode to test, either car or rail.
+        """
+        pd.testing.assert_frame_equal(get_costs(costs[mode], mode), self.COSTS[mode])
+
+    @staticmethod
+    def test_missing(costs: Dict[str, Path]):
+        """Test that a KeyError is raised if a column is missing from file.
+
+        Parameters
+        ----------
+        costs : Dict[str, Path]
+            Paths to the car, rail and missing_car cost files.
+        """
+        with pytest.raises(ValueError) as e:
+            get_costs(costs["missing_car"], "car")
+        msg = "Columns missing from car cost, columns expected but not found: ['toll']"
+        assert e.value.args[0] == msg
 
 
 ##### FUNCTIONS #####
