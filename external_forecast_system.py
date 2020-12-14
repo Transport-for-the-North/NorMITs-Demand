@@ -825,17 +825,12 @@ class ExternalForecastSystem:
         nhb_a_weights.columns = nhb_a_weights.columns.astype(str)
 
         # ## ZONE TRANSLATION ## #
-        # TODO: Convert column name to norms_zone_id etc
         # TODO: Check demand before and after translation
-        model_zone_col = '%s_zone_col' % self.model_name
+        model_zone_col = '%s_zone_id' % self.model_name
         if desired_zoning != self.input_zone_system:
             print("Need to translate zones.")
             print("Translating from: " + self.input_zone_system)
             print("Translating to: " + desired_zoning)
-
-            # read in translation dataframe
-            # output_path = os.path.join(self.imports['zoning'], desired_zoning + ".csv")
-            # translation_dataframe = pd.read_csv(output_path)
 
             # Read in translation dataframes
             fname = consts.POP_TRANSLATION_FNAME % (self.input_zone_system, self.model_name)

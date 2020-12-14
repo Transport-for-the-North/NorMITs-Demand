@@ -143,12 +143,6 @@ def _distribute_pa_internal(productions,
     a_weights = attraction_weights.copy()
     unique_col = 'trips'
 
-    # Ensure P/A are named by their model
-    model_zone_id = du.get_model_name(calib_params['m']) + '_zone_id'
-    productions = productions.rename(columns={zone_col: model_zone_id})
-    a_weights = a_weights.rename(columns={zone_col: model_zone_id})
-    zone_col = model_zone_id
-
     out_dist_name = du.calib_params_to_dist_name(
         trip_origin=trip_origin,
         matrix_format='pa',
