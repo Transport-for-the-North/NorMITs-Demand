@@ -525,27 +525,7 @@ class EFSAttractionGenerator:
         nhb_att = nhb_att.reindex(index_cols, axis='columns')
         nhb_att = nhb_att.groupby(group_cols).sum().reset_index()
 
-        # Rename columns so output of this function call is the same
-        # as it was before the re-write
-        attractions = du.convert_msoa_naming(
-            attractions,
-            msoa_col_name=internal_zone_col,
-            msoa_path=msoa_conversion_path,
-            to='int'
-        )
-
-        nhb_att = du.convert_msoa_naming(
-            nhb_att,
-            msoa_col_name=internal_zone_col,
-            msoa_path=msoa_conversion_path,
-            to='int'
-        )
-
-        # Re-align col names for returning
-        columns = {internal_zone_col: external_zone_col}
-        attractions = attractions.rename(columns=columns)
-        nhb_att = nhb_att.rename(columns=columns)
-
+        # Output the final attractions
         fname = consts.ATTRS_FNAME % (zoning_system, 'hb')
         nhb_fname = consts.ATTRS_FNAME % (zoning_system, 'nhb')
         attractions.to_csv(os.path.join(out_path, fname), index=False)

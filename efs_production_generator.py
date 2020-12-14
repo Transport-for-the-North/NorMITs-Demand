@@ -483,15 +483,6 @@ class EFSProductionGenerator:
         productions = productions.reindex(index_cols, axis='columns')
         productions = productions.groupby(group_cols).sum().reset_index()
 
-        # Rename columns so output of this function call is the same
-        # as it was before the re-write
-        productions = du.convert_msoa_naming(
-            productions,
-            msoa_col_name=internal_zone_col,
-            msoa_path=msoa_conversion_path,
-            to='int'
-        )
-
         print("Writing HB productions to disk...")
         fname = consts.PRODS_FNAME % (self.zoning_system, 'hb')
         path = os.path.join(out_path, fname)
@@ -1845,20 +1836,6 @@ class NhbProductionModel:
 
         nhb_prods = nhb_prods.reindex(index_cols, axis='columns')
         nhb_prods = nhb_prods.groupby(group_cols).sum().reset_index()
-
-        # ## CONVERT TO OLD EFS FORMAT ## #
-        # Rename columns so output of this function call is the same
-        # as it was before the re-write
-        nhb_prods = du.convert_msoa_naming(
-            nhb_prods,
-            msoa_col_name=self.internal_zone_col,
-            msoa_path=self.msoa_conversion_path,
-            to='int'
-        )
-
-        # Rename to the external zone column name
-        col_rename = {self.internal_zone_col: self.external_zone_col}
-        nhb_prods = nhb_prods.rename(columns=col_rename)
 
         # Output the aggregated productions
         print("Writing NHB Productions to disk...")
