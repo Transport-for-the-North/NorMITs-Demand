@@ -91,6 +91,7 @@ class ExternalForecastSystem:
 
         # TODO: Infer filenames/paths based on scenario
         # Initialise
+        du.validate_model_name_and_mode(model_name, consts.MODES_NEEDED)
         self.model_name = du.validate_model_name(model_name)
         self.iter_name = 'iter' + str(iter_num)
         self.import_location = import_home
@@ -2236,7 +2237,7 @@ def main():
     iter_num = 1
     import_home = "Y:/"
     export_home = "E:/"
-    model_name = 'noham'   # Make sure the correct mode is being used!!!
+    model_name = 'norms_2015'   # Make sure the correct mode is being used!!!
 
     # Set up constraints
     if constrain_population:

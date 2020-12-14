@@ -88,11 +88,14 @@ ZONING_SYSTEMS = [
 ]
 
 # Valid model names
-MODEL_NAMES = [
-    'noham',
-    'norms',
-    'norms_2015'
+_model_name_modes = [
+    ('noham',       [3]),
+    ('norms',       [6]),
+    ('norms_2015',  [6]),
 ]
+MODEL_NAMES = [x[0] for x in _model_name_modes]
+MODEL_MODES = {name: modes for name, modes in _model_name_modes}
+
 
 # DIRECTORY NAMES
 AUDITS_DIRNAME = 'Audits'
@@ -102,7 +105,7 @@ NHB_PARAMS_DIRNAME = 'nhb_factors'
 
 # HB consts
 PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]
-MODES_NEEDED = [3]
+MODES_NEEDED = [6]
 SOC_NEEDED = [0, 1, 2, 3]
 NS_NEEDED = [1, 2, 3, 4, 5]
 CA_NEEDED = [1, 2]
