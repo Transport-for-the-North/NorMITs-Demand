@@ -6,22 +6,10 @@ from external_forecast_system import ExternalForecastSystem
 
 
 def main():
-    nhb_pm = pm.NhbProductionModel(
-        import_home=r'Y:\NorMITs Demand\import',
-        export_home=r'E:\NorMITs Demand\norms_2015\v2_4-EFS_Output\iter1',
-        model_name='norms',
-        msoa_conversion_path=r"Y:\NorMITs Demand\import\default\zoning\msoa_zones.csv"
-    )
-    prods = nhb_pm.run()
-
-    print(prods)
-
-
-def main2():
     # TESTING SCENARIOS INPUTS
     # Running control
-    run_base_efs = False
-    recreate_productions = True
+    run_base_efs = True
+    recreate_productions = False
     recreate_attractions = True
 
     run_nhb = True
@@ -29,14 +17,14 @@ def main2():
     constrain_population = False
 
     # Controls I/O
-    iter_num = 3
+    iter_num = 2
     import_home = "Y:/"
     export_home = "E:/"
     model_name = 'norms_2015'   # Make sure the correct mode is being used!!!
 
     # UZC Inputs
-    pop_growth = r"Y:\NorMITs Demand\inputs\scenarios\EFS inputs\Population\Growth factors\SC04_UZC_pop_growthfactors_EFS.csv"
-    emp_growth = r"Y:\NorMITs Demand\inputs\scenarios\EFS inputs\Employment\Growth factors\SC04_UZC_job_growthfactors_EFS.csv"
+    pop_growth = r"Y:\NorMITs Demand\import\scenarios\SC04_UZC\population\future_growth_factors.csv"
+    emp_growth = r"Y:\NorMITs Demand\import\scenarios\SC04_UZC\employment\future_growth_factors.csv"
 
     pop_con = r""
 
