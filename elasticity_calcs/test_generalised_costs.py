@@ -5,7 +5,7 @@
 
 ##### IMPORTS #####
 # Standard imports
-from typing import Dict
+from typing import Dict, Tuple
 from pathlib import Path
 
 # Third party imports
@@ -65,7 +65,7 @@ class TestCheckMatrices:
             _check_matrices(
                 {"test": np.zeros((2, 2)), "test2": np.zeros((3, 3))}, ["test", "test2"]
             )
-        msg = "Matrices are not all the same shape: " "test = (2, 2), test2 = (3, 3)"
+        msg = "Matrices are not all the same shape: test = (2, 2), test2 = (3, 3)"
         assert e.value.args[0] == msg
 
 
@@ -185,11 +185,11 @@ class TestGetCosts:
     COSTS = {
         "car": pd.DataFrame(
             {
-                "from_model_zone_id": range(10),
-                "to_model_zone_id": range(10),
-                "time": np.random.rand(10),
-                "distance": np.random.rand(10),
-                "toll": np.random.rand(10),
+                "from_model_zone_id": [1, 1, 2, 2],
+                "to_model_zone_id": [1, 2, 1, 2],
+                "time": [0.16, 0.32, 6.55, 9.81],
+                "distance": [3.81, 3.9, 7.59, 6.09],
+                "toll": [9.34, 4.24, 9.75, 7.94],
             }
         ),
         "rail": pd.DataFrame(
@@ -205,10 +205,23 @@ class TestGetCosts:
         ),
     }
     COSTS["missing_car"] = COSTS["car"].drop(columns="toll")
+    NOHAM_2_NORMS = pd.DataFrame({"noham_zone_id": [1, 2], "norms_zone_id": [1, 1]})
+    CONVERTED_COSTS = {
+        "car": pd.DataFrame(
+            {
+                "from_model_zone_id": [1],
+                "to_model_zone_id": [1],
+                "time": [16.84],
+                "distance": [21.39],
+                "toll": [31.27],
+            }
+        ),
+        "rail": COSTS["rail"],
+    }
 
     @pytest.fixture(name="costs", scope="class")
-    def fixture_costs(self, tmp_path_factory) -> Dict[str, Path]:
-        """Create temporary test folder containing cost files.
+    def fixture_costs(self, tmp_path_factory) -> Tuple[Dict[str, Path], Path]:
+        """Create temporary test folder containing cost files and lookups.
 
         Parameters
         ----------
@@ -219,38 +232,48 @@ class TestGetCosts:
         -------
         Dict[str, Path]
             Paths to the car and rail cost files.
+        Path
+            Path to the folder containing the cost lookup.
         """
         folder = tmp_path_factory.mktemp("costs")
         paths = {}
         for nm, df in self.COSTS.items():
             paths[nm] = folder / f"{nm}.csv"
             df.to_csv(paths[nm], index=False)
-        return paths
 
-    @pytest.mark.parametrize("mode", ["car", "rail"])
-    def test_read(self, costs: Dict[str, Path], mode: str):
+        lookup_file = folder / "noham_to_norms.csv"
+        self.NOHAM_2_NORMS.to_csv(lookup_file, index=False)
+        return paths, folder
+
+    @pytest.mark.parametrize("mode, zone_system", [("car", "noham"), ("rail", "norms")])
+    def test_read(
+        self, costs: Tuple[Dict[str, Path], Path], mode: str, zone_system: str
+    ):
         """Test that the function reads the costs correctly.
 
         Parameters
         ----------
-        costs : Dict[str, Path]
-            Paths to the car and rail cost files.
+        costs : Tuple[Dict[str, Path], Path]
+            Paths to the car and rail cost files and the zone translation folder.
         mode : str
             Which mode to test, either car or rail.
         """
-        pd.testing.assert_frame_equal(get_costs(costs[mode], mode), self.COSTS[mode])
+        pd.testing.assert_frame_equal(
+            get_costs(costs[0][mode], mode, zone_system, costs[1]),
+            self.CONVERTED_COSTS[mode],
+        )
 
     @staticmethod
-    def test_missing(costs: Dict[str, Path]):
+    def test_missing(costs: Tuple[Dict[str, Path], Path]):
         """Test that a KeyError is raised if a column is missing from file.
 
         Parameters
         ----------
-        costs : Dict[str, Path]
-            Paths to the car, rail and missing_car cost files.
+        costs : Tuple[Dict[str, Path], Path]
+            Paths to the car and rail cost files and the zone translation folder.
         """
         with pytest.raises(ValueError) as e:
-            get_costs(costs["missing_car"], "car")
+            get_costs(costs[0]["missing_car"], "car", None, None)
         msg = "Columns missing from car cost, columns expected but not found: ['toll']"
         assert e.value.args[0] == msg
 

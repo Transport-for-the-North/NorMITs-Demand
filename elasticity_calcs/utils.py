@@ -16,6 +16,10 @@ import pandas as pd
 from demand_utilities.utils import safe_read_csv
 
 
+##### CONSTANTS #####
+COMMON_ZONE_SYSTEM = "norms"
+
+
 ##### FUNCTIONS #####
 def read_segments_file(path: Path) -> pd.DataFrame:
     """Read the segments CSV file containing all the TfN segmentation info.

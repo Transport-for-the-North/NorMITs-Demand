@@ -13,6 +13,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# Local imports
+from demand_utilities.utils import zone_translation_df
+from zone_translator import translate_matrix
+from .utils import COMMON_ZONE_SYSTEM
+
 
 ##### CONSTANTS #####
 RAIL_GC_FACTORS = {"walk": 1.75, "wait": 2, "interchange_penalty": 5}
@@ -248,7 +253,9 @@ def gen_cost_elasticity_mins(
     return elasticity * (averages["gc"] / (averages["cost"] * cost_factor))
 
 
-def get_costs(cost_file: Path, mode: str) -> pd.DataFrame:
+def get_costs(
+    cost_file: Path, mode: str, zone_system: str, zone_translation_folder: Path
+) -> pd.DataFrame:
     """Reads the given cost file, expected columns are in `COST_LOOKUP`.
 
     Parameters
@@ -257,6 +264,11 @@ def get_costs(cost_file: Path, mode: str) -> pd.DataFrame:
         Path to the CSV file containing cost data.
     mode : str
         The mode of the costs, either rail or car.
+    zone_system : str
+        The zone system of the costs, the cost will be translated
+        to the `COMMON_ZONE_SYSTEM` if required.
+    zone_translation_folder : Path
+        Path to the folder containing the zone translation lookups.
 
     Returns
     -------
@@ -269,8 +281,23 @@ def get_costs(cost_file: Path, mode: str) -> pd.DataFrame:
         If any expected columns are missing.
     """
     try:
-        return pd.read_csv(cost_file, usecols=COST_LOOKUP[mode.lower()].values())
+        costs = pd.read_csv(cost_file, usecols=COST_LOOKUP[mode.lower()].values())
     except ValueError as e:
         loc = str(e).find("columns expected")
         e_str = str(e)[loc:] if loc != -1 else str(e)
         raise ValueError(f"Columns missing from {mode} cost, {e_str}") from e
+
+    # Convert zone system if required
+    if zone_system != COMMON_ZONE_SYSTEM:
+        lookup = zone_translation_df(
+            zone_translation_folder, zone_system, COMMON_ZONE_SYSTEM
+        )
+        costs = translate_matrix(
+            costs,
+            lookup,
+            [f"{zone_system}_zone_id", f"{COMMON_ZONE_SYSTEM}_zone_id"],
+            square_format=False,
+            zone_cols=[COST_LOOKUP[mode][i] for i in ("origin", "destination")],
+        )
+
+    return costs
