@@ -1467,18 +1467,58 @@ def test_bespoke_zones(gen_path: str,
     
     # ## Error Checking ## #
     # Check for duplicates
+    if gen_data.duplicated().any():
+        raise ValueError("Error: Duplicate Rows Exist in Generation Sheet")
     # Check each zone ID exists in norms/noham
+    if any([zone not in sector_data["Zone"].unique() for zone in 
+           gen_data["Zone ID"].unique()]):
+        raise ValueError("Error: Bespoke Zone IDs do not exist in Model Zones")
     # Check origin and destinations are both defined for each zone
+    group_cols = [col for col in gen_data.columns 
+                  if "TfN" in col or 
+                  col in ["Purpose ID", "Generator ID", "Zone ID", "Year"]]
+    if any([d_count != 2 for d_count in 
+            gen_data.groupby(group_cols)["Direction"].count().values]):
+        raise ValueError("Error: Supply both directions for each generator")
     # Check all unique purpose ids exist in lookup - check they are in the 
     # same group e.g. <100, <200. Detect if splits will need to be done
-    # Check that each of soc, ns, ca are either all explicitly defined 
+    if any([purp not in purp_data["Purpose ID"].unique() for purp in 
+            gen_data["Purpose ID"].unique()]):
+        raise ValueError("Error: Undefined Purpose ID supplied")
+    u_purps = gen_data[["Purpose ID"]].drop_duplicates()
+    if u_purps.merge(purp_data)["Purpose"].duplicated().any():
+        print("Warning: Overlapping purpose IDs supplied ")
+    # Check that each of soc, ns, ca are valid, either all explicitly defined 
     # (none missing) or based on underlying data. Check that they are valid 
     # combinations e.g. purpose 1 only has soc
+    soc_defined = all([x in consts.SOC_NEEDED + [999] for x in 
+                       gen_data["TfN Segmentation - soc"]])
+    ns_defined = all([x in consts.NS_NEEDED + [999] for x in 
+                       gen_data["TfN Segmentation - ns"]])
+    ca_defined = all([x in consts.CA_NEEDED + [999] for x in 
+                       gen_data["TfN Segmentation - ca"]])
+    if not (soc_defined and ns_defined and ca_defined):
+        raise ValueError("Error: Segmentation is not valid")
     # Check sector ID exists in sector system
+    if any([sec not in sector_data["Sector ID"] for sec in 
+            gen_data["Donor Sector ID"].unique()]):
+        raise ValueError("Error: Define all donor sectors")
+    if any([sec not in sector_data["Sector ID"] + [0] for sec in 
+            gen_data["Constraint Sector ID"].unique()]):
+        raise ValueError("Error: Define all constraint sectors")
     # Check all distribution ids exist
+    if any([dist not in dist_data["Distribution ID"] for dist in 
+            gen_data["Distribution ID"].unique()]):
+        raise ValueError("Error: Define all Distribution IDs")
     # Check intrazonal ids are valid
+    if any([intra not in [1, 2] for intra in 
+            gen_data["Include / Exclude Intrazonals"].unique()]):
+        raise ValueError("Error: Intrazonal ID must be 1 or 2")
     # Check constraint Ids are valid
-    
+    if any([const not in [0, 1, 2] for const in 
+            gen_data["Constraint Type"].unique()]):
+        raise ValueError("Error: Constraint Type must be 0, 1, or 2")
+
     # ## Prepare and Infill data ## #
     # Fetch matrix data at max segmentation for all donor sectors
     if recreate_donor:
@@ -1530,6 +1570,8 @@ def test_bespoke_zones(gen_path: str,
         sector_data,
         exports_path["pa_24"]
     )
+    
+    print(f"Skipped {skipped.shape[0]} matrices - see log file")
     
     additions.to_csv("additions.csv")
     skipped.to_csv("skipped.csv")
