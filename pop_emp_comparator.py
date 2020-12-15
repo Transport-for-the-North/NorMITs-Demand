@@ -18,6 +18,8 @@ from openpyxl.worksheet.worksheet import Worksheet
 # Local imports
 from demand_utilities import utils as du
 from demand_utilities.sector_reporter_v2 import SectorReporter
+from efs_production_generator import get_land_use_data, build_production_imports
+from efs_attraction_generator import build_attraction_imports, get_employment_data
 
 
 ##### CONSTANTS #####
@@ -37,7 +39,7 @@ class PopEmpComparator:
 
     def __init__(
         self,
-        input_csv: str,
+        import_home: str,
         growth_csv: str,
         constraint_csv: str,
         output_csv: str,
@@ -50,9 +52,9 @@ class PopEmpComparator:
 
         Parameters
         ----------
-        input_csv : str
-            Path to csv containing the input population (or employment) data for
-            the base year at MSOA level.
+        import_home : str
+            Base path for the input location, used for finding the base population
+            and employment data.
         growth_csv : str
             Path to the csv containing the input growth values for population (or employment)
             at MSOA level for all output years.
@@ -99,7 +101,7 @@ class PopEmpComparator:
 
         # Read the required columns for input csvs
         self.input_data, self.constraint_data, self.growth_data = self._read_inputs(
-            input_csv, constraint_csv, growth_csv
+            import_home, constraint_csv, growth_csv
         )
 
         # Create dictionary of sector reporter parameters
@@ -152,7 +154,7 @@ class PopEmpComparator:
         return output, years
 
     def _read_inputs(
-        self, input_csv: str, constraint_csv: str, growth_csv: str
+        self, import_home: str, constraint_csv: str, growth_csv: str
     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """Reads the input, constraint and growth CSV files.
 
@@ -160,8 +162,9 @@ class PopEmpComparator:
 
         Parameters
         ----------
-        input_csv : str
-            Path to the input CSV file.
+        import_home : str
+            Base path for the input location, used for finding the base population
+            and employment data.
         constraint_csv : str
             Path to the constraint CSV file.
         growth_csv : str
@@ -173,20 +176,32 @@ class PopEmpComparator:
             The input, constraint and growth data from the
             given files.
         """
+        # Read input data
+        start = time.perf_counter()
         if self.data_type == "population":
-            base_yr_col = "base_year_population"
+            base_yr_col = "people"
+            imports = build_production_imports(import_home)
+            path = imports["land_use"]
+            print(f'\tReading "{path}"', end="")
+            input_data = get_land_use_data(path)[[self.ZONE_COL, base_yr_col]]
+            input_data = input_data.groupby(self.ZONE_COL, as_index=False).sum()
         else:
-            base_yr_col = "base_year_workers"
-        input_data = self._read_print(input_csv, skipinitialspace=True)
+            imports = build_attraction_imports(import_home, self.base_year, None)
+            path = imports["base_employment"]
+            print(f'\tReading "{path}"', end="")
+            base_yr_col = "E01"
+            input_data = get_employment_data(path)[[self.ZONE_COL, base_yr_col]]
         input_data.rename(columns={base_yr_col: str(self.base_year)}, inplace=True)
+        print(f" - Done in {time.perf_counter() - start:,.1f}s")
 
+        # Read constraint data for required years
         cols = [self.ZONE_COL, *self.years]
         constraint_data = self._read_print(
             constraint_csv, skipinitialspace=True, usecols=cols
         )
 
+        # Read the growth data and normalise against the base year
         growth_data = self._read_print(growth_csv, skipinitialspace=True, usecols=cols)
-        # Normalise the growth data against the base year
         growth_data[self.years] = growth_data[self.years].div(
             growth_data[str(self.base_year)], axis=0
         )
@@ -333,6 +348,8 @@ class PopEmpComparator:
         for (nm, df), met_cols in zip(
             msoa_coded_data.items(), [[self.base_year]] + [self.years] * 3
         ):
+            # Rename column for sector totals method
+            df = df.rename(columns={self.ZONE_COL: "model_zone_id"})
             original_cols = [c for c in df.columns if c != "model_zone_id"]
             df = sector_rep.calculate_sector_totals_v2(
                 df, met_cols, **self.sector_params, aggregation_method=None

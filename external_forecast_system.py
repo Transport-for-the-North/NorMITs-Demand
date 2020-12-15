@@ -125,9 +125,7 @@ class ExternalForecastSystem:
         # Initialise parameters for population and employment comparisons
         self.pop_emp_inputs = {
             "population": {
-                "input_csv": os.path.join(
-                    self.imports["default_inputs"], base_pop_path
-                ),
+                "import_home": self.imports["home"],
                 "growth_csv": os.path.join(
                     self.imports["default_inputs"], pop_growth_path
                 ),
@@ -139,9 +137,7 @@ class ExternalForecastSystem:
                 ),
             },
             "employment": {
-                "input_csv": os.path.join(
-                    self.imports["default_inputs"], base_emp_path
-                ),
+                "import_home": self.imports["home"],
                 "growth_csv": os.path.join(
                     self.imports["default_inputs"], emp_growth_path
                 ),

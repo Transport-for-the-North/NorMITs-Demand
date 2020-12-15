@@ -34,6 +34,45 @@ ZONE_COL = "msoa_zone_id"
 TEST_MSOAS = ["E02000001", "E02000002", "E02000003", "E02000004", "E02000005"]
 
 # Test DataFrames
+BASE_POPULATION = pd.DataFrame(
+    {
+        "msoa_zone_id": TEST_MSOAS,
+        "area_type": [1] * 5,
+        "property_type": [1.0] * 5,
+        "age": ["16-74"] * 5,
+        "gender": ["Females"] * 5,
+        "household": ["1 Adult"] * 5,
+        "cars": [0] * 5,
+        "household_composition": [1.0] * 5,
+        "employment_type": ["fte"] * 5,
+        "traveller_type": [49] * 5,
+        "soc": [1.0] * 5,
+        "ns": [1.0] * 5,
+        "ca": [1] * 5,
+        "people": [10] * 5,
+    }
+)
+BASE_EMPLOYMENT = pd.DataFrame(
+    zip(*[TEST_MSOAS, *[list(range(5)) for _ in range(15)]]),
+    columns=[
+        "geo_code",
+        "E03",
+        "E04",
+        "E05",
+        "E06",
+        "E07A",
+        "E07B",
+        "E07C",
+        "E07D",
+        "E08",
+        "E09",
+        "E10",
+        "E11",
+        "E12",
+        "E13",
+        "E14",
+    ],
+)
 BASE_DATA = pd.DataFrame(
     {ZONE_COL: TEST_MSOAS, BASE_YEAR: np.random.randint(1, 10000, 5)}
 )
@@ -89,17 +128,15 @@ def test_real_data():
         ExternalForecastSystem._out_dir,
     )
     # Population csv files, locations from ExternalForecastSysten.__init__ parameters
-    population_value_file = "population/base_population_2018.csv"
     population_growth_file = "population/future_population_growth.csv"
     population_constraint_file = "population/future_population_values.csv"
     # Employment csv files
-    worker_value_file = "employment/base_workers_2018.csv"
     worker_growth_file = "employment/future_workers_growth.csv"
     worker_constraint_file = "employment/future_workers_growth_values.csv"
 
     # Compare the population inputs and outputs
     pop_comp = PopEmpComparator(
-        os.path.join(imports["default_inputs"], population_value_file),
+        imports["home"],
         os.path.join(imports["default_inputs"], population_growth_file),
         os.path.join(imports["default_inputs"], population_constraint_file),
         os.path.join(exports["productions"], "MSOA_population.csv"),
@@ -113,7 +150,7 @@ def test_real_data():
     pop_comp.write_comparisons(exports["reports"], output_as="excel", year_col=True)
     # Compare the employment inputs and outputs
     emp_comp = PopEmpComparator(
-        os.path.join(imports["default_inputs"], worker_value_file),
+        imports["home"],
         os.path.join(imports["default_inputs"], worker_growth_file),
         os.path.join(imports["default_inputs"], worker_constraint_file),
         os.path.join(exports["attractions"], "MSOA_employment.csv"),
@@ -158,22 +195,24 @@ def test_excel_column_format(style: str, ignore_rows: int):
         assert new_style == this_style, f"'{new_style}' != '{this_style}' for row {r}"
 
 
-@pytest.fixture(name="test_files")
-def fixture_test_files(tmpdir) -> Dict[str, Path]:
+@pytest.fixture(name="test_files", scope="module")
+def fixture_test_files(tmp_path_factory) -> Dict[str, Path]:
     """Write test data to CSVs in temporary directory.
 
     Parameters
     ----------
-    tmpdir : pathlib.Path
+    tmp_path_factory :
         Temporary directory provided by pytest
 
     Returns
     -------
     Dict[str, Path]
-        Paths to the test files.
+        Paths to the test files/folders.
     """
+    tmpdir = tmp_path_factory.mktemp("pop_emp_comparator")
     paths = {
-        "base": tmpdir / "base_data.csv",
+        "base_population": tmpdir / "land use/land_use_output_msoa.csv",
+        "base_employment": tmpdir / f"attractions/non_freight_msoa_{BASE_YEAR}.csv",
         "growth": tmpdir / "growth_data.csv",
         "constraint": tmpdir / "constraint_data.csv",
         "sector_lookup": tmpdir / "sector_lookup.csv",
@@ -181,14 +220,19 @@ def fixture_test_files(tmpdir) -> Dict[str, Path]:
         "output_employment": tmpdir / "output_employment.csv",
     }
     data = [
-        BASE_DATA,
+        BASE_POPULATION,
+        BASE_EMPLOYMENT,
         GROWTH_DATA,
         CONSTRAINT_DATA,
         SECTOR_LOOKUP,
         OUTPUT_POPULATION,
         OUTPUT_EMPLOYMENT,
     ]
-    for p, df in zip(paths.values(), data):
+    for (nm, p), df in zip(paths.items(), data):
+        if nm.startswith("base"):
+            print(paths[nm].parent)
+            paths[nm].parent.mkdir()
+            paths[nm] = paths[nm].parent.parent
         df.to_csv(p, index=False)
     return paths
 
@@ -211,7 +255,7 @@ def fixture_initialise_class(test_files: pytest.fixture) -> Dict[str, PopEmpComp
     comparators = {}
     for i in ("population", "employment"):
         comparators[i] = PopEmpComparator(
-            test_files["base"],
+            test_files[f"base_{i}"],
             test_files["growth"],
             test_files["constraint"],
             test_files[f"output_{i}"],
@@ -244,7 +288,17 @@ def test_initialisation(
         The output 'population' or 'employment' test data to compare against.
     """
     instance = initialise_class[data_type]
-    pd.testing.assert_frame_equal(instance.input_data, BASE_DATA, check_dtype=False)
+    if data_type == "population":
+        base_data = BASE_POPULATION[["msoa_zone_id", "people"]].rename(
+            columns={"people": BASE_YEAR}
+        )
+    else:
+        base_data = BASE_EMPLOYMENT.copy()
+        base_data[BASE_YEAR] = base_data.sum(axis=1)
+        base_data = base_data[["geo_code", BASE_YEAR]].rename(
+            columns={"geo_code": "msoa_zone_id"}
+        )
+    pd.testing.assert_frame_equal(instance.input_data, base_data, check_dtype=False)
     pd.testing.assert_frame_equal(
         instance.constraint_data, CONSTRAINT_DATA, check_dtype=False
     )
