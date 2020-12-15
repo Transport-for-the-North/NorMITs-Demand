@@ -998,9 +998,8 @@ class ExternalForecastSystem:
         sector_totals = self.sector_reporter.calculate_sector_totals(
                 converted_productions,
                 grouping_metric_columns=year_list,
-                zone_system_name=desired_zoning,
-                zone_system_file=zone_system_file,
-                sector_grouping_file=sector_grouping_file
+                sector_grouping_file=sector_grouping_file,
+                zone_col=model_zone_col
                 )
 
         pm_sector_total_dictionary = {}
@@ -1014,9 +1013,8 @@ class ExternalForecastSystem:
             pm_sector_totals = self.sector_reporter.calculate_sector_totals(
                 pm_productions,
                 grouping_metric_columns=year_list,
-                zone_system_name=desired_zoning,
-                zone_system_file=zone_system_file,
-                sector_grouping_file=sector_grouping_file
+                sector_grouping_file=sector_grouping_file,
+                zone_col=model_zone_col
             )
 
             key_string = str(purpose)
@@ -2232,7 +2230,7 @@ def main():
     iter_num = 1
     import_home = "Y:/"
     export_home = "E:/"
-    model_name = 'norms_2015'   # Make sure the correct mode is being used!!!
+    model_name = consts.MODEL_NAME
 
     # Set up constraints
     if constrain_population:

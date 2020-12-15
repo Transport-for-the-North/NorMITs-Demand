@@ -12,7 +12,7 @@ A file of constants to be used.
 Keeps all constants in one place, for all files in the project to refer to,
 and keeps the code more readable.
 """
-import os
+# TODO: Re-organise constants
 
 # ### Constant Values ### #
 
@@ -27,14 +27,6 @@ ALL_MODES = [1, 2, 3, 5, 6]
 
 TIME_PERIODS = [1, 2, 3, 4]
 TIME_PERIOD_STRS = ['tp' + str(x) for x in TIME_PERIODS]
-
-BASE_YEAR = 2018
-FUTURE_YEARS = [2033, 2035, 2050]
-ALL_YEARS = [BASE_YEAR] + FUTURE_YEARS
-
-BASE_YEAR_STR = str(BASE_YEAR)
-FUTURE_YEARS_STR = [str(x) for x in FUTURE_YEARS]
-ALL_YEARS_STR = [str(x) for x in ALL_YEARS]
 
 PROCESS_COUNT = -2
 
@@ -102,18 +94,6 @@ AUDITS_DIRNAME = 'Audits'
 PRODUCTIONS_DIRNAME = 'Productions'
 ATTRACTIONS_DIRNAME = 'Attractions'
 NHB_PARAMS_DIRNAME = 'nhb_factors'
-
-# HB consts
-PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]
-MODES_NEEDED = [6]
-SOC_NEEDED = [0, 1, 2, 3]
-NS_NEEDED = [1, 2, 3, 4, 5]
-CA_NEEDED = [1, 2]
-TP_NEEDED = [1, 2, 3, 4]
-
-# NHB consts
-NHB_PURPOSES_NEEDED = [12, 13, 14, 15, 16, 18]
-NHB_FUTURE_YEARS = [2033, 2035, 2050]
 
 VALID_MATRIX_FORMATS = ['pa', 'od']
 
@@ -241,6 +221,31 @@ DEFAULT_PRODUCTION_CONSTRAINTS = [
     False,   # secondary post-development constraint used for matching HH pop
     False   # final trip based constraint
 ]
+
+
+# RUNNING CONSTANTS
+MODEL_NAME = 'norms_2015'
+
+# YEARS
+BASE_YEAR = 2018
+FUTURE_YEARS = [2033, 2035, 2050]
+
+# HB consts
+PURPOSES_NEEDED = ALL_HB_P
+MODES_NEEDED = MODEL_MODES[MODEL_NAME]
+SOC_NEEDED = [0, 1, 2, 3]
+NS_NEEDED = [1, 2, 3, 4, 5]
+CA_NEEDED = [1, 2]
+TP_NEEDED = [1, 2, 3, 4]
+
+# NHB consts
+NHB_PURPOSES_NEEDED = ALL_HB_P
+
+# Built from running args
+ALL_YEARS = [BASE_YEAR] + FUTURE_YEARS
+BASE_YEAR_STR = str(BASE_YEAR)
+FUTURE_YEARS_STR = [str(x) for x in FUTURE_YEARS]
+ALL_YEARS_STR = [str(x) for x in ALL_YEARS]
 
 
 
