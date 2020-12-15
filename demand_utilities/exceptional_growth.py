@@ -1287,37 +1287,47 @@ def _build_addition_matrix(filtered_trips: pd.DataFrame,
     add_trips = np.zeros_like(old_trips)
     # Add the new volumes to the relevant zones
     for row_dict in filtered_trips.to_dict(orient="records"):
+        # Check if intrazonals should be included
+        include_intrazonals = row_dict["Include / Exclude Intrazonals"] == 1
         # Get the zone IDs
+        bespoke_zone = row_dict["Zone ID"]
         zones = sector_data.loc[
             sector_data["Sector ID"] == row_dict["Sector ID"]
         ]["Zone"].values
+        # Remove the intrazonal if necessary
+        if not include_intrazonals:
+            zones = zones[zones != bespoke_zone]
+        # Raise an error if this means there is nowhere to distribute
+        if zones.size == 0:
+            raise ValueError("Error: Intrazonals excluded when "
+                             "distributing to self")
         # Convert the zones to matrix indices (offset by one)
+        bespoke_zone_idx = bespoke_zone - 1
         zone_idxs = zones - 1
         # Distribute using the underlying distribution in that sector
-        bespoke_zone = row_dict["Zone ID"]
-        row_dist = old_trips[bespoke_zone, zone_idxs]
-        col_dist = old_trips[zone_idxs, bespoke_zone]
+        row_dist = old_trips[bespoke_zone_idx, zone_idxs]
+        col_dist = old_trips[zone_idxs, bespoke_zone_idx]
         if purpose in consts.ALL_HB_P:
             # For HB - add both productions and attractions
-            add_trips[bespoke_zone, zone_idxs] += (
+            add_trips[bespoke_zone_idx, zone_idxs] += (
                 row_dict["prod"]
                 * row_dist
                 / row_dist.sum()
             )
-            add_trips[zone_idxs, bespoke_zone] += (
+            add_trips[zone_idxs, bespoke_zone_idx] += (
                 row_dict["attr"]
                 * col_dist
                 / col_dist.sum()
             )
         elif row_dict["Direction"] == 1:
             # For NHB - use the direction and add the ODs
-            add_trips[bespoke_zone, zone_idxs] += (
+            add_trips[bespoke_zone_idx, zone_idxs] += (
                 row_dict["dist_volume"]
                 * row_dist
                 / row_dist.sum()
             )
         elif row_dict["Direction"] == 2:
-            add_trips[zone_idxs, bespoke_zone] += (
+            add_trips[zone_idxs, bespoke_zone_idx] += (
                 row_dict["dist_volume"]
                 * col_dist
                 / col_dist.sum()
@@ -1325,6 +1335,48 @@ def _build_addition_matrix(filtered_trips: pd.DataFrame,
         else:
             raise ValueError("Invalid Purpose or Direction")
     return add_trips
+
+
+def _constrain_to_sector_total(trip_matrix: np.array,
+                               bespoke_trip_matrix: np.array,
+                               constraint_zones: np.array,
+                               bespoke_zone: int,
+                               minimum_reduction: float = 0.25,
+                               constrain: str = "origin"
+                               ) -> np.array:
+    
+    final_trip_matrix = trip_matrix.copy()
+    
+    # Create masks to access the constraint area
+    sector_mask = np.zeros_like(trip_matrix, dtype=bool)
+    if constrain == "origin":
+        sector_mask[bespoke_zone, constraint_zones] = True
+    elif constrain == "destination":
+        sector_mask[constraint_zones, bespoke_zone] = True
+    c_mask = (bespoke_trip_matrix == 0) & sector_mask
+    add_mask = bespoke_trip_matrix != 0
+    
+    # Calculate the target (sector total - original trips - bespoke trips)
+    target = (
+        trip_matrix[sector_mask].sum()
+        - trip_matrix[add_mask].sum()
+        - bespoke_trip_matrix[add_mask].sum()
+    )
+    # Get the original number of trips in the constraint area to check that 
+    # they are not being reduced too much
+    start_trips = trip_matrix[c_mask].sum()
+    if target <= minimum_reduction * start_trips:
+        target = minimum_reduction * start_trips
+    
+    # Factor all zones that have not had bespoke trips added so that the 
+    # totals are consistent
+    final_trip_matrix[c_mask] = target * trip_matrix[c_mask] / start_trips
+    
+    # Finally, add the bespoke trips
+    final_trip_matrix[add_mask] += bespoke_trip_matrix[add_mask]
+    
+    return final_trip_matrix
+    
 
 def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                             sector_data: pd.DataFrame,
@@ -1340,10 +1392,11 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
     cas = consts.CA_NEEDED
     purps = converted_trips["Purpose"].unique()
     modes = converted_trips["mode"].unique()
+    gen_zones = converted_trips["Zone ID"].unique()
     if len(modes) != 1:
         raise ValueError("Only one mode is supported at once")
-    segment_combs = tqdm(list(product(year_list, purps, cas, modes)))
-    for year, purp, ca, mode in segment_combs:
+    segment_combs = tqdm(list(product(year_list, purps, cas, modes, gen_zones)))
+    for year, purp, ca, mode, gen_zone in segment_combs:
         if purp in consts.ALL_NHB_P:
             if ca == 2:
                 continue
@@ -1379,6 +1432,7 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
             trips = trips_df.values
             # Build dictionary of the additional productions / attractions
             filter_str = (
+                "`Zone ID` == @gen_zone and "
                 "Year == @year and "
                 "Purpose == @purp and "
                 "segment == @segment and "
@@ -1392,8 +1446,11 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                  "Direction", "Constraint Type", "Constraint Sector ID",
                  "dist_volume", "prod", "attr"]
             ]
+            if filtered_trips.empty:
+                raise ValueError("Fatal Error: No generators found")
+
             constraint_type = filtered_trips["Constraint Type"].unique()
-            if len(constraint_type) != 1:
+            if len(constraint_type) > 1:
                 print(filtered_trips)
                 raise ValueError("Error: Inconsistent Constraint Type")
             constraint_type = constraint_type[0]
@@ -1421,8 +1478,18 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                 trips[mask] = add_trips[mask]
             # Constraint Type 2 - Constrain to zone / sector total
             elif constraint_type == 2:
-                # TODO 
-                pass
+                # TODO Test this further - is constraint method correct?
+                # There should be just one constraint sector id
+                c_sector = filtered_trips["Constraint Sector ID"].unique()
+                if len(c_sector) > 1:
+                    raise ValueError("Error: Inconsistent Constraint Sector")
+                c_sector = c_sector[0]
+                # Get an array of the zones used in the constraint
+                c_zones = sector_data.loc[sector_data["Sector ID"] == c_sector]
+                c_zones = c_zones["Zone"].values - 1
+                bespoke_zone = gen_zone - 1
+                trips = _constrain_to_sector_total(trips, add_trips, c_zones, 
+                                                   bespoke_zone)
             else:
                 raise ValueError("Invalid Constraint Type, ", constraint_type)
             
@@ -1448,10 +1515,11 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
 def test_bespoke_zones(gen_path: str,
                        exports_path: str,
                        model_name: str,
+                       audit_path: str,
                        recreate_donor: bool = True
                        ):
     
-    if model_name == "norms_2015":
+    if model_name == "norms_2015" or model_name == "norms":
         model_suffix = "NoRMS"
     elif model_name == "noham":
         model_suffix = "NoHAM"
@@ -1463,9 +1531,11 @@ def test_bespoke_zones(gen_path: str,
     gen_data = bespoke_dict[f"Generation Data {model_suffix}"]
     purp_data = bespoke_dict[f"Purpose Data"]
     sector_data = bespoke_dict[f"Sector Data {model_suffix}"]
+    sector_def_data = bespoke_dict[f"Sector Definition {model_suffix}"]
     dist_data = bespoke_dict[f"Distribution Data {model_suffix}"]
     
     # ## Error Checking ## #
+    print("Checking for input errors")
     # Check for duplicates
     if gen_data.duplicated().any():
         raise ValueError("Error: Duplicate Rows Exist in Generation Sheet")
@@ -1510,6 +1580,12 @@ def test_bespoke_zones(gen_path: str,
     if any([dist not in dist_data["Distribution ID"] for dist in 
             gen_data["Distribution ID"].unique()]):
         raise ValueError("Error: Define all Distribution IDs")
+    # Check for same distribution - sector systems
+    dest_sectors_check = dist_data.merge(sector_def_data, on="Sector ID")
+    dest_sectors_check = dest_sectors_check.groupby("Distribution ID")
+    if not all(dest_sectors_check["Sector System ID"].nunique() == 1):
+        raise ValueError("Error: Distributions must use a single "
+                         "sector system")
     # Check intrazonal ids are valid
     if any([intra not in [1, 2] for intra in 
             gen_data["Include / Exclude Intrazonals"].unique()]):
@@ -1518,10 +1594,12 @@ def test_bespoke_zones(gen_path: str,
     if any([const not in [0, 1, 2] for const in 
             gen_data["Constraint Type"].unique()]):
         raise ValueError("Error: Constraint Type must be 0, 1, or 2")
+    print("Input ok")
 
     # ## Prepare and Infill data ## #
     # Fetch matrix data at max segmentation for all donor sectors
     if recreate_donor:
+        print("Calculating donor sector splits")
         donor_sectors = gen_data["Donor Sector ID"].unique()
         sector_lookup = sector_data.loc[
             sector_data["Sector ID"].isin(donor_sectors)
@@ -1531,8 +1609,8 @@ def test_bespoke_zones(gen_path: str,
             exports_path
         )
         
-        donor_data.to_csv("donor_test.csv")
-        agg_tour_props.to_csv("tp_test.csv")
+        donor_data.to_csv(os.path.join(audit_path, "donor_test.csv"))
+        agg_tour_props.to_csv(os.path.join(audit_path, "tp_test.csv"))
     else:
         donor_data = pd.read_csv("donor_test.csv")
         agg_tour_props = pd.read_csv("tp_test.csv")
@@ -1542,25 +1620,25 @@ def test_bespoke_zones(gen_path: str,
     print("Splitting bespoke segments")
     gen_data = _replace_generation_segments(gen_data, purp_data)
     
-    gen_data.to_csv("gen_test.csv")
+    gen_data.to_csv(os.path.join(audit_path, "gen_test.csv"))
     
     # Apply the underlying segment splits where required
     print("Applying donor sector splits")
     split_data = _apply_underlying_segment_splits(gen_data, donor_data)
     
-    split_data.to_csv("split_test.csv", index=False)
+    split_data.to_csv(os.path.join(audit_path, "split_test.csv"), index=False)
     
     # ## Distribution ## #
     print("Applying user distribution")
     sector_dist = _apply_sector_distribution(split_data, dist_data)
     
-    sector_dist.to_csv("dist_test.csv", index=False)
+    sector_dist.to_csv(os.path.join(audit_path, "dist_test.csv"), index=False)
     
     # Convert HB purposes into productions/attractions using tour proportions
     print("Converting to PAs")
     converted_trips = _convert_od_to_trips(sector_dist, agg_tour_props)
     
-    converted_trips.to_csv("converted_test.csv")
+    converted_trips.to_csv(os.path.join(audit_path, "converted_test.csv"))
     
     # ## Combine with existing matrices ## #
     # Build list of all segmentations
@@ -1573,8 +1651,8 @@ def test_bespoke_zones(gen_path: str,
     
     print(f"Skipped {skipped.shape[0]} matrices - see log file")
     
-    additions.to_csv("additions.csv")
-    skipped.to_csv("skipped.csv")
+    additions.to_csv(os.path.join(audit_path, "additions.csv"))
+    skipped.to_csv(os.path.join(audit_path, "skipped.csv"))
 
 
 def test_growth_criteria():
