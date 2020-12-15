@@ -1149,7 +1149,8 @@ def _apply_underlying_segment_splits(generation_data: pd.DataFrame,
         on=["Donor Sector ID", "Purpose", "segment", "ca"],
         how="left"
     )
-    group_cols = ["Purpose ID",
+    group_cols = ["Year",
+                  "Purpose ID",
                   "Direction",
                   "TfN Segmentation - soc",
                   "TfN Segmentation - ns",
@@ -1189,15 +1190,23 @@ def _apply_underlying_segment_splits(generation_data: pd.DataFrame,
 
 def test_bespoke_zones(gen_path: str,
                        exports_path: str,
+                       model_name: str,
                        recreate_donor: bool = True
                        ):
     
+    if model_name == "norms_2015":
+        model_suffix = "NoRMS"
+    elif model_name == "noham":
+        model_suffix = "NoHAM"
+    else:
+        raise ValueError(f"Model Type {model_name} is not supported")
+    
     # Load Generation Data
     bespoke_dict = pd.read_excel(gen_path, engine="openpyxl", sheet_name=None)
-    gen_data = bespoke_dict["Generation Data Example"]
-    purp_data = bespoke_dict["Purpose Data Example"]
-    sector_data = bespoke_dict["Sector Data Example"]
-    dist_data = bespoke_dict["Distribution Data Example"]
+    gen_data = bespoke_dict[f"Generation Data {model_suffix}"]
+    purp_data = bespoke_dict[f"Purpose Data"]
+    sector_data = bespoke_dict[f"Sector Data {model_suffix}"]
+    dist_data = bespoke_dict[f"Distribution Data {model_suffix}"]
     
     # ## Error Checking ## #
     # Check for duplicates
@@ -1226,6 +1235,7 @@ def test_bespoke_zones(gen_path: str,
         )
         
         donor_data.to_csv("donor_test.csv")
+        agg_tour_props.to_csv("tp_test.csv")
     else:
         donor_data = pd.read_csv("donor_test.csv")
         agg_tour_props = pd.read_csv("tp_test.csv")
@@ -1233,6 +1243,8 @@ def test_bespoke_zones(gen_path: str,
     # Convert the segmentation to the EFS segments to split the bespoke 
     # zone data
     gen_data = _replace_generation_segments(gen_data, purp_data)
+    
+    gen_data.to_csv("gen_test.csv")
     
     # Apply the underlying segment splits where required
     split_data = _apply_underlying_segment_splits(gen_data, donor_data)
@@ -1266,9 +1278,10 @@ def test_bespoke_zones(gen_path: str,
     
     # Convert HB purposes into productions/attractions using tour proportions
     # Split from home / to home
+    # Reset index to set Sector ID as a column
+    agg_tour_props.reset_index(inplace=True)
     agg_tour_props = agg_tour_props.melt(
-        id_vars=["Sector ID",
-                    "Purpose", "segment", "mode", "ca"],
+        id_vars=["Sector ID", "Purpose", "segment", "mode", "ca"],
         value_vars=["origins", "dests"],
         var_name="Direction",
         value_name="tour_proportion"
@@ -1311,15 +1324,22 @@ def test_bespoke_zones(gen_path: str,
     # ## Combine with existing matrices ## #
     # Build list of all segmentations
     print("Combining with existing matrices")
+    additions = []
+    skipped = []
     year_list = sector_dist["Year"].unique()
     socs = consts.SOC_NEEDED
     ns = consts.NS_NEEDED
+    # Use all CA values - will need to skip for NHB matrices
     cas = consts.CA_NEEDED
-    purps = consts.ALL_P
-    mode = consts.MODES_NEEDED[0]
-    segment_combs = tqdm(list(product(year_list, purps, cas)))
-    for year, purp, ca in segment_combs:
+    purps = converted_trips["Purpose"].unique()
+    modes = converted_trips["mode"].unique()
+    if len(modes) != 1:
+        raise ValueError("Only one mode is supported at once")
+    segment_combs = tqdm(list(product(year_list, purps, cas, modes)))
+    for year, purp, ca, mode in segment_combs:
         if purp in consts.ALL_NHB_P:
+            if ca == 2:
+                continue
             segments = [999]
             ca = 999
         elif purp in consts.SOC_P:
@@ -1343,7 +1363,12 @@ def test_bespoke_zones(gen_path: str,
                 csv=True
             )
             matrix_path = os.path.join(exports_path["pa_24"], matrix_name)
-            trips_df = pd.read_csv(matrix_path, index_col=0)
+            try:
+                trips_df = pd.read_csv(matrix_path, index_col=0)
+            except FileNotFoundError:
+                # Skip if data was provided for matrices that don't exist
+                skipped.append([year, purp, mode, ca, segment])
+                continue
             trips = trips_df.values
             # Build dictionary of the additional productions / attractions
             filter_str = (
@@ -1362,6 +1387,7 @@ def test_bespoke_zones(gen_path: str,
             ]
             constraint_type = filtered_trips["Constraint Type"].unique()
             if len(constraint_type) != 1:
+                print(filtered_trips)
                 raise ValueError("Error: Inconsistent Constraint Type")
             constraint_type = constraint_type[0]
             
@@ -1407,8 +1433,11 @@ def test_bespoke_zones(gen_path: str,
                 else:
                     raise ValueError("Invalid Purpose or Direction")
             
+            additions.append([
+                year, purp, mode, ca, segment, trips.sum(), add_trips.sum()
+            ])
             segment_combs.set_description(
-                f"p_{purp}, m_{mode}, ca_{ca}, seg_{segment} "
+                f"yr_{year}, p_{purp}, m_{mode}, ca_{ca}, seg_{segment} "
                 f"- Added {add_trips.sum()}"
             )
             # Constraint Type 0 - Add Trips to existing
@@ -1433,6 +1462,17 @@ def test_bespoke_zones(gen_path: str,
                 columns=trips_df.columns
             )
             new_trips_df.to_csv(new_matrix_path)
+    additions = pd.DataFrame(
+        additions,
+        columns=["Year", "Purp", "Mode", "CA", "Segment", "Old Trips", 
+                 "Additional Trips"]
+    )
+    skipped = pd.DataFrame(
+        skipped,
+        columns=["Year", "Purp", "Mode", "CA", "Segment"]
+    )
+    additions.to_csv("additions.csv")
+    skipped.to_csv("skipped.csv")
 
 
 def test_growth_criteria():
