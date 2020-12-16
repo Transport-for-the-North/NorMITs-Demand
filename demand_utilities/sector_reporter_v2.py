@@ -63,9 +63,8 @@ class SectorReporter:
     def calculate_sector_totals(self,
                                 calculating_dataframe: pd.DataFrame,
                                 grouping_metric_columns: List[str] = None,
-                                zone_system_name: str = None,
-                                zone_system_file: str = None,
-                                sector_grouping_file: str = None
+                                sector_grouping_file: str = None,
+                                zone_col: str = 'model_zone_id'
                                 ) -> pd.DataFrame:
         """
         Calculates the sector totals off the given parameters.
@@ -127,21 +126,6 @@ class SectorReporter:
         Different aggregation / total methods. Average or median are examples.
         """
         calculating_dataframe = calculating_dataframe.copy()
-        
-        if (zone_system_name != None):
-            # do nothing
-            print("Changing zone system name...")
-        else:
-            print("Not changing zone system name...")
-            zone_system_name = self.default_zone_system_name
-        
-        if (zone_system_file != None):
-            # read in file
-            print("Changing zone system...")
-            zone_system = pd.read_csv(zone_system_file)
-        else:
-            print("Not changing zone system...")
-            zone_system = self.default_zone_system.copy()
             
         if (sector_grouping_file != None):
             # read in file
@@ -150,8 +134,8 @@ class SectorReporter:
         else:
             print("Not changing sector grouping...")
             sector_grouping = self.default_sector_grouping.copy()
-            
-        sector_grouping_zones = sector_grouping["model_zone_id"].unique()
+
+        sector_grouping = sector_grouping.rename(columns={'model_zone_id': zone_col})
             
         if (grouping_metric_columns == None):
             grouping_metric_columns = calculating_dataframe.columns[1:]
@@ -166,8 +150,8 @@ class SectorReporter:
         for group in groupings:
             zones = sector_grouping[
                 sector_grouping["grouping_id"] == group
-            ]["model_zone_id"].values
-            calculating_dataframe_mask = calculating_dataframe["model_zone_id"].isin(zones)
+            ][zone_col].values
+            calculating_dataframe_mask = calculating_dataframe[zone_col].isin(zones)
             new_grouping_dataframe = pd.DataFrame({"grouping_id": [group]})
     
             for metric in grouping_metric_columns:

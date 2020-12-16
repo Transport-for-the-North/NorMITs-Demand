@@ -26,15 +26,18 @@ from typing import Iterator
 SOC_P = [1, 2, 12]
 NS_P = [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
 
-INPUT_DIR = r'Y:\NorMITs Demand\import\norms_2015\seed_distributions'
-OUTPUT_DIR = r'Y:\NorMITs Demand\import\norms_2015\seed_distributions'
+HB_P = [1, 2, 3, 4, 5, 6, 7, 8]
+NHB_P = [12, 13, 14, 15, 16, 18]
 
-TRIP_ORIGIN = 'hb'
+INPUT_DIR = r'Y:\NorMITs Demand\import\norms\seed_distributions'
+OUTPUT_DIR = r'Y:\NorMITs Demand\import\norms\seed_distributions'
+
+TRIP_ORIGIN = 'nhb'
 MATRIX_FORMAT = 'pa'
 
 START_SEG = {
-    'p_list': [12, 13, 14, 15, 16, 18],
-    'm_list': [6]
+    'p_list': NHB_P,
+    'm_list': [6],
 }
 
 END_SEG = START_SEG.copy()
