@@ -279,7 +279,7 @@ class EFSAttractionGenerator:
             )
 
         # Build paths to the needed files
-        imports = build_attraction_imports(
+        self.imports = build_attraction_imports(
             import_home=import_home,
             base_year=base_year,
             attraction_weights_path=attraction_weights_path,
@@ -294,7 +294,7 @@ class EFSAttractionGenerator:
         # ## BASE YEAR EMPLOYMENT ## #
         print("Loading the base year employment data...")
         base_year_emp = get_employment_data(
-            import_path=imports['base_employment'],
+            import_path=self.imports['base_employment'],
             zone_col=internal_zone_col,
             emp_cat_col=emp_cat_col,
             return_format='long',
@@ -316,7 +316,7 @@ class EFSAttractionGenerator:
             # Add Soc splits into the base year
             base_year_emp = split_by_soc(
                 df=base_year_emp,
-                soc_weights=get_soc_weights(imports['soc_weights']),
+                soc_weights=get_soc_weights(self.imports['soc_weights']),
                 unique_col=base_year,
                 split_cols=[internal_zone_col, emp_cat_col]
             )
@@ -435,7 +435,6 @@ class EFSAttractionGenerator:
             )
             print("Post Constraint")
             print(employment[future_years].sum())
-            raise NotImplementedError("Finished Constraint Test")
             # employment = self.efs_constrainer.run(
             #     employment,
             #     constraint_method,
@@ -447,6 +446,16 @@ class EFSAttractionGenerator:
             #     designated_area,
             #     internal_zone_col
             # )
+
+        # Write the produced employment to file
+        # Earlier than previously to also save the soc segmentation
+        if out_path is None:
+            print("WARNING! No output path given. "
+                  "Not writing employment to file.")
+        else:
+            print("Writing employment to file...")
+            path = os.path.join(out_path, consts.EMP_FNAME % zoning_system)
+            employment.to_csv(path, index=False)
 
         # Reindex and sum
         # Removes soc splits - attractions weights can't cope
@@ -465,15 +474,6 @@ class EFSAttractionGenerator:
                       % (str(year), total_emp))
             print('\n')
 
-        # Write the produced employment to file
-        if out_path is None:
-            print("WARNING! No output path given. "
-                  "Not writing employment to file.")
-        else:
-            print("Writing employment to file...")
-            path = os.path.join(out_path, consts.EMP_FNAME % zoning_system)
-            employment.to_csv(path, index=False)
-
         # ## CREATE ATTRACTIONS ## #
         # Index by as much segmentation as possible
         idx_cols = list(employment.columns)
@@ -484,15 +484,15 @@ class EFSAttractionGenerator:
             employment=employment,
             base_year=base_year,
             future_years=future_years,
-            attraction_weights_path=imports['weights'],
-            mode_splits_path=imports['mode_splits'],
-            soc_weights_path=imports['soc_weights'],
+            attraction_weights_path=self.imports['weights'],
+            mode_splits_path=self.imports['mode_splits'],
+            soc_weights_path=self.imports['soc_weights'],
             idx_cols=idx_cols,
             emp_cat_col=emp_cat_col,
             p_col=a_weights_p_col,
             m_col=mode_split_m_col,
-            ntem_control_dir=imports['ntem_control'],
-            lad_lookup_dir=imports['lad_lookup'],
+            ntem_control_dir=self.imports['ntem_control'],
+            lad_lookup_dir=self.imports['lad_lookup'],
             control_fy_attractions=control_fy_attractions
         )
 
