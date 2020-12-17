@@ -404,7 +404,10 @@ def constrain_forecast(pre_constraint_df: pd.DataFrame,
 
         df[year] = year_constrained[year]
 
-    # Copnvert back to MSOA codes
+    # Drop the temporary grouping id column
+    df.drop("grouping_id", axis=1, inplace=True)
+
+    # Convert back to MSOA codes
     if msoa_path is not None:
         df = du.convert_msoa_naming(
             df,

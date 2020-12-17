@@ -52,7 +52,7 @@ def load_exceptional_zones(productions_export: str,
 def segment_employment(employment: pd.DataFrame,
                        soc_weights_path: str,
                        zone_column: str,
-                       data_col: str,
+                       data_cols: List[str],
                        msoa_lookup_path: str
                        ) -> pd.DataFrame:
     """Takes a dataframe containing employment data and a path to soc_weights,
@@ -68,8 +68,8 @@ def segment_employment(employment: pd.DataFrame,
         "msoa_zone_id".
     zone_column : str
         Usually "msoa_zone_id", should contain MSOA zones.
-    data_col : str
-        Column in employment that contains the employee data.
+    data_cols : List[str]
+        Columns in employment that contains the employee data.
     msoa_lookup_path : str
         File used to convert MSOA codes to zone ids
 
@@ -103,16 +103,33 @@ def segment_employment(employment: pd.DataFrame,
     )
     soc_weights.set_index(zone_column, inplace=True)
 
-    soc_employment = attr.split_by_soc(
-        soc_employment,
-        soc_weights,
-        zone_col=zone_column,
-        p_col="p",
-        unique_col=data_col,
-        soc_col="soc"
-    )
+    segmented_emp = pd.DataFrame()
 
-    return soc_employment
+    for data_col in data_cols:
+        filtered_emp = soc_employment.drop(
+            [col for col in data_cols if col != data_col],
+            axis=1
+        )
+        year_employment = attr.split_by_soc(
+            filtered_emp,
+            soc_weights,
+            unique_col=data_col,
+            split_cols=[zone_column, "employment_cat"]
+        )
+        year_employment = year_employment.set_index(
+            [col for col in year_employment.columns if col != data_col]
+        )
+        if segmented_emp.empty:
+            segmented_emp = year_employment
+        else:
+            segmented_emp[data_col] = year_employment[data_col]
+
+    segmented_emp.reset_index(inplace=True)
+    segmented_emp.drop("p", axis=1, inplace=True)
+    
+    segmented_emp["soc"] = segmented_emp["soc"].astype("float").astype("int")
+
+    return segmented_emp
 
 
 def attraction_exceptional_trip_rate(observed_base: pd.DataFrame,
@@ -167,6 +184,9 @@ def attraction_exceptional_trip_rate(observed_base: pd.DataFrame,
     """
 
     emp_group_cols = ["sector_id"] + segment_cols
+    attr_group_cols = ["sector_id"] + segment_cols
+    emp_group_cols.remove("purpose_id")
+    
     if sector_lookup is None:
         def sector_map(x): return x
     else:
@@ -180,9 +200,13 @@ def attraction_exceptional_trip_rate(observed_base: pd.DataFrame,
     observed = observed_base.copy()
     observed["sector_id"] = observed[zone_column].map(sector_map)
 
-    # Filter employment to only the commute category
+    # Filter employment to only the commute category - drop the column
     emp_sub = land_use.loc[land_use["employment_cat"] == "E01"]
-    emp_sub = emp_sub[[zone_column, base_year]]
+    emp_sub = emp_sub[
+        [zone_column] + 
+        [col for col in segment_cols if col not in ["sector_id", "purpose_id"]]
+        + [base_year]
+    ]
 
     # If required, convert employment to soc segmentation
     if soc_weights_path is not None:
@@ -206,7 +230,7 @@ def attraction_exceptional_trip_rate(observed_base: pd.DataFrame,
         )[base_year].sum()
         emp["soc"] = emp["soc"].astype("int")
     else:
-        emp = emp.groupby(["sector_id"], as_index=False)[base_year].sum()
+        emp = emp.groupby(emp_group_cols, as_index=False)[base_year].sum()
     emp.rename({base_year: "land_use"}, axis=1, inplace=True)
 
     print("Split Employment")
@@ -215,14 +239,23 @@ def attraction_exceptional_trip_rate(observed_base: pd.DataFrame,
     observed.to_csv("observed_pre_group.csv")
 
     observed = observed.groupby(
-        emp_group_cols,
+        attr_group_cols,
         as_index=False
     )[base_year].sum()
 
     print("Observed Attractions")
     print(observed)
 
-    emp_group_cols.remove(purpose_column)
+    if "soc" in emp.columns and 0 not in emp["soc"].unique():
+        # Add in soc segmentation for non-soc purposes (sum 1, 2, 3)
+        soc_0 = emp.groupby(
+            [col for col in emp_group_cols if col != "soc"],
+            as_index=False
+        )["land_use"].sum()
+        soc_0["soc"] = 0
+        emp = emp.append(
+            soc_0
+        )
 
     # Merge data and calculate the trip rate
     tr_e = observed.merge(
@@ -230,14 +263,14 @@ def attraction_exceptional_trip_rate(observed_base: pd.DataFrame,
         on=emp_group_cols
     )
 
-    emp_group_cols.insert(1, purpose_column)
-    tr_e.set_index(emp_group_cols, inplace=True)
+    # emp_group_cols.insert(1, purpose_column)
+    tr_e.set_index(attr_group_cols, inplace=True)
     tr_e.sort_index(inplace=True)
     tr_e.reset_index(inplace=True)
 
     tr_e["trip_rate"] = tr_e[base_year] / tr_e["land_use"]
 
-    tr_e = tr_e[emp_group_cols + ["trip_rate"]]
+    tr_e = tr_e[attr_group_cols + ["trip_rate"]]
 
     print(tr_e)
 
@@ -483,7 +516,7 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
         Contains all segmentation columns, the intermediate synthetic and 
         observed data, and the final grown trips.
     """
-    # TODO Note this could result in lower trips generated than before. See
+    # Note this could result in lower trips generated than before. See
     # the audit output for the changes
 
     sector_map = sector_lookup.copy()
@@ -519,11 +552,6 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
     # Map the land use to the sector used for the trip rates
     e_land_use["sector_id"] = e_land_use[zone_column].map(sector_map)
 
-    print("Exceptional Land Use")
-    print(e_land_use)
-    e_land_use.to_csv("e_land_use.csv")
-    print("Trip Rates")
-    print(trip_rates)
     trip_rate_merge_cols = merge_cols.copy()
     trip_rate_merge_cols.remove(zone_column)
     trip_rate_merge_cols.remove("purpose_id")
@@ -533,6 +561,29 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
     # only for attractions)
     if force_soc_type:
         e_land_use["soc"] = e_land_use["soc"].astype("int")
+        # Add soc = 0 segmentation (sum of the others) for use in 
+        # non-soc purposes
+        if 0 not in e_land_use["soc"].unique():
+            # Extract the soc total at sector level
+            soc_group_cols = [
+                col for col in merge_cols 
+                if col not in ["soc", "purpose_id"]
+            ] + ["sector_id"]
+            soc_0 = e_land_use.groupby(
+                soc_group_cols,
+                as_index=False
+            )[value_column].sum()
+            # Define as soc 0 and add to the end of the existing data
+            soc_0["soc"] = 0
+            e_land_use = e_land_use.append(
+                soc_0
+            )
+
+    print("Exceptional Land Use")
+    print(e_land_use)
+    e_land_use.to_csv("e_land_use.csv")
+    print("Trip Rates")
+    print(trip_rates)
 
     # Merge on the common segmentation and re-calculate the synthetic forecast 
     # using the new sector level trip rates
@@ -589,7 +640,8 @@ def growth_criteria(synth_productions: pd.DataFrame,
                     zone_translator: ZoneTranslator = None,
                     zone_translator_args: dict = None,
                     exceptional_zones: pd.DataFrame = None,
-                    trip_rate_sectors: str = None
+                    trip_rate_sectors: str = None,
+                    soc_weights_path: str = None
                     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Processes the PA vectors and other data from the main EFS and returns 
     the forecast vectors.
@@ -677,16 +729,32 @@ def growth_criteria(synth_productions: pd.DataFrame,
     )
     print("Employment")
     print(employment)
+    employment = du.convert_msoa_naming(
+        employment,
+        msoa_col_name="msoa_zone_id",
+        msoa_path=msoa_lookup_path,
+        to='int'
+    )
+    # Remove the employment-cat column
+    # if "employment_cat" in employment.columns:
+    #     employment = employment.loc[employment["employment_cat"] == "E01"]
+    #     employment.drop("employment_cat", axis=1, inplace=True)
+
+    # If there is no soc segmentation in the employment - need to split
+    if "soc" not in employment.columns:
+        employment = segment_employment(
+            employment,
+            soc_weights_path,
+            "msoa_zone_id",
+            [base_year] + future_years,
+            msoa_lookup_path
+        )
+    employment.to_csv("test_emp.csv")
     employment.rename(
         {"msoa_zone_id": "model_zone_id"},
         axis=1,
         inplace=True)
-    employment = du.convert_msoa_naming(
-        employment,
-        msoa_col_name="model_zone_id",
-        msoa_path=msoa_lookup_path,
-        to='int'
-    )
+    
 
     # If the zone translator has been supplied, need to change zone system
     if zone_translator is not None:
@@ -801,7 +869,8 @@ def growth_criteria(synth_productions: pd.DataFrame,
             exceptional_zones=converted_e_zones,
             land_use=emp_subset,
             trip_rates=attr_trip_rates,
-            sector_lookup=trip_rate_sectors
+            sector_lookup=trip_rate_sectors,
+            force_soc_type="soc" in emp_segments
         )
 
     # Combine forecast vectors
