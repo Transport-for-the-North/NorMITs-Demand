@@ -24,16 +24,46 @@ from efs_constrainer import ForecastConstrainer
 
 import demand_utilities.utils as du
 
+# TODO: Align attraction model class to NHB Production Model
+
 
 class EFSAttractionGenerator:
-    
+
     def __init__(self,
-                 tag_certainty_bounds=consts.TAG_CERTAINTY_BOUNDS):
+                 model_name: str,
+                 seg_level: str = 'tfn',
+                 zoning_system: str = 'msoa',
+                 tag_certainty_bounds=consts.TAG_CERTAINTY_BOUNDS
+                 ):
         """
         #TODO
         """
+        # Validate inputs
+        seg_level = du.validate_seg_level(seg_level)
+        model_name = du.validate_model_name(model_name)
+        zoning_system = du.validate_zoning_system(zoning_system)
+
+        # Assign
         self.efs_constrainer = ForecastConstrainer()
         self.tag_certainty_bounds = tag_certainty_bounds
+
+        self.model_name = model_name
+
+        self.zoning_system = zoning_system
+        self.zone_col = '%s_zone_id' % zoning_system
+        self.emp_cat_col = 'employment_cat'
+
+        # Define the segmentation we're using
+        if seg_level == 'tfn':
+            self.emp_segments = [self.emp_cat_col, 'soc']
+            self.attr_segments = ['p', 'soc']
+            self.return_segments = [self.zone_col] + self.attr_segments
+        else:
+            raise ValueError(
+                "'%s' is a valid segmentation level, but I don't have a way "
+                "of determining which segments to use for it. You should add "
+                "one!" % seg_level
+            )
     
     def run(self,
             base_year: str,
@@ -75,7 +105,6 @@ class EFSAttractionGenerator:
             m_needed: List[int] = consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
-            zoning_system: str = 'msoa',
             no_neg_growth: bool = True,
             employment_infill: float = 0.001,
 
@@ -237,8 +266,8 @@ class EFSAttractionGenerator:
             possible in the input data.
         """
         # Return previously created productions if we can
-        fname = consts.ATTRS_FNAME % (zoning_system, 'hb')
-        nhb_fname = consts.ATTRS_FNAME % (zoning_system, 'nhb')
+        fname = consts.ATTRS_FNAME % (self.zoning_system, 'hb')
+        nhb_fname = consts.ATTRS_FNAME % (self.zoning_system, 'nhb')
         final_output_path = os.path.join(out_path, fname)
         nhb_output_path = os.path.join(out_path, nhb_fname)
 
@@ -249,11 +278,8 @@ class EFSAttractionGenerator:
             return pd.read_csv(final_output_path), pd.read_csv(nhb_output_path)
 
         # Init
-        internal_zone_col = 'msoa_zone_id'
-        zoning_system = du.validate_zoning_system(zoning_system)
         a_weights_p_col = 'purpose'
         mode_split_m_col = 'mode'
-        emp_cat_col = 'employment_cat'
         all_years = [str(x) for x in [base_year] + future_years]
         integrate_d_log = d_log is not None and d_log_split is not None
         if integrate_d_log:
@@ -263,18 +289,18 @@ class EFSAttractionGenerator:
         # TODO: Make this more adaptive
         # Set the level of segmentation being used
         if segmentation_cols is None:
-            segmentation_cols = [emp_cat_col]
+            segmentation_cols = [self.emp_cat_col]
 
         # Fix column naming if different
-        if external_zone_col != internal_zone_col:
+        if external_zone_col != self.zone_col:
             employment_growth = employment_growth.copy().rename(
-                columns={external_zone_col: internal_zone_col}
+                columns={external_zone_col: self.zone_col}
             )
             designated_area = designated_area.copy().rename(
-                columns={external_zone_col: internal_zone_col}
+                columns={external_zone_col: self.zone_col}
             )
             employment_constraint = employment_constraint.rename(
-                columns={external_zone_col: internal_zone_col}
+                columns={external_zone_col: self.zone_col}
             )
 
         # Build paths to the needed files
@@ -294,19 +320,17 @@ class EFSAttractionGenerator:
         print("Loading the base year employment data...")
         base_year_emp = get_employment_data(
             import_path=imports['base_employment'],
-            zone_col=internal_zone_col,
-            emp_cat_col=emp_cat_col,
+            zone_col=self.zone_col,
+            emp_cat_col=self.emp_cat_col,
             return_format='long',
             value_col=base_year,
         )
 
         # Audit employment numbers
-        mask = (base_year_emp[emp_cat_col] == 'E01')
+        mask = (base_year_emp[self.emp_cat_col] == 'E01')
         total_base_year_emp = base_year_emp.loc[mask, base_year].sum()
         du.print_w_toggle("Base Year Employment: %d" % total_base_year_emp,
                           echo=audits)
-
-        print(base_year_emp)
 
         # ## FUTURE YEAR EMPLOYMENT ## #
         print("Generating future year employment data...")
@@ -317,21 +341,24 @@ class EFSAttractionGenerator:
                 df=base_year_emp,
                 soc_weights=get_soc_weights(imports['soc_weights']),
                 unique_col=base_year,
-                split_cols=[internal_zone_col, emp_cat_col]
+                split_cols=[self.zone_col, self.emp_cat_col]
             )
 
             # Aggregate the growth factors to remove extra segmentation
-            group_cols = [internal_zone_col, 'soc']
+            group_cols = [self.zone_col, 'soc']
             index_cols = group_cols.copy() + all_years
 
             employment_growth = employment_growth.reindex(columns=index_cols)
-            # TODO: Remove ns splits from growth factors
-            # TODO: Remove soc0 too
             employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
 
             # Make sure both soc columns are the same format
             base_year_emp['soc'] = base_year_emp['soc'].astype('float').astype('int')
             employment_growth['soc'] = employment_growth['soc'].astype('float').astype('int')
+        else:
+            # We're not using soc, remove it from our segmentations
+            self.emp_segments.remove('soc')
+            self.attr_segments.remove('soc')
+            self.return_segments.remove('soc')
 
         # Merge on all possible segmentations - not years
         merge_cols = du.intersection(list(base_year_emp), list(employment_growth))
@@ -347,7 +374,7 @@ class EFSAttractionGenerator:
             infill=employment_infill
         )
 
-        # Now need te remove soc splits
+        # Now need te remove soc splits?
         if 'soc' in employment_growth:
             pass
 
@@ -363,7 +390,7 @@ class EFSAttractionGenerator:
                 base_year,
                 all_years,
                 designated_area,
-                internal_zone_col
+                self.zone_col
             )
         elif constraint_source == "model grown base":
             print("Generating model grown base constraint for use on "
@@ -391,12 +418,12 @@ class EFSAttractionGenerator:
                 base_year,
                 all_years,
                 designated_area,
-                internal_zone_col
+                self.zone_col
             )
 
         # Reindex and sum
         # Removes soc splits - attractions weights can't cope
-        group_cols = [internal_zone_col] + segmentation_cols
+        group_cols = [self.zone_col] + self.emp_segments
         index_cols = group_cols.copy() + all_years
         employment = employment.reindex(index_cols, axis='columns')
         employment = employment.groupby(group_cols).sum().reset_index()
@@ -404,7 +431,7 @@ class EFSAttractionGenerator:
         # Population Audit
         if audits:
             print('\n', '-'*15, 'Employment Audit', '-'*15)
-            mask = (employment[emp_cat_col] == 'E01')
+            mask = (employment[self.emp_cat_col] == 'E01')
             for year in all_years:
                 total_emp = employment.loc[mask, year].sum()
                 print('. Total jobs for year %s is: %.4f'
@@ -417,7 +444,7 @@ class EFSAttractionGenerator:
                   "Not writing employment to file.")
         else:
             print("Writing employment to file...")
-            path = os.path.join(out_path, consts.EMP_FNAME % zoning_system)
+            path = os.path.join(out_path, consts.EMP_FNAME % self.zoning_system)
             employment.to_csv(path, index=False)
 
         # ## CREATE ATTRACTIONS ## #
@@ -434,7 +461,7 @@ class EFSAttractionGenerator:
             mode_splits_path=imports['mode_splits'],
             soc_weights_path=imports['soc_weights'],
             idx_cols=idx_cols,
-            emp_cat_col=emp_cat_col,
+            emp_cat_col=self.emp_cat_col,
             p_col=a_weights_p_col,
             m_col=mode_split_m_col,
             ntem_control_dir=imports['ntem_control'],
@@ -464,8 +491,8 @@ class EFSAttractionGenerator:
                   "Not writing attractions to file.")
         else:
             print("Writing attractions to file...")
-            fname = consts.ATTRS_FNAME % (zoning_system, 'raw_hb')
-            nhb_fname = consts.ATTRS_FNAME % (zoning_system, 'raw_nhb')
+            fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_hb')
+            nhb_fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_nhb')
             attractions.to_csv(os.path.join(out_path, fname), index=False)
             nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 
@@ -489,29 +516,18 @@ class EFSAttractionGenerator:
         nhb_att = nhb_att[mask]
         nhb_att = nhb_att.drop(m_col, axis='columns')
 
-        # Rename columns so output of this function call is the same
-        # as it was before the re-write
-        attractions = du.convert_msoa_naming(
-            attractions,
-            msoa_col_name=internal_zone_col,
-            msoa_path=msoa_conversion_path,
-            to='int'
-        )
+        # Reindex to just the wanted return cols
+        group_cols = self.return_segments
+        index_cols = group_cols.copy() + all_years
 
-        nhb_att = du.convert_msoa_naming(
-            nhb_att,
-            msoa_col_name=internal_zone_col,
-            msoa_path=msoa_conversion_path,
-            to='int'
-        )
+        attractions = attractions.reindex(index_cols, axis='columns')
+        attractions = attractions.groupby(group_cols).sum().reset_index()
+        nhb_att = nhb_att.reindex(index_cols, axis='columns')
+        nhb_att = nhb_att.groupby(group_cols).sum().reset_index()
 
-        # Re-align col names for returning
-        columns = {internal_zone_col: external_zone_col}
-        attractions = attractions.rename(columns=columns)
-        nhb_att = nhb_att.rename(columns=columns)
-
-        fname = consts.ATTRS_FNAME % (zoning_system, 'hb')
-        nhb_fname = consts.ATTRS_FNAME % (zoning_system, 'nhb')
+        # Output the final attractions
+        fname = consts.ATTRS_FNAME % (self.zoning_system, 'hb')
+        nhb_fname = consts.ATTRS_FNAME % (self.zoning_system, 'nhb')
         attractions.to_csv(os.path.join(out_path, fname), index=False)
         nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 
@@ -1007,6 +1023,62 @@ def combine_yearly_attractions(year_dfs: Dict[str, pd.DataFrame],
     return pd.concat(attraction_ph)
 
 
+def add_soc0(df: pd.DataFrame,
+             data_cols: List[str],
+             p_col: str = 'p',
+             soc_col: str = 'soc'
+             ) -> pd.DataFrame:
+    """
+    Removes soc splits for the purposes that don't use them, and replaces with
+    soc0
+
+    Parameters
+    ----------
+    df:
+        The dataframe to add soc0 into
+
+    data_cols:
+        A list of the column names that contain data values. I.e. not
+        segmentation variables
+
+    p_col:
+        Name of the column in df that contains purpose data.
+
+    soc_col:
+        Name of the column in df that contains soc data.
+
+    Returns
+    -------
+    soc_df:
+        The given df with soc0 added in where needed
+    """
+    # Init
+    df = df.copy()
+    index_cols = list(df)
+
+    # Figure out which rows need combining to soc0
+    mask = (df[p_col].isin(consts.SOC_P))
+    retain_df = df[mask].copy()
+    combine_df = df[~mask].copy()
+
+    # Return early if we can
+    if combine_df.empty:
+        return retain_df
+
+    # Remove the soc segmentation
+    index_cols.remove(soc_col)
+    group_cols = du.list_safe_remove(index_cols.copy(), data_cols)
+
+    combine_df = combine_df.reindex(columns=index_cols)
+    combine_df = combine_df.groupby(group_cols).sum().reset_index()
+
+    # Re-add in soc col, all set to 0
+    combine_df[soc_col] = 0
+
+    # Finally, stick the two back together
+    return pd.concat([retain_df, combine_df])
+
+
 def split_by_soc(df: pd.DataFrame,
                  soc_weights: pd.DataFrame,
                  zone_col: str = 'msoa_zone_id',
@@ -1226,9 +1298,19 @@ def merge_attraction_weights(employment: pd.DataFrame,
     # Need to convert the str purposes into int
     attractions[p_col] = attractions[p_col].apply(lambda row: consts.P_STR2INT[row])
 
-    # Split by soc categories if needed
-    if soc_weights is not None:
-        soc_col = 'soc'
+    # Sort out soc categories as needed
+    soc_col = 'soc'
+    if soc_col in list(attractions):
+        # Remove soc splits in p3-8
+        attractions = add_soc0(
+            attractions,
+            data_cols=[unique_col],
+            p_col=p_col,
+            soc_col=soc_col
+        )
+
+    elif soc_weights is not None:
+        # Add in soc if needed
         attractions = split_by_soc(
             attractions,
             soc_weights,
