@@ -994,7 +994,7 @@ def get_dist_name(trip_origin: str,
         name_parts += ["m" + mode]
 
     if not is_none_like(segment) and not is_none_like(purpose):
-        seg_name = "soc" if purpose in ['1', '2'] else "ns"
+        seg_name = "soc" if int(purpose) in consts.SOC_P else "ns"
         name_parts += [seg_name + segment]
 
     if not is_none_like(car_availability):

@@ -942,16 +942,21 @@ def calculate_tour_proportions(od_matrix_base: str,
 
 
 def get_donor_zone_data(sectors: pd.DataFrame,
-                        export_paths: dict
+                        export_paths: dict,
+                        nhb_segmented: bool
                         ) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     pa_path = export_paths["pa_24"]
     od_path = export_paths["od"]
+    
+    # Check if OD matrices are available for tour proportions
+    ods_available = len(os.listdir(od_path)) > 0
 
     # ## Build HB totals ## #
     hb_purps = consts.PURPOSES_NEEDED
     socs = consts.SOC_NEEDED
     ns = consts.NS_NEEDED
+    # For Noham, assume CA_NEEDED should be None
     cas = consts.CA_NEEDED
     modes = consts.MODES_NEEDED
     year = consts.BASE_YEAR
@@ -960,6 +965,7 @@ def get_donor_zone_data(sectors: pd.DataFrame,
     agg_tour_props = pd.DataFrame()
 
     desc = "Getting HB donor zone data"
+    message = ""
     iter_hb = tqdm(list(product(hb_purps, modes, cas)), desc=desc)
     for purp, mode, ca in iter_hb:
         if purp in consts.SOC_P:
@@ -967,8 +973,9 @@ def get_donor_zone_data(sectors: pd.DataFrame,
         elif purp in consts.NS_P:
             segments = ns
         for segment in segments:
+            desc_string = f"p_{purp}, m_{mode}, ca_{ca}, seg_{segment}"
             iter_hb.set_description(
-                f"p_{purp}, m_{mode}, ca_{ca}, seg_{segment}"
+                desc_string + " : " + message
             )
             matrix_name = du.get_dist_name(
                 trip_origin="hb",
@@ -982,20 +989,29 @@ def get_donor_zone_data(sectors: pd.DataFrame,
                 csv=True
             )
             matrix_path = os.path.join(pa_path, matrix_name)
-            # Get 24hr OD tour proportions
-            od_matrix_base = du.get_dist_name(
-                trip_origin="hb",
-                matrix_format="od_{}",
-                year=str(year),
-                purpose=str(purp),
-                mode=str(mode),
-                segment=str(segment),
-                car_availability=str(ca),
-                tp="{}",
-                csv=True
-            )
-            od_matrix_path = os.path.join(od_path, od_matrix_base)
-            tour_props = calculate_tour_proportions(od_matrix_path)
+            if ods_available:
+                # Get 24hr OD tour proportions
+                od_matrix_base = du.get_dist_name(
+                    trip_origin="hb",
+                    matrix_format="od_{}",
+                    year=str(year),
+                    purpose=str(purp),
+                    mode=str(mode),
+                    segment=str(segment),
+                    car_availability=str(ca),
+                    tp="{}",
+                    csv=True
+                )
+                od_matrix_path = os.path.join(od_path, od_matrix_base)
+                tour_props = calculate_tour_proportions(od_matrix_path)
+                message = "Calculating Tour Proportions"
+            else:
+                # If OD matrices are not available - give a warning and use 
+                # default 0.5 for all
+                tour_props = pd.read_csv(matrix_path, index_col=0)
+                for col in tour_props.columns:
+                    tour_props[col].values[:] = 0.5
+                message = "Warning: Using default Tour Proportions of 0.5"
             # Extract the origin and destinations for each donor sector
             donor_totals, agg_tp = extract_donor_totals(
                 matrix_path,
@@ -1026,32 +1042,46 @@ def get_donor_zone_data(sectors: pd.DataFrame,
     nhb_donor_data = pd.DataFrame()
 
     desc = "Getting NHB donor zone data"
-    iter_nhb = tqdm(list(product(nhb_purps, modes)), desc=desc)
-    for purp, mode in iter_nhb:
-        matrix_name = du.get_dist_name(
-            trip_origin="nhb",
-            matrix_format="pa",
-            year=str(year),
-            purpose=str(purp),
-            mode=str(mode),
-            segment=None,
-            car_availability=None,
-            tp=None,
-            csv=True
-        )
-        matrix_path = os.path.join(pa_path, matrix_name)
-        # Extract the origin and destinations for each donor sector
-        donor_totals, _ = extract_donor_totals(matrix_path, sectors)
-        # Add segmentation columns
-        donor_totals["Purpose"] = purp
-        donor_totals["segment"] = 999
-        donor_totals["mode"] = mode
-        donor_totals["ca"] = 999
-
-        if nhb_donor_data.empty:
-            nhb_donor_data = donor_totals
+    if segment_employment:
+        iter_nhb = tqdm(list(product(nhb_purps, modes, cas)), desc=desc)
+    else:
+        iter_nhb = tqdm(list(product(nhb_purps, modes, [None])), desc=desc)
+    for purp, mode, ca in iter_nhb:
+        if not segment_employment:
+            segments = [999]
+        elif purp in consts.SOC_P:
+            segments = socs
+        # Not elif as NS_P not defined for NHB
         else:
-            nhb_donor_data = nhb_donor_data.append(donor_totals)
+            segments = ns
+        for segment in segments:
+            iter_nhb.set_description(
+                f"p_{purp}, m_{mode}, ca_{ca}, seg_{segment}"
+            )
+            matrix_name = du.get_dist_name(
+                trip_origin="nhb",
+                matrix_format="pa",
+                year=str(year),
+                purpose=str(purp),
+                mode=str(mode),
+                segment=str(segment) if segment_employment else None,
+                car_availability=str(ca),
+                tp=None,
+                csv=True
+            )
+            matrix_path = os.path.join(pa_path, matrix_name)
+            # Extract the origin and destinations for each donor sector
+            donor_totals, _ = extract_donor_totals(matrix_path, sectors)
+            # Add segmentation columns
+            donor_totals["Purpose"] = purp
+            donor_totals["segment"] = segment
+            donor_totals["mode"] = mode
+            donor_totals["ca"] = ca
+
+            if nhb_donor_data.empty:
+                nhb_donor_data = donor_totals
+            else:
+                nhb_donor_data = nhb_donor_data.append(donor_totals)
 
     hb_donor_data["trip_origin"] = "hb"
     nhb_donor_data["trip_origin"] = "nhb"
@@ -1061,7 +1091,8 @@ def get_donor_zone_data(sectors: pd.DataFrame,
 
 
 def _replace_generation_segments(generation_data: pd.DataFrame,
-                                 purpose_data: pd.DataFrame):
+                                 purpose_data: pd.DataFrame,
+                                 segmented_nhb: bool):
     
     gen_data = generation_data.copy()
     
@@ -1089,8 +1120,9 @@ def _replace_generation_segments(generation_data: pd.DataFrame,
         on=["TfN Segmentation - soc", "Purpose"],
         how="left"
     )
+    hb_nhb_ns_p = [p for p in consts.ALL_P if p not in consts.SOC_P]
     ns = pd.DataFrame(
-        [[999, p, seg] for p, seg in product(consts.NS_P, consts.NS_NEEDED)],
+        [[999, p, seg] for p, seg in product(hb_nhb_ns_p, consts.NS_NEEDED)],
         columns=["TfN Segmentation - ns", "Purpose", "ns"]
     )
     gen_data = pd.merge(
@@ -1120,12 +1152,13 @@ def _replace_generation_segments(generation_data: pd.DataFrame,
         gen_data["TfN Segmentation - ca"]
     ).astype("int")
     # Replace the values for nhb purposes with 999
-    gen_data.loc[
-        gen_data["Purpose"].isin(consts.NHB_PURPOSES_NEEDED), "segment"
-        ] = 999
-    gen_data.loc[
-        gen_data["Purpose"].isin(consts.NHB_PURPOSES_NEEDED), "ca"
-        ] = 999
+    if not segmented_nhb:
+        gen_data.loc[
+            gen_data["Purpose"].isin(consts.NHB_PURPOSES_NEEDED), "segment"
+            ] = 999
+        gen_data.loc[
+            gen_data["Purpose"].isin(consts.NHB_PURPOSES_NEEDED), "ca"
+            ] = 999
     gen_data.drop(
         ["soc",
          "ns"],
@@ -1380,7 +1413,8 @@ def _constrain_to_sector_total(trip_matrix: np.array,
 
 def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                             sector_data: pd.DataFrame,
-                            export_path: str
+                            export_path: str,
+                            segmented_nhb: bool
                             ) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     additions = []
@@ -1397,7 +1431,7 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
         raise ValueError("Only one mode is supported at once")
     segment_combs = tqdm(list(product(year_list, purps, cas, modes, gen_zones)))
     for year, purp, ca, mode, gen_zone in segment_combs:
-        if purp in consts.ALL_NHB_P:
+        if purp in consts.ALL_NHB_P and not segmented_nhb:
             if ca == 2:
                 continue
             segments = [999]
@@ -1409,8 +1443,8 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
         for segment in segments:
             # Load the original matrix
             trip_origin = "hb" if purp in consts.ALL_HB_P else "nhb"
-            segment_str = str(segment) if trip_origin == "hb" else None
-            ca_str = str(ca) if trip_origin == "hb" else None
+            segment_str = str(segment) if segmented_nhb else None
+            ca_str = str(ca) if segmented_nhb else None
             matrix_name = du.get_dist_name(
                 trip_origin=trip_origin,
                 matrix_format="pa",
@@ -1516,7 +1550,8 @@ def test_bespoke_zones(gen_path: str,
                        exports_path: str,
                        model_name: str,
                        audit_path: str,
-                       recreate_donor: bool = True
+                       recreate_donor: bool = True,
+                       nhb_segmented: bool = True
                        ):
     
     if model_name == "norms_2015" or model_name == "norms":
@@ -1606,7 +1641,8 @@ def test_bespoke_zones(gen_path: str,
         ]
         donor_data, agg_tour_props = get_donor_zone_data(
             sector_lookup,
-            exports_path
+            exports_path,
+            nhb_segmented
         )
         
         donor_data.to_csv(os.path.join(audit_path, "donor_test.csv"))
@@ -1618,7 +1654,7 @@ def test_bespoke_zones(gen_path: str,
     # Convert the segmentation to the EFS segments to split the bespoke 
     # zone data
     print("Splitting bespoke segments")
-    gen_data = _replace_generation_segments(gen_data, purp_data)
+    gen_data = _replace_generation_segments(gen_data, purp_data, nhb_segmented)
     
     gen_data.to_csv(os.path.join(audit_path, "gen_test.csv"))
     
@@ -1646,7 +1682,8 @@ def test_bespoke_zones(gen_path: str,
     additions, skipped = _apply_to_bespoke_zones(
         converted_trips,
         sector_data,
-        exports_path["pa_24"]
+        exports_path["pa_24"],
+        nhb_segmented
     )
     
     print(f"Skipped {skipped.shape[0]} matrices - see log file")
