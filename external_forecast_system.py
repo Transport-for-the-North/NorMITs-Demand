@@ -946,7 +946,8 @@ class ExternalForecastSystem:
 
         population_segments = [seg for seg in production_segments
                                if seg != "purpose_id"]
-        employment_segments = ["model_zone_id", "employment_cat"]
+        employment_segments = [seg for seg in attraction_segments
+                               if seg != "purpose_id"] + ["employment_cat"]
 
         growth_criteria_segments = {
             "pop": population_segments,
@@ -962,6 +963,7 @@ class ExternalForecastSystem:
         model_zone_to_sector_path = r"Y:\NorMITs Demand\import\zone_translation\norms_2015_to_tfn_sectors.csv"
         from_zone_column = "norms_zone_id"
         to_sector_column = "tfn_sectors_zone_id"
+        soc_weights_path = self.attraction_generator.imports["soc_weights"]
 
         # Load sector mapping for calculating the exceptional zone trip rates
         sector_lookup = pd.read_csv(model_zone_to_sector_path)
@@ -1001,7 +1003,8 @@ class ExternalForecastSystem:
             zone_translator=self.zone_translator,
             zone_translator_args=zone_translator_args,
             exceptional_zones=exceptional_zones,
-            trip_rate_sectors=sector_lookup
+            trip_rate_sectors=sector_lookup,
+            soc_weights_path=soc_weights_path
         )
 
         # # ## REPEAT ATTRACTION WEIGHT GENERATION ## #
