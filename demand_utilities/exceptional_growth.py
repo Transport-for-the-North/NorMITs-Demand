@@ -1,6 +1,7 @@
 import os
 from typing import List
 from typing import Tuple
+from typing import Iterable
 from itertools import product
 
 import numpy as np
@@ -943,7 +944,8 @@ def calculate_tour_proportions(od_matrix_base: str,
 
 def get_donor_zone_data(sectors: pd.DataFrame,
                         export_paths: dict,
-                        nhb_segmented: bool
+                        nhb_segmented: bool,
+                        ca_needed: bool
                         ) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     pa_path = export_paths["pa_24"]
@@ -957,7 +959,7 @@ def get_donor_zone_data(sectors: pd.DataFrame,
     socs = consts.SOC_NEEDED
     ns = consts.NS_NEEDED
     # For Noham, assume CA_NEEDED should be None
-    cas = consts.CA_NEEDED
+    cas = consts.CA_NEEDED if ca_needed else ["None"]
     modes = consts.MODES_NEEDED
     year = consts.BASE_YEAR
 
@@ -1092,9 +1094,24 @@ def get_donor_zone_data(sectors: pd.DataFrame,
 
 def _replace_generation_segments(generation_data: pd.DataFrame,
                                  purpose_data: pd.DataFrame,
-                                 segmented_nhb: bool):
+                                 segmented_nhb: bool,
+                                 ca_needed: bool):
     
     gen_data = generation_data.copy()
+    
+    if not ca_needed:
+        # Combine any ca segmentation in the generation data 
+        # - likely not needed for most inputs
+        group_cols = [
+            col for col in gen_data.columns 
+            if col not in ["Volume", "TfN Segmentation - ca"]
+        ]
+        gen_data = gen_data.groupby(
+            group_cols,
+            as_index=False
+        )["Volume"].sum()
+        # Add the dummy value all ca segmentation
+        gen_data["TfN Segmentation - ca"] = 999
     
     # Convert given purpose to EFS purposes
     try:
@@ -1110,6 +1127,7 @@ def _replace_generation_segments(generation_data: pd.DataFrame,
         gen_data["Purpose"] = gen_data["Purpose ID"]
     
     # Add the segmentation if required
+    # 999 is used in the inputs to represent the aggregated segment
     socs = pd.DataFrame(
         [[999, p, seg] for p, seg in product(consts.SOC_P, consts.SOC_NEEDED)],
         columns=["TfN Segmentation - soc", "Purpose", "soc"]
@@ -1131,26 +1149,29 @@ def _replace_generation_segments(generation_data: pd.DataFrame,
         on=["TfN Segmentation - ns", "Purpose"],
         how="left"
     )
-    cas = pd.DataFrame(
-        [[999,  seg] for seg in consts.CA_NEEDED],
-        columns=["TfN Segmentation - ca", "ca"]
-    )
-    gen_data = pd.merge(
-        gen_data,
-        cas,
-        on=["TfN Segmentation - ca"],
-        how="left"
-    )
+    if ca_needed:
+        cas = pd.DataFrame(
+            [[999,  seg] for seg in consts.CA_NEEDED],
+            columns=["TfN Segmentation - ca", "ca"]
+        )
+        gen_data = pd.merge(
+            gen_data,
+            cas,
+            on=["TfN Segmentation - ca"],
+            how="left"
+        )
+        # Replace 999 values with the given segmentation
+        gen_data["ca"] = gen_data["ca"].fillna(
+            gen_data["TfN Segmentation - ca"]
+        ).astype("int")
+    else:
+        gen_data["ca"] = "None"
     # Build the segment column using the hierarchy of aggregated first
     gen_data["segment"] = gen_data["soc"].fillna(
         gen_data["ns"]).fillna(
             gen_data["TfN Segmentation - soc"]).fillna(
                 gen_data["TfN Segmentation - ns"]
             ).astype("int")
-    # Replace 999 values with the given segmentation
-    gen_data["ca"] = gen_data["ca"].fillna(
-        gen_data["TfN Segmentation - ca"]
-    ).astype("int")
     # Replace the values for nhb purposes with 999
     if not segmented_nhb:
         gen_data.loc[
@@ -1173,6 +1194,8 @@ def _apply_underlying_segment_splits(generation_data: pd.DataFrame,
                                      donor_data: pd.DataFrame
                                      ) -> pd.DataFrame:
     
+    ca_needed = "None" not in generation_data["ca"].unique()
+    
     df = generation_data.copy()
     
     # Merge generation data to the donor_data to split where required
@@ -1182,12 +1205,16 @@ def _apply_underlying_segment_splits(generation_data: pd.DataFrame,
         on=["Donor Sector ID", "Purpose", "segment", "ca"],
         how="left"
     )
+    segment_cols = [
+        "TfN Segmentation - soc",
+        "TfN Segmentation - ns",
+        "TfN Segmentation - ca"
+    ]
+    if not ca_needed:
+        segment_cols.remove("TfN Segmentation - ca")
     group_cols = ["Year",
                   "Purpose ID",
-                  "Direction",
-                  "TfN Segmentation - soc",
-                  "TfN Segmentation - ns",
-                  "TfN Segmentation - ca"]
+                  "Direction"] + segment_cols
     split_data["o_totals"] = split_data.groupby(
         group_cols,
         as_index=False
@@ -1207,14 +1234,16 @@ def _apply_underlying_segment_splits(generation_data: pd.DataFrame,
     # Drop intermediate columns
     split_data.drop(
         ["Purpose ID",
-         "TfN Segmentation - soc",
-         "TfN Segmentation - ns",
-         "TfN Segmentation - ca",
          "origins",
          "dests",
          "o_totals",
          "d_totals",
          "proportion"],
+        axis=1,
+        inplace=True
+    )
+    split_data.drop(
+        segment_cols,
         axis=1,
         inplace=True
     )
@@ -1257,12 +1286,17 @@ def _convert_od_to_trips(sector_distributed_data: pd.DataFrame,
                          aggregated_tour_proportions: pd.DataFrame
                          ) -> pd.DataFrame:
     
+    ca_needed = "None" not in sector_distributed_data["ca"].unique()
+    
     sector_dist = sector_distributed_data.copy()
     agg_tour_props = aggregated_tour_proportions.copy()
     
     # Split from home / to home
     # Reset index to set Sector ID as a column
     agg_tour_props.reset_index(inplace=True)
+    id_vars = ["Sector ID", "Purpose", "segment", "mode", "ca"]
+    if not ca_needed:
+        id_vars.remove("ca")
     agg_tour_props = agg_tour_props.melt(
         id_vars=["Sector ID", "Purpose", "segment", "mode", "ca"],
         value_vars=["origins", "dests"],
@@ -1417,13 +1451,15 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                             segmented_nhb: bool
                             ) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
+    ca_needed = "None" not in converted_trips["ca"].unique()
+
     additions = []
     skipped = []
     year_list = converted_trips["Year"].unique()
     socs = consts.SOC_NEEDED
     ns = consts.NS_NEEDED
-    # Use all CA values - will need to skip for NHB matrices
-    cas = consts.CA_NEEDED
+    # Use all CA values - will need to skip for NOHAM
+    cas = consts.CA_NEEDED if ca_needed else ["None"]
     purps = converted_trips["Purpose"].unique()
     modes = converted_trips["mode"].unique()
     gen_zones = converted_trips["Zone ID"].unique()
@@ -1546,6 +1582,115 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
     )
     return additions, skipped
 
+
+def check_bespoke_input(gen_data: pd.DataFrame,
+                        purp_data: pd.DataFrame,
+                        sector_data: pd.DataFrame,
+                        sector_def_data: pd.DataFrame,
+                        dist_data: pd.DataFrame
+                        ) -> None:
+    def check_valid(check_vals: pd.Series,
+                    valid_vals: Iterable,
+                    message: str = None):
+        """
+        Checks if any of check_vals are not in valid_vals
+        - return True if not valid
+        """
+        check = check_vals.unique()
+        if isinstance(valid_vals, pd.Series):
+            valid = valid_vals.unique()
+        else:
+            valid = valid_vals
+        if any([x not in valid for x in check]):
+            if message is not None:
+                raise ValueError(message)
+            else:
+                return True
+        return False
+
+    # Check for duplicates
+    if gen_data.duplicated().any():
+        raise ValueError("Error: Duplicate Rows Exist in Generation Sheet")
+
+    # Check each zone ID exists in norms/noham
+    check_valid(
+        gen_data["Zone ID"],
+        sector_data["Zone"],
+        "Error: Bespoke Zone IDs do not exist in Model Zones"
+    )
+
+    # Check origin and destinations are both defined for each zone
+    group_cols = [col for col in gen_data.columns
+                  if "TfN" in col or
+                  col in ["Purpose ID", "Generator ID", "Zone ID", "Year"]]
+    direction_counts = gen_data.groupby(group_cols)["Direction"].count().values
+    if any([d_count != 2 for d_count in direction_counts]):
+        raise ValueError("Error: Supply both directions for each generator")
+
+    # Check all unique purpose ids exist in lookup - check they are in the
+    # same group e.g. <100, <200. Detect if splits will need to be done
+    check_valid(
+        gen_data["Purpose ID"],
+        purp_data["Purpose ID"],
+        "Error: Undefined Purpose ID supplied"
+    )
+    u_purps = gen_data[["Purpose ID"]].drop_duplicates()
+    if u_purps.merge(purp_data)["Purpose"].duplicated().any():
+        print("Warning: Overlapping purpose IDs supplied ")
+
+    # Check that each of soc, ns, ca are valid, either all explicitly defined
+    # (none missing) or based on underlying data. Check that they are valid
+    # combinations e.g. purpose 1 only has soc
+    soc_not_defined = check_valid(gen_data["TfN Segmentation - soc"],
+                                  consts.SOC_NEEDED + [999])
+    ns_not_defined = check_valid(gen_data["TfN Segmentation - ns"],
+                                 consts.NS_NEEDED + [999])
+    ca_not_defined = check_valid(gen_data["TfN Segmentation - ca"],
+                                 consts.CA_NEEDED + [999])
+    if (soc_not_defined and ns_not_defined and ca_not_defined):
+        raise ValueError("Error: Segmentation is not valid")
+
+    # Check sector ID exists in sector system
+    check_valid(
+        gen_data["Donor Sector ID"],
+        sector_data["Sector ID"],
+        "Error: Define all donor sectors"
+    )
+    constraint_secs = gen_data.loc[gen_data["Constraint Type"] != 0]
+    check_valid(
+        constraint_secs["Constraint Sector ID"],
+        sector_data["Sector ID"],
+        "Error: Define all constraint sectors"
+    )
+
+    # Check all distribution ids exist
+    check_valid(
+        gen_data["Distribution ID"],
+        dist_data["Distribution ID"],
+        "Error: Define all Distribution IDs"
+    )
+
+    # Check for same distribution - sector systems
+    dest_sectors_check = dist_data.merge(sector_def_data, on="Sector ID")
+    dest_sectors_check = dest_sectors_check.groupby("Distribution ID")
+    if not all(dest_sectors_check["Sector System ID"].nunique() == 1):
+        raise ValueError("Error: Distributions must use a single "
+                         "sector system")
+
+    # Check intrazonal ids are valid
+    check_valid(
+        gen_data["Include / Exclude Intrazonals"],
+        [1, 2],
+        "Error: Intrazonal ID must be 1 or 2"
+    )
+
+    # Check constraint Ids are valid
+    check_valid(
+        gen_data["Constraint Type"],
+        [0, 1, 2],
+        "Error: Constraint Type must be 0, 1, or 2"
+    )
+    
 def test_bespoke_zones(gen_path: str,
                        exports_path: str,
                        model_name: str,
@@ -1556,8 +1701,10 @@ def test_bespoke_zones(gen_path: str,
     
     if model_name == "norms_2015" or model_name == "norms":
         model_suffix = "NoRMS"
+        ca_needed = True
     elif model_name == "noham":
         model_suffix = "NoHAM"
+        ca_needed = False
     else:
         raise ValueError(f"Model Type {model_name} is not supported")
     
@@ -1568,67 +1715,16 @@ def test_bespoke_zones(gen_path: str,
     sector_data = bespoke_dict[f"Sector Data {model_suffix}"]
     sector_def_data = bespoke_dict[f"Sector Definition {model_suffix}"]
     dist_data = bespoke_dict[f"Distribution Data {model_suffix}"]
-    
+
     # ## Error Checking ## #
     print("Checking for input errors")
-    # Check for duplicates
-    if gen_data.duplicated().any():
-        raise ValueError("Error: Duplicate Rows Exist in Generation Sheet")
-    # Check each zone ID exists in norms/noham
-    if any([zone not in sector_data["Zone"].unique() for zone in 
-           gen_data["Zone ID"].unique()]):
-        raise ValueError("Error: Bespoke Zone IDs do not exist in Model Zones")
-    # Check origin and destinations are both defined for each zone
-    group_cols = [col for col in gen_data.columns 
-                  if "TfN" in col or 
-                  col in ["Purpose ID", "Generator ID", "Zone ID", "Year"]]
-    if any([d_count != 2 for d_count in 
-            gen_data.groupby(group_cols)["Direction"].count().values]):
-        raise ValueError("Error: Supply both directions for each generator")
-    # Check all unique purpose ids exist in lookup - check they are in the 
-    # same group e.g. <100, <200. Detect if splits will need to be done
-    if any([purp not in purp_data["Purpose ID"].unique() for purp in 
-            gen_data["Purpose ID"].unique()]):
-        raise ValueError("Error: Undefined Purpose ID supplied")
-    u_purps = gen_data[["Purpose ID"]].drop_duplicates()
-    if u_purps.merge(purp_data)["Purpose"].duplicated().any():
-        print("Warning: Overlapping purpose IDs supplied ")
-    # Check that each of soc, ns, ca are valid, either all explicitly defined 
-    # (none missing) or based on underlying data. Check that they are valid 
-    # combinations e.g. purpose 1 only has soc
-    soc_defined = all([x in consts.SOC_NEEDED + [999] for x in 
-                       gen_data["TfN Segmentation - soc"]])
-    ns_defined = all([x in consts.NS_NEEDED + [999] for x in 
-                       gen_data["TfN Segmentation - ns"]])
-    ca_defined = all([x in consts.CA_NEEDED + [999] for x in 
-                       gen_data["TfN Segmentation - ca"]])
-    if not (soc_defined and ns_defined and ca_defined):
-        raise ValueError("Error: Segmentation is not valid")
-    # Check sector ID exists in sector system
-    if any([sec not in sector_data["Sector ID"] for sec in 
-            gen_data["Donor Sector ID"].unique()]):
-        raise ValueError("Error: Define all donor sectors")
-    if any([sec not in sector_data["Sector ID"] + [0] for sec in 
-            gen_data["Constraint Sector ID"].unique()]):
-        raise ValueError("Error: Define all constraint sectors")
-    # Check all distribution ids exist
-    if any([dist not in dist_data["Distribution ID"] for dist in 
-            gen_data["Distribution ID"].unique()]):
-        raise ValueError("Error: Define all Distribution IDs")
-    # Check for same distribution - sector systems
-    dest_sectors_check = dist_data.merge(sector_def_data, on="Sector ID")
-    dest_sectors_check = dest_sectors_check.groupby("Distribution ID")
-    if not all(dest_sectors_check["Sector System ID"].nunique() == 1):
-        raise ValueError("Error: Distributions must use a single "
-                         "sector system")
-    # Check intrazonal ids are valid
-    if any([intra not in [1, 2] for intra in 
-            gen_data["Include / Exclude Intrazonals"].unique()]):
-        raise ValueError("Error: Intrazonal ID must be 1 or 2")
-    # Check constraint Ids are valid
-    if any([const not in [0, 1, 2] for const in 
-            gen_data["Constraint Type"].unique()]):
-        raise ValueError("Error: Constraint Type must be 0, 1, or 2")
+    check_bespoke_input(
+        gen_data,
+        purp_data,
+        sector_data,
+        sector_def_data,
+        dist_data
+    )
     print("Input ok")
 
     # ## Prepare and Infill data ## #
@@ -1642,7 +1738,8 @@ def test_bespoke_zones(gen_path: str,
         donor_data, agg_tour_props = get_donor_zone_data(
             sector_lookup,
             exports_path,
-            nhb_segmented
+            nhb_segmented,
+            ca_needed
         )
         
         donor_data.to_csv(os.path.join(audit_path, "donor_test.csv"))
@@ -1654,13 +1751,21 @@ def test_bespoke_zones(gen_path: str,
     # Convert the segmentation to the EFS segments to split the bespoke 
     # zone data
     print("Splitting bespoke segments")
-    gen_data = _replace_generation_segments(gen_data, purp_data, nhb_segmented)
+    gen_data = _replace_generation_segments(
+        gen_data, 
+        purp_data, 
+        nhb_segmented,
+        ca_needed
+    )
     
     gen_data.to_csv(os.path.join(audit_path, "gen_test.csv"))
     
     # Apply the underlying segment splits where required
     print("Applying donor sector splits")
-    split_data = _apply_underlying_segment_splits(gen_data, donor_data)
+    split_data = _apply_underlying_segment_splits(
+        gen_data,
+        donor_data
+    )
     
     split_data.to_csv(os.path.join(audit_path, "split_test.csv"), index=False)
     
@@ -1672,7 +1777,10 @@ def test_bespoke_zones(gen_path: str,
     
     # Convert HB purposes into productions/attractions using tour proportions
     print("Converting to PAs")
-    converted_trips = _convert_od_to_trips(sector_dist, agg_tour_props)
+    converted_trips = _convert_od_to_trips(
+        sector_dist,
+        agg_tour_props
+    )
     
     converted_trips.to_csv(os.path.join(audit_path, "converted_test.csv"))
     
