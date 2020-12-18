@@ -98,7 +98,7 @@ def doubly_constrained_furness(seed_vals: np.array,
         # Calculate the diff - leave early if met
         row_diff = (row_targets - np.sum(furnessed_mat, axis=1)) ** 2
         col_diff = (col_targets - np.sum(furnessed_mat, axis=0)) ** 2
-        cur_diff = np.sum(row_diff + col_diff) ** 0.5
+        cur_diff = np.sum(row_diff + col_diff) ** .5
         if cur_diff < tol:
             early_exit = True
             break
@@ -129,6 +129,7 @@ def _distribute_pa_internal(productions,
                             tp_col,
                             max_iters,
                             seed_infill,
+                            furness_tol,
                             seed_mat_format,
                             echo,
                             audit_out,
@@ -141,12 +142,6 @@ def _distribute_pa_internal(productions,
     productions = productions.copy()
     a_weights = attraction_weights.copy()
     unique_col = 'trips'
-
-    # Ensure P/A are named by their model
-    model_zone_id = du.get_model_name(calib_params['m']) + '_zone_id'
-    productions = productions.rename(columns={zone_col: model_zone_id})
-    a_weights = a_weights.rename(columns={zone_col: model_zone_id})
-    zone_col = model_zone_id
 
     out_dist_name = du.calib_params_to_dist_name(
         trip_origin=trip_origin,
@@ -250,7 +245,8 @@ def _distribute_pa_internal(productions,
         max_iters=max_iters,
         seed_infill=seed_infill,
         idx_col=zone_col,
-        unique_col=unique_col
+        unique_col=unique_col,
+        tol=furness_tol
     )
 
     if audit_out is not None:
@@ -297,6 +293,7 @@ def distribute_pa(productions: pd.DataFrame,
                   trip_origin: str = 'hb',
                   max_iters: int = 5000,
                   seed_infill: float = 1e-5,
+                  furness_tol: float = 1e-2,
                   seed_mat_format: str = 'enhpa',
                   echo: bool = False,
                   audit_out: str = None,
@@ -405,6 +402,11 @@ def distribute_pa(productions: pd.DataFrame,
     seed_infill:
         The value to infill any seed values that are 0.
 
+    furness_tol:
+        The maximum difference between the achieved and the target values
+        to tolerate before exiting the furness early. R^2 is used to calculate
+        the difference.
+
     seed_mat_format:
         The format of the seed matrices. Usually 'enhpa' from TMS disaggregator
 
@@ -490,6 +492,7 @@ def distribute_pa(productions: pd.DataFrame,
             'tp_col': tp_col,
             'max_iters': max_iters,
             'seed_infill': seed_infill,
+            'furness_tol': furness_tol,
             'seed_mat_format': seed_mat_format,
             'echo': echo,
             'audit_out': audit_out,
@@ -649,7 +652,7 @@ def nhb_furness(p_import: str,
                 ns_needed: List[int] = None,
                 ca_needed: List[int] = None,
                 tp_needed: List[int] = None,
-                nhb_productions_fname: str = consts.NHB_PRODUCTIONS_FNAME,
+                nhb_productions_fname: str = 'nhb_productions.csv',
                 zone_col: str = 'model_zone_id',
                 p_col: str = 'purpose_id',
                 m_col: str = 'mode_id',

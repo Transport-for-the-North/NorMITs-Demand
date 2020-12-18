@@ -143,6 +143,39 @@ def validate_model_name(model_name: str) -> str:
     return model_name
 
 
+def validate_model_name_and_mode(model_name: str,
+                                 m_needed: List[int] = consts.MODES_NEEDED
+                                 ) -> None:
+    """
+    Checks that the given modes are valid modes for the given model name
+
+    Parameters
+    ----------
+    model_name:
+        The the model name to validate
+
+    m_needed:
+        A list of the modes to validate against the model name
+
+    Returns
+    -------
+        None
+    
+    Raises
+    -------
+    ValueError:
+        If any of the modes in m_needed are not a valid mode for the given
+        model_name
+    """
+    # Init
+    model_name = validate_model_name(model_name)
+
+    for mode in m_needed:
+        if mode not in consts.MODEL_MODES[model_name]:
+            raise ValueError("%s is not a valid mode for model %s"
+                             % (str(mode), model_name))
+
+
 def validate_user_class(user_class: str) -> str:
     """
     Tidies up user_class and raises an exception if not a valid name
@@ -494,6 +527,11 @@ def convert_msoa_naming(df: pd.DataFrame,
     # Init
     column_order = list(df)
     to = to.strip().lower()
+
+    # Validate
+    if msoa_col_name not in df:
+        raise KeyError("Column '%s' not in given dataframe to convert."
+                       % msoa_col_name)
 
     # Rename everything to make sure there are no clashes
     df = df.rename(columns={msoa_col_name: 'df_msoa'})

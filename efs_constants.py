@@ -12,7 +12,7 @@ A file of constants to be used.
 Keeps all constants in one place, for all files in the project to refer to,
 and keeps the code more readable.
 """
-import os
+# TODO: Re-organise constants
 
 # ### Constant Values ### #
 
@@ -27,14 +27,6 @@ ALL_MODES = [1, 2, 3, 5, 6]
 
 TIME_PERIODS = [1, 2, 3, 4]
 TIME_PERIOD_STRS = ['tp' + str(x) for x in TIME_PERIODS]
-
-BASE_YEAR = 2018
-FUTURE_YEARS = [2033, 2035, 2050]
-ALL_YEARS = [BASE_YEAR] + FUTURE_YEARS
-
-BASE_YEAR_STR = str(BASE_YEAR)
-FUTURE_YEARS_STR = [str(x) for x in FUTURE_YEARS]
-ALL_YEARS_STR = [str(x) for x in ALL_YEARS]
 
 PROCESS_COUNT = -2
 
@@ -88,29 +80,20 @@ ZONING_SYSTEMS = [
 ]
 
 # Valid model names
-MODEL_NAMES = [
-    'noham',
-    'norms',
-    'norms_2015'
+_model_name_modes = [
+    ('noham',       [3]),
+    ('norms',       [6]),
+    ('norms_2015',  [6]),
 ]
+MODEL_NAMES = [x[0] for x in _model_name_modes]
+MODEL_MODES = {name: modes for name, modes in _model_name_modes}
+
 
 # DIRECTORY NAMES
 AUDITS_DIRNAME = 'Audits'
 PRODUCTIONS_DIRNAME = 'Productions'
 ATTRACTIONS_DIRNAME = 'Attractions'
 NHB_PARAMS_DIRNAME = 'nhb_factors'
-
-# HB consts
-PURPOSES_NEEDED = [1, 2, 3, 4, 5, 6, 7, 8]
-MODES_NEEDED = [6]
-SOC_NEEDED = [0, 1, 2, 3]
-NS_NEEDED = [1, 2, 3, 4, 5]
-CA_NEEDED = [1, 2]
-TP_NEEDED = [1, 2, 3, 4]
-
-# NHB consts
-NHB_PURPOSES_NEEDED = [12, 13, 14, 15, 16, 18]
-NHB_FUTURE_YEARS = [2033, 2035, 2050]
 
 VALID_MATRIX_FORMATS = ['pa', 'od']
 
@@ -126,15 +109,19 @@ TAG_CERTAINTY_BOUNDS = {
 PRODS_FNAME = '%s_%s_productions.csv'
 ATTRS_FNAME = '%s_%s_attractions.csv'
 
+# zone_system
 POP_FNAME = '%s_population.csv'
 EMP_FNAME = '%s_employment.csv'
 
+# ## Zone Translations
+
+# from_zone_system, to_zone_system
+POP_TRANSLATION_FNAME = '%s_%s_pop_weighted_lookup.csv'
+EMP_TRANSLATION_FNAME = '%s_%s_emp_weighted_lookup.csv'
+
+# ## NTEM Controls
 # year
 NTEM_CONTROL_FNAME = 'ntem_pa_ave_wday_%s.csv'
-
-
-NHB_PRODUCTIONS_FNAME = 'nhb_productions.csv'
-
 DEFAULT_LAD_LOOKUP = 'lad_to_msoa.csv'
 
 # TODO: can likely remove lots of EFS_COLUMN_DICTIONARY
@@ -239,3 +226,30 @@ TFN_MSOA_SECTOR_LOOKUPS = {
     "population": "tfn_sector_msoa_pop_weighted_lookup.csv",
     "employment": "tfn_sector_msoa_emp_weighted_lookup.csv"
 }
+
+# RUNNING CONSTANTS
+MODEL_NAME = 'norms'
+
+# YEARS
+BASE_YEAR = 2018
+FUTURE_YEARS = [2033, 2035, 2050]
+
+# HB consts
+PURPOSES_NEEDED = ALL_HB_P
+MODES_NEEDED = MODEL_MODES[MODEL_NAME]
+SOC_NEEDED = [0, 1, 2, 3]
+NS_NEEDED = [1, 2, 3, 4, 5]
+CA_NEEDED = [1, 2]
+TP_NEEDED = [1, 2, 3, 4]
+
+# NHB consts
+NHB_PURPOSES_NEEDED = ALL_NHB_P
+
+# Built from running args
+ALL_YEARS = [BASE_YEAR] + FUTURE_YEARS
+BASE_YEAR_STR = str(BASE_YEAR)
+FUTURE_YEARS_STR = [str(x) for x in FUTURE_YEARS]
+ALL_YEARS_STR = [str(x) for x in ALL_YEARS]
+
+
+

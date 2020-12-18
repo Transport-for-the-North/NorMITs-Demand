@@ -65,9 +65,8 @@ class SectorReporter:
     def calculate_sector_totals(self,
                                 calculating_dataframe: pd.DataFrame,
                                 grouping_metric_columns: List[str] = None,
-                                zone_system_name: str = None,
-                                zone_system_file: str = None,
                                 sector_grouping_file: str = None,
+                                zone_col: str = 'model_zone_id',
                                 verbose: bool = True
                                 ) -> pd.DataFrame:
         """
@@ -130,21 +129,6 @@ class SectorReporter:
         Different aggregation / total methods. Average or median are examples.
         """
         calculating_dataframe = calculating_dataframe.copy()
-        
-        if (zone_system_name != None):
-            # do nothing
-            print("Changing zone system name...")
-        else:
-            print("Not changing zone system name...")
-            zone_system_name = self.default_zone_system_name
-        
-        if (zone_system_file != None):
-            # read in file
-            print("Changing zone system...")
-            zone_system = pd.read_csv(zone_system_file)
-        else:
-            print("Not changing zone system...")
-            zone_system = self.default_zone_system.copy()
             
         if (sector_grouping_file != None):
             # read in file
@@ -153,8 +137,8 @@ class SectorReporter:
         else:
             print("Not changing sector grouping...")
             sector_grouping = self.default_sector_grouping.copy()
-            
-        sector_grouping_zones = sector_grouping["model_zone_id"].unique()
+
+        sector_grouping = sector_grouping.rename(columns={'model_zone_id': zone_col})
             
         if (grouping_metric_columns == None):
             grouping_metric_columns = calculating_dataframe.columns[1:]
@@ -169,8 +153,8 @@ class SectorReporter:
         for group in groupings:
             zones = sector_grouping[
                 sector_grouping["grouping_id"] == group
-            ]["model_zone_id"].values
-            calculating_dataframe_mask = calculating_dataframe["model_zone_id"].isin(zones)
+            ][zone_col].values
+            calculating_dataframe_mask = calculating_dataframe[zone_col].isin(zones)
             new_grouping_dataframe = pd.DataFrame({"grouping_id": [group]})
     
             for metric in grouping_metric_columns:
@@ -201,7 +185,7 @@ class SectorReporter:
         sector_grouping_file : str, optional
             Path to the non-default sector definition file, by default None
         verbose : bool, optional
-            If True, prints messages when using non-default values, 
+            If True, prints messages when using non-default values,
             by default False
 
         Returns
@@ -260,17 +244,17 @@ class SectorReporter:
         ----------
         calculating_dataframe : pd.DataFrame
             The dataframe to apply the sectoring to.
-            Requires the column model_zone_id to be present and the zoning 
+            Requires the column model_zone_id to be present and the zoning
             should match the sector_grouping_file used.
         metric_columns : List[str], optional
             List of columns to aggregate, by default None
         segment_columns : List[str], optional
-            List of column names to keep dissaggregated. Any columns not 
-            specified in metric_columns or segment_columns will be lost, 
+            List of column names to keep dissaggregated. Any columns not
+            specified in metric_columns or segment_columns will be lost,
             by default None
         zone_system_name : str, optional
             Name of the zone system if not using the default system. Will be
-            used to as the original zone column name 
+            used to as the original zone column name
             e.g. "model" -> "model_zone_id, by default "model"
         zone_system_file : str, optional
             Path to the non-default zone definition file, by default None
@@ -281,7 +265,7 @@ class SectorReporter:
             name. e.g. "grouping" -> "grouping_id", by default "grouping"
         aggregation_method : Union[List[str], str], optional
             Aggregation method to use for the metric columns. The same method
-            is applied to all matric columns. Can be a list of methods to 
+            is applied to all matric columns. Can be a list of methods to
             produce a column for each method for each metric or None to keep
             the original zone system but add the sector ids as a new column,
              by default "sum"
@@ -369,16 +353,16 @@ class SectorReporter:
             Path to a matrix file. Must be wide format and contain the zone
             id system within the sector_grouping_file
         out_path : str, optional
-            Path to save the new matrix file. If None, the original file is 
+            Path to save the new matrix file. If None, the original file is
             overwritten, by default None
         zone_system_name : str, optional
             Name of the zone system if not using the default system. Will be
-            used to as the original zone column name 
+            used to as the original zone column name
             e.g. "model" -> "model_zone_id, by default "model"
         zone_system_file : str, optional
             Path to the zone definition file, by default None
         sector_grouping_file : str, optional
-            Path to the non-default sector grouping file. Must contain 
+            Path to the non-default sector grouping file. Must contain
             model_zone_d and grouping_id columns, by default None
         sector_system_name : str, optional
             Name of the sector system. Will be used as the sector column
@@ -396,7 +380,7 @@ class SectorReporter:
         # Fetch any overridden parameters
         zone_system_name, zone_system, sector_grouping = self.get_parameters(
             zone_system_name,
-             zone_system_file, 
+             zone_system_file,
              sector_grouping_file,
             verbose=verbose
         )
@@ -417,7 +401,7 @@ class SectorReporter:
         df.columns = ["i", "j", "v"]
         df["i"] = df["i"].astype("int64")
         df["j"] = df["j"].astype("int64")
-        
+
         # Get the initial matrix total
         pre_agg_total = df["v"].sum()
 
