@@ -5,7 +5,6 @@ verify_ssl = true
 
 [dev-packages]
 pylint = "*"
-black = "*"
 pytest = "*"
 
 [packages]
