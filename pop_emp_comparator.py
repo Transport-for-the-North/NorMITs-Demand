@@ -216,7 +216,7 @@ class PopEmpComparator:
             path = imports["base_employment"]
 
             # Read in base year data
-            print(f'\tReading "{path}"', end="")
+            du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
             input_data = get_employment_data(path).reindex(columns=index_cols)
 
         else:
@@ -225,7 +225,8 @@ class PopEmpComparator:
                              "able to get here!" % str(self.data_type))
 
         input_data.rename(columns={base_yr_col: str(self.base_year)}, inplace=True)
-        print(f" - Done in {time.perf_counter() - start:,.1f}s")
+        du.print_w_toggle(f" - Done in {time.perf_counter() - start:,.1f}s",
+                          echo=self.verbose)
 
         # Read constraint data for required years
         cols = [self.ZONE_COL, *self.years]
@@ -262,7 +263,7 @@ class PopEmpComparator:
         con_diff = totals['output total'] - totals['constraint total']
         con_div = (totals['output total'] / totals['constraint total']) - 1
         growth = totals['output total'] / totals.loc[self.base_year, 'output total']
-        out_growth = totals['output growth'] - totals['mean growth input']
+        out_growth = growth - totals['mean growth input']
 
         # Assign
         totals['constraint difference'] = con_diff
@@ -323,7 +324,7 @@ class PopEmpComparator:
             con_diff = comp[(yr, 'output')] - comp[(yr, 'constraint')]
             con_div = (comp[(yr, 'output')] / comp[(yr, 'constraint')]) - 1
             growth_calc = comp[(yr, 'output')] / comp[(self.base_year, 'output')]
-            out_growth = comp[(yr, 'output growth')] - comp[(yr, 'growth')]
+            out_growth = growth_calc - comp[(yr, 'growth')]
 
             comp[(yr, 'constraint difference')] = con_diff
             comp[(yr, 'constraint % difference')] = con_div
