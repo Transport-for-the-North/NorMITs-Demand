@@ -25,8 +25,8 @@ from efs_attraction_generator import build_attraction_imports, get_employment_da
 ##### CONSTANTS #####
 EXCEL_MAX = (10000, 1000) # Maximum size of dataframe to be written to excel
 
-
 ##### CLASSES #####
+# TODO: Split into two classes inheriting from a common base
 class PopEmpComparator:
     """Class to read the input MSOA population (or employment) data and compare it to the output.
 
@@ -43,34 +43,42 @@ class PopEmpComparator:
                  growth_csv: str,
                  constraint_csv: str,
                  output_csv: str,
-                 data_type: {"population", "employment"},
+                 data_type: str,
                  base_year: str,
                  sector_grouping_file: str = None,
                  sector_system_name: str = "tfn_sectors_zone",
+                 verbose: bool = True,
                  ):
-        """Reads and checks the csvs required for the comparisons.
+        """Reads and checks the csv files required for the comparisons.
 
         Parameters
         ----------
         import_home : str
             Base path for the input location, used for finding the base population
             and employment data.
+
         growth_csv : str
             Path to the csv containing the input growth values for population (or employment)
             at MSOA level for all output years.
+
         constraint_csv : str
             Path to the csv containing the input constraints for population (or employment)
             at MSOA level for all output years.
+
         output_csv : str
             Path to the output population (or employment) data produced by the
             EFSProductionGenerator (or EFSAttractionGenerator) class at MSOA level.
+
         data_type : {'population', 'employment'}
             Whether 'population' or 'employment' data is given for the comparison.
+
         base_year : str
             Base year of the model.
+
         sector_grouping_file : str, optional
             Path to the sector grouping file to use, if None (default) uses the default
             one present in the SectorReporter class.
+
         sector_system_name : str, optional
             Name of the sector system being used, defaul 'tfn_sectors_zone'.
 
@@ -80,6 +88,9 @@ class PopEmpComparator:
             If the data_type parameter isn't 'population' or 'employment' or the base_year
             isn't found as a column in the output csv.
         """
+        # Init
+        self.verbose = verbose
+
         # Check data_type is allowed
         self.data_type = data_type.lower()
         if self.data_type not in ("population", "employment"):
@@ -87,7 +98,10 @@ class PopEmpComparator:
                 'data_type parameter should be "population" or "employment" '
                 f'not "{data_type}"'
             )
-        print(f"Initialising {self.data_type.capitalize()} comparisons:")
+
+        du.print_w_toggle("Initialising %s comparisons:"
+                          % self.data_type.capitalize(),
+                          echo=verbose)
 
         # Read the output data and extract years columns
         self.output, self.years = self._read_output(output_csv)
@@ -97,7 +111,7 @@ class PopEmpComparator:
             raise ValueError(f'Base year ({self.base_year}) not found in the '
                              f'{self.data_type} output DataFrame.')
 
-        # Read the required columns for input csvs
+        # Read the required columns for input csv files
         self.input_data, self.constraint_data, self.growth_data = self._read_inputs(
             import_home, constraint_csv, growth_csv
         )
@@ -151,9 +165,11 @@ class PopEmpComparator:
         years = [i for i in output.columns if pat.match(i.strip())]
         return output, years
 
-    def _read_inputs(
-        self, import_home: str, constraint_csv: str, growth_csv: str
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def _read_inputs(self,
+                     import_home: str,
+                     constraint_csv: str,
+                     growth_csv: str
+                     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """Reads the input, constraint and growth CSV files.
 
         Performs some checks on the inputs and normalises the growth.
@@ -163,8 +179,10 @@ class PopEmpComparator:
         import_home : str
             Base path for the input location, used for finding the base population
             and employment data.
+
         constraint_csv : str
             Path to the constraint CSV file.
+
         growth_csv : str
             Path to the growth CSV file.
 
@@ -180,7 +198,7 @@ class PopEmpComparator:
             base_yr_col = "people"
             imports = build_production_imports(import_home)
             path = imports["land_use"]
-            print(f'\tReading "{path}"', end="")
+            du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
             input_data = get_land_use_data(path)[[self.ZONE_COL, base_yr_col]]
             input_data = input_data.groupby(self.ZONE_COL, as_index=False).sum()
         else:
@@ -358,7 +376,11 @@ class PopEmpComparator:
         sector_comp.index.name = 'sector'
         return sector_comp
 
-    def write_comparisons(self, output_loc: str, output_as: str='excel', year_col: bool=False):
+    def write_comparisons(self,
+                          output_loc: str,
+                          output_as: str = 'excel',
+                          year_col: bool = False
+                          ) -> None:
         """Runs each comparison method and writes the output to a csv.
 
         Parameters

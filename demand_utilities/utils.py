@@ -237,6 +237,26 @@ def validate_vdm_seg_params(seg_params: Dict[str, Any]) -> Dict[str, Any]:
     return seg_params
 
 
+def print_w_toggle(*args, echo, **kwargs):
+    """
+    Small wrapper to only print when echo=True
+
+    Parameters
+    ----------
+    *args:
+        The text to print - can be passed in the same format as a usual
+        print function
+
+    echo:
+        Whether to print the text or not
+
+    **kwargs:
+        Any other kwargs to pass directly to the print function call
+    """
+    if echo:
+        print(*args, **kwargs)
+
+
 def build_io_paths(import_location: str,
                    export_location: str,
                    model_name: str,

@@ -113,6 +113,7 @@ class ExternalForecastSystem:
         # Setup up import/export paths
         self.imports, self.exports, self.params = self.generate_output_paths()
         self._read_in_default_inputs()
+        self._build_pop_emp_paths()
         self.msoa_zones_path = os.path.join(self.imports["zoning"], "msoa_zones.csv")
 
         # sub-classes
@@ -124,34 +125,13 @@ class ExternalForecastSystem:
         self.sector_reporter = SectorReporter()
         self.zone_translator = ZoneTranslator()
 
-        # TODO: Functionalise pop/emp paths
-        # Initialise parameters for population and employment comparisons
-        self.pop_emp_inputs = {
-            "population": {
-                "input_csv": os.path.join(self.imports["default_inputs"],base_pop_path),
-                "growth_csv": os.path.join(self.imports["default_inputs"], pop_growth_path),
-                "constraint_csv": os.path.join(self.imports["default_inputs"], pop_constraint_path),
-                "msoa_lookup_file": os.path.join(self.imports["zoning"], "msoa_zones.csv"),
-                "import_home": self.imports["home"],
-                "sector_grouping_file": os.path.join(self.imports["zoning"], consts.TFN_MSOA_SECTOR_LOOKUPS["population"]),
-            },
-            "employment": {
-                "input_csv": os.path.join(self.imports["default_inputs"], base_emp_path),
-                "growth_csv": os.path.join(self.imports["default_inputs"], emp_growth_path),
-                "constraint_csv": os.path.join(self.imports["default_inputs"], emp_constraint_path),
-                "msoa_lookup_file": os.path.join(self.imports["zoning"], "msoa_zones.csv"),
-                "sector_grouping_file": os.path.join(
-                    self.imports["zoning"], consts.TFN_MSOA_SECTOR_LOOKUPS["employment"]
-                ),
-            },
-        }
-
         print("External Forecast System initiated!")
         last_time = current_time
         current_time = time.time()
         print("Initialisation took: %.2f seconds." % (current_time - last_time))
 
     def _read_in_default_inputs(self):
+        # Change this dep
         input_dir = self.imports['default_inputs']
 
         # Read in soc and ns as strings if in inputs
@@ -167,7 +147,7 @@ class ExternalForecastSystem:
         file_path = os.path.join(input_dir, self.pop_constraint_path)
         self.pop_constraint = du.safe_read_csv(file_path, dtype=dtypes)
 
-        # Worker files
+        # Employment files
         file_path = os.path.join(input_dir, self.base_emp_path)
         self.base_emp = du.safe_read_csv(file_path, dtype=dtypes)
 
@@ -178,11 +158,42 @@ class ExternalForecastSystem:
         self.emp_constraint = du.safe_read_csv(file_path, dtype=dtypes)
 
         # Zone and area files
+        input_dir = self.imports['default_inputs']
         file_path = os.path.join(input_dir, self.msoa_lookup_path)
         self.msoa_lookup = du.safe_read_csv(file_path)
 
         file_path = os.path.join(input_dir, self.lad_msoa_lookup_path)
         self.lad_msoa_lookup = du.safe_read_csv(file_path)
+
+    def _build_pop_emp_paths(self):
+        # Init
+        # TODO: Update input_dir with scenarios
+        input_dir = self.imports['default_inputs']
+        zone_lookups = consts.TFN_MSOA_SECTOR_LOOKUPS
+
+        # Build the pop paths
+        pop_paths = {
+            "import_home": self.imports["home"],
+            "growth_csv": os.path.join(input_dir, self.pop_growth_path),
+            "constraint_csv": os.path.join(input_dir, self.pop_constraint_path),
+            "sector_grouping_file": os.path.join(self.imports['zoning'],
+                                                 zone_lookups["population"])
+        }
+
+        # Build the emp paths
+        emp_paths = {
+            "import_home": self.imports["home"],
+            "growth_csv": os.path.join(input_dir, self.emp_growth_path),
+            "constraint_csv": os.path.join(input_dir, self.emp_constraint_path),
+            "sector_grouping_file": os.path.join(self.imports['zoning'],
+                                                 zone_lookups["employment"])
+        }
+
+        # Assign to dictionary
+        self.pop_emp_inputs = {
+            "population": pop_paths,
+            "employment": emp_paths,
+        }
 
     def run(self,
             base_year: int = 2018,
@@ -750,13 +761,12 @@ class ExternalForecastSystem:
 
         # ## PRODUCTION GENERATION ## #
         print("Generating productions...")
-        production_trips, population_output = self.production_generator.run(
+        production_trips = self.production_generator.run(
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
             population_growth=pop_growth,
             population_constraint=pop_constraint,
             import_home=self.imports['home'],
-            msoa_conversion_path=self.msoa_zones_path,
             control_productions=True,
             d_log=development_log,
             d_log_split=development_log_split,
@@ -771,30 +781,20 @@ class ExternalForecastSystem:
 
             population_metric=population_metric,
         )
-        print("Productions generated!")
-        # Compare productions output to inputs
-        comparison = PopEmpComparator(
-            **self.pop_emp_inputs['population'],
-            output_csv=os.path.join(self.exports['productions'], 'MSOA_population.csv'),
-            data_type='population',
-            base_year=str(base_year)
-            )
-        comparison.write_comparisons(self.exports['reports'], output_as='csv', year_col=True)
-
         last_time = current_time
         current_time = time.time()
-        print("Production generation took: %.2f seconds" %
-              (current_time - last_time))
+        elapsed_time = current_time - last_time
+        print("Production generation took: %.2f seconds" % elapsed_time)
 
         # ## ATTRACTION GENERATION ###
         print("Generating attractions...")
-        attraction_dataframe, nhb_att, employment_output = self.attraction_generator.run(
+        attraction_dataframe, nhb_att = self.attraction_generator.run(
+            out_path=self.exports['attractions'],
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
             employment_growth=emp_growth,
             employment_constraint=emp_constraint,
             import_home=self.imports['home'],
-            msoa_conversion_path=self.msoa_zones_path,
             attraction_weights_path=self.imports['a_weights'],
             control_attractions=True,
             d_log=development_log,
@@ -805,26 +805,47 @@ class ExternalForecastSystem:
             constraint_on=constraint_on,
             constraint_source=constraint_source,
             designated_area=self.lad_msoa_lookup.copy(),
-            out_path=self.exports['attractions'],
             recreate_attractions=recreate_attractions
         )
 
-        print("Attractions generated!")
-        # Compare attractions output to inputs
-        comparison = PopEmpComparator(
+        last_time = current_time
+        current_time = time.time()
+        print("Attraction generation took: %.2f seconds" %
+              (current_time - last_time))
+
+        # ## Audit the pop/emp inputs/outputs ## #
+        print("Auditing population/employment numbers...")
+        # Build paths
+        pop_path = os.path.join(self.exports['productions'],
+                                self.production_generator.pop_fname)
+        emp_path = os.path.join(self.exports['attractions'],
+                                self.attraction_generator.emp_fname)
+
+        # Build the comparators
+        pop_comp = PopEmpComparator(
+            **self.pop_emp_inputs['population'],
+            output_csv=pop_path,
+            data_type='population',
+            base_year=str(base_year)
+        )
+        emp_comp = PopEmpComparator(
             **self.pop_emp_inputs['employment'],
-            output_csv=os.path.join(self.exports['attractions'], 'MSOA_employment.csv'),
+            output_csv=emp_path,
             data_type='employment',
             base_year=str(base_year)
-            )
-        comparison.write_comparisons(self.exports['reports'], output_as='csv', year_col=True)
+        )
+
+        # Write comparisons to disk
+        pop_comp.write_comparisons(self.exports['reports'], 'csv', True)
+        emp_comp.write_comparisons(self.exports['reports'], 'csv', True)
 
         last_time = current_time
         current_time = time.time()
-        print("Employment and Attraction generation took: %.2f seconds" %
-              (current_time - last_time))
+        elapsed_time = current_time - last_time
+        print("Population/Employment auditing took: %.2f seconds" % elapsed_time)
 
         # ## Generate NHB Productions ## #
+        print("Generating Non-Home Based Productions...")
         nhb_pm = pm.NhbProductionModel(
             import_home=self.imports['home'],
             export_home=self.exports['home'],
@@ -834,6 +855,11 @@ class ExternalForecastSystem:
         nhb_productions = nhb_pm.run(
             recreate_productions=recreate_nhb_productions
         )
+
+        last_time = current_time
+        current_time = time.time()
+        elapsed_time = current_time - last_time
+        print("NHB Production generation took: %.2f seconds" % elapsed_time)
 
         # # ## ATTRACTION WEIGHT GENERATION ## #
         print("Generating attraction weights...")
@@ -2045,6 +2071,7 @@ class ExternalForecastSystem:
 
     def generate_output_paths(self) -> Tuple[dict, dict, dict]:
         """
+        # TODO: Update generate_output_paths to include scenario paths
 
         Returns
         -------
@@ -2253,8 +2280,8 @@ def main():
 
     # Running control
     run_base_efs = True
-    recreate_productions = True
-    recreate_attractions = True
+    recreate_productions = False
+    recreate_attractions = False
     recreate_nhb_productions = True
 
     constrain_population = False
@@ -2265,7 +2292,7 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    iter_num = 1
+    iter_num = 0
     import_home = "Y:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME

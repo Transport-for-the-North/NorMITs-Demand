@@ -53,6 +53,8 @@ class EFSAttractionGenerator:
         self.zone_col = '%s_zone_id' % zoning_system
         self.emp_cat_col = 'employment_cat'
 
+        self.emp_fname = consts.EMP_FNAME % zoning_system
+
         # Define the segmentation we're using
         if seg_level == 'tfn':
             self.emp_segments = [self.emp_cat_col, 'soc']
@@ -66,6 +68,7 @@ class EFSAttractionGenerator:
             )
 
     def run(self,
+            out_path: str,
             base_year: str,
             future_years: List[str],
 
@@ -75,7 +78,6 @@ class EFSAttractionGenerator:
 
             # Build import paths
             import_home: str,
-            msoa_conversion_path: str,
 
             # Alternate population/attraction creation files
             attraction_weights_path: str,
@@ -110,10 +112,9 @@ class EFSAttractionGenerator:
 
             # Handle outputs
             audits: bool = True,
-            out_path: str = None,
             recreate_attractions: bool = True,
             aggregate_nhb_tp: bool = True
-            ) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
+            ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Attraction model for the external forecast system. This has been
         written to align with TMS attraction generation, with the addition of
@@ -133,6 +134,10 @@ class EFSAttractionGenerator:
 
         Parameters
         ----------
+        out_path:
+            Path to the directory to output the employment and attractions
+            dataframes.
+
         base_year:
             The base year of the forecast.
 
@@ -152,12 +157,6 @@ class EFSAttractionGenerator:
         import_home:
             The home directory to find all the attraction imports. Usually
             Y:/NorMITs Demand/import
-
-        msoa_conversion_path:
-            Path to the file containing the conversion from msoa integer
-            identifiers to the msoa string code identifiers. Hoping to remove
-            this in a future update and align all of EFS to use msoa string
-            code identifiers.
 
         attraction_weights_path:
             The path to alternate attraction weights import data. If left as
@@ -242,10 +241,6 @@ class EFSAttractionGenerator:
             be used to monitor the employment and attraction numbers being
             generated and constrained.
 
-        out_path:
-            Path to the directory to output the employment and attractions
-            dataframes.
-
         recreate_attractions:
             Whether to recreate the attractions or not. If False, it will
             look in out_path for previously produced attractions and return
@@ -264,9 +259,6 @@ class EFSAttractionGenerator:
         segmented_nhb_attractions:
             NHB attractions for mode m_needed, segmented by all segments
             possible in the input data.
-
-        employment_output: str
-            Path to the employment output CSV.
         """
         # Return previously created productions if we can
         fname = consts.ATTRS_FNAME % (self.zoning_system, 'hb')
@@ -442,13 +434,9 @@ class EFSAttractionGenerator:
             print('\n')
 
         # Write the produced employment to file
-        if out_path is None:
-            print("WARNING! No output path given. "
-                  "Not writing employment to file.")
-        else:
-            print("Writing employment to file...")
-            employment_output = os.path.join(out_path, consts.EMP_FNAME % self.zoning_system)
-            employment.to_csv(employment_output, index=False)
+        print("Writing employment to file...")
+        employment_output = os.path.join(out_path, self.emp_fname)
+        employment.to_csv(employment_output, index=False)
 
         # ## CREATE ATTRACTIONS ## #
         # Index by as much segmentation as possible
@@ -489,15 +477,11 @@ class EFSAttractionGenerator:
         nhb_att = nhb_att.rename(columns=columns)
 
         # Write attractions to file
-        if out_path is None:
-            print("WARNING! No output path given. "
-                  "Not writing attractions to file.")
-        else:
-            print("Writing attractions to file...")
-            fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_hb')
-            nhb_fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_nhb')
-            attractions.to_csv(os.path.join(out_path, fname), index=False)
-            nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
+        print("Writing attractions to file...")
+        fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_hb')
+        nhb_fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_nhb')
+        attractions.to_csv(os.path.join(out_path, fname), index=False)
+        nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 
         # TODO: functionalise conversion to old efs
         # ## CONVERT TO OLD EFS FORMAT ## #
@@ -534,7 +518,7 @@ class EFSAttractionGenerator:
         attractions.to_csv(os.path.join(out_path, fname), index=False)
         nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 
-        return attractions, nhb_att, employment_output
+        return attractions, nhb_att
 
     def attraction_generation(self,
                               worker_dataframe: pd.DataFrame,

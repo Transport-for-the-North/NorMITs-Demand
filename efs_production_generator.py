@@ -59,6 +59,8 @@ class EFSProductionGenerator:
         self.zoning_system = zoning_system
         self.zone_col = '%s_zone_id' % zoning_system
 
+        self.pop_fname = consts.POP_FNAME % (zoning_system)
+
         # Define the segmentation we're using
         if seg_level == 'tfn':
             self.segments = ['area_type', 'p', 'soc', 'ns', 'ca']
@@ -76,6 +78,7 @@ class EFSProductionGenerator:
             self.return_segments.remove('ca')
 
     def run(self,
+            out_path: str,
             base_year: str,
             future_years: List[str],
 
@@ -85,7 +88,6 @@ class EFSProductionGenerator:
 
             # Build import paths
             import_home: str,
-            msoa_conversion_path: str,
 
             # Alternate population/production creation files
             lu_import_path: str = None,
@@ -122,10 +124,9 @@ class EFSProductionGenerator:
 
             # Handle outputs
             audits: bool = True,
-            out_path: str = None,
             recreate_productions: bool = True,
             population_metric: str = "Population",  # Households, Population
-            ) -> Tuple[pd.DataFrame, str]:
+            ) -> pd.DataFrame:
         """
         Production model for the external forecast system. This has been
         written to align with TMS production generation, with the addition of
@@ -144,6 +145,10 @@ class EFSProductionGenerator:
 
         Parameters
         ----------
+        out_path:
+            Path to the directory to output the population and productions
+            dataframes.
+
         base_year:
             The base year of the forecast.
 
@@ -162,12 +167,6 @@ class EFSProductionGenerator:
         import_home:
             The home directory to find all the production imports. Usually
             Y:/NorMITs Demand/import
-
-        msoa_conversion_path:
-            Path to the file containing the conversion from msoa integer
-            identifiers to the msoa string code identifiers. Hoping to remove
-            this in a future update and align all of EFS to use msoa string
-            code identifiers.
 
         lu_import_path:
             The path to alternate land use import data. If left as None, the
@@ -262,10 +261,6 @@ class EFSProductionGenerator:
             be used to monitor the population and production numbers being
             generated and constrained.
 
-        out_path:
-            Path to the directory to output the population and productions
-            dataframes.
-
         recreate_productions:
             Whether to recreate the productions or not. If False, it will
             look in out_path for previously produced productions and return
@@ -280,8 +275,6 @@ class EFSProductionGenerator:
         Segmented_productions:
             Productions for mode m_needed, segmented by all segments possible
             in the input data.
-        population_output:
-            Path to the population output CSV.
         """
         # Return previously created productions if we can
         fname = consts.PRODS_FNAME % (self.zoning_system, 'hb')
@@ -430,13 +423,9 @@ class EFSProductionGenerator:
             print('\n')
 
         # Write the produced population to file
-        if out_path is None:
-            print("WARNING! No output path given. "
-                  "Not writing populations to file.")
-        else:
-            print("Writing population to file...")
-            population_output = os.path.join(out_path, consts.POP_FNAME % self.zoning_system)
-            population.to_csv(population_output, index=False)
+        print("Writing population to file...")
+        population_output = os.path.join(out_path, self.pop_fname)
+        population.to_csv(population_output, index=False)
 
         # ## CREATE PRODUCTIONS ## #
         print("Population generated. Converting to productions...")
@@ -456,14 +445,10 @@ class EFSProductionGenerator:
         )
 
         # Write productions to file
-        if out_path is None:
-            print("WARNING! No output path given. "
-                  "Not writing productions to file.")
-        else:
-            print("Writing productions to file...")
-            fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_hb')
-            path = os.path.join(out_path, fname)
-            productions.to_csv(path, index=False)
+        print("Writing productions to file...")
+        fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_hb')
+        path = os.path.join(out_path, fname)
+        productions.to_csv(path, index=False)
 
         # ## CONVERT TO OLD EFS FORMAT ## #
         # Make sure columns are the correct data type
@@ -490,7 +475,7 @@ class EFSProductionGenerator:
         path = os.path.join(out_path, fname)
         productions.to_csv(path, index=False)
 
-        return productions, population_output
+        return productions
 
     def grow_population(self,
                         population_values: pd.DataFrame,

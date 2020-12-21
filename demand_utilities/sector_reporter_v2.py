@@ -196,14 +196,14 @@ class SectorReporter:
         """
         messages = []
 
-        if (zone_system_name is not None):
+        if zone_system_name is not None:
             # do nothing
             messages.append("Changing zone system name...")
         else:
             messages.append("Not changing zone system name...")
             zone_system_name = self.default_zone_system_name
 
-        if (zone_system_file is not None):
+        if zone_system_file is not None:
             # read in file
             messages.append("Changing zone system...")
             zone_system = pd.read_csv(zone_system_file)
@@ -211,7 +211,7 @@ class SectorReporter:
             messages.append("Not changing zone system...")
             zone_system = self.default_zone_system.copy()
 
-        if (sector_grouping_file is not None):
+        if sector_grouping_file is not None:
             # read in file
             messages.append("Changing sector grouping...")
             sector_grouping = pd.read_csv(sector_grouping_file)
