@@ -78,7 +78,8 @@ class ExternalForecastSystem:
                  lad_msoa_lookup_path: str = "zoning/lad_msoa_grouping.csv",
 
                  import_home: str = "Y:/",
-                 export_home: str = "E:/"
+                 export_home: str = "E:/",
+                 verbose: str = True
                  ):
         # TODO: Write EFS constructor docs
         # TODO: Re-write constraints handling in the base year
@@ -97,6 +98,7 @@ class ExternalForecastSystem:
         self.iter_name = 'iter' + str(iter_num)
         self.import_location = import_home
         self.output_location = export_home
+        self.verbose = verbose
 
         self.base_pop_path = base_pop_path
         self.pop_constraint_path = pop_constraint_path
@@ -826,13 +828,15 @@ class ExternalForecastSystem:
             **self.pop_emp_inputs['population'],
             output_csv=pop_path,
             data_type='population',
-            base_year=str(base_year)
+            base_year=str(base_year),
+            verbose=self.verbose
         )
         emp_comp = PopEmpComparator(
             **self.pop_emp_inputs['employment'],
             output_csv=emp_path,
             data_type='employment',
-            base_year=str(base_year)
+            base_year=str(base_year),
+            verbose=self.verbose
         )
 
         # Write comparisons to disk
@@ -1040,7 +1044,7 @@ class ExternalForecastSystem:
                 zone_col=model_zone_col,
                 seed_dist_dir=self.imports['seed_dists'],
                 dist_out=self.exports['pa_24'],
-                audit_out=self.exports['print_audits'],
+                audit_out=self.exports['audits'],
                 echo=echo_distribution
             )
 
@@ -1124,6 +1128,7 @@ class ExternalForecastSystem:
             # TODO: Store output files into local storage (class storage)
 
     def pa_to_od(self,
+                 model_name: str,
                  years_needed: List[int] = consts.ALL_YEARS,
                  modes_needed: List[int] = consts.MODES_NEEDED,
                  purposes_needed: List[int] = consts.PURPOSES_NEEDED,
@@ -1140,6 +1145,9 @@ class ExternalForecastSystem:
 
         Parameters
         ----------
+        model_name:
+            The name of the model to convert from PA to OD
+
         years_needed:
             The years of PA matrices to convert to OD
 
@@ -1207,6 +1215,7 @@ class ExternalForecastSystem:
             pa2od.efs_build_od(
                 pa_import=self.exports['pa'],
                 od_export=self.exports['od'],
+                model_name=model_name,
                 p_needed=purposes_needed,
                 m_needed=modes_needed,
                 soc_needed=soc_needed,
@@ -1458,6 +1467,7 @@ class ExternalForecastSystem:
             )
 
     def generate_post_me_tour_proportions(self,
+                                          model_name: str,
                                           year: int = consts.BASE_YEAR,
                                           m_needed: List[int] = consts.MODES_NEEDED,
                                           overwrite_decompiled_od=True,
@@ -1481,6 +1491,9 @@ class ExternalForecastSystem:
 
         Parameters
         ----------
+        model_name:
+            The name of the model this is being run for.
+
         year:
              The year to decompile OD matrices for. (Usually the base year)
 
@@ -1537,7 +1550,7 @@ class ExternalForecastSystem:
                     year=year,
                     user_class=True,
                     to_wide=True,
-                    wide_col_name=du.get_model_name(m_needed[0]) + '_zone_id',
+                    wide_col_name='%s_zone_id' % model_name,
                     from_pcu=from_pcu,
                     vehicle_occupancy_import=self.imports['home']
                 )
@@ -2276,13 +2289,13 @@ def write_input_info(output_path,
 
 
 def main():
-    echo = False
+    verbose = False
 
     # Running control
     run_base_efs = True
     recreate_productions = False
     recreate_attractions = False
-    recreate_nhb_productions = True
+    recreate_nhb_productions = False
 
     constrain_population = False
 
@@ -2308,7 +2321,8 @@ def main():
         iter_num=iter_num,
         model_name=model_name,
         import_home=import_home,
-        export_home=export_home
+        export_home=export_home,
+        verbose=verbose
     )
 
     if run_base_efs:
@@ -2319,7 +2333,7 @@ def main():
             recreate_productions=recreate_productions,
             recreate_attractions=recreate_attractions,
             recreate_nhb_productions=recreate_nhb_productions,
-            echo_distribution=echo,
+            echo_distribution=verbose,
             constraint_required=constraints
         )
 
@@ -2327,9 +2341,10 @@ def main():
     if run_hb_pa_to_od:
         # Convert to HB to OD
         efs.pa_to_od(
+            model_name=model_name,
             overwrite_hb_tp_pa=True,
             overwrite_hb_tp_od=True,
-            echo=echo
+            echo=verbose
         )
 
     # TODO: Update Integrated OD2PA codebase
@@ -2344,6 +2359,7 @@ def main():
         # Decompiles post-me base year OD matrices - generates tour
         # proportions in the process
         efs.generate_post_me_tour_proportions(
+            model_name=model_name,
             overwrite_decompiled_od=False,
             overwrite_tour_proportions=True,
         )

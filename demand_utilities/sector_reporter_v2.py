@@ -222,7 +222,7 @@ class SectorReporter:
         if verbose:
             print(*messages, sep="\n")
 
-        return (zone_system_name, zone_system, sector_grouping)
+        return zone_system_name, zone_system, sector_grouping
 
     def calculate_sector_totals_v2(self,
                                    calculating_dataframe: pd.DataFrame,
@@ -232,8 +232,7 @@ class SectorReporter:
                                    zone_system_file: str = None,
                                    sector_grouping_file: str = None,
                                    sector_system_name: str = "grouping",
-                                   aggregation_method: Union[List[str],
-                                                             str] = "sum",
+                                   aggregation_method: Union[List[str], str] = "sum",
                                    verbose: bool = False
                                    ) -> pd.DataFrame:
         """Groups a dataframe by the desired sector system.
@@ -282,24 +281,28 @@ class SectorReporter:
         ValueError
             Raises a ValueError is any provided column name is not available.
         """
-
+        # Init
         calculating_dataframe = calculating_dataframe.copy()
         metric_columns = metric_columns or []
         segment_columns = segment_columns or []
 
-        # Check Inputs
-        missing_metrics = [
-            metric for metric in metric_columns if
-            metric not in calculating_dataframe.columns
-        ]
-        missing_segments = [
-            segment for segment in segment_columns if
-            segment not in calculating_dataframe.columns
-        ]
+        # Validate Inputs
+        missing_metrics = list()
+        for metric in metric_columns:
+            if metric not in calculating_dataframe.columns:
+                missing_metrics.append(metric)
+
+        missing_segments = list()
+        for segment in segment_columns:
+            if segment not in calculating_dataframe.columns:
+                missing_segments.append(segment)
+
         if len(missing_metrics) + len(missing_segments) > 0:
-            raise ValueError(f"Dataframe missing: segments - "
-                             f"{missing_segments}, metrics - {missing_metrics}"
-                             )
+            raise ValueError(
+                "Dataframe missing the following:\n"
+                "Segments: %s\nMetrics: %s"
+                % (str(missing_segments), str(missing_metrics))
+            )
 
         zone_system_name, zone_system, sector_grouping = self.get_parameters(
             zone_system_name,
@@ -345,31 +348,38 @@ class SectorReporter:
                                  aggregation_method: str = "sum",
                                  verbose: bool = False
                                  ) -> None:
-        """Aggregates a wide format matrix file to the goven sector system.
+        """Aggregates a wide format matrix file to the given sector system.
 
         Parameters
         ----------
         matrix_path : str
             Path to a matrix file. Must be wide format and contain the zone
             id system within the sector_grouping_file
+
         out_path : str, optional
             Path to save the new matrix file. If None, the original file is
             overwritten, by default None
+
         zone_system_name : str, optional
             Name of the zone system if not using the default system. Will be
             used to as the original zone column name
             e.g. "model" -> "model_zone_id, by default "model"
+
         zone_system_file : str, optional
             Path to the zone definition file, by default None
+
         sector_grouping_file : str, optional
             Path to the non-default sector grouping file. Must contain
             model_zone_d and grouping_id columns, by default None
+
         sector_system_name : str, optional
             Name of the sector system. Will be used as the sector column
             name. e.g. "grouping" -> "grouping_id", by default "grouping"
+
         aggregation_method : str, optional
             Aggregation method to use for the metric columns. The same method
             is applied to all matric columns, by default "sum"
+
         verbose : bool, optional
             If True, log messages will be printed, by default False
         """
@@ -380,8 +390,8 @@ class SectorReporter:
         # Fetch any overridden parameters
         zone_system_name, zone_system, sector_grouping = self.get_parameters(
             zone_system_name,
-             zone_system_file,
-             sector_grouping_file,
+            zone_system_file,
+            sector_grouping_file,
             verbose=verbose
         )
 

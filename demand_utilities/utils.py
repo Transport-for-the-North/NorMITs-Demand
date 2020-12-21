@@ -852,39 +852,6 @@ def copy_and_rename(src: str, dst: str) -> None:
     shutil.move(os.path.join(dst_head, src_tail), dst)
 
 
-def get_model_name(mode: int) -> str:
-    """
-    Returns a string of the TfN model name based on the mode given.
-
-    Parameters
-    ----------
-    mode:
-        Mode of transport
-
-    Returns
-    -------
-    model_name:
-        model name string
-    """
-    mode_to_name = {
-        1: None,
-        2: None,
-        3: 'noham',
-        4: None,
-        5: None,
-        6: 'norms'
-    }
-
-    if mode not in mode_to_name:
-        raise ValueError("'%s' is not a valid mode." % str(mode))
-
-    if mode_to_name[mode] is None:
-        raise ValueError("'%s' is a valid mode, but a model name does not "
-                         "exist for it." % str(mode))
-
-    return mode_to_name[mode]
-
-
 def add_fname_suffix(fname: str, suffix: str):
     """
     Adds suffix to fname - in front of the file type extension
@@ -911,6 +878,7 @@ def add_fname_suffix(fname: str, suffix: str):
 
 
 def safe_read_csv(file_path: str,
+                  print_time: bool = False,
                   **kwargs
                   ) -> pd.DataFrame:
     """
@@ -920,6 +888,9 @@ def safe_read_csv(file_path: str,
     ----------
     file_path:
         Path to the file to read in
+
+    print_time:
+        Whether to print out some info on how long the file read has taken
 
     kwargs:
         ANy kwargs to pass onto pandas.read_csv()
@@ -938,7 +909,16 @@ def safe_read_csv(file_path: str,
     if not os.path.exists(file_path):
         raise IOError("No file exists at %s" % file_path)
 
-    return pd.read_csv(file_path, **kwargs)
+    # Just return the file
+    if not print_time:
+        return pd.read_csv(file_path, **kwargs)
+
+    # Print out some timing info while reading
+    start = time.perf_counter()
+    print('\tReading "%s"' % file_path, end="")
+    df = pd.read_csv(file_path, **kwargs)
+    print(" - Done in %fs" % (time.perf_counter() - start))
+    return df
 
 
 def is_none_like(o) -> bool:
@@ -2314,6 +2294,7 @@ def file_write_check(path: Union[str, Path], wait: bool=True) -> Path:
     ----------
     path : str
         Path to the file to check.
+
     wait : bool, optional
         Whether or not to wait for the file to be closed, by default True.
         If False appends number to the end of file name to find a path that
@@ -2379,7 +2360,7 @@ def safe_dataframe_to_csv(df, out_path, flatten_header=False, **to_csv_kwargs):
         None
     """
     if flatten_header and len(df.columns.names) > 1:
-        # Combine multple columns levels into a single name split by ':'
+        # Combine multiple columns levels into a single name split by ':'
         df.columns = [' : '.join(str(i) for i in c) for c in df.columns]
 
     written_to_file = False
@@ -2533,9 +2514,7 @@ def filter_by_segmentation(df: pd.DataFrame,
     return df[mask]
 
 
-def intersection(l1: List[Any],
-                 l2: List[Any],
-                 ) -> List[Any]:
+def intersection(l1: List[Any], l2: List[Any]) -> List[Any]:
     """
     Efficient method to return the intersection between l1 and l2
     """

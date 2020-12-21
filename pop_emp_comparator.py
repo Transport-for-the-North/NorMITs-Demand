@@ -123,8 +123,7 @@ class PopEmpComparator:
             "zone_system_name": "msoa",
         }
 
-    @staticmethod
-    def _read_print(path: Path, **kwargs) -> pd.DataFrame:
+    def _read_print(self, path: Path, **kwargs) -> pd.DataFrame:
         """Reads given CSV file and outputs time taken.
 
         Parameters
@@ -139,11 +138,11 @@ class PopEmpComparator:
         pd.DataFrame
             The data read from the CSV.
         """
-        start = time.perf_counter()
-        print(f'\tReading "{path}"', end="")
-        df = du.safe_read_csv(path, **kwargs)
-        print(f" - Done in {time.perf_counter() - start:,.1f}s")
-        return df
+        return du.safe_read_csv(
+            path,
+            print_time=self.verbose,
+            **kwargs
+        )
 
     def _read_output(self, output_csv: str) -> Tuple[pd.DataFrame, List[str]]:
         """Reads the output CSV file and gets the year columns present.
@@ -192,34 +191,55 @@ class PopEmpComparator:
             The input, constraint and growth data from the
             given files.
         """
-        # Read input data
+        # Init
         start = time.perf_counter()
+
+        # Read input data
         if self.data_type == "population":
+            # Set up args
             base_yr_col = "people"
+            index_cols = [self.ZONE_COL, base_yr_col]
             imports = build_production_imports(import_home)
             path = imports["land_use"]
+
+            # Read base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
-            input_data = get_land_use_data(path)[[self.ZONE_COL, base_yr_col]]
+
+            input_data = get_land_use_data(path).reindex(columns=index_cols)
             input_data = input_data.groupby(self.ZONE_COL, as_index=False).sum()
-        else:
+
+        elif self.data_type == "employment":
+            # Set up args
+            base_yr_col = "E01"
+            index_cols = [self.ZONE_COL, base_yr_col]
             imports = build_attraction_imports(import_home, self.base_year, None)
             path = imports["base_employment"]
+
+            # Read in base year data
             print(f'\tReading "{path}"', end="")
-            base_yr_col = "E01"
-            input_data = get_employment_data(path)[[self.ZONE_COL, base_yr_col]]
+            input_data = get_employment_data(path).reindex(columns=index_cols)
+
+        else:
+            # We shouldn't be able to get here
+            raise ValueError("%s is not a valid data_type. We shouldn't be "
+                             "able to get here!" % str(self.data_type))
+
         input_data.rename(columns={base_yr_col: str(self.base_year)}, inplace=True)
         print(f" - Done in {time.perf_counter() - start:,.1f}s")
 
         # Read constraint data for required years
         cols = [self.ZONE_COL, *self.years]
         constraint_data = self._read_print(
-            constraint_csv, skipinitialspace=True, usecols=cols
+            constraint_csv,
+            skipinitialspace=True,
+            usecols=cols
         )
 
         # Read the growth data and normalise against the base year
         growth_data = self._read_print(growth_csv, skipinitialspace=True, usecols=cols)
         growth_data[self.years] = growth_data[self.years].div(
-            growth_data[str(self.base_year)], axis=0
+            growth_data[str(self.base_year)],
+            axis=0
         )
         return input_data, constraint_data, growth_data
 
@@ -239,16 +259,23 @@ class PopEmpComparator:
         totals.index.name = 'year'
 
         # Calculate comparison columns
-        totals['constraint difference'] = totals['output total'] - totals['constraint total']
-        totals['constraint % difference'] = (totals['output total']
-                                             / totals['constraint total']) - 1
-        totals['output growth'] = (totals['output total']
-                                   / totals.loc[self.base_year, 'output total'])
-        totals['growth difference'] = totals['output growth'] - totals['mean growth input']
+        con_diff = totals['output total'] - totals['constraint total']
+        con_div = (totals['output total'] / totals['constraint total']) - 1
+        growth = totals['output total'] / totals.loc[self.base_year, 'output total']
+        out_growth = totals['output growth'] - totals['mean growth input']
+
+        # Assign
+        totals['constraint difference'] = con_diff
+        totals['constraint % difference'] = con_div
+        totals['output growth'] = growth
+        totals['growth difference'] = out_growth
+
         return totals
 
-    def _compare_dataframes(self, index_col: str, input_: pd.DataFrame,
-                            constraint: pd.DataFrame, growth: pd.DataFrame,
+    def _compare_dataframes(self, index_col: str,
+                            input_: pd.DataFrame,
+                            constraint: pd.DataFrame,
+                            growth: pd.DataFrame,
                             output: pd.DataFrame) -> pd.DataFrame:
         """Concatanates the given dataframes and calulcates comparison columns.
 
@@ -274,10 +301,17 @@ class PopEmpComparator:
         pd.DataFrame
             Concatenation of all given dataframes with additional comparison columns.
         """
+        # Init
+        nm_dfs = [
+            ('input', input_),
+            ('constraint', constraint),
+            ('growth', growth),
+            ('output', output)
+        ]
+
         # Set index of dataframes to index_col for concat and rename columns with source
-        concat = []
-        for nm, df in (('input', input_), ('constraint', constraint), ('growth', growth),
-                       ('output', output)):
+        concat = list()
+        for nm, df in nm_dfs:
             df = df.set_index(index_col)
             df.columns = pd.MultiIndex.from_tuples([(i, nm) for i in df.columns])
             concat.append(df)
@@ -286,14 +320,16 @@ class PopEmpComparator:
 
         # Calculate comparison columns
         for yr in self.years:
-            comp[(yr, 'constraint difference')] = (comp[(yr, 'output')]
-                                                   - comp[(yr, 'constraint')])
-            comp[(yr, 'constraint % difference')] = (comp[(yr, 'output')]
-                                                     / comp[(yr, 'constraint')]) - 1
-            comp[(yr, 'output growth')] = (comp[(yr, 'output')]
-                                           / comp[(self.base_year, 'output')])
-            comp[(yr, 'growth difference')] = (comp[(yr, 'output growth')]
-                                               - comp[(yr, 'growth')])
+            con_diff = comp[(yr, 'output')] - comp[(yr, 'constraint')]
+            con_div = (comp[(yr, 'output')] / comp[(yr, 'constraint')]) - 1
+            growth_calc = comp[(yr, 'output')] / comp[(self.base_year, 'output')]
+            out_growth = comp[(yr, 'output growth')] - comp[(yr, 'growth')]
+
+            comp[(yr, 'constraint difference')] = con_diff
+            comp[(yr, 'constraint % difference')] = con_div
+            comp[(yr, 'output growth')] = growth_calc
+            comp[(yr, 'growth difference')] = out_growth
+
         # Sort columns and return comparison
         return comp.sort_index(axis=1, level=0, sort_remaining=False)
 
@@ -321,6 +357,9 @@ class PopEmpComparator:
         pd.DataFrame
             Differences between the input and output values at sector level.
         """
+        # Init
+        SPLIT_COL = 'overlap_msoa_split_factor'
+        sector_rep = SectorReporter()
         cols = [self.ZONE_COL, *self.years]
         msoa_coded_data = {
             'input': self.input_data[[self.ZONE_COL, self.base_year]],
@@ -328,13 +367,15 @@ class PopEmpComparator:
             'output': self.output[cols],
             'growth': self.growth_data[cols]
         }
-        # Calculate sectors totals (or means) for the comparison data
-        SPLIT_COL = 'overlap_msoa_split_factor'
-        sector_rep = SectorReporter()
+
+        # Init Loop
         sector_data = {}
         metric_cols = {}
-        for (nm, df), met_cols in zip(msoa_coded_data.items(),
-                                      [[self.base_year]] + [self.years] * 3):
+        loop_gen = zip(msoa_coded_data.items(),
+                       [[self.base_year]] + [self.years] * 3)
+
+        # Calculate sectors totals (or means) for the comparison data
+        for (nm, df), met_cols in loop_gen:
             # Rename column for sector totals method
             df = df.rename(columns={self.ZONE_COL: "model_zone_id"})
             original_cols = [c for c in df.columns if c != 'model_zone_id']
@@ -424,6 +465,7 @@ class PopEmpComparator:
                     col_order = df.loc[:, df.columns.get_level_values(0)[0]].columns.tolist()
                     df = df.stack(level=0)
                     df.index.names = df.index.names[:-1] + ['year']
+
                     # Make sure no columns are missing from column order
                     missing = [c for c in df.columns if c not in col_order]
                     df = df[col_order + missing]

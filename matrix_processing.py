@@ -224,8 +224,8 @@ def aggregate_matrices(import_dir: str,
     List of all aggregated matrix paths (optional)
     """
     # Init
-    if(ns_needed is not None and soc_needed is None
-       or soc_needed is not None and ns_needed is None):
+    if((ns_needed is not None and soc_needed is None)
+       or (soc_needed is not None and ns_needed is None)):
         raise ValueError("Both keep_soc and keep_ns need to be set at the same "
                          "time. Cannot set one and not the other.")
 
@@ -1673,9 +1673,7 @@ def build_24hr_mats(import_dir: str,
             full_mat.to_csv(os.path.join(export_dir, output_dist_name))
 
 
-def copy_nhb_matrices(import_dir: str,
-                      export_dir: str,
-                      ) -> None:
+def copy_nhb_matrices(import_dir: str, export_dir: str) -> None:
     # Find the .csv nhb mats
     mats = du.list_files(import_dir)
     mats = [x for x in mats if '.csv' in x]
