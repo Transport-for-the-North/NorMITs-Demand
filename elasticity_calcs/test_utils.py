@@ -14,7 +14,12 @@ import pandas as pd
 import numpy as np
 
 # Local imports
-from .utils import read_segments_file, read_elasticity_file, get_constraint_matrices
+from .utils import (
+    read_segments_file,
+    read_elasticity_file,
+    get_constraint_matrices,
+    read_demand_matrix,
+)
 
 
 ##### CONSTANTS #####
@@ -89,7 +94,7 @@ class TestGetConstraintMatrices:
             path = (folder / path).absolute()
             paths.append(path)
             with open(path, "wt") as f:
-                np.savetxt(f, self.MATRICES[i])
+                np.savetxt(f, self.MATRICES[i], delimiter=",")
         return folder, paths
 
     def test_get_constraint_matrices(self, constraint_folder: Tuple[Path, List[Path]]):
@@ -145,6 +150,53 @@ class TestGetConstraintMatrices:
             path = tmp_path / "folder"
         with pytest.raises(FileNotFoundError):
             get_constraint_matrices(path)
+
+
+class TestReadDemandMatrix:
+    """Tests for the `read_demand_matrix` function."""
+
+    @staticmethod
+    @pytest.fixture(name="demand_folder", scope="class")
+    def fixture_demand_folder(tmp_path_factory: Path) -> Tuple[Path, str, pd.DataFrame]:
+        """Create test demand matrix in temporary folder.
+
+        Parameters
+        ----------
+        tmp_path_factory : Path
+            Temporary folder provided by pytest.
+
+        Returns
+        -------
+        Path
+            Folder containing test matrix.
+        str
+            Filename of test matrix.
+        pd.DataFrame
+            The test matrix.
+        """
+        folder = tmp_path_factory.mktemp("demand")
+        demand = pd.DataFrame(np.full((3, 3), 10.0), columns=[1, 2, 3], index=[1, 2, 3])
+        filename = "test_matrix.csv"
+        demand.to_csv(folder / filename)
+        return folder, filename, demand
+
+    @staticmethod
+    def test_read(demand_folder: Tuple[Path, str, pd.DataFrame]):
+        """Test that a NoRMS matrix is read correctly without converting zones.
+
+        Parameters
+        ----------
+        demand_folder : Tuple[Path, str, pd.DataFrame]
+            The folder, filename and data for the test matrix.
+        """
+        folder, name, matrix = demand_folder
+        pd.testing.assert_frame_equal(
+            read_demand_matrix(folder / name, folder, "norms"), matrix
+        )
+
+    @staticmethod
+    def test_lookup():
+        raise NotImplementedError("Placeholder for `read_demand_matrix` test.")
 
 
 ##### FUNCTIONS #####

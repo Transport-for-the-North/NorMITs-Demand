@@ -13,7 +13,8 @@ import numpy as np
 import pandas as pd
 
 # Local imports
-from demand_utilities.utils import safe_read_csv
+from demand_utilities.utils import safe_read_csv, zone_translation_df
+from zone_translator import translate_matrix
 
 
 ##### CONSTANTS #####
@@ -119,6 +120,8 @@ def get_constraint_matrices(
 ) -> Dict[str, Union[Path, np.array]]:
     """Search the given folder for any CSV files.
 
+    All constraint matrices should be in the `COMMON_ZONE_SYSTEM`.
+
     Parameters
     ----------
     folder : Path
@@ -151,5 +154,45 @@ def get_constraint_matrices(
         if get_files is None:
             matrices[nm] = path.absolute()
         elif nm in get_files:
-            matrices[nm] = np.loadtxt(path)
+            matrices[nm] = np.loadtxt(path, delimiter=",")
     return matrices
+
+
+def read_demand_matrix(
+    path: Path, zone_translation_folder: Path, from_zone: str
+) -> pd.DataFrame:
+    """Reads demand matrix and converts it to `COMMON_ZONE_SYSTEM`.
+
+    WIP: Zone system conversion functionality is not fully implemented.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the demand matrix.
+    zone_translation_folder : Path
+        Path to the folder contain zone lookups.
+    from_zone : str
+        The current zone system of the matrix, if this
+        isn't `COMMON_ZONE_SYSTEM` then the matrix will
+        be converted.
+
+    Returns
+    -------
+    pd.DataFrame
+        The demand matrix in the `COMMON_ZONE_SYSTEM`.
+    """
+    demand = pd.read_csv(path, index_col=0)
+    if from_zone != COMMON_ZONE_SYSTEM:
+        # TODO Use splitting factor when translating zone systems and calculate
+        # matrix splitting factors for converting by to original zone system and
+        # to be used as weights for converting cost zone systems
+        lookup = zone_translation_df(
+            zone_translation_folder, from_zone, COMMON_ZONE_SYSTEM
+        )
+        demand = translate_matrix(
+            demand, lookup, [f"{from_zone}_zone_id", f"{COMMON_ZONE_SYSTEM}_zone_id"]
+        )
+    # Convert column and index names to int
+    demand.columns = pd.to_numeric(demand.columns, downcast="integer")
+    demand.index = pd.to_numeric(demand.index, downcast="integer")
+    return demand.sort_index().sort_index(axis=1)
