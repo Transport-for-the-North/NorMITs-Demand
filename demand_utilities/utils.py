@@ -141,6 +141,39 @@ def validate_model_name(model_name: str) -> str:
     return model_name
 
 
+def validate_model_name_and_mode(model_name: str,
+                                 m_needed: List[int] = consts.MODES_NEEDED
+                                 ) -> None:
+    """
+    Checks that the given modes are valid modes for the given model name
+
+    Parameters
+    ----------
+    model_name:
+        The the model name to validate
+
+    m_needed:
+        A list of the modes to validate against the model name
+
+    Returns
+    -------
+        None
+    
+    Raises
+    -------
+    ValueError:
+        If any of the modes in m_needed are not a valid mode for the given
+        model_name
+    """
+    # Init
+    model_name = validate_model_name(model_name)
+
+    for mode in m_needed:
+        if mode not in consts.MODEL_MODES[model_name]:
+            raise ValueError("%s is not a valid mode for model %s"
+                             % (str(mode), model_name))
+
+
 def validate_user_class(user_class: str) -> str:
     """
     Tidies up user_class and raises an exception if not a valid name
@@ -492,6 +525,11 @@ def convert_msoa_naming(df: pd.DataFrame,
     column_order = list(df)
     to = to.strip().lower()
 
+    # Validate
+    if msoa_col_name not in df:
+        raise KeyError("Column '%s' not in given dataframe to convert."
+                       % msoa_col_name)
+
     # Rename everything to make sure there are no clashes
     df = df.rename(columns={msoa_col_name: 'df_msoa'})
 
@@ -762,22 +800,31 @@ def copy_and_rename(src: str, dst: str) -> None:
     -------
     None
     """
+    if not os.path.exists(src):
+        raise IOError("Source file does not exist.\n %s" % src)
+
     if not os.path.isfile(src):
-        raise ValueError("The given src file is not a file. Cannot handle "
+        raise IOError("The given src file is not a file. Cannot handle "
                          "directories.")
 
     # Only rename if given a filename
     if '.' not in os.path.basename(dst):
         # Copy over with same filename
         shutil.copy(src, dst)
-    else:
-        # Split paths
-        _, src_tail = os.path.split(src)
-        dst_head, dst_tail = os.path.split(dst)
+        return
 
-        # Copy then rename
-        shutil.copy(src, dst_head)
-        shutil.move(os.path.join(dst_head, src_tail), dst)
+    # Split paths
+    src_head, src_tail = os.path.split(src)
+    dst_head, dst_tail = os.path.split(dst)
+
+    # Avoid case where src and dist is same locations
+    if dst_head == src_head:
+        shutil.copy(src, dst)
+        return
+
+    # Copy then rename
+    shutil.copy(src, dst_head)
+    shutil.move(os.path.join(dst_head, src_tail), dst)
 
 
 def get_model_name(mode: int) -> str:
@@ -994,7 +1041,8 @@ def get_dist_name(trip_origin: str,
         name_parts += ["m" + mode]
 
     if not is_none_like(segment) and not is_none_like(purpose):
-        seg_name = "soc" if purpose in ['1', '2'] else "ns"
+        soc_p_str = [str(x) for x in consts.SOC_P]
+        seg_name = "soc" if purpose in soc_p_str else "ns"
         name_parts += [seg_name + segment]
 
     if not is_none_like(car_availability):
@@ -1026,16 +1074,16 @@ def calib_params_to_dist_name(trip_origin: str,
     """
     Wrapper for get_distribution_name() using calib params
     """
-    segment_str = 'soc' if calib_params['p'] in [1, 2] else 'ns'
+    segment_str = 'soc' if calib_params['p'] in consts.SOC_P else 'ns'
 
     return get_dist_name(
-        trip_origin,
-        matrix_format,
-        str(calib_params.get('yr')),
-        str(calib_params.get('p')),
-        str(calib_params.get('m')),
-        str(calib_params.get(segment_str)),
-        str(calib_params.get('ca')),
+        trip_origin=trip_origin,
+        matrix_format=matrix_format,
+        year=str(calib_params.get('yr')),
+        purpose=str(calib_params.get('p')),
+        mode=str(calib_params.get('m')),
+        segment=str(calib_params.get(segment_str)),
+        car_availability=str(calib_params.get('ca')),
         tp=str(calib_params.get('tp')),
         csv=csv,
         suffix=suffix
@@ -1154,7 +1202,7 @@ def generate_calib_params(year: str = None,
         raise ValueError("If segment is set, purpose needs to be set too, "
                          "otherwise segment text cannot be determined.")
     # Init
-    segment_str = 'soc' if purpose in [1, 2] else 'ns'
+    segment_str = 'soc' if purpose in consts.SOC_P else 'ns'
 
     keys = ['yr', 'p', 'm', segment_str, 'ca', 'tp']
     vals = [year, purpose, mode, segment, ca, tp]
@@ -1509,11 +1557,10 @@ def segmentation_loop_generator(p_list: Iterable[int],
             required_segments = soc_list
         elif purpose in consts.NS_P:
             required_segments = ns_list
-        elif purpose in consts.ALL_NHB_P:
-            required_segments = [None]
         else:
-            raise ValueError("'%s' does not seem to be a valid soc, ns, or "
-                             "nhb purpose." % str(purpose))
+            raise ValueError("'%s' does not seem to be a valid soc or ns "
+                             "purpose." % str(purpose))
+
         for mode in m_list:
             for segment in required_segments:
                 for car_availability in ca_list:
@@ -1558,23 +1605,14 @@ def cp_segmentation_loop_generator(p_list: Iterable[int],
         tp_list=tp_list
     )
 
-    if tp_list is not None:
-        for p, m, seg, ca, tp in loop_generator:
-            yield generate_calib_params(
-                purpose=p,
-                mode=m,
-                segment=seg,
-                ca=ca,
-                tp=tp
-            )
-    else:
-        for p, m, seg, ca in loop_generator:
-            yield generate_calib_params(
-                purpose=p,
-                mode=m,
-                segment=seg,
-                ca=ca
-            )
+    for p, m, seg, ca, tp in loop_generator:
+        yield generate_calib_params(
+            purpose=p,
+            mode=m,
+            segment=seg,
+            ca=ca,
+            tp=tp
+        )
 
 
 def segment_loop_generator(seg_dict: Dict[str, List[Any]],
@@ -2562,7 +2600,9 @@ def balance_a_to_p(productions: pd.DataFrame,
             productions[col].sum(),
             attractions[col].sum(),
             significant=significant,
-            err_msg="Row and Column target totals do not match. Cannot Furness."
+            err_msg="After balancing Attraction to Productions the totals do"
+                    "not match somehow. Might need to double check the "
+                    "balancing function."
         )
 
     return attractions
@@ -2917,7 +2957,7 @@ def parse_mat_output(list_dir,
 
 def convert_to_weights(df: pd.DataFrame,
                        year_cols: List[str],
-                       weight_by_col: str = 'purpose_id'
+                       weight_by_col: str = 'p'
                        ) -> pd.DataFrame:
     """
     TODO: write convert_to_weights() doc

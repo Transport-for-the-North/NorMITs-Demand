@@ -38,13 +38,44 @@ from demand_utilities import concurrency as conc
 class EFSProductionGenerator:
     
     def __init__(self,
-                 tag_certainty_bounds=consts.TAG_CERTAINTY_BOUNDS):
+                 model_name: str,
+                 seg_level: str = 'tfn',
+                 zoning_system: str = 'msoa',
+                 tag_certainty_bounds=consts.TAG_CERTAINTY_BOUNDS
+                 ):
         """
         #TODO
         """
+        # Validate inputs
+        seg_level = du.validate_seg_level(seg_level)
+        model_name = du.validate_model_name(model_name)
+        zoning_system = du.validate_zoning_system(zoning_system)
+
+        # Assign
         self.efs_constrainer = ForecastConstrainer()
         self.tag_certainty_bounds = tag_certainty_bounds
-    
+
+        self.model_name = model_name
+
+        self.zoning_system = zoning_system
+        self.zone_col = '%s_zone_id' % zoning_system
+
+        # Define the segmentation we're using
+        if seg_level == 'tfn':
+            self.segments = ['area_type', 'p', 'soc', 'ns', 'ca']
+            self.return_segments = [self.zone_col] + self.segments
+            self.return_segments.remove('area_type')
+        else:
+            raise ValueError(
+                "'%s' is a valid segmentation level, but I don't have a way "
+                "of determining which segments to use for it. You should add "
+                "one!" % seg_level
+            )
+
+        # Remove ca segmentation for some models
+        if model_name == 'noham':
+            self.return_segments.remove('ca')
+
     def run(self,
             base_year: str,
             future_years: List[str],
@@ -85,7 +116,6 @@ class EFSProductionGenerator:
             m_needed: List[int] = consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
-            zoning_system: str = 'msoa',
             lu_year: int = 2018,
             no_neg_growth: bool = True,
             population_infill: float = 0.001,
@@ -252,7 +282,7 @@ class EFSProductionGenerator:
             in the input data.
         """
         # Return previously created productions if we can
-        fname = consts.PRODS_FNAME % (zoning_system, 'hb')
+        fname = consts.PRODS_FNAME % (self.zoning_system, 'hb')
         final_output_path = os.path.join(out_path, fname)
 
         if not recreate_productions and os.path.isfile(final_output_path):
@@ -260,8 +290,7 @@ class EFSProductionGenerator:
             return pd.read_csv(final_output_path)
 
         # Init
-        internal_zone_col = 'msoa_zone_id'
-        zoning_system = du.validate_zoning_system(zoning_system)
+        internal_zone_col = self.zone_col
         all_years = [str(x) for x in [base_year] + future_years]
         integrate_d_log = d_log is not None
         # Dlog is now passed as the path to the d-log file
@@ -446,7 +475,7 @@ class EFSProductionGenerator:
                   "Not writing populations to file.")
         else:
             print("Writing population to file...")
-            path = os.path.join(out_path, consts.POP_FNAME % zoning_system)
+            path = os.path.join(out_path, consts.POP_FNAME % self.zoning_system)
             population.to_csv(path, index=False)
 
         # ## CREATE PRODUCTIONS ## #
@@ -472,7 +501,7 @@ class EFSProductionGenerator:
                   "Not writing productions to file.")
         else:
             print("Writing productions to file...")
-            fname = consts.PRODS_FNAME % (zoning_system, 'raw_hb')
+            fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_hb')
             path = os.path.join(out_path, fname)
             productions.to_csv(path, index=False)
 
@@ -484,43 +513,20 @@ class EFSProductionGenerator:
         productions['ca'] = productions['ca'].astype(int)
         productions.columns = productions.columns.astype(str)
 
-        # Aggregate tp
-        index_cols = list(productions)
-        index_cols.remove('tp')
-
-        group_cols = index_cols.copy()
-        for year in all_years:
-            group_cols.remove(year)
-
-        # Group and sum
-        productions = productions.reindex(index_cols, axis='columns')
-        productions = productions.groupby(group_cols).sum().reset_index()
-
         # Extract just the needed mode
         mask = productions['m'].isin(m_needed)
         productions = productions[mask]
         productions = productions.drop('m', axis='columns')
 
-        # Rename columns so output of this function call is the same
-        # as it was before the re-write
-        productions = du.convert_msoa_naming(
-            productions,
-            msoa_col_name=internal_zone_col,
-            msoa_path=msoa_conversion_path,
-            to='int'
-        )
+        # Reindex to just the wanted return cols
+        group_cols = self.return_segments
+        index_cols = group_cols.copy() + all_years
 
-        productions = productions.rename(
-            columns={
-                internal_zone_col: external_zone_col,
-                'ca': 'car_availability_id',
-                'p': 'purpose_id',
-                'area_type': 'area_type_id'
-            }
-        )
+        productions = productions.reindex(index_cols, axis='columns')
+        productions = productions.groupby(group_cols).sum().reset_index()
 
         print("Writing HB productions to disk...")
-        fname = consts.PRODS_FNAME % (zoning_system, 'hb')
+        fname = consts.PRODS_FNAME % (self.zoning_system, 'hb')
         path = os.path.join(out_path, fname)
         productions.to_csv(path, index=False)
 
@@ -1144,6 +1150,7 @@ class NhbProductionModel:
     def __init__(self,
                  import_home: str,
                  export_home: str,
+                 msoa_conversion_path: str,
                  model_name: str,
                  seg_level: str = 'tfn',
                  return_segments: List[str] = None,
@@ -1167,6 +1174,9 @@ class NhbProductionModel:
 
                  # Alternate output paths
                  audit_write_dir: str = None,
+
+                 # Converting back to old EFS format
+                 external_zone_col: str = 'model_zone_id',
 
                  # Alternate col names from inputs
                  m_col: str = 'm',
@@ -1197,6 +1207,12 @@ class NhbProductionModel:
             usually related to a specific run of the ExternalForecastSystem,
             and should be gotten from there.
             e.g. 'E:/NorMITs Demand/norms_2015/v2_3-EFS_Output/iter1'
+
+        msoa_conversion_path:
+            Path to the file containing the conversion from msoa integer
+            identifiers to the msoa string code identifiers. Hoping to remove
+            this in a future update and align all of EFS to use msoa string
+            code identifiers.
 
         model_name:
             The name of the model being run. This is usually something like:
@@ -1318,6 +1334,7 @@ class NhbProductionModel:
         self.model_name = model_name
         self.seg_level = seg_level
         self.return_segments = return_segments
+        self.msoa_conversion_path = msoa_conversion_path
 
         self.base_year = base_year
         self.future_years = future_years
@@ -1342,6 +1359,8 @@ class NhbProductionModel:
 
         self.print_audits = audits
         self.process_count = process_count
+        self.internal_zone_col = 'msoa_zone_id'
+        self.external_zone_col = external_zone_col
 
         self.imports, self.exports = self._build_paths(
             import_home=import_home,
@@ -1358,7 +1377,7 @@ class NhbProductionModel:
         
         if seg_level == 'tfn':
             self.segments = ['area_type', 'p', 'soc', 'ns', 'ca']
-            self.return_segments = [self.zone_col] + self.segments + [self.tp_col]
+            self.return_segments = [self.zone_col] + self.segments
             self.return_segments.remove('area_type')
         else:
             raise ValueError(
@@ -1366,6 +1385,10 @@ class NhbProductionModel:
                 "of determining which segments to use for it. You should add "
                 "one!" % seg_level
             )
+
+        # Remove ca segmentation for some models
+        if model_name == 'noham':
+            self.return_segments.remove('ca')
 
     def _build_paths(self,
                      import_home: str,
@@ -1637,16 +1660,9 @@ class NhbProductionModel:
         """
 
         # Read in files
-        dtypes = {'soc': str, 'ns': str}
+        dtypes = {self.soc_col: str, self.ns_col: str}
         prods = pd.read_csv(self.imports['productions'], dtype=dtypes)
         attrs = pd.read_csv(self.imports['attractions'], dtype=dtypes)
-
-        # Ensure correct column types
-        if self.soc_col in prods:
-            prods[self.soc_col] = prods[self.soc_col].astype('str')
-
-        if self.ns_col in prods:
-            prods[self.ns_col] = prods[self.ns_col].astype('str')
 
         # Determine all unique segments - ignore mode
         seg_params = du.build_seg_params(self.seg_level, prods)
@@ -1702,6 +1718,7 @@ class NhbProductionModel:
 
     def run(self,
             output_raw: bool = True,
+            recreate_productions: bool = True,
             verbose: bool = True,
             ) -> pd.DataFrame:
         """
@@ -1721,7 +1738,12 @@ class NhbProductionModel:
         ----------
         output_raw:
             Whether to output the raw nhb productions before aggregating to
-            the requiroed segmentation and mode.
+            the required segmentation and mode.
+
+        recreate_productions:
+            Whether to recreate the nhb productions or not. If False, it will
+            look in out_path for previously produced productions and return
+            them. If none can be found, they will be generated.
 
         verbose:
             Whether to print progress bars during processing or not.
@@ -1732,6 +1754,14 @@ class NhbProductionModel:
             NHB productions for the mode and segmentation requested in the
             class constructor
         """
+        # Return previously created productions if we can
+        fname = consts.PRODS_FNAME % (self.zoning_system, 'nhb')
+        final_output_path = os.path.join(self.exports['productions'], fname)
+
+        if not recreate_productions and os.path.isfile(final_output_path):
+            print("Found some already produced nhb productions. Using them!")
+            return pd.read_csv(final_output_path)
+
         # Initialise timing
         start_time = timing.current_milli_time()
         du.print_w_toggle(
@@ -1907,7 +1937,7 @@ def _gen_base_productions_internal(area_type,
         # Filter the productions and attractions
         p_subset = du.filter_by_segmentation(prods, seg_vals, fit=True)
 
-        # Soc is always special - do this to avoid dropping demand
+        # Soc0 is always special - do this to avoid dropping demand
         if seg_vals.get('soc', -1) == '0':
             temp_seg_vals = seg_vals.copy()
             temp_seg_vals.pop('soc')
@@ -2579,7 +2609,7 @@ def old_nhb_production(hb_pa_import,
                    required_car_availabilities,
                    years_needed,
                    nhb_factor_import,
-                   out_fname=consts.NHB_PRODUCTIONS_FNAME
+                   out_fname='nhb_productions.csv'
                    ):
     """
     This function builds NHB productions by
