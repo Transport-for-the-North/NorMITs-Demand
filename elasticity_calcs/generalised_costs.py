@@ -6,7 +6,7 @@
 
 ##### IMPORTS #####
 # Standard imports
-from typing import Dict, List
+from typing import Dict, List, Union
 from pathlib import Path
 
 # Third party imports
@@ -16,7 +16,7 @@ import pandas as pd
 # Local imports
 from demand_utilities.utils import zone_translation_df
 from zone_translator import translate_matrix
-from .utils import COMMON_ZONE_SYSTEM
+from elasticity_calcs.utils import COMMON_ZONE_SYSTEM
 
 
 ##### CONSTANTS #####
@@ -141,10 +141,6 @@ def gen_cost_car_mins(
         The vehicle operating cost, in pence per kilometre.
     vt : float
         The value of time * occupancy value, in pence per minute.
-    weights : np.array, optional
-        Array for calculating the weighted average of the input matrices,
-        by default None. If None then the mean of the input matrices will
-        be used instead.
 
     Returns
     -------
@@ -280,13 +276,16 @@ def get_costs(
     ValueError
         If any expected columns are missing.
     """
+    mode = mode.lower()
     try:
-        costs = pd.read_csv(cost_file, usecols=COST_LOOKUP[mode.lower()].values())
+        costs = pd.read_csv(cost_file, usecols=COST_LOOKUP[mode].values())
     except ValueError as e:
         loc = str(e).find("columns expected")
         e_str = str(e)[loc:] if loc != -1 else str(e)
         raise ValueError(f"Columns missing from {mode} cost, {e_str}") from e
+    costs.rename(columns={v: k for k, v in COST_LOOKUP[mode].items()}, inplace=True)
 
+    # TODO Cost translation should be demand weighted average
     # Convert zone system if required
     if zone_system != COMMON_ZONE_SYSTEM:
         lookup = zone_translation_df(
@@ -297,7 +296,75 @@ def get_costs(
             lookup,
             [f"{zone_system}_zone_id", f"{COMMON_ZONE_SYSTEM}_zone_id"],
             square_format=False,
-            zone_cols=[COST_LOOKUP[mode][i] for i in ("origin", "destination")],
+            zone_cols=["origin", "destination"],
         )
+    # Convert origin/destination columns to integers
+    for c in ("origin", "destination"):
+        costs[c] = pd.to_numeric(costs[c], downcast="integer")
+    return costs.sort_values(["origin", "destination"])
 
-    return costs
+
+def gen_cost_mode(
+    costs: Union[pd.DataFrame, float], mode: str, **kwargs
+) -> Union[np.array, float]:
+    """Calculate generalised cost (GC) for a single mode using the relevant function.
+
+    Parameters
+    ----------
+    costs : Union[pd.DataFrame, float]
+        Cost dataframe, or value, for given mode.
+    mode : str
+        Name of the mode GC is being calculated for.
+
+    Returns
+    -------
+    Union[np.array, float]
+        The generlised cost as an array if `costs` is a DataFrame
+        or a float if `costs` is a float.
+    """
+    mode = mode.lower()
+    cost_to_array = lambda v: costs.pivot(
+        index="origin", columns="destination", values=v
+    ).values
+    if mode == "car":
+        gc = gen_cost_car_mins(
+            {i: cost_to_array(i) for i in ("time", "dist", "toll")}, **kwargs
+        )
+    elif mode == "rail":
+        gc = gen_cost_rail_mins(
+            {i: cost_to_array(i) for i in ("walk", "wait", "ride", "fare", "num_int")},
+            **kwargs,
+        )
+    else:
+        gc = costs
+    return gc
+
+
+def calculate_gen_costs(
+    costs: Dict[str, Union[pd.DataFrame, float]], gc_params: Dict[str, Dict[str, float]]
+) -> Dict[str, Union[np.array, float]]:
+    """Calculate the generalised costs for rail, car, bus, active and no-travel.
+
+    Generalised cost is a scalar for bus, active and no-travel, will be set
+    to cost.
+
+    Parameters
+    ----------
+    costs : Dict[str, Union[pd.DataFrame, float]]
+        Cost DataFrames for rail and car, other modes are optional
+        but should be scalar values if given.
+    gc_params : Dict[str, Dict[str, float]]
+        Parameters for Value of time * occupancy and vehicle operating
+        costs for car and just value of time for rail.
+
+    Returns
+    -------
+    Dict[str, np.array]
+        Generalised cost arrays for rail and car and scalar values
+        for bus, active and no-travel.
+    """
+    gc = {}
+    for m, cost in costs.items():
+        gc[m] = gen_cost_mode(cost, m, **gc_params[m])
+
+    return gc

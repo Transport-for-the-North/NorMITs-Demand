@@ -44,6 +44,10 @@ class TestAverageMatrices:
         [(None, 54), (np.full((3, 3), 1.0), 54), (WEIGHTS, 47.453917050691246)],
     )
     def test_average(self, weights: np.array, answer: float):
+        """Test the `_average_matrices` function calculates averages correctly.
+
+        Tests for weighted and non-weighted averages.
+        """
         averages = _average_matrices({"test": self.MATRIX}, ["test"], weights=weights)
         assert averages == {"test": answer}
 
@@ -206,17 +210,28 @@ class TestGetCosts:
     }
     COSTS["missing_car"] = COSTS["car"].drop(columns="toll")
     NOHAM_2_NORMS = pd.DataFrame({"noham_zone_id": [1, 2], "norms_zone_id": [1, 1]})
+    # Both costs are renamed and car is rezoned
     CONVERTED_COSTS = {
         "car": pd.DataFrame(
             {
-                "from_model_zone_id": [1],
-                "to_model_zone_id": [1],
+                "origin": [1],
+                "destination": [1],
                 "time": [16.84],
-                "distance": [21.39],
+                "dist": [21.39],
                 "toll": [31.27],
             }
         ),
-        "rail": COSTS["rail"],
+        "rail": COSTS["rail"].rename(
+            columns={
+                "from_model_zone_id": "origin",
+                "to_model_zone_id": "destination",
+                "AE_cost": "walk",
+                "Wait_Actual_cost": "wait",
+                "IVT_cost": "ride",
+                "fare_cost": "fare",
+                "Interchange_cost": "num_int",
+            }
+        ),
     }
 
     @pytest.fixture(name="costs", scope="class")
@@ -261,6 +276,7 @@ class TestGetCosts:
         pd.testing.assert_frame_equal(
             get_costs(costs[0][mode], mode, zone_system, costs[1]),
             self.CONVERTED_COSTS[mode],
+            check_dtype=False,
         )
 
     @staticmethod
@@ -276,6 +292,22 @@ class TestGetCosts:
             get_costs(costs[0]["missing_car"], "car", None, None)
         msg = "Columns missing from car cost, columns expected but not found: ['toll']"
         assert e.value.args[0] == msg
+
+
+class TestGenCostMode: # TODO Implement tests for gen_cost_mode
+    """Tests for the `gen_cost_mode` function."""
+
+    @staticmethod
+    def test_calculation():
+        raise NotImplementedError("Placeholder for `gen_cost_mode` test.")
+
+
+class TestCalculateGenCosts: # TODO implement tests for calculate_gen_costs
+    """Tests for the `calculate_gen_costs` function."""
+
+    @staticmethod
+    def test_calculation():
+        raise NotImplementedError("Placeholder for the `calculate_gen_costs` test.")
 
 
 ##### FUNCTIONS #####
