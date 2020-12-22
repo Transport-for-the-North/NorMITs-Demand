@@ -45,7 +45,7 @@ ELASTICITY_DATA = {
         "Bus",
         "Rail",
         "Active",
-        "Not_travel",
+        "No_travel",
         "Car",
         "Bus",
         "Rail",

@@ -5,12 +5,15 @@
 
 ##### IMPORTS #####
 # Standard imports
+import sys
+import contextlib
 from pathlib import Path
 from typing import Union, Dict, List
 
 # Third party imports
 import numpy as np
 import pandas as pd
+from tqdm.contrib import DummyTqdmFile
 
 # Local imports
 from demand_utilities.utils import safe_read_csv, zone_translation_df
@@ -196,3 +199,27 @@ def read_demand_matrix(
     demand.columns = pd.to_numeric(demand.columns, downcast="integer")
     demand.index = pd.to_numeric(demand.index, downcast="integer")
     return demand.sort_index().sort_index(axis=1)
+
+
+@contextlib.contextmanager
+def std_out_err_redirect_tqdm():
+    """Redirect stdout and stderr to `tqdm.write`.
+
+    Code copied from tqdm documentation:
+    https://github.com/tqdm/tqdm#redirecting-writing
+
+    Yields
+    -------
+    sys.stdout
+        Original stdout.
+    """
+    orig_out_err = sys.stdout, sys.stderr
+    try:
+        sys.stdout, sys.stderr = map(DummyTqdmFile, orig_out_err)
+        yield orig_out_err[0]
+    # Relay exceptions
+    except Exception as exc:
+        raise exc
+    # Always restore sys.stdout/err if necessary
+    finally:
+        sys.stdout, sys.stderr = orig_out_err
