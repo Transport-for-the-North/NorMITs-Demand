@@ -20,7 +20,7 @@ from elasticity_calcs.utils import COMMON_ZONE_SYSTEM
 
 
 ##### CONSTANTS #####
-RAIL_GC_FACTORS = {"walk": 1.75, "wait": 2, "interchange_penalty": 5}
+RAIL_GC_FACTORS = {"walk": 1.5, "wait": 2, "interchange_penalty": 5}
 COST_LOOKUP = {
     "rail": {
         "origin": "from_model_zone_id",
@@ -73,7 +73,14 @@ def _average_matrices(
     missing = []
     for nm in expected:
         try:
-            averages[nm] = np.average(matrices[nm], weights=weights)
+            # If matrix is scalar (for other modes) don't need to calculate average
+            if isinstance(matrices[nm], (float, int)):
+                averages[nm] = matrices[nm]
+            else:
+                # If demand weights are scalar then just calculate mean
+                if isinstance(weights, (float, int)):
+                    weights = None
+                averages[nm] = np.average(matrices[nm], weights=weights)
         except KeyError:
             missing.append(nm)
     if missing:
@@ -365,6 +372,6 @@ def calculate_gen_costs(
     """
     gc = {}
     for m, cost in costs.items():
-        gc[m] = gen_cost_mode(cost, m, **gc_params[m])
+        gc[m] = gen_cost_mode(cost, m, **gc_params.get(m, {}))
 
     return gc
