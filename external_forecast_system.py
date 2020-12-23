@@ -66,6 +66,8 @@ class ExternalForecastSystem:
                  model_name: str,
                  iter_num: int,
 
+                 integrate_dlog: bool,
+
                  base_pop_path: str = "population/base_population_2018.csv",
                  pop_growth_path: str = "population/future_population_growth.csv",
                  pop_constraint_path: str = "population/future_population_values.csv",
@@ -73,6 +75,9 @@ class ExternalForecastSystem:
                  base_emp_path: str = "employment/base_workers_2018.csv",
                  emp_growth_path: str = "employment/future_workers_growth.csv",
                  emp_constraint_path: str = "employment/future_workers_growth_values.csv",
+
+                 dlog_pop_path: str = None,
+                 dlog_emp_path: str = None,
 
                  msoa_lookup_path: str = "zoning/msoa_zones.csv",
                  lad_msoa_lookup_path: str = "zoning/lad_msoa_grouping.csv",
@@ -95,6 +100,7 @@ class ExternalForecastSystem:
         du.validate_model_name_and_mode(model_name, consts.MODES_NEEDED)
         self.model_name = du.validate_model_name(model_name)
         self.iter_name = 'iter' + str(iter_num)
+        self.integrate_dlog = integrate_dlog
         self.import_location = import_home
         self.output_location = export_home
 
@@ -107,12 +113,14 @@ class ExternalForecastSystem:
         self.emp_growth_path = emp_growth_path
 
         self.input_zone_system = "MSOA"
+        self.output_zone_system = self.model_name
         self.msoa_lookup_path = msoa_lookup_path
         self.lad_msoa_lookup_path = lad_msoa_lookup_path
 
         # Setup up import/export paths
         self.imports, self.exports, self.params = self.generate_output_paths()
         self._read_in_default_inputs()
+        self._set_up_dlog(dlog_pop_path, dlog_emp_path)
         self.msoa_zones_path = os.path.join(self.imports['zoning'],
                                             'msoa_zones.csv')
 
@@ -164,10 +172,34 @@ class ExternalForecastSystem:
         file_path = os.path.join(input_dir, self.lad_msoa_lookup_path)
         self.lad_msoa_lookup = du.safe_read_csv(file_path)
 
+    def _set_up_dlog(self, dlog_pop_path: str, dlog_emp_path: str) -> None:
+        # If we're not integrating d-log, set to None
+        if not self.integrate_dlog:
+            self.dlog_paths = {
+                'pop': None,
+                'emp': None
+            }
+            return
+
+        # Set to default paths if nothing given
+        if dlog_pop_path is None:
+            dlog_pop_path = os.path.join(self.imports["default_inputs"],
+                                         'population',
+                                         'dlog_residential.csv')
+
+        if dlog_emp_path is None:
+            dlog_emp_path = os.path.join(self.imports["default_inputs"],
+                                         'employment',
+                                         'dlog_nonresidential.csv')
+
+        self.dlog_paths = {
+            'pop': dlog_pop_path,
+            'emp': dlog_emp_path,
+        }
+
     def run(self,
             base_year: int = 2018,
             future_years: List[int] = consts.FUTURE_YEARS,
-            desired_zoning: str = "MSOA",
             alt_pop_base_year_file: str = None,
             alt_households_base_year_file: str = None,
             alt_worker_base_year_file: str = None,
@@ -182,8 +214,6 @@ class ExternalForecastSystem:
             soc_needed: List[int] = consts.SOC_NEEDED,
             ns_needed: List[int] = consts.NS_NEEDED,
             car_availabilities_needed: List[int] = consts.CA_NEEDED,
-            dlog_file_pop: str = None,
-            dlog_file_emp: str = None,
             minimum_development_certainty: str = "MTL",
             population_metric: str = "Population",  # Households, Population
             constraint_required: List[bool] = consts.CONSTRAINT_REQUIRED_DEFAULT,
@@ -450,9 +480,6 @@ class ExternalForecastSystem:
         distribution_method = distribution_method.lower()
         population_metric = population_metric.lower()
         minimum_development_certainty = minimum_development_certainty.upper()
-        integrate_dlog = dlog_file_pop is not None and dlog_file_emp is not None
-        iter_name = self.iter_name
-        model_name = du.get_model_name(modes_needed[0])
 
         year_list = [str(x) for x in [base_year] + future_years]
 
@@ -465,7 +492,7 @@ class ExternalForecastSystem:
             os.path.join(self.exports['home'], "input_parameters.txt"),
             base_year,
             future_years,
-            desired_zoning,
+            self.output_zone_system,
             alt_pop_base_year_file,
             alt_households_base_year_file,
             alt_worker_base_year_file,
@@ -480,7 +507,7 @@ class ExternalForecastSystem:
             soc_needed,
             ns_needed,
             car_availabilities_needed,
-            integrate_dlog,
+            self.integrate_dlog,
             minimum_development_certainty,
             population_metric,
             constraint_required,
@@ -659,21 +686,6 @@ class ExternalForecastSystem:
             print("Reading in default values took: %.2f seconds." %
                   (current_time - last_time))
 
-        # ## D-LOG READ-IN
-        if dlog_file_pop is None:
-            dlog_file_pop = os.path.join(
-                self.imports["default_inputs"],
-                "population",
-                "dlog_residential.csv"
-            )
-        if dlog_file_emp is None:
-            dlog_file_emp = os.path.join(
-                self.imports["default_inputs"],
-                "employment",
-                "dlog_nonresidential.csv"
-            )
-
-
         # ## CONSTRAINT BUILDING
         if constraint_source == "default":
             print("Constraint 'default' selected, retrieving constraint "
@@ -749,7 +761,7 @@ class ExternalForecastSystem:
             import_home=self.imports['home'],
             msoa_conversion_path=self.msoa_zones_path,
             control_productions=True,
-            d_log=dlog_file_pop,
+            dlog=self.dlog_paths['pop'],
             constraint_required=constraint_required,
             constraint_method=constraint_method,
             constraint_area=constraint_area,
@@ -778,7 +790,7 @@ class ExternalForecastSystem:
             msoa_conversion_path=self.msoa_zones_path,
             attraction_weights_path=self.imports['a_weights'],
             control_attractions=True,
-            d_log=dlog_file_emp,
+            dlog=self.dlog_paths['emp'],
             constraint_required=constraint_required,
             constraint_method=constraint_method,
             constraint_area=constraint_area,
@@ -788,8 +800,6 @@ class ExternalForecastSystem:
             out_path=self.exports['attractions'],
             recreate_attractions=recreate_attractions
         )
-
-        # Removed attraction matching - this deleted the soc segmentation
 
         # ## Generate NHB Productions ## #
         nhb_pm = pm.NhbProductionModel(
@@ -829,30 +839,22 @@ class ExternalForecastSystem:
         nhb_a_weights.columns = nhb_a_weights.columns.astype(str)
 
         # ## ZONE TRANSLATION ## #
-        # TODO: Check demand before and after translation
         model_zone_col = '%s_zone_id' % self.model_name
-        if desired_zoning != self.input_zone_system:
+        if self.output_zone_system != self.input_zone_system:
             print("Need to translate zones.")
             print("Translating from: " + self.input_zone_system)
-            print("Translating to: " + desired_zoning)
+            print("Translating to: " + self.output_zone_system)
 
-            # Read in translation dataframes
-            fname = consts.POP_TRANSLATION_FNAME % (self.input_zone_system, self.model_name)
-            path = os.path.join(self.imports['zoning'], fname)
-            pop_translation_df = pd.read_csv(path)
-
-            fname = consts.EMP_TRANSLATION_FNAME % (self.input_zone_system, self.model_name)
-            path = os.path.join(self.imports['zoning'], fname)
-            emp_translation_df = pd.read_csv(path)
+            pop_translation, emp_translation = self.get_translation_dfs()
 
             # Figure out which columns are the segmentation
             non_split_columns = list(production_trips.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
             converted_productions = self.zone_translator.run(
                 production_trips,
-                pop_translation_df,
+                pop_translation,
                 self.input_zone_system,
-                desired_zoning,
+                self.output_zone_system,
                 non_split_cols=non_split_columns
             )
 
@@ -860,9 +862,9 @@ class ExternalForecastSystem:
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
             converted_nhb_productions = self.zone_translator.run(
                 nhb_productions,
-                pop_translation_df,
+                pop_translation,
                 self.input_zone_system,
-                desired_zoning,
+                self.output_zone_system,
                 non_split_cols=non_split_columns
             )
 
@@ -870,9 +872,9 @@ class ExternalForecastSystem:
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
             converted_pure_attractions = self.zone_translator.run(
                 attraction_dataframe,
-                emp_translation_df,
+                emp_translation,
                 self.input_zone_system,
-                desired_zoning,
+                self.output_zone_system,
                 non_split_cols=non_split_columns
             )
 
@@ -880,9 +882,9 @@ class ExternalForecastSystem:
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
             converted_nhb_att = self.zone_translator.run(
                 nhb_att,
-                emp_translation_df,
+                emp_translation,
                 self.input_zone_system,
-                desired_zoning,
+                self.output_zone_system,
                 non_split_cols=non_split_columns
             )
 
@@ -890,9 +892,9 @@ class ExternalForecastSystem:
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
             converted_attractions = self.zone_translator.run(
                 attraction_weights,
-                emp_translation_df,
+                emp_translation,
                 self.input_zone_system,
-                desired_zoning,
+                self.output_zone_system,
                 non_split_cols=non_split_columns
             )
 
@@ -900,9 +902,9 @@ class ExternalForecastSystem:
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
             converted_nhb_attractions = self.zone_translator.run(
                 nhb_a_weights,
-                emp_translation_df,
+                emp_translation,
                 self.input_zone_system,
-                desired_zoning,
+                self.output_zone_system,
                 non_split_cols=non_split_columns
             )
 
@@ -922,141 +924,46 @@ class ExternalForecastSystem:
             converted_nhb_attractions = nhb_a_weights.copy()
 
         # Write Translated p/a to file
-        fname = consts.PRODS_FNAME % (desired_zoning, 'hb')
+        fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
         converted_productions.to_csv(
             os.path.join(self.exports['productions'], fname),
             index=False
         )
 
-        fname = consts.PRODS_FNAME % (desired_zoning, 'nhb')
+        fname = consts.PRODS_FNAME % (self.output_zone_system, 'nhb')
         converted_nhb_productions.to_csv(
             os.path.join(self.exports['productions'], fname),
             index=False
         )
 
-        fname = consts.ATTRS_FNAME % (desired_zoning, 'hb')
+        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
         converted_pure_attractions.to_csv(
             os.path.join(self.exports['attractions'], fname),
             index=False
         )
 
-        fname = consts.ATTRS_FNAME % (desired_zoning, 'nhb')
+        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'nhb')
         converted_nhb_att.to_csv(
             os.path.join(self.exports['attractions'], fname),
             index=False
         )
 
-        # Load the exceptional zone definitions from production/attraction
-        # generation
-        print("Loading Exceptional Growth Datafiles")
-        exceptional_zones = eg.load_exceptional_zones(
-            productions_export=self.exports["productions"],
-            attractions_export=self.exports["attractions"]
-        )
-        # Reload aggregated population and employment data to calculate
-        # sector level trip rates
-        grown_population_path = os.path.join(
-            self.exports["productions"],
-            consts.POP_FNAME % "MSOA"
-        )
-        grown_employment_path = os.path.join(
-            self.exports["attractions"],
-            consts.EMP_FNAME % "MSOA"
-        )
+        if self.integrate_dlog:
+            pa_dfs = self._handle_growth_criteria(
+                synth_productions=converted_productions,
+                synth_attractions=converted_pure_attractions,
+                base_year=base_year,
+                future_years=future_years
+            )
+            converted_productions, converted_pure_attractions = pa_dfs
 
-        # For testing purposes - use the previously generated trip outputs -
-        # same as the synthetic base
-        obs_production_path = r"Y:\NorMITs Demand\norms_2015\v2_3-EFS_Output\iter1\Productions\norms_2015_productions.csv"
-        obs_attraction_path = r"Y:\NorMITs Demand\norms_2015\v2_3-EFS_Output\iter1\Attractions\norms_2015_attractions.csv"
+            # Convert the new attractions to weights
+            converted_attractions = du.convert_to_weights(
+                converted_pure_attractions,
+                year_list
+            )
 
-        # For testing purposes - use the converted productions/attractions
-        # from a previous run (same as observed placeholders)
-        # converted_productions = pd.read_csv(obs_production_path)
-        # converted_pure_attractions = pd.read_csv(obs_attraction_path)
-
-        # Detect the segment columns for PAs and Pop/Emp
-        production_segments = list(converted_productions.columns)
-        attraction_segments = list(converted_pure_attractions.columns)
-
-        for year in year_list:
-            production_segments.remove(year)
-            attraction_segments.remove(year)
-
-        population_segments = [seg for seg in production_segments
-                               if seg != "purpose_id"]
-        employment_segments = [seg for seg in attraction_segments
-                               if seg != "purpose_id"] + ["employment_cat"]
-
-        growth_criteria_segments = {
-            "pop": population_segments,
-            "emp": employment_segments,
-            "prod": production_segments,
-            "attr": attraction_segments
-        }
-
-        # ## APPLY GROWTH CRITERIA ## #
-
-        # Placeholder sector file definition
-        # TODO Integrate into EFS inputs
-        model_zone_to_sector_path = r"Y:\NorMITs Demand\import\zone_translation\norms_2015_to_tfn_sectors.csv"
-        from_zone_column = "norms_zone_id"
-        to_sector_column = "tfn_sectors_zone_id"
-        soc_weights_path = self.attraction_generator.imports["soc_weights"]
-
-        # Load sector mapping for calculating the exceptional zone trip rates
-        sector_lookup = pd.read_csv(model_zone_to_sector_path)
-        sector_lookup.rename({from_zone_column: "model_zone_id",
-                              to_sector_column: "grouping_id"},
-                             axis=1,
-                             inplace=True)
-        sector_lookup = sector_lookup.set_index("model_zone_id")["grouping_id"]
-
-        # Zone translation arguments for population/employment and
-        # exceptional zone translation - reduces number of arguments required
-        zone_translator_args = {
-            "translation_dataframe": translation_dataframe,
-            "start_zoning_system_name": self.input_zone_system,
-            "end_zoning_system_name": desired_zoning,
-        }
-
-        # MSOA path to translate population and employment zones
-        msoa_lookup_path = os.path.join(
-            self.imports["default_inputs"],
-            self.msoa_lookup_path
-        )
-
-        # Apply growth criteria to "normal" and "exceptional" zones
-        (converted_productions,
-         converted_pure_attractions) = eg.growth_criteria(
-            synth_productions=converted_productions,
-            synth_attractions=converted_pure_attractions,
-            observed_prod_path=obs_production_path,
-            observed_attr_path=obs_attraction_path,
-            population_path=grown_population_path,
-            employment_path=grown_employment_path,
-            msoa_lookup_path=msoa_lookup_path,
-            segments=growth_criteria_segments,
-            future_years=[str(x) for x in future_years],
-            base_year=str(base_year),
-            zone_translator=self.zone_translator,
-            zone_translator_args=zone_translator_args,
-            exceptional_zones=exceptional_zones,
-            trip_rate_sectors=sector_lookup,
-            soc_weights_path=soc_weights_path
-        )
-
-        # # ## REPEAT ATTRACTION WEIGHT GENERATION ## #
-        print("Generating attraction weights...")
-        converted_attractions = du.convert_to_weights(
-            attraction_dataframe,
-            year_list
-        )
-
-        print("Attraction weights generated!")
-        last_time = current_time
-        current_time = time.time()
-        print("Attraction weight generation took: %.2f seconds" %
-              (current_time - last_time))
+        # TODO: Move conversion to attraction weights down here
 
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
@@ -1074,7 +981,7 @@ class ExternalForecastSystem:
                 zone_col=model_zone_col,
                 seed_dist_dir=self.imports['seed_dists'],
                 dist_out=self.exports['pa_24'],
-                audit_out=self.exports['print_audits'],
+                audit_out=self.exports['audits'],
                 echo=echo_distribution
             )
 
@@ -1093,7 +1000,7 @@ class ExternalForecastSystem:
                 zone_col=model_zone_col,
                 seed_dist_dir=self.imports['seed_dists'],
                 dist_out=self.exports['pa_24'],
-                audit_out=self.exports['print_audits'],
+                audit_out=self.exports['audits'],
                 echo=echo_distribution
             )
 
@@ -1107,7 +1014,7 @@ class ExternalForecastSystem:
 
         # ## SECTOR TOTALS ## #
         zone_system_file = os.path.join(self.imports['zoning'],
-                                        desired_zoning + '.csv')
+                                        self.output_zone_system + '.csv')
         sector_grouping_file = os.path.join(self.imports['zoning'],
                                             "tfn_level_one_sectors_norms_grouping.csv")
 
@@ -1150,7 +1057,7 @@ class ExternalForecastSystem:
                 # Attractions output moved
                 # Translated production and attractions moved
 
-                fname = desired_zoning + "_sector_totals.csv"
+                fname = self.output_zone_system + "_sector_totals.csv"
                 sector_totals.to_csv(
                     os.path.join(self.exports['sectors'], fname),
                     index=False
@@ -1175,6 +1082,141 @@ class ExternalForecastSystem:
                   + "future usage.")
             self.sector_totals = sector_totals
             # TODO: Store output files into local storage (class storage)
+
+    def _handle_growth_criteria(self,
+                                synth_productions: pd.DataFrame,
+                                synth_attractions: pd.DataFrame,
+                                base_year: str,
+                                future_years: List[str],
+                                ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        # Init
+        all_years = [base_year] + future_years
+
+        # Load the exceptional zone definitions from production/attraction
+        # generation
+        print("Loading Exceptional Growth Datafiles")
+        exceptional_zones = eg.load_exceptional_zones(
+            productions_export=self.exports["productions"],
+            attractions_export=self.exports["attractions"]
+        )
+        # Reload aggregated population and employment data to calculate
+        # sector level trip rates
+        fname = consts.POP_FNAME % self.input_zone_system
+        grown_pop_path = os.path.join(self.exports["productions"], fname)
+
+        fname = consts.EMP_FNAME % self.input_zone_system
+        grown_emp_path = os.path.join(self.exports["attractions"], fname)
+
+        # For testing purposes - use the previously generated trip outputs -
+        # same as the synthetic base
+        obs_production_path = r"Y:\NorMITs Demand\norms_2015\v2_3-EFS_Output\iter1\Productions\norms_2015_productions.csv"
+        obs_attraction_path = r"Y:\NorMITs Demand\norms_2015\v2_3-EFS_Output\iter1\Attractions\norms_2015_attractions.csv"
+
+        # For testing purposes - use the converted productions/attractions
+        # from a previous run (same as observed placeholders)
+        # converted_productions = pd.read_csv(obs_production_path)
+        # converted_pure_attractions = pd.read_csv(obs_attraction_path)
+
+        # Detect the segment columns for PAs and Pop/Emp
+        p_segs = du.list_safe_remove(list(synth_productions), all_years)
+        a_segs = du.list_safe_remove(list(synth_attractions), all_years)
+
+        growth_criteria_segments = {
+            "pop": [seg for seg in p_segs if seg != "purpose_id"],
+            "emp": [seg for seg in a_segs if seg != "purpose_id"] + ["employment_cat"],
+            "prod": p_segs,
+            "attr": a_segs
+        }
+
+        # ## APPLY GROWTH CRITERIA ## #
+        # Placeholder sector file definition
+        # TODO Integrate into EFS inputs
+        model_zone_to_sector_path = r"Y:\NorMITs Demand\import\zone_translation\norms_2015_to_tfn_sectors.csv"
+        from_zone_column = "norms_zone_id"
+        to_sector_column = "tfn_sectors_zone_id"
+        soc_weights_path = self.attraction_generator.imports["soc_weights"]
+
+        # Load sector mapping for calculating the exceptional zone trip rates
+        sector_lookup = pd.read_csv(model_zone_to_sector_path).rename(
+            columns={
+                from_zone_column: "model_zone_id",
+                to_sector_column: "grouping_id"
+            })
+        sector_lookup = sector_lookup.set_index("model_zone_id")["grouping_id"]
+
+        # Zone translation arguments for population/employment and
+        # exceptional zone translation - reduces number of arguments required
+        pop_translation, emp_translation = self.get_translation_dfs()
+
+        # TODO: Update growth_criteria() to use different translation for pop
+        #  /emp data
+        zone_translator_args = {
+            "translation_dataframe": pop_translation,
+            "start_zoning_system_name": self.input_zone_system,
+            "end_zoning_system_name": self.output_zone_system,
+        }
+
+        # MSOA path to translate population and employment zones
+        msoa_lookup_path = os.path.join(
+            self.imports["default_inputs"],
+            self.msoa_lookup_path
+        )
+
+        # TODO: How to deal with NHB productions/attractions??
+        #  Run this after the P/A models, then base the NHB off this?
+        # Apply growth criteria to "normal" and "exceptional" zones
+        productions, attractions = eg.growth_criteria(
+            synth_productions=synth_productions,
+            synth_attractions=synth_attractions,
+            observed_prod_path=obs_production_path,
+            observed_attr_path=obs_attraction_path,
+            population_path=grown_pop_path,
+            employment_path=grown_emp_path,
+            msoa_lookup_path=msoa_lookup_path,
+            segments=growth_criteria_segments,
+            future_years=future_years,
+            base_year=base_year,
+            zone_translator=self.zone_translator,
+            zone_translator_args=zone_translator_args,
+            exceptional_zones=exceptional_zones,
+            trip_rate_sectors=sector_lookup,
+            soc_weights_path=soc_weights_path
+        )
+
+        return productions, attractions
+
+    def get_translation_dfs(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Returns the dataframes for translating from input_zone_system to
+        output_zone_system.
+
+        A different translation dataframe is returned for translating
+        population data and employment data.
+
+        Returns
+        -------
+        pop_translation:
+            A population weighted translation dataframe to convert from
+            input_zone_system to output_zone_system
+
+        emp_translation:
+            A employment weighted translation dataframe to convert from
+            input_zone_system to output_zone_system
+        """
+        # Init
+        fname_args = (self.input_zone_system, self.output_zone_system)
+
+        # Read in pop translation
+        fname = consts.POP_TRANSLATION_FNAME % fname_args
+        path = os.path.join(self.imports['zoning'], fname)
+        pop_translation = pd.read_csv(path)
+
+        # Read in emp translation
+        fname = consts.EMP_TRANSLATION_FNAME % fname_args
+        path = os.path.join(self.imports['zoning'], fname)
+        emp_translation = pd.read_csv(path)
+
+        return pop_translation, emp_translation
 
     def pa_to_od(self,
                  years_needed: List[int] = consts.ALL_YEARS,
@@ -2199,7 +2241,7 @@ class ExternalForecastSystem:
             'productions': os.path.join(export_home, 'Productions'),
             'attractions': os.path.join(export_home, 'Attractions'),
             'sectors': os.path.join(export_home, 'Sectors'),
-            'print_audits': os.path.join(export_home, 'Audits'),
+            'audits': os.path.join(export_home, 'Audits'),
 
             # Pre-ME
             'pa': os.path.join(matrices_home, pa),
@@ -2330,10 +2372,12 @@ def main():
     echo = False
 
     # Running control
+    integrate_dlog = False
+
     run_base_efs = True
-    recreate_productions = True
-    recreate_attractions = True
-    recreate_nhb_productions = True
+    recreate_productions = False
+    recreate_attractions = False
+    recreate_nhb_productions = False
 
     constrain_population = False
 
@@ -2343,7 +2387,7 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    iter_num = 1
+    iter_num = 0
     import_home = "Y:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
@@ -2358,6 +2402,7 @@ def main():
     efs = ExternalForecastSystem(
         iter_num=iter_num,
         model_name=model_name,
+        integrate_dlog=integrate_dlog,
         import_home=import_home,
         export_home=export_home
     )
@@ -2365,7 +2410,6 @@ def main():
     if run_base_efs:
         # Generates HB PA matrices
         efs.run(
-            desired_zoning=model_name,
             constraint_source="Default",
             recreate_productions=recreate_productions,
             recreate_attractions=recreate_attractions,

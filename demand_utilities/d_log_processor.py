@@ -86,7 +86,7 @@ def parse_dlog_build_out(dlog: pd.DataFrame,
     Parameters
     ----------
     dlog : pd.DataFrame
-        The subset of the dlog (excess columns removed)
+        The subset of the dlog_processor (excess columns removed)
     year : str
         Future year that the build-out information will be calculated to
     dlog_columns : List[str]
@@ -95,7 +95,7 @@ def parse_dlog_build_out(dlog: pd.DataFrame,
     Returns
     -------
     pd.DataFrame
-        The same dataframe as dlog, with only the columns in 
+        The same dataframe as dlog_processor, with only the columns in
         dlog_columns + a column with the name given in year that contains
         the estimated development
     """
@@ -341,6 +341,8 @@ def constrain_post_dlog(df: pd.DataFrame,
     return df
 
 
+# TODO: Move constraining function elsewhere
+#  group with NTEM constraints
 def constrain_forecast(pre_constraint_df: pd.DataFrame,
                        constraint_df: pd.DataFrame,
                        constraint_zone_equivalence: pd.DataFrame,
@@ -562,7 +564,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         raise ValueError("Dataframe does not contain the required"
                          " columns")
 
-    # Save dlog rows where data is missing
+    # Save dlog_processor rows where data is missing
     dlog_missing_data = pd.DataFrame()
     # Identify zones where estimated growth was invalid
     invalid_growth_zones = pd.DataFrame()
@@ -596,7 +598,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
             as_index=False
         )[year].sum()
 
-        # Calculate the new growth as base year absolute + data from dlog
+        # Calculate the new growth as base year absolute + data from dlog_processor
         dlog_data_col = f"dlog_add_{year}"
         dlog_subset.rename({year: dlog_data_col}, axis=1, inplace=True)
         dlog_additions = dlog_additions.merge(
@@ -628,7 +630,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         )
         segment_split.loc[segment_split[base_year] == 0, adj_growth] = 0
         
-        # Handle cases where addition of the dlog data (negative) leaves 
+        # Handle cases where addition of the dlog_processor data (negative) leaves
         # a zone with negative or very low population / employment
         # TODO check that this is correct - could instead adjust all segments
         # in the zone to preserver spatial distribution
@@ -684,7 +686,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
                 inplace=True
             )
 
-    # Use pre and post dlog growth to identify exceptional zones
+    # Use pre and post dlog_processor growth to identify exceptional zones
     e_zones = identify_exceptional_zones(
         pre_df=pre_dlog_growth,
         post_df=post_dlog_growth,

@@ -22,7 +22,7 @@ from tqdm import tqdm
 
 import efs_constants as consts
 from efs_constrainer import ForecastConstrainer
-from demand_utilities import d_log_processor as dlog
+from demand_utilities import d_log_processor as dlog_processor
 
 from demand_utilities import timing
 from demand_utilities import utils as du
@@ -102,7 +102,7 @@ class EFSProductionGenerator:
             control_fy_productions: bool = True,
 
             # D-Log
-            d_log: str = None,
+            dlog: str = None,
 
             # Population constraints
             constraint_required: List[bool] = consts.DEFAULT_PRODUCTION_CONSTRAINTS,
@@ -206,7 +206,7 @@ class EFSProductionGenerator:
             constraints given in ntem_control_dir or not. When running for
             scenarios other than the base NTEM, this should be False.
 
-        d_log:
+        dlog:
             TODO: Clarify what format D_log data comes in as
 
         d_log_split:
@@ -290,13 +290,7 @@ class EFSProductionGenerator:
             return pd.read_csv(final_output_path)
 
         # Init
-        internal_zone_col = self.zone_col
         all_years = [str(x) for x in [base_year] + future_years]
-        integrate_d_log = d_log is not None
-        # Dlog is now passed as the path to the d-log file
-        # if integrate_d_log:
-        #     d_log = d_log.copy()
-        #     d_log_split = d_log_split.copy()
 
         # TODO: Make this more adaptive
         # Set the level of segmentation being used
@@ -310,15 +304,15 @@ class EFSProductionGenerator:
             ]
 
         # Fix column naming if different
-        if external_zone_col != internal_zone_col:
+        if external_zone_col != self.zone_col:
             population_growth = population_growth.copy().rename(
-                columns={external_zone_col: internal_zone_col}
+                columns={external_zone_col: self.zone_col}
             )
             designated_area = designated_area.copy().rename(
-                columns={external_zone_col: internal_zone_col}
+                columns={external_zone_col: self.zone_col}
             )
             population_constraint = population_constraint.rename(
-                columns={external_zone_col: internal_zone_col}
+                columns={external_zone_col: self.zone_col}
             )
 
         # TODO: Deal with case where land use year and base year don't match
@@ -372,91 +366,77 @@ class EFSProductionGenerator:
         )
 
         # ## CONSTRAIN POPULATION ## #
+        # TODO: Remove constraint source
         if constraint_required[0] and (constraint_source != "model grown base"):
             print("Performing the first constraint on population...")
-            print("Pre Constraint")
-            print(population[future_years].sum())
-            constraint_segments = [col for col in segmentation_cols
-                                  if col in population_constraint]
-            population = dlog.constrain_forecast(
+            print(". Pre Constraint: %.3f" % population[future_years].sum())
+            constraint_segments = du.intersection(segmentation_cols,
+                                                  population_constraint)
+
+            population = dlog_processor.constrain_forecast(
                 population,
                 population_constraint,
                 designated_area,
                 base_year,
                 future_years,
-                internal_zone_col,
+                self.zone_col,
                 msoa_path=msoa_conversion_path,
                 segment_cols=constraint_segments
             )
-            print("Post Constraint")
-            print(population[future_years].sum())
+            print(". Post Constraint: %.3f" % population[future_years].sum())
+
         elif constraint_source == "model grown base":
             print("Generating model grown base constraint for use on "
                   "development constraints...")
             population_constraint = population.copy()
 
         # ## INTEGRATE D-LOG ## #
-        if integrate_d_log:
+        if dlog is not None:
             print("Integrating the development log...")
-            # Remove the columns not used to split the dlog ndata
-            dlog_segmentation_groups = [
-                col for col in segmentation_cols
-                if col not in ["area_type", "traveller_type"]
-            ]
-            population, hg_zones = dlog.apply_d_log(
+            # Remove the columns not used to split the dlog_processor data
+            seg_groups = du.intersection(segmentation_cols,
+                                         ['area_type', "traveller_type"])
+
+            population, hg_zones = dlog_processor.apply_d_log(
                 pre_dlog_df=population,
                 base_year=base_year,
                 future_years=future_years,
-                dlog_path=d_log,
+                dlog_path=dlog,
                 constraints=population_constraint,
                 constraints_zone_equivalence=designated_area,
                 dlog_conversion_factor=1.0,
                 msoa_zones=msoa_conversion_path,
                 segment_cols=segmentation_cols,
-                segment_groups=dlog_segmentation_groups,
+                segment_groups=seg_groups,
                 dlog_data_column_key="population",
                 perform_constraint=False,
                 audit_location=out_path
             )
             # Save High Growth (Exceptional) zones to file
-            hg_zones.to_csv(
-                os.path.join(out_path, "exceptional_zones.csv"),
-                index=False
-            )
+            hg_zones.to_csv(os.path.join(out_path, consts.EG_FNAME),
+                            index=False)
 
         # ## POST D-LOG CONSTRAINT ## #
         if constraint_required[1]:
             print("Performing the post-development log constraint on population...")
-            print("Pre Constraint")
-            print(population[future_years].sum())
-            constraint_segments = [col for col in segmentation_cols
-                                  if col in population_constraint]
-            population = dlog.constrain_forecast(
+            print(". Pre Constraint: %.3f" % population[future_years].sum())
+            constraint_segments = du.intersection(segmentation_cols,
+                                                  population_constraint)
+
+            population = dlog_processor.constrain_forecast(
                 population,
                 population_constraint,
                 designated_area,
                 base_year,
                 future_years,
-                internal_zone_col,
+                self.zone_col,
                 msoa_path=msoa_conversion_path,
                 segment_cols=constraint_segments
             )
-            print("Post Constraint")
-            print(population[future_years].sum())
-            # population = self.efs_constrainer.run(
-            #     population,
-            #     constraint_method,
-            #     constraint_area,
-            #     constraint_on,
-            #     population_constraint,
-            #     base_year,
-            #     all_years,
-            #     designated_area,
-            #     internal_zone_col
-            # )
+            print(". Post Constraint: %.3f" % population[future_years].sum())
 
         # Reindex and sum
-        group_cols = [internal_zone_col] + segmentation_cols
+        group_cols = [self.zone_col] + segmentation_cols
         index_cols = group_cols.copy() + all_years
         population = population.reindex(index_cols, axis='columns')
         population = population.groupby(group_cols).sum().reset_index()

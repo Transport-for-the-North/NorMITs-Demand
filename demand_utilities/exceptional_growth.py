@@ -715,12 +715,12 @@ def growth_criteria(synth_productions: pd.DataFrame,
     # Rename zone and segment columns to the standard EFS naming
     print("Population")
     print(population)
-    population.rename(
-        {"msoa_zone_id": "model_zone_id",
-         "area_type": "area_type_id",
-         "ca": "car_availability_id"},
-        axis=1,
-        inplace=True)
+    population = population.rename(
+        columns={
+            "msoa_zone_id": "model_zone_id",
+            "area_type": "area_type_id",
+            "ca": "car_availability_id"
+        })
     population = du.convert_msoa_naming(
         population,
         msoa_col_name="model_zone_id",
@@ -754,27 +754,27 @@ def growth_criteria(synth_productions: pd.DataFrame,
         {"msoa_zone_id": "model_zone_id"},
         axis=1,
         inplace=True)
-    
 
     # If the zone translator has been supplied, need to change zone system
+    # TODO: Use pop/emp translation file depending on what's being translated
     if zone_translator is not None:
 
         population = zone_translator.run(
             population,
-            non_split_columns=segments["pop"],
+            non_split_cols=segments["pop"],
             **zone_translator_args
         )
 
         employment = zone_translator.run(
             employment,
-            non_split_columns=segments["emp"],
+            non_split_cols=segments["emp"],
             **zone_translator_args
         )
 
         if exceptional_zones is not None:
             converted_e_zones = zone_translator.run(
                 exceptional_zones,
-                non_split_columns=["model_zone_id"],
+                non_split_cols=["model_zone_id"],
                 **zone_translator_args
             )
         else:
@@ -825,8 +825,8 @@ def growth_criteria(synth_productions: pd.DataFrame,
     )
 
     # ## Apply Growth Criteria ## #
-    grown_productions = {}
-    grown_attractions = {}
+    grown_productions = dict()
+    grown_attractions = dict()
 
     synth_prod_base = synth_productions[segments["prod"] + [base_year]]
     synth_attr_base = synth_attractions[segments["attr"] + [base_year]]
@@ -971,7 +971,7 @@ def test():
         translation_dataframe,
         "MSOA",
         "norms_2015",
-        non_split_columns=["model_zone_id"]
+        non_split_cols=["model_zone_id"]
     )
 
     population = zt.run(
@@ -979,7 +979,7 @@ def test():
         translation_dataframe,
         "MSOA",
         "norms_2015",
-        non_split_columns=["model_zone_id",
+        non_split_cols=["model_zone_id",
                            "car_availability_id",
                            "soc",
                            "ns",
@@ -991,7 +991,7 @@ def test():
         translation_dataframe,
         "MSOA",
         "norms_2015",
-        non_split_columns=["model_zone_id",
+        non_split_cols=["model_zone_id",
                            "employment_cat"]
     )
     synthetic_p = zt.run(
@@ -999,7 +999,7 @@ def test():
         translation_dataframe,
         "MSOA",
         "norms_2015",
-        non_split_columns=[
+        non_split_cols=[
             "model_zone_id",
             "purpose_id",
             "car_availability_id",
@@ -1012,7 +1012,7 @@ def test():
         translation_dataframe,
         "MSOA",
         "norms_2015",
-        non_split_columns=[
+        non_split_cols=[
             "model_zone_id",
             "purpose_id",
             "car_availability_id",
@@ -1025,7 +1025,7 @@ def test():
         translation_dataframe,
         "MSOA",
         "norms_2015",
-        non_split_columns=["model_zone_id", "purpose_id", "soc"]
+        non_split_cols=["model_zone_id", "purpose_id", "soc"]
     )
 
     obs_base_e = synthetic_e[[zone_col] + seg_cols_e + [base_year]]

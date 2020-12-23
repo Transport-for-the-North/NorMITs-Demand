@@ -20,7 +20,7 @@ from itertools import product
 from tqdm import tqdm
 
 import efs_constants as consts
-from demand_utilities import d_log_processor as dlog
+from demand_utilities import d_log_processor as dlog_processor
 from efs_constrainer import ForecastConstrainer
 
 import demand_utilities.utils as du
@@ -91,7 +91,7 @@ class EFSAttractionGenerator:
             control_fy_attractions: bool = True,
 
             # D-Log
-            d_log: str = None,
+            dlog: str = None,
 
             # Employment constraints
             constraint_required: List[bool] = consts.DEFAULT_ATTRACTION_CONSTRAINTS,
@@ -192,11 +192,8 @@ class EFSAttractionGenerator:
             constraints given in ntem_control_dir or not. When running for
             scenarios other than the base NTEM, this should be False.
 
-        d_log:
+        dlog:
             TODO: Clarify what format D_log data comes in as
-
-        d_log_split:
-            See d_log
 
         constraint_required:
             See efs_constrainer.ForecastConstrainer()
@@ -281,11 +278,6 @@ class EFSAttractionGenerator:
         a_weights_p_col = 'purpose'
         mode_split_m_col = 'mode'
         all_years = [str(x) for x in [base_year] + future_years]
-        integrate_d_log = d_log is not None
-        # Dlog is now passed as the path to the d-log file
-        # if integrate_d_log:
-        #     d_log = d_log.copy()
-        #     d_log_split = d_log_split.copy()
 
         # TODO: Make this more adaptive
         # Set the level of segmentation being used
@@ -380,15 +372,14 @@ class EFSAttractionGenerator:
             pass
 
         # ## CONSTRAIN POPULATION ## #
+        # TODO: Remove constraint source
         if constraint_required[3] and (constraint_source != "model grown base"):
             print("Performing the first constraint on employment...")
-            print("Pre Constraint")
-            print(employment[future_years].sum())
-            constraint_segments = [col for col in segmentation_cols
-                                  if col in employment_constraint]
-            if "ns" in constraint_segments:
-                constraint_segments.remove("ns")
-            employment = dlog.constrain_forecast(
+            print(". Pre Constraint: %.3f" % employment[future_years].sum())
+            constraint_segments = du.intersection(segmentation_cols,
+                                                  employment_constraint)
+
+            employment = dlog_processor.constrain_forecast(
                 employment,
                 employment_constraint,
                 designated_area,
@@ -398,35 +389,26 @@ class EFSAttractionGenerator:
                 msoa_path=msoa_conversion_path,
                 segment_cols=constraint_segments
             )
-            print("Post Constraint")
-            print(employment[future_years].sum())
-            # employment = self.efs_constrainer.run(
-            #     employment,
-            #     constraint_method,
-            #     constraint_area,
-            #     constraint_on,
-            #     employment_constraint,
-            #     base_year,
-            #     all_years,
-            #     designated_area,
-            #     internal_zone_col
-            # )
+            print(". Post Constraint: %.3f" % employment[future_years].sum())
+
         elif constraint_source == "model grown base":
             print("Generating model grown base constraint for use on "
                   "development constraints...")
             employment_constraint = employment.copy()
 
         # ## INTEGRATE D-LOG ## #
-        if integrate_d_log:
+        if dlog is not None:
             print("Integrating the development log...")
+
             dlog_segments = ["employment_cat"]
             if "soc" in employment_growth:
                 dlog_segments.append("soc")
-            employment, hg_zones = dlog.apply_d_log(
+
+            employment, hg_zones = dlog_processor.apply_d_log(
                 pre_dlog_df=employment,
                 base_year=base_year,
                 future_years=future_years,
-                dlog_path=d_log,
+                dlog_path=dlog,
                 constraints=employment_constraint,
                 constraints_zone_equivalence=designated_area,
                 dlog_conversion_factor=1.0,
@@ -436,22 +418,19 @@ class EFSAttractionGenerator:
                 perform_constraint=False,
                 audit_location=out_path
             )
+
             # Save High Growth (Exceptional) zones to file
-            hg_zones.to_csv(
-                os.path.join(out_path, "exceptional_zones.csv"),
-                index=False
-            )
+            hg_zones.to_csv(os.path.join(out_path, consts.EG_FNAME),
+                            index=False)
 
         # ## POST D-LOG CONSTRAINT ## #
         if constraint_required[4]:
             print("Performing the post-development log constraint on employment...")
-            print("Pre Constraint")
-            print(employment[future_years].sum())
-            constraint_segments = [col for col in segmentation_cols
-                                  if col in employment_constraint]
-            if "ns" in constraint_segments:
-                constraint_segments.remove("ns")
-            employment = dlog.constrain_forecast(
+            print(". Pre Constraint: %.3f" % employment[future_years].sum())
+            constraint_segments = du.intersection(segmentation_cols,
+                                                  employment_constraint)
+
+            employment = dlog_processor.constrain_forecast(
                 employment,
                 employment_constraint,
                 designated_area,
@@ -461,19 +440,7 @@ class EFSAttractionGenerator:
                 msoa_path=msoa_conversion_path,
                 segment_cols=constraint_segments
             )
-            print("Post Constraint")
-            print(employment[future_years].sum())
-            # employment = self.efs_constrainer.run(
-            #     employment,
-            #     constraint_method,
-            #     constraint_area,
-            #     constraint_on,
-            #     employment_constraint,
-            #     base_year,
-            #     all_years,
-            #     designated_area,
-            #     internal_zone_col
-            # )
+            print(". Post Constraint: %.3f" % employment[future_years].sum())
 
         # Write the produced employment to file
         # Earlier than previously to also save the soc segmentation

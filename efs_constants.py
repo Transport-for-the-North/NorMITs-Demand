@@ -113,6 +113,8 @@ ATTRS_FNAME = '%s_%s_attractions.csv'
 POP_FNAME = '%s_population.csv'
 EMP_FNAME = '%s_employment.csv'
 
+EG_FNAME = "exceptional_zones.csv"
+
 # ## Zone Translations
 
 # from_zone_system, to_zone_system
