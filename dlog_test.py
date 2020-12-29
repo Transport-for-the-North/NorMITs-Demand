@@ -28,33 +28,31 @@ if not os.path.isdir(emp_audit_loc):
     os.makedirs(emp_audit_loc)
 
 population = dlog.apply_d_log(
-                pre_dlog_df=population,
-                base_year=base_year,
-                future_years=future_years,
-                dlog_path=d_log,
-                constraints=population_constraint,
-                constraints_zone_equivalence=r"Y:\NorMITs Demand\inputs\default\zoning\lad_msoa_grouping.csv",
-                segment_cols=["soc", "ns", "ca"],
-                dlog_conversion_factor=1.0,
-                development_zone_lookup=r"C:\Users\Monopoly\Documents\EFS\data\dlog\development_msoa_lookup.csv",
-                msoa_zones=r"C:\Users\Monopoly\Documents\EFS\data\zoning\msoa_zones.csv",
-                dlog_data_column_key="population",
-                perform_constraint=constraint_required[1],
-                audit_location=pop_audit_loc
-            )
+    pre_dlog_df=population,
+    base_year=base_year,
+    future_years=future_years,
+    dlog_path=d_log,
+    constraints=population_constraint,
+    constraints_zone_equivalence=r"Y:\NorMITs Demand\inputs\default\zoning\lad_msoa_grouping.csv",
+    segment_cols=["soc", "ns", "ca"],
+    dlog_conversion_factor=1.0,
+    msoa_conversion_path=r"C:\Users\Monopoly\Documents\EFS\data\zoning\msoa_zones.csv",
+    dlog_data_column_key="population",
+    perform_constraint=constraint_required[1],
+    audit_location=pop_audit_loc
+)
 
 employment = dlog.apply_d_log(
-                pre_dlog_df=employment,
-                base_year=base_year,
-                future_years=future_years,
-                dlog_path=d_log_emp,
-                constraints=population_constraint,
-                constraints_zone_equivalence=r"Y:\NorMITs Demand\inputs\default\zoning\lad_msoa_grouping.csv",
-                segment_cols=["employment_cat"],
-                dlog_conversion_factor=1.0,
-                development_zone_lookup=r"C:\Users\Monopoly\Documents\EFS\data\dlog\development_msoa_lookup.csv",
-                msoa_zones=r"C:\Users\Monopoly\Documents\EFS\data\zoning\msoa_zones.csv",
-                dlog_data_column_key="employees",
-                perform_constraint=constraint_required[1],
-                audit_location=emp_audit_loc
-            )
+    pre_dlog_df=employment,
+    base_year=base_year,
+    future_years=future_years,
+    dlog_path=d_log_emp,
+    constraints=population_constraint,
+    constraints_zone_equivalence=r"Y:\NorMITs Demand\inputs\default\zoning\lad_msoa_grouping.csv",
+    segment_cols=["employment_cat"],
+    dlog_conversion_factor=1.0,
+    msoa_conversion_path=r"C:\Users\Monopoly\Documents\EFS\data\zoning\msoa_zones.csv",
+    dlog_data_column_key="employees",
+    perform_constraint=constraint_required[1],
+    audit_location=emp_audit_loc
+)

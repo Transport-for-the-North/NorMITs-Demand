@@ -16,7 +16,8 @@ def identify_exceptional_zones(pre_df: pd.DataFrame,
                                base_year: str,
                                future_years: List[str],
                                absolute_cutoff: float = None,
-                               cutoff_method: str = "growth"
+                               cutoff_method: str = "growth",
+                               zone_col: str = 'msoa_zone_id'
                                ) -> pd.DataFrame:
     # TODO: Write docs for identify_exceptional_zones()
     
@@ -62,7 +63,7 @@ def identify_exceptional_zones(pre_df: pd.DataFrame,
         raise ValueError("Cutoff method must be 'growth', 'absolute', "
                          "or 'both'")
 
-    return pd.Series(e_zones)
+    return pd.DataFrame(e_zones, columns=[zone_col])
 
 
 def set_datetime_types(df: pd.DataFrame,
@@ -468,13 +469,13 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
                 base_year:  str,
                 future_years: List[str],
                 dlog_path: str,
+                msoa_conversion_path: str,
                 constraints: pd.DataFrame,
                 constraints_zone_equivalence: pd.DataFrame,
                 segment_cols: List[str],
                 segment_groups: List[str] = None,
                 dlog_conversion_factor: float = 1.0,
                 msoa_column: str = "msoa_zone_id",
-                msoa_zones: str = None,
                 emp_cat_col: str = 'employment_cat',
                 min_growth_limit: float = 0.25,
                 dlog_data_column_key: str = "population",
@@ -497,17 +498,19 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     Returns a DataFrame of future year population
     """
 
+    # TODO: remove the conversions to and from msoa id numbers in apply_d_log()
+
     # Use segment columns if no value provided for segment groups
     segment_groups = segment_groups or segment_cols
 
     post_dlog_df = pre_dlog_df.copy()[
         [msoa_column, base_year] + segment_cols + future_years
     ]
-    if msoa_zones is not None:
+    if msoa_conversion_path is not None:
         post_dlog_df = du.convert_msoa_naming(
             post_dlog_df,
             msoa_col_name=msoa_column,
-            msoa_path=msoa_zones,
+            msoa_path=msoa_conversion_path,
             to='int'
         )
     # If we are applying to the employment data - remove the totals category
@@ -550,8 +553,18 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         / segment_split.groupby("sector_id")[base_year].transform("sum")
     )
 
-    # Read in development log data
+    # # Read in development log data
+    # print(du.safe_read_csv(dlog_path))
+    # print(msoa_conversion_path)
+    #
+    # dlog_data = du.convert_msoa_naming(
+    #     du.safe_read_csv(dlog_path),
+    #     msoa_col_name=msoa_column,
+    #     msoa_path=msoa_conversion_path,
+    #     to='str'
+    # )
     dlog_data = du.safe_read_csv(dlog_path)
+
     # Define column names
     start_date = "start_date"
     end_date = "expected_completion_date"
@@ -700,7 +713,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         base_year=base_year,
         future_years=future_years
     )
-    
+
     # Drop any temporary columns
     post_dlog_df.drop(
         ["sector_id"] + [col for col in post_dlog_df.columns 
@@ -718,11 +731,17 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         )
 
     # Convert back to string - as expected by the next steps
-    if msoa_zones is not None:
+    if msoa_conversion_path is not None:
         post_dlog_df = du.convert_msoa_naming(
             post_dlog_df,
             msoa_col_name=msoa_column,
-            msoa_path=msoa_zones,
+            msoa_path=msoa_conversion_path,
+            to="string"
+        )
+        e_zones = du.convert_msoa_naming(
+            e_zones,
+            msoa_col_name=msoa_column,
+            msoa_path=msoa_conversion_path,
             to="string"
         )
 
