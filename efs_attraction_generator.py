@@ -94,11 +94,8 @@ class EFSAttractionGenerator:
             dlog: str = None,
 
             # Employment constraints
-            constraint_required: List[bool] = consts.DEFAULT_ATTRACTION_CONSTRAINTS,
-            constraint_method: str = "Percentage",  # Percentage, Average
-            constraint_area: str = "Designated",  # Zone, Designated, All
-            constraint_on: str = "Growth",  # Growth, All
-            constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
+            pre_dlog_constraint: bool = False,
+            post_dlog_constraint: bool = None,
             designated_area: pd.DataFrame = None,
 
             # Segmentation controls
@@ -195,20 +192,13 @@ class EFSAttractionGenerator:
         dlog:
             TODO: Clarify what format D_log data comes in as
 
-        constraint_required:
-            See efs_constrainer.ForecastConstrainer()
+        pre_dlog_constraint:
+            Whether to constrain the population before applying the dlog or
+            not.
 
-        constraint_method:
-            See efs_constrainer.ForecastConstrainer()
-
-        constraint_area:
-            See efs_constrainer.ForecastConstrainer()
-
-        constraint_on:
-            See efs_constrainer.ForecastConstrainer()
-
-        constraint_source:
-            See efs_constrainer.ForecastConstrainer()
+        post_dlog_constraint
+            Whether to constrain the population after applying the dlog or
+            not.
 
         designated_area:
             See efs_constrainer.ForecastConstrainer()
@@ -279,6 +269,10 @@ class EFSAttractionGenerator:
         mode_split_m_col = 'mode'
         all_years = [str(x) for x in [base_year] + future_years]
 
+        # If not set, perform the post_dlog_constrain if dlog is on
+        if post_dlog_constraint is None:
+            post_dlog_constraint = dlog is not None
+
         # TODO: Make this more adaptive
         # Set the level of segmentation being used
         if segmentation_cols is None:
@@ -297,7 +291,7 @@ class EFSAttractionGenerator:
             )
 
         # Build paths to the needed files
-        self.imports = build_attraction_imports(
+        imports = build_attraction_imports(
             import_home=import_home,
             base_year=base_year,
             attraction_weights_path=attraction_weights_path,
@@ -312,7 +306,7 @@ class EFSAttractionGenerator:
         # ## BASE YEAR EMPLOYMENT ## #
         print("Loading the base year employment data...")
         base_year_emp = get_employment_data(
-            import_path=self.imports['base_employment'],
+            import_path=imports['base_employment'],
             zone_col=self.zone_col,
             emp_cat_col=self.emp_cat_col,
             return_format='long',
@@ -332,7 +326,7 @@ class EFSAttractionGenerator:
             # Add Soc splits into the base year
             base_year_emp = split_by_soc(
                 df=base_year_emp,
-                soc_weights=get_soc_weights(self.imports['soc_weights']),
+                soc_weights=get_soc_weights(imports['soc_weights']),
                 unique_col=base_year,
                 split_cols=[self.zone_col, self.emp_cat_col]
             )
@@ -340,9 +334,6 @@ class EFSAttractionGenerator:
             # Aggregate the growth factors to remove extra segmentation
             group_cols = [self.zone_col, 'soc']
             index_cols = group_cols.copy() + all_years
-
-            employment_growth = employment_growth.reindex(columns=index_cols)
-            employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
 
             # Make sure both soc columns are the same format
             base_year_emp['soc'] = base_year_emp['soc'].astype('float').astype('int')
@@ -352,6 +343,14 @@ class EFSAttractionGenerator:
             self.emp_segments.remove('soc')
             self.attr_segments.remove('soc')
             self.return_segments.remove('soc')
+
+        # Make sure our growth factors are at the right segmentation
+        group_cols = [self.zone_col] + self.emp_segments.copy()
+        group_cols.remove(self.emp_cat_col)
+        index_cols = group_cols.copy() + all_years
+
+        employment_growth = employment_growth.reindex(columns=index_cols)
+        employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
 
         # Merge on all possible segmentations - not years
         merge_cols = du.intersection(list(base_year_emp), list(employment_growth))
@@ -367,15 +366,16 @@ class EFSAttractionGenerator:
             infill=employment_infill
         )
 
-        # Now need te remove soc splits?
-        if 'soc' in employment_growth:
-            pass
+        # Remove E01 for constraints / dlog
+        employment = du.remove_all_commute_cat(
+            df=employment,
+            emp_cat_col=self.emp_cat_col
+        )
 
         # ## CONSTRAIN POPULATION ## #
-        # TODO: Remove constraint source
-        if constraint_required[3] and (constraint_source != "model grown base"):
+        if pre_dlog_constraint:
             print("Performing the first constraint on employment...")
-            print(". Pre Constraint: %.3f" % employment[future_years].sum())
+            print(". Pre Constraint:\n%s" % employment[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
                                                   employment_constraint)
 
@@ -389,12 +389,7 @@ class EFSAttractionGenerator:
                 msoa_path=msoa_conversion_path,
                 segment_cols=constraint_segments
             )
-            print(". Post Constraint: %.3f" % employment[future_years].sum())
-
-        elif constraint_source == "model grown base":
-            print("Generating model grown base constraint for use on "
-                  "development constraints...")
-            employment_constraint = employment.copy()
+            print(". Post Constraint:\n%s" % employment[future_years].sum())
 
         # ## INTEGRATE D-LOG ## #
         if dlog is not None:
@@ -424,9 +419,10 @@ class EFSAttractionGenerator:
                             index=False)
 
         # ## POST D-LOG CONSTRAINT ## #
-        if constraint_required[4]:
+        if post_dlog_constraint:
+            pd.set_option('display.float_format', str)
             print("Performing the post-development log constraint on employment...")
-            print(". Pre Constraint: %.3f" % employment[future_years].sum())
+            print(". Pre Constraint:\n%s" % employment[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
                                                   employment_constraint)
 
@@ -440,7 +436,14 @@ class EFSAttractionGenerator:
                 msoa_path=msoa_conversion_path,
                 segment_cols=constraint_segments
             )
-            print(". Post Constraint: %.3f" % employment[future_years].sum())
+            print(". Post Constraint:\n%s" % employment[future_years].sum())
+
+        # D-Log and constraints done. Need to add E01 back in
+        employment = du.add_all_commute_cat(
+            df=employment,
+            emp_cat_col=self.emp_cat_col,
+            unique_data_cols=all_years
+        )
 
         # Write the produced employment to file
         # Earlier than previously to also save the soc segmentation
@@ -488,15 +491,15 @@ class EFSAttractionGenerator:
             employment=employment,
             base_year=base_year,
             future_years=future_years,
-            attraction_weights_path=self.imports['weights'],
-            mode_splits_path=self.imports['mode_splits'],
-            soc_weights_path=self.imports['soc_weights'],
+            attraction_weights_path=imports['weights'],
+            mode_splits_path=imports['mode_splits'],
+            soc_weights_path=imports['soc_weights'],
             idx_cols=idx_cols,
             emp_cat_col=self.emp_cat_col,
             p_col=a_weights_p_col,
             m_col=mode_split_m_col,
-            ntem_control_dir=self.imports['ntem_control'],
-            lad_lookup_dir=self.imports['lad_lookup'],
+            ntem_control_dir=imports['ntem_control'],
+            lad_lookup_dir=imports['lad_lookup'],
             control_fy_attractions=control_fy_attractions
         )
 
@@ -1593,6 +1596,43 @@ def generate_attractions(employment: pd.DataFrame,
     )
 
     return attractions, nhb_attractions
+
+
+def remove_all_commute_cat(df: pd.DataFrame,
+                           emp_cat_col: str,
+                           all_commute_name: str = 'E01'
+                           ) -> pd.DataFrame:
+    """
+    Removes all_commute_name from emp_cat_col in df.
+
+    df must be in long format, with a column for all employment categories
+
+    Parameters
+    ----------
+    df:
+        The dataframe to remove the all commute category from
+
+    emp_cat_col:
+        The name of the column in df that contains the employment category
+        data
+
+    all_commute_name:
+        The name of the employment category that represents all commute data.
+        This is the category that will be removed from df/
+
+    Returns
+    -------
+    df:
+        A copy of the original df with the all commute category removed.
+    """
+    # Validate input
+    if emp_cat_col not in df:
+        raise ValueError(
+            "Cannot remove all commute category from df, as the emp_cat_col "
+            "given does not exist. Given: %s" % str(emp_cat_col)
+        )
+
+    return df.loc[df[emp_cat_col] != all_commute_name]
 
 
 def build_attraction_imports(import_home: str,

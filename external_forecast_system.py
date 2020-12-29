@@ -14,8 +14,7 @@ import os
 import time
 import itertools
 
-from typing import List
-from typing import Tuple
+from typing import List, Dict, Tuple
 
 # External libs
 import numpy as np
@@ -38,14 +37,8 @@ from demand_utilities import utils as du
 from demand_utilities.sector_reporter_v2 import SectorReporter
 from demand_utilities import exceptional_growth as eg
 
-# TODO: Implement multiprocessing
-# TODO: Determine the TfN model name based on the given mode
 # TODO: Output a run log instead of printing everything to the terminal.
 # TODO: On error, output a simple error report
-
-# TODO: Fix dtype error from pandas on initialisation
-#  More info here:
-#  https://stackoverflow.com/questions/24251219/pandas-read-csv-low-memory-and-dtype-options
 
 # TODO: CLean up unnecessary processing and files left over from production
 #  model rewrite.
@@ -118,7 +111,9 @@ class ExternalForecastSystem:
         self.lad_msoa_lookup_path = lad_msoa_lookup_path
 
         # Setup up import/export paths
-        self.imports, self.exports, self.params = self.generate_output_paths()
+        path_dicts = self.generate_output_paths(consts.BASE_YEAR_STR)
+        self.imports, self.exports, self.params = path_dicts
+
         self._read_in_default_inputs()
         self._set_up_dlog(dlog_pop_path, dlog_emp_path)
         self.msoa_zones_path = os.path.join(self.imports['zoning'],
@@ -216,10 +211,7 @@ class ExternalForecastSystem:
             car_availabilities_needed: List[int] = consts.CA_NEEDED,
             minimum_development_certainty: str = "MTL",
             population_metric: str = "Population",  # Households, Population
-            constraint_required: List[bool] = consts.CONSTRAINT_REQUIRED_DEFAULT,
-            constraint_method: str = "Percentage",  # Percentage, Average
-            constraint_area: str = "Designated",  # Zone, Designated, All
-            constraint_on: str = "Growth",  # Growth, All
+            constraint_required: Dict[str, bool] = consts.CONSTRAINT_REQUIRED_DEFAULT,
             constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
             outputting_files: bool = True,
             recreate_productions: bool = True,
@@ -473,9 +465,6 @@ class ExternalForecastSystem:
         current_time = begin_time
 
         # Format inputs
-        constraint_method = constraint_method.lower()
-        constraint_area = constraint_area.lower()
-        constraint_on = constraint_on.lower()
         constraint_source = constraint_source.lower()
         distribution_method = distribution_method.lower()
         population_metric = population_metric.lower()
@@ -484,7 +473,8 @@ class ExternalForecastSystem:
         year_list = [str(x) for x in [base_year] + future_years]
 
         # Validate inputs
-        _input_checks(m_needed=modes_needed)
+        _input_checks(m_needed=modes_needed,
+                      constraint_required=constraint_required)
 
         # ## PREPARE OUTPUTS ## #
         print("Initialising outputs...")
@@ -511,9 +501,6 @@ class ExternalForecastSystem:
             minimum_development_certainty,
             population_metric,
             constraint_required,
-            constraint_method,
-            constraint_area,
-            constraint_on,
             constraint_source,
         )
 
@@ -762,11 +749,8 @@ class ExternalForecastSystem:
             msoa_conversion_path=self.msoa_zones_path,
             control_productions=True,
             dlog=self.dlog_paths['pop'],
-            constraint_required=constraint_required,
-            constraint_method=constraint_method,
-            constraint_area=constraint_area,
-            constraint_on=constraint_on,
-            constraint_source=constraint_source,
+            pre_dlog_constraint=constraint_required['pop_pre_dlog'],
+            post_dlog_constraint=constraint_required['pop_post_dlog'],
             designated_area=self.lad_msoa_lookup.copy(),
             out_path=self.exports['productions'],
             recreate_productions=recreate_productions,
@@ -791,11 +775,8 @@ class ExternalForecastSystem:
             attraction_weights_path=self.imports['a_weights'],
             control_attractions=True,
             dlog=self.dlog_paths['emp'],
-            constraint_required=constraint_required,
-            constraint_method=constraint_method,
-            constraint_area=constraint_area,
-            constraint_on=constraint_on,
-            constraint_source=constraint_source,
+            pre_dlog_constraint=constraint_required['emp_pre_dlog'],
+            post_dlog_constraint=constraint_required['emp_post_dlog'],
             designated_area=self.lad_msoa_lookup.copy(),
             out_path=self.exports['attractions'],
             recreate_attractions=recreate_attractions
@@ -860,53 +841,39 @@ class ExternalForecastSystem:
 
             non_split_columns = list(nhb_productions.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_nhb_productions = self.zone_translator.run(
-                nhb_productions,
-                pop_translation,
-                self.input_zone_system,
-                self.output_zone_system,
-                non_split_cols=non_split_columns
-            )
+            converted_nhb_productions = self.zone_translator.run(nhb_productions, pop_translation,
+                                                                 self.input_zone_system,
+                                                                 self.output_zone_system,
+                                                                 non_split_cols=non_split_columns)
 
             non_split_columns = list(attraction_dataframe.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_pure_attractions = self.zone_translator.run(
-                attraction_dataframe,
-                emp_translation,
-                self.input_zone_system,
-                self.output_zone_system,
-                non_split_cols=non_split_columns
-            )
+            converted_pure_attractions = self.zone_translator.run(attraction_dataframe,
+                                                                  emp_translation,
+                                                                  self.input_zone_system,
+                                                                  self.output_zone_system,
+                                                                  non_split_cols=non_split_columns)
 
             non_split_columns = list(nhb_att.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_nhb_att = self.zone_translator.run(
-                nhb_att,
-                emp_translation,
-                self.input_zone_system,
-                self.output_zone_system,
-                non_split_cols=non_split_columns
-            )
+            converted_nhb_att = self.zone_translator.run(nhb_att, emp_translation,
+                                                         self.input_zone_system,
+                                                         self.output_zone_system,
+                                                         non_split_cols=non_split_columns)
 
             non_split_columns = list(attraction_weights.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_attractions = self.zone_translator.run(
-                attraction_weights,
-                emp_translation,
-                self.input_zone_system,
-                self.output_zone_system,
-                non_split_cols=non_split_columns
-            )
+            converted_attractions = self.zone_translator.run(attraction_weights, emp_translation,
+                                                             self.input_zone_system,
+                                                             self.output_zone_system,
+                                                             non_split_cols=non_split_columns)
 
             non_split_columns = list(nhb_a_weights.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_nhb_attractions = self.zone_translator.run(
-                nhb_a_weights,
-                emp_translation,
-                self.input_zone_system,
-                self.output_zone_system,
-                non_split_cols=non_split_columns
-            )
+            converted_nhb_attractions = self.zone_translator.run(nhb_a_weights, emp_translation,
+                                                                 self.input_zone_system,
+                                                                 self.output_zone_system,
+                                                                 non_split_cols=non_split_columns)
 
             print("Zone translation completed!")
             last_time = current_time
@@ -952,8 +919,8 @@ class ExternalForecastSystem:
             pa_dfs = self._handle_growth_criteria(
                 synth_productions=converted_productions,
                 synth_attractions=converted_pure_attractions,
-                base_year=base_year,
-                future_years=future_years
+                base_year=str(base_year),
+                future_years=[str(x) for x in future_years]
             )
             converted_productions, converted_pure_attractions = pa_dfs
 
@@ -1095,7 +1062,7 @@ class ExternalForecastSystem:
         # Load the exceptional zone definitions from production/attraction
         # generation
         print("Loading Exceptional Growth Datafiles")
-        exceptional_zones = eg.load_exceptional_zones(
+        p_ez, a_ez = eg.load_exceptional_zones(
             productions_export=self.exports["productions"],
             attractions_export=self.exports["attractions"]
         )
@@ -1109,32 +1076,22 @@ class ExternalForecastSystem:
 
         # For testing purposes - use the previously generated trip outputs -
         # same as the synthetic base
-        obs_production_path = r"Y:\NorMITs Demand\norms_2015\v2_3-EFS_Output\iter1\Productions\norms_2015_productions.csv"
-        obs_attraction_path = r"Y:\NorMITs Demand\norms_2015\v2_3-EFS_Output\iter1\Attractions\norms_2015_attractions.csv"
+        obs_production_path = r"E:\NorMITs Demand\norms\v2_4-EFS_Output\iter1\Productions\norms_hb_productions.csv"
+        obs_attraction_path = r"E:\NorMITs Demand\norms\v2_4-EFS_Output\iter1\Attractions\norms_hb_attractions.csv"
 
         # For testing purposes - use the converted productions/attractions
         # from a previous run (same as observed placeholders)
         # converted_productions = pd.read_csv(obs_production_path)
         # converted_pure_attractions = pd.read_csv(obs_attraction_path)
 
-        # Detect the segment columns for PAs and Pop/Emp
-        p_segs = du.list_safe_remove(list(synth_productions), all_years)
-        a_segs = du.list_safe_remove(list(synth_attractions), all_years)
-
-        growth_criteria_segments = {
-            "pop": [seg for seg in p_segs if seg != "purpose_id"],
-            "emp": [seg for seg in a_segs if seg != "purpose_id"] + ["employment_cat"],
-            "prod": p_segs,
-            "attr": a_segs
-        }
-
         # ## APPLY GROWTH CRITERIA ## #
         # Placeholder sector file definition
-        # TODO Integrate into EFS inputs
+        # TODO: Integrate into EFS inputs
+        # TODO: Need norms_to_tfn sector lookups.
+        #  Should these be pop/emp weighted too?
         model_zone_to_sector_path = r"Y:\NorMITs Demand\import\zone_translation\norms_2015_to_tfn_sectors.csv"
         from_zone_column = "norms_zone_id"
         to_sector_column = "tfn_sectors_zone_id"
-        soc_weights_path = self.attraction_generator.imports["soc_weights"]
 
         # Load sector mapping for calculating the exceptional zone trip rates
         sector_lookup = pd.read_csv(model_zone_to_sector_path).rename(
@@ -1148,20 +1105,6 @@ class ExternalForecastSystem:
         # exceptional zone translation - reduces number of arguments required
         pop_translation, emp_translation = self.get_translation_dfs()
 
-        # TODO: Update growth_criteria() to use different translation for pop
-        #  /emp data
-        zone_translator_args = {
-            "translation_dataframe": pop_translation,
-            "start_zoning_system_name": self.input_zone_system,
-            "end_zoning_system_name": self.output_zone_system,
-        }
-
-        # MSOA path to translate population and employment zones
-        msoa_lookup_path = os.path.join(
-            self.imports["default_inputs"],
-            self.msoa_lookup_path
-        )
-
         # TODO: How to deal with NHB productions/attractions??
         #  Run this after the P/A models, then base the NHB off this?
         # Apply growth criteria to "normal" and "exceptional" zones
@@ -1170,17 +1113,19 @@ class ExternalForecastSystem:
             synth_attractions=synth_attractions,
             observed_prod_path=obs_production_path,
             observed_attr_path=obs_attraction_path,
+            prod_exceptional_zones=p_ez,
+            attr_exceptional_zones=a_ez,
             population_path=grown_pop_path,
             employment_path=grown_emp_path,
-            msoa_lookup_path=msoa_lookup_path,
-            segments=growth_criteria_segments,
-            future_years=future_years,
+            model_name=self.model_name,
             base_year=base_year,
+            future_years=future_years,
             zone_translator=self.zone_translator,
-            zone_translator_args=zone_translator_args,
-            exceptional_zones=exceptional_zones,
+            zt_from_zone=self.input_zone_system,
+            zt_pop_df=pop_translation,
+            zt_emp_df=emp_translation,
             trip_rate_sectors=sector_lookup,
-            soc_weights_path=soc_weights_path
+            soc_weights_path=self.imports['soc_weights']
         )
 
         return productions, attractions
@@ -2164,8 +2109,14 @@ class ExternalForecastSystem:
 
         return reattached_dataframe
 
-    def generate_output_paths(self) -> Tuple[dict, dict, dict]:
+    def generate_output_paths(self, base_year: str) -> Tuple[dict, dict, dict]:
         """
+
+        Parameters
+        ----------
+        base_year:
+            The base year of the model being run. This is used to build the
+            base year file paths
 
         Returns
         -------
@@ -2183,6 +2134,7 @@ class ExternalForecastSystem:
 
         """
         # TODO: Call function in utils to build paths
+        #  make sure all functionality is carried over
         # Init
         model_name = self.model_name.lower()
 
@@ -2204,6 +2156,10 @@ class ExternalForecastSystem:
         import_home = os.path.join(model_home, 'import')
         input_home = os.path.join(import_home, 'default')
 
+        # Build the longer paths
+        path = 'attractions/soc_2_digit_sic_%s.csv' % base_year
+        soc_weights_path = os.path.join(import_home, path)
+
         imports = {
             'home': import_home,
             'default_inputs': input_home,
@@ -2212,7 +2168,8 @@ class ExternalForecastSystem:
             'lookups': os.path.join(model_home, 'lookup'),
             'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
             'zoning': os.path.join(input_home, 'zoning'),
-            'a_weights': a_weights_path
+            'a_weights': a_weights_path,
+            'soc_weights': soc_weights_path
         }
 
         #  ## EXPORT PATHS ## #
@@ -2289,8 +2246,9 @@ class ExternalForecastSystem:
         return imports, exports, params
 
 
-def _input_checks(iter_num=None,
-                  m_needed=None
+def _input_checks(iter_num: int = None,
+                  m_needed: List[int] = None,
+                  constraint_required: Dict[str, bool] = None
                   ) -> None:
     """
     Checks that any arguments given are OK. Will raise an error
@@ -2301,10 +2259,21 @@ def _input_checks(iter_num=None,
                 "during testing.")
 
     if m_needed is not None and len(m_needed) > 1:
-        raise ValueError("Was given more than one mode. EFS cannot run "
-                         "using more than one mode at a time due to "
-                         "different zoning systems for NoHAM and NoRMS "
-                         "etc.")
+        raise du.ExternalForecastSystemError(
+            "Was given more than one mode. EFS cannot run using more than "
+            "one mode at a time due to different zoning systems for NoHAM "
+            "and NoRMS etc.")
+
+    # Make sure all the expected keys exist
+    if constraint_required is not None:
+        expected_keys = consts.CONSTRAINT_REQUIRED_DEFAULT.keys()
+        for key in expected_keys:
+            if key not in constraint_required:
+                raise du.ExternalForecastSystemError(
+                    "Missing '%s' key in constraint_required. Expected to "
+                    "find all of the following keys:\n%s"
+                    % (str(key), str(expected_keys))
+                )
 
 
 def write_input_info(output_path,
@@ -2329,9 +2298,6 @@ def write_input_info(output_path,
                      minimum_development_certainty: str,
                      population_metric: str,
                      constraint_required: List[bool],
-                     constraint_method: str,
-                     constraint_area: str,
-                     constraint_on: str,
                      constraint_source: str,
                      ) -> None:
 
@@ -2359,9 +2325,6 @@ def write_input_info(output_path,
         "Minimum Development Certainty: " + str(minimum_development_certainty),
         "Population Metric: " + population_metric,
         "Constraints Used On: " + str(constraint_required),
-        "Constraint Method: " + constraint_method,
-        "Constraint Area: " + constraint_area,
-        "Constraint On: " + constraint_on,
         "Constraint Source: " + constraint_source
     ]
     with open(output_path, 'w') as out:
@@ -2372,14 +2335,12 @@ def main():
     echo = False
 
     # Running control
-    integrate_dlog = False
+    integrate_dlog = True
 
     run_base_efs = True
     recreate_productions = False
     recreate_attractions = False
     recreate_nhb_productions = False
-
-    constrain_population = False
 
     run_hb_pa_to_od = False
     run_compile_od = False
@@ -2391,12 +2352,6 @@ def main():
     import_home = "Y:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
-
-    # Set up constraints
-    if constrain_population:
-        constraints = consts.CONSTRAINT_REQUIRED_DEFAULT
-    else:
-        constraints = [False] * 6
 
     # ## RUN START ## #
     efs = ExternalForecastSystem(
@@ -2414,8 +2369,7 @@ def main():
             recreate_productions=recreate_productions,
             recreate_attractions=recreate_attractions,
             recreate_nhb_productions=recreate_nhb_productions,
-            echo_distribution=echo,
-            constraint_required=constraints
+            echo_distribution=echo
         )
 
     # TODO: Get PA2OD to compile HB and NHB mats

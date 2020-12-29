@@ -54,6 +54,15 @@ class NormitsDemandError(Exception):
         super().__init__(self.message)
 
 
+class ExternalForecastSystemError(NormitsDemandError):
+    """
+    Base Exception for all custom EFS errors
+    """
+    def __init__(self, message=None):
+        self.message = message
+        super().__init__(self.message)
+
+
 def validate_seg_level(seg_level: str) -> str:
     """
     Tidies up seg_level and raises an exception if not a valid name
@@ -941,34 +950,6 @@ def is_none_like(o) -> bool:
         return all([is_none_like(x) for x in o])
 
     return False
-
-
-def get_data_subset(orig_data: pd.DataFrame,
-                    split_col_name: str = 'model_zone_id',
-                    subset_vals: List[object] = consts.DEFAULT_ZONE_SUBSET
-                    ) -> pd.DataFrame:
-    """
-    Returns a subset of the original data - useful for testing and dev
-
-    Parameters
-    ----------
-    orig_data:
-        The pandas DataFrame containing the starting data
-
-    split_col_name:
-        The column of orig_data we will look for subset_vals in
-
-    subset_vals:
-        The values to look for and keep in split_col_data
-
-    Returns
-    -------
-    subset_data:
-        A smaller version of orig_data
-
-    """
-    subset_mask = orig_data[split_col_name].isin(subset_vals)
-    return orig_data.loc[subset_mask]
 
 
 def get_vdm_dist_name(trip_origin: str,
@@ -2721,6 +2702,74 @@ def is_almost_equal(v1: float,
         True if v1 and v2 are equal to significant bits, else False
     """
     return isclose(v1, v2, abs_tol=10 ** -significant)
+
+
+def remove_all_commute_cat(df: pd.DataFrame,
+                           emp_cat_col: str,
+                           all_commute_name: str = 'E01'
+                           ) -> pd.DataFrame:
+    """
+    Removes all_commute_name from emp_cat_col in df.
+
+    df must be in long format, with a column for all employment categories
+
+    Parameters
+    ----------
+    df:
+        The dataframe to remove the all commute category from
+
+    emp_cat_col:
+        The name of the column in df that contains the employment category
+        data
+
+    all_commute_name:
+        The name of the employment category that represents all commute data.
+        This is the category that will be removed from df/
+
+    Returns
+    -------
+    df:
+        A copy of the original df with the all commute category removed.
+    """
+    # Validate input
+    if emp_cat_col not in df:
+        raise ValueError(
+            "Cannot remove all commute category from df, as the emp_cat_col "
+            "given does not exist. Given: %s" % str(emp_cat_col)
+        )
+
+    return df.loc[df[emp_cat_col] != all_commute_name]
+
+
+def add_all_commute_cat(df: pd.DataFrame,
+                        emp_cat_col: str,
+                        unique_data_cols: List[str],
+                        all_commute_name: str = 'E01'
+                        ) -> pd.DataFrame:
+    # Init
+    df = df.copy()
+
+    # Validate input
+    if emp_cat_col not in df:
+        raise ValueError(
+            "Cannot add all commute category to df, as the emp_cat_col "
+            "given does not exist. Given: %s" % str(emp_cat_col)
+        )
+
+    # Set up the group and index columns
+    index_cols = list(df)
+    index_cols.remove(emp_cat_col)
+    group_cols = list_safe_remove(index_cols.copy(), unique_data_cols)
+
+    # Calculate the totals for each zone
+    all_commute = df.reindex(columns=index_cols)
+    all_commute = all_commute.groupby(group_cols).sum().reset_index()
+    all_commute[emp_cat_col] = all_commute_name
+
+    # Append back to the starting dataframe and sort
+    df = df.append(all_commute)
+    df = df.sort_values(by=group_cols + ["employment_cat"])
+    return df.reset_index(drop=True)
 
 
 # ## BELOW HERE IS OLD TMS CODE ## #

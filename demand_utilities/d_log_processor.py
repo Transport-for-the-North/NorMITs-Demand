@@ -1,12 +1,14 @@
 
 import os
-from tqdm import tqdm
-
-from typing import List, Tuple
 
 import pandas as pd
 
+from typing import List, Tuple
+
+from tqdm import tqdm
+
 from demand_utilities import utils as du
+
 
 def identify_exceptional_zones(pre_df: pd.DataFrame,
                                post_df: pd.DataFrame,
@@ -16,6 +18,7 @@ def identify_exceptional_zones(pre_df: pd.DataFrame,
                                absolute_cutoff: float = None,
                                cutoff_method: str = "growth"
                                ) -> pd.DataFrame:
+    # TODO: Write docs for identify_exceptional_zones()
     
     # Return a dataframe of the highest growth zones and their associated 
     # growth
@@ -460,7 +463,6 @@ def estimate_dlog_build_out(dlog: pd.DataFrame,
     
     return parsed_dlog, errors
     
-    
 
 def apply_d_log(pre_dlog_df: pd.DataFrame,
                 base_year:  str,
@@ -473,6 +475,7 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
                 dlog_conversion_factor: float = 1.0,
                 msoa_column: str = "msoa_zone_id",
                 msoa_zones: str = None,
+                emp_cat_col: str = 'employment_cat',
                 min_growth_limit: float = 0.25,
                 dlog_data_column_key: str = "population",
                 perform_constraint: bool = True,
@@ -509,10 +512,13 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         )
     # If we are applying to the employment data - remove the totals category
     # (will be added back in afterwards)
-    if "employment_cat" in segment_cols:
-        post_dlog_df = post_dlog_df.loc[
-            post_dlog_df["employment_cat"] != "E01"
-        ]
+    re_add_all_commute_cat = False
+    if emp_cat_col in segment_cols:
+        # Check if the all_commute_Cat exists
+        if 'E01' in post_dlog_df[emp_cat_col].unique():
+            post_dlog_df = du.remove_all_commute_cat(post_dlog_df, emp_cat_col)
+            re_add_all_commute_cat = True
+
     # Save the initial growth by MSOA to use in identifying exceptional zones
     pre_dlog_growth = post_dlog_df.groupby(msoa_column)[
         [base_year] + future_years
@@ -704,20 +710,12 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     )
     # If we are applying to the employment data - add the totals category
     # back in
-    if "employment_cat" in segment_cols:
-        # Calculate the totals for each zone
-        group_cols = [msoa_column] + [seg for seg in segment_cols
-                                      if seg != "employment_cat"]
-        emp_cat1 = post_dlog_df.groupby(group_cols, as_index=False)[
-            [base_year] + future_years
-        ].sum()
-        emp_cat1["employment_cat"] = "E01"
-        # Append back to the post_dlog dataframe and sort by zone/segment
-        post_dlog_df = post_dlog_df.append(emp_cat1)
-        post_dlog_df.sort_values(by=[msoa_column, "employment_cat"],
-                                 inplace=True)
-        post_dlog_df.reset_index(drop=True, inplace=True)
-
+    if re_add_all_commute_cat:
+        post_dlog_df = du.add_all_commute_cat(
+            df=post_dlog_df,
+            emp_cat_col=emp_cat_col,
+            unique_data_cols=[base_year] + future_years,
+        )
 
     # Convert back to string - as expected by the next steps
     if msoa_zones is not None:
@@ -755,6 +753,5 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
             index=False
         )
 
-    
     return post_dlog_df, e_zones
 

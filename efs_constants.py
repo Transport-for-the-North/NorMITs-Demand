@@ -184,46 +184,17 @@ EFS_COLUMN_DICTIONARY = {
     ]
 }
 
-# ### Default Values ### #
-
-# What is this area?
-DEFAULT_ZONE_SUBSET = [1, 2, 1055, 1056, 1057, 1058, 1059, 1060, 1061, 1062]
-
 # ### Default Function Arguments ### #
 
 # ## EFS_RUN ## #
-
-# By default EFS should no longer constrain to NTEM planning data
-# for populations and employment!
-# WE now trust NorMITs Land Use to provide us with accurate population
-# and employment data
-CONSTRAINT_REQUIRED_DEFAULT = [
-    False,   # initial population metric constraint
-    False,   # post-development constraint
-    False,   # secondary post-development constraint used for matching HH pop
-    False,  # initial worker metric constraint
-    False,  # secondary worker metric constraint
-    False,  # final trip based constraint
-]
-
-# ## Attraction Generation ## #
-DEFAULT_ATTRACTION_CONSTRAINTS = [
-    False,   # initial population metric constraint
-    False,   # post-development constraint
-    False,   # secondary post-development constraint used for matching HH pop
-    False,  # initial worker metric constraint
-    False,  # secondary worker metric constraint
-    False,  # final trip based constraint
-]
-
-# ## Production Generations ## #
-DEFAULT_PRODUCTION_CONSTRAINTS = [
-    False,   # initial population metric constraint
-    False,   # post-development constraint
-    False,   # secondary post-development constraint used for matching HH pop
-    False   # final trip based constraint
-]
-
+# We don't constrain by default. Land Use provides us with accurate enough
+# data. Unless we include D-log!
+CONSTRAINT_REQUIRED_DEFAULT = {
+    'pop_pre_dlog': False,
+    'pop_post_dlog': None,      # Automatically turns on/off if dlog in use
+    'emp_pre_dlog': False,
+    'emp_post_dlog': None,      # Automatically turns on/off if dlog in use
+}
 
 # RUNNING CONSTANTS
 MODEL_NAME = 'norms'

@@ -105,11 +105,8 @@ class EFSProductionGenerator:
             dlog: str = None,
 
             # Population constraints
-            constraint_required: List[bool] = consts.DEFAULT_PRODUCTION_CONSTRAINTS,
-            constraint_method: str = "Percentage",  # Percentage, Average
-            constraint_area: str = "Designated",  # Zone, Designated, All
-            constraint_on: str = "Growth",  # Growth, All
-            constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
+            pre_dlog_constraint: bool = False,
+            post_dlog_constraint: bool = None,
             designated_area: pd.DataFrame = None,
 
             # Segmentation Controls
@@ -209,23 +206,13 @@ class EFSProductionGenerator:
         dlog:
             TODO: Clarify what format D_log data comes in as
 
-        d_log_split:
-            See d_log
+        pre_dlog_constraint:
+            Whether to constrain the population before applying the dlog or
+            not.
 
-        constraint_required:
-            See efs_constrainer.ForecastConstrainer()
-
-        constraint_method:
-            See efs_constrainer.ForecastConstrainer()
-
-        constraint_area:
-            See efs_constrainer.ForecastConstrainer()
-
-        constraint_on:
-            See efs_constrainer.ForecastConstrainer()
-
-        constraint_source:
-            See efs_constrainer.ForecastConstrainer()
+        post_dlog_constraint
+            Whether to constrain the population after applying the dlog or
+            not.
 
         designated_area:
             See efs_constrainer.ForecastConstrainer()
@@ -291,6 +278,10 @@ class EFSProductionGenerator:
 
         # Init
         all_years = [str(x) for x in [base_year] + future_years]
+
+        # If not set, perform the post_dlog_constrain if dlog is on
+        if post_dlog_constraint is None:
+            post_dlog_constraint = dlog is not None
 
         # TODO: Make this more adaptive
         # Set the level of segmentation being used
@@ -365,11 +356,10 @@ class EFSProductionGenerator:
             growth_merge_cols=merge_cols
         )
 
-        # ## CONSTRAIN POPULATION ## #
-        # TODO: Remove constraint source
-        if constraint_required[0] and (constraint_source != "model grown base"):
+        # ## POST D-LOG CONSTRAINT ## #
+        if pre_dlog_constraint:
             print("Performing the first constraint on population...")
-            print(". Pre Constraint: %.3f" % population[future_years].sum())
+            print(". Pre Constraint:\n%s" % population[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
                                                   population_constraint)
 
@@ -383,12 +373,7 @@ class EFSProductionGenerator:
                 msoa_path=msoa_conversion_path,
                 segment_cols=constraint_segments
             )
-            print(". Post Constraint: %.3f" % population[future_years].sum())
-
-        elif constraint_source == "model grown base":
-            print("Generating model grown base constraint for use on "
-                  "development constraints...")
-            population_constraint = population.copy()
+            print(". Post Constraint:\n%s" % population[future_years].sum())
 
         # ## INTEGRATE D-LOG ## #
         if dlog is not None:
@@ -417,9 +402,9 @@ class EFSProductionGenerator:
                             index=False)
 
         # ## POST D-LOG CONSTRAINT ## #
-        if constraint_required[1]:
+        if post_dlog_constraint:
             print("Performing the post-development log constraint on population...")
-            print(". Pre Constraint: %.3f" % population[future_years].sum())
+            print(". Pre Constraint:\n%s" % population[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
                                                   population_constraint)
 
@@ -433,7 +418,7 @@ class EFSProductionGenerator:
                 msoa_path=msoa_conversion_path,
                 segment_cols=constraint_segments
             )
-            print(". Post Constraint: %.3f" % population[future_years].sum())
+            print(". Post Constraint:\n%s" % population[future_years].sum())
 
         # Reindex and sum
         group_cols = [self.zone_col] + segmentation_cols
@@ -553,226 +538,6 @@ class EFSProductionGenerator:
         )
 
         return grown_population
-
-    def grow_by_population(self,
-                           population_growth: pd.DataFrame,
-                           population_values: pd.DataFrame,
-                           population_constraint: pd.DataFrame,
-                           d_log: pd.DataFrame = None,
-                           d_log_split: pd.DataFrame = None,
-                           minimum_development_certainty: str = "MTL",  # "NC", "MTL", "RF", "H"
-                           constraint_required: List[bool] = consts.DEFAULT_PRODUCTION_CONSTRAINTS,
-                           constraint_method: str = "Percentage",  # Percentage, Average
-                           constraint_area: str = "Designated",  # Zone, Designated, All
-                           constraint_on: str = "Growth",  # Growth, All
-                           constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
-                           designated_area: pd.DataFrame = None,
-                           base_year_string: str = None,
-                           model_years: List[str] = List[None]
-                           ) -> pd.DataFrame:
-        """
-        TODO: Write grow_by_population() doc
-        """
-        # ## GROW POPULATION
-        grown_population = self.population_grower(
-            population_growth,
-            population_values,
-            base_year_string,
-            model_years
-        )
-
-        # ## initial population metric constraint
-        if constraint_required[0] and (constraint_source != "model grown base"):
-            print("Performing the first constraint on population...")
-            grown_population = self.efs_constrainer.run(
-                grown_population,
-                constraint_method,
-                constraint_area,
-                constraint_on,
-                population_constraint,
-                base_year_string,
-                model_years,
-                designated_area
-            )
-        elif constraint_source == "model grown base":
-            print("Generating model grown base constraint for use on "
-                  + "development constraints...")
-            population_constraint = grown_population.copy()
-
-        # ## D-LOG INTEGRATION
-        if d_log is not None and d_log_split is not None:
-            print("Including development log...")
-            development_households = self.development_log_house_generator(
-                d_log,
-                d_log_split,
-                minimum_development_certainty,
-                model_years
-            )
-            raise NotImplementedError("D-Log pop generation not "
-                                      "yet implemented.")
-            # TODO: Generate population
-        else:
-            print("Not including development log...")
-
-        # ## post-development log constraint
-        if constraint_required[1]:
-            print("Performing the post-development log on population...")
-            grown_population = self.efs_constrainer.run(
-                grown_population,
-                constraint_method,
-                constraint_area,
-                constraint_on,
-                population_constraint,
-                base_year_string,
-                model_years,
-                designated_area
-            )
-        return grown_population
-
-    def grow_by_households(self,
-                           population_constraint: pd.DataFrame,
-                           population_split: pd.DataFrame,
-                           households_growth: pd.DataFrame,
-                           households_values: pd.DataFrame,
-                           households_constraint: pd.DataFrame,
-                           housing_split: pd.DataFrame,
-                           housing_occupancy: pd.DataFrame,
-                           d_log: pd.DataFrame = None,
-                           d_log_split: pd.DataFrame = None,
-                           minimum_development_certainty: str = "MTL",  # "NC", "MTL", "RF", "H"
-                           constraint_required: List[bool] = consts.DEFAULT_PRODUCTION_CONSTRAINTS,
-                           constraint_method: str = "Percentage",  # Percentage, Average
-                           constraint_area: str = "Designated",  # Zone, Designated, All
-                           constraint_on: str = "Growth",  # Growth, All
-                           constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
-                           designated_area: pd.DataFrame = None,
-                           base_year_string: str = None,
-                           model_years: List[str] = List[None]
-                           ) -> pd.DataFrame:
-        # ## GROW HOUSEHOLDS
-        grown_households = self.households_grower(
-            households_growth,
-            households_values,
-            base_year_string,
-            model_years
-        )
-
-        # ## initial population metric constraint
-        if constraint_required[0] and (constraint_source != "model grown base"):
-            print("Performing the first constraint on households...")
-            grown_households = self.efs_constrainer.run(
-                grown_households,
-                constraint_method,
-                constraint_area,
-                constraint_on,
-                households_constraint,
-                base_year_string,
-                model_years,
-                designated_area
-            )
-        elif constraint_source == "model grown base":
-            print("Generating model grown base constraint for use on "
-                  + "development constraints...")
-            households_constraint = grown_households.copy()
-
-        # ## SPLIT HOUSEHOLDS
-        split_households = self.split_housing(
-            grown_households,
-            housing_split,
-            base_year_string,
-            model_years
-        )
-
-        # ## D-LOG INTEGRATION
-        if d_log is not None and d_log_split is not None:
-            print("Including development log...")
-            # ## DEVELOPMENT SPLIT
-            split_development_households = self.development_log_house_generator(
-                d_log,
-                d_log_split,
-                minimum_development_certainty,
-                model_years
-            )
-
-            # ## COMBINE BASE + DEVELOPMENTS
-            split_households = self.combine_households_and_developments(
-                split_households,
-                split_development_households
-            )
-
-        else:
-            print("Not including development log...")
-
-        # ## post-development log constraint
-        if constraint_required[1]:
-            print("Performing the post-development log constraint on "
-                  "households...")
-            split_households = self.efs_constrainer.run(
-                split_households,
-                constraint_method,
-                constraint_area,
-                constraint_on,
-                households_constraint,
-                base_year_string,
-                model_years,
-                designated_area
-            )
-
-        # ## POPULATION GENERATION
-        population = self.generate_housing_occupancy(
-            split_households,
-            housing_occupancy,
-            base_year_string,
-            model_years
-        )
-
-        # ## ENSURE WE HAVE NO MINUS POPULATION
-        for year in model_years:
-            mask = (population[year] < 0)
-            population.loc[mask, year] = self.pop_infill
-
-        # ## secondary post-development constraint
-        # (used for matching HH pop)
-        if constraint_required[2] and (constraint_source != "model grown base"):
-            print("Constraining to population on population in "
-                  "households...")
-            population = self.efs_constrainer.run(
-                population,
-                constraint_method,
-                constraint_area,
-                constraint_on,
-                population_constraint,
-                base_year_string,
-                model_years,
-                designated_area
-            )
-        elif constraint_source == "model grown base":
-            print("Population constraint in households metric selected.")
-            print("No way to control population using model grown base "
-                  + "constraint source.")
-
-        # ## SPLIT POP (On traveller type)
-        split_population = self.split_population(
-            population,
-            population_split,
-            base_year_string,
-            model_years
-        )
-
-        # ## RECOMBINING POP
-        final_population = self.growth_recombination(split_population,
-                                                     "base_year_population",
-                                                     model_years)
-
-        final_population.sort_values(
-            by=[
-                "model_zone_id",
-                "property_type_id",
-                "traveller_type_id"
-            ],
-            inplace=True
-        )
-        return final_population
 
     def production_generation(self,
                               population: pd.DataFrame,
