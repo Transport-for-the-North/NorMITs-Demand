@@ -568,18 +568,7 @@ class ExternalForecastSystem:
 
         # ## CONSTRAINT BUILDING
         pop_constraint = self.pop_constraint.copy()
-        # pop_constraint = self.constrainer.convert_constraint_off_base_year(
-        #     pop_constraint,
-        #     str(base_year),
-        #     year_list
-        # )
-
         emp_constraint = self.emp_constraint.copy()
-        # emp_constraint = self.constrainer.convert_constraint_off_base_year(
-        #     emp_constraint,
-        #     str(base_year),
-        #     year_list
-        # )
 
         print("Constraints retrieved!")
         last_time = current_time
@@ -1688,6 +1677,7 @@ class ExternalForecastSystem:
             self._out_dir,
             model_name,
             self.__version__ + "-EFS_Output",
+            self.scenario_name,
             self.iter_name,
         ]
         export_home = os.path.join(*fname_parts)

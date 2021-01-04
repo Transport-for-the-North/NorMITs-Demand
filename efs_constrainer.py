@@ -192,24 +192,6 @@ class ForecastConstrainer:
         constrained_dataframe = grown_dataframe
         return constrained_dataframe
 
-    def convert_constraint_off_base_year(self,
-                                         constraint_dataframe: pd.DataFrame,
-                                         base_year: str,
-                                         all_years: List[str]
-                                         ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        constraint_dataframe = constraint_dataframe.copy()
-
-        # TODO: Get rid of this lambda
-        constraint_dataframe.loc[:, all_years] = constraint_dataframe.apply(
-            lambda x, columns_required=all_years, base_year=base_year:
-                x[columns_required] - x[base_year],
-            axis=1)
-        
-        return constraint_dataframe
-
 
 def grow_constraint(base_values: pd.DataFrame,
                     growth_factors: pd.DataFrame,

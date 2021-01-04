@@ -268,6 +268,7 @@ def build_io_paths(import_location: str,
                    export_location: str,
                    model_name: str,
                    iter_name: str,
+                   scenario_name: str,
                    demand_version: str,
                    demand_dir_name: str = 'NorMITs Demand',
                    ) -> Tuple[dict, dict, dict]:
@@ -294,6 +295,10 @@ def build_io_paths(import_location: str,
         The name of the iteration being run. Usually of the format iterx,
         where x is a number, e.g. iter3
 
+    scenario_name:
+        The name of the scenario use to produce outputs. This should be one
+        of consts.SCENARIOS
+
     demand_version:
         Version number of NorMITs Demand being run - this is used to generate
         the correct output path.
@@ -319,7 +324,7 @@ def build_io_paths(import_location: str,
     """
     # TODO: Tidy up Y:/ drive imports/inputs folders after contract
     # Init
-    model_name = model_name.lower()
+    model_name = validate_model_name(model_name)
 
     # ## IMPORT PATHS ## #
     # Attraction weights are a bit special, we get these directly from
@@ -337,7 +342,7 @@ def build_io_paths(import_location: str,
     # Generate import and export paths
     model_home = os.path.join(import_location, demand_dir_name)
     import_home = os.path.join(model_home, 'import')
-    input_home = os.path.join(model_home, 'inputs', 'default')
+    input_home = os.path.join(import_home, 'default')
 
     imports = {
         'home': import_home,
@@ -347,6 +352,7 @@ def build_io_paths(import_location: str,
         'lookups': os.path.join(model_home, 'lookup'),
         'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
         'zoning': os.path.join(input_home, 'zoning'),
+        'scenarios': os.path.join(import_home, 'scenarios'),
         'a_weights': a_weights_path
     }
 
@@ -357,6 +363,7 @@ def build_io_paths(import_location: str,
         demand_dir_name,
         model_name,
         demand_version + "-EFS_Output",
+        scenario_name,
         iter_name,
     ]
     export_home = os.path.join(*fname_parts)
