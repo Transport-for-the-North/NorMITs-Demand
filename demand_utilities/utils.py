@@ -112,6 +112,35 @@ def validate_zoning_system(zoning_system: str) -> str:
     return zoning_system
 
 
+def validate_scenario_name(scenario_name: str) -> str:
+    """
+    Tidies up zoning_system and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    scenario_name:
+        The name of the scenario to validate
+
+    Returns
+    -------
+    scenario_name:
+        scenario_name with both strip and upper applied to remove any
+        whitespace and make it all uppercase
+
+    Raises
+    -------
+    ValueError:
+        If scenario_name is not a valid name for a scenario
+    """
+    # Init
+    scenario_name = scenario_name.strip().upper()
+
+    if scenario_name not in consts.SCENARIOS:
+        raise ValueError("%s is not a valid name for a scenario."
+                         % scenario_name)
+    return scenario_name
+
+
 def validate_model_name(model_name: str) -> str:
     """
     Tidies up model_name and raises an exception if not a valid name
