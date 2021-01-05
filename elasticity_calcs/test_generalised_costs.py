@@ -135,8 +135,18 @@ class TestGenCostRailMins:
         "num_int": np.array([[1, 0], [0, 2]]),
     }
     VT = 83.07
-    TEST_FACTORS = [None, {"walk": 1, "interchange_penalty": 10}]
+    TEST_FACTORS = [
+        None,
+        {"walk": 1.75},
+        {"walk": 1, "interchange_penalty": 10},
+    ]
     TEST_ANSWERS = [
+        np.array(
+            [
+                [48.36529854339714, 13.67991814132659],
+                [91.45546105693992, 60.49546045503792],
+            ]
+        ),
         np.array(
             [
                 [49.64779854339714, 14.96491814132659],
