@@ -1304,6 +1304,8 @@ class NhbProductionModel:
 
         self.control_productions = control_productions
         self.control_fy_productions = control_fy_productions
+        if not control_productions:
+            self.control_fy_productions = False
 
         self.m_col = m_col
         self.m_share_col = m_share_col

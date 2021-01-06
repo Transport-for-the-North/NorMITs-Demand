@@ -639,7 +639,9 @@ class ExternalForecastSystem:
             import_home=self.imports['home'],
             export_home=self.exports['home'],
             model_name=self.model_name,
-            msoa_conversion_path=self.msoa_zones_path
+            msoa_conversion_path=self.msoa_zones_path,
+            base_year=str(base_year),
+            future_years=[str(x) for x in future_years]
         )
         nhb_productions = nhb_pm.run(
             recreate_productions=recreate_nhb_productions
@@ -672,7 +674,6 @@ class ExternalForecastSystem:
         nhb_a_weights.columns = nhb_a_weights.columns.astype(str)
 
         # ## ZONE TRANSLATION ## #
-        # TODO: Check demand before and after translation
         model_zone_col = '%s_zone_id' % self.model_name
         if desired_zoning != self.input_zone_system:
             print("Need to translate zones.")
@@ -810,7 +811,6 @@ class ExternalForecastSystem:
             )
 
             print("Generating NHB distributions...")
-            print("Distributions generated!")
             dm.distribute_pa(
                 productions=converted_nhb_productions,
                 attraction_weights=converted_nhb_attractions,
@@ -1740,7 +1740,7 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC01_JAM
+    scenario = consts.SC00_NTEM
     iter_num = 0
     import_home = "Y:/"
     export_home = "E:/"
