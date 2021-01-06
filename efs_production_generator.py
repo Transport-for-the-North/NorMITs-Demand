@@ -405,6 +405,7 @@ class EFSProductionGenerator:
         if post_dlog_constraint:
             print("Performing the post-development log constraint on population...")
             print(". Pre Constraint:\n%s" % population[future_years].sum())
+            print(". Constraint:\n%s" % population_constraint[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
                                                   population_constraint)
 

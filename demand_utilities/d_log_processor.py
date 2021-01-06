@@ -264,8 +264,6 @@ def constrain_post_dlog(df: pd.DataFrame,
                         ):
     """Perform a constraint on the post d-log data. Constraint is on the 
     total growth at sector level.
-    TODO Check that this is correct. Sometimes will result in zones decreasing
-    in later years.
 
     Parameters
     ----------
@@ -356,6 +354,42 @@ def constrain_forecast(pre_constraint_df: pd.DataFrame,
                        msoa_path: str = None,
                        segment_cols: List[str] = None
                        ) -> pd.DataFrame:
+    """Constrains a population / employment dataframe by growth values.
+    Constrain can be done using a sector system given by 
+    constraint_zone_equivalence
+    Note that if the base absolute values are not the same as the constraint
+    values, the constrained values will not match the NTEM totals.
+
+    Parameters
+    ----------
+    pre_constraint_df : pd.DataFrame
+        The dataframe to be constrained. Should contain all columns: base_year,
+        future_years, zone_column, and segment_cols.
+    constraint_df : pd.DataFrame
+        Contains absolute values for each of the future_years and base_year. 
+        Should be at the same segmentation as pre_constraint_df.
+    constraint_zone_equivalence : pd.DataFrame
+        The zone - sector equivalence. Must contain model_zone_id and 
+        grouping_id columns.
+    base_year : str
+        The base year to calculate growth from.
+    future_years : List[str]
+        The forecast years.
+    zone_column : str
+        Name of the column containing zone IDs
+    msoa_path : str, optional
+        Path to the file with MSOA code to ID equivalence, by default None
+    segment_cols : List[str], optional
+        The segmentation columns contained in the data. E.g. [purpose, soc, ns,
+        ca] or [purpose, soc] generally for population and employment, 
+        by default None
+
+    Returns
+    -------
+    pd.DataFrame
+        The constrained dataframe. Growth from the base year will have been
+        constrained at the given sector level.
+    """
 
     df = pre_constraint_df.copy()
     constraint = constraint_df.copy()
@@ -375,11 +409,11 @@ def constrain_forecast(pre_constraint_df: pd.DataFrame,
             to='int'
         )
 
-    print("Input Dataframe")
-    print(df)
+    # print("Input Dataframe")
+    # print(df)
     
-    print("Constraint")
-    print(constraint)
+    # print("Constraint")
+    # print(constraint)
 
     sector_equivalence = constraint_zone_equivalence.copy()
     sector_equivalence.rename(

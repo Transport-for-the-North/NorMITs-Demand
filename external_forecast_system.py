@@ -929,6 +929,22 @@ class ExternalForecastSystem:
                 converted_pure_attractions,
                 year_list
             )
+            
+            # Write grown productions and attractions to file
+            # Save as exceptional - e.g. "exc_productions"
+            fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
+            fname = fname.replace("_productions", "_exc_productions")
+            converted_productions.to_csv(
+                os.path.join(self.exports['productions'], fname),
+                index=False
+            )
+
+            fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
+            fname = fname.replace("_attractions", "_exc_attractions")
+            converted_pure_attractions.to_csv(
+                os.path.join(self.exports['attractions'], fname),
+                index=False
+            )
 
         # TODO: Move conversion to attraction weights down here
 
@@ -1125,7 +1141,9 @@ class ExternalForecastSystem:
             zt_pop_df=pop_translation,
             zt_emp_df=emp_translation,
             trip_rate_sectors=sector_lookup,
-            soc_weights_path=self.imports['soc_weights']
+            soc_weights_path=self.imports['soc_weights'],
+            prod_audits=self.exports["productions"],
+            attr_audits=self.exports["attractions"]
         )
 
         return productions, attractions

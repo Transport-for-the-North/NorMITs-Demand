@@ -423,6 +423,7 @@ class EFSAttractionGenerator:
             pd.set_option('display.float_format', str)
             print("Performing the post-development log constraint on employment...")
             print(". Pre Constraint:\n%s" % employment[future_years].sum())
+            print(". Constraint:\n%s" % employment_constraint[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
                                                   employment_constraint)
 
