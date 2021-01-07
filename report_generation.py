@@ -161,6 +161,9 @@ def matrix_reporting(matrix_directory: str,
                     sectored_output_files.append(new_file)
                     os.replace(matrix_file, new_file)
 
+    # Collate the sectored files into one for easier use in Power BI etc.
+    concat_matrix_folder(output_dir)
+
     if collate_years:
         # Create a GIS format report
         generate_gis_report(
@@ -522,6 +525,70 @@ def concat_vector_folder(data_dir: str,
     # TODO add option to remove individual files if needed
 
 
+def concat_matrix_folder(data_dir: str,
+                         matrix_type: str,
+                         output_name: str = None):
+    """Concatenates a folder of "wide" format .csv files to a single file
+
+    Parameters
+    ----------
+    data_dir : str
+        Path to the directory containing the CSV files
+    matrix_type : str
+        The matrix type - "pa" or "od"
+    output_name : str, optional
+        Name of the concatenated output file, by default None
+    """
+
+    # Override default file name
+    output_name = output_name or "concatenated_data.csv"
+
+    # Fetch a list of all .csv files in the directory
+    files = os.listdir(data_dir)
+
+    file_df = du.parse_mat_output(
+        files,
+        sep="_",
+        mat_type=matrix_type,
+        file_format=".csv",
+        file_name="file"
+    )
+
+    vector_df = pd.DataFrame()
+
+    for _, row in file_df.iterrows():
+
+        single_vector = pd.read_csv(
+            os.path.join(data_dir, row.pop("file")),
+            index_col=0
+        )
+        single_vector = single_vector.stack().reset_index()
+        single_vector.columns = ["origin", "destination", "demand"]
+
+        # Add additional columns for each segment e.g. purpose, mode, soc/ns
+        for key, value in row.items():
+            single_vector[key] = value
+
+        if vector_df.empty:
+            vector_df = single_vector
+        else:
+            vector_df = pd.concat(
+                (vector_df, single_vector),
+                axis=0
+            )
+
+    # Remove columns that just contain "none" - e.g. suffixes on the file name
+    vector_df = vector_df[
+        [col for col in vector_df
+         if next(iter(set(vector_df[col]))) != "none"]
+    ]
+
+    vector_df.to_csv(
+        os.path.join(data_dir, output_name),
+        index=False
+    )
+
+
 def load_report_params(param_file: str) -> None:
     """Load report generation parameters from file.
     Allows a number of options to be set in a json file.
@@ -546,7 +613,7 @@ def load_report_params(param_file: str) -> None:
              "ns": List of ns to keep
              "ca": List of ca to keep
              "tp": List of tp to keep
-             } - Any segment can be "Keep" or "Agg" to either keep disaggregated
+             }- Any segment can be "Keep" or "Agg" to either keep disaggregated
                 or to aggregate all of that segment together
          - "zones_file" - Dummy zones fileto supply to sector reporter
          - "sectors_files" - List of sector files within
@@ -637,7 +704,6 @@ def check_params(parameters: dict,
     print("Parameters OK")
 
 
-
 def main(param_file: str,
          imports: dict,
          exports: dict,
@@ -725,7 +791,7 @@ if __name__ == "__main__":
 
     pa_params = os.path.join(
         imports["default_inputs"],
-                             "reports", "params", "pa.json"
+        "reports", "params", "pa.json"
     )
     main(pa_params, imports, exports, model_name)
     tp_pa_params = os.path.join(imports["default_inputs"],
