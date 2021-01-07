@@ -350,7 +350,10 @@ class ElasticityModel:
         folder.mkdir(parents=True, exist_ok=True)
         name = get_dist_name(**demand_params, csv=True)
         df = pd.DataFrame(
-            [(k, adjusted_demand[k].mean()) for k in ("bus", "active", "no_travel")],
+            [
+                (k, adjusted_demand[k].mean())
+                for k in ("bus", "active", "no_travel")
+            ],
             columns=["mode", "mean_demand_adjustment"],
         )
         safe_dataframe_to_csv(df, folder / name, index=False)
@@ -372,34 +375,32 @@ def calculate_adjustment(
             f"expected one of {list(GC_ELASTICITY_TYPES.keys())}"
         )
 
-    cols = ["AffectedMode", "ModeCostChg", "OwnElast", "CstrMatrixName"]
+    chg_mode, _, _ = GC_ELASTICITY_TYPES[elasticity_type]
+    # Filter only elasticities involving the mode that changes
+    elasticities = elasticities.loc[
+        elasticities["ModeCostChg"].str.lower() == chg_mode
+    ]
+
+    # Set base gc to 1 if it is 0 as cannot divide by 0
+    tmp_base_gc = np.where(base_gc[chg_mode] == 0, 1, base_gc[chg_mode])
+
+    # The cost and cost_factors are dependant on the cost that changes
+    cost, cost_factor = _elasticity_gc_factors(
+        base_costs[chg_mode],
+        gc_params.get(chg_mode, {}),
+        elasticity_type,
+    )
+
+    cols = ["AffectedMode", "OwnElast", "CstrMatrixName"]
     demand_adjustment = {
         m.lower(): np.full_like(base_demand[m.lower()], 1.0)
         for m in elasticities[cols[0]].unique()
     }
-    # TODO Move calculations for chg_mode outside loop as these are
-    # the same per elasticity_type and filter node chg_mode out of elasticities
-    # before looping so loop should only be on affected mode (5 loops)
-    for aff_mode, chg_mode, elast, cstr_name in elasticities[cols].itertuples(
+    for aff_mode, elast, cstr_name in elasticities[cols].itertuples(
         index=False, name=None
     ):
-        aff_mode, chg_mode = aff_mode.lower(), chg_mode.lower()
-        if chg_mode != GC_ELASTICITY_TYPES[elasticity_type][0]:
-            continue  # No need to calculate elasticity if mode cost doesn't change
-        adj_cost, adj_gc_params = adjust_cost(
-            base_costs[chg_mode],
-            gc_params.get(chg_mode, {}),
-            elasticity_type,
-            cost_constraint[cstr_name],
-        )
-        adj_gc = gen_cost_mode(adj_cost, chg_mode, **adj_gc_params)
-
-        # The cost and cost_factors are dependant on the cost that changes
-        cost, cost_factor = _elasticity_gc_factors(
-            base_costs[chg_mode],
-            gc_params.get(chg_mode, {}),
-            elasticity_type,
-        )
+        aff_mode = aff_mode.lower()
+        # Calculate the generalised cost of the current elasticity
         gc_elast = gen_cost_elasticity_mins(
             elast,
             base_gc[chg_mode],
@@ -407,10 +408,16 @@ def calculate_adjustment(
             base_demand[chg_mode],
             cost_factor,
         )
-
-        # Set base gc to 1 if it is 0 as cannot divide by 0
-        tmp_base_gc = np.where(base_gc[chg_mode] == 0, 1, base_gc[chg_mode])
+        # Adjust the costs of the change mode and calculate adjusted GC
+        adj_cost, adj_gc_params = adjust_cost(
+            base_costs[chg_mode],
+            gc_params.get(chg_mode, {}),
+            elasticity_type,
+            cost_constraint[cstr_name],
+        )
+        adj_gc = gen_cost_mode(adj_cost, chg_mode, **adj_gc_params)
         gc_ratio = adj_gc / tmp_base_gc
+
         demand_adjustment[aff_mode] = demand_adjustment[aff_mode] * np.power(
             gc_ratio,
             gc_elast,
