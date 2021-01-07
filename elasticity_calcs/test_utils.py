@@ -195,8 +195,9 @@ class TestReadDemandMatrix:
         )
 
     @staticmethod
+    @pytest.mark.skip(reason="Placeholder for `read_demand_matrix` test.")
     def test_lookup():
-        raise NotImplementedError("Placeholder for `read_demand_matrix` test.")
+        pass
 
 
 ##### FUNCTIONS #####

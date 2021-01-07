@@ -308,16 +308,18 @@ class TestGenCostMode: # TODO Implement tests for gen_cost_mode
     """Tests for the `gen_cost_mode` function."""
 
     @staticmethod
+    @pytest.mark.skip(reason="Placeholder for `gen_cost_mode` test.")
     def test_calculation():
-        raise NotImplementedError("Placeholder for `gen_cost_mode` test.")
+        pass
 
 
 class TestCalculateGenCosts: # TODO implement tests for calculate_gen_costs
     """Tests for the `calculate_gen_costs` function."""
 
     @staticmethod
+    @pytest.mark.skip(reason="Placeholder for the `calculate_gen_costs` test.")
     def test_calculation():
-        raise NotImplementedError("Placeholder for the `calculate_gen_costs` test.")
+        pass
 
 
 ##### FUNCTIONS #####
