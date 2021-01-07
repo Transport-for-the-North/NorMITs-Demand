@@ -353,7 +353,6 @@ class EFSAttractionGenerator:
             # We're not using soc, remove it from our segmentations
             self.emp_segments.remove('soc')
             self.attr_segments.remove('soc')
-            self.return_segments.remove('soc')
 
         # Merge on all possible segmentations - not years
         merge_cols = du.intersection(list(base_year_emp), list(employment_growth))
@@ -368,10 +367,6 @@ class EFSAttractionGenerator:
             no_neg_growth=no_neg_growth,
             infill=employment_infill
         )
-
-        # Now need te remove soc splits?
-        if 'soc' in employment_growth:
-            pass
 
         # ## CONSTRAIN POPULATION ## #
         if constraint_required[3] and (constraint_source != "model grown base"):
