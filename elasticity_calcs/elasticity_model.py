@@ -478,8 +478,12 @@ def adjust_cost(
     if cost_type in base_costs.columns:
         if constraint_matrix is None:
             constraint_matrix = 1.0
-        adj_cost[cost_type] = (
-            adj_cost[cost_type] * change * constraint_matrix.flatten()
+        np.multiply(
+            adj_cost[cost_type].values,
+            change,
+            out=adj_cost[cost_type].values,
+            where=constraint_matrix.flatten() == 1,
+            casting="unsafe",
         )
     elif cost_type in gc_params:
         adj_gc_params[cost_type] = adj_gc_params[cost_type] * change
