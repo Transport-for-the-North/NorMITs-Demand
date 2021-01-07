@@ -114,6 +114,35 @@ def validate_zoning_system(zoning_system: str) -> str:
     return zoning_system
 
 
+def validate_scenario_name(scenario_name: str) -> str:
+    """
+    Tidies up zoning_system and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    scenario_name:
+        The name of the scenario to validate
+
+    Returns
+    -------
+    scenario_name:
+        scenario_name with both strip and upper applied to remove any
+        whitespace and make it all uppercase
+
+    Raises
+    -------
+    ValueError:
+        If scenario_name is not a valid name for a scenario
+    """
+    # Init
+    scenario_name = scenario_name.strip().upper()
+
+    if scenario_name not in consts.SCENARIOS:
+        raise ValueError("%s is not a valid name for a scenario."
+                         % scenario_name)
+    return scenario_name
+
+
 def validate_model_name(model_name: str) -> str:
     """
     Tidies up model_name and raises an exception if not a valid name
@@ -261,6 +290,7 @@ def build_io_paths(import_location: str,
                    export_location: str,
                    model_name: str,
                    iter_name: str,
+                   scenario_name: str,
                    demand_version: str,
                    demand_dir_name: str = 'NorMITs Demand',
                    ) -> Tuple[dict, dict, dict]:
@@ -287,6 +317,10 @@ def build_io_paths(import_location: str,
         The name of the iteration being run. Usually of the format iterx,
         where x is a number, e.g. iter3
 
+    scenario_name:
+        The name of the scenario use to produce outputs. This should be one
+        of consts.SCENARIOS
+
     demand_version:
         Version number of NorMITs Demand being run - this is used to generate
         the correct output path.
@@ -312,7 +346,7 @@ def build_io_paths(import_location: str,
     """
     # TODO: Tidy up Y:/ drive imports/inputs folders after contract
     # Init
-    model_name = model_name.lower()
+    model_name = validate_model_name(model_name)
 
     # ## IMPORT PATHS ## #
     # Attraction weights are a bit special, we get these directly from
@@ -340,6 +374,7 @@ def build_io_paths(import_location: str,
         'lookups': os.path.join(model_home, 'lookup'),
         'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
         'zoning': os.path.join(input_home, 'zoning'),
+        'scenarios': os.path.join(import_home, 'scenarios'),
         'a_weights': a_weights_path
     }
 
@@ -350,6 +385,7 @@ def build_io_paths(import_location: str,
         demand_dir_name,
         model_name,
         demand_version + "-EFS_Output",
+        scenario_name,
         iter_name,
     ]
     export_home = os.path.join(*fname_parts)
@@ -1509,6 +1545,153 @@ def expand_distribution(dist: pd.DataFrame,
             dist[ns_col] = segment
 
     return dist
+
+
+def ensure_segmentation(df: pd.DataFrame,
+                        p_needed: List[int] = None,
+                        m_needed: List[int] = None,
+                        soc_needed: List[int] = None,
+                        ns_needed: List[int] = None,
+                        ca_needed: List[int] = None,
+                        tp_needed: List[int] = None,
+                        p_col: str = 'p',
+                        m_col: str = 'm',
+                        soc_col: str = 'soc',
+                        ns_col: str = 'ns',
+                        ca_col: str = 'ca',
+                        tp_col: str = 'tp',
+                        ignore_ns: bool = False,
+                        ignore_ca: bool = False
+                        ) -> pd.DataFrame:
+    """
+    Ensures the required segmentation exists in the given dataframe
+
+    Check is carried out by ensuring a column exists in the dataframe if the
+    list of inputs for that segmentation is not None, or only contains one
+    item. This function will also try to make sure the columns are in the
+    correct data types, and will return a copy of the given df after
+    conversion.
+
+    Parameters
+    ----------
+    df:
+        The dataframe to ensure the segmentation exists in.
+
+    p_needed:
+        A list of the purposes to segment by, or None if no segmentation
+        required by purpose.
+
+    m_needed:
+        A list of the modes to segment by, or None if no segmentation
+        required by mode.
+
+    soc_needed:
+        A list of soc categories to segment by, or None if no segmentation
+        required by soc.
+
+    ns_needed:
+        A list of ns categories to segment by, or None if no segmentation
+        required by ns
+
+    ca_needed:
+        A list of ca categories to segment by, or None if no segmentation
+        required by car availability
+
+    tp_needed:
+        A list of time periods to segment by, or None if no segmentation
+        required by time period.
+
+    p_col:
+        The name of the column containing purpose data.
+    
+    m_col:
+        The name of the column containing mode data.
+    
+    soc_col:
+        The name of the column containing soc data.
+
+    ns_col:
+        The name of the column containing ns data.
+
+    ca_col:
+        The name of the column containing car availability data.
+
+    tp_col:
+        The name of the column containing time period data.
+
+    ignore_ns:
+        If True, the ns segmentation will not be checked regardless of the
+        value of ns_needed. This is useful when checking the segmentation of
+        attractions which never have ns segmentation.
+
+    ignore_ca:
+        If True, the car availability segmentation will not be checked
+        regardless of the value of ca_needed. This is useful when checking the
+        segmentation of attractions which do not have ca segmentation.
+
+    Returns
+    -------
+    converted_df:
+        The given df with some data type conversions applied to make sure
+        columns are using the correct data types.
+
+    Raises
+    ------
+    NormitsDemandError:
+        If the arguments given determine that a segmenation should exist, but
+        no segmentation can be found in df.
+    """
+    # Init
+    col_data_dict = {
+        p_col: p_needed,
+        m_col: m_needed,
+        soc_col: soc_needed,
+        ns_col: ns_needed,
+        ca_col: ca_needed,
+        tp_col: tp_needed
+    }
+
+    # Remove what we're ignoring
+    if ignore_ns:
+        del col_data_dict[ns_col]
+
+    if ignore_ca:
+        del col_data_dict[ca_col]
+
+    # Sanitise the df. Make sure column names are strings and soc/ns are
+    # strings
+    df.columns = df.columns.astype(str)
+
+    if soc_col in list(df):
+        df[soc_col] = df[soc_col].astype(str)
+
+    if ns_col in list(df):
+        df[ns_col] = df[ns_col].astype(str)
+
+    # Build a list of the columns we need to check for
+    check_cols = list()
+    for col, seg in col_data_dict.items():
+        if seg is None or len(seg) <= 1:
+            continue
+
+        check_cols.append(col)
+
+    if len(check_cols) == 0:
+        raise NormitsDemandError(
+            "There doesn't seem to be any segmentation we need to check for."
+            "Please make sure the segmentation parameters given are not None, "
+            "and longer than 1 item."
+        )
+
+    # Check all the columns exist
+    for col in check_cols:
+        if col not in list(df):
+            raise KeyError(
+                "No column exists in the given dataframe for %s segmentation."
+                % col
+            )
+        
+    return df
 
 
 def vdm_segment_loop_generator(to_list: Iterable[str],

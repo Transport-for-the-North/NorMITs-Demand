@@ -88,6 +88,21 @@ _model_name_modes = [
 MODEL_NAMES = [x[0] for x in _model_name_modes]
 MODEL_MODES = {name: modes for name, modes in _model_name_modes}
 
+# Valid Scenario Names
+SC00_NTEM = 'NTEM'
+SC01_JAM = 'SC01_JAM'
+SC02_PP = 'SC02_PP'
+SC03_DD = 'SC03_DD'
+SC04_UZC = 'SC04_UZC'
+
+SCENARIOS = [
+    SC00_NTEM,
+    SC01_JAM,
+    SC02_PP,
+    SC03_DD,
+    SC04_UZC
+]
+
 
 # DIRECTORY NAMES
 AUDITS_DIRNAME = 'Audits'

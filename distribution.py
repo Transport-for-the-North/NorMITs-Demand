@@ -193,6 +193,8 @@ def _distribute_pa_internal(productions,
                                             fit=True)
 
     # Soc0 is always special - do this to avoid dropping demand
+    # This is saying: If soc is 0, ignore soc segmentation!
+    # Can we fo this for productions too?
     if base_filter.get('soc', -1) == '0':
         base_filter_t = base_filter.copy()
         base_filter_t.pop('soc')
@@ -442,8 +444,33 @@ def distribute_pa(productions: pd.DataFrame,
         productions['soc'] = productions['soc'].astype(str)
     if 'ns' in list(productions):
         productions['ns'] = productions['ns'].astype(str)
+    if 'soc' in list(attraction_weights):
+        attraction_weights['soc'] = attraction_weights['soc'].astype(str)
 
-    # TODO: Ensure given segmentation exists
+    # ## Make sure the segmentations we're asking for exist in P/A ## #
+    # Build a dict of the common arguments
+    kwargs = {
+        'p_needed': p_needed,
+        'm_needed': m_needed,
+        'soc_needed': soc_needed,
+        'ns_needed': ns_needed,
+        'ca_needed': ca_needed,
+        'tp_needed': tp_needed,
+        'p_col': p_col,
+        'm_col': m_col,
+        'soc_col': soc_col,
+        'ns_col': ns_col,
+        'ca_col': ca_col,
+        'tp_col': tp_col,
+
+    }
+
+    # Check the productions and attractions
+    productions = du.ensure_segmentation(productions, **kwargs)
+    attraction_weights = du.ensure_segmentation(attraction_weights,
+                                                ignore_ns=True,
+                                                ignore_ca=True,
+                                                **kwargs)
 
     # Get P/A columns
     p_cols = list(productions.columns)

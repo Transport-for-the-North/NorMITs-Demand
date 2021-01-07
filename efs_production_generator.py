@@ -1291,6 +1291,8 @@ class NhbProductionModel:
 
         self.control_productions = control_productions
         self.control_fy_productions = control_fy_productions
+        if not control_productions:
+            self.control_fy_productions = False
 
         self.m_col = m_col
         self.m_share_col = m_share_col
@@ -1791,6 +1793,11 @@ class NhbProductionModel:
             # Update Audits for output
             year_audit.update(audit)
             audits.append(year_audit)
+
+        # Controlling to NTEM seems to change some of the column dtypes
+        nhb_prods['p'] = nhb_prods['p'].astype(int)
+        nhb_prods['m'] = nhb_prods['m'].astype(int)
+        nhb_prods['tp'] = nhb_prods['tp'].astype(int)
 
         # Write the audit to disk
         if len(audits) > 0:
