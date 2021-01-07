@@ -819,7 +819,7 @@ def growth_criteria(synth_productions: pd.DataFrame,
                 non_split_cols=non_split_columns
             )
         else:
-            prod_exceptional_zones = pd.DataFrame(columns=["model_zone_id"])
+            prod_exceptional_zones = pd.DataFrame(columns=[model_zone_col])
 
         if attr_exceptional_zones is not None:
             non_split_columns = list(attr_exceptional_zones)
@@ -832,7 +832,7 @@ def growth_criteria(synth_productions: pd.DataFrame,
                 non_split_cols=non_split_columns
             )
         else:
-            attr_exceptional_zones = pd.DataFrame(columns=["model_zone_id"])
+            attr_exceptional_zones = pd.DataFrame(columns=[model_zone_col])
 
     # Stick exceptional zones together now they've been translated
     exceptional_zones = [prod_exceptional_zones, attr_exceptional_zones]
@@ -858,7 +858,7 @@ def growth_criteria(synth_productions: pd.DataFrame,
     index_cols = attr_group_cols + [base_year]
     observed_attr_base = observed_attractions.reindex(columns=index_cols)
 
-    prod_trip_rates = production_exceptional_trip_rate(
+    prod_trip_rates = calculate_production_trip_rate(
         observed_base=observed_prod_base,
         land_use=population,
         e_zones=pd.DataFrame,

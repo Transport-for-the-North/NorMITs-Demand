@@ -915,36 +915,38 @@ class ExternalForecastSystem:
             index=False
         )
 
-        if self.integrate_dlog:
-            pa_dfs = self._handle_growth_criteria(
-                synth_productions=converted_productions,
-                synth_attractions=converted_pure_attractions,
-                base_year=str(base_year),
-                future_years=[str(x) for x in future_years]
-            )
-            converted_productions, converted_pure_attractions = pa_dfs
+        # Apply the growth criteria using the post-ME P/A vectors
+        # (normal and exceptional zones)
+        pa_dfs = self._handle_growth_criteria(
+            synth_productions=converted_productions,
+            synth_attractions=converted_pure_attractions,
+            base_year=str(base_year),
+            future_years=[str(x) for x in future_years],
+            integrate_dlog=self.integrate_dlog
+        )
+        converted_productions, converted_pure_attractions = pa_dfs
 
-            # Convert the new attractions to weights
-            converted_attractions = du.convert_to_weights(
-                converted_pure_attractions,
-                year_list
-            )
-            
-            # Write grown productions and attractions to file
-            # Save as exceptional - e.g. "exc_productions"
-            fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
-            fname = fname.replace("_productions", "_exc_productions")
-            converted_productions.to_csv(
-                os.path.join(self.exports['productions'], fname),
-                index=False
-            )
+        # Convert the new attractions to weights
+        converted_attractions = du.convert_to_weights(
+            converted_pure_attractions,
+            year_list
+        )
+        
+        # Write grown productions and attractions to file
+        # Save as exceptional - e.g. "exc_productions"
+        fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
+        fname = fname.replace("_productions", "_exc_productions")
+        converted_productions.to_csv(
+            os.path.join(self.exports['productions'], fname),
+            index=False
+        )
 
-            fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
-            fname = fname.replace("_attractions", "_exc_attractions")
-            converted_pure_attractions.to_csv(
-                os.path.join(self.exports['attractions'], fname),
-                index=False
-            )
+        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
+        fname = fname.replace("_attractions", "_exc_attractions")
+        converted_pure_attractions.to_csv(
+            os.path.join(self.exports['attractions'], fname),
+            index=False
+        )
 
         # TODO: Move conversion to attraction weights down here
 
@@ -1071,6 +1073,7 @@ class ExternalForecastSystem:
                                 synth_attractions: pd.DataFrame,
                                 base_year: str,
                                 future_years: List[str],
+                                integrate_dlog: bool
                                 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         # Init
         all_years = [base_year] + future_years
@@ -1078,10 +1081,16 @@ class ExternalForecastSystem:
         # Load the exceptional zone definitions from production/attraction
         # generation
         print("Loading Exceptional Growth Datafiles")
-        p_ez, a_ez = eg.load_exceptional_zones(
-            productions_export=self.exports["productions"],
-            attractions_export=self.exports["attractions"]
-        )
+        # Only handle exceptional zones if the d-log is being integrated
+        if integrate_dlog:
+            print("Fetching Exceptional Zones")
+            p_ez, a_ez = eg.load_exceptional_zones(
+                productions_export=self.exports["productions"],
+                attractions_export=self.exports["attractions"]
+            )
+        else:
+            print("Ignoring Exceptional Zones")
+            p_ez, a_ez = (None, None)
         # Reload aggregated population and employment data to calculate
         # sector level trip rates
         fname = consts.POP_FNAME % self.input_zone_system
