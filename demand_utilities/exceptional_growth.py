@@ -1742,11 +1742,11 @@ def test_bespoke_zones(gen_path: str,
             ca_needed
         )
         
-        donor_data.to_csv(os.path.join(audit_path, "donor_test.csv"))
-        agg_tour_props.to_csv(os.path.join(audit_path, "tp_test.csv"))
+        # donor_data.to_csv(os.path.join(audit_path, "donor_test.csv"))
+        # agg_tour_props.to_csv(os.path.join(audit_path, "tp_test.csv"))
     else:
-        donor_data = pd.read_csv("donor_test.csv")
-        agg_tour_props = pd.read_csv("tp_test.csv")
+        donor_data = pd.read_csv(os.path.join(audit_path, "donor_test.csv"))
+        agg_tour_props = pd.read_csv(os.path.join(audit_path, "tp_test.csv"))
     
     # Convert the segmentation to the EFS segments to split the bespoke 
     # zone data
@@ -1758,7 +1758,7 @@ def test_bespoke_zones(gen_path: str,
         ca_needed
     )
     
-    gen_data.to_csv(os.path.join(audit_path, "gen_test.csv"))
+    # gen_data.to_csv(os.path.join(audit_path, "gen_test.csv"))
     
     # Apply the underlying segment splits where required
     print("Applying donor sector splits")
@@ -1767,7 +1767,7 @@ def test_bespoke_zones(gen_path: str,
         donor_data
     )
     
-    split_data.to_csv(os.path.join(audit_path, "split_test.csv"), index=False)
+    # split_data.to_csv(os.path.join(audit_path, "split_test.csv"), index=False)
     
     # ## Distribution ## #
     print("Applying user distribution")
@@ -1782,7 +1782,7 @@ def test_bespoke_zones(gen_path: str,
         agg_tour_props
     )
     
-    converted_trips.to_csv(os.path.join(audit_path, "converted_test.csv"))
+    # converted_trips.to_csv(os.path.join(audit_path, "converted_test.csv"))
     
     # ## Combine with existing matrices ## #
     # Build list of all segmentations
@@ -1796,8 +1796,17 @@ def test_bespoke_zones(gen_path: str,
     
     print(f"Skipped {skipped.shape[0]} matrices - see log file")
     
-    additions.to_csv(os.path.join(audit_path, "additions.csv"))
-    skipped.to_csv(os.path.join(audit_path, "skipped.csv"))
+    bespoke_audit_path = os.path.join(
+        audit_path, "Bespoke Zones"
+    )
+    if not os.path.isdir(bespoke_audit_path):
+        os.mkdir(bespoke_audit_path)
+    additions.to_csv(
+        os.path.join(bespoke_audit_path, "bespoke_zone_additions.csv")
+    )
+    skipped.to_csv(
+        os.path.join(bespoke_audit_path, "bespoke_zone_skipped_matrices.csv")
+    )
 
 
 def test_growth_criteria():
