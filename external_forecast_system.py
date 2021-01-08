@@ -251,7 +251,6 @@ class ExternalForecastSystem:
             dlog_file: str = None,
             dlog_split_file: str = None,
             minimum_development_certainty: str = "MTL",
-            population_metric: str = "Population",  # Households, Population
             constraint_required: List[bool] = consts.CONSTRAINT_REQUIRED_DEFAULT,
             constraint_method: str = "Percentage",  # Percentage, Average
             constraint_area: str = "Designated",  # Zone, Designated, All
@@ -515,7 +514,6 @@ class ExternalForecastSystem:
         constraint_on = constraint_on.lower()
         constraint_source = constraint_source.lower()
         distribution_method = distribution_method.lower()
-        population_metric = population_metric.lower()
         minimum_development_certainty = minimum_development_certainty.upper()
         integrate_dlog = dlog_split_file is not None and dlog_file is not None
 
@@ -547,7 +545,6 @@ class ExternalForecastSystem:
             car_availabilities_needed,
             integrate_dlog,
             minimum_development_certainty,
-            population_metric,
             constraint_required,
             constraint_method,
             constraint_area,
@@ -596,6 +593,7 @@ class ExternalForecastSystem:
             population_growth=pop_growth,
             population_constraint=pop_constraint,
             import_home=self.imports['home'],
+            export_home=self.exports['home'],
             control_productions=True,
             control_fy_productions=self.ntem_control_future_years,
             d_log=development_log,
@@ -608,8 +606,6 @@ class ExternalForecastSystem:
             designated_area=self.lad_msoa_lookup.copy(),
             out_path=self.exports['productions'],
             recreate_productions=recreate_productions,
-
-            population_metric=population_metric,
         )
         last_time = current_time
         current_time = time.time()
@@ -1743,7 +1739,6 @@ def write_input_info(output_path,
                      car_availabilities_needed: List[int],
                      integrate_dlog: bool,
                      minimum_development_certainty: str,
-                     population_metric: str,
                      constraint_required: List[bool],
                      constraint_method: str,
                      constraint_area: str,
@@ -1773,7 +1768,6 @@ def write_input_info(output_path,
         "Car Availabilities Used: " + str(car_availabilities_needed),
         "Development Log Integrated: " + str(integrate_dlog),
         "Minimum Development Certainty: " + str(minimum_development_certainty),
-        "Population Metric: " + population_metric,
         "Constraints Used On: " + str(constraint_required),
         "Constraint Method: " + constraint_method,
         "Constraint Area: " + constraint_area,

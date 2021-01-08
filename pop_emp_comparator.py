@@ -123,7 +123,11 @@ class PopEmpComparator:
             "zone_system_name": "msoa",
         }
 
-    def _read_print(self, path: Path, **kwargs) -> pd.DataFrame:
+    def _read_print(self,
+                    path: Path,
+                    group_cols: List[str] = None,
+                    **kwargs
+                    ) -> pd.DataFrame:
         """Reads given CSV file and outputs time taken.
 
         Parameters
@@ -138,11 +142,16 @@ class PopEmpComparator:
         pd.DataFrame
             The data read from the CSV.
         """
-        return du.safe_read_csv(
+        df = du.safe_read_csv(
             path,
             print_time=self.verbose,
             **kwargs
         )
+
+        if group_cols is not None:
+            df = df.groupby(group_cols).sum().reset_index()
+
+        return df
 
     def _read_output(self, output_csv: str) -> Tuple[pd.DataFrame, List[str]]:
         """Reads the output CSV file and gets the year columns present.
@@ -232,12 +241,18 @@ class PopEmpComparator:
         cols = [self.ZONE_COL, *self.years]
         constraint_data = self._read_print(
             constraint_csv,
+            group_cols=[self.ZONE_COL],
             skipinitialspace=True,
             usecols=cols
         )
 
         # Read the growth data and normalise against the base year
-        growth_data = self._read_print(growth_csv, skipinitialspace=True, usecols=cols)
+        growth_data = self._read_print(
+            growth_csv,
+            group_cols=[self.ZONE_COL],
+            skipinitialspace=True,
+            usecols=cols
+        )
         growth_data[self.years] = growth_data[self.years].div(
             growth_data[str(self.base_year)],
             axis=0
@@ -278,22 +293,29 @@ class PopEmpComparator:
                             constraint: pd.DataFrame,
                             growth: pd.DataFrame,
                             output: pd.DataFrame) -> pd.DataFrame:
-        """Concatanates the given dataframes and calulcates comparison columns.
+        """
+        Concatenates the given dataframes and calculates comparison columns.
 
-        All dataframes should include a column with the name `self.ZONE_COL` which
-        will be set as the index for the concatenation. An additional level will be
-        added to the column names to distinguish the source of the data.
+        All dataframes should include a column with the name `self.ZONE_COL`
+        which will be set as the index for the concatenation. An additional
+        level will be added to the column names to distinguish the source of
+        the data.
 
         Parameters
         ----------
         index_col : str
             Name of the column to be used as the index for concatenation.
+
         input_ : pd.DataFrame
             Input base year data.
+
+
         constraint : pd.DataFrame
             Input constraint data with all output year columns.
+
         growth : pd.DataFrame
             Input growth data with all output year columns.
+
         output : pd.DataFrame
             Output data.
 
@@ -310,9 +332,13 @@ class PopEmpComparator:
             ('output', output)
         ]
 
-        # Set index of dataframes to index_col for concat and rename columns with source
+        # Set index of dataframes to index_col for concat and rename columns
+        # with source
         concat = list()
         for nm, df in nm_dfs:
+            print(nm)
+            print(df)
+            print('\n\n')
             df = df.set_index(index_col)
             df.columns = pd.MultiIndex.from_tuples([(i, nm) for i in df.columns])
             concat.append(df)

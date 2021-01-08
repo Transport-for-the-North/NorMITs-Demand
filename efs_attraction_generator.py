@@ -1389,6 +1389,13 @@ def merge_attraction_weights(employment: pd.DataFrame,
         )
         nhb_attractions = nhb_attractions.rename(columns={'p': p_col, 'm': m_col})
 
+        # Control to NTEM returns wrong type
+        attractions[p_col] = attractions[p_col].astype(int)
+        attractions[m_col] = attractions[m_col].astype(int)
+        nhb_attractions[p_col] = nhb_attractions[p_col].astype(int)
+        nhb_attractions[m_col] = nhb_attractions[m_col].astype(int)
+        nhb_attractions['tp'] = nhb_attractions['tp'].astype(int)
+
     return attractions, nhb_attractions
 
 
@@ -1610,6 +1617,7 @@ def build_attraction_imports(import_home: str,
         'ntem_control'
         'lad_lookup'
     """
+    # Set all unset paths
     if employment_path is None:
         path = 'attractions/non_freight_msoa_%s.csv' % base_year
         employment_path = os.path.join(import_home, path)
@@ -1638,5 +1646,17 @@ def build_attraction_imports(import_home: str,
         'ntem_control': ntem_control_dir,
         'lad_lookup': lad_lookup_dir
     }
+
+    # Make sure all import paths exit
+    for key, path in imports.items():
+        # TODO: DEMAND MERGE: Fix cross model inputs
+        if key == 'weights' and path is None:
+            continue
+
+        if not os.path.exists(path):
+            raise IOError(
+                "Attraction Model Imports: The path for %s does not "
+                "exist.\nFull path: %s" % (key, path)
+            )
 
     return imports
