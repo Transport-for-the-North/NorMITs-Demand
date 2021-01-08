@@ -40,21 +40,22 @@ RAIL_COSTS = pd.DataFrame(
         "Interchange_cost": 2,
     }
 )
-DEMAND = pd.DataFrame(100, columns=ZONES, index=ZONES)
+DEMAND = pd.DataFrame(1, columns=ZONES, index=ZONES)
 CONSTRAINT = np.full_like(DEMAND.values, 1)
 ELASTICITIES_FILE = (
     Path(__file__).parent / "test_elastcities_commuting_moderate.csv"
 )
 YEARS = ["2018"]
-CAR_ANSWER = pd.DataFrame(93.62961831227628, columns=ZONES, index=ZONES)
-RAIL_ANSWER = pd.DataFrame(95.37233029862024, columns=ZONES, index=ZONES)
+# Answers taken from manual calculations within Excel
+CAR_ANSWER = pd.DataFrame(0.897845275494197, columns=ZONES, index=ZONES)
+RAIL_ANSWER = pd.DataFrame(0.990900752128458, columns=ZONES, index=ZONES)
 OTHER_ANSWER = pd.DataFrame(
     {
         "mode": ["bus", "active", "no_travel"],
         "mean_demand_adjustment": [
-            1.1809522515713635,
-            0.9825459480857618,
-            0.9825459480857618,
+            1.21590935775892,
+            0.946596709199525,
+            1.43053565783266,
         ],
     }
 )
@@ -83,6 +84,7 @@ class TestElasticityModel:
             for i in ("bus", "active", "no_travel")
         ],
     ]
+    CHECK_TOLERANCE = 1e-4
 
     @pytest.fixture(name="folders", scope="class")
     def fixture_folders(self, tmp_path_factory: Path) -> Tuple[Path, Path]:
@@ -137,26 +139,33 @@ class TestElasticityModel:
             self.DEMAND_PARAMS, self.ELASTICITY_PARAMS
         )
 
-    @staticmethod
     @pytest.mark.parametrize("mode,answer", APPLY_ELASTICITIES_RETURNS)
     def test_apply_elasticities_return(
+        self,
         output_demand: Dict[str, pd.DataFrame],
         mode: str,
         answer: pd.DataFrame,
     ):
         """Tests if `ElasticityModel.apply_elasticities` returns correct values."""
         if mode in ("car", "ca1", "ca2"):
-            pd.testing.assert_frame_equal(answer, output_demand[mode])
+            pd.testing.assert_frame_equal(
+                answer, output_demand[mode], atol=self.CHECK_TOLERANCE
+            )
         else:
-            assert answer.iloc[0, 1] == np.mean(output_demand[mode])
+            assert (
+                abs(answer.iloc[0, 1] - np.mean(output_demand[mode]))
+                < self.CHECK_TOLERANCE
+            )
 
-    @staticmethod
     @pytest.mark.parametrize(
         "mode,answer",
         [("car", CAR_ANSWER), ("rail", RAIL_ANSWER), ("others", OTHER_ANSWER)],
     )
     def test_apply_elasticities_output(
+        self,
         folders: Tuple[Path, Path],
+        # Argument required to make sure output_demand fixture produces outputs
+        output_demand,  # pylint: disable=unused-argument
         mode: str,
         answer: pd.DataFrame,
     ):
@@ -171,4 +180,6 @@ class TestElasticityModel:
             out = pd.read_csv(i, index_col=ind)
             if mode != "others":
                 out.columns = out.columns.astype(int)
-            pd.testing.assert_frame_equal(answer, out, check_dtype=False)
+            pd.testing.assert_frame_equal(
+                answer, out, check_dtype=False, atol=self.CHECK_TOLERANCE
+            )

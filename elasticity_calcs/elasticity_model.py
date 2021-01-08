@@ -43,6 +43,7 @@ GC_ELASTICITY_TYPES = {
     "Rail_IVTT": ("rail", "ride", 0.8),
     "Bus_Fare": ("bus", "fare", 0.8),
     "Bus_IVTT": ("bus", "ride", 0.8),
+    "Car_RUC": ("car", "gc", 1.2),
 }
 # ID and zone system for each mode
 MODE_ID = {"car": 1, "rail": 6}
@@ -375,7 +376,7 @@ def calculate_adjustment(
             f"expected one of {list(GC_ELASTICITY_TYPES.keys())}"
         )
 
-    chg_mode, _, _ = GC_ELASTICITY_TYPES[elasticity_type]
+    chg_mode, cost_type, change = GC_ELASTICITY_TYPES[elasticity_type]
     # Filter only elasticities involving the mode that changes
     elasticities = elasticities.loc[
         elasticities["ModeCostChg"].str.lower() == chg_mode
@@ -400,23 +401,30 @@ def calculate_adjustment(
         index=False, name=None
     ):
         aff_mode = aff_mode.lower()
-        # Calculate the generalised cost of the current elasticity
-        gc_elast = gen_cost_elasticity_mins(
-            elast,
-            base_gc[chg_mode],
-            cost,
-            base_demand[chg_mode],
-            cost_factor,
-        )
-        # Adjust the costs of the change mode and calculate adjusted GC
-        adj_cost, adj_gc_params = adjust_cost(
-            base_costs[chg_mode],
-            gc_params.get(chg_mode, {}),
-            elasticity_type,
-            cost_constraint[cstr_name],
-        )
-        adj_gc = gen_cost_mode(adj_cost, chg_mode, **adj_gc_params)
-        gc_ratio = adj_gc / tmp_base_gc
+        if cost_type != "gc":
+            # Calculate the generalised cost of the current elasticity
+            gc_elast = gen_cost_elasticity_mins(
+                elast,
+                base_gc[chg_mode],
+                cost,
+                base_demand[chg_mode],
+                cost_factor,
+            )
+            # Adjust the costs of the change mode and calculate adjusted GC
+            adj_cost, adj_gc_params = adjust_cost(
+                base_costs[chg_mode],
+                gc_params.get(chg_mode, {}),
+                elasticity_type,
+                cost_constraint[cstr_name],
+            )
+            adj_gc = gen_cost_mode(adj_cost, chg_mode, **adj_gc_params)
+            gc_ratio = adj_gc / tmp_base_gc
+        else:
+            # If the generalised costs itself is being changed then elasticity given
+            # is the GC elasticity and the GC ratio will be equal to the change,
+            # using cost constraint to only change certain cells
+            gc_elast = elast
+            gc_ratio = np.where(cost_constraint[cstr_name] == 1, change, 1)
 
         demand_adjustment[aff_mode] = demand_adjustment[aff_mode] * np.power(
             gc_ratio,
@@ -532,7 +540,9 @@ def _elasticity_gc_factors(
     )
     mode, cost_type, _ = GC_ELASTICITY_TYPES[elasticity_type]
     cost, factor = None, None
-    if mode == "car":
+    if cost_type == "gc":
+        cost = 1.0
+    elif mode == "car":
         if cost_type == "time":
             cost = square_matrix(cost_type)
             factor = 1 / 60
