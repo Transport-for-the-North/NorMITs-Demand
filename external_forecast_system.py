@@ -97,6 +97,9 @@ class ExternalForecastSystem:
         self.msoa_lookup_path = msoa_lookup_path
         self.lad_msoa_lookup_path = lad_msoa_lookup_path
 
+        # Don't NTEM Control Future years in scenarios
+        self.ntem_control_future_years = not (scenario_name in consts.TFN_SCENARIOS)
+
         # Setup up import/export paths
         self.imports, self.exports, self.params = self.generate_output_paths()
         self._setup_scenario_paths()
@@ -157,14 +160,6 @@ class ExternalForecastSystem:
         -------
         None
         """
-        # Init
-        tfn_scenarios = [
-            consts.SC01_JAM,
-            consts.SC02_PP,
-            consts.SC03_DD,
-            consts.SC04_UZC
-        ]
-
         # Path building is slightly different for default NTEM
         if self.scenario_name == consts.SC00_NTEM:
             # Setup directory paths
@@ -178,7 +173,7 @@ class ExternalForecastSystem:
             emp_growth_path = os.path.join(emp_home, 'future_workers_growth.csv')
             emp_constraint_path = os.path.join(emp_home, 'future_workers_growth_values.csv')
 
-        elif self.scenario_name in tfn_scenarios:
+        elif self.scenario_name in consts.TFN_SCENARIOS:
             # Setup directory paths
             scenario_home = os.path.join(self.imports['scenarios'],
                                          self.scenario_name)
@@ -561,30 +556,14 @@ class ExternalForecastSystem:
         )
 
         # ## INPUT CHECKS ## #
-        print("Starting input checks...")
-
-        # Distribute column names into more specific variables
-        base_year_pop_cols = self.column_dictionary["base_year_population"]
-        base_year_hh_cols = self.column_dictionary["base_year_households"]
-        base_year_workers_cols = self.column_dictionary["base_year_workers"]
-
-        pop_cols = self.column_dictionary["population"] + year_list
-        # pop_ratio_cols = self.column_dictionary["population_ratio"] + year_list
-
-        # hh_cols = self.column_dictionary["households"] + year_list
-        # hh_occupancy_cols = self.column_dictionary["housing_occupancy"] + year_list
-
-        emp_cols = self.column_dictionary["employment"] + year_list
-        # emp_ratio_cols = self.column_dictionary["employment_ratio"] + year_list
-
-        # production_trip_cols = self.column_dictionary["production_trips"] + year_list
-        # mode_split_cols = self.column_dictionary["mode_split"] + year_list
-        # attraction_weight_cols = self.column_dictionary["attraction_weights"] + year_list
-
-        print("No known errors in the inputs!")
-        last_time = current_time
-        current_time = time.time()
-        print("Input checks took: %.2f seconds." % (current_time - last_time))
+        # print("Starting input checks...")
+        #
+        #
+        #
+        # print("No known errors in the inputs!")
+        # last_time = current_time
+        # current_time = time.time()
+        # print("Input checks took: %.2f seconds." % (current_time - last_time))
 
         # ## GET DATA ## #
         # TODO: Tidy this up
@@ -618,6 +597,7 @@ class ExternalForecastSystem:
             population_constraint=pop_constraint,
             import_home=self.imports['home'],
             control_productions=True,
+            control_fy_productions=self.ntem_control_future_years,
             d_log=development_log,
             d_log_split=development_log_split,
             constraint_required=constraint_required,
@@ -647,6 +627,7 @@ class ExternalForecastSystem:
             import_home=self.imports['home'],
             attraction_weights_path=self.imports['a_weights'],
             control_attractions=True,
+            control_fy_attractions=self.ntem_control_future_years,
             d_log=development_log,
             d_log_split=development_log_split,
             constraint_required=constraint_required,
@@ -704,7 +685,9 @@ class ExternalForecastSystem:
             model_name=self.model_name,
             msoa_conversion_path=self.msoa_zones_path,
             base_year=str(base_year),
-            future_years=[str(x) for x in future_years]
+            future_years=[str(x) for x in future_years],
+            control_productions=True,
+            control_fy_productions=self.ntem_control_future_years
         )
         nhb_productions = nhb_pm.run(
             recreate_productions=recreate_nhb_productions
@@ -1806,9 +1789,9 @@ def main():
 
     # Running control
     run_base_efs = True
-    recreate_productions = False
-    recreate_attractions = False
-    recreate_nhb_productions = False
+    recreate_productions = True
+    recreate_attractions = True
+    recreate_nhb_productions = True
 
     constrain_population = False
 
@@ -1818,7 +1801,7 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC00_NTEM
+    scenario = consts.SC04_UZC
     iter_num = 0
     import_home = "Y:/"
     export_home = "E:/"
