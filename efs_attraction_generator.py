@@ -78,12 +78,16 @@ class EFSAttractionGenerator:
 
             # Build import paths
             import_home: str,
+            export_home: str,
 
             # Alternate population/attraction creation files
             attraction_weights_path: str,
             employment_path: str = None,
             mode_splits_path: str = None,
             soc_weights_path: str = None,
+
+            # Alternate output paths
+            audit_write_dir: str = None,
 
             # Production control file
             ntem_control_dir: str = None,
@@ -158,6 +162,12 @@ class EFSAttractionGenerator:
             The home directory to find all the attraction imports. Usually
             Y:/NorMITs Demand/import
 
+        export_home:
+            Path to the export home of this instance of outputs. This is
+            usually related to a specific run of the ExternalForecastSystem,
+            and should be gotten from there using generate_output_paths().
+            e.g. 'E:/NorMITs Demand/norms_2015/v2_3-EFS_Output/iter1'
+
         attraction_weights_path:
             The path to alternate attraction weights import data. If left as
             None, the attraction model will use the default land use data.
@@ -173,6 +183,10 @@ class EFSAttractionGenerator:
         soc_weights_path:
             The path to alternate soc weights import data. If left as None, the
             attraction model will use the default land use data.
+
+        audit_write_dir:
+            Alternate path to write the audits. If left as None, the default
+            location is used.
 
         ntem_control_dir:
             The path to alternate ntem control directory. If left as None, the
@@ -311,6 +325,11 @@ class EFSAttractionGenerator:
             set_controls=control_attractions
         )
 
+        exports = build_attraction_exports(
+            export_home=export_home,
+            audit_write_dir=audit_write_dir
+        )
+
         # ## BASE YEAR EMPLOYMENT ## #
         print("Loading the base year employment data...")
         base_year_emp = get_employment_data(
@@ -447,6 +466,7 @@ class EFSAttractionGenerator:
             mode_splits_path=imports['mode_splits'],
             soc_weights_path=imports['soc_weights'],
             idx_cols=idx_cols,
+            audit_dir=exports['audits'],
             emp_cat_col=self.emp_cat_col,
             p_col=a_weights_p_col,
             m_col=mode_split_m_col,
@@ -1166,7 +1186,10 @@ def merge_attraction_weights(employment: pd.DataFrame,
                              control_path: str = None,
                              lad_lookup_dir: str = None,
                              lad_lookup_name: str = consts.DEFAULT_LAD_LOOKUP,
-                             ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+                             ) -> Tuple[pd.DataFrame,
+                                        pd.DataFrame,
+                                        Dict[str, float],
+                                        Dict[str, float]]:
     """
     Combines employment numbers with attractions weights to produce the
     attractions per purpose.
@@ -1231,10 +1254,23 @@ def merge_attraction_weights(employment: pd.DataFrame,
 
     Returns
     -------
-    Attractions:
+    hb_attractions:
         A wide dataframe containing the attraction numbers. The index will
         match the index from employment, the columns will be the purposes
         given in p_col of attractions_weight_path.
+
+    nhb_attractions:
+        A wide dataframe containing the attraction numbers. The index will
+        match the index from employment, the columns will be the purposes
+        given in p_col of attractions_weight_path.
+
+    hb_audit:
+        A dictionary showing the values before and after an NTEM control
+        (if carried out) for the hb_attractions
+
+    nhb_audit:
+        A dictionary showing the values before and after an NTEM control
+        (if carried out) for the nhb_attractions
 
     """
     # Init
@@ -1365,7 +1401,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
         print("Performing HB NTEM constraint...")
         # TODO: Allow control_to_ntem() to take flexible col names
         attractions = attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        attractions, *_ = du.control_to_ntem(
+        attractions, hb_audit, _ = du.control_to_ntem(
             attractions,
             ntem_totals,
             ntem_lad_lookup,
@@ -1378,7 +1414,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
 
         print("Performing NHB NTEM constraint...")
         nhb_attractions = nhb_attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        nhb_attractions, *_ = du.control_to_ntem(
+        nhb_attractions, nhb_audit, _ = du.control_to_ntem(
             nhb_attractions,
             ntem_totals,
             ntem_lad_lookup,
@@ -1396,7 +1432,20 @@ def merge_attraction_weights(employment: pd.DataFrame,
         nhb_attractions[m_col] = nhb_attractions[m_col].astype(int)
         nhb_attractions['tp'] = nhb_attractions['tp'].astype(int)
 
-    return attractions, nhb_attractions
+    else:
+        # Create audit showing no NTEM control was used
+        hb_audit = {
+            'before': attractions['trips'].sum(),
+            'target': -1,
+            'after': attractions['trips'].sum()
+        }
+        nhb_audit = {
+            'before': nhb_attractions['trips'].sum(),
+            'target': -1,
+            'after': nhb_attractions['trips'].sum()
+        }
+
+    return attractions, nhb_attractions, hb_audit, nhb_audit
 
 
 def generate_attractions(employment: pd.DataFrame,
@@ -1406,6 +1455,7 @@ def generate_attractions(employment: pd.DataFrame,
                          mode_splits_path: str,
                          soc_weights_path: str,
                          idx_cols: List[str],
+                         audit_dir: str,
                          emp_cat_col: str = 'employment_cat',
                          p_col: str = 'purpose',
                          m_col: str = 'mode',
@@ -1447,6 +1497,10 @@ def generate_attractions(employment: pd.DataFrame,
     idx_cols:
         The column names used to index the wide employment df. This should
         cover all segmentation in the employment
+
+    audit_dir:
+        Path to the directory to write NTEM control audits out to during
+        attraction generation.
 
     emp_cat_col:
         The name of the column containing the employment categories
@@ -1503,6 +1557,8 @@ def generate_attractions(employment: pd.DataFrame,
     # Generate attractions per year
     yr_ph = dict()
     yr_ph_nhb = dict()
+    hb_audits = list()
+    nhb_audits = list()
     for year in all_years:
         print("\nConverting year %s to attractions..." % str(year))
 
@@ -1523,7 +1579,7 @@ def generate_attractions(employment: pd.DataFrame,
         )
 
         # Convert employment to attractions for this year
-        yr_ph[year], yr_ph_nhb[year] = merge_attraction_weights(
+        yr_ph[year], yr_ph_nhb[year], hb_audit, nhb_audit = merge_attraction_weights(
             employment=yr_emp,
             attraction_weights_path=attraction_weights_path,
             mode_splits_path=mode_splits_path,
@@ -1538,6 +1594,15 @@ def generate_attractions(employment: pd.DataFrame,
 
         )
 
+        # Update list of audits
+        year_hb_audit = {'year': year}
+        year_hb_audit.update(hb_audit)
+        hb_audits.append(year_hb_audit)
+
+        year_nhb_audit = {'year': year}
+        year_nhb_audit.update(nhb_audit)
+        nhb_audits.append(year_nhb_audit)
+
     # Get all the attractions into a single df, efficiently
     attractions = du.combine_yearly_dfs(
         yr_ph,
@@ -1549,6 +1614,18 @@ def generate_attractions(employment: pd.DataFrame,
         unique_col=unique_col,
         p_col=p_col
     )
+
+    # Write the production audits to disk
+    if len(hb_audits) > 0:
+        fname = consts.ATTRS_FNAME % ('msoa', 'hb')
+        path = os.path.join(audit_dir, fname)
+        pd.DataFrame(hb_audits).to_csv(path, index=False)
+
+    # Write the production audits to disk
+    if len(nhb_audits) > 0:
+        fname = consts.ATTRS_FNAME % ('msoa', 'nhb')
+        path = os.path.join(audit_dir, fname)
+        pd.DataFrame(nhb_audits).to_csv(path, index=False)
 
     return attractions, nhb_attractions
 
@@ -1660,3 +1737,52 @@ def build_attraction_imports(import_home: str,
             )
 
     return imports
+
+
+def build_attraction_exports(export_home: str,
+                             audit_write_dir: str = None
+                             ) -> Dict[str, str]:
+    """
+    Builds a dictionary of attraction export paths, forming a standard calling
+    procedure for attraction exports. Arguments allow default paths to be
+    replaced.
+
+
+    Parameters
+    ----------
+    export_home:
+        Usually the export home for this run of the EFS. Can be automatically
+        generated using du.build_io_paths()
+
+    audit_write_dir:
+        An alternate export path for the audits. By default this will be:
+        audits/productions/
+
+    Returns
+    -------
+    export_dict:
+        A dictionary of paths with the following keys:
+        'audits'
+
+    """
+    # Set all unset export paths to default values
+    if audit_write_dir is None:
+        audit_write_dir = os.path.join(export_home,
+                                       consts.AUDITS_DIRNAME,
+                                       'Attractions')
+    du.create_folder(audit_write_dir, chDir=False)
+
+    # Build the exports dictionary
+    exports = {
+        'audits': audit_write_dir
+    }
+
+    # Make sure all export paths exit
+    for key, path in exports.items():
+        if not os.path.exists(path):
+            raise IOError(
+                "Attraction Model Exports: The path for %s does not "
+                "exist.\nFull path: %s" % (key, path)
+            )
+
+    return exports

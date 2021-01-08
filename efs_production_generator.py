@@ -343,7 +343,6 @@ class EFSProductionGenerator:
             set_controls=control_productions
         )
 
-        # USE ME
         exports = build_production_exports(
             export_home=export_home,
             audit_write_dir=audit_write_dir
@@ -445,11 +444,12 @@ class EFSProductionGenerator:
             group_cols=group_cols,
             base_year=base_year,
             future_years=future_years,
+            trip_origin='hb',
             trip_rates_path=imports['trip_rates'],
             time_splits_path=imports['time_splits'],
             mean_time_splits_path=imports['mean_time_splits'],
             mode_share_path=imports['mode_share'],
-            audit_dir=out_path,
+            audit_dir=exports['audits'],
             ntem_control_dir=imports['ntem_control'],
             lad_lookup_dir=imports['lad_lookup'],
             control_fy_productions=control_fy_productions,
@@ -2089,6 +2089,9 @@ def build_production_exports(export_home: str,
                              audit_write_dir: str = None
                              ) -> Dict[str, str]:
     """
+    Builds a dictionary of production export paths, forming a standard calling
+    procedure for production exports. Arguments allow default paths to be
+    replaced.
 
     Parameters
     ----------
@@ -2218,7 +2221,7 @@ def merge_pop_trip_rates(population: pd.DataFrame,
                          lad_lookup_name: str = consts.DEFAULT_LAD_LOOKUP,
                          tp_needed: List[int] = consts.TP_NEEDED,
                          traveller_type_col: str = 'traveller_type',
-                         ) -> pd.DataFrame:
+                         ) -> Tuple[pd.DataFrame, Dict[str, float]]:
     """
     Converts a single year of population into productions
 
@@ -2479,7 +2482,7 @@ def merge_pop_trip_rates(population: pd.DataFrame,
                                                    lad_lookup_name))
 
         print("Performing NTEM constraint...")
-        msoa_output, *_, = du.control_to_ntem(
+        msoa_output, audit, _ = du.control_to_ntem(
             msoa_output,
             ntem_totals,
             ntem_lad_lookup,
@@ -2491,14 +2494,22 @@ def merge_pop_trip_rates(population: pd.DataFrame,
 
         msoa_output['p'] = msoa_output['p'].astype(int)
         msoa_output['m'] = msoa_output['m'].astype(int)
+    else:
+        # Create audit showing no NTEM control was used
+        audit = {
+            'before': msoa_output['trips'].sum(),
+            'target': -1,
+            'after': msoa_output['trips'].sum()
+        }
 
-    return msoa_output
+    return msoa_output, audit
 
 
 def generate_productions(population: pd.DataFrame,
                          group_cols: List[str],
                          base_year: str,
                          future_years: List[str],
+                         trip_origin: str,
                          trip_rates_path: str,
                          time_splits_path: str,
                          mean_time_splits_path: str,
@@ -2511,12 +2522,13 @@ def generate_productions(population: pd.DataFrame,
     # TODO: write generate_productions() docs
     # Init
     all_years = [base_year] + future_years
-    audit_base_fname = 'yr%s_production_topline.csv'
+    audit_base_fname = 'yr%s_%s_production_topline.csv'
     ntem_base_fname = 'ntem_pa_ave_wday_%s.csv'
 
     # TODO: Multiprocess yearly productions
     # Generate Productions for each year
     yr_ph = dict()
+    audits = list()
     for year in all_years:
         # Only only set the control path if we need to constrain
         if not control_fy_productions and year != base_year:
@@ -2527,11 +2539,13 @@ def generate_productions(population: pd.DataFrame,
         else:
             ntem_control_path = None
 
-        audit_out = os.path.join(audit_dir, audit_base_fname % year)
+        # Build the topline output path
+        audit_fname = audit_base_fname % (year, trip_origin)
+        audit_out = os.path.join(audit_dir, audit_fname)
 
         yr_pop = population.copy().reindex(group_cols + [year], axis='columns')
         yr_pop = yr_pop.rename(columns={year: 'people'})
-        yr_prod = merge_pop_trip_rates(
+        yr_ph[year], ntem_audit = merge_pop_trip_rates(
             yr_pop,
             group_cols=group_cols,
             trip_rates_path=trip_rates_path,
@@ -2542,13 +2556,23 @@ def generate_productions(population: pd.DataFrame,
             control_path=ntem_control_path,
             lad_lookup_dir=lad_lookup_dir
         )
-        yr_ph[year] = yr_prod
+
+        # Update list of audits
+        year_audit = {'year': year}
+        year_audit.update(ntem_audit)
+        audits.append(year_audit)
 
     # Join all productions into one big matrix
     productions = du.combine_yearly_dfs(
         yr_ph,
         unique_col='trips'
     )
+
+    # Write the production audits to disk
+    if len(audits) > 0:
+        fname = consts.PRODS_FNAME % ('msoa', 'hb')
+        path = os.path.join(audit_dir, fname)
+        pd.DataFrame(audits).to_csv(path, index=False)
 
     return productions
 

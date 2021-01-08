@@ -336,9 +336,6 @@ class PopEmpComparator:
         # with source
         concat = list()
         for nm, df in nm_dfs:
-            print(nm)
-            print(df)
-            print('\n\n')
             df = df.set_index(index_col)
             df.columns = pd.MultiIndex.from_tuples([(i, nm) for i in df.columns])
             concat.append(df)

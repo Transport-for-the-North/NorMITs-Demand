@@ -621,6 +621,7 @@ class ExternalForecastSystem:
             employment_growth=emp_growth,
             employment_constraint=emp_constraint,
             import_home=self.imports['home'],
+            export_home=self.exports['home'],
             attraction_weights_path=self.imports['a_weights'],
             control_attractions=True,
             control_fy_attractions=self.ntem_control_future_years,
@@ -853,7 +854,7 @@ class ExternalForecastSystem:
                 zone_col=model_zone_col,
                 seed_dist_dir=self.imports['seed_dists'],
                 dist_out=self.exports['pa_24'],
-                audit_out=self.exports['audits'],
+                audit_out=self.exports['dist_audits'],
                 echo=echo_distribution
             )
 
@@ -871,7 +872,7 @@ class ExternalForecastSystem:
                 zone_col=model_zone_col,
                 seed_dist_dir=self.imports['seed_dists'],
                 dist_out=self.exports['pa_24'],
-                audit_out=self.exports['audits'],
+                audit_out=self.exports['dist_audits'],
                 echo=echo_distribution
             )
 
