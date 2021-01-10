@@ -561,7 +561,7 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
             # Extract the soc total at sector level
             soc_group_cols = [
                 col for col in merge_cols 
-                if col not in ["soc", "purpose_id"]
+                if col not in ["soc", "p"]
             ] + ["sector_id"]
             soc_0 = e_land_use.groupby(
                 soc_group_cols,
