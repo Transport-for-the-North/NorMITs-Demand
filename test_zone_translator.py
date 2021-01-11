@@ -31,7 +31,9 @@ class TestTranslateMatrix:
         index=[1, 2],
     )
     NOHAM_MAT = pd.DataFrame(
-        np.array([[1.472, 0.368, 0.08], [0.368, 0.092, 0.02], [5.92, 1.48, 9.4]]),
+        np.array(
+            [[1.472, 0.368, 0.08], [0.368, 0.092, 0.02], [5.92, 1.48, 9.4]]
+        ),
         columns=[1, 2, 3],
         index=[1, 2, 3],
     )
@@ -51,7 +53,9 @@ class TestTranslateMatrix:
         expected: pd.DataFrame,
     ):
         """Test that the translation doesn't change the matrix total. """
-        test = translate_matrix(mat, lookup, lookup_cols, split_column=split_col)
+        test, _ = translate_matrix(
+            mat, lookup, lookup_cols, split_column=split_col
+        )
         assert np.sum(test.values) == np.sum(expected.values)
 
     def test_incorrect_totals(self):
@@ -60,7 +64,10 @@ class TestTranslateMatrix:
         lookup["split"] = [0.8, 0.3, 1]
         with pytest.raises(ValueError) as e:
             translate_matrix(
-                self.NORMS_MAT, lookup, ["norms", "noham"], split_column="split"
+                self.NORMS_MAT,
+                lookup,
+                ["norms", "noham"],
+                split_column="split",
             )
         msg = "The matrix total after translation differs from input matrix by: 1.2E+00"
         assert e.value.args[0] == msg
@@ -75,7 +82,9 @@ class TestTranslateMatrix:
         expected: pd.DataFrame,
     ):
         """Test that the translations works correctly between two test matrices. """
-        test = translate_matrix(mat, lookup, lookup_cols, split_column=split_col)
+        test, _ = translate_matrix(
+            mat, lookup, lookup_cols, split_column=split_col
+        )
         pd.testing.assert_frame_equal(test, expected)
 
     @staticmethod
@@ -93,9 +102,11 @@ class TestTranslateMatrix:
         for m in (mat, expected):
             m = m.melt(ignore_index=False).reset_index()
             m.columns = ["o", "d", "value"]
-            list_matrices.append(m.sort_values(["o", "d"]).reset_index(drop=True))
+            list_matrices.append(
+                m.sort_values(["o", "d"]).reset_index(drop=True)
+            )
 
-        test = translate_matrix(
+        test, _ = translate_matrix(
             list_matrices[0],
             lookup,
             lookup_cols,
@@ -108,3 +119,38 @@ class TestTranslateMatrix:
             test["value"].sum(), list_matrices[1]["value"].sum(), 14
         )
         pd.testing.assert_frame_equal(test, list_matrices[1])
+
+    @staticmethod
+    @pytest.mark.parametrize(PARAMETER_STR, PARAMETERS)
+    def test_reverse(
+        mat: pd.DataFrame,
+        lookup: pd.DataFrame,
+        lookup_cols: Tuple[str, str],
+        split_col: str,
+        expected: pd.DataFrame,
+    ):
+        """Test that the translation correctly produces reverse lookup."""
+        test, reverse = translate_matrix(
+            mat,
+            lookup,
+            lookup_cols,
+            zone_cols=["o", "d"],
+            split_column=split_col,
+        )
+        pd.testing.assert_frame_equal(test, expected)
+
+        od = ["o", "d"]
+        test.index.name = od[0]
+        test.columns.name = od[1]
+        test = test.unstack().reset_index().rename(columns={0: "trips"})
+        right_on = [f"{lookup_cols[1]}-{i}" for i in od]
+        test = test.merge(
+            reverse, left_on=od, right_on=right_on, how="left", validate="1:m"
+        )
+        test["trips"] = test["trips"] * test["split"]
+        test = test.drop(columns=od + right_on + ["split"]).rename(
+            columns={f"{lookup_cols[0]}-{i}": i for i in od}
+        )
+        test = test.groupby(od, as_index=False).sum()
+        test = test.pivot(index=od[0], columns=od[1], values="trips")
+        pd.testing.assert_frame_equal(test, mat, check_names=False)

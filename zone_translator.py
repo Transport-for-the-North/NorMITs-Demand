@@ -12,6 +12,7 @@ import numpy as np
 
 from demand_utilities.utils import zone_translation_df
 
+
 class ZoneTranslator:
     def run(self,
             dataframe: pd.DataFrame,
@@ -141,11 +142,11 @@ def translate_matrix(
     square_format: bool = True,
     zone_cols: Tuple[str, str] = None,
     split_column: str = None,
-) -> pd.DataFrame:
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Convert a matrix to a new zone system using given lookup.
 
-    Based on the `translate_matrices.translate_matrices` function from TMS,
-    simplied for use here.
+    Based on the `translate_matrices.translate_matrices` function
+    from TMS, simplied for use here.
 
     Parameters
     ----------
@@ -154,17 +155,17 @@ def translate_matrix(
         - square: zones should be defined in the index and column headers.
         - list: should contain 2 zone columns and a column with the values.
     lookup : pd.DataFrame
-        Lookup between the desired zone systems, with optional splitting factor
-        column.
+        Lookup between the desired zone systems, with optional splitting
+        factor column.
     lookup_cols : Tuple[str, str]
         Names of the lookup columns containing the current zone system then
         the new zone system.
     square_format : bool, optional
-        Whether the provided matrix is in square (True) or list format (False),
-        by default True
+        Whether the provided matrix is in square (True) or list format
+        (False), by default True
     zone_cols : Tuple[str, str], optional
-        The names of the zone columns in the matrix only required for list format
-        matrices, by default None
+        The names of the zone columns in the matrix only required for list
+        format matrices, by default None
     split_column : str, optional
         Name of the split column in the lookup, by default None
 
@@ -172,6 +173,9 @@ def translate_matrix(
     -------
     pd.DataFrame
         Matrix with the new zone system.
+    pd.DataFrame
+        Matrix of splitting factors for converting back to the old zone
+        system.
     """
     level_names = [matrix.columns.name, matrix.index.name]
     # Make sure the matrix is in list format
@@ -189,20 +193,41 @@ def translate_matrix(
         matrix_total = matrix[splitting_cols].sum()
     zone_cols = ["o", "d"]
 
+    if split_column is None:
+        split_column = "split"
+        lookup[split_column] = 1.0
+    lookup, lookup_cols = _lookup_matrix(lookup, lookup_cols, split_column)
+
     # Convert both columns to new zone system
-    for c in zone_cols:
-        matrix = matrix.merge(lookup, left_on=c, right_on=lookup_cols[0], how="left")
-        matrix.drop(columns=[c, lookup_cols[0]], inplace=True)
-        matrix.rename(columns={lookup_cols[1]: c}, inplace=True)
-        # Multiply columns by splitting factors if given
-        if split_column is not None:
-            for s in splitting_cols:
-                matrix[s] = matrix[s] * matrix[split_column]
-            matrix.drop(columns=split_column, inplace=True)
-    # Aggregate rows together
-    matrix = matrix.groupby(zone_cols, as_index=False).sum()
+    matrix = matrix.merge(
+        lookup,
+        left_on=zone_cols,
+        right_on=lookup_cols[:2],
+        how="left",
+        validate="1:m",
+    ).drop(columns=zone_cols)
+    for s in splitting_cols:
+        matrix[s] = matrix[s] * matrix[split_column]
+    reverse = matrix.copy()
+    matrix = (
+        matrix[lookup_cols[2:] + list(splitting_cols)]
+        .groupby(lookup_cols[2:], as_index=False)
+        .sum()
+    )
+
+    # Calculating splitting factors for reversing translation
+    reverse = reverse.merge(
+        matrix,
+        on=lookup_cols[2:],
+        how="left",
+        validate="m:1",
+        suffixes=("", "_total"),
+    )
+    for s in splitting_cols:
+        reverse[f"split"] = reverse[f"{s}"] / reverse[f"{s}_total"]
 
     # Convert back to input format and reset column/index names
+    matrix = matrix.rename(columns=dict(zip(lookup_cols[2:], zone_cols)))
     if square_format:
         matrix = matrix.pivot(zone_cols[0], zone_cols[1], "value")
         new_total = np.sum(matrix.values)
@@ -220,4 +245,55 @@ def translate_matrix(
             "The matrix total after translation differs "
             f"from input matrix by: {diff:.1E}"
         )
-    return matrix
+    return matrix, reverse[lookup_cols + ["split"]]
+
+
+def _lookup_matrix(
+    lookup: pd.DataFrame, lookup_cols: List[str], split: str
+) -> Tuple[pd.DataFrame, List[str]]:
+    """Convert a zone corrsepondence lookup to an OD pair lookup.
+
+    Convert from format [old zone, new zone, splitting factor] to
+    [old zone - origin, old zone - destination, new zone - origin,
+    new zone - destination, OD pair splitting factor].
+
+    Parameters
+    ----------
+    lookup : pd.DataFrame
+        Zone correspondence with 2 lookup columns and a single split
+        column.
+    lookup_cols : List[str]
+        List of the 2 columns used for lookup where first element
+        is the old zone system column and the second in the new
+        zone system.
+    split : str
+        The name of the column containing the splitting factors.
+
+    Returns
+    -------
+    pd.DataFrame
+        OD pair lookup with 4 lookup columns based on `lookup_cols`
+        values but with '-o' or '-d' appended and updated splitting
+        factor column.
+    List[str]
+        List of the lookup column names, 4 elements.
+    """
+    od = ("o", "d")
+    matrix = {}
+    for col in lookup_cols:
+        matrix[f"{col}-{od[0]}"] = np.repeat(lookup[col].values, len(lookup))
+        matrix[f"{col}-{od[1]}"] = np.tile(lookup[col].values, len(lookup))
+    matrix = pd.DataFrame(matrix)
+
+    # Calculate splitting factors
+    for col in od:
+        matrix = matrix.merge(
+            lookup.rename(columns={split: f"{split}-{col}"}),
+            how="left",
+            left_on=[f"{i}-{col}" for i in lookup_cols],
+            right_on=lookup_cols,
+            validate="m:1",
+        )
+    matrix[split] = matrix[f"{split}-{od[0]}"] * matrix[f"{split}-{od[1]}"]
+    cols = [f"{c}-{d}" for c in lookup_cols for d in od]
+    return matrix[cols + [split]], cols
