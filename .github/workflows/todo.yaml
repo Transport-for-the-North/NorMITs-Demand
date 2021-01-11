@@ -5,8 +5,8 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@master"
-      - name: "TODO to Issue"
-        uses: "alstr/todo-to-issue-action@v1.2-beta"
+      - name: TODO to Issue
+        uses: alstr/todo-to-issue-action@v2.4.1
         with:
           REPO: ${{ github.repository }}
           BEFORE: ${{ github.event.before }}
