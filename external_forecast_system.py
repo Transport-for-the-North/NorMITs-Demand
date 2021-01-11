@@ -43,16 +43,6 @@ from demand_utilities.sector_reporter_v2 import SectorReporter
 # TODO: Output a run log instead of printing everything to the terminal.
 # TODO: On error, output a simple error report
 
-# TODO: Fix dtype error from pandas on initialisation
-#  More info here:
-#  https://stackoverflow.com/questions/24251219/pandas-read-csv-low-memory-and-dtype-options
-
-# TODO: CLean up unnecessary processing and files left over from production
-#  model rewrite.
-# This includes: all household files, car association , trip_rates,
-# mode splits, mode time splits.
-# THe new production model reads these files in as needed
-
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
