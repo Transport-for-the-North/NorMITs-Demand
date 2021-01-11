@@ -29,6 +29,8 @@ from typing import Union
 from typing import Iterable
 from typing import Iterator
 
+from pathlib import Path
+
 from math import isclose
 
 from tqdm import tqdm
@@ -264,6 +266,26 @@ def validate_vdm_seg_params(seg_params: Dict[str, Any]) -> Dict[str, Any]:
     return seg_params
 
 
+def print_w_toggle(*args, echo, **kwargs):
+    """
+    Small wrapper to only print when echo=True
+
+    Parameters
+    ----------
+    *args:
+        The text to print - can be passed in the same format as a usual
+        print function
+
+    echo:
+        Whether to print the text or not
+
+    **kwargs:
+        Any other kwargs to pass directly to the print function call
+    """
+    if echo:
+        print(*args, **kwargs)
+
+
 def build_io_paths(import_location: str,
                    export_location: str,
                    model_name: str,
@@ -362,7 +384,7 @@ def build_io_paths(import_location: str,
         export_location,
         demand_dir_name,
         model_name,
-        demand_version + "-EFS_Output",
+        "v%s-EFS_Output" % demand_version,
         scenario_name,
         iter_name,
     ]
@@ -383,7 +405,9 @@ def build_io_paths(import_location: str,
         'productions': os.path.join(export_home, 'Productions'),
         'attractions': os.path.join(export_home, 'Attractions'),
         'sectors': os.path.join(export_home, 'Sectors'),
-        'print_audits': os.path.join(export_home, 'Audits'),
+        'audits': os.path.join(export_home, 'Audits'),
+        'dist_audits': os.path.join(export_home, 'Audits', 'Matrices'),
+        'reports': os.path.join(export_home, 'Reports'),
 
         # Pre-ME
         'pa': os.path.join(matrices_home, pa),
@@ -756,7 +780,9 @@ def get_growth_values(base_year_df: pd.DataFrame,
                                      errors='ignore')
 
     # Merge on merge col
-    growth_values = pd.merge(base_year_df, growth_df, on=merge_cols)
+    growth_values = pd.merge(base_year_df,
+                             growth_df,
+                             on=merge_cols)
 
     # Grow base year value by values given in growth_df - 1
     # -1 so we get growth values. NOT growth values + base year
@@ -863,39 +889,6 @@ def copy_and_rename(src: str, dst: str) -> None:
     shutil.move(os.path.join(dst_head, src_tail), dst)
 
 
-def get_model_name(mode: int) -> str:
-    """
-    Returns a string of the TfN model name based on the mode given.
-
-    Parameters
-    ----------
-    mode:
-        Mode of transport
-
-    Returns
-    -------
-    model_name:
-        model name string
-    """
-    mode_to_name = {
-        1: None,
-        2: None,
-        3: 'noham',
-        4: None,
-        5: None,
-        6: 'norms'
-    }
-
-    if mode not in mode_to_name:
-        raise ValueError("'%s' is not a valid mode." % str(mode))
-
-    if mode_to_name[mode] is None:
-        raise ValueError("'%s' is a valid mode, but a model name does not "
-                         "exist for it." % str(mode))
-
-    return mode_to_name[mode]
-
-
 def add_fname_suffix(fname: str, suffix: str):
     """
     Adds suffix to fname - in front of the file type extension
@@ -922,6 +915,7 @@ def add_fname_suffix(fname: str, suffix: str):
 
 
 def safe_read_csv(file_path: str,
+                  print_time: bool = False,
                   **kwargs
                   ) -> pd.DataFrame:
     """
@@ -931,6 +925,9 @@ def safe_read_csv(file_path: str,
     ----------
     file_path:
         Path to the file to read in
+
+    print_time:
+        Whether to print out some info on how long the file read has taken
 
     kwargs:
         ANy kwargs to pass onto pandas.read_csv()
@@ -949,7 +946,16 @@ def safe_read_csv(file_path: str,
     if not os.path.exists(file_path):
         raise IOError("No file exists at %s" % file_path)
 
-    return pd.read_csv(file_path, **kwargs)
+    # Just return the file
+    if not print_time:
+        return pd.read_csv(file_path, **kwargs)
+
+    # Print out some timing info while reading
+    start = time.perf_counter()
+    print('\tReading "%s"' % file_path, end="")
+    df = pd.read_csv(file_path, **kwargs)
+    print(" - Done in %fs" % (time.perf_counter() - start))
+    return df
 
 
 def is_none_like(o) -> bool:
@@ -1743,7 +1749,6 @@ def segmentation_loop_generator(p_list: Iterable[int],
         else:
             raise ValueError("'%s' does not seem to be a valid soc or ns "
                              "purpose." % str(purpose))
-
         for mode in m_list:
             for segment in required_segments:
                 for car_availability in ca_list:
@@ -2416,7 +2421,7 @@ def get_zone_translation(import_dir: str,
     # Load the file
     path = os.path.join(import_dir, base_filename % (from_zone, to_zone))
     translation = pd.read_csv(path)
-    
+
     # Make sure we can find the columns
     from_col = base_col_name % from_zone
     to_col = base_col_name % to_zone
@@ -2461,6 +2466,100 @@ def defaultdict_to_regular(d):
     if isinstance(d, defaultdict):
         d = {k: defaultdict_to_regular(v) for k, v in d.items()}
     return d
+
+
+def file_write_check(path: Union[str, Path], wait: bool=True) -> Path:
+    """Attempts to write to given path to see if file is in use.
+
+    Will either wait for the file to be closed or it will append numbers
+    to the file name until and path can be found that isn't in use.
+
+    Parameters
+    ----------
+    path : str
+        Path to the file to check.
+
+    wait : bool, optional
+        Whether or not to wait for the file to be closed, by default True.
+        If False appends number to the end of file name to find a path that
+        isn't in use.
+
+    Returns
+    -------
+    Path
+        Path that isn't currently in use, will be the same as given `path`
+        if wait is True.
+
+    Raises
+    ------
+    ValueError
+        When wait is False and a path can't be found, that isn't in use, in less
+        than 100 attempts.
+    """
+    path = Path(path)
+    new_path = path
+    count = 1
+    waiting = False
+    while True:
+        try:
+            with open(new_path, 'wb') as f:
+                pass
+            return new_path
+        except PermissionError:
+            if wait:
+                if not waiting:
+                    print(f"Cannot write to file at {new_path.absolute()}.",
+                          "Please ensure it is not open anywhere.",
+                          "Waiting for permission to write...", sep='\n')
+                    waiting = True
+                time.sleep(1)
+            else:
+                new_path = path.parent / (path.stem + f'_{count}' + path.suffix)
+                count += 1
+                if count > 100:
+                    raise ValueError('Too many files in use!')
+
+
+def safe_dataframe_to_csv(df, out_path, flatten_header=False, **to_csv_kwargs):
+    """
+    Wrapper around df.to_csv. Gives the user a chance to close the open file.
+
+    Parameters
+    ----------
+    df:
+        pandas.DataFrame to write to call to_csv on
+
+    out_path:
+        Where to write the file to. TO first argument to df.to_csv()
+
+    flatten_header: bool, optional
+        Whether or not MultiIndex column names should be flattened into a single level,
+        default False.
+
+    to_csv_kwargs:
+        Any other kwargs to be passed straight to df.to_csv()
+
+    Returns
+    -------
+        None
+    """
+    if flatten_header and len(df.columns.names) > 1:
+        # Combine multiple columns levels into a single name split by ':'
+        df.columns = [' : '.join(str(i) for i in c) for c in df.columns]
+
+    written_to_file = False
+    waiting = False
+    while not written_to_file:
+        try:
+            df.to_csv(out_path, **to_csv_kwargs)
+            written_to_file = True
+        except PermissionError:
+            if not waiting:
+                print("Cannot write to file at %s.\n" % out_path +
+                      "Please ensure it is not open anywhere.\n" +
+                      "Waiting for permission to write...\n")
+                waiting = True
+            time.sleep(1)
 
 
 def fit_filter(df: pd.DataFrame,
@@ -2599,9 +2698,7 @@ def filter_by_segmentation(df: pd.DataFrame,
     return df[mask]
 
 
-def intersection(l1: List[Any],
-                 l2: List[Any],
-                 ) -> List[Any]:
+def intersection(l1: List[Any], l2: List[Any]) -> List[Any]:
     """
     Efficient method to return the intersection between l1 and l2
     """
@@ -3130,7 +3227,7 @@ def parse_mat_output(list_dir,
             if len(dat) == 0:
                 dat = 'none'
             split_dict.update({name: dat})
-        split_list.append(split_dict)           
+        split_list.append(split_dict)
 
     segments = pd.DataFrame(split_list)
     segments = segments.replace({np.nan:'none'})

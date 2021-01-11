@@ -95,13 +95,14 @@ SC02_PP = 'SC02_PP'
 SC03_DD = 'SC03_DD'
 SC04_UZC = 'SC04_UZC'
 
-SCENARIOS = [
+TFN_SCENARIOS = [
     SC00_NTEM,
     SC01_JAM,
     SC02_PP,
     SC03_DD,
     SC04_UZC
 ]
+SCENARIOS = [SC00_NTEM] + TFN_SCENARIOS
 
 
 # DIRECTORY NAMES
@@ -237,9 +238,13 @@ DEFAULT_PRODUCTION_CONSTRAINTS = [
     False   # final trip based constraint
 ]
 
+TFN_MSOA_SECTOR_LOOKUPS = {
+    "population": "tfn_sector_msoa_pop_weighted_lookup.csv",
+    "employment": "tfn_sector_msoa_emp_weighted_lookup.csv"
+}
 
 # RUNNING CONSTANTS
-MODEL_NAME = 'norms'
+MODEL_NAME = 'noham'
 
 # YEARS
 BASE_YEAR = 2018

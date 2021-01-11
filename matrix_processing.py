@@ -40,9 +40,13 @@ import demand_utilities.concurrency as conc
 def _aggregate(import_dir: str,
                in_fnames: List[str],
                export_path: str
-               ) -> None:
+               ) -> str:
     """
     Loads the given files, aggregates together and saves in given location
+
+    Returns
+    -------
+    Path of the exported matrix
     """
     # Load in files and aggregate
     aggregated_mat = None
@@ -61,6 +65,7 @@ def _aggregate(import_dir: str,
     # Write new matrix out
     aggregated_mat.to_csv(export_path)
     print("Aggregated matrix written: %s" % os.path.basename(export_path))
+    return export_path
 
 
 def _recursive_aggregate(candidates: List[str],
@@ -68,7 +73,7 @@ def _recursive_aggregate(candidates: List[str],
                          segmentation_strs: List[List[str]],
                          import_dir: str,
                          export_path: str
-                         ) -> None:
+                         ) -> str:
     """
     The internal function of aggregate_matrices(). Recursively steps through
     the segmentations given, aggregating as it goes.
@@ -98,8 +103,10 @@ def _recursive_aggregate(candidates: List[str],
 
     Returns
     -------
-    None
+    Path of the exported matrices
     """
+
+    mat_export_paths = []
 
     # ## EXIT CONDITION ## #
     if len(segmentations) == 1:
@@ -109,21 +116,23 @@ def _recursive_aggregate(candidates: List[str],
 
         if du.is_none_like(segmentations):
             # Aggregate remaining candidates
-            _aggregate(
+            mat_export_path = _aggregate(
                 import_dir=import_dir,
                 in_fnames=candidates,
                 export_path=export_path + '.csv'
             )
+            mat_export_paths.append(mat_export_path)
         else:
             # Loop through and aggregate
             for segment, seg_str in zip(segmentations, segmentation_strs):
-                _aggregate(
+                mat_export_path = _aggregate(
                     import_dir=import_dir,
                     in_fnames=[x for x in candidates.copy() if seg_str in x],
                     export_path=export_path + seg_str + '.csv'
                 )
+                mat_export_paths.append(mat_export_path)
         # Exit condition done, leave recursion
-        return
+        return mat_export_paths
 
     # ## RECURSIVELY LOOP ## #
     seg, other_seg = segmentations[0], segmentations[1:]
@@ -131,20 +140,23 @@ def _recursive_aggregate(candidates: List[str],
 
     if du.is_none_like(seg):
         # Don't need to segment here, next loop
-        _recursive_aggregate(candidates=candidates,
+        mat_export_path = _recursive_aggregate(candidates=candidates,
                              segmentations=other_seg,
                              segmentation_strs=other_strs,
                              import_dir=import_dir,
                              export_path=export_path)
+        mat_export_paths.extend(mat_export_path)
     else:
         # Narrow down search, loop again
         for segment, seg_str in zip(seg, strs):
-            _recursive_aggregate(
+            mat_export_path = _recursive_aggregate(
                 candidates=[x for x in candidates.copy() if seg_str in x],
                 segmentations=other_seg,
                 segmentation_strs=other_strs,
                 import_dir=import_dir,
                 export_path=export_path + seg_str)
+            mat_export_paths.extend(mat_export_path)
+    return mat_export_paths
 
 
 def aggregate_matrices(import_dir: str,
@@ -157,8 +169,9 @@ def aggregate_matrices(import_dir: str,
                        soc_needed: List[int] = None,
                        ns_needed: List[int] = None,
                        ca_needed: List[int] = None,
-                       tp_needed: List[int] = None
-                       ) -> None:
+                       tp_needed: List[int] = None,
+                       return_paths: bool = False
+                       ) -> List[str]:
     """
     Aggregates the matrices in import_dir up to the given level and writes
     the new matrices out to export_dir
@@ -202,13 +215,17 @@ def aggregate_matrices(import_dir: str,
         If None, time periods will be aggregated. If set, chosen time periods
         will be retained.
 
+    return_paths:
+        If True then the paths of all aggregated matrices will be returned.
+        Otherwise, returns None.
+
     Returns
     -------
-    None
+    List of all aggregated matrix paths (optional)
     """
     # Init
-    if(ns_needed is not None and soc_needed is None
-       or soc_needed is not None and ns_needed is None):
+    if((ns_needed is not None and soc_needed is None)
+       or (soc_needed is not None and ns_needed is None)):
         raise ValueError("Both keep_soc and keep_ns need to be set at the same "
                          "time. Cannot set one and not the other.")
 
@@ -226,6 +243,7 @@ def aggregate_matrices(import_dir: str,
 
     # for year, purpose, mode, time_period
     print("Writing files to: %s" % export_dir)
+    mat_export_paths = []
     for year, m, p in product(years_needed, m_needed, p_needed):
         # Init
         if p in consts.SOC_P:
@@ -263,13 +281,17 @@ def aggregate_matrices(import_dir: str,
         )
         out_path = os.path.join(export_dir, base_fname)
 
-        _recursive_aggregate(
+        export_paths = _recursive_aggregate(
             candidates=compile_mats,
             segmentations=[segment_needed, ca_needed, tp_needed],
             segmentation_strs=[segment_str, ca_strs, tp_strs],
             import_dir=import_dir,
             export_path=out_path
         )
+        mat_export_paths.extend(export_paths)
+
+    if return_paths:
+        return mat_export_paths
 
 
 def get_tour_proportion_seed_values(m: int,
@@ -1297,7 +1319,7 @@ def build_compile_params(import_dir: str,
         Whether the home based and non-home based matrices should be compiled
         together or not. If True, separate hb and nhb compiled matrices are
         created.
-        
+
     split_od_from_to:
         Whether the od_from and od_to matrices should be compiled together or
         not. If True, separate od_from and od_to compiled matrices are created.
@@ -1651,9 +1673,7 @@ def build_24hr_mats(import_dir: str,
             full_mat.to_csv(os.path.join(export_dir, output_dist_name))
 
 
-def copy_nhb_matrices(import_dir: str,
-                      export_dir: str,
-                      ) -> None:
+def copy_nhb_matrices(import_dir: str, export_dir: str) -> None:
     # Find the .csv nhb mats
     mats = du.list_files(import_dir)
     mats = [x for x in mats if '.csv' in x]

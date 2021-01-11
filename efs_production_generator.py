@@ -59,6 +59,8 @@ class EFSProductionGenerator:
         self.zoning_system = zoning_system
         self.zone_col = '%s_zone_id' % zoning_system
 
+        self.pop_fname = consts.POP_FNAME % (zoning_system)
+
         # Define the segmentation we're using
         if seg_level == 'tfn':
             self.segments = ['area_type', 'p', 'soc', 'ns', 'ca']
@@ -76,6 +78,7 @@ class EFSProductionGenerator:
             self.return_segments.remove('ca')
 
     def run(self,
+            out_path: str,
             base_year: str,
             future_years: List[str],
 
@@ -83,9 +86,9 @@ class EFSProductionGenerator:
             population_growth: pd.DataFrame,
             population_constraint: pd.DataFrame,
 
-            # Build import paths
+            # Build I/O paths
             import_home: str,
-            msoa_conversion_path: str,
+            export_home: str,
 
             # Alternate population/production creation files
             lu_import_path: str = None,
@@ -93,6 +96,9 @@ class EFSProductionGenerator:
             time_splits_path: str = None,
             mean_time_splits_path: str = None,
             mode_share_path: str = None,
+
+            # Alternate output paths
+            audit_write_dir: str = None,
 
             # Production control file
             ntem_control_dir: str = None,
@@ -122,9 +128,7 @@ class EFSProductionGenerator:
 
             # Handle outputs
             audits: bool = True,
-            out_path: str = None,
             recreate_productions: bool = True,
-            population_metric: str = "Population",  # Households, Population
             ) -> pd.DataFrame:
         """
         Production model for the external forecast system. This has been
@@ -144,6 +148,10 @@ class EFSProductionGenerator:
 
         Parameters
         ----------
+        out_path:
+            Path to the directory to output the population and productions
+            dataframes.
+
         base_year:
             The base year of the forecast.
 
@@ -163,11 +171,11 @@ class EFSProductionGenerator:
             The home directory to find all the production imports. Usually
             Y:/NorMITs Demand/import
 
-        msoa_conversion_path:
-            Path to the file containing the conversion from msoa integer
-            identifiers to the msoa string code identifiers. Hoping to remove
-            this in a future update and align all of EFS to use msoa string
-            code identifiers.
+        export_home:
+            Path to the export home of this instance of outputs. This is
+            usually related to a specific run of the ExternalForecastSystem,
+            and should be gotten from there using generate_output_paths().
+            e.g. 'E:/NorMITs Demand/norms_2015/v2_3-EFS_Output/iter1'
 
         lu_import_path:
             The path to alternate land use import data. If left as None, the
@@ -188,6 +196,10 @@ class EFSProductionGenerator:
         mode_share_path:
             The path to alternate mode share data. If left as None, the
             production model will use the default mode share data.
+
+        audit_write_dir:
+            Alternate path to write the audits. If left as None, the default
+            location is used.
 
         ntem_control_dir:
             The path to alternate ntem control directory. If left as None, the
@@ -262,18 +274,10 @@ class EFSProductionGenerator:
             be used to monitor the population and production numbers being
             generated and constrained.
 
-        out_path:
-            Path to the directory to output the population and productions
-            dataframes.
-
         recreate_productions:
             Whether to recreate the productions or not. If False, it will
             look in out_path for previously produced productions and return
             them. If none can be found, they will be generated.
-
-        population_metric:
-            No longer used - kept for now to retain all information from
-            previous EFS. Will be removed in future.
 
         Returns
         -------
@@ -339,9 +343,10 @@ class EFSProductionGenerator:
             set_controls=control_productions
         )
 
-        if population_metric == "households":
-            raise ValueError("Production Model has changed. Households growth "
-                             "is not currently supported.")
+        exports = build_production_exports(
+            export_home=export_home,
+            audit_write_dir=audit_write_dir
+        )
 
         # ## BASE YEAR POPULATION ## #
         print("Loading the base year population data...")
@@ -428,13 +433,9 @@ class EFSProductionGenerator:
             print('\n')
 
         # Write the produced population to file
-        if out_path is None:
-            print("WARNING! No output path given. "
-                  "Not writing populations to file.")
-        else:
-            print("Writing population to file...")
-            path = os.path.join(out_path, consts.POP_FNAME % self.zoning_system)
-            population.to_csv(path, index=False)
+        print("Writing population to file...")
+        population_output = os.path.join(out_path, self.pop_fname)
+        population.to_csv(population_output, index=False)
 
         # ## CREATE PRODUCTIONS ## #
         print("Population generated. Converting to productions...")
@@ -443,25 +444,22 @@ class EFSProductionGenerator:
             group_cols=group_cols,
             base_year=base_year,
             future_years=future_years,
+            trip_origin='hb',
             trip_rates_path=imports['trip_rates'],
             time_splits_path=imports['time_splits'],
             mean_time_splits_path=imports['mean_time_splits'],
             mode_share_path=imports['mode_share'],
-            audit_dir=out_path,
+            audit_dir=exports['audits'],
             ntem_control_dir=imports['ntem_control'],
             lad_lookup_dir=imports['lad_lookup'],
             control_fy_productions=control_fy_productions,
         )
 
         # Write productions to file
-        if out_path is None:
-            print("WARNING! No output path given. "
-                  "Not writing productions to file.")
-        else:
-            print("Writing productions to file...")
-            fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_hb')
-            path = os.path.join(out_path, fname)
-            productions.to_csv(path, index=False)
+        print("Writing productions to file...")
+        fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_hb')
+        path = os.path.join(out_path, fname)
+        productions.to_csv(path, index=False)
 
         # ## CONVERT TO OLD EFS FORMAT ## #
         # Make sure columns are the correct data type
@@ -1163,7 +1161,7 @@ class NhbProductionModel:
         export_home:
             Path to the export home of this instance of outputs. This is
             usually related to a specific run of the ExternalForecastSystem,
-            and should be gotten from there.
+            and should be gotten from there using generate_output_paths().
             e.g. 'E:/NorMITs Demand/norms_2015/v2_3-EFS_Output/iter1'
 
         msoa_conversion_path:
@@ -1363,8 +1361,9 @@ class NhbProductionModel:
                      audit_write_dir: str,
                      ) -> Tuple[Dict[str, str], Dict[str, str]]:
         """
-        Builds a dictionary of import paths, forming a standard calling
-        procedure for imports. Arguments allow default paths to be replaced.
+        Builds a dictionary of import and export paths, forming a standard
+        calling procedure for I/O. Arguments allow default paths to be
+        replaced.
         """
         # Set all unset import paths to default values
         if hb_prods_path is None:
@@ -1434,7 +1433,7 @@ class NhbProductionModel:
         }
 
         # Make sure all export paths exit
-        for key, path in imports.items():
+        for key, path in exports.items():
             if not os.path.exists(path):
                 raise IOError(
                     "NHB Production Model Exports: The path for %s does not "
@@ -1979,7 +1978,7 @@ def build_production_imports(import_home: str,
                              mode_share_path: str = None,
                              ntem_control_dir: str = None,
                              lad_lookup_dir: str = None,
-                             set_controls: bool = True
+                             set_controls: bool = True,
                              ) -> Dict[str, str]:
     """
     Builds a dictionary of production import paths, forming a standard calling
@@ -1990,7 +1989,7 @@ def build_production_imports(import_home: str,
     ----------
     import_home:
         The base path to base all of the other import paths from. This
-        should usually be "Y:/NorMITs Demand/import" for business as usual.
+        should usually be "Y:/NorMITs Demand/import" for default inputs.
 
     lu_import_path:
         An alternate land use import path to use. File will need to follow the
@@ -2035,7 +2034,6 @@ def build_production_imports(import_home: str,
         'mode_share_path',
         'ntem_control',
         'lad_lookup',
-
     """
     # Set all unset import paths to default values
     if lu_import_path is None:
@@ -2076,7 +2074,63 @@ def build_production_imports(import_home: str,
         'lad_lookup': lad_lookup_dir
     }
 
+    # Make sure all import paths exit
+    for key, path in imports.items():
+        if not os.path.exists(path):
+            raise IOError(
+                "HB Production Model Imports: The path for %s does not "
+                "exist.\nFull path: %s" % (key, path)
+            )
+
     return imports
+
+
+def build_production_exports(export_home: str,
+                             audit_write_dir: str = None
+                             ) -> Dict[str, str]:
+    """
+    Builds a dictionary of production export paths, forming a standard calling
+    procedure for production exports. Arguments allow default paths to be
+    replaced.
+
+    Parameters
+    ----------
+    export_home:
+        Usually the export home for this run of the EFS. Can be automatically
+        generated using du.build_io_paths()
+
+    audit_write_dir:
+        An alternate export path for the audits. By default this will be:
+        audits/productions/
+
+    Returns
+    -------
+    export_dict:
+        A dictionary of paths with the following keys:
+        'audits'
+
+    """
+    # Set all unset export paths to default values
+    if audit_write_dir is None:
+        audit_write_dir = os.path.join(export_home,
+                                       consts.AUDITS_DIRNAME,
+                                       'Productions')
+    du.create_folder(audit_write_dir, chDir=False)
+
+    # Build the exports dictionary
+    exports = {
+        'audits': audit_write_dir
+    }
+
+    # Make sure all export paths exit
+    for key, path in exports.items():
+        if not os.path.exists(path):
+            raise IOError(
+                "HB Production Model Exports: The path for %s does not "
+                "exist.\nFull path: %s" % (key, path)
+            )
+
+    return exports
 
 
 def get_land_use_data(land_use_path: str,
@@ -2167,7 +2221,7 @@ def merge_pop_trip_rates(population: pd.DataFrame,
                          lad_lookup_name: str = consts.DEFAULT_LAD_LOOKUP,
                          tp_needed: List[int] = consts.TP_NEEDED,
                          traveller_type_col: str = 'traveller_type',
-                         ) -> pd.DataFrame:
+                         ) -> Tuple[pd.DataFrame, Dict[str, float]]:
     """
     Converts a single year of population into productions
 
@@ -2428,7 +2482,7 @@ def merge_pop_trip_rates(population: pd.DataFrame,
                                                    lad_lookup_name))
 
         print("Performing NTEM constraint...")
-        msoa_output, *_, = du.control_to_ntem(
+        msoa_output, audit, _ = du.control_to_ntem(
             msoa_output,
             ntem_totals,
             ntem_lad_lookup,
@@ -2438,13 +2492,24 @@ def merge_pop_trip_rates(population: pd.DataFrame,
             purpose='hb'
         )
 
-    return msoa_output
+        msoa_output['p'] = msoa_output['p'].astype(int)
+        msoa_output['m'] = msoa_output['m'].astype(int)
+    else:
+        # Create audit showing no NTEM control was used
+        audit = {
+            'before': msoa_output['trips'].sum(),
+            'target': -1,
+            'after': msoa_output['trips'].sum()
+        }
+
+    return msoa_output, audit
 
 
 def generate_productions(population: pd.DataFrame,
                          group_cols: List[str],
                          base_year: str,
                          future_years: List[str],
+                         trip_origin: str,
                          trip_rates_path: str,
                          time_splits_path: str,
                          mean_time_splits_path: str,
@@ -2457,12 +2522,13 @@ def generate_productions(population: pd.DataFrame,
     # TODO: write generate_productions() docs
     # Init
     all_years = [base_year] + future_years
-    audit_base_fname = 'yr%s_production_topline.csv'
+    audit_base_fname = 'yr%s_%s_production_topline.csv'
     ntem_base_fname = 'ntem_pa_ave_wday_%s.csv'
 
     # TODO: Multiprocess yearly productions
     # Generate Productions for each year
     yr_ph = dict()
+    audits = list()
     for year in all_years:
         # Only only set the control path if we need to constrain
         if not control_fy_productions and year != base_year:
@@ -2473,11 +2539,13 @@ def generate_productions(population: pd.DataFrame,
         else:
             ntem_control_path = None
 
-        audit_out = os.path.join(audit_dir, audit_base_fname % year)
+        # Build the topline output path
+        audit_fname = audit_base_fname % (year, trip_origin)
+        audit_out = os.path.join(audit_dir, audit_fname)
 
         yr_pop = population.copy().reindex(group_cols + [year], axis='columns')
         yr_pop = yr_pop.rename(columns={year: 'people'})
-        yr_prod = merge_pop_trip_rates(
+        yr_ph[year], ntem_audit = merge_pop_trip_rates(
             yr_pop,
             group_cols=group_cols,
             trip_rates_path=trip_rates_path,
@@ -2488,13 +2556,23 @@ def generate_productions(population: pd.DataFrame,
             control_path=ntem_control_path,
             lad_lookup_dir=lad_lookup_dir
         )
-        yr_ph[year] = yr_prod
+
+        # Update list of audits
+        year_audit = {'year': year}
+        year_audit.update(ntem_audit)
+        audits.append(year_audit)
 
     # Join all productions into one big matrix
     productions = du.combine_yearly_dfs(
         yr_ph,
         unique_col='trips'
     )
+
+    # Write the production audits to disk
+    if len(audits) > 0:
+        fname = consts.PRODS_FNAME % ('msoa', 'hb')
+        path = os.path.join(audit_dir, fname)
+        pd.DataFrame(audits).to_csv(path, index=False)
 
     return productions
 

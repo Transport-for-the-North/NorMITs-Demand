@@ -361,6 +361,7 @@ def efs_build_tp_pa(tp_import: str,
 
 def _build_od_internal(pa_import,
                        od_export,
+                       model_name,
                        calib_params,
                        phi_lookup_folder,
                        phi_type,
@@ -388,7 +389,6 @@ def _build_od_internal(pa_import,
     mode = calib_params['m']
     purpose = calib_params['p']
 
-    model_name = du.get_model_name(mode)
     model_zone_col = model_name + '_zone_id'
 
     # Print out some info
@@ -535,6 +535,7 @@ def _build_od_internal(pa_import,
 
 def efs_build_od(pa_import: str,
                  od_export: str,
+                 model_name: str,
                  p_needed: List[int],
                  m_needed: List[int],
                  soc_needed: List[int],
@@ -555,6 +556,7 @@ def efs_build_od(pa_import: str,
     ----------
     pa_import
     od_export
+    model_name
     p_needed
     m_needed
     soc_needed
@@ -582,6 +584,7 @@ def efs_build_od(pa_import: str,
     unchanging_kwargs = {
        'pa_import': pa_import,
        'od_export': od_export,
+       'model_name': model_name,
        'phi_lookup_folder': phi_lookup_folder,
        'phi_type': phi_type,
        'aggregate_to_wday': aggregate_to_wday,

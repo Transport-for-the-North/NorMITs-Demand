@@ -16,3 +16,18 @@ Once the above command has ran you can activate the environment by running `pipe
 you can run any Python files with the usual `python` command. To add any new Python
 packages to the environment use `pipenv install package_name` instead of pip, this will download
 and install the package and update "Pipfile" and "Pipfile.lock" with the version information.
+
+
+## ExternalForecastSystem Versions
+
+Brief log of the changes and additions made to the NorMITs Demand codebase between versions.
+
+##### V2.4
+ - Start of this version documentation.
+ - Scenario front end added to allow easy running of different TfN Future Travel Scenarios.
+ 
+##### V2.5
+ - Updated Version number in ExternalForecastSystem - replaced underscores with dots. 
+ - Additional reporting and audit checks added.
+ - Internal PopEmpComparator added to check and report on the expected and produced population/emplyment data of the Production and Attraction models.
+ - Reporting tool added to display a dashboard of outputs from the External Forecast System.

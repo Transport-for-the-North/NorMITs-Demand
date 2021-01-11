@@ -33,6 +33,7 @@ import efs_constrainer as constrainer
 
 from efs_constrainer import ForecastConstrainer
 from zone_translator import ZoneTranslator
+from pop_emp_comparator import PopEmpComparator
 
 from demand_utilities import utils as du
 from demand_utilities.sector_reporter_v2 import SectorReporter
@@ -42,20 +43,10 @@ from demand_utilities.sector_reporter_v2 import SectorReporter
 # TODO: Output a run log instead of printing everything to the terminal.
 # TODO: On error, output a simple error report
 
-# TODO: Fix dtype error from pandas on initialisation
-#  More info here:
-#  https://stackoverflow.com/questions/24251219/pandas-read-csv-low-memory-and-dtype-options
-
-# TODO: CLean up unnecessary processing and files left over from production
-#  model rewrite.
-# This includes: all household files, car association , trip_rates,
-# mode splits, mode time splits.
-# THe new production model reads these files in as needed
-
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
-    __version__ = "v2_4"
+    __version__ = "2.5"    # Additional Reporting added
     _out_dir = "NorMITs Demand"
 
     # defines all non-year columns
@@ -70,7 +61,8 @@ class ExternalForecastSystem:
                  lad_msoa_lookup_path: str = "zoning/lad_msoa_grouping.csv",
 
                  import_home: str = "Y:/",
-                 export_home: str = "E:/"
+                 export_home: str = "E:/",
+                 verbose: str = True
                  ):
         # TODO: Write EFS constructor docs
         # TODO: Re-write constraints handling in the base year
@@ -89,17 +81,21 @@ class ExternalForecastSystem:
         self.scenario_name = du.validate_scenario_name(scenario_name)
         self.import_location = import_home
         self.output_location = export_home
+        self.verbose = verbose
 
         self.input_zone_system = "MSOA"
         self.msoa_lookup_path = msoa_lookup_path
         self.lad_msoa_lookup_path = lad_msoa_lookup_path
 
+        # Don't NTEM Control Future years in scenarios
+        self.ntem_control_future_years = not (scenario_name in consts.TFN_SCENARIOS)
+
         # Setup up import/export paths
         self.imports, self.exports, self.params = self.generate_output_paths()
         self._setup_scenario_paths()
         self._read_in_default_inputs()
-        self.msoa_zones_path = os.path.join(self.imports['zoning'],
-                                            'msoa_zones.csv')
+        self._build_pop_emp_paths()
+        self.msoa_zones_path = os.path.join(self.imports["zoning"], "msoa_zones.csv")
 
         # sub-classes
         self.constrainer = ForecastConstrainer()
@@ -113,10 +109,10 @@ class ExternalForecastSystem:
         print("External Forecast System initiated!")
         last_time = current_time
         current_time = time.time()
-        print("Initialisation took: %.2f seconds." %
-              (current_time - last_time))
+        print("Initialisation took: %.2f seconds." % (current_time - last_time))
 
     def _read_in_default_inputs(self) -> None:
+        # Change this dep
         input_dir = self.imports['default_inputs']
 
         # Read in soc and ns as strings if in inputs
@@ -137,6 +133,7 @@ class ExternalForecastSystem:
         self.emp_constraint = du.safe_read_csv(file_path, dtype=dtypes)
 
         # Zone and area files
+        input_dir = self.imports['default_inputs']
         file_path = os.path.join(input_dir, self.msoa_lookup_path)
         self.msoa_lookup = du.safe_read_csv(file_path)
 
@@ -153,14 +150,6 @@ class ExternalForecastSystem:
         -------
         None
         """
-        # Init
-        tfn_scenarios = [
-            consts.SC01_JAM,
-            consts.SC02_PP,
-            consts.SC03_DD,
-            consts.SC04_UZC
-        ]
-
         # Path building is slightly different for default NTEM
         if self.scenario_name == consts.SC00_NTEM:
             # Setup directory paths
@@ -174,7 +163,7 @@ class ExternalForecastSystem:
             emp_growth_path = os.path.join(emp_home, 'future_workers_growth.csv')
             emp_constraint_path = os.path.join(emp_home, 'future_workers_growth_values.csv')
 
-        elif self.scenario_name in tfn_scenarios:
+        elif self.scenario_name in consts.TFN_SCENARIOS:
             # Setup directory paths
             scenario_home = os.path.join(self.imports['scenarios'],
                                          self.scenario_name)
@@ -201,6 +190,36 @@ class ExternalForecastSystem:
         self.emp_constraint_path = emp_constraint_path
         self.emp_growth_path = emp_growth_path
 
+    def _build_pop_emp_paths(self):
+        # Init
+        # TODO: Update input_dir with scenarios
+        input_dir = self.imports['default_inputs']
+        zone_lookups = consts.TFN_MSOA_SECTOR_LOOKUPS
+
+        # Build the pop paths
+        pop_paths = {
+            "import_home": self.imports["home"],
+            "growth_csv": os.path.join(input_dir, self.pop_growth_path),
+            "constraint_csv": os.path.join(input_dir, self.pop_constraint_path),
+            "sector_grouping_file": os.path.join(self.imports['zoning'],
+                                                 zone_lookups["population"])
+        }
+
+        # Build the emp paths
+        emp_paths = {
+            "import_home": self.imports["home"],
+            "growth_csv": os.path.join(input_dir, self.emp_growth_path),
+            "constraint_csv": os.path.join(input_dir, self.emp_constraint_path),
+            "sector_grouping_file": os.path.join(self.imports['zoning'],
+                                                 zone_lookups["employment"])
+        }
+
+        # Assign to dictionary
+        self.pop_emp_inputs = {
+            "population": pop_paths,
+            "employment": emp_paths,
+        }
+
     def run(self,
             base_year: int = 2018,
             future_years: List[int] = consts.FUTURE_YEARS,
@@ -222,7 +241,6 @@ class ExternalForecastSystem:
             dlog_file: str = None,
             dlog_split_file: str = None,
             minimum_development_certainty: str = "MTL",
-            population_metric: str = "Population",  # Households, Population
             constraint_required: List[bool] = consts.CONSTRAINT_REQUIRED_DEFAULT,
             constraint_method: str = "Percentage",  # Percentage, Average
             constraint_area: str = "Designated",  # Zone, Designated, All
@@ -486,7 +504,6 @@ class ExternalForecastSystem:
         constraint_on = constraint_on.lower()
         constraint_source = constraint_source.lower()
         distribution_method = distribution_method.lower()
-        population_metric = population_metric.lower()
         minimum_development_certainty = minimum_development_certainty.upper()
         integrate_dlog = dlog_split_file is not None and dlog_file is not None
 
@@ -518,7 +535,6 @@ class ExternalForecastSystem:
             car_availabilities_needed,
             integrate_dlog,
             minimum_development_certainty,
-            population_metric,
             constraint_required,
             constraint_method,
             constraint_area,
@@ -527,31 +543,14 @@ class ExternalForecastSystem:
         )
 
         # ## INPUT CHECKS ## #
-        print("Starting input checks...")
-
-        # Distribute column names into more specific variables
-        base_year_pop_cols = self.column_dictionary["base_year_population"]
-        base_year_hh_cols = self.column_dictionary["base_year_households"]
-        base_year_workers_cols = self.column_dictionary["base_year_workers"]
-
-        pop_cols = self.column_dictionary["population"] + year_list
-        # pop_ratio_cols = self.column_dictionary["population_ratio"] + year_list
-
-        # hh_cols = self.column_dictionary["households"] + year_list
-        # hh_occupancy_cols = self.column_dictionary["housing_occupancy"] + year_list
-
-        emp_cols = self.column_dictionary["employment"] + year_list
-        # emp_ratio_cols = self.column_dictionary["employment_ratio"] + year_list
-
-        # production_trip_cols = self.column_dictionary["production_trips"] + year_list
-        # mode_split_cols = self.column_dictionary["mode_split"] + year_list
-        # attraction_weight_cols = self.column_dictionary["attraction_weights"] + year_list
-
-        print("No known errors in the inputs!")
-        last_time = current_time
-        current_time = time.time()
-        print("Input checks took: %.2f seconds." %
-              (current_time - last_time))
+        # print("Starting input checks...")
+        #
+        #
+        #
+        # print("No known errors in the inputs!")
+        # last_time = current_time
+        # current_time = time.time()
+        # print("Input checks took: %.2f seconds." % (current_time - last_time))
 
         # ## GET DATA ## #
         # TODO: Tidy this up
@@ -584,8 +583,9 @@ class ExternalForecastSystem:
             population_growth=pop_growth,
             population_constraint=pop_constraint,
             import_home=self.imports['home'],
-            msoa_conversion_path=self.msoa_zones_path,
+            export_home=self.exports['home'],
             control_productions=True,
+            control_fy_productions=self.ntem_control_future_years,
             d_log=development_log,
             d_log_split=development_log_split,
             constraint_required=constraint_required,
@@ -596,26 +596,25 @@ class ExternalForecastSystem:
             designated_area=self.lad_msoa_lookup.copy(),
             out_path=self.exports['productions'],
             recreate_productions=recreate_productions,
-
-            population_metric=population_metric,
         )
-        print("Productions generated!")
         last_time = current_time
         current_time = time.time()
-        print("Production generation took: %.2f seconds" %
-              (current_time - last_time))
+        elapsed_time = current_time - last_time
+        print("Production generation took: %.2f seconds" % elapsed_time)
 
         # ## ATTRACTION GENERATION ###
         print("Generating attractions...")
         attraction_dataframe, nhb_att = self.attraction_generator.run(
+            out_path=self.exports['attractions'],
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
             employment_growth=emp_growth,
             employment_constraint=emp_constraint,
             import_home=self.imports['home'],
-            msoa_conversion_path=self.msoa_zones_path,
+            export_home=self.exports['home'],
             attraction_weights_path=self.imports['a_weights'],
             control_attractions=True,
+            control_fy_attractions=self.ntem_control_future_years,
             d_log=development_log,
             d_log_split=development_log_split,
             constraint_required=constraint_required,
@@ -624,28 +623,67 @@ class ExternalForecastSystem:
             constraint_on=constraint_on,
             constraint_source=constraint_source,
             designated_area=self.lad_msoa_lookup.copy(),
-            out_path=self.exports['attractions'],
             recreate_attractions=recreate_attractions
         )
 
-        print("Attractions generated!")
         last_time = current_time
         current_time = time.time()
-        print("Employment and Attraction generation took: %.2f seconds" %
+        print("Attraction generation took: %.2f seconds" %
               (current_time - last_time))
 
+        # ## Audit the pop/emp inputs/outputs ## #
+        print("Auditing population/employment numbers...")
+        # Build paths
+        pop_path = os.path.join(self.exports['productions'],
+                                self.production_generator.pop_fname)
+        emp_path = os.path.join(self.exports['attractions'],
+                                self.attraction_generator.emp_fname)
+
+        # Build the comparators
+        pop_comp = PopEmpComparator(
+            **self.pop_emp_inputs['population'],
+            output_csv=pop_path,
+            data_type='population',
+            base_year=str(base_year),
+            verbose=self.verbose
+        )
+        emp_comp = PopEmpComparator(
+            **self.pop_emp_inputs['employment'],
+            output_csv=emp_path,
+            data_type='employment',
+            base_year=str(base_year),
+            verbose=self.verbose
+        )
+
+        # Write comparisons to disk
+        pop_comp.write_comparisons(self.exports['reports'], 'csv', True)
+        emp_comp.write_comparisons(self.exports['reports'], 'csv', True)
+
+        last_time = current_time
+        current_time = time.time()
+        elapsed_time = current_time - last_time
+        print("Population/Employment auditing took: %.2f seconds" % elapsed_time)
+
         # ## Generate NHB Productions ## #
+        print("Generating Non-Home Based Productions...")
         nhb_pm = pm.NhbProductionModel(
             import_home=self.imports['home'],
             export_home=self.exports['home'],
             model_name=self.model_name,
             msoa_conversion_path=self.msoa_zones_path,
             base_year=str(base_year),
-            future_years=[str(x) for x in future_years]
+            future_years=[str(x) for x in future_years],
+            control_productions=True,
+            control_fy_productions=self.ntem_control_future_years
         )
         nhb_productions = nhb_pm.run(
             recreate_productions=recreate_nhb_productions
         )
+
+        last_time = current_time
+        current_time = time.time()
+        elapsed_time = current_time - last_time
+        print("NHB Production generation took: %.2f seconds" % elapsed_time)
 
         # # ## ATTRACTION WEIGHT GENERATION ## #
         print("Generating attraction weights...")
@@ -806,7 +844,7 @@ class ExternalForecastSystem:
                 zone_col=model_zone_col,
                 seed_dist_dir=self.imports['seed_dists'],
                 dist_out=self.exports['pa_24'],
-                audit_out=self.exports['print_audits'],
+                audit_out=self.exports['dist_audits'],
                 echo=echo_distribution
             )
 
@@ -824,7 +862,7 @@ class ExternalForecastSystem:
                 zone_col=model_zone_col,
                 seed_dist_dir=self.imports['seed_dists'],
                 dist_out=self.exports['pa_24'],
-                audit_out=self.exports['print_audits'],
+                audit_out=self.exports['dist_audits'],
                 echo=echo_distribution
             )
 
@@ -908,6 +946,7 @@ class ExternalForecastSystem:
             # TODO: Store output files into local storage (class storage)
 
     def pa_to_od(self,
+                 model_name: str,
                  years_needed: List[int] = consts.ALL_YEARS,
                  modes_needed: List[int] = consts.MODES_NEEDED,
                  purposes_needed: List[int] = consts.PURPOSES_NEEDED,
@@ -924,6 +963,9 @@ class ExternalForecastSystem:
 
         Parameters
         ----------
+        model_name:
+            The name of the model to convert from PA to OD
+
         years_needed:
             The years of PA matrices to convert to OD
 
@@ -991,6 +1033,7 @@ class ExternalForecastSystem:
             pa2od.efs_build_od(
                 pa_import=self.exports['pa'],
                 od_export=self.exports['od'],
+                model_name=model_name,
                 p_needed=purposes_needed,
                 m_needed=modes_needed,
                 soc_needed=soc_needed,
@@ -1242,6 +1285,7 @@ class ExternalForecastSystem:
             )
 
     def generate_post_me_tour_proportions(self,
+                                          model_name: str,
                                           year: int = consts.BASE_YEAR,
                                           m_needed: List[int] = consts.MODES_NEEDED,
                                           overwrite_decompiled_od=True,
@@ -1265,6 +1309,9 @@ class ExternalForecastSystem:
 
         Parameters
         ----------
+        model_name:
+            The name of the model this is being run for.
+
         year:
              The year to decompile OD matrices for. (Usually the base year)
 
@@ -1321,7 +1368,7 @@ class ExternalForecastSystem:
                     year=year,
                     user_class=True,
                     to_wide=True,
-                    wide_col_name=du.get_model_name(m_needed[0]) + '_zone_id',
+                    wide_col_name='%s_zone_id' % model_name,
                     from_pcu=from_pcu,
                     vehicle_occupancy_import=self.imports['home']
                 )
@@ -1619,6 +1666,7 @@ class ExternalForecastSystem:
 
     def generate_output_paths(self) -> Tuple[dict, dict, dict]:
         """
+        # TODO: Update generate_output_paths to include scenario paths
 
         Returns
         -------
@@ -1682,7 +1730,6 @@ def write_input_info(output_path,
                      car_availabilities_needed: List[int],
                      integrate_dlog: bool,
                      minimum_development_certainty: str,
-                     population_metric: str,
                      constraint_required: List[bool],
                      constraint_method: str,
                      constraint_area: str,
@@ -1712,7 +1759,6 @@ def write_input_info(output_path,
         "Car Availabilities Used: " + str(car_availabilities_needed),
         "Development Log Integrated: " + str(integrate_dlog),
         "Minimum Development Certainty: " + str(minimum_development_certainty),
-        "Population Metric: " + population_metric,
         "Constraints Used On: " + str(constraint_required),
         "Constraint Method: " + constraint_method,
         "Constraint Area: " + constraint_area,
@@ -1724,7 +1770,7 @@ def write_input_info(output_path,
 
 
 def main():
-    echo = False
+    verbose = False
 
     # Running control
     run_base_efs = True
@@ -1758,7 +1804,8 @@ def main():
         model_name=model_name,
         scenario_name=scenario,
         import_home=import_home,
-        export_home=export_home
+        export_home=export_home,
+        verbose=verbose
     )
 
     if run_base_efs:
@@ -1768,7 +1815,7 @@ def main():
             recreate_productions=recreate_productions,
             recreate_attractions=recreate_attractions,
             recreate_nhb_productions=recreate_nhb_productions,
-            echo_distribution=echo,
+            echo_distribution=verbose,
             constraint_required=constraints
         )
 
@@ -1776,9 +1823,10 @@ def main():
     if run_hb_pa_to_od:
         # Convert to HB to OD
         efs.pa_to_od(
+            model_name=model_name,
             overwrite_hb_tp_pa=True,
             overwrite_hb_tp_od=True,
-            echo=echo
+            echo=verbose
         )
 
     # TODO: Update Integrated OD2PA codebase
@@ -1793,6 +1841,7 @@ def main():
         # Decompiles post-me base year OD matrices - generates tour
         # proportions in the process
         efs.generate_post_me_tour_proportions(
+            model_name=model_name,
             overwrite_decompiled_od=False,
             overwrite_tour_proportions=True,
         )
