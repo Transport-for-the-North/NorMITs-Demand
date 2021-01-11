@@ -15,6 +15,7 @@ import time
 import itertools
 
 from typing import List
+from typing import Dict
 from typing import Tuple
 
 # External libs
@@ -192,15 +193,13 @@ class ExternalForecastSystem:
 
     def _build_pop_emp_paths(self):
         # Init
-        # TODO: Update input_dir with scenarios
-        input_dir = self.imports['default_inputs']
         zone_lookups = consts.TFN_MSOA_SECTOR_LOOKUPS
 
         # Build the pop paths
         pop_paths = {
             "import_home": self.imports["home"],
-            "growth_csv": os.path.join(input_dir, self.pop_growth_path),
-            "constraint_csv": os.path.join(input_dir, self.pop_constraint_path),
+            "growth_csv": self.pop_growth_path,
+            "constraint_csv": self.pop_constraint_path,
             "sector_grouping_file": os.path.join(self.imports['zoning'],
                                                  zone_lookups["population"])
         }
@@ -208,8 +207,8 @@ class ExternalForecastSystem:
         # Build the emp paths
         emp_paths = {
             "import_home": self.imports["home"],
-            "growth_csv": os.path.join(input_dir, self.emp_growth_path),
-            "constraint_csv": os.path.join(input_dir, self.emp_constraint_path),
+            "growth_csv": self.emp_growth_path,
+            "constraint_csv": self.emp_constraint_path,
             "sector_grouping_file": os.path.join(self.imports['zoning'],
                                                  zone_lookups["employment"])
         }
@@ -1664,9 +1663,13 @@ class ExternalForecastSystem:
 
         return reattached_dataframe
 
-    def generate_output_paths(self) -> Tuple[dict, dict, dict]:
+    def generate_output_paths(self) -> Tuple[Dict[str, str],
+                                             Dict[str, str],
+                                             Dict[str, str]]:
         """
-        # TODO: Update generate_output_paths to include scenario paths
+        Returns imports, exports and params dictionaries
+
+        Calls du.build_io_paths() with class attributes.
 
         Returns
         -------
@@ -1681,7 +1684,6 @@ class ExternalForecastSystem:
         params:
             Dictionary of parameter export paths with the following keys:
             compile, tours
-
         """
         return du.build_io_paths(self.import_location,
                                  self.output_location,
