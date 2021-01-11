@@ -342,7 +342,6 @@ def build_io_paths(import_location: str,
     params:
         Dictionary of parameter export paths with the following keys:
         compile, tours
-
     """
     # TODO: Tidy up Y:/ drive imports/inputs folders after contract
     # Init
