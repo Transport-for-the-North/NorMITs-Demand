@@ -160,7 +160,9 @@ class ElasticityModel:
             self.elasticity_folder / CONSTRAINTS_FOLDER,
             elasticities["CstrMatrixName"].unique().tolist(),
         )
-        base_demand, rail_ca_split = self._get_demand(demand_params)
+        base_demand, rail_ca_split, car_reverse = self._get_demand(
+            demand_params
+        )
         base_costs = self._get_costs(demand_params["purpose"])
         # TODO Generalised costs parameters VT/VC should be read from an input
         gc_params = {"car": {"vt": 16.58, "vc": 9.45}, "rail": {"vt": 16.6}}
@@ -203,13 +205,13 @@ class ElasticityModel:
                 np.ravel(np.abs(adjusted_demand["rail"] - total_rail))
             )
             print(
-                "When splitting adjusted rail demand into CA and NCA, NCA + CA "
-                f"!= Total Rail, there is a maximum difference of {diff:.1E}"
+                "When splitting adjusted rail demand into CA and NCA, NCA + CA"
+                f" != Total Rail, there is a maximum difference of {diff:.1E}"
             )
         adjusted_demand.pop("rail")
 
         # Write demand output
-        self._write_demand(adjusted_demand, demand_params)
+        self._write_demand(adjusted_demand, demand_params, car_reverse)
         return adjusted_demand
 
     def _get_demand(
@@ -232,6 +234,9 @@ class ElasticityModel:
             The ratio of CA and NCA to total rail demand, allowing
             the demand to be split back into CA and NCA once
             elasticities are applied.
+        car_reverse : pd.DataFrame
+            Splitting factors and look for converting the car demand
+            back to old zone system after calculations.
 
         Raises
         ------
@@ -250,7 +255,7 @@ class ElasticityModel:
                 car_availability=ca,
                 csv=True,
             )
-            tmp[f"ca{ca}"] = read_demand_matrix(
+            tmp[f"ca{ca}"], _ = read_demand_matrix(
                 path, self.zone_translation_folder, MODE_ZONE_SYSTEM[m]
             )
         if not (
@@ -278,12 +283,12 @@ class ElasticityModel:
         path = self.demand_folders[m][0] / get_dist_name(
             **demand_params, mode=str(MODE_ID[m]), csv=True
         )
-        demand[m] = read_demand_matrix(
+        demand[m], car_reverse = read_demand_matrix(
             path, self.zone_translation_folder, MODE_ZONE_SYSTEM[m]
         )
 
         demand.update(dict.fromkeys(OTHER_MODES, 1.0))
-        return demand, rail_split
+        return demand, rail_split, car_reverse
 
     def _get_costs(self, purpose: int) -> Dict[str, pd.DataFrame]:
         """Read the cost files for each mode in `MODE_ZONE_SYSTEM`.
@@ -315,6 +320,7 @@ class ElasticityModel:
         self,
         adjusted_demand: Dict[str, pd.DataFrame],
         demand_params: Dict[str, str],
+        car_reverse: pd.DataFrame,
     ):
         """Write the adjusted demand to CSV files.
 
@@ -329,8 +335,12 @@ class ElasticityModel:
         demand_params : Dict[str, str]
             The demand parameters to be passed to `get_dist_name` for
             creating the output filename.
+        car_reverse : pd.DataFrame
+            The lookup and splitting factors for converting car demand
+            back to the old zone system.
         """
         for m in ("car", "ca1", "ca2"):
+            # TODO convert car demand back to NoHAM zone system before writing out
             ca = None
             mode = m
             if m != "car":

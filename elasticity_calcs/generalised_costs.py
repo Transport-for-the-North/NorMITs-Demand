@@ -298,7 +298,7 @@ def get_costs(
         lookup = zone_translation_df(
             zone_translation_folder, zone_system, COMMON_ZONE_SYSTEM
         )
-        costs = translate_matrix(
+        costs, _ = translate_matrix(
             costs,
             lookup,
             [f"{zone_system}_zone_id", f"{COMMON_ZONE_SYSTEM}_zone_id"],

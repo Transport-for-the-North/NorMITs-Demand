@@ -16,12 +16,13 @@ import pandas as pd
 from tqdm.contrib import DummyTqdmFile
 
 # Local imports
-from demand_utilities.utils import safe_read_csv, zone_translation_df
+from demand_utilities.utils import safe_read_csv
 from zone_translator import translate_matrix
 
 
 ##### CONSTANTS #####
 COMMON_ZONE_SYSTEM = "norms"
+ZONE_LOOKUP_NAME = "{from_zone}_to_{to_zone}.csv"
 
 
 ##### FUNCTIONS #####
@@ -148,7 +149,9 @@ def get_constraint_matrices(
     matrices = {}
     if not folder.is_dir():
         raise FileNotFoundError(f"Not a folder, or doesn't exist: {folder}")
-    get_files = [i.lower() for i in get_files] if get_files is not None else get_files
+    get_files = (
+        [i.lower() for i in get_files] if get_files is not None else get_files
+    )
 
     for path in folder.iterdir():
         if path.suffix.lower() != ".csv":
@@ -166,8 +169,6 @@ def read_demand_matrix(
 ) -> pd.DataFrame:
     """Reads demand matrix and converts it to `COMMON_ZONE_SYSTEM`.
 
-    WIP: Zone system conversion functionality is not fully implemented.
-
     Parameters
     ----------
     path : Path
@@ -183,22 +184,34 @@ def read_demand_matrix(
     -------
     pd.DataFrame
         The demand matrix in the `COMMON_ZONE_SYSTEM`.
+    pd.DataFrame
+        Splitting factors for converting back to the old
+        zone system.
     """
     demand = pd.read_csv(path, index_col=0)
-    if from_zone != COMMON_ZONE_SYSTEM:
-        # TODO Use splitting factor when translating zone systems and calculate
-        # matrix splitting factors for converting by to original zone system and
-        # to be used as weights for converting cost zone systems
-        lookup = zone_translation_df(
-            zone_translation_folder, from_zone, COMMON_ZONE_SYSTEM
-        )
-        demand = translate_matrix(
-            demand, lookup, [f"{from_zone}_zone_id", f"{COMMON_ZONE_SYSTEM}_zone_id"]
-        )
     # Convert column and index names to int
     demand.columns = pd.to_numeric(demand.columns, downcast="integer")
     demand.index = pd.to_numeric(demand.index, downcast="integer")
-    return demand.sort_index().sort_index(axis=1)
+
+    reverse = None
+    if from_zone != COMMON_ZONE_SYSTEM:
+        lookup_file = zone_translation_folder / ZONE_LOOKUP_NAME.format(
+            from_zone=from_zone, to_zone=COMMON_ZONE_SYSTEM
+        )
+        dtypes = {
+            f"{from_zone}_zone_id": int,
+            f"{COMMON_ZONE_SYSTEM}_zone_id": int,
+            "split": float,
+        }
+        lookup = pd.read_csv(lookup_file, usecols=dtypes.keys(), dtype=dtypes)
+
+        demand, reverse = translate_matrix(
+            demand,
+            lookup,
+            [f"{from_zone}_zone_id", f"{COMMON_ZONE_SYSTEM}_zone_id"],
+            split_column="split",
+        )
+    return demand.sort_index().sort_index(axis=1), reverse
 
 
 @contextlib.contextmanager

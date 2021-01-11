@@ -53,7 +53,19 @@ ELASTICITY_DATA = {
         "Car",
         "Bus",
     ],
-    "OwnElast": [-0.3, 0.06, 0.07, 0.02, 0.01, 0.16, -0.8, 0.17, 0.02, -0.3, 0.06],
+    "OwnElast": [
+        -0.3,
+        0.06,
+        0.07,
+        0.02,
+        0.01,
+        0.16,
+        -0.8,
+        0.17,
+        0.02,
+        -0.3,
+        0.06,
+    ],
     "CstrMatrixName": ["all_trips"] * 11,
 }
 
@@ -67,7 +79,9 @@ class TestGetConstraintMatrices:
     MATRICES = [np.random.rand(3, 3) for i in range(3)]
 
     @pytest.fixture(name="constraint_folder", scope="class")
-    def fixture_constraint_folder(self, tmp_path_factory) -> Tuple[Path, List[Path]]:
+    def fixture_constraint_folder(
+        self, tmp_path_factory
+    ) -> Tuple[Path, List[Path]]:
         """Create matrix CSV files for testing.
 
         Parameters
@@ -97,7 +111,9 @@ class TestGetConstraintMatrices:
                 np.savetxt(f, self.MATRICES[i], delimiter=",")
         return folder, paths
 
-    def test_get_constraint_matrices(self, constraint_folder: Tuple[Path, List[Path]]):
+    def test_get_constraint_matrices(
+        self, constraint_folder: Tuple[Path, List[Path]]
+    ):
         """Test that `get_constaint_matrices` finds the correct file paths.
 
         Parameters
@@ -115,7 +131,9 @@ class TestGetConstraintMatrices:
         for path in constraint_folder[1]:
             assert matrices[path.stem.lower()] == path
 
-    def test_read_constraint_matrices(self, constraint_folder: Tuple[Path, List[Path]]):
+    def test_read_constraint_matrices(
+        self, constraint_folder: Tuple[Path, List[Path]]
+    ):
         """Test that `get_contraint_matrices` reads the files correctly.
 
         Parameters
@@ -155,9 +173,26 @@ class TestGetConstraintMatrices:
 class TestReadDemandMatrix:
     """Tests for the `read_demand_matrix` function."""
 
-    @staticmethod
+    DEMAND_NORMS = pd.DataFrame(
+        np.full((2, 2), 10.0), columns=[1, 2], index=[1, 2]
+    )
+    DEMAND_NOHAM = pd.DataFrame(
+        np.arange(1, 10, dtype=float).reshape(3, 3),
+        columns=[1, 2, 3],
+        index=[1, 2, 3],
+    )
+    LOOKUP = pd.DataFrame(
+        {
+            "noham_zone_id": [1, 2, 2, 3],
+            "norms_zone_id": [1, 1, 2, 2],
+            "split": [1, 0.8, 0.2, 1],
+        }
+    )
+    NORMS_NAME = "norms_demand.csv"
+    NOHAM_NAME = "noham_demand.csv"
+
     @pytest.fixture(name="demand_folder", scope="class")
-    def fixture_demand_folder(tmp_path_factory: Path) -> Tuple[Path, str, pd.DataFrame]:
+    def fixture_demand_folder(self, tmp_path_factory: Path) -> Path:
         """Create test demand matrix in temporary folder.
 
         Parameters
@@ -169,35 +204,65 @@ class TestReadDemandMatrix:
         -------
         Path
             Folder containing test matrix.
-        str
-            Filename of test matrix.
-        pd.DataFrame
-            The test matrix.
         """
         folder = tmp_path_factory.mktemp("demand")
-        demand = pd.DataFrame(np.full((3, 3), 10.0), columns=[1, 2, 3], index=[1, 2, 3])
-        filename = "test_matrix.csv"
-        demand.to_csv(folder / filename)
-        return folder, filename, demand
+        self.DEMAND_NORMS.to_csv(folder / self.NORMS_NAME)
+        self.DEMAND_NOHAM.to_csv(folder / self.NOHAM_NAME)
+        self.LOOKUP.to_csv(folder / "noham_to_norms.csv")
+        return folder
 
-    @staticmethod
-    def test_read(demand_folder: Tuple[Path, str, pd.DataFrame]):
+    def test_read(self, demand_folder: Path):
         """Test that a NoRMS matrix is read correctly without converting zones.
 
         Parameters
         ----------
-        demand_folder : Tuple[Path, str, pd.DataFrame]
-            The folder, filename and data for the test matrix.
+        demand_folder : Path
+            The folder containing the test matrix.
         """
-        folder, name, matrix = demand_folder
-        pd.testing.assert_frame_equal(
-            read_demand_matrix(folder / name, folder, "norms"), matrix
+        out, _ = read_demand_matrix(
+            demand_folder / self.NORMS_NAME, demand_folder, "norms"
         )
+        pd.testing.assert_frame_equal(out, self.DEMAND_NORMS)
 
-    @staticmethod
-    @pytest.mark.skip(reason="Placeholder for `read_demand_matrix` test.")
-    def test_lookup():
-        pass
+    def test_lookup(self, demand_folder: Path):
+        """Test that a NoHAM matrix is read in correctly and converted zones.
+
+        Check that NoHAM demand it is correctly converted to NoRMS zone
+        system and check it can be converted back to NoHAM zone system
+        correctly.
+
+        Parameters
+        ----------
+        demand_folder : Path
+            The folder containing the test matrix.
+        """
+        test, reverse = read_demand_matrix(
+            demand_folder / self.NOHAM_NAME, demand_folder, "noham"
+        )
+        answer = pd.DataFrame(
+            [[9.0, 9.0], [15.0, 12.0]], index=[1, 2], columns=[1, 2]
+        )
+        pd.testing.assert_frame_equal(test, answer)
+
+        # Convert back to NoHAM zone system
+        od = ["o", "d"]
+        lookup_cols = ["noham_zone_id", "norms_zone_id"]
+        test.index.name = od[0]
+        test.columns.name = od[1]
+        test = test.unstack().reset_index().rename(columns={0: "trips"})
+        right_on = [f"{lookup_cols[1]}-{i}" for i in od]
+        test = test.merge(
+            reverse, left_on=od, right_on=right_on, how="left", validate="1:m"
+        )
+        test["trips"] = test["trips"] * test["split"]
+        test = test.drop(columns=od + right_on + ["split"]).rename(
+            columns={f"{lookup_cols[0]}-{i}": i for i in od}
+        )
+        test = test.groupby(od, as_index=False).sum()
+        test = test.pivot(index=od[0], columns=od[1], values="trips")
+        pd.testing.assert_frame_equal(
+            test, self.DEMAND_NOHAM, check_names=False
+        )
 
 
 ##### FUNCTIONS #####
@@ -254,7 +319,8 @@ def test_read_segments_file(segments_file: Tuple[Path, pd.DataFrame]):
 
 
 @pytest.mark.parametrize(
-    "func, args", [(read_segments_file, []), (read_elasticity_file, ["", "", ""])]
+    "func, args",
+    [(read_segments_file, []), (read_elasticity_file, ["", "", ""])],
 )
 def test_missing_file(func, args):
     """Tests that an error is raised if path doesn't exist. """
