@@ -56,7 +56,7 @@ from demand_utilities.sector_reporter_v2 import SectorReporter
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
-    __version__ = "v2_4"
+    __version__ = "2.5"    # Additional Reporting added
     _out_dir = "NorMITs Demand"
 
     # defines all non-year columns
@@ -1796,7 +1796,7 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC04_UZC
+    scenario = consts.SC00_NTEM
     iter_num = 0
     import_home = "Y:/"
     export_home = "E:/"

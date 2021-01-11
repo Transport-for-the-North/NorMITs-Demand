@@ -384,7 +384,7 @@ def build_io_paths(import_location: str,
         export_location,
         demand_dir_name,
         model_name,
-        demand_version + "-EFS_Output",
+        "v%s-EFS_Output" % demand_version,
         scenario_name,
         iter_name,
     ]
