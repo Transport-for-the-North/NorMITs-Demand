@@ -6,6 +6,7 @@
 
 ##### IMPORTS #####
 # Standard imports
+import warnings
 from pathlib import Path
 from typing import List, Dict, Tuple, Union
 
@@ -29,6 +30,7 @@ from elasticity_calcs.generalised_costs import (
     calculate_gen_costs,
     gen_cost_elasticity_mins,
 )
+from zone_translator import square_to_list
 
 
 ##### CONSTANTS #####
@@ -48,11 +50,12 @@ GC_ELASTICITY_TYPES = {
 # ID and zone system for each mode
 MODE_ID = {"car": 1, "rail": 6}
 MODE_ZONE_SYSTEM = {
-    "car": "norms",
+    "car": "noham",
     "rail": "norms",
-}  # FIXME using rail demand for both for testing
+}
 COST_NAMES = "{mode}_costs_p{purpose}.csv"
 OTHER_MODES = ["bus", "active", "no_travel"]
+MATRIX_TOTAL_TOLERANCE = 1e-10
 
 
 ##### CLASSES #####
@@ -160,10 +163,16 @@ class ElasticityModel:
             self.elasticity_folder / CONSTRAINTS_FOLDER,
             elasticities["CstrMatrixName"].unique().tolist(),
         )
-        base_demand, rail_ca_split, car_reverse = self._get_demand(
-            demand_params
+        (
+            base_demand,
+            rail_ca_split,
+            car_reverse,
+            car_original,
+        ) = self._get_demand(demand_params)
+        base_costs = self._get_costs(
+            demand_params["purpose"], {"car": car_original}
         )
-        base_costs = self._get_costs(demand_params["purpose"])
+        del car_original
         # TODO Generalised costs parameters VT/VC should be read from an input
         gc_params = {"car": {"vt": 16.58, "vc": 9.45}, "rail": {"vt": 16.6}}
         base_gc = calculate_gen_costs(base_costs, gc_params)
@@ -216,7 +225,12 @@ class ElasticityModel:
 
     def _get_demand(
         self, demand_params: Dict[str, str]
-    ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, np.array]]:
+    ) -> Tuple[
+        Dict[str, pd.DataFrame],
+        Dict[str, np.array],
+        pd.DataFrame,
+        pd.DataFrame,
+    ]:
         """Read the rail and car demand, aggregating CA and NCA for rail.
 
         Parameters
@@ -237,6 +251,8 @@ class ElasticityModel:
         car_reverse : pd.DataFrame
             Splitting factors and look for converting the car demand
             back to old zone system after calculations.
+        car_original : pd.DataFrame
+            Demand matrix for car before the zone system conversion.
 
         Raises
         ------
@@ -255,7 +271,7 @@ class ElasticityModel:
                 car_availability=ca,
                 csv=True,
             )
-            tmp[f"ca{ca}"], _ = read_demand_matrix(
+            tmp[f"ca{ca}"], _, _ = read_demand_matrix(
                 path, self.zone_translation_folder, MODE_ZONE_SYSTEM[m]
             )
         if not (
@@ -283,14 +299,16 @@ class ElasticityModel:
         path = self.demand_folders[m][0] / get_dist_name(
             **demand_params, mode=str(MODE_ID[m]), csv=True
         )
-        demand[m], car_reverse = read_demand_matrix(
+        demand[m], car_reverse, car_original = read_demand_matrix(
             path, self.zone_translation_folder, MODE_ZONE_SYSTEM[m]
         )
 
         demand.update(dict.fromkeys(OTHER_MODES, 1.0))
-        return demand, rail_split, car_reverse
+        return demand, rail_split, car_reverse, car_original
 
-    def _get_costs(self, purpose: int) -> Dict[str, pd.DataFrame]:
+    def _get_costs(
+        self, purpose: int, demand: Dict[str, pd.DataFrame]
+    ) -> Dict[str, pd.DataFrame]:
         """Read the cost files for each mode in `MODE_ZONE_SYSTEM`.
 
         Doesn't get the costs for Bus, Active or Non-travel modes as these
@@ -300,6 +318,8 @@ class ElasticityModel:
         ----------
         purpose : int
             Purpose ID to get the costs for.
+        demand : Dict[str, pd.DataFrame]
+            Demand to as weights for zone translation.
 
         Returns
         -------
@@ -311,7 +331,9 @@ class ElasticityModel:
             path = self.demand_folders[m][1] / COST_NAMES.format(
                 mode=m, purpose=purpose
             )
-            costs[m] = get_costs(path, m, zone, self.zone_translation_folder)
+            costs[m] = get_costs(
+                path, m, zone, self.zone_translation_folder, demand.get(m)
+            )
 
         costs.update(dict.fromkeys(OTHER_MODES, 1.0))
         return costs
@@ -337,10 +359,43 @@ class ElasticityModel:
             creating the output filename.
         car_reverse : pd.DataFrame
             The lookup and splitting factors for converting car demand
-            back to the old zone system.
+            back to the old zone system, with the following columns:
+            [original zone - origin, original zone - destination,
+            common zone system - origin, common zone system
+            - destination, splitting factor].
         """
+        if car_reverse is not None:
+            # Convert car demand back to old zone system
+            old_zone = square_to_list(adjusted_demand["car"])
+            car_reverse.columns = ["orig_o", "orig_d", "o", "d", "split"]
+            old_zone = old_zone.merge(
+                car_reverse, on=["o", "d"], how="left", validate="1:m"
+            )
+            old_zone["value"] = old_zone["value"] * old_zone["split"]
+            old_zone = (
+                old_zone[["orig_o", "orig_d", "value"]]
+                .groupby(["orig_o", "orig_d"], as_index=False)
+                .sum()
+            )
+            old_zone.rename(
+                columns={f"orig_{i}": i for i in "od"}, inplace=True
+            )
+            old_zone = old_zone.pivot(index="o", columns="d", values="value")
+            old_zone.index.name = adjusted_demand["car"].index.name
+            old_zone.columns.name = adjusted_demand["car"].columns.name
+            # Check conversion hasn't changed total
+            totals = [
+                np.sum(x.values) for x in (old_zone, adjusted_demand["car"])
+            ]
+            if abs(totals[0] - totals[1]) > MATRIX_TOTAL_TOLERANCE:
+                warnings.warn(
+                    f"'car' matrix totals differ by {abs(totals[0] - totals[1]):.1E}"
+                    " when converting back to original zone system",
+                    RuntimeWarning,
+                )
+            adjusted_demand["car"] = old_zone
+
         for m in ("car", "ca1", "ca2"):
-            # TODO convert car demand back to NoHAM zone system before writing out
             ca = None
             mode = m
             if m != "car":

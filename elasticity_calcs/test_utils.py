@@ -219,7 +219,7 @@ class TestReadDemandMatrix:
         demand_folder : Path
             The folder containing the test matrix.
         """
-        out, _ = read_demand_matrix(
+        out, _, _ = read_demand_matrix(
             demand_folder / self.NORMS_NAME, demand_folder, "norms"
         )
         pd.testing.assert_frame_equal(out, self.DEMAND_NORMS)
@@ -236,7 +236,7 @@ class TestReadDemandMatrix:
         demand_folder : Path
             The folder containing the test matrix.
         """
-        test, reverse = read_demand_matrix(
+        test, reverse, _ = read_demand_matrix(
             demand_folder / self.NOHAM_NAME, demand_folder, "noham"
         )
         answer = pd.DataFrame(

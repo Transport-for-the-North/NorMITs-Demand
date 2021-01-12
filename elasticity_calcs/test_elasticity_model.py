@@ -19,11 +19,12 @@ from .elasticity_model import ElasticityModel
 
 
 ##### CONSTANTS #####
-ZONES = [1, 2, 3]
+CAR_ZONES = [1, 2, 3]
+RAIL_ZONES = [1, 2]
 CAR_COSTS = pd.DataFrame(
     {
-        "from_model_zone_id": np.repeat(ZONES, len(ZONES)),
-        "to_model_zone_id": np.tile(ZONES, len(ZONES)),
+        "from_model_zone_id": np.repeat(CAR_ZONES, len(CAR_ZONES)),
+        "to_model_zone_id": np.tile(CAR_ZONES, len(CAR_ZONES)),
         "time": 3000,
         "toll": 0,
         "distance": 25000,
@@ -31,8 +32,8 @@ CAR_COSTS = pd.DataFrame(
 )
 RAIL_COSTS = pd.DataFrame(
     {
-        "from_model_zone_id": np.repeat(ZONES, len(ZONES)),
-        "to_model_zone_id": np.tile(ZONES, len(ZONES)),
+        "from_model_zone_id": np.repeat(RAIL_ZONES, len(RAIL_ZONES)),
+        "to_model_zone_id": np.tile(RAIL_ZONES, len(RAIL_ZONES)),
         "AE_cost": 5,
         "fare_cost": 420,
         "IVT_cost": 30,
@@ -40,15 +41,20 @@ RAIL_COSTS = pd.DataFrame(
         "Interchange_cost": 2,
     }
 )
-DEMAND = pd.DataFrame(1, columns=ZONES, index=ZONES)
-CONSTRAINT = np.full_like(DEMAND.values, 1)
+CAR_DEMAND = pd.DataFrame(1, columns=CAR_ZONES, index=CAR_ZONES)
+RAIL_DEMAND = pd.DataFrame(1, columns=RAIL_ZONES, index=RAIL_ZONES)
+CONSTRAINT = np.full_like(RAIL_DEMAND.values, 1)
 ELASTICITIES_FILE = (
     Path(__file__).parent / "test_elastcities_commuting_moderate.csv"
 )
 YEARS = ["2018"]
 # Answers taken from manual calculations within Excel
-CAR_ANSWER = pd.DataFrame(0.897845275494197, columns=ZONES, index=ZONES)
-RAIL_ANSWER = pd.DataFrame(0.990900752128458, columns=ZONES, index=ZONES)
+CAR_ANSWER = pd.DataFrame(
+    0.897845275494197, columns=CAR_ZONES, index=CAR_ZONES
+)
+RAIL_ANSWER = pd.DataFrame(
+    0.990900752128458, columns=RAIL_ZONES, index=RAIL_ZONES
+)
 OTHER_ANSWER = pd.DataFrame(
     {
         "mode": ["bus", "active", "no_travel"],
@@ -84,6 +90,13 @@ class TestElasticityModel:
             for i in ("bus", "active", "no_travel")
         ],
     ]
+    LOOKUP = pd.DataFrame(
+        {
+            "noham_zone_id": [1, 2, 2, 3],
+            "norms_zone_id": [1, 1, 2, 2],
+            "split": [1, 0.8, 0.2, 1],
+        }
+    )
     CHECK_TOLERANCE = 1e-4
 
     @pytest.fixture(name="folders", scope="class")
@@ -110,14 +123,16 @@ class TestElasticityModel:
         )
         # Demand files
         base_demand = "{trip_origin}_{matrix_format}_yr{year}_p{purpose}_m{mode}_soc{segment}"
-        car_demand = base_demand.format(**self.DEMAND_PARAMS, mode=1) + ".csv"
-        rail_demand = [
-            base_demand.format(**self.DEMAND_PARAMS, mode=6) + f"_ca{i}.csv"
-            for i in (1, 2)
-        ]
-        for i, nm in enumerate((car_demand, *rail_demand)):
-            folder = "car_demand" if i == 0 else "rail_demand"
-            DEMAND.to_csv(input_folders[folder] / nm)
+        CAR_DEMAND.to_csv(
+            input_folders["car_demand"]
+            / (base_demand.format(**self.DEMAND_PARAMS, mode=1) + ".csv")
+        )
+        for i in 1, 2:
+            filename = (
+                base_demand.format(**self.DEMAND_PARAMS, mode=6)
+                + f"_ca{i}.csv"
+            )
+            RAIL_DEMAND.to_csv(input_folders["rail_demand"] / filename)
         # Cost files
         cost_file = f"{{}}_costs_p{self.DEMAND_PARAMS['purpose']}.csv"
         for df, nm in ((RAIL_COSTS, "rail"), (CAR_COSTS, "car")):
@@ -125,6 +140,11 @@ class TestElasticityModel:
                 input_folders[f"{nm}_costs"] / cost_file.format(nm),
                 index=False,
             )
+        # Lookup file
+        lookup_file = "noham_to_norms.csv"
+        self.LOOKUP.to_csv(
+            input_folders["translation"] / lookup_file, index=False
+        )
 
         output_folder = tmp_path_factory.mktemp("outputs")
         return input_folders, output_folder

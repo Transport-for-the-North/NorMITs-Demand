@@ -8,7 +8,7 @@
 import sys
 import contextlib
 from pathlib import Path
-from typing import Union, Dict, List
+from typing import Union, Dict, List, Tuple
 
 # Third party imports
 import numpy as np
@@ -166,7 +166,7 @@ def get_constraint_matrices(
 
 def read_demand_matrix(
     path: Path, zone_translation_folder: Path, from_zone: str
-) -> pd.DataFrame:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Reads demand matrix and converts it to `COMMON_ZONE_SYSTEM`.
 
     Parameters
@@ -187,6 +187,8 @@ def read_demand_matrix(
     pd.DataFrame
         Splitting factors for converting back to the old
         zone system.
+    pd.DataFrame
+        The demand matrix in the `from_zone` zone system.
     """
     demand = pd.read_csv(path, index_col=0)
     # Convert column and index names to int
@@ -194,7 +196,9 @@ def read_demand_matrix(
     demand.index = pd.to_numeric(demand.index, downcast="integer")
 
     reverse = None
+    old_zone = None
     if from_zone != COMMON_ZONE_SYSTEM:
+        old_zone = demand.copy()
         lookup_file = zone_translation_folder / ZONE_LOOKUP_NAME.format(
             from_zone=from_zone, to_zone=COMMON_ZONE_SYSTEM
         )
@@ -211,7 +215,7 @@ def read_demand_matrix(
             [f"{from_zone}_zone_id", f"{COMMON_ZONE_SYSTEM}_zone_id"],
             split_column="split",
         )
-    return demand.sort_index().sort_index(axis=1), reverse
+    return demand.sort_index().sort_index(axis=1), reverse, old_zone
 
 
 @contextlib.contextmanager
