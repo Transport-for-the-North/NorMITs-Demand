@@ -22,6 +22,7 @@ from .generalised_costs import (
     RAIL_GC_FACTORS,
     gen_cost_elasticity_mins,
     get_costs,
+    read_gc_parameters,
 )
 
 
@@ -346,6 +347,82 @@ class TestCalculateGenCosts:  # TODO implement tests for calculate_gen_costs
     @pytest.mark.skip(reason="Placeholder for the `calculate_gen_costs` test.")
     def test_calculation():
         pass
+
+
+class TestReadGCParameters:
+    """Tests for the `read_gc_parameters` function."""
+
+    PARAM_FILE = pd.DataFrame(
+        {
+            "year": ["2018", "2018", "2030", "2030"],
+            "mode": ["car", "rail"] * 2,
+            "vot": [16.2, 16.4, 17.2, 17.4],
+            "voc": [9.45, np.nan, 10.45, np.nan],
+        }
+    )
+    PARAMS = {
+        "2018": {
+            "car": {"vot": 16.2, "voc": 9.45},
+            "rail": {"vot": 16.4},
+        },
+        "2030": {
+            "car": {"vot": 17.2, "voc": 10.45},
+            "rail": {"vot": 17.4},
+        },
+    }
+    YEARS = ["2018", "2030"]
+    MODES = ["car", "rail"]
+
+    @pytest.fixture(name="param_path", scope="class")
+    def fixture_param_path(self, tmp_path_factory) -> Tuple[Path, Path]:
+        """Write generalised cost parameters test files.
+
+        Parameters
+        ----------
+        tmp_path_factory : Path
+            Temporary folder path provided by pytest.
+
+        Returns
+        -------
+        Path
+            Path to the correct input file.
+        Path
+            Path to the input file with missing data.
+        """
+        folder = tmp_path_factory.mktemp("gc_params")
+        correct = folder / "correct_gc_params.csv"
+        self.PARAM_FILE.to_csv(correct, index=False)
+        missing = folder / "missing_gc_params.csv"
+        self.PARAM_FILE.iloc[[0]].to_csv(missing, index=False)
+        return correct, missing
+
+    def test_correct(self, param_path: Tuple[Path, Path]):
+        """Tests that the GC parameters file is read correctly.
+
+        Parameters
+        ----------
+        param_path : Tuple[Path, Path]
+            Paths to the correct and missing files, respectively.
+        """
+        test = read_gc_parameters(param_path[0], self.YEARS, self.MODES)
+        assert test == self.PARAMS, "Correct GC params input file"
+
+    def test_missing(self, param_path: Tuple[Path, Path]):
+        """Test that the correct error is raised when data is missing.
+
+        Parameters
+        ----------
+        param_path : Tuple[Path, Path]
+            Paths to the correct and missing files, respectively.
+        """
+        with pytest.raises(ValueError) as e:
+            read_gc_parameters(param_path[1], self.YEARS, self.MODES)
+        msg = (
+            "Years missing: ['2030'] Year - mode pairs missing: "
+            "['2018 - rail'] from: missing_gc_params.csv"
+        )
+        print(repr(str(e.value.args[0])))
+        assert e.value.args[0] == msg, "Missing GC parameters file"
 
 
 ##### FUNCTIONS #####

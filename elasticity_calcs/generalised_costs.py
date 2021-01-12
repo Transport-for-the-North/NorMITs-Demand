@@ -39,6 +39,13 @@ COST_LOOKUP = {
         "toll": "toll",
     },
 }
+# Column name and dtype lookup for the GC parameters input file
+GC_PARAMETERS_FILE = {
+    "year": ("year", str),
+    "mode": ("mode", str),
+    "vot": ("vot", float),
+    "voc": ("voc", float),
+}
 
 
 ##### FUNCTIONS #####
@@ -401,3 +408,73 @@ def calculate_gen_costs(
         gc[m] = gen_cost_mode(cost, m, **gc_params.get(m, {}))
 
     return gc
+
+
+def read_gc_parameters(
+    path: Path, years: List[str], modes: List[str]
+) -> Dict[str, Dict[str, Dict[str, float]]]:
+    """Reads the generlised cost parameters CSV file.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the parameters file.
+    years : List[str]
+        List of the years required.
+    modes : List[str]
+        List of the modes required.
+
+    Returns
+    -------
+    Dict[str, Dict[str, Dict[str, float]]]
+        Nested dictionary containing the parameters split
+        by years and mode e.g.
+        {
+            "2018": {
+                "car": {"vot": 16.2, "voc": 9.45},
+                "rail": {"vot": 16.4},
+            },
+            "2030": {
+                "car": {"vot": 17.2, "voc": 10.45},
+                "rail": {"vot": 17.4},
+            },
+        }
+
+    Raises
+    ------
+    ValueError
+        If there are any years or modes missing
+        from the file.
+    """
+    dtypes = dict(GC_PARAMETERS_FILE.values())
+    data = pd.read_csv(path, usecols=dtypes.keys(), dtype=dtypes)
+    data.rename(
+        columns={v[0]: k for k, v in GC_PARAMETERS_FILE.items()}, inplace=True
+    )
+
+    missing_years = []
+    missing_modes = []
+    gc_params = {}
+    for yr in years:
+        if yr not in data["year"].values:
+            missing_years.append(yr)
+            continue
+        yr_cond = data["year"] == yr
+        data_year = {}
+        for m in modes:
+            if m not in data.loc[yr_cond, "mode"].values:
+                missing_modes.append(f"{yr} - {m}")
+                continue
+            cond = yr_cond & (data["mode"] == m)
+            cols = ["vot"] if m == "rail" else ["vot", "voc"]
+            data_year[m] = dict(data.loc[cond, cols].iloc[0])
+        gc_params[yr] = data_year
+
+    msg = ""
+    if missing_years:
+        msg += f"Years missing: {missing_years} "
+    if missing_modes:
+        msg += f"Year - mode pairs missing: {missing_modes}"
+    if msg != "":
+        raise ValueError(msg + f" from: {path.name}")
+    return gc_params
