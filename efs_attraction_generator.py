@@ -1726,7 +1726,8 @@ def build_attraction_imports(import_home: str,
 
     # Make sure all import paths exit
     for key, path in imports.items():
-        # TODO: DEMAND MERGE: Fix cross model inputs
+        # TODO: Fix cross model inputs
+        #  labels: demand merge
         if key == 'weights' and path is None:
             continue
 
