@@ -15,7 +15,7 @@ import pandas as pd
 
 # Local imports
 from demand_utilities.utils import zone_translation_df
-from zone_translator import translate_matrix
+from zone_translator import translate_matrix, square_to_list
 from elasticity_calcs.utils import COMMON_ZONE_SYSTEM
 
 
@@ -43,7 +43,9 @@ COST_LOOKUP = {
 
 ##### FUNCTIONS #####
 def _average_matrices(
-    matrices: Dict[str, np.array], expected: List[str], weights: np.array = None
+    matrices: Dict[str, np.array],
+    expected: List[str],
+    weights: np.array = None,
 ) -> Dict[str, float]:
     """Calculate the weighted average of expected matrices.
 
@@ -201,7 +203,9 @@ def gen_cost_rail_mins(
     KeyError
         If any of the expected matrices aren't provided.
     """
-    matrices = _check_matrices(matrices, ["walk", "wait", "ride", "fare", "num_int"])
+    matrices = _check_matrices(
+        matrices, ["walk", "wait", "ride", "fare", "num_int"]
+    )
 
     # Multply matrices by given (or default) weighting factors
     factors = RAIL_GC_FACTORS if factors is None else factors
@@ -210,7 +214,9 @@ def gen_cost_rail_mins(
         matrices[nm] = matrices[nm] * fac
 
     nm = "interchange_penalty"
-    inter_factor = RAIL_GC_FACTORS[nm] if nm not in factors.keys() else factors[nm]
+    inter_factor = (
+        RAIL_GC_FACTORS[nm] if nm not in factors.keys() else factors[nm]
+    )
     return (
         matrices["walk"]
         + matrices["wait"]
@@ -257,7 +263,11 @@ def gen_cost_elasticity_mins(
 
 
 def get_costs(
-    cost_file: Path, mode: str, zone_system: str, zone_translation_folder: Path
+    cost_file: Path,
+    mode: str,
+    zone_system: str,
+    zone_translation_folder: Path,
+    demand: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """Reads the given cost file, expected columns are in `COST_LOOKUP`.
 
@@ -272,6 +282,10 @@ def get_costs(
         to the `COMMON_ZONE_SYSTEM` if required.
     zone_translation_folder : Path
         Path to the folder containing the zone translation lookups.
+    demand : pd.DataFrame, optional
+        Relevant demand matrix (square format) for calculating
+        weight average cost when converting between zone systems,
+        only required if `zone_system` != `COMMON_ZONE_SYSTEM`.
 
     Returns
     -------
@@ -290,21 +304,29 @@ def get_costs(
         loc = str(e).find("columns expected")
         e_str = str(e)[loc:] if loc != -1 else str(e)
         raise ValueError(f"Columns missing from {mode} cost, {e_str}") from e
-    costs.rename(columns={v: k for k, v in COST_LOOKUP[mode].items()}, inplace=True)
+    costs.rename(
+        columns={v: k for k, v in COST_LOOKUP[mode].items()}, inplace=True
+    )
 
-    # TODO Cost translation should be demand weighted average
     # Convert zone system if required
     if zone_system != COMMON_ZONE_SYSTEM:
         lookup = zone_translation_df(
             zone_translation_folder, zone_system, COMMON_ZONE_SYSTEM
         )
+        if not isinstance(demand, pd.DataFrame):
+            raise TypeError(
+                f"'demand' is '{type(demand).__name__}', expected 'DataFrame'"
+            )
         costs, _ = translate_matrix(
             costs,
             lookup,
             [f"{zone_system}_zone_id", f"{COMMON_ZONE_SYSTEM}_zone_id"],
             square_format=False,
             zone_cols=["origin", "destination"],
+            aggregation_method="weighted_average",
+            weights=square_to_list(demand),
         )
+
     # Convert origin/destination columns to integers
     for c in ("origin", "destination"):
         costs[c] = pd.to_numeric(costs[c], downcast="integer")
@@ -339,7 +361,10 @@ def gen_cost_mode(
         )
     elif mode == "rail":
         gc = gen_cost_rail_mins(
-            {i: cost_to_array(i) for i in ("walk", "wait", "ride", "fare", "num_int")},
+            {
+                i: cost_to_array(i)
+                for i in ("walk", "wait", "ride", "fare", "num_int")
+            },
             **kwargs,
         )
     else:
@@ -348,7 +373,8 @@ def gen_cost_mode(
 
 
 def calculate_gen_costs(
-    costs: Dict[str, Union[pd.DataFrame, float]], gc_params: Dict[str, Dict[str, float]]
+    costs: Dict[str, Union[pd.DataFrame, float]],
+    gc_params: Dict[str, Dict[str, float]],
 ) -> Dict[str, Union[np.array, float]]:
     """Calculate the generalised costs for rail, car, bus, active and no-travel.
 

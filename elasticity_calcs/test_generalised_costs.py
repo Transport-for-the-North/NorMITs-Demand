@@ -37,18 +37,25 @@ class TestAverageMatrices:
         """Test that the correct error is raised if matrices are missing when calling. """
         with pytest.raises(KeyError) as e:
             _average_matrices({"test": np.zeros((3, 3))}, ["test", "test2"])
-        assert e.value.args[0] == "The following matrices are missing: ['test2']"
+        msg = "The following matrices are missing: ['test2']"
+        assert e.value.args[0] == msg
 
     @pytest.mark.parametrize(
         "weights,answer",
-        [(None, 54), (np.full((3, 3), 1.0), 54), (WEIGHTS, 47.453917050691246)],
+        [
+            (None, 54),
+            (np.full((3, 3), 1.0), 54),
+            (WEIGHTS, 47.453917050691246),
+        ],
     )
     def test_average(self, weights: np.array, answer: float):
         """Test the `_average_matrices` function calculates averages correctly.
 
         Tests for weighted and non-weighted averages.
         """
-        averages = _average_matrices({"test": self.MATRIX}, ["test"], weights=weights)
+        averages = _average_matrices(
+            {"test": self.MATRIX}, ["test"], weights=weights
+        )
         assert averages == {"test": answer}
 
 
@@ -60,14 +67,16 @@ class TestCheckMatrices:
         """Test that the correct error is raised when matrices are missing. """
         with pytest.raises(KeyError) as e:
             _check_matrices({"test": np.zeros((2, 2))}, ["test", "test2"])
-        assert e.value.args[0] == "The following matrices are missing: ['test2']"
+        msg = "The following matrices are missing: ['test2']"
+        assert e.value.args[0] == msg
 
     @staticmethod
     def test_different_shapes():
         """Test that the correct error is raised when matrices are different shapes. """
         with pytest.raises(ValueError) as e:
             _check_matrices(
-                {"test": np.zeros((2, 2)), "test2": np.zeros((3, 3))}, ["test", "test2"]
+                {"test": np.zeros((2, 2)), "test2": np.zeros((3, 3))},
+                ["test", "test2"],
             )
         msg = "Matrices are not all the same shape: test = (2, 2), test2 = (3, 3)"
         assert e.value.args[0] == msg
@@ -86,7 +95,8 @@ class TestGenCostCarMins:
         """Test that the correct error is raised if matrices are missing. """
         with pytest.raises(KeyError) as e:
             gen_cost_car_mins({"time": self.TIME_MAT}, self.VC, self.VT)
-        assert e.value.args[0] == "The following matrices are missing: ['dist', 'toll']"
+        msg = "The following matrices are missing: ['dist', 'toll']"
+        assert e.value.args[0] == msg
 
     def test_different_shapes(self):
         """Test that the correct error is raised if matrices aren't the same shape. """
@@ -109,7 +119,11 @@ class TestGenCostCarMins:
     def test_calculation(self):
         """Test that the calculation produces the correct values. """
         test = gen_cost_car_mins(
-            {"time": self.TIME_MAT, "dist": self.DIST_MAT, "toll": self.TOLL_MAT},
+            {
+                "time": self.TIME_MAT,
+                "dist": self.DIST_MAT,
+                "toll": self.TOLL_MAT,
+            },
             self.VC,
             self.VT,
         )
@@ -219,7 +233,12 @@ class TestGetCosts:
         ),
     }
     COSTS["missing_car"] = COSTS["car"].drop(columns="toll")
-    NOHAM_2_NORMS = pd.DataFrame({"noham_zone_id": [1, 2], "norms_zone_id": [1, 1]})
+    NOHAM_2_NORMS = pd.DataFrame(
+        {"noham_zone_id": [1, 2], "norms_zone_id": [1, 1]}
+    )
+    NOHAM_DEMAND = pd.DataFrame(
+        np.full((2, 2), 10.0), columns=[1, 2], index=[1, 2]
+    )
     # Both costs are renamed and car is rezoned
     CONVERTED_COSTS = {
         "car": pd.DataFrame(
@@ -245,8 +264,8 @@ class TestGetCosts:
     }
 
     @pytest.fixture(name="costs", scope="class")
-    def fixture_costs(self, tmp_path_factory) -> Tuple[Dict[str, Path], Path]:
-        """Create temporary test folder containing cost files and lookups.
+    def fixture_costs(self, tmp_path_factory) -> Dict[str, Path]:
+        """Create temporary test folder containing cost files.
 
         Parameters
         ----------
@@ -270,7 +289,9 @@ class TestGetCosts:
         self.NOHAM_2_NORMS.to_csv(lookup_file, index=False)
         return paths, folder
 
-    @pytest.mark.parametrize("mode, zone_system", [("car", "noham"), ("rail", "norms")])
+    @pytest.mark.parametrize(
+        "mode, zone_system", [("car", "noham"), ("rail", "norms")]
+    )
     def test_read(
         self, costs: Tuple[Dict[str, Path], Path], mode: str, zone_system: str
     ):
@@ -283,10 +304,15 @@ class TestGetCosts:
         mode : str
             Which mode to test, either car or rail.
         """
+        test = get_costs(
+            costs[0][mode],
+            mode,
+            zone_system,
+            costs[1],
+            self.NOHAM_DEMAND,
+        )
         pd.testing.assert_frame_equal(
-            get_costs(costs[0][mode], mode, zone_system, costs[1]),
-            self.CONVERTED_COSTS[mode],
-            check_dtype=False,
+            test, self.CONVERTED_COSTS[mode], check_dtype=False
         )
 
     @staticmethod
@@ -304,7 +330,7 @@ class TestGetCosts:
         assert e.value.args[0] == msg
 
 
-class TestGenCostMode: # TODO Implement tests for gen_cost_mode
+class TestGenCostMode:  # TODO Implement tests for gen_cost_mode
     """Tests for the `gen_cost_mode` function."""
 
     @staticmethod
@@ -313,7 +339,7 @@ class TestGenCostMode: # TODO Implement tests for gen_cost_mode
         pass
 
 
-class TestCalculateGenCosts: # TODO implement tests for calculate_gen_costs
+class TestCalculateGenCosts:  # TODO implement tests for calculate_gen_costs
     """Tests for the `calculate_gen_costs` function."""
 
     @staticmethod
@@ -324,7 +350,8 @@ class TestCalculateGenCosts: # TODO implement tests for calculate_gen_costs
 
 ##### FUNCTIONS #####
 @pytest.mark.parametrize(
-    "cost_factor,answer", [(None, 0.26649522280649446), (2.0, 0.13324761140324723)]
+    "cost_factor,answer",
+    [(None, 0.26649522280649446), (2.0, 0.13324761140324723)],
 )
 def test_gen_cost_elasticity_mins(cost_factor: float, answer: float):
     """Test that the `gen_cost_elasticity_mins` calulation is correct with various factors. """

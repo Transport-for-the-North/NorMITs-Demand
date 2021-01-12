@@ -10,7 +10,6 @@ from typing import List, Tuple
 import pandas as pd
 import numpy as np
 
-from demand_utilities.utils import zone_translation_df
 
 
 class ZoneTranslator:
@@ -142,6 +141,8 @@ def translate_matrix(
     square_format: bool = True,
     zone_cols: Tuple[str, str] = None,
     split_column: str = None,
+    aggregation_method: str = "sum",
+    weights: pd.DataFrame = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Convert a matrix to a new zone system using given lookup.
 
@@ -168,6 +169,12 @@ def translate_matrix(
         format matrices, by default None
     split_column : str, optional
         Name of the split column in the lookup, by default None
+    aggregation_method : str, optional
+        Name of the aggregation method to use, default "sum".
+    weights : pd.DataFrame, optional
+        Weights for "weighted_average" aggregation method,
+        default None. The format should be [o, d, value]
+        or square format if `square_format` is true.
 
     Returns
     -------
@@ -177,13 +184,26 @@ def translate_matrix(
         Matrix of splitting factors for converting back to the old zone
         system.
     """
+    avg_method = "weighted_average"
+    agg_methods = ["sum", "mean", avg_method]
+    if aggregation_method == avg_method and not isinstance(
+        weights, pd.DataFrame
+    ):
+        raise ValueError(
+            f"'weights' should be 'DataFrame' when 'weighted_average' "
+            f"is chosen not '{type(weights).__name__}'"
+        )
+    if aggregation_method not in agg_methods:
+        raise ValueError(
+            "'aggregation_method' should be one of "
+            f"{agg_methods}, not '{aggregation_method}'"
+        )
+
     level_names = [matrix.columns.name, matrix.index.name]
     # Make sure the matrix is in list format
     if square_format:
         matrix_total = np.sum(matrix.values)
-        matrix = matrix.melt(ignore_index=False, var_name="d")
-        matrix.index.name = "o"
-        matrix.reset_index(inplace=True)
+        matrix = square_to_list(matrix)
         splitting_cols = ["value"]
     else:
         original_columns = matrix.columns.tolist()
@@ -198,6 +218,39 @@ def translate_matrix(
         lookup[split_column] = 1.0
     lookup, lookup_cols = _lookup_matrix(lookup, lookup_cols, split_column)
 
+    if aggregation_method == avg_method:
+        if square_format:
+            weights = square_to_list(weights)
+        weights = weights.loc[:, [*zone_cols, "value"]].rename(
+            columns={"value": "weights"}
+        )
+        if len(weights) != len(matrix):
+            raise ValueError("'weights' and 'matrix' are not the same lengths")
+        # Calculate splitting factor based on weights
+        lookup = lookup.merge(
+            weights,
+            left_on=lookup_cols[:2],
+            right_on=zone_cols,
+            how="left",
+            validate="m:1",
+        )
+        lookup.drop(columns=zone_cols, inplace=True)
+        totals = (
+            lookup[lookup_cols[:2] + ["weights"]]
+            .groupby(lookup_cols[:2], as_index=False)
+            .sum()
+        )
+        lookup = lookup.merge(
+            totals,
+            on=lookup_cols[:2],
+            how="left",
+            validate="m:1",
+            suffixes=("", "_total"),
+        )
+        del totals
+        lookup["split"] = lookup["weights"] / lookup["weights_total"]
+        lookup.drop(columns=["weights", "weights_total"], inplace=True)
+
     # Convert both columns to new zone system
     matrix = matrix.merge(
         lookup,
@@ -209,10 +262,12 @@ def translate_matrix(
     for s in splitting_cols:
         matrix[s] = matrix[s] * matrix[split_column]
     reverse = matrix.copy()
+    if aggregation_method == avg_method:
+        aggregation_method = "sum"
     matrix = (
         matrix[lookup_cols[2:] + list(splitting_cols)]
         .groupby(lookup_cols[2:], as_index=False)
-        .sum()
+        .agg(aggregation_method)
     )
 
     # Calculating splitting factors for reversing translation
@@ -224,7 +279,7 @@ def translate_matrix(
         suffixes=("", "_total"),
     )
     for s in splitting_cols:
-        reverse[f"split"] = reverse[f"{s}"] / reverse[f"{s}_total"]
+        reverse["split"] = reverse[f"{s}"] / reverse[f"{s}_total"]
 
     # Convert back to input format and reset column/index names
     matrix = matrix.rename(columns=dict(zip(lookup_cols[2:], zone_cols)))
@@ -297,3 +352,23 @@ def _lookup_matrix(
     matrix[split] = matrix[f"{split}-{od[0]}"] * matrix[f"{split}-{od[1]}"]
     cols = [f"{c}-{d}" for c in lookup_cols for d in od]
     return matrix[cols + [split]], cols
+
+
+def square_to_list(matrix: pd.DataFrame) -> pd.DataFrame:
+    """Converts square matrix to list format.
+
+    Parameters
+    ----------
+    matrix : pd.DataFrame
+        Matrix in square format.
+
+    Returns
+    -------
+    pd.DataFrame
+        Matrix in list format with the following
+        columns: o, d, value
+    """
+    matrix = matrix.melt(ignore_index=False, var_name="d")
+    matrix.index.name = "o"
+    matrix.reset_index(inplace=True)
+    return matrix
