@@ -146,6 +146,11 @@ class ElasticityModel:
             )
 
     def apply_all(self):
+        """Performs elasticity calculations for all segments provided.
+
+        Segment information is read from `SEGMENTS_FILE` which is
+        expected to be found in elasticity folder given.
+        """
         segments = read_segments_file(self.elasticity_folder / SEGMENTS_FILE)
         gc_params = read_gc_parameters(
             self.input_files["gc_parameters"], self.years, list(MODE_ID.keys())
@@ -195,6 +200,44 @@ class ElasticityModel:
         gc_params: Dict[str, Dict[str, float]],
         cost_changes: pd.DataFrame,
     ) -> Dict[str, pd.DataFrame]:
+        """Performs elasticity calculation for a single EFS segment.
+
+        Parameters
+        ----------
+        demand_params : Dict[str, str]
+            Parameters to define what demand matrix to
+            use expected format:
+            {
+                "trip_origin": "hb",
+                "matrix_format": "pa",
+                "year": "2018",
+                "purpose": "1",
+                "segment": "1",
+            }
+        elasticity_params : Dict[str, str]
+            Parameters to define what elasticity values to
+            use, expected format:
+            {
+                "purpose": "Commuting",
+                "market_share": "CarToRail_Moderate",
+            }
+        gc_params : Dict[str, Dict[str, float]]
+            Parameters used in the generlised cost calculations,
+            expected format:
+            {
+                "car": {"vt": 16.2, "vc": 9.45},
+                "rail": {"vt": 16.4},
+            }
+        cost_changes : pd.DataFrame
+            The cost changes to be applied to be applied,
+            expects the following columns: elasticity_type,
+            constraint_matrix_name and percentage_change.
+
+        Returns
+        -------
+        Dict[str, pd.DataFrame]
+            The adjusted demand for all modes.
+        """
         elasticities = read_elasticity_file(
             self.elasticity_folder / ELASTICITIES_FILE, **elasticity_params
         )
@@ -481,6 +524,45 @@ def calculate_adjustment(
     cost_change: float,
     gc_params: Dict[str, Dict[str, float]],
 ) -> Dict[str, np.array]:
+    """Calculate the demand adjustment for a single cost change.
+
+    Parameters
+    ----------
+    base_demand : Dict[str, pd.DataFrame]
+        Base demand for all modes, with key being the
+        mode name.
+    base_costs : Dict[str, pd.DataFrame]
+        Base costs for all modes, with key being the
+        mode name.
+    base_gc : Dict[str, pd.DataFrame]
+        Base generalised cost for all modes.
+    elasticities : pd.DataFrame
+        Elasticity values for all mode combinations.
+    elasticity_type : str
+        The name of the elasticity cost change being
+        applied.
+    cost_constraint : np.array
+        An array to define where the cost is applied,
+        should be the same shape as `base_demand`.
+    cost_change : float
+        The percentage cost change being applied.
+    gc_params : Dict[str, Dict[str, float]]
+        The parameters used in the generlised cost
+        calculations, there should be one set of
+        values per mode.
+
+    Returns
+    -------
+    Dict[str, np.array]
+        The `base_demand` matrices after the
+        elasticity calculation has been applied.
+
+    Raises
+    ------
+    KeyError
+        If an `elasticity_type` not present in the
+        `GC_ELASTICITY_TYPES` lookup is given.
+    """
     if elasticity_type not in GC_ELASTICITY_TYPES:
         raise KeyError(
             f"Unknown elasticity_type: '{elasticity_type}', "
