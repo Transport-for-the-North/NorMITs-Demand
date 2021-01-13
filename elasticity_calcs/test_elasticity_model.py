@@ -7,7 +7,7 @@
 # Standard imports
 import shutil
 from pathlib import Path
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 
 # Third party imports
 import numpy as np
@@ -15,7 +15,11 @@ import pandas as pd
 import pytest
 
 # Local imports
-from .elasticity_model import ElasticityModel
+from .elasticity_model import (
+    ElasticityModel,
+    read_cost_changes,
+    GC_ELASTICITY_TYPES,
+)
 from .generalised_costs import read_gc_parameters
 
 
@@ -44,7 +48,8 @@ RAIL_COSTS = pd.DataFrame(
 )
 CAR_DEMAND = pd.DataFrame(1, columns=CAR_ZONES, index=CAR_ZONES)
 RAIL_DEMAND = pd.DataFrame(1, columns=RAIL_ZONES, index=RAIL_ZONES)
-CONSTRAINT = np.full_like(RAIL_DEMAND.values, 1)
+CONSTRAINT_ALL = ("all_trips", np.full_like(RAIL_DEMAND.values, 1))
+CONSTRAINT_ZEROS = ("no_trips", np.zeros_like(RAIL_DEMAND.values))
 ELASTICITIES_FILE = (
     Path(__file__).parent / "test_elastcities_commuting_moderate.csv"
 )
@@ -64,6 +69,23 @@ OTHER_ANSWER = pd.DataFrame(
             0.946596709199525,
             1.43053565783266,
         ],
+    }
+)
+COST_CHANGES = pd.DataFrame(
+    {
+        "year": "2018",
+        "elasticity_type": [
+            "Car_JourneyTime",
+            "Car_JourneyTime",
+            "Car_FuelCost",
+            "Rail_Fare",
+            "Rail_IVTT",
+            "Bus_Fare",
+            "Bus_IVTT",
+            "Car_RUC",
+        ],
+        "constraint_matrix_name": ["no_trips"] + ["all_trips"] * 7,
+        "percentage_change": [10, 0.8, 1.2, 0.8, 0.8, 0.8, 0.8, 1.2],
     }
 )
 
@@ -110,7 +132,7 @@ class TestElasticityModel:
 
     @pytest.fixture(name="folders", scope="class")
     def fixture_folders(
-        self, tmp_path_factory: Path
+        self, tmp_path_factory: Path, cost_changes: Path
     ) -> Tuple[Dict[str, Path], Dict[str, Path], Path]:
         """Creates input files in temp folder for testing."""
         folders = [
@@ -129,11 +151,13 @@ class TestElasticityModel:
         )
         constraint_folder = input_folders["elasticity"] / "constraint_matrices"
         constraint_folder.mkdir()
-        np.savetxt(
-            constraint_folder / "all_trips.csv", CONSTRAINT, delimiter=","
-        )
+        for nm, df in (CONSTRAINT_ALL, CONSTRAINT_ZEROS):
+            np.savetxt(constraint_folder / f"{nm}.csv", df, delimiter=",")
         # Demand files
-        base_demand = "{trip_origin}_{matrix_format}_yr{year}_p{purpose}_m{mode}_soc{segment}"
+        base_demand = (
+            "{trip_origin}_{matrix_format}_yr{year}"
+            "_p{purpose}_m{mode}_soc{segment}"
+        )
         CAR_DEMAND.to_csv(
             input_folders["car_demand"]
             / (base_demand.format(**self.DEMAND_PARAMS, mode=1) + ".csv")
@@ -163,6 +187,8 @@ class TestElasticityModel:
         input_files["gc_parameters"] = folder / "gc_parameters.csv"
         self.GC_PARAMETERS.to_csv(input_files["gc_parameters"], index=False)
 
+        input_files["cost_changes"] = cost_changes
+
         output_folder = tmp_path_factory.mktemp("outputs")
         return input_folders, input_files, output_folder
 
@@ -176,7 +202,10 @@ class TestElasticityModel:
             folders[1]["gc_parameters"], YEARS, ["car", "rail"]
         )
         return elast_model.apply_elasticities(
-            self.DEMAND_PARAMS, self.ELASTICITY_PARAMS, gc_params[YEARS[0]]
+            self.DEMAND_PARAMS,
+            self.ELASTICITY_PARAMS,
+            gc_params[YEARS[0]],
+            read_cost_changes(folders[1]["cost_changes"], YEARS),
         )
 
     @pytest.mark.parametrize("mode,answer", APPLY_ELASTICITIES_RETURNS)
@@ -223,3 +252,50 @@ class TestElasticityModel:
             pd.testing.assert_frame_equal(
                 answer, out, check_dtype=False, atol=self.CHECK_TOLERANCE
             )
+
+
+##### FUNCTIONS #####
+@pytest.fixture(name="cost_changes", scope="module")
+def fixture_cost_changes(tmp_path_factory: Path) -> Path:
+    """Write cost changes test file.
+
+    Parameters
+    ----------
+    tmp_path_factory : Path
+        Temporary path provided by pytest.
+
+    Returns
+    -------
+    Path
+        Path to the cost changes CSV file.
+    """
+    folder = tmp_path_factory.mktemp("cost_changes")
+    path = folder / "cost_changes.csv"
+    COST_CHANGES.to_csv(path, index=False)
+    return path
+
+
+@pytest.mark.parametrize("years", (["2018"], ["2018", "2019"]))
+@pytest.mark.parametrize("missing_type", (True, False))
+def test_read_cost_changes(
+    monkeypatch, cost_changes: Path, years: List[str], missing_type: bool
+):
+    """Test that `read_cost_changes` reads the file and performs checks."""
+    if missing_type:
+        monkeypatch.delitem(GC_ELASTICITY_TYPES, "Car_RUC")
+        with pytest.raises(KeyError) as e:
+            read_cost_changes(cost_changes, years)
+        msg = (
+            "Unknown elasticity_type: ['Car_RUC'], available types "
+            "are: ['Car_JourneyTime', 'Car_FuelCost', 'Rail_Fare', "
+            "'Rail_IVTT', 'Bus_Fare', 'Bus_IVTT']"
+        )
+        assert e.value.args[0] == msg, "Unknown elasticity type"
+    elif years != ["2018"]:
+        with pytest.raises(ValueError) as e:
+            read_cost_changes(cost_changes, years)
+        msg = "Cost change not present for years: ['2019']"
+        assert e.value.args[0] == msg, "Missing year data"
+    else:
+        data = read_cost_changes(cost_changes, years)
+        pd.testing.assert_frame_equal(data, COST_CHANGES)

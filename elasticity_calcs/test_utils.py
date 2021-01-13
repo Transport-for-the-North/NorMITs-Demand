@@ -66,7 +66,6 @@ ELASTICITY_DATA = {
         -0.3,
         0.06,
     ],
-    "CstrMatrixName": ["all_trips"] * 11,
 }
 
 

@@ -97,7 +97,6 @@ def read_elasticity_file(
         "AffectedMode": str,
         "ModeCostChg": str,
         "OwnElast": "float32",
-        "CstrMatrixName": str,
     }
     if isinstance(data, pd.DataFrame):
         df = data.copy()[dtypes.keys()]

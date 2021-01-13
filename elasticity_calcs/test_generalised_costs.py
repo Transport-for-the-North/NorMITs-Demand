@@ -421,7 +421,6 @@ class TestReadGCParameters:
             "Years missing: ['2030'] Year - mode pairs missing: "
             "['2018 - rail'] from: missing_gc_params.csv"
         )
-        print(repr(str(e.value.args[0])))
         assert e.value.args[0] == msg, "Missing GC parameters file"
 
 
