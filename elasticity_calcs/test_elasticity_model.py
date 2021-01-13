@@ -104,6 +104,21 @@ class TestElasticityModel:
         "purpose": "1",
         "segment": "1",
     }
+    ELASTICITY_SEGMENTS = pd.DataFrame(
+        {
+            "EFS_Seg": 1,
+            "EFS_PurpBase": "hb",
+            "EFS_MainPurp": "hb_w",
+            "EFS_SubPurp": "commute",
+            "EFS_SubPurpID": 1,
+            "EFS_TimePeriod": "24hr",
+            "EFS_SkillLevel": 1,
+            "EFS_IncLevel": None,
+            "Elast_Purp": "Commuting",
+            "Elast_MarketShare": "CarToRail_Moderate",
+        },
+        index=[0],
+    )
     GC_PARAMETERS = pd.DataFrame(
         {
             "year": ["2018", "2018"],
@@ -148,6 +163,9 @@ class TestElasticityModel:
         shutil.copy(
             ELASTICITIES_FILE,
             input_folders["elasticity"] / "elasticity_values.csv",
+        )
+        self.ELASTICITY_SEGMENTS.to_csv(
+            input_folders["elasticity"] / "elasticity_segments.csv"
         )
         constraint_folder = input_folders["elasticity"] / "constraint_matrices"
         constraint_folder.mkdir()
@@ -252,6 +270,32 @@ class TestElasticityModel:
             pd.testing.assert_frame_equal(
                 answer, out, check_dtype=False, atol=self.CHECK_TOLERANCE
             )
+
+    def test_apply_all(
+        self, folders: Tuple[Dict[str, Path], Dict[str, Path], Path]
+    ):
+        """Test `ElasticityModel.apply_all` method with a single segment."""
+        elast_model = ElasticityModel(*folders, YEARS)
+        elast_model.apply_all()
+
+        output_folders = {
+            "car": (1, CAR_ANSWER),
+            "rail": (2, RAIL_ANSWER),
+            "others": (1, OTHER_ANSWER),
+        }
+        for m, (num, ans) in output_folders.items():
+            out_files = list((folders[2] / m).iterdir())
+            assert len(out_files) == num, f"Wrong number of {m} output files"
+            for i in out_files:
+                col = 0 if m != "others" else None
+                test = pd.read_csv(i, index_col=col)
+                if m != "others":
+                    test.columns = pd.to_numeric(
+                        test.columns, downcast="integer"
+                    )
+                pd.testing.assert_frame_equal(
+                    test, ans, atol=self.CHECK_TOLERANCE
+                )
 
 
 ##### FUNCTIONS #####
