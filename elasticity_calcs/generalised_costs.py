@@ -43,8 +43,8 @@ COST_LOOKUP = {
 GC_PARAMETERS_FILE = {
     "year": ("year", str),
     "mode": ("mode", str),
-    "vot": ("vot", float),
-    "voc": ("voc", float),
+    "vt": ("vot", float),
+    "vc": ("voc", float),
 }
 
 
@@ -431,12 +431,12 @@ def read_gc_parameters(
         by years and mode e.g.
         {
             "2018": {
-                "car": {"vot": 16.2, "voc": 9.45},
-                "rail": {"vot": 16.4},
+                "car": {"vt": 16.2, "vc": 9.45},
+                "rail": {"vt": 16.4},
             },
             "2030": {
-                "car": {"vot": 17.2, "voc": 10.45},
-                "rail": {"vot": 17.4},
+                "car": {"vt": 17.2, "vc": 10.45},
+                "rail": {"vt": 17.4},
             },
         }
 
@@ -466,7 +466,7 @@ def read_gc_parameters(
                 missing_modes.append(f"{yr} - {m}")
                 continue
             cond = yr_cond & (data["mode"] == m)
-            cols = ["vot"] if m == "rail" else ["vot", "voc"]
+            cols = ["vt"] if m == "rail" else ["vt", "vc"]
             data_year[m] = dict(data.loc[cond, cols].iloc[0])
         gc_params[yr] = data_year
 

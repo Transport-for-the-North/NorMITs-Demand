@@ -29,6 +29,7 @@ from elasticity_calcs.generalised_costs import (
     gen_cost_mode,
     calculate_gen_costs,
     gen_cost_elasticity_mins,
+    read_gc_parameters,
 )
 from zone_translator import square_to_list
 
@@ -65,10 +66,11 @@ class ElasticityModel:
     def __init__(
         self,
         input_folders: Dict[str, Path],
+        input_files: Dict[str, Path],
         output_folder: Path,
         output_years: List[int],
     ):
-        self._check_folders(
+        self._check_paths(
             input_folders,
             (
                 "elasticity",
@@ -79,6 +81,9 @@ class ElasticityModel:
                 "car_costs",
             ),
         )
+        # TODO add cost changes file requirement to input_files
+        self._check_paths(input_files, ("gc_parameters",), "file")
+        self.input_files = input_files
 
         self.elasticity_folder = input_folders["elasticity"]
         self.zone_translation_folder = input_folders["translation"]
@@ -91,15 +96,21 @@ class ElasticityModel:
         self.years = output_years
 
     @staticmethod
-    def _check_folders(folders: Dict[str, Path], expected: List[str]):
-        """Check if expected folders are given and exist.
+    def _check_paths(
+        paths: Dict[str, Path], expected: List[str], path_type: str = "folder"
+    ):
+        """Check if expected paths are given and exist.
 
         Parameters
         ----------
-        folders : Dict[str, Path]
-            Dictionary containing paths to the expected folders.
+        paths : Dict[str, Path]
+            Dictionary containing paths to the expected folders
+            (or files).
         expected : List[str]
-            List of expected keys in the `folders` dictionary.
+            List of expected keys in the `paths` dictionary.
+        path_type : str, optional
+            Type of paths being provided either 'folder' (default)
+            or 'file'.
 
         Raises
         ------
@@ -108,21 +119,36 @@ class ElasticityModel:
         FileNotFoundError
             If any of the paths in `folders` aren't directories.
         """
+        path_type = path_type.lower()
+        if path_type == "folder":
+            check = lambda p: p.is_dir()
+        elif path_type == "file":
+            check = lambda p: p.is_file()
+        else:
+            raise ValueError(
+                f"path_type should be 'folder' or 'file' not '{path_type}'"
+            )
+
         missing = []
         not_dir = {}
         for i in expected:
-            if i not in folders.keys():
+            if i not in paths.keys():
                 missing.append(i)
                 continue
-            if not folders[i].is_dir():
-                not_dir[i] = folders[i]
+            if not check(paths[i]):
+                not_dir[i] = paths[i]
         if missing:
-            raise KeyError(f"Missing input folders: {missing}")
+            raise KeyError(f"Missing input {path_type}s: {missing}")
         if not_dir:
-            raise FileNotFoundError(f"Folders could not be found: {not_dir}")
+            raise FileNotFoundError(
+                f"{path_type.capitalize()}s could not be found: {not_dir}"
+            )
 
     def apply_all(self):
         segments = read_segments_file(self.elasticity_folder / SEGMENTS_FILE)
+        gc_params = read_gc_parameters(
+            self.input_files["gc_parameters"], self.years, list(MODE_ID.keys())
+        )
         # Redirect stdout and stderr to tqdm
         with std_out_err_redirect_tqdm() as orig_stdout:
             pbar = tqdm(
@@ -149,12 +175,17 @@ class ElasticityModel:
                     else:
                         seg = row["EFS_IncLevel"]
                     demand_params["segment"] = f"{seg:.0f}"
-                    self.apply_elasticities(demand_params, elasticity_params)
+                    self.apply_elasticities(
+                        demand_params, elasticity_params, gc_params[yr]
+                    )
                     pbar.update(1)
             pbar.close()
 
     def apply_elasticities(
-        self, demand_params: Dict[str, str], elasticity_params: Dict[str, str]
+        self,
+        demand_params: Dict[str, str],
+        elasticity_params: Dict[str, str],
+        gc_params: Dict[str, Dict[str, float]],
     ) -> Dict[str, pd.DataFrame]:
         elasticities = read_elasticity_file(
             self.elasticity_folder / ELASTICITIES_FILE, **elasticity_params
@@ -173,8 +204,6 @@ class ElasticityModel:
             demand_params["purpose"], {"car": car_original}
         )
         del car_original
-        # TODO Generalised costs parameters VT/VC should be read from an input
-        gc_params = {"car": {"vt": 16.58, "vc": 9.45}, "rail": {"vt": 16.6}}
         base_gc = calculate_gen_costs(base_costs, gc_params)
 
         # Loop through elasticity types and calculate demand adjustment

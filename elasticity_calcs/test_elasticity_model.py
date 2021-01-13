@@ -16,6 +16,7 @@ import pytest
 
 # Local imports
 from .elasticity_model import ElasticityModel
+from .generalised_costs import read_gc_parameters
 
 
 ##### CONSTANTS #####
@@ -81,6 +82,14 @@ class TestElasticityModel:
         "purpose": "1",
         "segment": "1",
     }
+    GC_PARAMETERS = pd.DataFrame(
+        {
+            "year": ["2018", "2018"],
+            "mode": ["car", "rail"],
+            "vot": [16.58, 16.6],
+            "voc": [9.45, np.nan],
+        }
+    )
     APPLY_ELASTICITIES_RETURNS = [
         ("car", CAR_ANSWER),
         ("ca1", RAIL_ANSWER),
@@ -100,7 +109,9 @@ class TestElasticityModel:
     CHECK_TOLERANCE = 1e-4
 
     @pytest.fixture(name="folders", scope="class")
-    def fixture_folders(self, tmp_path_factory: Path) -> Tuple[Path, Path]:
+    def fixture_folders(
+        self, tmp_path_factory: Path
+    ) -> Tuple[Dict[str, Path], Dict[str, Path], Path]:
         """Creates input files in temp folder for testing."""
         folders = [
             "elasticity",
@@ -146,17 +157,26 @@ class TestElasticityModel:
             input_folders["translation"] / lookup_file, index=False
         )
 
+        input_files = {}
+        folder = tmp_path_factory.mktemp("input_files")
+        # GC parameters file
+        input_files["gc_parameters"] = folder / "gc_parameters.csv"
+        self.GC_PARAMETERS.to_csv(input_files["gc_parameters"], index=False)
+
         output_folder = tmp_path_factory.mktemp("outputs")
-        return input_folders, output_folder
+        return input_folders, input_files, output_folder
 
     @pytest.fixture(name="output_demand", scope="class")
     def fixture_output_demand(
-        self, folders: Tuple[Path, Path]
+        self, folders: Tuple[Dict[str, Path], Dict[str, Path], Path]
     ) -> Dict[str, pd.DataFrame]:
         """Returns outputs from `ElasticityModel.apply_elasticities` for multiple tests."""
         elast_model = ElasticityModel(*folders, YEARS)
+        gc_params = read_gc_parameters(
+            folders[1]["gc_parameters"], YEARS, ["car", "rail"]
+        )
         return elast_model.apply_elasticities(
-            self.DEMAND_PARAMS, self.ELASTICITY_PARAMS
+            self.DEMAND_PARAMS, self.ELASTICITY_PARAMS, gc_params[YEARS[0]]
         )
 
     @pytest.mark.parametrize("mode,answer", APPLY_ELASTICITIES_RETURNS)
@@ -190,7 +210,7 @@ class TestElasticityModel:
         answer: pd.DataFrame,
     ):
         """Tests if `ElasticityModel.apply_elasticities` produces correct files."""
-        _, output_folder = folders
+        _, _, output_folder = folders
         expected = 2 if mode == "rail" else 1
         out_files = list((output_folder / mode).iterdir())
         msg = f"{len(out_files)} output files produced, expected {expected}"

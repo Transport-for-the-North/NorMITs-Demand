@@ -362,12 +362,12 @@ class TestReadGCParameters:
     )
     PARAMS = {
         "2018": {
-            "car": {"vot": 16.2, "voc": 9.45},
-            "rail": {"vot": 16.4},
+            "car": {"vt": 16.2, "vc": 9.45},
+            "rail": {"vt": 16.4},
         },
         "2030": {
-            "car": {"vot": 17.2, "voc": 10.45},
-            "rail": {"vot": 17.4},
+            "car": {"vt": 17.2, "vc": 10.45},
+            "rail": {"vt": 17.4},
         },
     }
     YEARS = ["2018", "2030"]
