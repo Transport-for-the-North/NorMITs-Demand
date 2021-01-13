@@ -1788,7 +1788,7 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC00_NTEM
+    scenario = consts.SC04_UZC
     iter_num = 0
     import_home = "Y:/"
     export_home = "E:/"
