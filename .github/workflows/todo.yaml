@@ -22,6 +22,6 @@ jobs:
           BEFORE: ${{ github.event.before }}
           SHA: ${{ github.sha }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LABEL: "# TODO"
+          LABEL: "# BACKLOG"
           COMMENT_MARKER: "#"
         id: "todo"
