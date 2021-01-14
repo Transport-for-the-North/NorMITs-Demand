@@ -1,0 +1,15 @@
+[input_folders]
+elasticity = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\elasticities
+translation = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\translation
+rail_demand = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\rail demand
+car_demand = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\car demand
+rail_costs = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\rail costs
+car_costs = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\car costs
+
+[input_files]
+gc_parameters = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Inputs\gc_parameters-uzc.csv
+cost_changes = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Inputs\cost_changes-uzc.csv
+
+[other]
+output_folder = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\outputs
+years = 2018
