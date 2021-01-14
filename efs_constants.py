@@ -125,6 +125,9 @@ TAG_CERTAINTY_BOUNDS = {
 PRODS_FNAME = '%s_%s_productions.csv'
 ATTRS_FNAME = '%s_%s_attractions.csv'
 
+# Additive growth audit
+PRODS_AG_FNAME = '%s_%s_productions_additive_growth.csv'
+
 # zone_system
 POP_FNAME = '%s_population.csv'
 EMP_FNAME = '%s_employment.csv'
@@ -244,7 +247,7 @@ TFN_MSOA_SECTOR_LOOKUPS = {
 }
 
 # RUNNING CONSTANTS
-MODEL_NAME = 'noham'
+MODEL_NAME = 'norms'
 
 # YEARS
 BASE_YEAR = 2018

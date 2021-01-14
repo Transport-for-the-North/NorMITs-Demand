@@ -16,6 +16,7 @@ import pandas as pd
 from typing import List
 from typing import Dict
 from typing import Tuple
+from typing import Callable
 
 from functools import reduce
 
@@ -1784,52 +1785,22 @@ class NhbProductionModel:
             print('\n')
 
         # ## OPTIONALLY CONSTRAIN TO NTEM ## #
-        control_years = list()
-        if self.control_productions:
-            control_years.append(self.base_year)
-        if self.control_fy_productions:
-            control_years += self.future_years
+        lad_lookup_path = os.path.join(self.imports['lad_lookup'],
+                                       consts.DEFAULT_LAD_LOOKUP)
 
-        audits = list()
-        for year in control_years:
-            # Init Audit
-            year_audit = {'year': year}
-
-            # Setup paths
-            ntem_fname = consts.NTEM_CONTROL_FNAME % year
-            control_path = os.path.join(self.imports['ntem_control'], ntem_fname)
-            lad_lookup_path = os.path.join(self.imports['lad_lookup'],
-                                           consts.DEFAULT_LAD_LOOKUP)
-
-            # Read in control files
-            ntem_totals = pd.read_csv(control_path)
-            ntem_lad_lookup = pd.read_csv(lad_lookup_path)
-
-            print("\nPerforming NTEM constraint for %s..." % year)
-            nhb_prods, audit, _, = du.control_to_ntem(
-                nhb_prods,
-                ntem_totals,
-                ntem_lad_lookup,
-                group_cols=['p', 'm', 'tp'],
-                base_value_name=year,
-                ntem_value_name='Productions',
-                purpose='nhb'
-            )
-
-            # Update Audits for output
-            year_audit.update(audit)
-            audits.append(year_audit)
-
-        # Controlling to NTEM seems to change some of the column dtypes
-        nhb_prods['p'] = nhb_prods['p'].astype(int)
-        nhb_prods['m'] = nhb_prods['m'].astype(int)
-        nhb_prods['tp'] = nhb_prods['tp'].astype(int)
-
-        # Write the audit to disk
-        if len(audits) > 0:
-            fname = consts.PRODS_FNAME % ('msoa', 'nhb')
-            path = os.path.join(self.exports['audits'], fname)
-            pd.DataFrame(audits).to_csv(path, index=False)
+        nhb_prods = control_productions_to_ntem(
+            productions=nhb_prods,
+            trip_origin='nhb',
+            ntem_dir=self.imports['ntem_control'],
+            lad_lookup_path=lad_lookup_path,
+            base_year=self.base_year,
+            future_years=self.future_years,
+            control_base_year=self.control_productions,
+            control_future_years=self.control_fy_productions,
+            ntem_control_cols=['p', 'm', 'tp'],
+            ntem_control_dtypes=[int, int, int],
+            audit_dir=self.exports['audits']
+        )
 
         # Output productions before any aggregation
         if output_raw:
@@ -2494,11 +2465,37 @@ def control_productions_to_ntem(productions: pd.DataFrame,
                                 future_years: List[str] = None,
                                 control_base_year: bool = True,
                                 control_future_years: bool = True,
+                                ntem_control_cols: List[str] = None,
+                                ntem_control_dtypes: List[Callable] = None,
                                 audit_dir: str = None
                                 ) -> pd.DataFrame:
+    # TODO: Write control_productions_to_ntem() docs
+    # Set up default args
+    if ntem_control_cols is None:
+        ntem_control_cols = ['p', 'm']
+
+    if ntem_control_dtypes is None:
+        ntem_control_dtypes = [int, int]
+
     # Init
     future_years = list() if future_years is None else future_years
 
+    # Use sorting to avoid merge. Productions is a BIG DF
+    all_years = [base_year] + future_years
+    sort_cols = du.list_safe_remove(list(productions), all_years)
+    productions = productions.sort_values(sort_cols)
+
+    # Do we need to grow on top of a controlled base year?
+    perform_additive_growth = control_base_year and not control_future_years
+
+    # Get growth values over base
+    if perform_additive_growth:
+        growth_values = productions.copy()
+        for year in future_years:
+            growth_values[year] -= growth_values[base_year]
+        growth_values.drop(columns=[base_year], inplace=True)
+
+    # ## NTEM CONTROL YEARS ## #
     # Figure out which years to control
     control_years = list()
     if control_base_year:
@@ -2524,7 +2521,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
             productions,
             ntem_totals,
             ntem_lad_lookup,
-            group_cols=['p', 'm'],
+            group_cols=ntem_control_cols,
             base_value_name=year,
             ntem_value_name='Productions',
             purpose=trip_origin
@@ -2535,8 +2532,8 @@ def control_productions_to_ntem(productions: pd.DataFrame,
         audits.append(year_audit)
 
     # Controlling to NTEM seems to change some of the column dtypes
-    productions['p'] = productions['p'].astype(int)
-    productions['m'] = productions['m'].astype(int)
+    dtypes = {c: d for c, d in zip(ntem_control_cols, ntem_control_dtypes)}
+    productions = productions.astype(dtypes)
 
     # Write the audit to disk
     if len(audits) > 0 and audit_dir is not None:
@@ -2544,8 +2541,22 @@ def control_productions_to_ntem(productions: pd.DataFrame,
         path = os.path.join(audit_dir, fname)
         pd.DataFrame(audits).to_csv(path, index=False)
 
-    # TODO: This is where we change to additive growth if controlled in
-    #  base year and not future years
+    if not perform_additive_growth:
+        return productions
+
+    # ## ADD PRE CONTROL GROWTH BACK ON ## #
+    # Make sure post-control productions are in the correct order
+    productions = productions.sort_values(sort_cols)
+
+    # Add growth back on
+    for year in future_years:
+        productions[year] += growth_values[year]
+
+    # Output an audit of the growth values calculated
+    if audit_dir is not None:
+        fname = consts.PRODS_AG_FNAME % ('msoa', trip_origin)
+        path = os.path.join(audit_dir, fname)
+        pd.DataFrame(audits).to_csv(path, index=False)
 
     return productions
 

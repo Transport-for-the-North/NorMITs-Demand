@@ -29,7 +29,7 @@ def matrix_reporting(matrix_directory: str,
                      output_dir: str,
                      trip_origin: str,
                      matrix_format: str,
-                     segments_needed: dict = {},
+                     segments_needed: dict = None,
                      zone_file: str = None,
                      sectors_files: List[str] = None,
                      zones_name: str = "model",
@@ -55,6 +55,10 @@ def matrix_reporting(matrix_directory: str,
         where each is a list of the required segments
 
     """
+
+    # Init
+    if segments_needed is None:
+        segments_needed = dict()
 
     success = True
 
@@ -729,6 +733,7 @@ def main(param_file: str,
 
     output_dir = os.path.join(exports["reports"], params["output_dir"])
     zones_file = os.path.join(imports["zoning"], params["zones_file"])
+    # TODO: Comprehension should not be longer than one line
     sectors_files = {
         name: os.path.join(imports["zone_translation"], x)
         for name, x in zip(params["sectors_names"], params["sectors_files"])
@@ -781,7 +786,7 @@ if __name__ == "__main__":
     iter_num = 1
     import_home = "Y:/"
     export_home = "Y:/"
-    model_name = 'norms'
+    model_name = consts.MODEL_NAME
 
     efs_main = efs.ExternalForecastSystem(
         iter_num=iter_num,
@@ -795,14 +800,19 @@ if __name__ == "__main__":
     imports = efs_main.imports
     exports = efs_main.exports
 
+    # Home based PA
     pa_params = os.path.join(
         imports["default_inputs"],
-        "reports", "params", "pa.json"
+        "reports", "params", "hb_pa.json"
     )
     main(pa_params, imports, exports, model_name)
-    tp_pa_params = os.path.join(imports["default_inputs"],
-                                "reports", "params", "tp_pa.json")
-    main(tp_pa_params, imports, exports, model_name)
+
+    # TP split HB PA
+    # tp_pa_params = os.path.join(imports["default_inputs"],
+    #                             "reports", "params", "tp_hb_pa.json")
+    # main(tp_pa_params, imports, exports, model_name)
+
+    # NHB PA
     nhb_params = os.path.join(imports["default_inputs"],
                               "reports", "params", "nhb_pa.json")
     main(nhb_params, imports, exports, model_name)
