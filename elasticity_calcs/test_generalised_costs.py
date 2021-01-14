@@ -23,6 +23,8 @@ from .generalised_costs import (
     gen_cost_elasticity_mins,
     get_costs,
     read_gc_parameters,
+    calculate_gen_costs,
+    gen_cost_mode,
 )
 
 
@@ -331,22 +333,76 @@ class TestGetCosts:
         assert e.value.args[0] == msg
 
 
-class TestGenCostMode:  # TODO Implement tests for gen_cost_mode
-    """Tests for the `gen_cost_mode` function."""
+class TestGenCostMode:
+    """Tests for the `gen_cost_mode` and `calculate_gen_costs` functions."""
 
-    @staticmethod
-    @pytest.mark.skip(reason="Placeholder for `gen_cost_mode` test.")
-    def test_calculation():
-        pass
+    CAR_COSTS = pd.DataFrame(
+        {
+            "origin": 1,
+            "destination": 1,
+            "time": 3000,
+            "toll": 10,
+            "dist": 25000,
+        },
+        index=[0],
+    )
+    RAIL_COSTS = pd.DataFrame(
+        {
+            "origin": 1,
+            "destination": 1,
+            "walk": 5,
+            "fare": 420,
+            "ride": 30,
+            "wait": 10,
+            "num_int": 2,
+        },
+        index=[0],
+    )
+    OTHER_COSTS = 10
+    CAR_PARAMS = {"vt": 16.58, "vc": 9.45}
+    RAIL_PARAMS = {"vt": 16.6}
+    CAR_ANSWER = np.array([[64.853]])
+    RAIL_ANSWER = np.array([[92.801]])
+    PRECISION = 3
 
+    @pytest.mark.parametrize(
+        "costs,mode,params,answ",
+        [
+            (CAR_COSTS, "car", CAR_PARAMS, CAR_ANSWER),
+            (RAIL_COSTS, "rail", RAIL_PARAMS, RAIL_ANSWER),
+            (OTHER_COSTS, "other", {}, OTHER_COSTS),
+        ],
+    )
+    def test_gen_cost_mode(self, costs, mode, params, answ):
+        """Test the `gen_cost_mode` function."""
+        test = gen_cost_mode(costs, mode, **params)
+        msg = f"{mode.capitalize()} GC calculation"
+        if mode == "other":
+            assert test == answ, msg
+        else:
+            np.testing.assert_array_almost_equal(
+                test, answ, self.PRECISION, msg
+            )
 
-class TestCalculateGenCosts:  # TODO implement tests for calculate_gen_costs
-    """Tests for the `calculate_gen_costs` function."""
-
-    @staticmethod
-    @pytest.mark.skip(reason="Placeholder for the `calculate_gen_costs` test.")
-    def test_calculation():
-        pass
+    def test_calculate_gen_costs(self):
+        """Test the `calculate_gen_costs` function."""
+        costs = {
+            "car": self.CAR_COSTS,
+            "rail": self.RAIL_COSTS,
+            "other": self.OTHER_COSTS,
+        }
+        gc_params = {"car": self.CAR_PARAMS, "rail": self.RAIL_PARAMS}
+        test = calculate_gen_costs(costs, gc_params)
+        assert test["other"] == self.OTHER_COSTS, "Other GC calculation"
+        np.testing.assert_array_almost_equal(
+            test["car"], self.CAR_ANSWER, self.PRECISION, "Car GC calculation"
+        )
+        np.testing.assert_array_almost_equal(
+            test["rail"],
+            self.RAIL_ANSWER,
+            self.PRECISION,
+            "Rail GC calculation",
+        )
 
 
 class TestReadGCParameters:
