@@ -17,6 +17,22 @@ you can run any Python files with the usual `python` command. To add any new Pyt
 packages to the environment use `pipenv install package_name` instead of pip, this will download
 and install the package and update "Pipfile" and "Pipfile.lock" with the version information.
 
+## Coding Style
+
+(NOTE: This needs fleshing out properly)
+
+NorMITs Demand follows the
+[Google Python Style Guide](https://google.github.io/styleguide/pyguide.html) with some exceptions:
+- If statements
+
+#### TODO, BACKLOG, and OPTIMIZE comments
+Special comments in code:
+- `# TODO:` Future work - can be picked up by IDE
+- `# OPTIMISE:` Point out code that can be better optimised, but you don't have time/resources
+right now. 
+- `# BACKLOG:` Use to point out bigger pieces of work. Can assign labels etc.
+ 
+
 
 ## ExternalForecastSystem Versions
 

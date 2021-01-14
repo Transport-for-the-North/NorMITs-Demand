@@ -21,6 +21,9 @@ import external_forecast_system as efs
 # homebased or non-homebased
 VALID_TRIP_ORIGIN = ["hb", "nhb"]
 
+# BACKLOG: Multiprocess report generation
+#  labels: optimisation
+
 
 def matrix_reporting(matrix_directory: str,
                      output_dir: str,
@@ -773,17 +776,20 @@ if __name__ == "__main__":
     # Run the configuration files to produce the report formats required by
     # Power BI
 
-    import_location = "Y:/"
-    output_location = "C:/"
-    model_name = "norms_2015"
+    # Controls I/O
+    scenario = consts.SC04_UZC
     iter_num = 1
-    iter_name = f"iter{iter_num}"
+    import_home = "Y:/"
+    export_home = "Y:/"
+    model_name = 'norms'
 
     efs_main = efs.ExternalForecastSystem(
+        iter_num=iter_num,
         model_name=model_name,
-        import_home=import_location,
-        export_home=output_location,
-        iter_num=iter_num
+        scenario_name=scenario,
+        import_home=import_home,
+        export_home=export_home,
+        verbose=False
     )
 
     imports = efs_main.imports

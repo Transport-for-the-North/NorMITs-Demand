@@ -8,6 +8,7 @@ Created on Mon Dec  9 12:13:07 2019
 import os
 import sys
 import warnings
+import operator
 
 import numpy as np
 import pandas as pd
@@ -467,9 +468,6 @@ class EFSProductionGenerator:
             control_future_years=control_fy_productions,
             audit_dir=exports['audits']
         )
-
-
-
 
         # Write productions to file
         print("Writing productions to file...")
@@ -1681,7 +1679,7 @@ class NhbProductionModel:
             kwargs=kwargs_list,
             process_count=self.process_count
         )
-        eff_nhb_prods = reduce(lambda x, y: x + y, returns)
+        eff_nhb_prods = reduce(operator.concat, returns)
 
         # Compile segmented
         print("Compiling full NHB Productions...")
@@ -2232,9 +2230,6 @@ def merge_pop_trip_rates(population: pd.DataFrame,
                          mean_time_splits_path: str,
                          mode_share_path: str,
                          audit_out: str,
-                         control_path: str = None,
-                         lad_lookup_dir: str = None,
-                         lad_lookup_name: str = consts.DEFAULT_LAD_LOOKUP,
                          tp_needed: List[int] = consts.TP_NEEDED,
                          traveller_type_col: str = 'traveller_type',
                          ) -> Tuple[pd.DataFrame, Dict[str, float]]:
@@ -2300,8 +2295,6 @@ def merge_pop_trip_rates(population: pd.DataFrame,
         all segmentation in the given population if possible, and add more.
     """
     # Init
-    do_ntem_control = control_path is not None and lad_lookup_dir is not None
-
     group_cols = group_cols.copy()
     group_cols.insert(2, 'p')
 
@@ -2567,48 +2560,53 @@ def generate_productions(population: pd.DataFrame,
                          mean_time_splits_path: str,
                          mode_share_path: str,
                          audit_dir: str,
-                         ntem_control_dir: str = None,
-                         lad_lookup_dir: str = None,
-                         control_fy_productions: bool = True
+                         process_count: int = consts.PROCESS_COUNT
                          ) -> pd.DataFrame:
     # TODO: write generate_productions() docs
     # Init
     all_years = [base_year] + future_years
     audit_base_fname = 'yr%s_%s_production_topline.csv'
-    ntem_base_fname = 'ntem_pa_ave_wday_%s.csv'
 
-    # TODO: Multiprocess yearly productions
-    # Generate Productions for each year
-    yr_ph = dict()
+    # ## MULTIPROCESS ## #
+    # Build the unchanging arguments
+    unchanging_kwargs = {
+        'group_cols': group_cols,
+        'trip_rates_path': trip_rates_path,
+        'time_splits_path': time_splits_path,
+        'mean_time_splits_path': mean_time_splits_path,
+        'mode_share_path': mode_share_path,
+    }
+
+    # Add in the changing kwargs
+    kwargs_list = list()
     for year in all_years:
-        # Only only set the control path if we need to constrain
-        if not control_fy_productions and year != base_year:
-            ntem_control_path = None
-        elif ntem_control_dir is not None:
-            ntem_fname = ntem_base_fname % year
-            ntem_control_path = os.path.join(ntem_control_dir, ntem_fname)
-        else:
-            ntem_control_path = None
-
         # Build the topline output path
         audit_fname = audit_base_fname % (year, trip_origin)
         audit_out = os.path.join(audit_dir, audit_fname)
 
+        # Get just the pop for this year
         yr_pop = population.copy().reindex(group_cols + [year], axis='columns')
         yr_pop = yr_pop.rename(columns={year: 'people'})
-        yr_ph[year] = merge_pop_trip_rates(
-            yr_pop,
-            group_cols=group_cols,
-            trip_rates_path=trip_rates_path,
-            time_splits_path=time_splits_path,
-            mean_time_splits_path=mean_time_splits_path,
-            mode_share_path=mode_share_path,
-            audit_out=audit_out,
-            control_path=ntem_control_path,
-            lad_lookup_dir=lad_lookup_dir
-        )
+
+        # Build the kwargs for this call
+        kwargs = unchanging_kwargs.copy()
+        kwargs['population'] = yr_pop
+        kwargs['audit_out'] = audit_out
+        kwargs_list.append(kwargs)
+
+    # Make the function calls
+    yearly_productions = conc.multiprocess(
+        merge_pop_trip_rates,
+        kwargs=kwargs_list,
+        process_count=process_count,
+        in_order=True
+    )
+
+    # Stick into a dict, ready to recombine
+    yr_ph = {y: p for y, p in zip(all_years, yearly_productions)}
 
     # Join all productions into one big matrix
+    # TODO: Convert code to use du.compile_efficient_df()
     productions = du.combine_yearly_dfs(
         yr_ph,
         unique_col='trips'
