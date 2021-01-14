@@ -24,4 +24,4 @@ jobs:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LABEL: "# BACKLOG"
           COMMENT_MARKER: "#"
-        id: "todo"
+        id: "backlog"
