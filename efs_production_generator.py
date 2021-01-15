@@ -2495,6 +2495,12 @@ def control_productions_to_ntem(productions: pd.DataFrame,
             growth_values[year] -= growth_values[base_year]
         growth_values.drop(columns=[base_year], inplace=True)
 
+        # Output an audit of the growth values calculated
+        if audit_dir is not None:
+            fname = consts.PRODS_AG_FNAME % ('msoa', trip_origin)
+            path = os.path.join(audit_dir, fname)
+            pd.DataFrame(growth_values).to_csv(path, index=False)
+
     # ## NTEM CONTROL YEARS ## #
     # Figure out which years to control
     control_years = list()
@@ -2550,13 +2556,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
 
     # Add growth back on
     for year in future_years:
-        productions[year] += growth_values[year]
-
-    # Output an audit of the growth values calculated
-    if audit_dir is not None:
-        fname = consts.PRODS_AG_FNAME % ('msoa', trip_origin)
-        path = os.path.join(audit_dir, fname)
-        pd.DataFrame(audits).to_csv(path, index=False)
+        productions[year] += growth_values[year].values
 
     return productions
 
