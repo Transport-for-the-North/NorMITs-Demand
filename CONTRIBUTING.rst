@@ -23,7 +23,7 @@ Coding Style
 
 NorMITs Demand follows the `Google Python Style Guide`_ with some exceptions:
 
-- **Multiline :code:`if`-statements** - To avoid a visual conflict with multiline
+- **Multiline if-statements** - To avoid a visual conflict with multiline
   :code:`if`-statements this codebase chooses to forgo the space between :code:`if`
   and the opening bracket. A comment should also be added, if reasonable. Therefore,
   the following:
@@ -44,7 +44,7 @@ NorMITs Demand follows the `Google Python Style Guide`_ with some exceptions:
        # As both conditions are true, we should do the thing
         do_something()
 
-- **Multiline :code:`for`-statements** - Try to avoid these where possible to prevent
+- **Multiline for-statements** - Try to avoid these where possible to prevent
   (less obstructive) visual conflicts. Instead, build the generator object before the
   :code:`for`-statement, then call the generator. Therefore, the following:
 
