@@ -9,7 +9,7 @@ efs = ExternalForecastSystem(
 )
 
 test_generations_path = (r"C:\Users\Monopoly\Documents\EFS\data"
-                         r"\20201214 TfN EFS - Task D5 Bespoke Zone - "
+                         r"\20201217 TfN EFS - Task D5 Bespoke Zone - "
                          "MANSAM Example Inputs v1b.xlsx")
 eg.test_bespoke_zones(test_generations_path, 
                       efs.exports, 
