@@ -67,10 +67,6 @@ class ExternalForecastSystem:
                  verbose: str = True
                  ):
         # TODO: Write EFS constructor docs
-        # TODO: Re-write constraints handling in the base year
-        #  Current method is confusing, will only get worse with scenarios
-
-        # TODO: Set CA needed etc in init
         # Initialise the timer
         begin_time = time.time()
         current_time = begin_time
@@ -84,6 +80,11 @@ class ExternalForecastSystem:
         self.import_location = import_home
         self.output_location = export_home
         self.verbose = verbose
+
+        # TODO: Write function to determine if CA is needed for model_names
+        self.is_ca_needed = True
+        if self.model_name == 'noham':
+            self.is_ca_needed = False
 
         self.input_zone_system = "MSOA"
         self.msoa_lookup_path = msoa_lookup_path
@@ -1789,7 +1790,7 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC04_UZC
+    scenario = consts.SC03_DD
     iter_num = 0
     import_home = "Y:/"
     export_home = "E:/"

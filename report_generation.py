@@ -105,7 +105,7 @@ def matrix_reporting(matrix_directory: str,
     for year in tqdm(parsed_segments["years"], desc="Aggregating by Year"):
         try:
             # TODO add aggregation_method to this function
-            output_files = aggregate_matrices(
+            aggregate_matrices(
                 import_dir=matrix_directory,
                 export_dir=output_dir,
                 trip_origin=trip_origin,
@@ -116,8 +116,7 @@ def matrix_reporting(matrix_directory: str,
                 soc_needed=parsed_segments["soc"],
                 ns_needed=parsed_segments["ns"],
                 ca_needed=parsed_segments["ca"],
-                tp_needed=parsed_segments["tp"],
-                return_paths=True
+                tp_needed=parsed_segments["tp"]
             )
         except AttributeError as e:
             # If there are no matrices available for these segments

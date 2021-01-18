@@ -62,10 +62,11 @@ def _aggregate(import_dir: str,
                                           )
         aggregated_mat += mat
 
+    print(in_fnames)
+
     # Write new matrix out
     aggregated_mat.to_csv(export_path)
     print("Aggregated matrix written: %s" % os.path.basename(export_path))
-    return export_path
 
 
 def _recursive_aggregate(candidates: List[str],
@@ -73,7 +74,7 @@ def _recursive_aggregate(candidates: List[str],
                          segmentation_strs: List[List[str]],
                          import_dir: str,
                          export_path: str
-                         ) -> str:
+                         ) -> None:
     """
     The internal function of aggregate_matrices(). Recursively steps through
     the segmentations given, aggregating as it goes.
@@ -100,13 +101,7 @@ def _recursive_aggregate(candidates: List[str],
 
     export_path:
         Directory to output the aggregated matrices.
-
-    Returns
-    -------
-    Path of the exported matrices
     """
-
-    mat_export_paths = []
 
     # ## EXIT CONDITION ## #
     if len(segmentations) == 1:
@@ -116,23 +111,21 @@ def _recursive_aggregate(candidates: List[str],
 
         if du.is_none_like(segmentations):
             # Aggregate remaining candidates
-            mat_export_path = _aggregate(
+            _aggregate(
                 import_dir=import_dir,
                 in_fnames=candidates,
                 export_path=export_path + '.csv'
             )
-            mat_export_paths.append(mat_export_path)
         else:
             # Loop through and aggregate
             for segment, seg_str in zip(segmentations, segmentation_strs):
-                mat_export_path = _aggregate(
+                _aggregate(
                     import_dir=import_dir,
                     in_fnames=[x for x in candidates.copy() if seg_str in x],
                     export_path=export_path + seg_str + '.csv'
                 )
-                mat_export_paths.append(mat_export_path)
         # Exit condition done, leave recursion
-        return mat_export_paths
+        return
 
     # ## RECURSIVELY LOOP ## #
     seg, other_seg = segmentations[0], segmentations[1:]
@@ -140,23 +133,21 @@ def _recursive_aggregate(candidates: List[str],
 
     if du.is_none_like(seg):
         # Don't need to segment here, next loop
-        mat_export_path = _recursive_aggregate(candidates=candidates,
+        _recursive_aggregate(candidates=candidates,
                              segmentations=other_seg,
                              segmentation_strs=other_strs,
                              import_dir=import_dir,
                              export_path=export_path)
-        mat_export_paths.extend(mat_export_path)
     else:
         # Narrow down search, loop again
         for segment, seg_str in zip(seg, strs):
-            mat_export_path = _recursive_aggregate(
+            _recursive_aggregate(
                 candidates=[x for x in candidates.copy() if seg_str in x],
                 segmentations=other_seg,
                 segmentation_strs=other_strs,
                 import_dir=import_dir,
-                export_path=export_path + seg_str)
-            mat_export_paths.extend(mat_export_path)
-    return mat_export_paths
+                export_path=export_path + seg_str
+            )
 
 
 def aggregate_matrices(import_dir: str,
@@ -169,8 +160,7 @@ def aggregate_matrices(import_dir: str,
                        soc_needed: List[int] = None,
                        ns_needed: List[int] = None,
                        ca_needed: List[int] = None,
-                       tp_needed: List[int] = None,
-                       return_paths: bool = False
+                       tp_needed: List[int] = None
                        ) -> List[str]:
     """
     Aggregates the matrices in import_dir up to the given level and writes
@@ -281,17 +271,13 @@ def aggregate_matrices(import_dir: str,
         )
         out_path = os.path.join(export_dir, base_fname)
 
-        export_paths = _recursive_aggregate(
+        _recursive_aggregate(
             candidates=compile_mats,
             segmentations=[segment_needed, ca_needed, tp_needed],
             segmentation_strs=[segment_str, ca_strs, tp_strs],
             import_dir=import_dir,
             export_path=out_path
         )
-        mat_export_paths.extend(export_paths)
-
-    if return_paths:
-        return mat_export_paths
 
 
 def get_tour_proportion_seed_values(m: int,
