@@ -849,6 +849,9 @@ def copy_and_rename(src: str, dst: str) -> None:
     """
     Makes a copy of the src file and saves it at dst with the new filename.
 
+    If no filename is given for dst, then the file will be copied over with
+    the same name as used in src.
+
     Parameters
     ----------
     src:
@@ -868,7 +871,7 @@ def copy_and_rename(src: str, dst: str) -> None:
         raise IOError("The given src file is not a file. Cannot handle "
                          "directories.")
 
-    # Only rename if given a filename
+    # If no filename given, don't need to rename - just use src filename
     if '.' not in os.path.basename(dst):
         # Copy over with same filename
         shutil.copy(src, dst)
@@ -1771,9 +1774,9 @@ def segmentation_loop_generator(p_list: Iterable[int],
 
 def cp_segmentation_loop_generator(p_list: Iterable[int],
                                    m_list: Iterable[int],
-                                   soc_list: Iterable[int],
-                                   ns_list: Iterable[int],
-                                   ca_list: Iterable[int],
+                                   soc_list: Iterable[int] = None,
+                                   ns_list: Iterable[int] = None,
+                                   ca_list: Iterable[int] = None,
                                    tp_list: Iterable[int] = None
                                    ) -> Iterator[Dict[str, int]]:
     """
@@ -1781,6 +1784,9 @@ def cp_segmentation_loop_generator(p_list: Iterable[int],
     calib params instead of a number of integer
     """
     # Init
+    soc_list = [None] if soc_list is None else soc_list
+    ns_list = [None] if ns_list is None else ns_list
+    ca_list = [None] if ca_list is None else ca_list
     tp_list = [None] if tp_list is None else tp_list
 
     loop_generator = segmentation_loop_generator(

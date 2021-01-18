@@ -62,8 +62,6 @@ def _aggregate(import_dir: str,
                                           )
         aggregated_mat += mat
 
-    print(in_fnames)
-
     # Write new matrix out
     aggregated_mat.to_csv(export_path)
     print("Aggregated matrix written: %s" % os.path.basename(export_path))

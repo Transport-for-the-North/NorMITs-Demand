@@ -1790,7 +1790,7 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC03_DD
+    scenario = consts.SC00_NTEM
     iter_num = 0
     import_home = "Y:/"
     export_home = "E:/"

@@ -25,9 +25,9 @@ NOHAM2LAD_FNAME = 'noham_lad_pop_weighted_lookup.csv'
 NOHAM2MSOA_FNAME = 'msoa_noham_pop_weighted_lookup.csv'
 NOHAM2TFN_FNAME = 'tfn_sector_noham_pop_weighted_lookup.csv'
 
-NORMS2LAD_FNAME = 'norms_2015_lad_pop_weighted_lookup.csv'
-NORMS2MSOA_FNAME = 'norms_2015_msoa_pop_weighted_lookup.csv '
-NORMS2TFN_FNAME = 'tfn_sector_norms_2015_pop_weighted_lookup.csv '
+NORMS2LAD_FNAME = 'norms_lad_pop_weighted_lookup.csv'
+NORMS2MSOA_FNAME = 'norms_msoa_pop_weighted_lookup.csv '
+NORMS2TFN_FNAME = 'tfn_sector_norms_pop_weighted_lookup.csv '
 
 MSOA2TFN_FNAME = 'tfn_sector_msoa_pop_weighted_lookup.csv'
 
@@ -286,8 +286,6 @@ def main():
         in_dir=in_dir,
         out_path=os.path.join(out_dir, base_fname % ('norms', 'tfn_sectors')),
     )
-
-    pass
 
 
 if __name__ == '__main__':

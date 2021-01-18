@@ -2,12 +2,14 @@ import os
 import re
 import json
 from glob import glob
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Any
 from itertools import product
 
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+
+from demand_utilities import concurrency as conc
 
 from demand_utilities import utils as du
 from demand_utilities import reports as dr
@@ -23,6 +25,76 @@ VALID_TRIP_ORIGIN = ["hb", "nhb"]
 
 # BACKLOG: Multiprocess report generation
 #  labels: optimisation
+
+
+def _maybe_aggregate_matrices(import_dir,
+                              export_dir,
+                              trip_origin,
+                              matrix_format,
+                              years_needed,
+                              p_needed,
+                              m_needed,
+                              soc_needed,
+                              ns_needed,
+                              ca_needed,
+                              tp_needed
+                              ) -> None:
+    """
+    Checks to see if the aggregation actually needs to take place. If not,
+    just copies over the already existing matrices.
+
+    Much faster than calling aggregate_matrices() if it's not needed!
+    """
+
+    # ## GENERATE THE NEEDED MATRIX NAMES ## #
+    loop_generator = du.cp_segmentation_loop_generator(
+        p_list=p_needed,
+        m_list=m_needed,
+        soc_list=soc_needed,
+        ns_list=ns_needed,
+        ca_list=ca_needed,
+        tp_list=tp_needed
+    )
+
+    # Loop through all the combinations
+    mat_names = list()
+    for year in years_needed:
+        for calib_params in loop_generator:
+            # Add year
+            calib_params['yr'] = year
+            mat_names.append(du.calib_params_to_dist_name(
+                trip_origin=trip_origin,
+                matrix_format=matrix_format,
+                calib_params=calib_params,
+                csv=True
+            ))
+
+    # ## ONLY AGGREGATE IF ALL NEEDED MATRICES DON'T EXIST ## #
+    existing_mat_names = [x for x in os.listdir(import_dir) if '.csv' in x]
+
+    if all([name in existing_mat_names for name in mat_names]):
+        # All matrices we need already exist. Just copy over!
+        print("No need to aggregate - just copying over...")
+        for name in mat_names:
+            in_path = os.path.join(import_dir, name)
+            du.copy_and_rename(in_path, export_dir)
+
+    else:
+        # We're gonna have to aggregate to make the matrices we need
+        print("Aggregating matrices...")
+        aggregate_matrices(
+            import_dir=import_dir,
+            export_dir=export_dir,
+            trip_origin=trip_origin,
+            matrix_format=matrix_format,
+            years_needed=years_needed,
+            p_needed=p_needed,
+            m_needed=m_needed,
+            soc_needed=soc_needed,
+            ns_needed=ns_needed,
+            ca_needed=ca_needed,
+            tp_needed=tp_needed,
+        )
 
 
 def matrix_reporting(matrix_directory: str,
@@ -105,7 +177,7 @@ def matrix_reporting(matrix_directory: str,
     for year in tqdm(parsed_segments["years"], desc="Aggregating by Year"):
         try:
             # TODO add aggregation_method to this function
-            aggregate_matrices(
+            _maybe_aggregate_matrices(
                 import_dir=matrix_directory,
                 export_dir=output_dir,
                 trip_origin=trip_origin,
@@ -120,8 +192,8 @@ def matrix_reporting(matrix_directory: str,
             )
         except AttributeError as e:
             # If there are no matrices available for these segments
-            # This should probably be handled in matrix_processing
-            print("ERROR::MISSING_SEGMENTS")
+            print("ERROR::MISSING_SEGMENTS! Did you pass in the correct "
+                  ".json file??")
             print(e)
             success = False
 
@@ -595,7 +667,7 @@ def concat_matrix_folder(data_dir: str,
     )
 
 
-def load_report_params(param_file: str) -> None:
+def load_report_params(param_file: str) -> Union[List[Any], Dict[str, Any]]:
     """Load report generation parameters from file.
     Allows a number of options to be set in a json file.
 
@@ -796,22 +868,34 @@ if __name__ == "__main__":
         verbose=False
     )
 
-    imports = efs_main.imports
-    exports = efs_main.exports
-
-    # Home based PA
-    pa_params = os.path.join(
-        imports["default_inputs"],
-        "reports", "params", "hb_pa.json"
+    # Build path to the dir containing the config files
+    config_dir = os.path.join(
+        efs_main.imports['home'],
+        model_name,
+        'params'
     )
-    main(pa_params, imports, exports, model_name)
 
-    # TP split HB PA
-    # tp_pa_params = os.path.join(imports["default_inputs"],
-    #                             "reports", "params", "tp_hb_pa.json")
-    # main(tp_pa_params, imports, exports, model_name)
+    param_fnames = [
+        'hb_pa.json',
+        'nhb_pa.json'
+    ]
 
-    # NHB PA
-    nhb_params = os.path.join(imports["default_inputs"],
-                              "reports", "params", "nhb_pa.json")
-    main(nhb_params, imports, exports, model_name)
+    # ## AGGREGATE OUTPUT DATA FOR REPORTING ## #
+    unchanging_kwargs = {
+        'imports': efs_main.imports,
+        'exports': efs_main.exports,
+        'model_name': model_name
+    }
+
+    # Build the list of all arguments
+    kwarg_list = list()
+    for fname in param_fnames:
+        kwargs = unchanging_kwargs.copy()
+        kwargs['param_file'] = os.path.join(config_dir, fname)
+        kwarg_list.append(kwargs)
+
+    conc.multiprocess(
+        fn=main,
+        kwargs=kwarg_list,
+        process_count=consts.PROCESS_COUNT
+    )
