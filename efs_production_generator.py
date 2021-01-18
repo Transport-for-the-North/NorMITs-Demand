@@ -379,8 +379,8 @@ class EFSProductionGenerator:
         if dlog is not None:
             print("Integrating the development log...")
             # Remove the columns not used to split the dlog_processor data
-            seg_groups = du.intersection(segmentation_cols,
-                                         ['area_type', "traveller_type"])
+            seg_groups = [x for x in segmentation_cols 
+                          if x not in ['area_type', "traveller_type"]]
 
             population, hg_zones = dlog_processor.apply_d_log(
                 pre_dlog_df=population,

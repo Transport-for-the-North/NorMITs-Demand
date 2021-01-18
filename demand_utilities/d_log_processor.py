@@ -163,9 +163,6 @@ def infill_dlog_build_out(dlog: pd.DataFrame,
     """Fill in gaps where no build out data was provided in the development
     log. This is done using the entire development phase total and the start /
     end dates. A linear build out is assumed.
-    TODO This does not return anything currently as more than half the 
-    developments are missing some of this data.
-    Fix the date check - only checks if between
 
     Parameters
     ----------
@@ -801,10 +798,10 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
             os.path.join(audit_location, "invalid_growth_zones.csv"),
             index=False
         )
-        e_zones.to_csv(
-            os.path.join(audit_location, "exceptional_zones.csv"),
-            index=False
-        )
+        # e_zones.to_csv(
+        #     os.path.join(audit_location, "exceptional_zones.csv"),
+        #     index=False
+        # )
 
     return post_dlog_df, e_zones
 

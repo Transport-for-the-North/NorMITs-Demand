@@ -1103,6 +1103,12 @@ class ExternalForecastSystem:
         # same as the synthetic base
         obs_production_path = r"E:\NorMITs Demand\norms\v2_4-EFS_Output\iter1\Productions\norms_hb_productions.csv"
         obs_attraction_path = r"E:\NorMITs Demand\norms\v2_4-EFS_Output\iter1\Attractions\norms_hb_attractions.csv"
+        obs_production_path = os.path.join(
+            self.exports["productions"], "norms_hb_productions.csv"
+        )
+        obs_attraction_path = os.path.join(
+            self.exports["attractions"], "norms_hb_attractions.csv"
+        )
 
         # For testing purposes - use the converted productions/attractions
         # from a previous run (same as observed placeholders)
