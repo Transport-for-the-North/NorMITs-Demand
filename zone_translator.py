@@ -133,6 +133,10 @@ class ZoneTranslator:
         return new_dataframe
 
 
+class MatrixTotalError(ValueError):
+    """Error for when matrix totals are different in `translate_matrix`."""
+
+
 ##### FUNCTIONS #####
 def translate_matrix(
     matrix: pd.DataFrame,
@@ -143,6 +147,7 @@ def translate_matrix(
     split_column: str = None,
     aggregation_method: str = "sum",
     weights: pd.DataFrame = None,
+    check_total: bool = True
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Convert a matrix to a new zone system using given lookup.
 
@@ -175,6 +180,11 @@ def translate_matrix(
         Weights for "weighted_average" aggregation method,
         default None. The format should be [o, d, value]
         or square format if `square_format` is true.
+    check_total : bool, optional
+        Whether or not the matrix total before and after the translation
+        should be checked. If True (default) ValueError will be raised
+        if the totals differ by more than 0.1. Always False when using
+        "weighted_average" aggregation method.
 
     Returns
     -------
@@ -186,6 +196,7 @@ def translate_matrix(
     """
     avg_method = "weighted_average"
     agg_methods = ["sum", "mean", avg_method]
+    check_total = False if aggregation_method == avg_method else check_total
     if aggregation_method == avg_method and not isinstance(
         weights, pd.DataFrame
     ):
@@ -294,9 +305,10 @@ def translate_matrix(
     matrix.index.name = level_names[1]
 
     # Check matrix totals
-    if not np.allclose(matrix_total, new_total, rtol=0, atol=1e-15):
+    if (check_total and
+        not np.allclose(matrix_total, new_total, rtol=0, atol=0.1)):
         diff = abs(matrix_total - new_total)
-        raise ValueError(
+        raise MatrixTotalError(
             "The matrix total after translation differs "
             f"from input matrix by: {diff:.1E}"
         )

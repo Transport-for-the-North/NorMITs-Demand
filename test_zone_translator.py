@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 # Local imports
-from zone_translator import translate_matrix
+from zone_translator import translate_matrix, MatrixTotalError
 
 
 ##### CLASSES #####
@@ -62,7 +62,7 @@ class TestTranslateMatrix:
         """Test that the correct error is raised if changes matrix total changes. """
         lookup = self.NORMS_2_NOHAM.copy()
         lookup["split"] = [0.8, 0.3, 1]
-        with pytest.raises(ValueError) as e:
+        with pytest.raises(MatrixTotalError) as e:
             translate_matrix(
                 self.NORMS_MAT,
                 lookup,

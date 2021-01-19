@@ -17,7 +17,7 @@ from tqdm.contrib import DummyTqdmFile
 
 # Local imports
 from demand_utilities.utils import safe_read_csv
-from zone_translator import translate_matrix
+from zone_translator import translate_matrix, MatrixTotalError
 
 
 ##### CONSTANTS #####
@@ -207,13 +207,26 @@ def read_demand_matrix(
             "split": float,
         }
         lookup = pd.read_csv(lookup_file, usecols=dtypes.keys(), dtype=dtypes)
+        cols = [f"{from_zone}_zone_id", f"{COMMON_ZONE_SYSTEM}_zone_id"]
+        try:
+            demand, reverse = translate_matrix(
+                demand,
+                lookup,
+                cols,
+                split_column="split",
+            )
+        except MatrixTotalError as e:
+            # Print the error but continue with the translation to still
+            # process current segment
+            print(f"{path.stem} - {e.__class__.__name__}: {e}")
+            demand, reverse = translate_matrix(
+                demand,
+                lookup,
+                cols,
+                split_column="split",
+                check_total=False
+            )
 
-        demand, reverse = translate_matrix(
-            demand,
-            lookup,
-            [f"{from_zone}_zone_id", f"{COMMON_ZONE_SYSTEM}_zone_id"],
-            split_column="split",
-        )
     return demand.sort_index().sort_index(axis=1), reverse, old_zone
 
 
