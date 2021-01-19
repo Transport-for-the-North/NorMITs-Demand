@@ -388,7 +388,6 @@ class EFSProductionGenerator:
                 future_years=future_years,
                 dlog_path=dlog,
                 msoa_conversion_path=msoa_conversion_path,
-                constraints=population_constraint,
                 constraints_zone_equivalence=designated_area,
                 segment_cols=segmentation_cols,
                 segment_groups=seg_groups,

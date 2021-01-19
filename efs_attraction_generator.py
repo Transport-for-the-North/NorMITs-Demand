@@ -405,7 +405,6 @@ class EFSAttractionGenerator:
                 future_years=future_years,
                 dlog_path=dlog,
                 msoa_conversion_path=msoa_conversion_path,
-                constraints=employment_constraint,
                 constraints_zone_equivalence=designated_area,
                 segment_cols=dlog_segments,
                 dlog_conversion_factor=1.0,
