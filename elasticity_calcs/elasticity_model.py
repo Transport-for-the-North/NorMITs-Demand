@@ -241,6 +241,19 @@ class ElasticityModel:
         elasticities = read_elasticity_file(
             self.elasticity_folder / ELASTICITIES_FILE, **elasticity_params
         )
+        # Check if any elasticities aren't provided in ELASTICITIES_FILE
+        missing = np.isin(
+            cost_changes["elasticity_type"].unique(),
+            elasticities["ElasticityType"],
+            invert=True,
+        )
+        if sum(missing) > 0:
+            missing = list(cost_changes["elasticity_type"].unique()[missing])
+            raise ValueError(
+                f"Elasticity values in {ELASTICITIES_FILE} "
+                f"missing for the following types: {missing}"
+            )
+
         constraint_matrices = get_constraint_matrices(
             self.elasticity_folder / CONSTRAINTS_FOLDER,
             cost_changes["constraint_matrix_name"].unique().tolist(),
