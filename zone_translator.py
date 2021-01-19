@@ -262,6 +262,19 @@ def translate_matrix(
         lookup["split"] = lookup["weights"] / lookup["weights_total"]
         lookup.drop(columns=["weights", "weights_total"], inplace=True)
 
+    # Check missing zones in lookup
+    missing = np.isin(
+        np.unique(matrix[zone_cols].values),
+        np.unique(lookup[lookup_cols[:2]].values),
+        assume_unique=True,
+        invert=True
+    )
+    if sum(missing) > 0:
+        raise ValueError(
+            f"{sum(missing)} zones found in matrix columns {zone_cols} which "
+            f"aren't present in lookup columns {lookup_cols[:2]}"
+        )
+
     # Convert both columns to new zone system
     matrix = matrix.merge(
         lookup,
