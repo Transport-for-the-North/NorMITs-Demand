@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 # Local imports
-from demand_utilities.utils import zone_translation_df
+from demand_utilities.utils import get_zone_translation
 from zone_translator import translate_matrix, square_to_list
 from elasticity_calcs.utils import COMMON_ZONE_SYSTEM
 
@@ -317,8 +317,11 @@ def get_costs(
 
     # Convert zone system if required
     if zone_system != COMMON_ZONE_SYSTEM:
-        lookup = zone_translation_df(
-            zone_translation_folder, zone_system, COMMON_ZONE_SYSTEM
+        lookup = get_zone_translation(
+            zone_translation_folder,
+            zone_system,
+            COMMON_ZONE_SYSTEM,
+            return_dataframe=True,
         )
         if not isinstance(demand, pd.DataFrame):
             raise TypeError(

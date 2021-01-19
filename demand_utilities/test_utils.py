@@ -11,12 +11,12 @@ from pathlib import Path
 import pandas as pd
 
 # Local imports
-from .utils import zone_translation_df
+from .utils import get_zone_translation
 
 
 ##### FUNCTIONS #####
-def test_zone_translation_df(tmp_path: Path):
-    """Test the `zone_translation_df` function returns the expected DataFrame.
+def test_get_zone_translation(tmp_path: Path):
+    """Test the `get_zone_translation` function returns the expected DataFrame.
 
     Parameters
     ----------
@@ -31,5 +31,9 @@ def test_zone_translation_df(tmp_path: Path):
     translation.to_csv(tmp_path / f"{from_zone}_to_{to_zone}.csv", index=False)
 
     pd.testing.assert_frame_equal(
-        translation, zone_translation_df(tmp_path, from_zone, to_zone)
+        translation,
+        get_zone_translation(
+            tmp_path, from_zone, to_zone, return_dataframe=True
+        ),
+        check_dtype=False,
     )
