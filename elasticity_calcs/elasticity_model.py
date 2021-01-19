@@ -314,9 +314,11 @@ class ElasticityModel:
             diff = np.max(
                 np.ravel(np.abs(adjusted_demand["rail"] - total_rail))
             )
+            name = get_dist_name(**demand_params, mode=str(MODE_ID["rail"]))
             print(
-                "When splitting adjusted rail demand into CA and NCA, NCA + CA"
-                f" != Total Rail, there is a maximum difference of {diff:.1E}"
+                f"{name}: when splitting adjusted rail demand into "
+                "CA and NCA, NCA + CA != Total Rail, there is a "
+                f"maximum difference of {diff:.1E}"
             )
         adjusted_demand.pop("rail")
 
@@ -489,10 +491,11 @@ class ElasticityModel:
                 np.sum(x.values) for x in (old_zone, adjusted_demand["car"])
             ]
             if abs(totals[0] - totals[1]) > MATRIX_TOTAL_TOLERANCE:
-                warnings.warn(
-                    f"'car' matrix totals differ by {abs(totals[0] - totals[1]):.1E}"
-                    " when converting back to original zone system",
-                    RuntimeWarning,
+                name = get_dist_name(**demand_params, mode=str(MODE_ID["car"]))
+                print(
+                    f"{name}: 'car' matrix totals differ by "
+                    f"{abs(totals[0] - totals[1]):.1E} when converting "
+                    "back to original zone system"
                 )
             adjusted_demand["car"] = old_zone
 
