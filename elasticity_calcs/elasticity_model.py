@@ -49,7 +49,7 @@ GC_ELASTICITY_TYPES = {
     "Car_RUC": ("car", "gc"),
 }
 # ID and zone system for each mode
-MODE_ID = {"car": 1, "rail": 6}
+MODE_ID = {"car": 3, "rail": 6}
 MODE_ZONE_SYSTEM = {
     "car": "noham",
     "rail": "norms",

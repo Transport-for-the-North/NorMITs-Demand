@@ -178,7 +178,7 @@ class TestElasticityModel:
         )
         CAR_DEMAND.to_csv(
             input_folders["car_demand"]
-            / (base_demand.format(**self.DEMAND_PARAMS, mode=1) + ".csv")
+            / (base_demand.format(**self.DEMAND_PARAMS, mode=3) + ".csv")
         )
         for i in 1, 2:
             filename = (
