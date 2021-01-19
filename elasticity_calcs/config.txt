@@ -1,15 +1,15 @@
 [input_folders]
-elasticity = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\elasticities
-translation = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\translation
-rail_demand = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\rail demand
-car_demand = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\car demand
-rail_costs = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\rail costs
-car_costs = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\car costs
+elasticity = Y:\NorMITs Demand\import\elasticities
+translation = Y:\NorMITs Demand\import\zone_translation
+rail_demand = Y:\NorMITs Demand\norms\v2.5-EFS_Output\SC04_UZC\iter1\Matrices\24hr PA Matrices
+car_demand = Y:\NorMITs Demand\noham\v2.5-EFS_Output\SC04_UZC\iter1\Matrices\24hr PA Matrices
+rail_costs = Y:\NorMITs Demand\import\norms\costs\elasticity_model_format
+car_costs = Y:\NorMITs Demand\import\noham\costs\cost components\elasticity_model_format
 
 [input_files]
-gc_parameters = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Inputs\gc_parameters-uzc.csv
-cost_changes = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Inputs\cost_changes-uzc.csv
+gc_parameters = Y:\NorMITs Demand\import\elasticities\gc_parameters-uzc.csv
+cost_changes = Y:\NorMITs Demand\import\elasticities\cost_changes-uzc-temp.csv
 
 [other]
-output_folder = C:\WSP_Projects\TfN EFS\02 Delivery\03 - D3\Test\outputs
-years = 2018
+output_folder = Y:\NorMITs Demand\elasticity_model\v2.5-EFS_Output\SC04_UZC
+years = 2033,2035,2050
