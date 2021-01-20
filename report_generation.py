@@ -881,7 +881,7 @@ if __name__ == "__main__":
     # Power BI
 
     # Controls I/O
-    scenario = consts.SC00_NTEM
+    scenario = consts.SC02_PP
     iter_num = 1
     import_home = "Y:/"
     export_home = "Y:/"

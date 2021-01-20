@@ -43,12 +43,14 @@ from demand_utilities.sector_reporter_v2 import SectorReporter
 # TODO: Determine the TfN model name based on the given mode
 # TODO: Output a run log instead of printing everything to the terminal.
 # TODO: On error, output a simple error report
-# BACKLOG: Backlog items!
+
+# BACKLOG: Implement a logger to log EFS run progress
+#  labels: QoL Updates
 
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
-    __version__ = "2.5"    # Additional Reporting added
+    __version__ = "2.5"
     _out_dir = "NorMITs Demand"
 
     # defines all non-year columns

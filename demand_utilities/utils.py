@@ -344,6 +344,8 @@ def build_io_paths(import_location: str,
         compile, tours
     """
     # TODO: Tidy up Y:/ drive imports/inputs folders after contract
+    # BACKLOG: Update I/O paths to point to TMS as needed
+    #  labels: demand merge
     # Init
     model_name = validate_model_name(model_name)
 
