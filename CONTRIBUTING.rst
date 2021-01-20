@@ -6,6 +6,7 @@ Ways Of Working
    :language: python
 
 .. _`Google Python Style Guide`: https://google.github.io/styleguide/pyguide.html
+.. _`todo comments`: https://google.github.io/styleguide/pyguide.html#312-todo-comments
 
 GitHub
 ------
@@ -83,16 +84,18 @@ NorMITs Demand follows the `Google Python Style Guide`_ with some exceptions:
                              variable_name_four: int,
                              ) -> float:
         # Do something
-    ...
+        ...
 
 Special Code Comments
 ---------------------
 A few unique code comment prefixes have been chosen to help keep track of issues in the
 codebase. They are noted below, with a brief description on when to use them:
 
-- :code:`# TODO:` Use this for small bits of future work, such as making a note of
+- :code:`# TODO(BenTaylor):` Use this for small bits of future work, such as making a note of
   potential future errors that should be checked for, or code that could be better
-  written if you had more time.
+  written if you had more time. A :code:`TODO` comment begins with the string :code:`TODO`
+  in all caps and a parenthesized identifier of the person or issue with the best
+  context about the problem. For further information, see `todo comments`_.
 
 - :code:`# OPTIMISE:` Point out code that can be better optimised, but you don't
   have time/resources right now, i.e. re-writing code in numpy in place of Pandas.

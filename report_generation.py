@@ -19,14 +19,6 @@ import efs_constants as consts
 import external_forecast_system as efs
 
 
-# Define the possible values for trip origin type -
-# homebased or non-homebased
-VALID_TRIP_ORIGIN = ["hb", "nhb"]
-
-# BACKLOG: Multiprocess report generation
-#  labels: optimisation
-
-
 def _maybe_aggregate_matrices(import_dir,
                               export_dir,
                               trip_origin,

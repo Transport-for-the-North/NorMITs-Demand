@@ -18,10 +18,20 @@ packages to the environment use `pipenv install package_name` instead of pip, th
 and install the package and update "Pipfile" and "Pipfile.lock" with the version information.
 
 
-## Class Versions
+## Class Versioning
 
-Brief log of the changes and additions made to the NorMITs Demand codebase between versions of
-classes.
+Versioning follows the following version control, as defined in the TfN Coding Standards
+(correct as of 20/01/21):
+
+- Apply version control with the following format Epic.Beta.Alpha 
+    - ‘Epic’ is a number corresponding to the Epic currently undertaken 
+    - ‘Beta’ is the release version currently available to TfN as a whole 
+    - ‘Alpha’ is the release version currently available to the TAME team 
+
+A brief log of the changes and additions made to the NorMITs Demand codebase between
+versions of classes. can be found below.
+
+
 
 ### ExternalForecastSystem
 

@@ -28,6 +28,8 @@ ALL_MODES = [1, 2, 3, 5, 6]
 TIME_PERIODS = [1, 2, 3, 4]
 TIME_PERIOD_STRS = ['tp' + str(x) for x in TIME_PERIODS]
 
+VALID_TRIP_ORIGINS = ['hb', 'nhb']
+
 PROCESS_COUNT = -2
 
 # ## VDM/ME2 constants ## #
