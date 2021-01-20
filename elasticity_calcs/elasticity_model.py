@@ -184,12 +184,18 @@ class ElasticityModel:
                     else:
                         seg = row["EFS_IncLevel"]
                     demand_params["segment"] = f"{seg:.0f}"
-                    self.apply_elasticities(
-                        demand_params,
-                        elasticity_params,
-                        gc_params[yr],
-                        cost_changes.loc[cost_changes["year"] == yr],
-                    )
+                    try:
+                        self.apply_elasticities(
+                            demand_params,
+                            elasticity_params,
+                            gc_params[yr],
+                            cost_changes.loc[cost_changes["year"] == yr],
+                        )
+                    except Exception as e:  # pylint: disable=broad-except
+                        # Catching and printing all errors so program can
+                        # continue with other segments
+                        name = get_dist_name(**demand_params)
+                        print(f"{name} - {e.__class__.__name__}: {e}")
                     pbar.update(1)
             pbar.close()
 
