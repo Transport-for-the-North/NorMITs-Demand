@@ -468,34 +468,42 @@ class ElasticityModel:
             creating the output filename.
         car_reverse : pd.DataFrame
             The lookup and splitting factors for converting car demand
-            back to the old zone system, with the following columns:
+            back to the original zone system, with the following columns:
             [original zone - origin, original zone - destination,
             common zone system - origin, common zone system
             - destination, splitting factor].
         """
         if car_reverse is not None:
-            # Convert car demand back to old zone system
-            old_zone = square_to_list(adjusted_demand["car"])
+            # Convert car demand back to original zone system
+            original_zs = square_to_list(adjusted_demand["car"])
             car_reverse.columns = ["orig_o", "orig_d", "o", "d", "split"]
-            old_zone = old_zone.merge(
-                car_reverse, on=["o", "d"], how="left", validate="1:m"
+            original_zs = original_zs.merge(
+                car_reverse,
+                on=["o", "d"],
+                how="left",
+                validate="1:m",
             )
-            old_zone["value"] = old_zone["value"] * old_zone["split"]
-            old_zone = (
-                old_zone[["orig_o", "orig_d", "value"]]
+            original_zs["value"] = original_zs["value"] * original_zs["split"]
+            original_zs = (
+                original_zs[["orig_o", "orig_d", "value"]]
                 .groupby(["orig_o", "orig_d"], as_index=False)
                 .sum()
             )
-            old_zone.rename(
-                columns={f"orig_{i}": i for i in "od"}, inplace=True
+            original_zs.rename(
+                columns={f"orig_{i}": i for i in "od"},
+                inplace=True,
             )
-            old_zone = old_zone.pivot(index="o", columns="d", values="value")
-            old_zone.index.name = adjusted_demand["car"].index.name
-            old_zone.columns.name = adjusted_demand["car"].columns.name
+            original_zs = original_zs.pivot(
+                index="o",
+                columns="d",
+                values="value",
+            )
+            original_zs.index.name = adjusted_demand["car"].index.name
+            original_zs.columns.name = adjusted_demand["car"].columns.name
             # Check conversion hasn't changed total
-            totals = [
-                np.sum(x.values) for x in (old_zone, adjusted_demand["car"])
-            ]
+            totals = []
+            for x in (original_zs, adjusted_demand["car"]):
+                totals.append(np.sum(x.values))
             if abs(totals[0] - totals[1]) > MATRIX_TOTAL_TOLERANCE:
                 name = get_dist_name(**demand_params, mode=str(MODE_ID["car"]))
                 print(
@@ -503,7 +511,7 @@ class ElasticityModel:
                     f"{abs(totals[0] - totals[1]):.1E} when converting "
                     "back to original zone system"
                 )
-            adjusted_demand["car"] = old_zone
+            adjusted_demand["car"] = original_zs
 
         for m in ("car", "ca1", "ca2"):
             ca = None
