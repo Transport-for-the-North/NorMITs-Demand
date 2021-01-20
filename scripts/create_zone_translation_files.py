@@ -120,14 +120,14 @@ def noham_to_tfn_via_msoa(in_dir, out_path):
 
 
 def norms_to_tfn(in_dir, out_path):
-    # Should Norms should nest nicely into TfN? Take biggest always
-    # Min overlap = 0.6455
+    # Should Norms nest nicely into TfN? Take biggest always
+    # Min overlap = 0.6463
     file = pd.read_csv(os.path.join(in_dir, NORMS2TFN_FNAME))
 
     # get just the needed columns
-    norms_col = 'old_norms_zone_id'
+    norms_col = 'norms_zone_id'
     tfn_col = 'tfn_sectors_zone_id'
-    overlap_col = 'overlap_old_norms_split_factor'
+    overlap_col = 'overlap_norms_split_factor'
     needed_cols = [norms_col, tfn_col, overlap_col]
     file = file.reindex(needed_cols, axis='columns')
 
@@ -173,7 +173,7 @@ def norms_to_lad(in_dir, out_path):
     file = pd.read_csv(os.path.join(in_dir, NORMS2LAD_FNAME))
 
     # get just the needed columns
-    norms_col = 'norms_2015_zone_id'
+    norms_col = 'norms_zone_id'
     lad_col = 'lad_zone_id'
     overlap_col = 'overlap_lad_split_factor'
     needed_cols = [norms_col, lad_col, overlap_col]

@@ -2115,7 +2115,7 @@ def is_in_string(vals: Iterable[str],
                  string: str
                  ) -> bool:
     """
-    Returns True if any of vals is on string, else False
+    Returns True if any of vals is in string, else False
     """
     for v in vals:
         if v in string:
@@ -3091,6 +3091,7 @@ def get_costs(model_lookup_path,
 
     # Filter down on purpose
     cost_cols = [x for x in cols if str_purpose in x]
+
     # Handle if we have numeric purpose costs, hope so, they're better!
     if len(cost_cols) == 0:
         cost_cols = [x for x in cols if ('p' + str(purpose)) in x]
