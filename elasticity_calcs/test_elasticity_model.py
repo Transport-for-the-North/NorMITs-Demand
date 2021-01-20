@@ -15,10 +15,10 @@ import pandas as pd
 import pytest
 
 # Local imports
+from elasticity_calcs import constants as ec
 from .elasticity_model import (
     ElasticityModel,
     read_cost_changes,
-    GC_ELASTICITY_TYPES,
 )
 from .generalised_costs import read_gc_parameters
 
@@ -326,7 +326,7 @@ def test_read_cost_changes(
 ):
     """Test that `read_cost_changes` reads the file and performs checks."""
     if missing_type:
-        monkeypatch.delitem(GC_ELASTICITY_TYPES, "Car_RUC")
+        monkeypatch.delitem(ec.GC_ELASTICITY_TYPES, "Car_RUC")
         with pytest.raises(KeyError) as e:
             read_cost_changes(cost_changes, years)
         msg = (

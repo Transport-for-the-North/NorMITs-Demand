@@ -18,12 +18,7 @@ from tqdm.contrib import DummyTqdmFile
 # Local imports
 from demand_utilities.utils import safe_read_csv
 from zone_translator import translate_matrix, MatrixTotalError
-
-
-##### CONSTANTS #####
-COMMON_ZONE_SYSTEM = "norms"
-ZONE_LOOKUP_NAME = "{from_zone}_to_{to_zone}.csv"
-
+from elasticity_calcs import constants as ec
 
 ##### FUNCTIONS #####
 def read_segments_file(path: Path) -> pd.DataFrame:
@@ -197,18 +192,18 @@ def read_demand_matrix(
 
     reverse = None
     old_zone = None
-    if from_zone != COMMON_ZONE_SYSTEM:
+    if from_zone != ec.COMMON_ZONE_SYSTEM:
         old_zone = demand.copy()
-        lookup_file = zone_translation_folder / ZONE_LOOKUP_NAME.format(
-            from_zone=from_zone, to_zone=COMMON_ZONE_SYSTEM
+        lookup_file = zone_translation_folder / ec.ZONE_LOOKUP_NAME.format(
+            from_zone=from_zone, to_zone=ec.COMMON_ZONE_SYSTEM
         )
         dtypes = {
             f"{from_zone}_zone_id": int,
-            f"{COMMON_ZONE_SYSTEM}_zone_id": int,
+            f"{ec.COMMON_ZONE_SYSTEM}_zone_id": int,
             "split": float,
         }
         lookup = pd.read_csv(lookup_file, usecols=dtypes.keys(), dtype=dtypes)
-        cols = [f"{from_zone}_zone_id", f"{COMMON_ZONE_SYSTEM}_zone_id"]
+        cols = [f"{from_zone}_zone_id", f"{ec.COMMON_ZONE_SYSTEM}_zone_id"]
         try:
             demand, reverse = translate_matrix(
                 demand,

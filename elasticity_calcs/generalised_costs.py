@@ -16,37 +16,7 @@ import pandas as pd
 # Local imports
 from demand_utilities.utils import get_zone_translation
 from zone_translator import translate_matrix, square_to_list
-from elasticity_calcs.utils import COMMON_ZONE_SYSTEM
-
-
-##### CONSTANTS #####
-RAIL_GC_FACTORS = {"walk": 1.5, "wait": 2, "interchange_penalty": 5}
-COST_LOOKUP = {
-    "rail": {
-        "origin": "from_model_zone_id",
-        "destination": "to_model_zone_id",
-        "walk": "AE_cost",
-        "wait": "Wait_Actual_cost",
-        "ride": "IVT_cost",
-        "fare": "fare_cost",
-        "num_int": "Interchange_cost",
-    },
-    "car": {
-        "origin": "from_model_zone_id",
-        "destination": "to_model_zone_id",
-        "time": "time",
-        "dist": "distance",
-        "toll": "toll",
-    },
-}
-# Column name and dtype lookup for the GC parameters input file
-GC_PARAMETERS_FILE = {
-    "year": ("year", str),
-    "mode": ("mode", str),
-    "vt": ("vot", float),
-    "vc": ("voc", float),
-}
-
+from elasticity_calcs import constants as ec
 
 ##### FUNCTIONS #####
 def _average_matrices(
@@ -215,15 +185,13 @@ def gen_cost_rail_mins(
     )
 
     # Multply matrices by given (or default) weighting factors
-    factors = RAIL_GC_FACTORS if factors is None else factors
+    factors = ec.RAIL_GC_FACTORS if factors is None else factors
     for nm in ["walk", "wait"]:
-        fac = RAIL_GC_FACTORS[nm] if nm not in factors.keys() else factors[nm]
+        fac = factors.get(nm, ec.RAIL_GC_FACTORS[nm])
         matrices[nm] = matrices[nm] * fac
 
     nm = "interchange_penalty"
-    inter_factor = (
-        RAIL_GC_FACTORS[nm] if nm not in factors.keys() else factors[nm]
-    )
+    inter_factor = factors.get(nm, ec.RAIL_GC_FACTORS[nm])
     return (
         matrices["walk"]
         + matrices["wait"]
@@ -306,21 +274,22 @@ def get_costs(
     """
     mode = mode.lower()
     try:
-        costs = pd.read_csv(cost_file, usecols=COST_LOOKUP[mode].values())
+        costs = pd.read_csv(cost_file, usecols=ec.COST_LOOKUP[mode].values())
     except ValueError as e:
         loc = str(e).find("columns expected")
         e_str = str(e)[loc:] if loc != -1 else str(e)
         raise ValueError(f"Columns missing from {mode} cost, {e_str}") from e
     costs.rename(
-        columns={v: k for k, v in COST_LOOKUP[mode].items()}, inplace=True
+        columns={v: k for k, v in ec.COST_LOOKUP[mode].items()},
+        inplace=True,
     )
 
     # Convert zone system if required
-    if zone_system != COMMON_ZONE_SYSTEM:
+    if zone_system != ec.COMMON_ZONE_SYSTEM:
         lookup = get_zone_translation(
             zone_translation_folder,
             zone_system,
-            COMMON_ZONE_SYSTEM,
+            ec.COMMON_ZONE_SYSTEM,
             return_dataframe=True,
         )
         if not isinstance(demand, pd.DataFrame):
@@ -330,7 +299,7 @@ def get_costs(
         costs, _ = translate_matrix(
             costs,
             lookup,
-            [f"{zone_system}_zone_id", f"{COMMON_ZONE_SYSTEM}_zone_id"],
+            [f"{zone_system}_zone_id", f"{ec.COMMON_ZONE_SYSTEM}_zone_id"],
             square_format=False,
             zone_cols=["origin", "destination"],
             aggregation_method="weighted_average",
@@ -460,10 +429,11 @@ def read_gc_parameters(
         If there are any years or modes missing
         from the file.
     """
-    dtypes = dict(GC_PARAMETERS_FILE.values())
+    dtypes = dict(ec.GC_PARAMETERS_FILE.values())
     data = pd.read_csv(path, usecols=dtypes.keys(), dtype=dtypes)
     data.rename(
-        columns={v[0]: k for k, v in GC_PARAMETERS_FILE.items()}, inplace=True
+        columns={v[0]: k for k, v in ec.GC_PARAMETERS_FILE.items()},
+        inplace=True,
     )
 
     missing_years = []

@@ -6,7 +6,6 @@
 
 ##### IMPORTS #####
 # Standard imports
-import warnings
 from pathlib import Path
 from typing import List, Dict, Tuple, Union
 
@@ -31,32 +30,8 @@ from elasticity_calcs.generalised_costs import (
     gen_cost_elasticity_mins,
     read_gc_parameters,
 )
+from elasticity_calcs import constants as ec
 from zone_translator import square_to_list
-
-
-##### CONSTANTS #####
-SEGMENTS_FILE = "elasticity_segments.csv"
-ELASTICITIES_FILE = "elasticity_values.csv"
-CONSTRAINTS_FOLDER = "constraint_matrices"
-# Lookup for the elasticity types and what modes/costs they affect
-GC_ELASTICITY_TYPES = {
-    "Car_JourneyTime": ("car", "time"),
-    "Car_FuelCost": ("car", "vc"),
-    "Rail_Fare": ("rail", "fare"),
-    "Rail_IVTT": ("rail", "ride"),
-    "Bus_Fare": ("bus", "fare"),
-    "Bus_IVTT": ("bus", "ride"),
-    "Car_RUC": ("car", "gc"),
-}
-# ID and zone system for each mode
-MODE_ID = {"car": 3, "rail": 6}
-MODE_ZONE_SYSTEM = {
-    "car": "noham",
-    "rail": "norms",
-}
-COST_NAMES = "{mode}_costs_p{purpose}.csv"
-OTHER_MODES = ["bus", "active", "no_travel"]
-MATRIX_TOTAL_TOLERANCE = 1e-10
 
 
 ##### CLASSES #####
@@ -153,9 +128,13 @@ class ElasticityModel:
         Segment information is read from `SEGMENTS_FILE` which is
         expected to be found in elasticity folder given.
         """
-        segments = read_segments_file(self.elasticity_folder / SEGMENTS_FILE)
+        segments = read_segments_file(
+            self.elasticity_folder / ec.SEGMENTS_FILE
+        )
         gc_params = read_gc_parameters(
-            self.input_files["gc_parameters"], self.years, list(MODE_ID.keys())
+            self.input_files["gc_parameters"],
+            self.years,
+            list(ec.MODE_ID.keys()),
         )
         cost_changes = read_cost_changes(
             self.input_files["cost_changes"], self.years
@@ -250,7 +229,7 @@ class ElasticityModel:
             The adjusted demand for all modes.
         """
         elasticities = read_elasticity_file(
-            self.elasticity_folder / ELASTICITIES_FILE, **elasticity_params
+            self.elasticity_folder / ec.ELASTICITIES_FILE, **elasticity_params
         )
         # Check if any elasticities aren't provided in ELASTICITIES_FILE
         missing = np.isin(
@@ -261,12 +240,12 @@ class ElasticityModel:
         if sum(missing) > 0:
             missing = list(cost_changes["elasticity_type"].unique()[missing])
             raise ValueError(
-                f"Elasticity values in {ELASTICITIES_FILE} "
+                f"Elasticity values in {ec.ELASTICITIES_FILE} "
                 f"missing for the following types: {missing}"
             )
 
         constraint_matrices = get_constraint_matrices(
-            self.elasticity_folder / CONSTRAINTS_FOLDER,
+            self.elasticity_folder / ec.CONSTRAINTS_FOLDER,
             cost_changes["constraint_matrix_name"].unique().tolist(),
         )
         (
@@ -325,7 +304,7 @@ class ElasticityModel:
             diff = np.max(
                 np.ravel(np.abs(adjusted_demand["rail"] - total_rail))
             )
-            name = get_dist_name(**demand_params, mode=str(MODE_ID["rail"]))
+            name = get_dist_name(**demand_params, mode=str(ec.MODE_ID["rail"]))
             print(
                 f"{name}: when splitting adjusted rail demand into "
                 "CA and NCA, NCA + CA != Total Rail, there is a "
@@ -381,19 +360,19 @@ class ElasticityModel:
         for ca in ("1", "2"):
             path = self.demand_folders[m][0] / get_dist_name(
                 **demand_params,
-                mode=str(MODE_ID[m]),
+                mode=str(ec.MODE_ID[m]),
                 car_availability=ca,
                 csv=True,
             )
             tmp[f"ca{ca}"], _, _ = read_demand_matrix(
-                path, self.zone_translation_folder, MODE_ZONE_SYSTEM[m]
+                path, self.zone_translation_folder, ec.MODE_ZONE_SYSTEM[m]
             )
         if not (
             tmp["ca1"].index.equals(tmp["ca2"].index)
             and tmp["ca1"].columns.equals(tmp["ca2"].columns)
         ):
             raise KeyError(
-                get_dist_name(**demand_params, mode=MODE_ID[m])
+                get_dist_name(**demand_params, mode=ec.MODE_ID[m])
                 + " does not have the same index for CA and NCA"
             )
         # Get demand for CA + NCA and calculate split for converting back
@@ -411,13 +390,13 @@ class ElasticityModel:
         # Get car demand
         m = "car"
         path = self.demand_folders[m][0] / get_dist_name(
-            **demand_params, mode=str(MODE_ID[m]), csv=True
+            **demand_params, mode=str(ec.MODE_ID[m]), csv=True
         )
         demand[m], car_reverse, car_original = read_demand_matrix(
-            path, self.zone_translation_folder, MODE_ZONE_SYSTEM[m]
+            path, self.zone_translation_folder, ec.MODE_ZONE_SYSTEM[m]
         )
 
-        demand.update(dict.fromkeys(OTHER_MODES, 1.0))
+        demand.update(dict.fromkeys(ec.OTHER_MODES, 1.0))
         return demand, rail_split, car_reverse, car_original
 
     def _get_costs(
@@ -441,15 +420,15 @@ class ElasticityModel:
             The costs for each mode which is present in `MODE_ID`.
         """
         costs = {}
-        for m, zone in MODE_ZONE_SYSTEM.items():
-            path = self.demand_folders[m][1] / COST_NAMES.format(
+        for m, zone in ec.MODE_ZONE_SYSTEM.items():
+            path = self.demand_folders[m][1] / ec.COST_NAMES.format(
                 mode=m, purpose=purpose
             )
             costs[m] = get_costs(
                 path, m, zone, self.zone_translation_folder, demand.get(m)
             )
 
-        costs.update(dict.fromkeys(OTHER_MODES, 1.0))
+        costs.update(dict.fromkeys(ec.OTHER_MODES, 1.0))
         return costs
 
     def _write_demand(
@@ -509,8 +488,10 @@ class ElasticityModel:
             totals = []
             for x in (original_zs, adjusted_demand["car"]):
                 totals.append(np.sum(x.values))
-            if abs(totals[0] - totals[1]) > MATRIX_TOTAL_TOLERANCE:
-                name = get_dist_name(**demand_params, mode=str(MODE_ID["car"]))
+            if abs(totals[0] - totals[1]) > ec.MATRIX_TOTAL_TOLERANCE:
+                name = get_dist_name(
+                    **demand_params, mode=str(ec.MODE_ID["car"])
+                )
                 print(
                     f"{name}: 'car' matrix totals differ by "
                     f"{abs(totals[0] - totals[1]):.1E} when converting "
@@ -530,7 +511,7 @@ class ElasticityModel:
             folder.mkdir(parents=True, exist_ok=True)
             name = get_dist_name(
                 **demand_params,
-                mode=str(MODE_ID[mode]),
+                mode=str(ec.MODE_ID[mode]),
                 car_availability=ca,
                 csv=True,
             )
@@ -600,13 +581,13 @@ def calculate_adjustment(
         If an `elasticity_type` not present in the
         `GC_ELASTICITY_TYPES` lookup is given.
     """
-    if elasticity_type not in GC_ELASTICITY_TYPES:
+    if elasticity_type not in ec.GC_ELASTICITY_TYPES:
         raise KeyError(
             f"Unknown elasticity_type: '{elasticity_type}', "
-            f"expected one of {list(GC_ELASTICITY_TYPES.keys())}"
+            f"expected one of {list(ec.GC_ELASTICITY_TYPES.keys())}"
         )
 
-    chg_mode, cost_type = GC_ELASTICITY_TYPES[elasticity_type]
+    chg_mode, cost_type = ec.GC_ELASTICITY_TYPES[elasticity_type]
     # Filter only elasticities involving the mode that changes
     elasticities = elasticities.loc[
         elasticities["ModeCostChg"].str.lower() == chg_mode
@@ -711,7 +692,7 @@ def adjust_cost(
         If the cost to be adjusted isn't present in the `base_costs`
         or `gc_params`.
     """
-    mode, cost_type = GC_ELASTICITY_TYPES[elasticity_type]
+    mode, cost_type = ec.GC_ELASTICITY_TYPES[elasticity_type]
     # Other modes have scalar costs and no GC params so are just
     # multiplied by change
     if not isinstance(base_costs, pd.DataFrame):
@@ -781,7 +762,7 @@ def _elasticity_gc_factors(
             values=values_col,
         )
 
-    mode, cost_type = GC_ELASTICITY_TYPES[elasticity_type]
+    mode, cost_type = ec.GC_ELASTICITY_TYPES[elasticity_type]
     cost, factor = None, None
     if cost_type == "gc":
         cost = 1.0
@@ -798,7 +779,7 @@ def _elasticity_gc_factors(
         elif cost_type == "fare":
             cost = square_matrix(cost_type)
             factor = 1 / gc_params["vt"]
-    elif mode in OTHER_MODES:
+    elif mode in ec.OTHER_MODES:
         cost = 1.0
 
     if cost is None:
@@ -844,12 +825,12 @@ def read_cost_changes(path: Path, years: List[str]) -> pd.DataFrame:
 
     unknown_types = []
     for i in df["elasticity_type"].unique():
-        if i not in GC_ELASTICITY_TYPES.keys():
+        if i not in ec.GC_ELASTICITY_TYPES.keys():
             unknown_types.append(i)
     if unknown_types:
         raise KeyError(
             f"Unknown elasticity_type: {unknown_types}, "
-            f"available types are: {list(GC_ELASTICITY_TYPES.keys())}"
+            f"available types are: {list(ec.GC_ELASTICITY_TYPES.keys())}"
         )
     missing_years = [i for i in years if i not in df["year"].unique().tolist()]
     if missing_years:

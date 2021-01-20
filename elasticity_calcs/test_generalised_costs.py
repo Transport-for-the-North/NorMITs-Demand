@@ -14,12 +14,12 @@ import numpy as np
 import pandas as pd
 
 # Local imports
+from elasticity_calcs import constants as ec
 from .generalised_costs import (
     _average_matrices,
     _check_matrices,
     gen_cost_car_mins,
     gen_cost_rail_mins,
-    RAIL_GC_FACTORS,
     gen_cost_elasticity_mins,
     get_costs,
     read_gc_parameters,
@@ -204,7 +204,7 @@ class TestGenCostRailMins:
     @pytest.mark.parametrize("factors,answer", zip(TEST_FACTORS, TEST_ANSWERS))
     def test_calculation(self, factors: Dict[str, float], answer: np.array):
         """Tests the calculation with different weighting factors. """
-        factors = RAIL_GC_FACTORS if factors is None else factors
+        factors = ec.RAIL_GC_FACTORS if factors is None else factors
         np.testing.assert_array_equal(
             gen_cost_rail_mins(self.MATRICES, self.VT, factors), answer
         )
