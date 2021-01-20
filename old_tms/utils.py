@@ -325,6 +325,7 @@ def glimpse(dataframe):
     gl = dataframe.iloc[0:5]
     return gl
 
+
 def control_to_ntem(msoa_output,
                     ntem_totals,
                     lad_lookup,
@@ -373,6 +374,10 @@ def control_to_ntem(msoa_output,
         adjusted_output:
             DF with same msoa zoning as input but controlled to NTEM.
     """
+    # TODO: control_to_ntem() is a bottleneck in P/A models. Optimise?
+    # TODO: control_to_ntem() returns group cols in different dtype than given
+    # Possible to remove merge? align?
+
     # Copy output
     output = msoa_output.copy()
 

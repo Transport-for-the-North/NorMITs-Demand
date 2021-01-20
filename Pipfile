@@ -10,6 +10,10 @@ pytest = "*"
 [packages]
 pandas = "*"
 tqdm = "*"
+openpyxl = "*"
 
 [requires]
 python_version = "3.8"
+
+[pipenv]
+allow_prereleases = true
