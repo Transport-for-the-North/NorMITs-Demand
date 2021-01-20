@@ -104,11 +104,12 @@ def read_elasticity_file(
         df = safe_read_csv(data, dtype=dtypes, usecols=dtypes.keys())
 
     # Filter required values
-    for col, val in [
+    filters = [
         ("ElasticityType", elasticity_type),
         ("Purp", purpose),
         ("MarketShare", market_share),
-    ]:
+    ]
+    for col, val in filters:
         if val is None:
             continue
         df = df.loc[df[col] == val]
@@ -224,7 +225,7 @@ def read_demand_matrix(
                 lookup,
                 cols,
                 split_column="split",
-                check_total=False
+                check_total=False,
             )
 
     return demand.sort_index().sort_index(axis=1), reverse, old_zone

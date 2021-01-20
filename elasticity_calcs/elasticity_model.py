@@ -772,9 +772,15 @@ def _elasticity_gc_factors(
         If the elasticitytype given leads to an unknown combination
         of cost_type and mode.
     """
-    square_matrix = lambda c: base_costs.pivot(
-        index="origin", columns="destination", values=c
-    )
+
+    def square_matrix(values_col: str) -> pd.DataFrame:
+        """Convert costs column into a square matrix."""
+        return base_costs.pivot(
+            index="origin",
+            columns="destination",
+            values=values_col,
+        )
+
     mode, cost_type = GC_ELASTICITY_TYPES[elasticity_type]
     cost, factor = None, None
     if cost_type == "gc":
