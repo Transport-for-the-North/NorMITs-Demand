@@ -1,17 +1,27 @@
 name: "todo_issues"
-on: ["push"]
+
+on:
+  # Trigger the workflow on push or pull request,
+  # but only for the main branch
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
 jobs:
   build:
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@master"
-      - name: "TODO to Issue"
-        uses: "alstr/todo-to-issue-action@v1.2-beta"
+      - name: TODO to Issue
+        uses: alstr/todo-to-issue-action@v2.4.1
         with:
           REPO: ${{ github.repository }}
           BEFORE: ${{ github.event.before }}
           SHA: ${{ github.sha }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LABEL: "# TODO"
+          LABEL: "# BACKLOG"
           COMMENT_MARKER: "#"
-        id: "todo"
+        id: "backlog"

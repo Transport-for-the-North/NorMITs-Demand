@@ -29,6 +29,8 @@ from typing import Union
 from typing import Iterable
 from typing import Iterator
 
+from pathlib import Path
+
 from math import isclose
 
 from tqdm import tqdm
@@ -110,6 +112,35 @@ def validate_zoning_system(zoning_system: str) -> str:
         raise ValueError("%s is not a valid name for a zoning system"
                          % zoning_system)
     return zoning_system
+
+
+def validate_scenario_name(scenario_name: str) -> str:
+    """
+    Tidies up zoning_system and raises an exception if not a valid name
+
+    Parameters
+    ----------
+    scenario_name:
+        The name of the scenario to validate
+
+    Returns
+    -------
+    scenario_name:
+        scenario_name with both strip and upper applied to remove any
+        whitespace and make it all uppercase
+
+    Raises
+    -------
+    ValueError:
+        If scenario_name is not a valid name for a scenario
+    """
+    # Init
+    scenario_name = scenario_name.strip().upper()
+
+    if scenario_name not in consts.SCENARIOS:
+        raise ValueError("%s is not a valid name for a scenario."
+                         % scenario_name)
+    return scenario_name
 
 
 def validate_model_name(model_name: str) -> str:
@@ -235,10 +266,31 @@ def validate_vdm_seg_params(seg_params: Dict[str, Any]) -> Dict[str, Any]:
     return seg_params
 
 
+def print_w_toggle(*args, echo, **kwargs):
+    """
+    Small wrapper to only print when echo=True
+
+    Parameters
+    ----------
+    *args:
+        The text to print - can be passed in the same format as a usual
+        print function
+
+    echo:
+        Whether to print the text or not
+
+    **kwargs:
+        Any other kwargs to pass directly to the print function call
+    """
+    if echo:
+        print(*args, **kwargs)
+
+
 def build_io_paths(import_location: str,
                    export_location: str,
                    model_name: str,
                    iter_name: str,
+                   scenario_name: str,
                    demand_version: str,
                    demand_dir_name: str = 'NorMITs Demand',
                    ) -> Tuple[dict, dict, dict]:
@@ -265,6 +317,10 @@ def build_io_paths(import_location: str,
         The name of the iteration being run. Usually of the format iterx,
         where x is a number, e.g. iter3
 
+    scenario_name:
+        The name of the scenario use to produce outputs. This should be one
+        of consts.SCENARIOS
+
     demand_version:
         Version number of NorMITs Demand being run - this is used to generate
         the correct output path.
@@ -286,11 +342,10 @@ def build_io_paths(import_location: str,
     params:
         Dictionary of parameter export paths with the following keys:
         compile, tours
-
     """
     # TODO: Tidy up Y:/ drive imports/inputs folders after contract
     # Init
-    model_name = model_name.lower()
+    model_name = validate_model_name(model_name)
 
     # ## IMPORT PATHS ## #
     # Attraction weights are a bit special, we get these directly from
@@ -308,7 +363,7 @@ def build_io_paths(import_location: str,
     # Generate import and export paths
     model_home = os.path.join(import_location, demand_dir_name)
     import_home = os.path.join(model_home, 'import')
-    input_home = os.path.join(model_home, 'inputs', 'default')
+    input_home = os.path.join(import_home, 'default')
 
     imports = {
         'home': import_home,
@@ -318,6 +373,7 @@ def build_io_paths(import_location: str,
         'lookups': os.path.join(model_home, 'lookup'),
         'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
         'zoning': os.path.join(input_home, 'zoning'),
+        'scenarios': os.path.join(import_home, 'scenarios'),
         'a_weights': a_weights_path
     }
 
@@ -327,7 +383,8 @@ def build_io_paths(import_location: str,
         export_location,
         demand_dir_name,
         model_name,
-        demand_version + "-EFS_Output",
+        "v%s-EFS_Output" % demand_version,
+        scenario_name,
         iter_name,
     ]
     export_home = os.path.join(*fname_parts)
@@ -347,7 +404,9 @@ def build_io_paths(import_location: str,
         'productions': os.path.join(export_home, 'Productions'),
         'attractions': os.path.join(export_home, 'Attractions'),
         'sectors': os.path.join(export_home, 'Sectors'),
-        'print_audits': os.path.join(export_home, 'Audits'),
+        'audits': os.path.join(export_home, 'Audits'),
+        'dist_audits': os.path.join(export_home, 'Audits', 'Matrices'),
+        'reports': os.path.join(export_home, 'Reports'),
 
         # Pre-ME
         'pa': os.path.join(matrices_home, pa),
@@ -720,7 +779,9 @@ def get_growth_values(base_year_df: pd.DataFrame,
                                      errors='ignore')
 
     # Merge on merge col
-    growth_values = pd.merge(base_year_df, growth_df, on=merge_cols)
+    growth_values = pd.merge(base_year_df,
+                             growth_df,
+                             on=merge_cols)
 
     # Grow base year value by values given in growth_df - 1
     # -1 so we get growth values. NOT growth values + base year
@@ -788,6 +849,9 @@ def copy_and_rename(src: str, dst: str) -> None:
     """
     Makes a copy of the src file and saves it at dst with the new filename.
 
+    If no filename is given for dst, then the file will be copied over with
+    the same name as used in src.
+
     Parameters
     ----------
     src:
@@ -807,7 +871,7 @@ def copy_and_rename(src: str, dst: str) -> None:
         raise IOError("The given src file is not a file. Cannot handle "
                          "directories.")
 
-    # Only rename if given a filename
+    # If no filename given, don't need to rename - just use src filename
     if '.' not in os.path.basename(dst):
         # Copy over with same filename
         shutil.copy(src, dst)
@@ -825,39 +889,6 @@ def copy_and_rename(src: str, dst: str) -> None:
     # Copy then rename
     shutil.copy(src, dst_head)
     shutil.move(os.path.join(dst_head, src_tail), dst)
-
-
-def get_model_name(mode: int) -> str:
-    """
-    Returns a string of the TfN model name based on the mode given.
-
-    Parameters
-    ----------
-    mode:
-        Mode of transport
-
-    Returns
-    -------
-    model_name:
-        model name string
-    """
-    mode_to_name = {
-        1: None,
-        2: None,
-        3: 'noham',
-        4: None,
-        5: None,
-        6: 'norms'
-    }
-
-    if mode not in mode_to_name:
-        raise ValueError("'%s' is not a valid mode." % str(mode))
-
-    if mode_to_name[mode] is None:
-        raise ValueError("'%s' is a valid mode, but a model name does not "
-                         "exist for it." % str(mode))
-
-    return mode_to_name[mode]
 
 
 def add_fname_suffix(fname: str, suffix: str):
@@ -886,6 +917,7 @@ def add_fname_suffix(fname: str, suffix: str):
 
 
 def safe_read_csv(file_path: str,
+                  print_time: bool = False,
                   **kwargs
                   ) -> pd.DataFrame:
     """
@@ -895,6 +927,9 @@ def safe_read_csv(file_path: str,
     ----------
     file_path:
         Path to the file to read in
+
+    print_time:
+        Whether to print out some info on how long the file read has taken
 
     kwargs:
         ANy kwargs to pass onto pandas.read_csv()
@@ -913,7 +948,16 @@ def safe_read_csv(file_path: str,
     if not os.path.exists(file_path):
         raise IOError("No file exists at %s" % file_path)
 
-    return pd.read_csv(file_path, **kwargs)
+    # Just return the file
+    if not print_time:
+        return pd.read_csv(file_path, **kwargs)
+
+    # Print out some timing info while reading
+    start = time.perf_counter()
+    print('\tReading "%s"' % file_path, end="")
+    df = pd.read_csv(file_path, **kwargs)
+    print(" - Done in %fs" % (time.perf_counter() - start))
+    return df
 
 
 def is_none_like(o) -> bool:
@@ -1506,6 +1550,153 @@ def expand_distribution(dist: pd.DataFrame,
     return dist
 
 
+def ensure_segmentation(df: pd.DataFrame,
+                        p_needed: List[int] = None,
+                        m_needed: List[int] = None,
+                        soc_needed: List[int] = None,
+                        ns_needed: List[int] = None,
+                        ca_needed: List[int] = None,
+                        tp_needed: List[int] = None,
+                        p_col: str = 'p',
+                        m_col: str = 'm',
+                        soc_col: str = 'soc',
+                        ns_col: str = 'ns',
+                        ca_col: str = 'ca',
+                        tp_col: str = 'tp',
+                        ignore_ns: bool = False,
+                        ignore_ca: bool = False
+                        ) -> pd.DataFrame:
+    """
+    Ensures the required segmentation exists in the given dataframe
+
+    Check is carried out by ensuring a column exists in the dataframe if the
+    list of inputs for that segmentation is not None, or only contains one
+    item. This function will also try to make sure the columns are in the
+    correct data types, and will return a copy of the given df after
+    conversion.
+
+    Parameters
+    ----------
+    df:
+        The dataframe to ensure the segmentation exists in.
+
+    p_needed:
+        A list of the purposes to segment by, or None if no segmentation
+        required by purpose.
+
+    m_needed:
+        A list of the modes to segment by, or None if no segmentation
+        required by mode.
+
+    soc_needed:
+        A list of soc categories to segment by, or None if no segmentation
+        required by soc.
+
+    ns_needed:
+        A list of ns categories to segment by, or None if no segmentation
+        required by ns
+
+    ca_needed:
+        A list of ca categories to segment by, or None if no segmentation
+        required by car availability
+
+    tp_needed:
+        A list of time periods to segment by, or None if no segmentation
+        required by time period.
+
+    p_col:
+        The name of the column containing purpose data.
+    
+    m_col:
+        The name of the column containing mode data.
+    
+    soc_col:
+        The name of the column containing soc data.
+
+    ns_col:
+        The name of the column containing ns data.
+
+    ca_col:
+        The name of the column containing car availability data.
+
+    tp_col:
+        The name of the column containing time period data.
+
+    ignore_ns:
+        If True, the ns segmentation will not be checked regardless of the
+        value of ns_needed. This is useful when checking the segmentation of
+        attractions which never have ns segmentation.
+
+    ignore_ca:
+        If True, the car availability segmentation will not be checked
+        regardless of the value of ca_needed. This is useful when checking the
+        segmentation of attractions which do not have ca segmentation.
+
+    Returns
+    -------
+    converted_df:
+        The given df with some data type conversions applied to make sure
+        columns are using the correct data types.
+
+    Raises
+    ------
+    NormitsDemandError:
+        If the arguments given determine that a segmenation should exist, but
+        no segmentation can be found in df.
+    """
+    # Init
+    col_data_dict = {
+        p_col: p_needed,
+        m_col: m_needed,
+        soc_col: soc_needed,
+        ns_col: ns_needed,
+        ca_col: ca_needed,
+        tp_col: tp_needed
+    }
+
+    # Remove what we're ignoring
+    if ignore_ns:
+        del col_data_dict[ns_col]
+
+    if ignore_ca:
+        del col_data_dict[ca_col]
+
+    # Sanitise the df. Make sure column names are strings and soc/ns are
+    # strings
+    df.columns = df.columns.astype(str)
+
+    if soc_col in list(df):
+        df[soc_col] = df[soc_col].astype(str)
+
+    if ns_col in list(df):
+        df[ns_col] = df[ns_col].astype(str)
+
+    # Build a list of the columns we need to check for
+    check_cols = list()
+    for col, seg in col_data_dict.items():
+        if seg is None or len(seg) <= 1:
+            continue
+
+        check_cols.append(col)
+
+    if len(check_cols) == 0:
+        raise NormitsDemandError(
+            "There doesn't seem to be any segmentation we need to check for."
+            "Please make sure the segmentation parameters given are not None, "
+            "and longer than 1 item."
+        )
+
+    # Check all the columns exist
+    for col in check_cols:
+        if col not in list(df):
+            raise KeyError(
+                "No column exists in the given dataframe for %s segmentation."
+                % col
+            )
+        
+    return df
+
+
 def vdm_segment_loop_generator(to_list: Iterable[str],
                                uc_list: Iterable[str],
                                m_list: Iterable[int],
@@ -1560,7 +1751,6 @@ def segmentation_loop_generator(p_list: Iterable[int],
         else:
             raise ValueError("'%s' does not seem to be a valid soc or ns "
                              "purpose." % str(purpose))
-
         for mode in m_list:
             for segment in required_segments:
                 for car_availability in ca_list:
@@ -1584,9 +1774,9 @@ def segmentation_loop_generator(p_list: Iterable[int],
 
 def cp_segmentation_loop_generator(p_list: Iterable[int],
                                    m_list: Iterable[int],
-                                   soc_list: Iterable[int],
-                                   ns_list: Iterable[int],
-                                   ca_list: Iterable[int],
+                                   soc_list: Iterable[int] = None,
+                                   ns_list: Iterable[int] = None,
+                                   ca_list: Iterable[int] = None,
                                    tp_list: Iterable[int] = None
                                    ) -> Iterator[Dict[str, int]]:
     """
@@ -1594,6 +1784,9 @@ def cp_segmentation_loop_generator(p_list: Iterable[int],
     calib params instead of a number of integer
     """
     # Init
+    soc_list = [None] if soc_list is None else soc_list
+    ns_list = [None] if ns_list is None else ns_list
+    ca_list = [None] if ca_list is None else ca_list
     tp_list = [None] if tp_list is None else tp_list
 
     loop_generator = segmentation_loop_generator(
@@ -1922,7 +2115,7 @@ def is_in_string(vals: Iterable[str],
                  string: str
                  ) -> bool:
     """
-    Returns True if any of vals is on string, else False
+    Returns True if any of vals is in string, else False
     """
     for v in vals:
         if v in string:
@@ -2233,7 +2426,7 @@ def get_zone_translation(import_dir: str,
     # Load the file
     path = os.path.join(import_dir, base_filename % (from_zone, to_zone))
     translation = pd.read_csv(path)
-    
+
     # Make sure we can find the columns
     from_col = base_col_name % from_zone
     to_col = base_col_name % to_zone
@@ -2278,6 +2471,100 @@ def defaultdict_to_regular(d):
     if isinstance(d, defaultdict):
         d = {k: defaultdict_to_regular(v) for k, v in d.items()}
     return d
+
+
+def file_write_check(path: Union[str, Path], wait: bool=True) -> Path:
+    """Attempts to write to given path to see if file is in use.
+
+    Will either wait for the file to be closed or it will append numbers
+    to the file name until and path can be found that isn't in use.
+
+    Parameters
+    ----------
+    path : str
+        Path to the file to check.
+
+    wait : bool, optional
+        Whether or not to wait for the file to be closed, by default True.
+        If False appends number to the end of file name to find a path that
+        isn't in use.
+
+    Returns
+    -------
+    Path
+        Path that isn't currently in use, will be the same as given `path`
+        if wait is True.
+
+    Raises
+    ------
+    ValueError
+        When wait is False and a path can't be found, that isn't in use, in less
+        than 100 attempts.
+    """
+    path = Path(path)
+    new_path = path
+    count = 1
+    waiting = False
+    while True:
+        try:
+            with open(new_path, 'wb') as f:
+                pass
+            return new_path
+        except PermissionError:
+            if wait:
+                if not waiting:
+                    print(f"Cannot write to file at {new_path.absolute()}.",
+                          "Please ensure it is not open anywhere.",
+                          "Waiting for permission to write...", sep='\n')
+                    waiting = True
+                time.sleep(1)
+            else:
+                new_path = path.parent / (path.stem + f'_{count}' + path.suffix)
+                count += 1
+                if count > 100:
+                    raise ValueError('Too many files in use!')
+
+
+def safe_dataframe_to_csv(df, out_path, flatten_header=False, **to_csv_kwargs):
+    """
+    Wrapper around df.to_csv. Gives the user a chance to close the open file.
+
+    Parameters
+    ----------
+    df:
+        pandas.DataFrame to write to call to_csv on
+
+    out_path:
+        Where to write the file to. TO first argument to df.to_csv()
+
+    flatten_header: bool, optional
+        Whether or not MultiIndex column names should be flattened into a single level,
+        default False.
+
+    to_csv_kwargs:
+        Any other kwargs to be passed straight to df.to_csv()
+
+    Returns
+    -------
+        None
+    """
+    if flatten_header and len(df.columns.names) > 1:
+        # Combine multiple columns levels into a single name split by ':'
+        df.columns = [' : '.join(str(i) for i in c) for c in df.columns]
+
+    written_to_file = False
+    waiting = False
+    while not written_to_file:
+        try:
+            df.to_csv(out_path, **to_csv_kwargs)
+            written_to_file = True
+        except PermissionError:
+            if not waiting:
+                print("Cannot write to file at %s.\n" % out_path +
+                      "Please ensure it is not open anywhere.\n" +
+                      "Waiting for permission to write...\n")
+                waiting = True
+            time.sleep(1)
 
 
 def fit_filter(df: pd.DataFrame,
@@ -2416,9 +2703,7 @@ def filter_by_segmentation(df: pd.DataFrame,
     return df[mask]
 
 
-def intersection(l1: List[Any],
-                 l2: List[Any],
-                 ) -> List[Any]:
+def intersection(l1: List[Any], l2: List[Any]) -> List[Any]:
     """
     Efficient method to return the intersection between l1 and l2
     """
@@ -2806,6 +3091,7 @@ def get_costs(model_lookup_path,
 
     # Filter down on purpose
     cost_cols = [x for x in cols if str_purpose in x]
+
     # Handle if we have numeric purpose costs, hope so, they're better!
     if len(cost_cols) == 0:
         cost_cols = [x for x in cols if ('p' + str(purpose)) in x]
@@ -2947,7 +3233,7 @@ def parse_mat_output(list_dir,
             if len(dat) == 0:
                 dat = 'none'
             split_dict.update({name: dat})
-        split_list.append(split_dict)           
+        split_list.append(split_dict)
 
     segments = pd.DataFrame(split_list)
     segments = segments.replace({np.nan:'none'})

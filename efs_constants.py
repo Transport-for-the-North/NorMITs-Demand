@@ -28,6 +28,8 @@ ALL_MODES = [1, 2, 3, 5, 6]
 TIME_PERIODS = [1, 2, 3, 4]
 TIME_PERIOD_STRS = ['tp' + str(x) for x in TIME_PERIODS]
 
+VALID_TRIP_ORIGINS = ['hb', 'nhb']
+
 PROCESS_COUNT = -2
 
 # ## VDM/ME2 constants ## #
@@ -88,6 +90,22 @@ _model_name_modes = [
 MODEL_NAMES = [x[0] for x in _model_name_modes]
 MODEL_MODES = {name: modes for name, modes in _model_name_modes}
 
+# Valid Scenario Names
+SC00_NTEM = 'NTEM'
+SC01_JAM = 'SC01_JAM'
+SC02_PP = 'SC02_PP'
+SC03_DD = 'SC03_DD'
+SC04_UZC = 'SC04_UZC'
+
+TFN_SCENARIOS = [
+    SC00_NTEM,
+    SC01_JAM,
+    SC02_PP,
+    SC03_DD,
+    SC04_UZC
+]
+SCENARIOS = [SC00_NTEM] + TFN_SCENARIOS
+
 
 # DIRECTORY NAMES
 AUDITS_DIRNAME = 'Audits'
@@ -108,6 +126,9 @@ TAG_CERTAINTY_BOUNDS = {
 # Zone_system, trip_origin
 PRODS_FNAME = '%s_%s_productions.csv'
 ATTRS_FNAME = '%s_%s_attractions.csv'
+
+# Additive growth audit
+PRODS_AG_FNAME = '%s_%s_productions_additive_growth.csv'
 
 # zone_system
 POP_FNAME = '%s_population.csv'
@@ -222,9 +243,13 @@ DEFAULT_PRODUCTION_CONSTRAINTS = [
     False   # final trip based constraint
 ]
 
+TFN_MSOA_SECTOR_LOOKUPS = {
+    "population": "tfn_sector_msoa_pop_weighted_lookup.csv",
+    "employment": "tfn_sector_msoa_emp_weighted_lookup.csv"
+}
 
 # RUNNING CONSTANTS
-MODEL_NAME = 'norms'
+MODEL_NAME = 'noham'
 
 # YEARS
 BASE_YEAR = 2018
