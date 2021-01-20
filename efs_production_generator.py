@@ -468,15 +468,6 @@ class EFSProductionGenerator:
             to='int'
         )
 
-        productions = productions.rename(
-            columns={
-                internal_zone_col: external_zone_col,
-                'ca': 'car_availability_id',
-                'p': 'purpose_id',
-                'area_type': 'area_type_id'
-            }
-        )
-
         print("Writing HB productions to disk...")
         fname = consts.PRODS_FNAME % (zoning_system, 'hb')
         path = os.path.join(out_path, fname)
@@ -1102,6 +1093,7 @@ class NhbProductionModel:
     def __init__(self,
                  import_home: str,
                  export_home: str,
+                 msoa_conversion_path: str,
                  model_name: str,
                  seg_level: str = 'tfn',
                  return_segments: List[str] = None,
@@ -1125,6 +1117,9 @@ class NhbProductionModel:
 
                  # Alternate output paths
                  audit_write_dir: str = None,
+
+                 # Converting back to old EFS format
+                 external_zone_col: str = 'model_zone_id',
 
                  # Alternate col names from inputs
                  m_col: str = 'm',
@@ -1155,6 +1150,12 @@ class NhbProductionModel:
             usually related to a specific run of the ExternalForecastSystem,
             and should be gotten from there.
             e.g. 'E:/NorMITs Demand/norms_2015/v2_3-EFS_Output/iter1'
+
+        msoa_conversion_path:
+            Path to the file containing the conversion from msoa integer
+            identifiers to the msoa string code identifiers. Hoping to remove
+            this in a future update and align all of EFS to use msoa string
+            code identifiers.
 
         model_name:
             The name of the model being run. This is usually something like:
@@ -1276,6 +1277,7 @@ class NhbProductionModel:
         self.model_name = model_name
         self.seg_level = seg_level
         self.return_segments = return_segments
+        self.msoa_conversion_path = msoa_conversion_path
 
         self.base_year = base_year
         self.future_years = future_years
@@ -1300,6 +1302,8 @@ class NhbProductionModel:
 
         self.print_audits = audits
         self.process_count = process_count
+        self.internal_zone_col = 'msoa_zone_id'
+        self.external_zone_col = external_zone_col
 
         self.imports, self.exports = self._build_paths(
             import_home=import_home,
@@ -1316,7 +1320,7 @@ class NhbProductionModel:
         
         if seg_level == 'tfn':
             self.segments = ['area_type', 'p', 'soc', 'ns', 'ca']
-            self.return_segments = [self.zone_col] + self.segments + [self.tp_col]
+            self.return_segments = [self.zone_col] + self.segments
             self.return_segments.remove('area_type')
         else:
             raise ValueError(
@@ -1595,16 +1599,9 @@ class NhbProductionModel:
         """
 
         # Read in files
-        dtypes = {'soc': str, 'ns': str}
+        dtypes = {self.soc_col: str, self.ns_col: str}
         prods = pd.read_csv(self.imports['productions'], dtype=dtypes)
         attrs = pd.read_csv(self.imports['attractions'], dtype=dtypes)
-
-        # Ensure correct column types
-        if self.soc_col in prods:
-            prods[self.soc_col] = prods[self.soc_col].astype('str')
-
-        if self.ns_col in prods:
-            prods[self.ns_col] = prods[self.ns_col].astype('str')
 
         # Determine all unique segments - ignore mode
         seg_params = du.build_seg_params(self.seg_level, prods)
@@ -1660,6 +1657,7 @@ class NhbProductionModel:
 
     def run(self,
             output_raw: bool = True,
+            recreate_productions: bool = True,
             verbose: bool = True,
             ) -> pd.DataFrame:
         """
@@ -1679,7 +1677,12 @@ class NhbProductionModel:
         ----------
         output_raw:
             Whether to output the raw nhb productions before aggregating to
-            the requiroed segmentation and mode.
+            the required segmentation and mode.
+
+        recreate_productions:
+            Whether to recreate the nhb productions or not. If False, it will
+            look in out_path for previously produced productions and return
+            them. If none can be found, they will be generated.
 
         verbose:
             Whether to print progress bars during processing or not.
@@ -1690,6 +1693,14 @@ class NhbProductionModel:
             NHB productions for the mode and segmentation requested in the
             class constructor
         """
+        # Return previously created productions if we can
+        fname = consts.PRODS_FNAME % (self.zoning_system, 'nhb')
+        final_output_path = os.path.join(self.exports['productions'], fname)
+
+        if not recreate_productions and os.path.isfile(final_output_path):
+            print("Found some already produced nhb productions. Using them!")
+            return pd.read_csv(final_output_path)
+
         # Initialise timing
         start_time = timing.current_milli_time()
         du.print_w_toggle(
@@ -1807,6 +1818,20 @@ class NhbProductionModel:
         nhb_prods = nhb_prods.reindex(index_cols, axis='columns')
         nhb_prods = nhb_prods.groupby(group_cols).sum().reset_index()
 
+        # ## CONVERT TO OLD EFS FORMAT ## #
+        # Rename columns so output of this function call is the same
+        # as it was before the re-write
+        nhb_prods = du.convert_msoa_naming(
+            nhb_prods,
+            msoa_col_name=self.internal_zone_col,
+            msoa_path=self.msoa_conversion_path,
+            to='int'
+        )
+
+        # Rename to the external zone column name
+        col_rename = {self.internal_zone_col: self.external_zone_col}
+        nhb_prods = nhb_prods.rename(columns=col_rename)
+
         # Output the aggregated productions
         print("Writing NHB Productions to disk...")
         fname = consts.PRODS_FNAME % (self.zoning_system, 'nhb')
@@ -1865,7 +1890,7 @@ def _gen_base_productions_internal(area_type,
         # Filter the productions and attractions
         p_subset = du.filter_by_segmentation(prods, seg_vals, fit=True)
 
-        # Soc is always special - do this to avoid dropping demand
+        # Soc0 is always special - do this to avoid dropping demand
         if seg_vals.get('soc', -1) == '0':
             temp_seg_vals = seg_vals.copy()
             temp_seg_vals.pop('soc')
