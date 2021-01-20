@@ -134,6 +134,7 @@ def _distribute_pa_internal(productions,
                             echo,
                             audit_out,
                             dist_out,
+                            round_dp=4
                             ):
     """
     Internal function of distribute_pa(). See that for full documentation.
@@ -248,7 +249,8 @@ def _distribute_pa_internal(productions,
         seed_infill=seed_infill,
         idx_col=zone_col,
         unique_col=unique_col,
-        tol=furness_tol
+        tol=furness_tol,
+        round_dp=round_dp,
     )
 
     if audit_out is not None:
@@ -299,6 +301,7 @@ def distribute_pa(productions: pd.DataFrame,
                   seed_mat_format: str = 'enhpa',
                   echo: bool = False,
                   audit_out: str = None,
+                  round_dp: int = 4,
                   process_count: int = consts.PROCESS_COUNT
                   ) -> None:
     """
@@ -418,6 +421,10 @@ def distribute_pa(productions: pd.DataFrame,
 
     audit_out:
         Path to a directory to output all audit checks.
+        
+    round_dp:
+        The number of decimal places to round the output values of the
+        furness to. Uses 4 by default.
 
     process_count:
         The number of processes to use when distributing all segmentations.
@@ -524,6 +531,7 @@ def distribute_pa(productions: pd.DataFrame,
             'echo': echo,
             'audit_out': audit_out,
             'dist_out': dist_out,
+            'round_dp': round_dp,
         }
 
         # Build a list of all kw arguments
@@ -563,6 +571,7 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
                            tol: float = 1e-9,
                            idx_col: str = 'model_zone_id',
                            unique_col: str = 'trips',
+                           round_dp: int = 4,
                            ):
     """
     Wrapper around doubly_constrained_furness() to handle pandas in/out
@@ -605,6 +614,10 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     unique_col:
         Name of the columns in row_targets and col_targets that contain the
         values to target during the furness.
+
+    round_dp:
+        The number of decimal places to round the output values of the
+        furness to. Uses 4 by default.
 
     Returns
     -------
@@ -656,6 +669,8 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         tol=tol,
         max_iters=max_iters
     )
+
+    furnessed_mat = np.round(furnessed_mat, round_dp)
 
     # ## STICK BACK INTO PANDAS ## #
     furnessed_mat = pd.DataFrame(

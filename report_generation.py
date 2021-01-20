@@ -2,12 +2,14 @@ import os
 import re
 import json
 from glob import glob
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Any
 from itertools import product
 
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+
+from demand_utilities import concurrency as conc
 
 from demand_utilities import utils as du
 from demand_utilities import reports as dr
@@ -25,21 +27,100 @@ VALID_TRIP_ORIGIN = ["hb", "nhb"]
 #  labels: optimisation
 
 
+def _maybe_aggregate_matrices(import_dir,
+                              export_dir,
+                              trip_origin,
+                              matrix_format,
+                              years_needed,
+                              p_needed,
+                              m_needed,
+                              soc_needed,
+                              ns_needed,
+                              ca_needed,
+                              tp_needed
+                              ) -> None:
+    """
+    Checks to see if the aggregation actually needs to take place. If not,
+    just copies over the already existing matrices.
+
+    Much faster than calling aggregate_matrices() if it's not needed!
+    """
+
+    # ## GENERATE THE NEEDED MATRIX NAMES ## #
+    loop_generator = du.cp_segmentation_loop_generator(
+        p_list=p_needed,
+        m_list=m_needed,
+        soc_list=soc_needed,
+        ns_list=ns_needed,
+        ca_list=ca_needed,
+        tp_list=tp_needed
+    )
+
+    # Loop through all the combinations
+    mat_names = list()
+    for year in years_needed:
+        for calib_params in loop_generator:
+            # Add year
+            calib_params['yr'] = year
+            mat_names.append(du.calib_params_to_dist_name(
+                trip_origin=trip_origin,
+                matrix_format=matrix_format,
+                calib_params=calib_params,
+                csv=True
+            ))
+
+    # ## ONLY AGGREGATE IF ALL NEEDED MATRICES DON'T EXIST ## #
+    existing_mat_names = [x for x in os.listdir(import_dir) if '.csv' in x]
+
+    if all([name in existing_mat_names for name in mat_names]):
+        # All matrices we need already exist. Just copy over!
+        print("No need to aggregate - just copying over...")
+
+        # ## MULTIPROCESS ## #
+        kwargs_list = list()
+        for name in mat_names:
+            kwargs_list.append({
+                'src': os.path.join(import_dir, name),
+                'dst': export_dir
+            })
+
+        conc.multiprocess(
+            fn=du.copy_and_rename,
+            kwargs=kwargs_list,
+            process_count=consts.PROCESS_COUNT
+        )
+
+    else:
+        # We're gonna have to aggregate to make the matrices we need
+        print("Aggregating matrices...")
+        aggregate_matrices(
+            import_dir=import_dir,
+            export_dir=export_dir,
+            trip_origin=trip_origin,
+            matrix_format=matrix_format,
+            years_needed=years_needed,
+            p_needed=p_needed,
+            m_needed=m_needed,
+            soc_needed=soc_needed,
+            ns_needed=ns_needed,
+            ca_needed=ca_needed,
+            tp_needed=tp_needed,
+        )
+
+
 def matrix_reporting(matrix_directory: str,
                      output_dir: str,
                      trip_origin: str,
                      matrix_format: str,
                      segments_needed: dict = None,
                      zone_file: str = None,
-                     sectors_files: List[str] = None,
+                     sectors_files: List[str] = None,  # Should be a dict?
                      zones_name: str = "model",
-                     sectors_names: List[str] = ["sector"],
                      aggregation_method: str = "sum",
                      tld_path: str = None,
                      cost_path: str = None,
                      overwrite_dir: bool = True,
                      collate_years: bool = False,
-                     model_name: str = "norms_2015"
                      ):
     """
     TODO: write documentataion
@@ -105,7 +186,7 @@ def matrix_reporting(matrix_directory: str,
     for year in tqdm(parsed_segments["years"], desc="Aggregating by Year"):
         try:
             # TODO add aggregation_method to this function
-            output_files = aggregate_matrices(
+            _maybe_aggregate_matrices(
                 import_dir=matrix_directory,
                 export_dir=output_dir,
                 trip_origin=trip_origin,
@@ -116,21 +197,18 @@ def matrix_reporting(matrix_directory: str,
                 soc_needed=parsed_segments["soc"],
                 ns_needed=parsed_segments["ns"],
                 ca_needed=parsed_segments["ca"],
-                tp_needed=parsed_segments["tp"],
-                return_paths=True
+                tp_needed=parsed_segments["tp"]
             )
         except AttributeError as e:
             # If there are no matrices available for these segments
-            # This should probably be handled in matrix_processing
-            print("ERROR::MISSING_SEGMENTS")
+            print("ERROR::MISSING_SEGMENTS! Did you pass in the correct "
+                  ".json file??")
             print(e)
             success = False
 
+        # Get a list of the matrices coped over
         output_files = glob(os.path.join(output_dir, "*.csv"))
-        output_files = [
-            x for x in output_files
-            if not any(sectors_name in x for sectors_name in sectors_names)
-        ]
+        output_files = [x for x in output_files if not du.is_in_string(sectors_names, x)]
         mat_files = [os.path.basename(x) for x in output_files]
 
         # Extract the trip length distributions
@@ -145,7 +223,7 @@ def matrix_reporting(matrix_directory: str,
             )
             overwrite_tld = False
 
-        # Aggregate sectors if requried
+        # Aggregate sectors if required
         if sectors_files is not None:
             sr = SectorReporter()
             valid_files = output_files.copy()
@@ -169,7 +247,7 @@ def matrix_reporting(matrix_directory: str,
                     os.replace(matrix_file, new_file)
 
     # Collate the sectored files into one for easier use in Power BI etc.
-    concat_matrix_folder(output_dir)
+    concat_matrix_folder(output_dir, matrix_format)
 
     if collate_years:
         # Create a GIS format report
@@ -302,6 +380,131 @@ def parse_segments(required_segments: Union[List[int], str],
         return required_segments
 
 
+def _tld_reporting_internal(mat_dict,
+                            matrix_type,
+                            matrix_dir,
+                            tld_path,
+                            cost_lookup_path,
+                            output_dir,
+                            ) -> None:
+
+    # Extract trip matrix info for each file
+    mat_name = mat_dict.pop("matrix")
+    print(". Generating tld report for: %s" % mat_name)
+    matrix = pd.read_csv(os.path.join(matrix_dir, mat_name))
+
+    # Extract segments if they exist - remove from calib params if needed
+    # purpose, mode, segment(optional) required in tlb function
+    trip_origin = mat_dict.pop("trip_origin")
+    year = mat_dict.pop("yr")
+    purpose = mat_dict.get("p")
+    mode = mat_dict.get("m")
+    soc = mat_dict.get("soc")
+    ns = mat_dict.get("ns")
+    ca = mat_dict.pop("ca", None)
+
+    # Choose the correct segmentation for tlb and dist names
+    # Non-home based in "standard_segments" can use tp to select tlb
+    # Time period is not an option otherwise
+    if soc is None and ns is None:
+        seg_tld_path = os.path.join(tld_path, "standard_segments")
+        segment = None
+        if trip_origin == "hb":
+            tp = mat_dict.pop("tp", None)
+        else:
+            tp = mat_dict.get("tp")
+    else:
+        seg_tld_path = os.path.join(tld_path, "enhanced_segments")
+        segment = soc if du.is_none_like(ns) else ns
+        tp = mat_dict.pop("tp", None)
+
+    for item, dat in mat_dict.items():
+        if dat.isnumeric():
+            mat_dict.update({item: int(dat)})
+
+    # Get the relevant trip length bands
+    # Some legacy code here - "ntem"
+    # TODO Use the year here to get the forecast/base tlb when they exist
+    year_tld_path = seg_tld_path
+    tlb = du.get_trip_length_bands(
+        year_tld_path,
+        mat_dict,
+        "ntem",
+        trip_origin,
+        replace_nan=False,
+        echo=True
+    )
+
+    # Set the string sent to the costs function
+    # BACKLOG: fix for NORMS tp costs - do not exist at the moment
+    #  labels: missing data
+    tp_str = "24hr" if tp is None else "tp"
+    tp_str = "24hr"
+    _ = str(mat_dict.pop("tp", None))
+
+    # Get the cost data for the purpose/mode
+    costs, cost_name = du.get_costs(
+        cost_lookup_path,
+        mat_dict,
+        tp=tp_str,
+        iz_infill=0.5
+    )
+
+    # Convert to a square numpy matrix
+    unq_zones = list(range(1, (costs[list(costs)[0]].max()) + 1))
+    costs = du.df_to_np(
+        costs,
+        v_heading='p_zone',
+        h_heading='a_zone',
+        values='cost',
+        unq_internal_zones=unq_zones,
+        echo=False
+    )
+
+    matrix = matrix.drop(list(matrix)[0], axis=1).values
+
+    # This matches the shape to the NORMS cost zones
+    if costs.shape != matrix.shape:
+        print(
+            "WARNING - Padded matrix to match costs shape "
+            + str(matrix.shape) + " -> " + str(costs.shape)
+        )
+        pad_matrix = np.zeros(costs.shape)
+        pad_matrix[:matrix.shape[0], :matrix.shape[1]] = matrix
+    else:
+        pad_matrix = matrix
+
+    # Get trip length by band
+
+    (trip_lengths_by_band_km,
+     band_shares_by_band,
+     average_trip_length) = dr.get_trip_length_by_band(tlb,
+                                                       costs,
+                                                       pad_matrix)
+
+    # Merge into single dataframe on the band index
+    tld_results = trip_lengths_by_band_km.merge(
+        band_shares_by_band,
+        on="tlb_index"
+    ).fillna(0.0)
+
+    # Save individual bands and band shares to separate csv files
+    out_file = du.get_dist_name(
+        trip_origin,
+        matrix_type,
+        year,
+        purpose,
+        mode,
+        segment=segment,
+        car_availability=ca,
+        tp=tp,
+        csv=True,
+        suffix="_tld"
+    )
+    out_file = os.path.join(output_dir, out_file)
+    tld_results.to_csv(out_file, index=False)
+
+
 def tld_reporting(matrix_dir: str,
                   matrix_files: List[str],
                   matrix_type: str,
@@ -322,7 +525,7 @@ def tld_reporting(matrix_dir: str,
         Path to the base cost folder
     """
 
-    print("Getting trip length distributions")
+    print("Getting trip length distributions...")
     # Create the tld directory if it doesn't exist
     output_dir = os.path.join(matrix_dir, "tld")
     if not os.path.isdir(output_dir):
@@ -341,125 +544,30 @@ def tld_reporting(matrix_dir: str,
         file_format=".csv",
         file_name="matrix"
     )
-    pbar = tqdm(mat_df.iterrows(), total=mat_df.shape[0])
-    for _, mat_desc in pbar:
-        mat_dict = mat_desc.to_dict()
 
-        # Extract trip matrix info for each file
-        matrix = mat_dict.pop("matrix")
-        matrix = pd.read_csv(
-            os.path.join(matrix_dir, matrix)
-        )
+    # ## GENERATE TLD REPORTS FOR EACH SEGMENTATION ## #
+    # Init args that are the same for each function call
+    unchanging_kwargs = {
+        'matrix_type': matrix_type,
+        'matrix_dir': matrix_dir,
+        'tld_path': tld_path,
+        'cost_lookup_path': cost_lookup_path,
+        'output_dir': output_dir,
+    }
 
-        # Extract segments if they exist - remove from calib params if needed
-        # purpose, mode, segment(optional) required in tlb function
-        trip_origin = mat_dict.pop("trip_origin")
-        year = mat_dict.pop("yr")
-        purpose = mat_dict.get("p")
-        mode = mat_dict.get("m")
-        soc = mat_dict.get("soc")
-        ns = mat_dict.get("ns")
-        ca = mat_dict.pop("ca", None)
+    # Generate the changing arguments, and build list of kwargs
+    kwarg_list = list()
+    for _, mat_desc in mat_df.iterrows():
+        kwargs = unchanging_kwargs.copy()
+        kwargs['mat_dict'] = mat_desc.to_dict()
+        kwarg_list.append(kwargs)
 
-        # Choose the correct segmentation for tlb and dist names
-        # Non-home based in "standard_segments" can use tp to select tlb
-        # Time period is not an option otherwise
-        if soc is None and ns is None:
-            seg_tld_path = os.path.join(tld_path, "standard_segments")
-            segment = None
-            if trip_origin == "hb":
-                tp = mat_dict.pop("tp", None)
-            else:
-                tp = mat_dict.get("tp")
-        else:
-            seg_tld_path = os.path.join(tld_path, "enhanced_segments")
-            segment = soc if du.is_none_like(ns) else ns
-            tp = mat_dict.pop("tp", None)
-
-        for item, dat in mat_dict.items():
-            if dat.isnumeric():
-                mat_dict.update({item: int(dat)})
-
-        # Get the relevant trip length bands
-        # Some legacy code here - "ntem"
-        # TODO Use the year here to get the forecast/base tlb when they exist
-        year_tld_path = seg_tld_path
-        tlb = du.get_trip_length_bands(
-            year_tld_path,
-            mat_dict,
-            "ntem",
-            trip_origin,
-            replace_nan=False,
-            echo=True
-        )
-
-        # Set the string sent to the costs function
-        # TODO fix for NORMS tp costs - do not exist at the moment
-        tp_str = "24hr" if tp is None else "tp"
-        tp_str = "24hr"
-        _ = str(mat_dict.pop("tp", None))
-
-        # Get the cost data for the purpose/mode
-        costs, cost_name = du.get_costs(
-            cost_lookup_path,
-            mat_dict,
-            tp=tp_str,
-            iz_infill=0.5
-        )
-
-        # Convert to a square numpy matrix
-        unq_zones = list(range(1, (costs[list(costs)[0]].max())+1))
-        costs = du.df_to_np(
-            costs,
-            v_heading='p_zone',
-            h_heading='a_zone',
-            values='cost',
-            unq_internal_zones=unq_zones,
-            echo=False
-        )
-
-        matrix = matrix.drop(list(matrix)[0], axis=1).values
-
-        # This matches the shape to the NORMS cost zones
-        if costs.shape != matrix.shape:
-            pbar.set_description(
-                "WARNING - Padded matrix to match costs shape "
-                + str(matrix.shape) + " -> " + str(costs.shape)
-            )
-            pad_matrix = np.zeros(costs.shape)
-            pad_matrix[:matrix.shape[0], :matrix.shape[1]] = matrix
-        else:
-            pad_matrix = matrix
-
-        # Get trip length by band
-
-        (trip_lengths_by_band_km,
-         band_shares_by_band,
-         average_trip_length) = dr.get_trip_length_by_band(tlb,
-                                                           costs,
-                                                           pad_matrix)
-
-        # Merge into single dataframe on the band index
-        tld_results = trip_lengths_by_band_km.merge(
-            band_shares_by_band,
-            on="tlb_index"
-        ).fillna(0.0)
-
-        # Save individual bands and band shares to separate csv files
-        out_file = du.get_dist_name(
-            trip_origin,
-            matrix_type,
-            year,
-            purpose,
-            mode,
-            segment=segment,
-            car_availability=ca,
-            tp=tp,
-            csv=True,
-            suffix="_tld"
-        )
-        out_file = os.path.join(output_dir, out_file)
-        tld_results.to_csv(out_file, index=False)
+    # Call the function
+    conc.multiprocess(
+        fn=_tld_reporting_internal,
+        kwargs=kwarg_list,
+        process_count=consts.PROCESS_COUNT
+    )
 
     # Concatenate all files into a single stacked csv
     concat_vector_folder(
@@ -596,7 +704,7 @@ def concat_matrix_folder(data_dir: str,
     )
 
 
-def load_report_params(param_file: str) -> None:
+def load_report_params(param_file: str) -> Union[List[Any], Dict[str, Any]]:
     """Load report generation parameters from file.
     Allows a number of options to be set in a json file.
 
@@ -765,7 +873,6 @@ def main(param_file: str,
             tld_path=tld_path,
             cost_path=cost_path,
             collate_years=collate_years,
-            model_name=model_name
         )
 
         if not successful:
@@ -782,7 +889,7 @@ if __name__ == "__main__":
     # Power BI
 
     # Controls I/O
-    scenario = consts.SC04_UZC
+    scenario = consts.SC00_NTEM
     iter_num = 1
     import_home = "Y:/"
     export_home = "Y:/"
@@ -797,22 +904,23 @@ if __name__ == "__main__":
         verbose=False
     )
 
-    imports = efs_main.imports
-    exports = efs_main.exports
-
-    # Home based PA
-    pa_params = os.path.join(
-        imports["default_inputs"],
-        "reports", "params", "hb_pa.json"
+    # Build path to the dir containing the config files
+    config_dir = os.path.join(
+        efs_main.imports['home'],
+        model_name,
+        'params'
     )
-    main(pa_params, imports, exports, model_name)
 
-    # TP split HB PA
-    # tp_pa_params = os.path.join(imports["default_inputs"],
-    #                             "reports", "params", "tp_hb_pa.json")
-    # main(tp_pa_params, imports, exports, model_name)
+    param_fnames = [
+        'hb_pa.json',
+        'nhb_pa.json'
+    ]
 
-    # NHB PA
-    nhb_params = os.path.join(imports["default_inputs"],
-                              "reports", "params", "nhb_pa.json")
-    main(nhb_params, imports, exports, model_name)
+    # ## AGGREGATE OUTPUT DATA FOR REPORTING ## #
+    for fname in param_fnames:
+        main(
+            param_file=os.path.join(config_dir, fname),
+            imports=efs_main.imports,
+            exports=efs_main.exports,
+            model_name=model_name
+        )
