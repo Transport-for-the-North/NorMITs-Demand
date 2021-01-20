@@ -354,6 +354,17 @@ def gen_cost_mode(
         Cost dataframe, or value, for given mode.
     mode : str
         Name of the mode GC is being calculated for.
+    kwargs : Keyword Arguments
+        Passed to `gen_cost_car_mins` or `gen_cost_rail_mins`
+        functions if `mode` is "car" or "rail", respectively,
+        not used for any other modes. The following arguments
+        are expected:
+        For `gen_cost_car_mins`:
+        - vt : float
+        - vc : float
+        For `gen_cost_rail_mins`:
+        - vt : float
+        - factors : Dict[str, float], optional
 
     Returns
     -------

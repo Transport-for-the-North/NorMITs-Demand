@@ -96,6 +96,8 @@ class ElasticityModel:
         self.output_folder.mkdir(exist_ok=True)
         self.years = output_years
 
+    # BACKLOG: Move to utils/IO
+    #   labels: demand merge
     @staticmethod
     def _check_paths(
         paths: Dict[str, Path], expected: List[str], path_type: str = "folder"
@@ -158,7 +160,10 @@ class ElasticityModel:
         cost_changes = read_cost_changes(
             self.input_files["cost_changes"], self.years
         )
-        # Redirect stdout and stderr to tqdm
+        # Redirect stdout and stderr to tqdm allows tqdm to control
+        # how print statements are shown and stops the progress bar
+        # formatting from breaking. Note: warnings.warn() messages
+        # still cause formatting issues in terminal.
         with std_out_err_redirect_tqdm() as orig_stdout:
             pbar = tqdm(
                 total=len(segments) * len(self.years),
@@ -513,6 +518,8 @@ class ElasticityModel:
                 )
             adjusted_demand["car"] = original_zs
 
+        # Write the demand for car and rail for both
+        # car availabilities (ca1 and ca2)
         for m in ("car", "ca1", "ca2"):
             ca = None
             mode = m
