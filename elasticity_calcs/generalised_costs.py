@@ -14,8 +14,8 @@ import numpy as np
 import pandas as pd
 
 # Local imports
-from demand_utilities.utils import get_zone_translation
-from zone_translator import translate_matrix, square_to_list
+import zone_translator as zt
+from demand_utilities import utils as du
 from elasticity_calcs import constants as ec
 
 ##### FUNCTIONS #####
@@ -286,7 +286,7 @@ def get_costs(
 
     # Convert zone system if required
     if zone_system != ec.COMMON_ZONE_SYSTEM:
-        lookup = get_zone_translation(
+        lookup = du.get_zone_translation(
             zone_translation_folder,
             zone_system,
             ec.COMMON_ZONE_SYSTEM,
@@ -296,14 +296,14 @@ def get_costs(
             raise TypeError(
                 f"'demand' is '{type(demand).__name__}', expected 'DataFrame'"
             )
-        costs, _ = translate_matrix(
+        costs, _ = zt.translate_matrix(
             costs,
             lookup,
             [f"{zone_system}_zone_id", f"{ec.COMMON_ZONE_SYSTEM}_zone_id"],
             square_format=False,
             zone_cols=["origin", "destination"],
             aggregation_method="weighted_average",
-            weights=square_to_list(demand),
+            weights=zt.square_to_list(demand),
         )
 
     # Convert origin/destination columns to integers

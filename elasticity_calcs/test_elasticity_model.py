@@ -16,11 +16,8 @@ import pytest
 
 # Local imports
 from elasticity_calcs import constants as ec
-from .elasticity_model import (
-    ElasticityModel,
-    read_cost_changes,
-)
-from .generalised_costs import read_gc_parameters
+from elasticity_calcs import elasticity_model as em
+from elasticity_calcs import generalised_costs as gc
 
 
 ##### CONSTANTS #####
@@ -215,15 +212,15 @@ class TestElasticityModel:
         self, folders: Tuple[Dict[str, Path], Dict[str, Path], Path]
     ) -> Dict[str, pd.DataFrame]:
         """Returns outputs from `ElasticityModel.apply_elasticities` for multiple tests."""
-        elast_model = ElasticityModel(*folders, YEARS)
-        gc_params = read_gc_parameters(
+        elast_model = em.ElasticityModel(*folders, YEARS)
+        gc_params = gc.read_gc_parameters(
             folders[1]["gc_parameters"], YEARS, ["car", "rail"]
         )
         return elast_model.apply_elasticities(
             self.DEMAND_PARAMS,
             self.ELASTICITY_PARAMS,
             gc_params[YEARS[0]],
-            read_cost_changes(folders[1]["cost_changes"], YEARS),
+            em.read_cost_changes(folders[1]["cost_changes"], YEARS),
         )
 
     @pytest.mark.parametrize("mode,answer", APPLY_ELASTICITIES_RETURNS)
@@ -275,7 +272,7 @@ class TestElasticityModel:
         self, folders: Tuple[Dict[str, Path], Dict[str, Path], Path]
     ):
         """Test `ElasticityModel.apply_all` method with a single segment."""
-        elast_model = ElasticityModel(*folders, YEARS)
+        elast_model = em.ElasticityModel(*folders, YEARS)
         elast_model.apply_all()
 
         output_folders = {
@@ -328,7 +325,7 @@ def test_read_cost_changes(
     if missing_type:
         monkeypatch.delitem(ec.GC_ELASTICITY_TYPES, "Car_RUC")
         with pytest.raises(KeyError) as e:
-            read_cost_changes(cost_changes, years)
+            em.read_cost_changes(cost_changes, years)
         msg = (
             "Unknown elasticity_type: ['Car_RUC'], available types "
             "are: ['Car_JourneyTime', 'Car_FuelCost', 'Rail_Fare', "
@@ -337,9 +334,9 @@ def test_read_cost_changes(
         assert e.value.args[0] == msg, "Unknown elasticity type"
     elif years != ["2018"]:
         with pytest.raises(ValueError) as e:
-            read_cost_changes(cost_changes, years)
+            em.read_cost_changes(cost_changes, years)
         msg = "Cost change not present for years: ['2019']"
         assert e.value.args[0] == msg, "Missing year data"
     else:
-        data = read_cost_changes(cost_changes, years)
+        data = em.read_cost_changes(cost_changes, years)
         pd.testing.assert_frame_equal(data, COST_CHANGES)

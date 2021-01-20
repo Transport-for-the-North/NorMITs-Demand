@@ -14,12 +14,7 @@ import pandas as pd
 import numpy as np
 
 # Local imports
-from .utils import (
-    read_segments_file,
-    read_elasticity_file,
-    get_constraint_matrices,
-    read_demand_matrix,
-)
+from elasticity_calcs import utils as eu
 
 
 ##### CONSTANTS #####
@@ -121,7 +116,7 @@ class TestGetConstraintMatrices:
             Folder containing the testing contraint matrices and a list of
             all the expected paths.
         """
-        matrices = get_constraint_matrices(constraint_folder[0])
+        matrices = eu.get_constraint_matrices(constraint_folder[0])
         # Check non_csv files aren't present
         for path in self.NON_CSV_FILES:
             assert path.stem.lower() not in matrices
@@ -142,7 +137,7 @@ class TestGetConstraintMatrices:
             all the expected paths.
         """
         names = [i.stem for i in self.CSV_FILES[:2]]
-        matrices = get_constraint_matrices(constraint_folder[0], names)
+        matrices = eu.get_constraint_matrices(constraint_folder[0], names)
         assert names == list(matrices.keys())
         for i, n in enumerate(names):
             np.testing.assert_array_equal(matrices[n], self.MATRICES[i])
@@ -166,7 +161,7 @@ class TestGetConstraintMatrices:
         else:
             path = tmp_path / "folder"
         with pytest.raises(FileNotFoundError):
-            get_constraint_matrices(path)
+            eu.get_constraint_matrices(path)
 
 
 class TestReadDemandMatrix:
@@ -218,7 +213,7 @@ class TestReadDemandMatrix:
         demand_folder : Path
             The folder containing the test matrix.
         """
-        out, _, _ = read_demand_matrix(
+        out, _, _ = eu.read_demand_matrix(
             demand_folder / self.NORMS_NAME, demand_folder, "norms"
         )
         pd.testing.assert_frame_equal(out, self.DEMAND_NORMS)
@@ -235,7 +230,7 @@ class TestReadDemandMatrix:
         demand_folder : Path
             The folder containing the test matrix.
         """
-        test, reverse, _ = read_demand_matrix(
+        test, reverse, _ = eu.read_demand_matrix(
             demand_folder / self.NOHAM_NAME, demand_folder, "noham"
         )
         answer = pd.DataFrame(
@@ -313,13 +308,13 @@ def test_read_segments_file(segments_file: Tuple[Path, pd.DataFrame]):
     segments_file : Tuple[Path, pd.DataFrame]
         Path to the testing segments file and the DataFrame for comparison.
     """
-    df = read_segments_file(segments_file[0])
+    df = eu.read_segments_file(segments_file[0])
     pd.testing.assert_frame_equal(df, segments_file[1], check_dtype=False)
 
 
 @pytest.mark.parametrize(
     "func, args",
-    [(read_segments_file, []), (read_elasticity_file, ["", "", ""])],
+    [(eu.read_segments_file, []), (eu.read_elasticity_file, ["", "", ""])],
 )
 def test_missing_file(func, args):
     """Tests that an error is raised if path doesn't exist. """
@@ -340,7 +335,7 @@ def test_read_elasticity_file(elasticity_file: Tuple[Path, pd.DataFrame]):
     --------
     `test_filter_elasticity_file` for testing of filtering the file.
     """
-    df = read_elasticity_file(elasticity_file[0])
+    df = eu.read_elasticity_file(elasticity_file[0])
     pd.testing.assert_frame_equal(df, elasticity_file[1], check_dtype=False)
 
 
@@ -380,12 +375,12 @@ def test_filter_elasticity_file(
         err_msg = "Value 'missing' not found in column 'MarketShare'"
     if err_msg:
         with pytest.raises(ValueError) as e:
-            read_elasticity_file(
+            eu.read_elasticity_file(
                 elasticity_file[1], elasticity_type, purpose, market_share
             )
         assert e.value.args[0] == err_msg
     else:
-        df = read_elasticity_file(
+        df = eu.read_elasticity_file(
             elasticity_file[1], elasticity_type, purpose, market_share
         )
         # Filter comparison dataframe for test

@@ -12,26 +12,14 @@ from typing import List, Dict, Tuple, Union
 # Third party imports
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
+import tqdm
 
 # Local imports
-from demand_utilities.utils import get_dist_name, safe_dataframe_to_csv
-from elasticity_calcs.utils import (
-    read_segments_file,
-    read_elasticity_file,
-    get_constraint_matrices,
-    read_demand_matrix,
-    std_out_err_redirect_tqdm,
-)
-from elasticity_calcs.generalised_costs import (
-    get_costs,
-    gen_cost_mode,
-    calculate_gen_costs,
-    gen_cost_elasticity_mins,
-    read_gc_parameters,
-)
+from demand_utilities import utils as du
+from elasticity_calcs import utils as eu
+from elasticity_calcs import generalised_costs as gc
 from elasticity_calcs import constants as ec
-from zone_translator import square_to_list
+import zone_translator as zt
 
 
 ##### CLASSES #####
@@ -128,10 +116,10 @@ class ElasticityModel:
         Segment information is read from `SEGMENTS_FILE` which is
         expected to be found in elasticity folder given.
         """
-        segments = read_segments_file(
+        segments = eu.read_segments_file(
             self.elasticity_folder / ec.SEGMENTS_FILE
         )
-        gc_params = read_gc_parameters(
+        gc_params = gc.read_gc_parameters(
             self.input_files["gc_parameters"],
             self.years,
             list(ec.MODE_ID.keys()),
@@ -143,8 +131,8 @@ class ElasticityModel:
         # how print statements are shown and stops the progress bar
         # formatting from breaking. Note: warnings.warn() messages
         # still cause formatting issues in terminal.
-        with std_out_err_redirect_tqdm() as orig_stdout:
-            pbar = tqdm(
+        with eu.std_out_err_redirect_tqdm() as orig_stdout:
+            pbar = tqdm.tqdm(
                 total=len(segments) * len(self.years),
                 desc="Applying elasticities to segments",
                 file=orig_stdout,
@@ -178,7 +166,7 @@ class ElasticityModel:
                     except Exception as e:  # pylint: disable=broad-except
                         # Catching and printing all errors so program can
                         # continue with other segments
-                        name = get_dist_name(**demand_params)
+                        name = du.get_dist_name(**demand_params)
                         print(f"{name} - {e.__class__.__name__}: {e}")
                     pbar.update(1)
             pbar.close()
@@ -228,7 +216,7 @@ class ElasticityModel:
         Dict[str, pd.DataFrame]
             The adjusted demand for all modes.
         """
-        elasticities = read_elasticity_file(
+        elasticities = eu.read_elasticity_file(
             self.elasticity_folder / ec.ELASTICITIES_FILE, **elasticity_params
         )
         # Check if any elasticities aren't provided in ELASTICITIES_FILE
@@ -244,7 +232,7 @@ class ElasticityModel:
                 f"missing for the following types: {missing}"
             )
 
-        constraint_matrices = get_constraint_matrices(
+        constraint_matrices = eu.get_constraint_matrices(
             self.elasticity_folder / ec.CONSTRAINTS_FOLDER,
             cost_changes["constraint_matrix_name"].unique().tolist(),
         )
@@ -258,7 +246,7 @@ class ElasticityModel:
             demand_params["purpose"], {"car": car_original}
         )
         del car_original
-        base_gc = calculate_gen_costs(base_costs, gc_params)
+        base_gc = gc.calculate_gen_costs(base_costs, gc_params)
 
         # Loop through cost changes file and calculate demand adjustment
         demand_adjustment = {k: [v] for k, v in base_demand.items()}
@@ -304,7 +292,7 @@ class ElasticityModel:
             diff = np.max(
                 np.ravel(np.abs(adjusted_demand["rail"] - total_rail))
             )
-            name = get_dist_name(**demand_params, mode=str(ec.MODE_ID["rail"]))
+            name = du.get_dist_name(**demand_params, mode=str(ec.MODE_ID["rail"]))
             print(
                 f"{name}: when splitting adjusted rail demand into "
                 "CA and NCA, NCA + CA != Total Rail, there is a "
@@ -358,13 +346,13 @@ class ElasticityModel:
         m = "rail"
         tmp = {}
         for ca in ("1", "2"):
-            path = self.demand_folders[m][0] / get_dist_name(
+            path = self.demand_folders[m][0] / du.get_dist_name(
                 **demand_params,
                 mode=str(ec.MODE_ID[m]),
                 car_availability=ca,
                 csv=True,
             )
-            tmp[f"ca{ca}"], _, _ = read_demand_matrix(
+            tmp[f"ca{ca}"], _, _ = eu.read_demand_matrix(
                 path, self.zone_translation_folder, ec.MODE_ZONE_SYSTEM[m]
             )
         if not (
@@ -372,7 +360,7 @@ class ElasticityModel:
             and tmp["ca1"].columns.equals(tmp["ca2"].columns)
         ):
             raise KeyError(
-                get_dist_name(**demand_params, mode=ec.MODE_ID[m])
+                du.get_dist_name(**demand_params, mode=ec.MODE_ID[m])
                 + " does not have the same index for CA and NCA"
             )
         # Get demand for CA + NCA and calculate split for converting back
@@ -389,10 +377,10 @@ class ElasticityModel:
 
         # Get car demand
         m = "car"
-        path = self.demand_folders[m][0] / get_dist_name(
+        path = self.demand_folders[m][0] / du.get_dist_name(
             **demand_params, mode=str(ec.MODE_ID[m]), csv=True
         )
-        demand[m], car_reverse, car_original = read_demand_matrix(
+        demand[m], car_reverse, car_original = eu.read_demand_matrix(
             path, self.zone_translation_folder, ec.MODE_ZONE_SYSTEM[m]
         )
 
@@ -424,7 +412,7 @@ class ElasticityModel:
             path = self.demand_folders[m][1] / ec.COST_NAMES.format(
                 mode=m, purpose=purpose
             )
-            costs[m] = get_costs(
+            costs[m] = gc.get_costs(
                 path, m, zone, self.zone_translation_folder, demand.get(m)
             )
 
@@ -459,7 +447,7 @@ class ElasticityModel:
         """
         if car_reverse is not None:
             # Convert car demand back to original zone system
-            original_zs = square_to_list(adjusted_demand["car"])
+            original_zs = zt.square_to_list(adjusted_demand["car"])
             car_reverse.columns = ["orig_o", "orig_d", "o", "d", "split"]
             original_zs = original_zs.merge(
                 car_reverse,
@@ -489,7 +477,7 @@ class ElasticityModel:
             for x in (original_zs, adjusted_demand["car"]):
                 totals.append(np.sum(x.values))
             if abs(totals[0] - totals[1]) > ec.MATRIX_TOTAL_TOLERANCE:
-                name = get_dist_name(
+                name = du.get_dist_name(
                     **demand_params, mode=str(ec.MODE_ID["car"])
                 )
                 print(
@@ -509,18 +497,18 @@ class ElasticityModel:
                 mode = "rail"
             folder = self.output_folder / mode
             folder.mkdir(parents=True, exist_ok=True)
-            name = get_dist_name(
+            name = du.get_dist_name(
                 **demand_params,
                 mode=str(ec.MODE_ID[mode]),
                 car_availability=ca,
                 csv=True,
             )
-            safe_dataframe_to_csv(adjusted_demand[m], folder / name)
+            du.safe_dataframe_to_csv(adjusted_demand[m], folder / name)
 
         # Write other modes to a single file
         folder = self.output_folder / "others"
         folder.mkdir(parents=True, exist_ok=True)
-        name = get_dist_name(**demand_params, csv=True)
+        name = du.get_dist_name(**demand_params, csv=True)
         df = pd.DataFrame(
             [
                 (k, adjusted_demand[k].mean())
@@ -528,7 +516,7 @@ class ElasticityModel:
             ],
             columns=["mode", "mean_demand_adjustment"],
         )
-        safe_dataframe_to_csv(df, folder / name, index=False)
+        du.safe_dataframe_to_csv(df, folder / name, index=False)
 
 
 ##### FUNCTIONS #####
@@ -611,7 +599,7 @@ def calculate_adjustment(
             cost_change,
             cost_constraint,
         )
-        adj_gc = gen_cost_mode(adj_cost, chg_mode, **adj_gc_params)
+        adj_gc = gc.gen_cost_mode(adj_cost, chg_mode, **adj_gc_params)
         gc_ratio = adj_gc / tmp_base_gc
     else:
         gc_ratio = np.where(cost_constraint == 1, cost_change, 1)
@@ -627,7 +615,7 @@ def calculate_adjustment(
         aff_mode = aff_mode.lower()
         if cost_type != "gc":
             # Calculate the generalised cost of the current elasticity
-            gc_elast = gen_cost_elasticity_mins(
+            gc_elast = gc.gen_cost_elasticity_mins(
                 elast,
                 base_gc[chg_mode],
                 cost,

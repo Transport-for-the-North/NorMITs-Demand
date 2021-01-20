@@ -8,8 +8,8 @@
 ##### IMPORTS #####
 # Standard imports
 import sys
+import configparser
 from pathlib import Path
-from configparser import ConfigParser, NoSectionError
 from typing import Tuple, List, Dict
 
 # Third party imports
@@ -21,7 +21,7 @@ from typing import Tuple, List, Dict
 # a file in the main NorMITs-Demand folder
 # Appending to path to avoid import errors
 sys.path.append(str(Path(__file__).parent.parent))
-from elasticity_calcs.elasticity_model import ElasticityModel
+from elasticity_calcs import elasticity_model as em
 
 
 ##### CONSTANTS #####
@@ -54,10 +54,10 @@ def get_inputs() -> Tuple[Dict[str, Path], Dict[str, Path], Path, List[str]]:
     ------
     FileNotFoundError
         If the config file doesn't exist.
-    NoSectionError
+    configparser.NoSectionError
         If there is a section missing from the config file.
     """
-    config = ConfigParser()
+    config = configparser.ConfigParser()
     path = Path(CONFIG_FILE)
     if not path.is_file():
         raise FileNotFoundError(f"Cannot find config file: {path}")
@@ -68,7 +68,7 @@ def get_inputs() -> Tuple[Dict[str, Path], Dict[str, Path], Path, List[str]]:
         if s not in config.sections():
             missing_sections.append(s)
     if missing_sections:
-        raise NoSectionError(missing_sections)
+        raise configparser.NoSectionError(missing_sections)
 
     input_folders = {k: Path(p) for k, p in config.items("input_folders")}
     input_files = {k: Path(p) for k, p in config.items("input_files")}
@@ -80,7 +80,7 @@ def get_inputs() -> Tuple[Dict[str, Path], Dict[str, Path], Path, List[str]]:
 def main():
     """Runs the elasticity model using parameters from the config file."""
     input_folders, input_files, output_folder, years = get_inputs()
-    elast_model = ElasticityModel(
+    elast_model = em.ElasticityModel(
         input_folders, input_files, output_folder, years
     )
     elast_model.apply_all()

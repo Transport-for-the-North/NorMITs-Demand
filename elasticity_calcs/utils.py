@@ -13,12 +13,13 @@ from typing import Union, Dict, List, Tuple
 # Third party imports
 import numpy as np
 import pandas as pd
-from tqdm.contrib import DummyTqdmFile
+from tqdm import contrib
 
 # Local imports
-from demand_utilities.utils import safe_read_csv
-from zone_translator import translate_matrix, MatrixTotalError
+import zone_translator as zt
+from demand_utilities import utils as du
 from elasticity_calcs import constants as ec
+
 
 ##### FUNCTIONS #####
 def read_segments_file(path: Path) -> pd.DataFrame:
@@ -47,7 +48,7 @@ def read_segments_file(path: Path) -> pd.DataFrame:
         "Elast_Purp": str,
         "Elast_MarketShare": str,
     }
-    return safe_read_csv(path, dtype=dtypes, usecols=dtypes.keys())
+    return du.safe_read_csv(path, dtype=dtypes, usecols=dtypes.keys())
 
 
 def read_elasticity_file(
@@ -96,7 +97,7 @@ def read_elasticity_file(
     if isinstance(data, pd.DataFrame):
         df = data.copy()[dtypes.keys()]
     else:
-        df = safe_read_csv(data, dtype=dtypes, usecols=dtypes.keys())
+        df = du.safe_read_csv(data, dtype=dtypes, usecols=dtypes.keys())
 
     # Filter required values
     filters = [
@@ -205,17 +206,17 @@ def read_demand_matrix(
         lookup = pd.read_csv(lookup_file, usecols=dtypes.keys(), dtype=dtypes)
         cols = [f"{from_zone}_zone_id", f"{ec.COMMON_ZONE_SYSTEM}_zone_id"]
         try:
-            demand, reverse = translate_matrix(
+            demand, reverse = zt.translate_matrix(
                 demand,
                 lookup,
                 cols,
                 split_column="split",
             )
-        except MatrixTotalError as e:
+        except zt.MatrixTotalError as e:
             # Print the error but continue with the translation to still
             # process current segment
             print(f"{path.stem} - {e.__class__.__name__}: {e}")
-            demand, reverse = translate_matrix(
+            demand, reverse = zt.translate_matrix(
                 demand,
                 lookup,
                 cols,
@@ -240,7 +241,7 @@ def std_out_err_redirect_tqdm():
     """
     orig_out_err = sys.stdout, sys.stderr
     try:
-        sys.stdout, sys.stderr = map(DummyTqdmFile, orig_out_err)
+        sys.stdout, sys.stderr = map(contrib.DummyTqdmFile, orig_out_err)
         yield orig_out_err[0]
     # Relay exceptions
     except Exception as exc:

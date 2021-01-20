@@ -15,17 +15,7 @@ import pandas as pd
 
 # Local imports
 from elasticity_calcs import constants as ec
-from .generalised_costs import (
-    _average_matrices,
-    _check_matrices,
-    gen_cost_car_mins,
-    gen_cost_rail_mins,
-    gen_cost_elasticity_mins,
-    get_costs,
-    read_gc_parameters,
-    calculate_gen_costs,
-    gen_cost_mode,
-)
+from elasticity_calcs import generalised_costs as gc
 
 
 ##### CLASSES #####
@@ -39,7 +29,7 @@ class TestAverageMatrices:
     def test_missing_matrices():
         """Test that the correct error is raised if matrices are missing when calling. """
         with pytest.raises(KeyError) as e:
-            _average_matrices({"test": np.zeros((3, 3))}, ["test", "test2"])
+            gc._average_matrices({"test": np.zeros((3, 3))}, ["test", "test2"])
         msg = "The following matrices are missing: ['test2']"
         assert e.value.args[0] == msg
 
@@ -56,7 +46,7 @@ class TestAverageMatrices:
 
         Tests for weighted and non-weighted averages.
         """
-        averages = _average_matrices(
+        averages = gc._average_matrices(
             {"test": self.MATRIX}, ["test"], weights=weights
         )
         assert averages == {"test": answer}
@@ -69,7 +59,7 @@ class TestCheckMatrices:
     def test_missing_matrices():
         """Test that the correct error is raised when matrices are missing. """
         with pytest.raises(KeyError) as e:
-            _check_matrices({"test": np.zeros((2, 2))}, ["test", "test2"])
+            gc._check_matrices({"test": np.zeros((2, 2))}, ["test", "test2"])
         msg = "The following matrices are missing: ['test2']"
         assert e.value.args[0] == msg
 
@@ -77,7 +67,7 @@ class TestCheckMatrices:
     def test_different_shapes():
         """Test that the correct error is raised when matrices are different shapes. """
         with pytest.raises(ValueError) as e:
-            _check_matrices(
+            gc._check_matrices(
                 {"test": np.zeros((2, 2)), "test2": np.zeros((3, 3))},
                 ["test", "test2"],
             )
@@ -97,14 +87,14 @@ class TestGenCostCarMins:
     def test_missing_matrices(self):
         """Test that the correct error is raised if matrices are missing. """
         with pytest.raises(KeyError) as e:
-            gen_cost_car_mins({"time": self.TIME_MAT}, self.VC, self.VT)
+            gc.gen_cost_car_mins({"time": self.TIME_MAT}, self.VC, self.VT)
         msg = "The following matrices are missing: ['dist', 'toll']"
         assert e.value.args[0] == msg
 
     def test_different_shapes(self):
         """Test that the correct error is raised if matrices aren't the same shape. """
         with pytest.raises(ValueError) as e:
-            gen_cost_car_mins(
+            gc.gen_cost_car_mins(
                 {
                     "time": self.TIME_MAT,
                     "dist": self.DIST_MAT,
@@ -121,7 +111,7 @@ class TestGenCostCarMins:
 
     def test_calculation(self):
         """Test that the calculation produces the correct values. """
-        test = gen_cost_car_mins(
+        test = gc.gen_cost_car_mins(
             {
                 "time": self.TIME_MAT,
                 "dist": self.DIST_MAT,
@@ -181,7 +171,7 @@ class TestGenCostRailMins:
     def test_missing_matrices(self):
         """Test that the correct error is raised if matrices are missing. """
         with pytest.raises(KeyError) as e:
-            gen_cost_rail_mins({}, self.VT)
+            gc.gen_cost_rail_mins({}, self.VT)
         msg = (
             "The following matrices are missing: "
             "['walk', 'wait', 'ride', 'fare', 'num_int']"
@@ -193,7 +183,7 @@ class TestGenCostRailMins:
         matrices = self.MATRICES.copy()
         matrices["fare"] = np.zeros((3, 3))
         with pytest.raises(ValueError) as e:
-            gen_cost_rail_mins(matrices, self.VT)
+            gc.gen_cost_rail_mins(matrices, self.VT)
         msg = (
             "Matrices are not all the same shape: "
             "walk = (2, 2), wait = (2, 2), ride = (2, 2), "
@@ -206,7 +196,7 @@ class TestGenCostRailMins:
         """Tests the calculation with different weighting factors. """
         factors = ec.RAIL_GC_FACTORS if factors is None else factors
         np.testing.assert_array_equal(
-            gen_cost_rail_mins(self.MATRICES, self.VT, factors), answer
+            gc.gen_cost_rail_mins(self.MATRICES, self.VT, factors), answer
         )
 
 
@@ -307,7 +297,7 @@ class TestGetCosts:
         mode : str
             Which mode to test, either car or rail.
         """
-        test = get_costs(
+        test = gc.get_costs(
             costs[0][mode],
             mode,
             zone_system,
@@ -328,7 +318,7 @@ class TestGetCosts:
             Paths to the car and rail cost files and the zone translation folder.
         """
         with pytest.raises(ValueError) as e:
-            get_costs(costs[0]["missing_car"], "car", None, None)
+            gc.get_costs(costs[0]["missing_car"], "car", None, None)
         msg = "Columns missing from car cost, columns expected but not found: ['toll']"
         assert e.value.args[0] == msg
 
@@ -375,7 +365,7 @@ class TestGenCostMode:
     )
     def test_gen_cost_mode(self, costs, mode, params, answ):
         """Test the `gen_cost_mode` function."""
-        test = gen_cost_mode(costs, mode, **params)
+        test = gc.gen_cost_mode(costs, mode, **params)
         msg = f"{mode.capitalize()} GC calculation"
         if mode == "other":
             assert test == answ, msg
@@ -392,7 +382,7 @@ class TestGenCostMode:
             "other": self.OTHER_COSTS,
         }
         gc_params = {"car": self.CAR_PARAMS, "rail": self.RAIL_PARAMS}
-        test = calculate_gen_costs(costs, gc_params)
+        test = gc.calculate_gen_costs(costs, gc_params)
         assert test["other"] == self.OTHER_COSTS, "Other GC calculation"
         np.testing.assert_array_almost_equal(
             test["car"], self.CAR_ANSWER, self.PRECISION, "Car GC calculation"
@@ -460,7 +450,7 @@ class TestReadGCParameters:
         param_path : Tuple[Path, Path]
             Paths to the correct and missing files, respectively.
         """
-        test = read_gc_parameters(param_path[0], self.YEARS, self.MODES)
+        test = gc.read_gc_parameters(param_path[0], self.YEARS, self.MODES)
         assert test == self.PARAMS, "Correct GC params input file"
 
     def test_missing(self, param_path: Tuple[Path, Path]):
@@ -472,7 +462,7 @@ class TestReadGCParameters:
             Paths to the correct and missing files, respectively.
         """
         with pytest.raises(ValueError) as e:
-            read_gc_parameters(param_path[1], self.YEARS, self.MODES)
+            gc.read_gc_parameters(param_path[1], self.YEARS, self.MODES)
         msg = (
             "Years missing: ['2030'] Year - mode pairs missing: "
             "['2018 - rail'] from: missing_gc_params.csv"
@@ -493,7 +483,7 @@ def test_gen_cost_elasticity_mins(cost_factor: float, answer: float):
         "cost": np.array([[7.72, 9.29], [6.92, 5.9]]),
         "demand": np.array([[42.66, 83.66], [77.28, 31.84]]),
     }
-    test = gen_cost_elasticity_mins(**test_params, cost_factor=cost_factor)
+    test = gc.gen_cost_elasticity_mins(**test_params, cost_factor=cost_factor)
     np.testing.assert_array_equal(
         test, answer, "Incorrect answer for `gen_cost_elasticity_mins`"
     )
