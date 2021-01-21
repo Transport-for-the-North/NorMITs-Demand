@@ -30,9 +30,33 @@ class ElasticityModel:
         self,
         input_folders: Dict[str, Path],
         input_files: Dict[str, Path],
-        output_folder: Path,
+        output_folders: Dict[str, Path],
         output_years: List[int],
     ):
+        """Check input files and folders exist and create output folders.
+
+        Parameters
+        ----------
+        input_folders : Dict[str, Path]
+            Paths to the input folders, expects the following keys:
+            - elasticity
+            - translation
+            - rail_demand
+            - car_demand
+            - rail_costs
+            - car_costs
+        input_files : Dict[str, Path]
+            Paths to the input files, expects the following keys:
+            - gc_parameters
+            - cost_changes
+        output_folders : Dict[str, Path]
+            Paths to the output folders, expectes the following keys:
+            - car
+            - rail
+            - others
+        output_years : List[int]
+            List of years to perform elasticity calculations for.
+        """
         self._check_paths(
             input_folders,
             (
@@ -55,15 +79,23 @@ class ElasticityModel:
             m: [input_folders[f"{m}_{c}"] for c in ("demand", "costs")]
             for m in ("rail", "car")
         }
-        self.output_folder = output_folder
-        self.output_folder.mkdir(exist_ok=True)
+
+        self._check_paths(
+            output_folders,
+            ("car", "rail", "others"),
+            create_folders=True,
+        )
+        self.output_folder = output_folders
         self.years = output_years
 
     # BACKLOG: Move to utils/IO
     #   labels: demand merge
     @staticmethod
     def _check_paths(
-        paths: Dict[str, Path], expected: List[str], path_type: str = "folder"
+        paths: Dict[str, Path],
+        expected: List[str],
+        path_type: str = "folder",
+        create_folders: bool = False,
     ):
         """Check if expected paths are given and exist.
 
@@ -77,13 +109,18 @@ class ElasticityModel:
         path_type : str, optional
             Type of paths being provided either 'folder' (default)
             or 'file'.
+        create_folders : bool, optional
+            If True will create folders that don't exist, if False
+            (default) raises FileNotFoundError. If `path_type` is
+            'file' then this parameter is ignored.
 
         Raises
         ------
         KeyError
             If any `expected` folders are missing from `folders`.
         FileNotFoundError
-            If any of the paths in `folders` aren't directories.
+            If any of the paths in `folders` aren't directories
+            and `create_folders` is False.
         """
         path_type = path_type.lower()
         if path_type == "folder":
@@ -102,7 +139,10 @@ class ElasticityModel:
                 missing.append(i)
                 continue
             if not check(paths[i]):
-                not_dir[i] = paths[i]
+                if create_folders and path_type == "folder":
+                    paths[i].mkdir(parents=True)
+                else:
+                    not_dir[i] = paths[i]
         if missing:
             raise KeyError(f"Missing input {path_type}s: {missing}")
         if not_dir:
@@ -292,7 +332,9 @@ class ElasticityModel:
             diff = np.max(
                 np.ravel(np.abs(adjusted_demand["rail"] - total_rail))
             )
-            name = du.get_dist_name(**demand_params, mode=str(ec.MODE_ID["rail"]))
+            name = du.get_dist_name(
+                **demand_params, mode=str(ec.MODE_ID["rail"])
+            )
             print(
                 f"{name}: when splitting adjusted rail demand into "
                 "CA and NCA, NCA + CA != Total Rail, there is a "
@@ -495,8 +537,7 @@ class ElasticityModel:
             if m != "car":
                 ca = m[2]
                 mode = "rail"
-            folder = self.output_folder / mode
-            folder.mkdir(parents=True, exist_ok=True)
+            folder = self.output_folder[mode]
             name = du.get_dist_name(
                 **demand_params,
                 mode=str(ec.MODE_ID[mode]),
@@ -506,8 +547,7 @@ class ElasticityModel:
             du.safe_dataframe_to_csv(adjusted_demand[m], folder / name)
 
         # Write other modes to a single file
-        folder = self.output_folder / "others"
-        folder.mkdir(parents=True, exist_ok=True)
+        folder = self.output_folder["others"]
         name = du.get_dist_name(**demand_params, csv=True)
         df = pd.DataFrame(
             [
