@@ -234,6 +234,24 @@ def fixture_test_files(tmp_path_factory) -> Dict[str, Path]:
             paths[nm].parent.mkdir()
             paths[nm] = paths[nm].parent.parent
         df.to_csv(p, index=False)
+
+    # Create empty files that are required by build_production_imports function
+    files = [
+        Path("tfn_segment_production_params/hb_trip_rates.csv"),
+        Path("tfn_segment_production_params/hb_time_split.csv"),
+        Path("tfn_segment_production_params/hb_ave_time_split.csv"),
+        Path("tfn_segment_production_params/hb_mode_split.csv"),
+        Path("attractions/attraction_mode_split.csv"),
+        Path(f"attractions/soc_2_digit_sic_{BASE_YEAR}.csv"),
+    ]
+    for path in files:
+        path = tmpdir / path
+        path.parent.mkdir(exist_ok=True, parents=True)
+        with open(path, "wt"):
+            pass
+    # Create empty required folder
+    (tmpdir / "ntem_constraints").mkdir(parents=True, exist_ok=True)
+
     return paths
 
 

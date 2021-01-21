@@ -2395,8 +2395,9 @@ def get_mean_tp_splits(tp_split_path: str,
 
 def get_zone_translation(import_dir: str,
                          from_zone: str,
-                         to_zone: str
-                         ) -> Dict[int, int]:
+                         to_zone: str,
+                         return_dataframe: bool = False
+                         ) -> Union[Dict[int, int], pd.DataFrame]:
     """
     Reads in the zone translation file from import_dir and converts it into a
     dictionary of from_zone: to_zone numbers
@@ -2415,11 +2416,16 @@ def get_zone_translation(import_dir: str,
     to_zone
         The name of the zoning system to convert to, e.g. lad
 
+    return_dataframe : bool, optional
+        If True returns a DataFrame instead of a dictionary, by default
+        False.
+
     Returns
     -------
     zone_translation:
-        A dictionary of from_zone values to to_zone values. Can be used to
-        convert a zone number from one zoning system to another.
+        A dictionary (or DataFrame depending on `return_dataframe`) of
+        from_zone values to to_zone values. Can be used to convert
+        a zone number from one zoning system to another.
     """
     # Init
     base_filename = '%s_to_%s.csv'
@@ -2447,6 +2453,8 @@ def get_zone_translation(import_dir: str,
     translation = translation.reindex([from_col, to_col], axis='columns')
     translation[from_col] = translation[from_col].astype(int)
     translation[to_col] = translation[to_col].astype(int)
+    if return_dataframe:
+        return translation
 
     # Convert pandas to a {from_col: to_col} dictionary
     translation = dict(translation.itertuples(index=False, name=None))

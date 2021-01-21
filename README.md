@@ -17,6 +17,11 @@ you can run any Python files with the usual `python` command. To add any new Pyt
 packages to the environment use `pipenv install package_name` instead of pip, this will download
 and install the package and update "Pipfile" and "Pipfile.lock" with the version information.
 
+## Testing
+Unit tests have been created using the pytest package and can be ran automatically using
+the command `pytest` in the main repository folder. Pytest will search for any files named
+`test_*.py` or `*_test.py` and run all tests within them, see
+[pytest documentation](https://docs.pytest.org/en/stable/) for more information.
 
 ## Class Versioning
 
