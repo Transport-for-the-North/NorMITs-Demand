@@ -255,7 +255,7 @@ def _distribute_pa_internal(productions,
 
     if audit_out is not None:
         # Create output filename
-        audit_fname = seed_fname.replace('_enhpa_', '_dist_audit_')
+        audit_fname = out_dist_name.replace('_pa_', '_dist_audit_')
         audit_path = os.path.join(audit_out, audit_fname)
 
         audits.audit_furness(
