@@ -10,6 +10,10 @@ car_costs = Y:\NorMITs Demand\import\noham\costs\cost components\elasticity_mode
 gc_parameters = Y:\NorMITs Demand\import\elasticities\gc_parameters-uzc.csv
 cost_changes = Y:\NorMITs Demand\import\elasticities\cost_changes-uzc-temp.csv
 
+[output_folders]
+car = Y:\NorMITs Demand\noham\v2.5-EFS_Output\SC04_UZC\iter1\Matrices\24hr PA Matrices - Elasticities Applied
+rail = Y:\NorMITs Demand\norms\v2.5-EFS_Output\SC04_UZC\iter1\Matrices\24hr PA Matrices - Elasticities Applied
+others = Y:\NorMITs Demand\elasticity_model\others\v2.5-EFS_Output\SC04_UZC\iter1
+
 [other]
-output_folder = Y:\NorMITs Demand\elasticity_model\v2.5-EFS_Output\SC04_UZC
 years = 2033,2035,2050

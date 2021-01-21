@@ -145,7 +145,7 @@ class TestElasticityModel:
     @pytest.fixture(name="folders", scope="class")
     def fixture_folders(
         self, tmp_path_factory: Path, cost_changes: Path
-    ) -> Tuple[Dict[str, Path], Dict[str, Path], Path]:
+    ) -> Tuple[Dict[str, Path], Dict[str, Path], Dict[str, Path]]:
         """Creates input files in temp folder for testing."""
         folders = [
             "elasticity",
@@ -205,7 +205,9 @@ class TestElasticityModel:
         input_files["cost_changes"] = cost_changes
 
         output_folder = tmp_path_factory.mktemp("outputs")
-        return input_folders, input_files, output_folder
+        modes = ("car", "rail", "others")
+        output_folders = {m: output_folder / m for m in modes}
+        return input_folders, input_files, output_folders
 
     @pytest.fixture(name="output_demand", scope="class")
     def fixture_output_demand(
@@ -254,9 +256,9 @@ class TestElasticityModel:
         answer: pd.DataFrame,
     ):
         """Tests if `ElasticityModel.apply_elasticities` produces correct files."""
-        _, _, output_folder = folders
+        _, _, output_folders = folders
         expected = 2 if mode == "rail" else 1
-        out_files = list((output_folder / mode).iterdir())
+        out_files = list((output_folders[mode]).iterdir())
         msg = f"{len(out_files)} output files produced, expected {expected}"
         assert len(out_files) == expected, msg
         for i in out_files:
@@ -281,7 +283,7 @@ class TestElasticityModel:
             "others": (1, OTHER_ANSWER),
         }
         for m, (num, ans) in output_folders.items():
-            out_files = list((folders[2] / m).iterdir())
+            out_files = list((folders[2][m]).iterdir())
             assert len(out_files) == num, f"Wrong number of {m} output files"
             for i in out_files:
                 col = 0 if m != "others" else None
