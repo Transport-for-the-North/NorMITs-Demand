@@ -50,6 +50,8 @@ from demand_utilities.sector_reporter_v2 import SectorReporter
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
+    # BACKLOG: import EFS Class version from package version
+    #  labels: demand merge
     __version__ = "2.5"
     _out_dir = "NorMITs Demand"
 
