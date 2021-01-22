@@ -218,6 +218,7 @@ class ExternalForecastSystem:
             recreate_attractions: bool = True,
             recreate_nhb_productions: bool = True,
             performing_sector_totals: bool = True,
+            apply_growth_criteria: bool = True,
             output_location: str = None,
             echo_distribution: bool = True
             ) -> None:
@@ -915,16 +916,17 @@ class ExternalForecastSystem:
             index=False
         )
 
-        # Apply the growth criteria using the post-ME P/A vectors
-        # (normal and exceptional zones)
-        pa_dfs = self._handle_growth_criteria(
-            synth_productions=converted_productions,
-            synth_attractions=converted_pure_attractions,
-            base_year=str(base_year),
-            future_years=[str(x) for x in future_years],
-            integrate_dlog=self.integrate_dlog
-        )
-        converted_productions, converted_pure_attractions = pa_dfs
+        if apply_growth_criteria:
+            # Apply the growth criteria using the post-ME P/A vectors
+            # (normal and exceptional zones)
+            pa_dfs = self._handle_growth_criteria(
+                synth_productions=converted_productions,
+                synth_attractions=converted_pure_attractions,
+                base_year=str(base_year),
+                future_years=[str(x) for x in future_years],
+                integrate_dlog=self.integrate_dlog
+            )
+            converted_productions, converted_pure_attractions = pa_dfs
 
         # Convert the new attractions to weights
         converted_attractions = du.convert_to_weights(
@@ -949,6 +951,8 @@ class ExternalForecastSystem:
         )
 
         # TODO: Move conversion to attraction weights down here
+
+        raise NotImplementedError("Finished Test")
 
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
@@ -1099,30 +1103,20 @@ class ExternalForecastSystem:
         fname = consts.EMP_FNAME % self.input_zone_system
         grown_emp_path = os.path.join(self.exports["attractions"], fname)
 
-        # For testing purposes - use the previously generated trip outputs -
-        # same as the synthetic base
-        obs_production_path = r"E:\NorMITs Demand\norms\v2_4-EFS_Output\iter1\Productions\norms_hb_productions.csv"
-        obs_attraction_path = r"E:\NorMITs Demand\norms\v2_4-EFS_Output\iter1\Attractions\norms_hb_attractions.csv"
-        obs_production_path = os.path.join(
-            self.exports["productions"], "norms_hb_productions.csv"
-        )
-        obs_attraction_path = os.path.join(
-            self.exports["attractions"], "norms_hb_attractions.csv"
-        )
-
-        # For testing purposes - use the converted productions/attractions
-        # from a previous run (same as observed placeholders)
-        # converted_productions = pd.read_csv(obs_production_path)
-        # converted_pure_attractions = pd.read_csv(obs_attraction_path)
+        # Us the matrices in seed distribution as the base observed
+        observed_pa_path = self.imports["seed_dists"]
 
         # ## APPLY GROWTH CRITERIA ## #
-        # Placeholder sector file definition
-        # TODO: Integrate into EFS inputs
+
         # TODO: Need norms_to_tfn sector lookups.
         #  Should these be pop/emp weighted too?
-        model_zone_to_sector_path = r"Y:\NorMITs Demand\import\zone_translation\norms_2015_to_tfn_sectors.csv"
-        from_zone_column = "norms_zone_id"
-        to_sector_column = "tfn_sectors_zone_id"
+        sector_system = "tfn_sectors"
+        model_zone_to_sector_path = os.path.join(
+            self.imports["zone_translation"],
+            "{}_to_{}.csv".format(self.output_zone_system, sector_system)
+        )
+        from_zone_column = "{}_zone_id".format(self.output_zone_system)
+        to_sector_column = "{}_zone_id".format(sector_system)
 
         # Load sector mapping for calculating the exceptional zone trip rates
         sector_lookup = pd.read_csv(model_zone_to_sector_path).rename(
@@ -1142,8 +1136,7 @@ class ExternalForecastSystem:
         productions, attractions = eg.growth_criteria(
             synth_productions=synth_productions,
             synth_attractions=synth_attractions,
-            observed_prod_path=obs_production_path,
-            observed_attr_path=obs_attraction_path,
+            observed_pa_path=observed_pa_path,
             prod_exceptional_zones=p_ez,
             attr_exceptional_zones=a_ez,
             population_path=grown_pop_path,
@@ -2225,6 +2218,7 @@ class ExternalForecastSystem:
         od_24 = '24hr OD Matrices'
         compiled = 'Compiled'
         aggregated = 'Aggregated'
+        pa_24_bespoke = '24hr PA Matrices - Bespoke Zones'
 
         exports = {
             'home': export_home,
@@ -2243,6 +2237,8 @@ class ExternalForecastSystem:
 
             'aggregated_pa_24': os.path.join(matrices_home, ' '.join([aggregated, pa_24])),
             'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
+
+            'pa_24_bespoke' : os.path.join(matrices_home, pa_24_bespoke)
         }
 
         for _, path in exports.items():

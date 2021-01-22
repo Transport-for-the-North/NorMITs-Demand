@@ -22,7 +22,7 @@ from tqdm import tqdm
 
 import efs_constants as consts
 from efs_constrainer import ForecastConstrainer
-from demand_utilities import d_log_processor as dlog_processor
+from demand_utilities import d_log_processor as dlog_p
 
 from demand_utilities import timing
 from demand_utilities import utils as du
@@ -363,7 +363,7 @@ class EFSProductionGenerator:
             constraint_segments = du.intersection(segmentation_cols,
                                                   population_constraint)
 
-            population = dlog_processor.constrain_forecast(
+            population = dlog_p.constrain_forecast(
                 population,
                 population_constraint,
                 designated_area,
@@ -382,7 +382,7 @@ class EFSProductionGenerator:
             seg_groups = [x for x in segmentation_cols 
                           if x not in ['area_type', "traveller_type"]]
 
-            population, hg_zones = dlog_processor.apply_d_log(
+            population, hg_zones = dlog_p.apply_d_log(
                 pre_dlog_df=population,
                 base_year=base_year,
                 future_years=future_years,
@@ -408,7 +408,7 @@ class EFSProductionGenerator:
             constraint_segments = du.intersection(segmentation_cols,
                                                   population_constraint)
 
-            population = dlog_processor.constrain_forecast(
+            population = dlog_p.constrain_forecast(
                 population,
                 population_constraint,
                 designated_area,

@@ -68,9 +68,14 @@ def identify_exceptional_zones(pre_df: pd.DataFrame,
     if not pre_df.index.identical(post_df.index):
         raise AttributeError("Pre and Post dataframe index do not align")
 
-    # Empty dataframe to store which zones meat the cutoff
+    # Empty dataframe to store which zones meet the cutoff
     growth_diff = pd.DataFrame(columns=future_years, index=pre_df.index)
     absolute_cols = []
+    # Loop over each forecast year and calculate the difference in growth 
+    # factor between the pre adjustment and post adjustment dataframes - store 
+    # as a column in growth_diff.
+    # If this value exceeds the growth criteria, flag the relevant zone.
+    # (Also do the same for the growth in absolute values if required)
     for year in future_years:
         # Calculate growth difference pre -> post
         growth_diff[year] = (
@@ -93,10 +98,11 @@ def identify_exceptional_zones(pre_df: pd.DataFrame,
                 growth_diff[abs_diff_col] > absolute_cutoff
             )
 
+    # If the criteria is met in any year, extract this zone as "exceptional"
     if cutoff_method == "growth":
         e_zones = growth_diff.loc[growth_diff[future_years].any(axis=1)].index
     elif cutoff_method == "absolute":
-        e_zones = growth_diff.loc[growth_diff[abs_diff_col].any(axis=1)].index
+        e_zones = growth_diff.loc[growth_diff[absolute_cols].any(axis=1)].index
     elif cutoff_method == "both":
         e_zones = growth_diff.loc[growth_diff.any(axis=1)].index
     else:
@@ -130,181 +136,6 @@ def set_datetime_types(df: pd.DataFrame,
             **kwargs
         )
     return df
-
-
-# TODO : Remove these functions. These were required by the original D-Log 
-# data to convert to a similar format as the current version
-
-# def parse_dlog_build_out(dlog: pd.DataFrame,
-#                          year: str,
-#                          dlog_columns: List[str]
-#                          ) -> pd.DataFrame:
-#     """Parses the data in the build out columns of the development log.
-#     TODO Currently assumes that the first year in the d-log is the base
-#     Does contain some repitition if this is done for all years but only small
-#     tasks.
-
-#     Parameters
-#     ----------
-#     dlog : pd.DataFrame
-#         The subset of the dlog_processor (excess columns removed)
-#     year : str
-#         Future year that the build-out information will be calculated to
-#     dlog_columns : List[str]
-#         All required columns to be present in the returned dataframe
-
-#     Returns
-#     -------
-#     pd.DataFrame
-#         The same dataframe as dlog_processor, with only the columns in
-#         dlog_columns + a column with the name given in year that contains
-#         the estimated development
-#     """
-
-#     dlog_subset = dlog.copy()
-
-#     # Extract the build out columns
-#     build_out_cols = [
-#         col for col in dlog_subset.columns
-#         if "units_" in col and any([c for c in col if c.isdigit()])
-#     ]
-#     # Extract the first year in the range
-#     build_out_years = [int(x.replace("units_", "").split("_")[0])
-#                        for x in build_out_cols]
-#     # Ensure these are sorted
-#     build_out_cols = [
-#         col for col, year in sorted(zip(build_out_cols, build_out_years),
-#                                     key=lambda pair: pair[1])
-#     ]
-#     build_out_years = [year for year in sorted(build_out_years)]
-
-#     # Get the position in the build out profile
-#     for i, band_start in enumerate(build_out_years[:-1]):
-#         next_band_start = build_out_years[i+1]
-#         future_year = int(year)
-#         if future_year > band_start and future_year <= next_band_start:
-
-#             band_width = next_band_start - band_start
-#             build_out_factor = (future_year - band_start) / band_width
-
-#             build_out_idx = i
-#             break
-
-#     # Calculate the number of additional households from the base year
-#     final_year_col = build_out_cols[build_out_idx]
-#     required_year_cols = build_out_cols[:build_out_idx+1]
-#     subset_columns = dlog_columns + required_year_cols
-#     dlog_subset = dlog_subset[subset_columns]
-
-#     # Any missing build out can be infilled as 0
-#     dlog_subset.fillna(
-#         {col: 0.0 for col in required_year_cols},
-#         inplace=True
-#     )
-
-#     # Assume a linear build out for the final band using previously
-#     # calculated factor
-#     dlog_subset[final_year_col] *= build_out_factor
-#     dlog_subset[year] = dlog_subset[required_year_cols].sum(axis=1)
-
-#     return dlog_subset
-
-
-# def infill_dlog_build_out(dlog: pd.DataFrame,
-#                           year: str,
-#                           start_date_col: str,
-#                           end_date_col: str,
-#                           development_id_col: str,
-#                           total_column: str
-#                           ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-#     """Fill in gaps where no build out data was provided in the development
-#     log. This is done using the entire development phase total and the start /
-#     end dates. A linear build out is assumed.
-
-#     Parameters
-#     ----------
-#     dlog : pd.DataFrame
-#         Development Log with estimated values already calculated from the 
-#         build out years.
-#     year : str
-#         Future year column that contains the known data. (from build out)
-#     start_date_col : str
-#         Column containing the development start date
-#     end_date_col : str
-#         Column containing the development end date
-#     development_id_col : str
-#         Column containing the ID of the development. Used to report 
-#         developments with errors.
-#     total_column : str
-#         Column containing the total number of units during the development
-#         phase.
-
-#     Returns
-#     -------
-#     Tuple[pd.DataFrame, pd.DataFrame]
-#         A dataframe containing only developments where the data can be infilled
-#         A dataframe listing the developments where data cannot be estimated 
-#         (missing dates or missing totals)
-#     """
-#     start_date = start_date_col
-#     end_date = end_date_col
-#     development_id = development_id_col
-#     i_year = int(year)
-
-#     no_build_out = dlog.copy()
-#     # Empty dataframe to store d-log ids with insufficient data
-#     dlog_errors = pd.DataFrame(columns=[development_id, year])
-#     dlog_errors[development_id] = dlog[development_id]
-
-#     # TODO check that this is correct way to identify no data
-#     no_build_out = no_build_out.loc[no_build_out[year] == 0]
-#     # Just flag the number of errors for now
-#     print(f"No build out data for {no_build_out.shape[0]}")
-#     # Check for missing totals
-#     missing_totals = no_build_out.loc[
-#         no_build_out[total_column] == 0
-#     ][development_id]
-#     dlog_errors[year] = ""
-#     dlog_errors.loc[
-#         dlog_errors[development_id].isin(missing_totals), year
-#     ] = "missing_total"
-#     # Remove missing data from no_build_out
-#     no_build_out = no_build_out.loc[
-#         ~no_build_out[development_id].isin(missing_totals)
-#     ]
-#     # Check for missing start / end dates
-#     missing_dates = no_build_out.loc[
-#         (no_build_out[start_date].isna())
-#         | (no_build_out[end_date].isna())
-#     ][development_id]
-#     dlog_errors.loc[
-#         dlog_errors[development_id].isin(missing_dates), year
-#     ] = "missing_date"
-#     # Remove missing data from no_build_out
-#     no_build_out = no_build_out.loc[
-#         ~no_build_out[development_id].isin(missing_dates)
-#     ]
-#     # Ignore data where the year is outside of the start / end range
-#     # these will be zero for this year
-#     no_build_out[start_date] = no_build_out[start_date].dt.year
-#     no_build_out[end_date] = no_build_out[end_date].dt.year
-#     no_build_out = no_build_out.loc[
-#         (i_year >= no_build_out[start_date])
-#         & (i_year <= no_build_out[end_date])
-#     ]
-#     # Estimate the build out for the year - linear between start
-#     # and end dates
-#     no_build_out[year] = (
-#         no_build_out[total_column]
-#         * (
-#             (i_year - no_build_out[start_date])
-#             / (no_build_out[end_date] - no_build_out[start_date])
-#         )
-#     )
-#     # Merge back to the subset
-#     no_build_out.rename({year: "filled_data"}, axis=1, inplace=True)
-
-#     return no_build_out, dlog_errors
 
 
 def constrain_post_dlog(df: pd.DataFrame,
@@ -397,8 +228,8 @@ def constrain_post_dlog(df: pd.DataFrame,
     return df
 
 
-# TODO: Move constraining function elsewhere
-#  group with NTEM constraints
+# BACKLOG: Move constraining function
+#  labels: demand merge
 def constrain_forecast(pre_constraint_df: pd.DataFrame,
                        constraint_df: pd.DataFrame,
                        constraint_zone_equivalence: pd.DataFrame,
@@ -586,6 +417,8 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
                 dlog_data_column_key: str = "population",
                 perform_constraint: bool = True,
                 constraints: pd.DataFrame = None,
+                exceptional_zone_cutoff: float = 0.75,
+                exceptional_zone_method: str = "growth",
                 audit_outputs: bool = False,
                 audit_location: str = None
                 ) -> pd.DataFrame:
@@ -647,6 +480,13 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     perform_constraint : bool, optional
         Flag is the built in constraint should be used. Now replaced by 
         constraint in production/attraction generators, by default True
+    exceptional_zone_cutoff : float, optional
+        The growth difference to identify exceptional zones. E.g. 0.75 will
+        flag any zones that have 75% difference in percentage points -> 
+        101% growth pre D-Log and 176% growth post D-Log would be flagged,
+        by default 0.75
+    exceptional_zone_method : str, optional
+        Can be "growth", "absolute", or "both", by default "growth"
     audit_outputs : bool, optional
         If audit outputs should be provided showing the splits used, and the 
         additions from the D-Log, by default False
@@ -756,8 +596,6 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     invalid_growth_zones = pd.DataFrame()
 
     # Calculate the growth factors for each MSOA and year
-    # May be faster to just get the first entry for each MSOA as the factors
-    # are identical
     metric_columns = [base_year] + future_years
     dlog_additions = post_dlog_df.groupby(msoa_column)[metric_columns].sum()
 
@@ -818,14 +656,21 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
         
         # Handle cases where addition of the dlog_processor data (negative) leaves
         # a zone with negative or very low population / employment
+        # Use the minimimum growth limit from the function arguments as the
+        # minimum possible value for the adjusted growth
+
+        # Flag zones where the adjusted growth is invalid
         invalid_growth = segment_split[adj_growth] < min_growth_limit
         audit_zones = segment_split[invalid_growth][
             [msoa_column] + segment_groups + [adj_growth]
         ].copy()
+        # Remove zones where the original growth was zero
         audit_zones = audit_zones.loc[audit_zones[adj_growth] != 0]
         audit_zones["year"] = year
         audit_zones.rename({adj_growth: "growth_factor"}, axis=1, inplace=True)
+        # Reset the invalid adjusted growth to the minimum growth limit
         segment_split.loc[invalid_growth, adj_growth] = min_growth_limit
+        # Save the invalid zones to output in audits if required
         if invalid_growth_zones.empty:
             invalid_growth_zones = audit_zones.drop_duplicates()
         else:
@@ -875,15 +720,20 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
     e_zones = identify_exceptional_zones(
         pre_df=pre_dlog_growth,
         post_df=post_dlog_growth,
-        growth_cutoff=0.75,
+        growth_cutoff=exceptional_zone_cutoff,
+        cutoff_method=exceptional_zone_method,
         base_year=base_year,
         future_years=future_years
     )
 
     # Drop any temporary columns
+    drop_cols = ["sector_id"]
+    adjusted_growth_cols = [
+        col for col in post_dlog_df.columns if "adj_growth" in col
+    ]
+    drop_cols.extend(adjusted_growth_cols)
     post_dlog_df.drop(
-        ["sector_id"] + [col for col in post_dlog_df.columns 
-                         if "adj_growth" in col],
+        drop_cols,
         axis=1,
         inplace=True
     )
@@ -933,10 +783,6 @@ def apply_d_log(pre_dlog_df: pd.DataFrame,
             os.path.join(audit_location, "invalid_growth_zones.csv"),
             index=False
         )
-        # e_zones.to_csv(
-        #     os.path.join(audit_location, "exceptional_zones.csv"),
-        #     index=False
-        # )
 
     return post_dlog_df, e_zones
 

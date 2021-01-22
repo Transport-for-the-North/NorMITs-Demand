@@ -20,7 +20,7 @@ from itertools import product
 from tqdm import tqdm
 
 import efs_constants as consts
-from demand_utilities import d_log_processor as dlog_processor
+from demand_utilities import d_log_processor as dlog_p
 from efs_constrainer import ForecastConstrainer
 
 import demand_utilities.utils as du
@@ -379,7 +379,7 @@ class EFSAttractionGenerator:
             constraint_segments = du.intersection(segmentation_cols,
                                                   employment_constraint)
 
-            employment = dlog_processor.constrain_forecast(
+            employment = dlog_p.constrain_forecast(
                 employment,
                 employment_constraint,
                 designated_area,
@@ -399,7 +399,7 @@ class EFSAttractionGenerator:
             if "soc" in employment_growth:
                 dlog_segments.append("soc")
 
-            employment, hg_zones = dlog_processor.apply_d_log(
+            employment, hg_zones = dlog_p.apply_d_log(
                 pre_dlog_df=employment,
                 base_year=base_year,
                 future_years=future_years,
@@ -426,7 +426,7 @@ class EFSAttractionGenerator:
             constraint_segments = du.intersection(segmentation_cols,
                                                   employment_constraint)
 
-            employment = dlog_processor.constrain_forecast(
+            employment = dlog_p.constrain_forecast(
                 employment,
                 employment_constraint,
                 designated_area,
@@ -1596,43 +1596,6 @@ def generate_attractions(employment: pd.DataFrame,
     )
 
     return attractions, nhb_attractions
-
-
-def remove_all_commute_cat(df: pd.DataFrame,
-                           emp_cat_col: str,
-                           all_commute_name: str = 'E01'
-                           ) -> pd.DataFrame:
-    """
-    Removes all_commute_name from emp_cat_col in df.
-
-    df must be in long format, with a column for all employment categories
-
-    Parameters
-    ----------
-    df:
-        The dataframe to remove the all commute category from
-
-    emp_cat_col:
-        The name of the column in df that contains the employment category
-        data
-
-    all_commute_name:
-        The name of the employment category that represents all commute data.
-        This is the category that will be removed from df/
-
-    Returns
-    -------
-    df:
-        A copy of the original df with the all commute category removed.
-    """
-    # Validate input
-    if emp_cat_col not in df:
-        raise ValueError(
-            "Cannot remove all commute category from df, as the emp_cat_col "
-            "given does not exist. Given: %s" % str(emp_cat_col)
-        )
-
-    return df.loc[df[emp_cat_col] != all_commute_name]
 
 
 def build_attraction_imports(import_home: str,
