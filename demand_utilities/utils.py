@@ -297,6 +297,7 @@ def print_w_toggle(*args, echo, **kwargs):
 
 def build_io_paths(import_location: str,
                    export_location: str,
+                   base_year: str,
                    model_name: str,
                    iter_name: str,
                    scenario_name: str,
@@ -376,6 +377,10 @@ def build_io_paths(import_location: str,
     import_home = os.path.join(model_home, 'import')
     input_home = os.path.join(import_home, 'default')
 
+    # Build the longer paths
+    path = 'attractions/soc_2_digit_sic_%s.csv' % base_year
+    soc_weights_path = os.path.join(import_home, path)
+
     imports = {
         'home': import_home,
         'default_inputs': input_home,
@@ -385,7 +390,8 @@ def build_io_paths(import_location: str,
         'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
         'zoning': os.path.join(input_home, 'zoning'),
         'scenarios': os.path.join(import_home, 'scenarios'),
-        'a_weights': a_weights_path
+        'a_weights': a_weights_path,
+        'soc_weights': soc_weights_path
     }
 
     #  ## EXPORT PATHS ## #
@@ -409,6 +415,7 @@ def build_io_paths(import_location: str,
     od_24 = '24hr OD Matrices'
     compiled = 'Compiled'
     aggregated = 'Aggregated'
+    pa_24_bespoke = '24hr PA Matrices - Bespoke Zones'
 
     exports = {
         'home': export_home,
@@ -429,6 +436,8 @@ def build_io_paths(import_location: str,
 
         'aggregated_pa_24': os.path.join(matrices_home, ' '.join([aggregated, pa_24])),
         'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
+
+        'pa_24_bespoke': os.path.join(matrices_home, pa_24_bespoke)
     }
 
     for _, path in exports.items():

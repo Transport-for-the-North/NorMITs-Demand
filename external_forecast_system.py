@@ -1839,6 +1839,7 @@ class ExternalForecastSystem:
         """
         return du.build_io_paths(self.import_location,
                                  self.output_location,
+                                 base_year,
                                  self.model_name,
                                  self.iter_name,
                                  self.scenario_name,
