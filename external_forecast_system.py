@@ -18,7 +18,6 @@ from typing import Dict
 from typing import Tuple
 
 # External libs
-import numpy as np
 import pandas as pd
 
 # self imports
@@ -29,7 +28,6 @@ import efs_constants as consts
 import distribution as dm
 import efs_production_generator as pm
 import efs_attraction_generator as am
-import efs_constrainer as constrainer
 
 from efs_constrainer import ForecastConstrainer
 from zone_translator import ZoneTranslator
