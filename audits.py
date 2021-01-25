@@ -11,6 +11,9 @@ File purpose:
 Module of audit functions to carry out during runs to ensure the values
 being returned make sense
 """
+import os
+
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -130,3 +133,76 @@ def audit_furness(row_targets: pd.DataFrame,
     # Convert to table and write out
     pd.DataFrame(audit_dict).to_csv(output_path, index=False)
 
+
+def summarise_audit_furness(audit_furness_output_path: str,
+                            trip_origin: str,
+                            format_name: str,
+                            year: str,
+                            p_needed: List[int],
+                            m_needed: List[int],
+                            soc_needed: List[int] = None,
+                            ns_needed: List[int] = None,
+                            ca_needed: List[int] = None,
+                            tp_needed: List[int] = None,
+                            p_diff_col_name: str = 'p_difference',
+                            a_diff_col_name: str = 'a_difference',
+                            ) -> None:
+    # TODO: Write summarise_audit_furness() docs
+    # Create iterator
+    segment_generator = du.cp_segmentation_loop_generator(p_list=p_needed,
+                                                          m_list=m_needed,
+                                                          ns_list=ns_needed,
+                                                          soc_list=soc_needed,
+                                                          ca_list=ca_needed,
+                                                          tp_list=tp_needed)
+
+    # Generate a summary for each segmentation in this year
+    summary_ph = list()
+    index_cols = set()
+    for segment_dict in segment_generator:
+        # Keep a record of columns for indexing df later
+        index_cols = index_cols.union(segment_dict.keys())
+
+        # Need to add year for filename
+        name_dict = segment_dict.copy()
+        name_dict['yr'] = year
+
+        # Read in the audit for this segmentation
+        dist_name = du.calib_params_to_dist_name(
+            trip_origin=trip_origin,
+            matrix_format=format_name,
+            calib_params=name_dict,
+            csv=True
+        )
+        df = pd.read_csv(os.path.join(audit_furness_output_path, dist_name))
+
+        # Get summaries of the productions and attractions
+        p_mean = np.mean(df[p_diff_col_name].values)
+        p_sum = np.sum(df[p_diff_col_name].values)
+
+        a_mean = np.mean(df[a_diff_col_name].values)
+        a_sum = np.sum(df[a_diff_col_name].values)
+
+        # Build into a dictionary to record values
+        segment_summary = segment_dict.copy()
+        segment_summary.update({
+            'p_mean': p_mean,
+            'p_sum': p_sum,
+            'a_mean': a_mean,
+            'a_sum': a_sum,
+        })
+        summary_ph.append(segment_summary)
+
+    # Build the index columns for the df
+    # TODO: Build a utils function to order calib params correctly for
+    #  df index
+    index_cols = list(index_cols)
+    index_cols += ['p_mean', 'p_sum', 'a_mean', 'a_sum']
+
+    # Build all summaries into a dataframe and format
+    out_df = pd.DataFrame(summary_ph).reindex(columns=index_cols)
+
+    # Write to disk
+    fname = "%s_furness_summary.csv" % year
+    out_path = os.path.join(audit_furness_output_path, fname)
+    out_df.to_csv(out_path, index=False)
