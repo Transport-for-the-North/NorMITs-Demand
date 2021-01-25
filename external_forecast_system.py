@@ -94,6 +94,9 @@ class ExternalForecastSystem:
 
         self.input_zone_system = "MSOA"
         self.output_zone_system = self.model_name
+
+        # TODO: Build zone lookup paths inside generate_output_paths()
+        # TODO: Rename generate_output_paths() to _generate_paths()
         self.msoa_lookup_path = msoa_lookup_path
         self.lad_msoa_lookup_path = lad_msoa_lookup_path
 
@@ -107,8 +110,6 @@ class ExternalForecastSystem:
         self._build_pop_emp_paths()
         self._read_in_default_inputs()
         self._set_up_dlog(dlog_pop_path, dlog_emp_path)
-        self.msoa_zones_path = os.path.join(self.imports['zoning'],
-                                            'msoa_zones.csv')
         self.msoa_zones_path = os.path.join(self.imports["zoning"], "msoa_zones.csv")
 
         # sub-classes
@@ -591,7 +592,7 @@ class ExternalForecastSystem:
             population_constraint=pop_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],
-            msoa_lookup_path=self.msoa_lookup_path,
+            msoa_lookup_path=self.msoa_zones_path,
             control_productions=True,
             control_fy_productions=self.ntem_control_future_years,
             dlog=self.dlog_paths['pop'],
@@ -616,7 +617,7 @@ class ExternalForecastSystem:
             employment_constraint=emp_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],
-            msoa_lookup_path=self.msoa_lookup_path,
+            msoa_lookup_path=self.msoa_zones_path,
             attraction_weights_path=self.imports['a_weights'],
             control_attractions=True,
             control_fy_attractions=self.ntem_control_future_years,
@@ -1741,7 +1742,7 @@ def main():
     verbose = False
 
     # Running control
-    integrate_dlog = True
+    integrate_dlog = False
 
     run_base_efs = True
     recreate_productions = True
