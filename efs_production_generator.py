@@ -111,6 +111,7 @@ class EFSProductionGenerator:
 
             # D-Log
             dlog: str = None,
+            msoa_conversion_path: str = None,
 
             # Population constraints
             pre_dlog_constraint: bool = False,

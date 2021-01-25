@@ -195,7 +195,7 @@ def calculate_attraction_weights(observed_base: pd.DataFrame,
     # Group and sum employment by the required segmentation (likely sector
     # and soc) - adding in the column for soc segmentation if necessary
     emp["sector_id"] = emp[zone_column].map(sector_map)
-    if soc_weights_path is not None:
+    if "soc" in emp.columns:
         emp = emp.groupby(
             ["sector_id", "soc"],
             as_index=False
@@ -212,16 +212,18 @@ def calculate_attraction_weights(observed_base: pd.DataFrame,
         as_index=False
     )[base_year].sum()
 
-    if "soc" in emp.columns and 0 not in emp["soc"].unique():
+    if "soc" in emp.columns and "none" not in emp["soc"].unique():
         # Add in soc segmentation for non-soc purposes (sum 1, 2, 3)
         soc_0 = emp.groupby(
             [col for col in emp_group_cols if col != "soc"],
             as_index=False
         )["land_use"].sum()
-        soc_0["soc"] = 0
+        soc_0["soc"] = "none"
         emp = emp.append(
             soc_0
         )
+        # Convert to string to match with observed data types
+        emp["soc"] = emp["soc"].astype("str")
 
     # Merge is done on sector_id and employment segmentation (soc) so that the
     # same land_use data is joined to each purpose in the attractions
@@ -241,6 +243,11 @@ def calculate_attraction_weights(observed_base: pd.DataFrame,
     tr_e["trip_rate"] = tr_e[base_year] / tr_e["land_use"]
 
     tr_e = tr_e[attr_group_cols + ["trip_rate"]]
+
+    # Convert soc segmentation to integers as expected by the synthetic vectors
+    if "soc" in tr_e.columns:
+        tr_e["soc"] = tr_e["soc"].replace("none", 0)
+        tr_e["soc"] = tr_e["soc"].astype("int")
 
     return tr_e
 
@@ -520,6 +527,12 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
         how="outer",
         on=merge_cols
     )
+    
+    # Replace "none" in observed soc with soc = 0 for employment
+    if "none" not in forecast_vector["soc"].unique():
+        observed_base["soc"] = observed_base["soc"].replace("none", 0)
+        observed_base["soc"] = observed_base["soc"].astype("int")
+    
     forecast_vector = pd.merge(
         forecast_vector,
         observed_base.rename({base_year: "b_c"}, axis=1),
@@ -827,6 +840,9 @@ def growth_criteria(synth_productions: pd.DataFrame,
             "msoa_zone_id",
             [base_year] + future_years
         )
+        # Add back into the employment segmentation
+        segments["emp"].append("soc")
+        emp_group_cols.append("soc")
 
     # If the zone translator has been supplied, need to change zone system
     if zone_translator is not None:
@@ -907,7 +923,7 @@ def growth_criteria(synth_productions: pd.DataFrame,
 
     prod_trip_rates = calculate_production_trip_rate(
         observed_base=observed_prod_base,
-        land_use=population,
+        population=population,
         e_zones=pd.DataFrame,
         base_year=base_year,
         segment_cols=segments['prod'],
@@ -917,7 +933,7 @@ def growth_criteria(synth_productions: pd.DataFrame,
     )
     attr_trip_rates = calculate_attraction_weights(
         observed_base=observed_attr_base,
-        land_use=employment,
+        employment=employment,
         base_year=base_year,
         emp_segment_cols=segments['emp'],
         attr_segment_cols=segments['attr'],

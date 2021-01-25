@@ -98,6 +98,7 @@ class EFSAttractionGenerator:
 
             # D-Log
             dlog: str = None,
+            msoa_conversion_path: str = None,
 
             # Employment constraints
             pre_dlog_constraint: bool = False,

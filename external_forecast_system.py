@@ -606,6 +606,7 @@ class ExternalForecastSystem:
             control_productions=True,
             control_fy_productions=self.ntem_control_future_years,
             dlog=self.dlog_paths['pop'],
+            msoa_conversion_path=self.msoa_zones_path,
             pre_dlog_constraint=constraint_required['pop_pre_dlog'],
             post_dlog_constraint=constraint_required['pop_post_dlog'],
             designated_area=self.lad_msoa_lookup.copy(),
@@ -631,6 +632,7 @@ class ExternalForecastSystem:
             control_attractions=True,
             control_fy_attractions=self.ntem_control_future_years,
             dlog=self.dlog_paths['emp'],
+            msoa_conversion_path=self.msoa_zones_path,
             pre_dlog_constraint=constraint_required['emp_pre_dlog'],
             post_dlog_constraint=constraint_required['emp_post_dlog'],
             designated_area=self.lad_msoa_lookup.copy(),
@@ -853,8 +855,6 @@ class ExternalForecastSystem:
         )
 
         # TODO: Move conversion to attraction weights down here
-
-        raise NotImplementedError("Finished Test")
 
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
@@ -1967,7 +1967,6 @@ def main():
     if run_base_efs:
         # Generates HB PA matrices
         efs.run(
-            desired_zoning=model_name,
             recreate_productions=recreate_productions,
             recreate_attractions=recreate_attractions,
             recreate_nhb_productions=recreate_nhb_productions,

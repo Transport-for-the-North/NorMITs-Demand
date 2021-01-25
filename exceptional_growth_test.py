@@ -5,11 +5,12 @@ from external_forecast_system import ExternalForecastSystem
 import efs_constants as consts
 
 efs = ExternalForecastSystem(
-    model_name="norms",
-    iter_num=4,
+    model_name=consts.MODEL_NAME,
+    iter_num=0,
     import_home="Y:/",
     export_home="C:/",
-    integrate_dlog=True
+    integrate_dlog=True,
+    scenario_name=consts.SC00_NTEM
 )
 
 generation_file = (
