@@ -194,9 +194,7 @@ def summarise_audit_furness(audit_furness_output_path: str,
         summary_ph.append(segment_summary)
 
     # Build the index columns for the df
-    # TODO: Build a utils function to order calib params correctly for
-    #  df index
-    index_cols = list(index_cols)
+    index_cols = du.segmentation_order(list(index_cols))
     index_cols += ['p_mean', 'p_sum', 'a_mean', 'a_sum']
 
     # Build all summaries into a dataframe and format

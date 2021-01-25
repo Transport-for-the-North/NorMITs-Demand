@@ -90,6 +90,17 @@ _model_name_modes = [
 MODEL_NAMES = [x[0] for x in _model_name_modes]
 MODEL_MODES = {name: modes for name, modes in _model_name_modes}
 
+# Order of segmentation in outputs
+SEGMENTATION_ORDER = [
+    'yr',
+    'p',
+    'm',
+    'soc',
+    'ns',
+    'ca',
+    'tp',
+]
+
 # Valid Scenario Names
 SC00_NTEM = 'NTEM'
 SC01_JAM = 'SC01_JAM'
