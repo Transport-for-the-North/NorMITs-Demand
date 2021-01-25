@@ -12,7 +12,6 @@ File purpose:
 # Built-ins
 import os
 import time
-import itertools
 
 from typing import List
 from typing import Dict
@@ -278,12 +277,11 @@ class ExternalForecastSystem:
             minimum_development_certainty: str = "MTL",
             constraint_required: Dict[str, bool] = consts.CONSTRAINT_REQUIRED_DEFAULT,
             constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
-            outputting_files: bool = True,
             recreate_productions: bool = True,
             recreate_attractions: bool = True,
             recreate_nhb_productions: bool = True,
-            performing_sector_totals: bool = True,
             apply_growth_criteria: bool = True,
+            outputting_files: bool = True,
             output_location: str = None,
             echo_distribution: bool = True
             ) -> None:
@@ -569,16 +567,6 @@ class ExternalForecastSystem:
             constraint_source,
         )
 
-        # ## INPUT CHECKS ## #
-        # print("Starting input checks...")
-        #
-        #
-        #
-        # print("No known errors in the inputs!")
-        # last_time = current_time
-        # current_time = time.time()
-        # print("Input checks took: %.2f seconds." % (current_time - last_time))
-
         # ## GET DATA ## #
         # TODO: Tidy this up
         pop_growth = self.pop_growth.copy()
@@ -603,10 +591,10 @@ class ExternalForecastSystem:
             population_constraint=pop_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],
+            msoa_lookup_path=self.msoa_lookup_path,
             control_productions=True,
             control_fy_productions=self.ntem_control_future_years,
             dlog=self.dlog_paths['pop'],
-            msoa_conversion_path=self.msoa_zones_path,
             pre_dlog_constraint=constraint_required['pop_pre_dlog'],
             post_dlog_constraint=constraint_required['pop_post_dlog'],
             designated_area=self.lad_msoa_lookup.copy(),
@@ -628,11 +616,11 @@ class ExternalForecastSystem:
             employment_constraint=emp_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],
+            msoa_lookup_path=self.msoa_lookup_path,
             attraction_weights_path=self.imports['a_weights'],
             control_attractions=True,
             control_fy_attractions=self.ntem_control_future_years,
             dlog=self.dlog_paths['emp'],
-            msoa_conversion_path=self.msoa_zones_path,
             pre_dlog_constraint=constraint_required['emp_pre_dlog'],
             post_dlog_constraint=constraint_required['emp_post_dlog'],
             designated_area=self.lad_msoa_lookup.copy(),
@@ -1627,187 +1615,6 @@ class ExternalForecastSystem:
             )
 
         # TODO: Compile to OD/PA when we know the correct format
-
-    def segment_dataframe(self,
-                          combined_dataframe: pd.DataFrame,
-                          split_dataframe: pd.DataFrame,
-                          year_list: List[str]
-                          ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        combined_dataframe = combined_dataframe.copy()
-        split_dataframe = split_dataframe.copy()
-
-        segmented_dataframe = pd.merge(
-            split_dataframe,
-            combined_dataframe,
-            on=["model_zone_id"],
-            suffixes=("_spl", "")
-        )
-
-        for year in year_list:
-            segmented_dataframe.loc[:, year] = (
-                segmented_dataframe.loc[:, year]
-                /
-                segmented_dataframe.loc[:, year + "_spl"]
-            )
-
-        split_names = [s + "_spl" for s in year_list]
-        segmented_dataframe = segmented_dataframe.drop(
-            labels=split_names,
-            axis=1
-        )
-
-        return segmented_dataframe
-
-    def mode_time_split_application(self,
-                                    production_dataframe: pd.DataFrame,
-                                    mode_time_split_dataframe: pd.DataFrame,
-                                    year_list: List[str]
-                                    ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        production_dataframe = production_dataframe.copy()
-        mode_time_split_dataframe = mode_time_split_dataframe.copy()
-
-        trip_dataframe = pd.merge(
-            production_dataframe,
-            mode_time_split_dataframe,
-            on=["purpose_id", "traveller_type_id", "area_type_id"],
-            suffixes=("", "_splits")
-        )
-
-        # Multiply by proportions to get split values
-        for year in year_list:
-            trip_dataframe.loc[:, year] = (
-                trip_dataframe[year]
-                *
-                trip_dataframe[year + "_splits"]
-            )
-
-        # Extract just the needed columns
-        group_by_cols = [
-            "model_zone_id",
-            "purpose_id",
-            "traveller_type_id",
-            "area_type_id",
-            "mode_time_split"
-        ]
-        needed_columns = group_by_cols.copy()
-        needed_columns.extend(year_list)
-
-        trip_dataframe = trip_dataframe[needed_columns]
-        trip_dataframe = trip_dataframe.groupby(
-            by=group_by_cols,
-            as_index=False
-        ).sum()
-
-        return trip_dataframe
-
-    def attraction_generation(self,
-                              worker_dataframe: pd.DataFrame,
-                              attraction_weight: pd.DataFrame,
-                              year_list: List[str]
-                              ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        worker_dataframe = worker_dataframe.copy()
-        attraction_weight = attraction_weight.copy()
-
-        attraction_dataframe = pd.merge(
-            worker_dataframe,
-            attraction_weight,
-            on=["employment_class"],
-            suffixes=("", "_weights")
-        )
-
-        for year in year_list:
-            attraction_dataframe.loc[:, year] = (
-                attraction_dataframe[year]
-                *
-                attraction_dataframe[year + "_weights"]
-            )
-
-        group_by_cols = ["model_zone_id", "purpose_id"]
-        needed_columns = group_by_cols.copy()
-        needed_columns.extend(year_list)
-
-        attraction_dataframe = attraction_dataframe[needed_columns]
-        attraction_dataframe = attraction_dataframe.groupby(
-            by=group_by_cols,
-            as_index=False
-        ).sum()
-
-        return attraction_dataframe
-
-    def generate_car_availability(self,
-                                  traveller_based_dataframe: pd.DataFrame,
-                                  car_availability: pd.DataFrame,
-                                  year_string_list: List[str],
-                                  required_columns: List[str]
-                                  ) -> pd.DataFrame:
-        """
-        #TODO
-
-        Where the traveller type has no cars indicated as available,
-        set car availability to 1
-
-        Where the traveller type has 1+ cars indicated as available,
-        set car availability to 2
-        """
-        traveller_based_dataframe = traveller_based_dataframe.copy()
-        car_availability = car_availability.copy()
-        required_combined_columns = required_columns.copy()
-
-        required_combined_columns.extend(year_string_list)
-
-        # Get the car availability for each traveller type
-        car_availability_dataframe = pd.merge(
-            traveller_based_dataframe,
-            car_availability,
-            on=["traveller_type_id"]
-        )
-
-        # Extract the required columns
-        car_availability_dataframe = car_availability_dataframe[
-            required_combined_columns
-        ]
-        car_availability_dataframe = car_availability_dataframe.groupby(
-            by=required_columns,
-            as_index=False
-        ).sum()
-
-        return car_availability_dataframe
-
-    def reattach_mode_time_ids(self,
-                               split_dataframe: pd.DataFrame,
-                               time_split_types_dataframe: pd.DataFrame,
-                               year_string_list: List[str],
-                               required_columns: List[str]
-                               ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        split_dataframe = split_dataframe.copy()
-        time_split_types_dataframe = time_split_types_dataframe.copy()
-        required_combined_columns = required_columns.copy()
-
-        required_combined_columns.extend(year_string_list)
-
-        reattached_dataframe = pd.merge(
-            split_dataframe,
-            time_split_types_dataframe,
-            on=["mode_time_split"]
-        )
-
-        reattached_dataframe = reattached_dataframe[
-            required_combined_columns
-        ]
-
-        return reattached_dataframe
 
     def generate_output_paths(self, base_year: str) -> Tuple[Dict[str, str],
                                                              Dict[str, str],

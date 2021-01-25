@@ -99,6 +99,7 @@ class EFSProductionGenerator:
             time_splits_path: str = None,
             mean_time_splits_path: str = None,
             mode_share_path: str = None,
+            msoa_lookup_path: str = None,
 
             # Alternate output paths
             audit_write_dir: str = None,
@@ -111,7 +112,6 @@ class EFSProductionGenerator:
 
             # D-Log
             dlog: str = None,
-            msoa_conversion_path: str = None,
 
             # Population constraints
             pre_dlog_constraint: bool = False,
@@ -196,6 +196,10 @@ class EFSProductionGenerator:
         mode_share_path:
             The path to alternate mode share data. If left as None, the
             production model will use the default mode share data.
+
+        msoa_lookup_path:
+            The path to alternate msoa lookup import data. If left as None,
+            the production model will use the default msoa lookup path.
 
         audit_write_dir:
             Alternate path to write the audits. If left as None, the default
@@ -327,6 +331,7 @@ class EFSProductionGenerator:
             time_splits_path=time_splits_path,
             mean_time_splits_path=mean_time_splits_path,
             mode_share_path=mode_share_path,
+            msoa_lookup_path=msoa_lookup_path,
             ntem_control_dir=ntem_control_dir,
             lad_lookup_dir=lad_lookup_dir,
             set_controls=control_productions
@@ -378,7 +383,7 @@ class EFSProductionGenerator:
                 base_year,
                 future_years,
                 self.zone_col,
-                msoa_path=msoa_conversion_path,
+                msoa_path=imports['msoa_lookup'],
                 segment_cols=constraint_segments
             )
             print(". Post Constraint:\n%s" % population[future_years].sum())
@@ -395,7 +400,7 @@ class EFSProductionGenerator:
                 base_year=base_year,
                 future_years=future_years,
                 dlog_path=dlog,
-                msoa_conversion_path=msoa_conversion_path,
+                msoa_conversion_path=imports['msoa_lookup'],
                 constraints_zone_equivalence=designated_area,
                 segment_cols=segmentation_cols,
                 segment_groups=seg_groups,
@@ -423,7 +428,7 @@ class EFSProductionGenerator:
                 base_year,
                 future_years,
                 self.zone_col,
-                msoa_path=msoa_conversion_path,
+                msoa_path=imports['msoa_lookup'],
                 segment_cols=constraint_segments
             )
             print(". Post Constraint:\n%s" % population[future_years].sum())
@@ -1749,6 +1754,7 @@ def build_production_imports(import_home: str,
                              time_splits_path: str = None,
                              mean_time_splits_path: str = None,
                              mode_share_path: str = None,
+                             msoa_lookup_path: str = None,
                              ntem_control_dir: str = None,
                              lad_lookup_dir: str = None,
                              set_controls: bool = True,
@@ -1782,6 +1788,10 @@ def build_production_imports(import_home: str,
 
     mode_share_path:
         An alternate mode share import path to use. File will need to follow
+        the same format as default file.
+
+    msoa_lookup_path:
+        An alternate msoa lookup import path to use. File will need to follow
         the same format as default file.
 
     ntem_control_dir:
@@ -1829,6 +1839,10 @@ def build_production_imports(import_home: str,
         path = 'tfn_segment_production_params\hb_mode_split.csv'
         mode_share_path = os.path.join(import_home, path)
 
+    if msoa_lookup_path is None:
+        path = "default\zoning\msoa_zones.csv"
+        msoa_lookup_path = os.path.join(import_home, path)
+
     if set_controls and ntem_control_dir is None:
         path = 'ntem_constraints'
         ntem_control_dir = os.path.join(import_home, path)
@@ -1843,8 +1857,9 @@ def build_production_imports(import_home: str,
         'time_splits': time_splits_path,
         'mean_time_splits': mean_time_splits_path,
         'mode_share': mode_share_path,
+        'msoa_lookup': msoa_lookup_path,
         'ntem_control': ntem_control_dir,
-        'lad_lookup': lad_lookup_dir
+        'lad_lookup': lad_lookup_dir,
     }
 
     # Make sure all import paths exit

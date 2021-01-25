@@ -86,6 +86,7 @@ class EFSAttractionGenerator:
             employment_path: str = None,
             mode_splits_path: str = None,
             soc_weights_path: str = None,
+            msoa_lookup_path: str = None,
 
             # Alternate output paths
             audit_write_dir: str = None,
@@ -98,7 +99,6 @@ class EFSAttractionGenerator:
 
             # D-Log
             dlog: str = None,
-            msoa_conversion_path: str = None,
 
             # Employment constraints
             pre_dlog_constraint: bool = False,
@@ -181,6 +181,10 @@ class EFSAttractionGenerator:
         soc_weights_path:
             The path to alternate soc weights import data. If left as None, the
             attraction model will use the default land use data.
+
+        msoa_lookup_path:
+            The path to alternate msoa lookup import data. If left as None,
+            the attraction model will use the default msoa lookup path.
 
         audit_write_dir:
             Alternate path to write the audits. If left as None, the default
@@ -308,6 +312,7 @@ class EFSAttractionGenerator:
             employment_path=employment_path,
             mode_splits_path=mode_splits_path,
             soc_weights_path=soc_weights_path,
+            msoa_lookup_path=msoa_lookup_path,
             ntem_control_dir=ntem_control_dir,
             lad_lookup_dir=lad_lookup_dir,
             set_controls=control_attractions
@@ -400,7 +405,7 @@ class EFSAttractionGenerator:
                 base_year,
                 future_years,
                 self.zone_col,
-                msoa_path=msoa_conversion_path,
+                msoa_path=imports['msoa_lookup'],
                 segment_cols=constraint_segments
             )
             print(". Post Constraint:\n%s" % employment[future_years].sum())
@@ -418,7 +423,7 @@ class EFSAttractionGenerator:
                 base_year=base_year,
                 future_years=future_years,
                 dlog_path=dlog,
-                msoa_conversion_path=msoa_conversion_path,
+                msoa_conversion_path=imports['msoa_lookup'],
                 constraints_zone_equivalence=designated_area,
                 segment_cols=dlog_segments,
                 dlog_conversion_factor=1.0,
@@ -447,7 +452,7 @@ class EFSAttractionGenerator:
                 base_year,
                 future_years,
                 self.zone_col,
-                msoa_path=msoa_conversion_path,
+                msoa_path=imports['msoa_lookup'],
                 segment_cols=constraint_segments
             )
             print(". Post Constraint:\n%s" % employment[future_years].sum())
@@ -1675,6 +1680,7 @@ def build_attraction_imports(import_home: str,
                              employment_path: str = None,
                              mode_splits_path: str = None,
                              soc_weights_path: str = None,
+                             msoa_lookup_path: str = None,
                              ntem_control_dir: str = None,
                              lad_lookup_dir: str = None,
                              set_controls: bool = True
@@ -1708,6 +1714,10 @@ def build_attraction_imports(import_home: str,
 
     soc_weights_path:
         An alternate soc weights import path to use. File will need to follow
+        the same format as default file.
+
+    msoa_lookup_path:
+        An alternate msoa lookup import path to use. File will need to follow
         the same format as default file.
 
     ntem_control_dir:
@@ -1746,6 +1756,10 @@ def build_attraction_imports(import_home: str,
         path = 'attractions/soc_2_digit_sic_%s.csv' % base_year
         soc_weights_path = os.path.join(import_home, path)
 
+    if msoa_lookup_path is None:
+        path = "default\zoning\msoa_zones.csv"
+        msoa_lookup_path = os.path.join(import_home, path)
+
     if set_controls and ntem_control_dir is None:
         path = 'ntem_constraints'
         ntem_control_dir = os.path.join(import_home, path)
@@ -1759,13 +1773,14 @@ def build_attraction_imports(import_home: str,
         'base_employment': employment_path,
         'mode_splits': mode_splits_path,
         'soc_weights': soc_weights_path,
+        'msoa_lookup': msoa_lookup_path,
         'ntem_control': ntem_control_dir,
-        'lad_lookup': lad_lookup_dir
+        'lad_lookup': lad_lookup_dir,
     }
 
     # Make sure all import paths exit
     for key, path in imports.items():
-        # TODO: Fix cross model inputs
+        # BACKLOG: Fix cross model inputs
         #  labels: demand merge
         if key == 'weights' and path is None:
             continue
