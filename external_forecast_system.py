@@ -641,25 +641,27 @@ class ExternalForecastSystem:
         emp_path = os.path.join(self.exports['attractions'],
                                 self.attraction_generator.emp_fname)
 
-        # Build the comparators
-        pop_comp = PopEmpComparator(
-            **self.pop_emp_inputs['population'],
-            output_csv=pop_path,
-            data_type='population',
-            base_year=str(base_year),
-            verbose=self.verbose
-        )
-        emp_comp = PopEmpComparator(
-            **self.pop_emp_inputs['employment'],
-            output_csv=emp_path,
-            data_type='employment',
-            base_year=str(base_year),
-            verbose=self.verbose
-        )
+        # TODO: Add toggle to turn pop/emp comparator on/off
 
-        # Write comparisons to disk
-        pop_comp.write_comparisons(self.exports['reports'], 'csv', True)
-        emp_comp.write_comparisons(self.exports['reports'], 'csv', True)
+        # # Build the comparators
+        # pop_comp = PopEmpComparator(
+        #     **self.pop_emp_inputs['population'],
+        #     output_csv=pop_path,
+        #     data_type='population',
+        #     base_year=str(base_year),
+        #     verbose=self.verbose
+        # )
+        # emp_comp = PopEmpComparator(
+        #     **self.pop_emp_inputs['employment'],
+        #     output_csv=emp_path,
+        #     data_type='employment',
+        #     base_year=str(base_year),
+        #     verbose=self.verbose
+        # )
+        #
+        # # Write comparisons to disk
+        # pop_comp.write_comparisons(self.exports['reports'], 'csv', True)
+        # emp_comp.write_comparisons(self.exports['reports'], 'csv', True)
 
         last_time = current_time
         current_time = time.time()
@@ -1745,9 +1747,9 @@ def main():
     integrate_dlog = False
 
     run_base_efs = True
-    recreate_productions = True
-    recreate_attractions = True
-    recreate_nhb_productions = True
+    recreate_productions = False
+    recreate_attractions = False
+    recreate_nhb_productions = False
 
     run_hb_pa_to_od = False
     run_compile_od = False

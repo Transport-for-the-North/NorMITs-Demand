@@ -212,18 +212,20 @@ def calculate_attraction_weights(observed_base: pd.DataFrame,
         as_index=False
     )[base_year].sum()
 
-    if "soc" in emp.columns and "none" not in emp["soc"].unique():
-        # Add in soc segmentation for non-soc purposes (sum 1, 2, 3)
-        soc_0 = emp.groupby(
-            [col for col in emp_group_cols if col != "soc"],
-            as_index=False
-        )["land_use"].sum()
-        soc_0["soc"] = "none"
-        emp = emp.append(
-            soc_0
-        )
-        # Convert to string to match with observed data types
-        emp["soc"] = emp["soc"].astype("str")
+    # Convert the observed data to the correct format for a merge
+    observed["soc"] = observed["soc"].replace("none", 0)
+    observed["soc"] = observed["soc"].astype(int)
+
+    # Add in soc0 if not in there
+    if "soc" in emp.columns and 0 not in emp["soc"].unique():
+        # Sum all columns except soc to get soc0 values
+        group_cols = [col for col in emp_group_cols if col != "soc"]
+        soc_0 = emp.groupby(group_cols)["land_use"].sum().reset_index()
+        soc_0["soc"] = 0
+        emp = emp.append(soc_0)
+
+        # Make sure the dtype matches the observed data
+        emp["soc"] = emp["soc"].astype(int)
 
     # Merge is done on sector_id and employment segmentation (soc) so that the
     # same land_use data is joined to each purpose in the attractions
@@ -234,20 +236,12 @@ def calculate_attraction_weights(observed_base: pd.DataFrame,
     )
 
     # emp_group_cols.insert(1, purpose_column)
-    tr_e.set_index(attr_group_cols, inplace=True)
-    tr_e.sort_index(inplace=True)
-    tr_e.reset_index(inplace=True)
+    tr_e = tr_e.set_index(attr_group_cols).sort_index().reset_index()
 
     # Trip Rate (attraction weight) =
     # Base year attractions / Base year employment
     tr_e["trip_rate"] = tr_e[base_year] / tr_e["land_use"]
-
     tr_e = tr_e[attr_group_cols + ["trip_rate"]]
-
-    # Convert soc segmentation to integers as expected by the synthetic vectors
-    if "soc" in tr_e.columns:
-        tr_e["soc"] = tr_e["soc"].replace("none", 0)
-        tr_e["soc"] = tr_e["soc"].astype("int")
 
     return tr_e
 
@@ -529,10 +523,14 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
     )
     
     # Replace "none" in observed soc with soc = 0 for employment
-    if "none" not in forecast_vector["soc"].unique():
-        observed_base["soc"] = observed_base["soc"].replace("none", 0)
-        observed_base["soc"] = observed_base["soc"].astype("int")
-    
+    observed_base["soc"] = observed_base["soc"].replace("none", 0)
+    observed_base["soc"] = observed_base["soc"].astype("int")
+
+    # Replace "none" in forecast_vector soc with soc = 0 for employment
+    if forecast_vector['soc'].dtype == object:
+        forecast_vector["soc"] = forecast_vector["soc"].replace("none", 0)
+        forecast_vector["soc"] = forecast_vector["soc"].astype("int")
+
     forecast_vector = pd.merge(
         forecast_vector,
         observed_base.rename({base_year: "b_c"}, axis=1),
@@ -546,9 +544,8 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
 
     # Handle Exceptional Zones
     # Get the relevant land use data and save in e_land_use (exceptional)
-    e_land_use = land_use.loc[
-        land_use[zone_column
-                 ].isin(exceptional_zones[zone_column])].copy()
+    mask = land_use[zone_column].isin(exceptional_zones[zone_column])
+    e_land_use = land_use.loc[mask].copy()
     # Map the land use to the sector used for the trip rates
     e_land_use["sector_id"] = e_land_use[zone_column].map(sector_map)
     # If a sector id was not found for any zone - print the errors and assume
@@ -1024,17 +1021,19 @@ def growth_criteria(synth_productions: pd.DataFrame,
         )
         grown_attractions.append(year_attractions)
 
-    # Combine forecast vectors for each year
-    converted_productions = pd.concat(
-        [x.set_index(prod_group_cols) for x in grown_productions],
-        axis=1
-    ).reset_index()
-    converted_pure_attractions = pd.concat(
-        [x.set_index(attr_group_cols) for x in grown_attractions],
-        axis=1
-    ).reset_index()
+    # Set indexes to make concat faster
+    grown_productions = [x.set_index(prod_group_cols) for x in grown_productions]
+    grown_attractions = [x.set_index(attr_group_cols) for x in grown_attractions]
 
-    return converted_productions, converted_pure_attractions
+    # Combine production forecast vectors for each year
+    grown_productions = pd.concat(grown_productions, axis=1, sort=False)
+    grown_productions = grown_productions.reset_index()
+
+    # Combine attraction forecast vectors for each year
+    grown_attractions = pd.concat(grown_attractions, axis=1, sort=False)
+    grown_attractions = grown_attractions.reset_index()
+
+    return grown_productions, grown_attractions
 
 
 def extract_donor_totals(matrix_path: str,
