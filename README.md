@@ -22,3 +22,22 @@ Unit tests have been created using the pytest package and can be ran automatical
 the command `pytest` in the main repository folder. Pytest will search for any files named
 `test_*.py` or `*_test.py` and run all tests within them, see
 [pytest documentation](https://docs.pytest.org/en/stable/) for more information.
+
+## Versioning
+The NorMITs Demand codebase follows [Semantic Versioning](https://semver.org/); the convention
+for most software products. In Summary this means the version numbers should be read in the 
+following way.
+
+Given a version number MAJOR.MINOR.PATCH (e.g. 1.0.0), increment the:
+
+- MAJOR version when you make incompatible API changes,
+- MINOR version when you add functionality in a backwards compatible manner, and
+- PATCH version when you make backwards compatible bug fixes.
+
+Below, a brief summary of previous version can be found. Note that this should be moved in future
+to reflect future releases to avoid filling up this readme with version notes.
+
+### v0.1.0
+Initial version number. Before the TMS codebase has been merged into this codebase (which is really
+only EFS). No Elasticity model is included, and neither is the exceptional/bespoke zones. The first 
+version of EFS outputs can be found from this version onwards.
