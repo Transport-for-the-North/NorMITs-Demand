@@ -643,25 +643,25 @@ class ExternalForecastSystem:
 
         # TODO: Add toggle to turn pop/emp comparator on/off
 
-        # # Build the comparators
-        # pop_comp = PopEmpComparator(
-        #     **self.pop_emp_inputs['population'],
-        #     output_csv=pop_path,
-        #     data_type='population',
-        #     base_year=str(base_year),
-        #     verbose=self.verbose
-        # )
-        # emp_comp = PopEmpComparator(
-        #     **self.pop_emp_inputs['employment'],
-        #     output_csv=emp_path,
-        #     data_type='employment',
-        #     base_year=str(base_year),
-        #     verbose=self.verbose
-        # )
-        #
-        # # Write comparisons to disk
-        # pop_comp.write_comparisons(self.exports['reports'], 'csv', True)
-        # emp_comp.write_comparisons(self.exports['reports'], 'csv', True)
+        # Build the comparators
+        pop_comp = PopEmpComparator(
+            **self.pop_emp_inputs['population'],
+            output_csv=pop_path,
+            data_type='population',
+            base_year=str(base_year),
+            verbose=self.verbose
+        )
+        emp_comp = PopEmpComparator(
+            **self.pop_emp_inputs['employment'],
+            output_csv=emp_path,
+            data_type='employment',
+            base_year=str(base_year),
+            verbose=self.verbose
+        )
+
+        # Write comparisons to disk
+        pop_comp.write_comparisons(self.exports['reports'], 'csv', True)
+        emp_comp.write_comparisons(self.exports['reports'], 'csv', True)
 
         last_time = current_time
         current_time = time.time()
@@ -1744,7 +1744,7 @@ def main():
     verbose = False
 
     # Running control
-    integrate_dlog = False
+    integrate_dlog = True
 
     run_base_efs = True
     recreate_productions = False

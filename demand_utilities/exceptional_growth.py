@@ -521,15 +521,15 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
         how="outer",
         on=merge_cols
     )
-    
-    # Replace "none" in observed soc with soc = 0 for employment
-    observed_base["soc"] = observed_base["soc"].replace("none", 0)
-    observed_base["soc"] = observed_base["soc"].astype("int")
 
-    # Replace "none" in forecast_vector soc with soc = 0 for employment
-    if forecast_vector['soc'].dtype == object:
-        forecast_vector["soc"] = forecast_vector["soc"].replace("none", 0)
-        forecast_vector["soc"] = forecast_vector["soc"].astype("int")
+    # None is left in soc data for attractions as a residual from getting
+    # observed data from PA matrices. Set soc0 where soc==None to remove this
+    # and making it match synthetic attractions.
+    if forecast_vector['soc'].dtype != object:
+        # Cast observed data to match dtype
+        forecast_dtype = forecast_vector['soc'].dtype
+        observed_base["soc"] = observed_base["soc"].replace("none", 0)
+        observed_base["soc"] = observed_base["soc"].astype(forecast_dtype)
 
     forecast_vector = pd.merge(
         forecast_vector,
