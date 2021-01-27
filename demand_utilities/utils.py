@@ -1981,6 +1981,51 @@ def seg_level_loop_generator(seg_level: str,
                          "write it!" % seg_level)
 
 
+def segmentation_order(segmentation_lst: List[str]) -> List[str]:
+    """
+    Returns the segmentation_lst in its hierarchical order for segmentation.
+
+    Any non-segmentation keys will be appended onto the end of the list
+
+    Parameters
+    ----------
+    segmentation_lst:
+        A list of segmentation keys. See consts.SEGMENTATION_ORDER for a list
+        of valid values
+
+    Returns
+    -------
+    list:
+        segmentation_lst in its expected order. This is the
+        same order as filenames etc.
+    """
+    # Init
+    seg_order = consts.SEGMENTATION_ORDER.copy()
+
+    # Order the segmentation keys, stick non seg back on the end
+    non_seg_vals = [x for x in segmentation_lst if x not in seg_order]
+    ordered_seg_vals = [x for x in seg_order if x in segmentation_lst]
+    return ordered_seg_vals + non_seg_vals
+
+
+def seg_dict_key_order(segmentation_dict: Dict[str, Any]) -> List[str]:
+    """
+    Returns the keys of segmentation_dict in their hierarchical order
+
+    Parameters
+    ----------
+    segmentation_dict:
+        A dictionary of segmentation keys and their values. AKA Calib_params
+
+    Returns
+    -------
+    list:
+        A list of segmentation_dict keys in their expected order. This is the
+        same order as filenames etc.
+    """
+    return segmentation_order(list(segmentation_dict.keys()))
+
+
 def long_to_wide_out(df: pd.DataFrame,
                      v_heading: str,
                      h_heading: str,

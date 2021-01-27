@@ -18,7 +18,6 @@ from typing import Dict
 from typing import Tuple
 
 # External libs
-import numpy as np
 import pandas as pd
 
 # self imports
@@ -29,7 +28,8 @@ import efs_constants as consts
 import distribution as dm
 import efs_production_generator as pm
 import efs_attraction_generator as am
-import efs_constrainer as constrainer
+
+import version
 
 from efs_constrainer import ForecastConstrainer
 from zone_translator import ZoneTranslator
@@ -48,9 +48,7 @@ from demand_utilities import exceptional_growth as eg
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
-    # BACKLOG: import EFS Class version from package version
-    #  labels: demand merge
-    __version__ = "2.5"
+    __version__ = version.__version__
     _out_dir = "NorMITs Demand"
 
     # defines all non-year columns

@@ -562,6 +562,21 @@ def distribute_pa(productions: pd.DataFrame,
             process_count=process_count
         )
 
+        # Finally - create aan audit summary
+        if audit_out is not None:
+            audits.summarise_audit_furness(
+                audit_out,
+                trip_origin=trip_origin,
+                format_name='dist_audit',
+                year=year,
+                p_needed=p_needed,
+                m_needed=m_needed,
+                soc_needed=soc_needed,
+                ns_needed=ns_needed,
+                ca_needed=ca_needed,
+                tp_needed=tp_needed,
+            )
+
 
 def furness_pandas_wrapper(seed_values: pd.DataFrame,
                            row_targets: pd.DataFrame,
