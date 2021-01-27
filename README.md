@@ -41,3 +41,8 @@ to reflect future releases to avoid filling up this readme with version notes.
 Initial version number. Before the TMS codebase has been merged into this codebase (which is really
 only EFS). No Elasticity model is included, and neither is the exceptional/bespoke zones. The first 
 version of EFS outputs can be found from this version onwards.
+
+### v0.2.0
+The Elasticity Model and Bespoke Zones code now exist in the codebase - although they are not fully
+integrated. The D-Log has been added and can be optionally integrated. Observed data can now be 
+properly integrated into the base year.
