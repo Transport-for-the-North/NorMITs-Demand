@@ -46,3 +46,8 @@ version of EFS outputs can be found from this version onwards.
 The Elasticity Model and Bespoke Zones code now exist in the codebase - although they are not fully
 integrated. The D-Log has been added and can be optionally integrated. Observed data can now be 
 properly integrated into the base year.
+
+### v0.2.1
+Updated the furness auditing so summary files per year are now written to disk.
+Versioning has also been updated in the EFS class - meaning the version for the class is now
+pulled straight from the module version.
