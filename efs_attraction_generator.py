@@ -20,6 +20,7 @@ from itertools import product
 from tqdm import tqdm
 
 import efs_constants as consts
+from demand_utilities import d_log_processor as dlog_p
 from efs_constrainer import ForecastConstrainer
 
 import demand_utilities.utils as du
@@ -85,6 +86,7 @@ class EFSAttractionGenerator:
             employment_path: str = None,
             mode_splits_path: str = None,
             soc_weights_path: str = None,
+            msoa_lookup_path: str = None,
 
             # Alternate output paths
             audit_write_dir: str = None,
@@ -96,15 +98,11 @@ class EFSAttractionGenerator:
             control_fy_attractions: bool = True,
 
             # D-Log
-            d_log: pd.DataFrame = None,
-            d_log_split: pd.DataFrame = None,
+            dlog: str = None,
 
             # Employment constraints
-            constraint_required: List[bool] = consts.DEFAULT_ATTRACTION_CONSTRAINTS,
-            constraint_method: str = "Percentage",  # Percentage, Average
-            constraint_area: str = "Designated",  # Zone, Designated, All
-            constraint_on: str = "Growth",  # Growth, All
-            constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
+            pre_dlog_constraint: bool = False,
+            post_dlog_constraint: bool = None,
             designated_area: pd.DataFrame = None,
 
             # Segmentation controls
@@ -184,6 +182,10 @@ class EFSAttractionGenerator:
             The path to alternate soc weights import data. If left as None, the
             attraction model will use the default land use data.
 
+        msoa_lookup_path:
+            The path to alternate msoa lookup import data. If left as None,
+            the attraction model will use the default msoa lookup path.
+
         audit_write_dir:
             Alternate path to write the audits. If left as None, the default
             location is used.
@@ -205,26 +207,16 @@ class EFSAttractionGenerator:
             constraints given in ntem_control_dir or not. When running for
             scenarios other than the base NTEM, this should be False.
 
-        d_log:
+        dlog:
             TODO: Clarify what format D_log data comes in as
 
-        d_log_split:
-            See d_log
+        pre_dlog_constraint:
+            Whether to constrain the population before applying the dlog or
+            not.
 
-        constraint_required:
-            See efs_constrainer.ForecastConstrainer()
-
-        constraint_method:
-            See efs_constrainer.ForecastConstrainer()
-
-        constraint_area:
-            See efs_constrainer.ForecastConstrainer()
-
-        constraint_on:
-            See efs_constrainer.ForecastConstrainer()
-
-        constraint_source:
-            See efs_constrainer.ForecastConstrainer()
+        post_dlog_constraint
+            Whether to constrain the population after applying the dlog or
+            not.
 
         designated_area:
             See efs_constrainer.ForecastConstrainer()
@@ -290,10 +282,10 @@ class EFSAttractionGenerator:
         a_weights_p_col = 'purpose'
         mode_split_m_col = 'mode'
         all_years = [str(x) for x in [base_year] + future_years]
-        integrate_d_log = d_log is not None and d_log_split is not None
-        if integrate_d_log:
-            d_log = d_log.copy()
-            d_log_split = d_log_split.copy()
+
+        # If not set, perform the post_dlog_constrain if dlog is on
+        if post_dlog_constraint is None:
+            post_dlog_constraint = dlog is not None
 
         # TODO: Make this more adaptive
         # Set the level of segmentation being used
@@ -320,6 +312,7 @@ class EFSAttractionGenerator:
             employment_path=employment_path,
             mode_splits_path=mode_splits_path,
             soc_weights_path=soc_weights_path,
+            msoa_lookup_path=msoa_lookup_path,
             ntem_control_dir=ntem_control_dir,
             lad_lookup_dir=lad_lookup_dir,
             set_controls=control_attractions
@@ -362,9 +355,6 @@ class EFSAttractionGenerator:
             group_cols = [self.zone_col, 'soc']
             index_cols = group_cols.copy() + all_years
 
-            employment_growth = employment_growth.reindex(columns=index_cols)
-            employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
-
             # Make sure both soc columns are the same format
             base_year_emp['soc'] = base_year_emp['soc'].astype('float').astype('int')
             employment_growth['soc'] = employment_growth['soc'].astype('float').astype('int')
@@ -372,6 +362,14 @@ class EFSAttractionGenerator:
             # We're not using soc, remove it from our segmentations
             self.emp_segments.remove('soc')
             self.attr_segments.remove('soc')
+
+        # Make sure our growth factors are at the right segmentation
+        group_cols = [self.zone_col] + self.emp_segments.copy()
+        group_cols.remove(self.emp_cat_col)
+        index_cols = group_cols.copy() + all_years
+
+        employment_growth = employment_growth.reindex(columns=index_cols)
+        employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
 
         # Merge on all possible segmentations - not years
         merge_cols = du.intersection(list(base_year_emp), list(employment_growth))
@@ -387,48 +385,94 @@ class EFSAttractionGenerator:
             infill=employment_infill
         )
 
+        # Remove E01 for constraints / dlog
+        employment = du.remove_all_commute_cat(
+            df=employment,
+            emp_cat_col=self.emp_cat_col
+        )
+
         # ## CONSTRAIN POPULATION ## #
-        if constraint_required[3] and (constraint_source != "model grown base"):
+        if pre_dlog_constraint:
             print("Performing the first constraint on employment...")
-            employment = self.efs_constrainer.run(
+            print(". Pre Constraint:\n%s" % employment[future_years].sum())
+            constraint_segments = du.intersection(segmentation_cols,
+                                                  employment_constraint)
+
+            employment = dlog_p.constrain_forecast(
                 employment,
-                constraint_method,
-                constraint_area,
-                constraint_on,
                 employment_constraint,
-                base_year,
-                all_years,
                 designated_area,
-                self.zone_col
+                base_year,
+                future_years,
+                self.zone_col,
+                msoa_path=imports['msoa_lookup'],
+                segment_cols=constraint_segments
             )
-        elif constraint_source == "model grown base":
-            print("Generating model grown base constraint for use on "
-                  "development constraints...")
-            employment_constraint = employment.copy()
+            print(". Post Constraint:\n%s" % employment[future_years].sum())
 
         # ## INTEGRATE D-LOG ## #
-        if integrate_d_log:
+        if dlog is not None:
             print("Integrating the development log...")
-            raise NotImplementedError("D-Log population integration has not "
-                                      "yet been implemented.")
-        else:
-            # If not integrating, no need for another constraint
-            constraint_required[4] = False
+
+            dlog_segments = ["employment_cat"]
+            if "soc" in employment_growth:
+                dlog_segments.append("soc")
+
+            employment, hg_zones = dlog_p.apply_d_log(
+                pre_dlog_df=employment,
+                base_year=base_year,
+                future_years=future_years,
+                dlog_path=dlog,
+                msoa_conversion_path=imports['msoa_lookup'],
+                constraints_zone_equivalence=designated_area,
+                segment_cols=dlog_segments,
+                dlog_conversion_factor=1.0,
+                dlog_data_column_key="employees",
+                perform_constraint=False,
+                audit_location=out_path
+            )
+
+            # Save High Growth (Exceptional) zones to file
+            hg_zones.to_csv(os.path.join(out_path, consts.EG_FNAME),
+                            index=False)
 
         # ## POST D-LOG CONSTRAINT ## #
-        if constraint_required[4]:
+        if post_dlog_constraint:
+            pd.set_option('display.float_format', str)
             print("Performing the post-development log constraint on employment...")
-            employment = self.efs_constrainer.run(
+            print(". Pre Constraint:\n%s" % employment[future_years].sum())
+            print(". Constraint:\n%s" % employment_constraint[future_years].sum())
+            constraint_segments = du.intersection(segmentation_cols,
+                                                  employment_constraint)
+
+            employment = dlog_p.constrain_forecast(
                 employment,
-                constraint_method,
-                constraint_area,
-                constraint_on,
                 employment_constraint,
-                base_year,
-                all_years,
                 designated_area,
-                self.zone_col
+                base_year,
+                future_years,
+                self.zone_col,
+                msoa_path=imports['msoa_lookup'],
+                segment_cols=constraint_segments
             )
+            print(". Post Constraint:\n%s" % employment[future_years].sum())
+
+        # D-Log and constraints done. Need to add E01 back in
+        employment = du.add_all_commute_cat(
+            df=employment,
+            emp_cat_col=self.emp_cat_col,
+            unique_data_cols=all_years
+        )
+
+        # Write the produced employment to file
+        # Earlier than previously to also save the soc segmentation
+        if out_path is None:
+            print("WARNING! No output path given. "
+                  "Not writing employment to file.")
+        else:
+            print("Writing employment to file...")
+            path = os.path.join(out_path, consts.EMP_FNAME % self.zone_col)
+            employment.to_csv(path, index=False)
 
         # Reindex and sum
         # Removes soc splits - attractions weights can't cope
@@ -1636,6 +1680,7 @@ def build_attraction_imports(import_home: str,
                              employment_path: str = None,
                              mode_splits_path: str = None,
                              soc_weights_path: str = None,
+                             msoa_lookup_path: str = None,
                              ntem_control_dir: str = None,
                              lad_lookup_dir: str = None,
                              set_controls: bool = True
@@ -1669,6 +1714,10 @@ def build_attraction_imports(import_home: str,
 
     soc_weights_path:
         An alternate soc weights import path to use. File will need to follow
+        the same format as default file.
+
+    msoa_lookup_path:
+        An alternate msoa lookup import path to use. File will need to follow
         the same format as default file.
 
     ntem_control_dir:
@@ -1707,6 +1756,10 @@ def build_attraction_imports(import_home: str,
         path = 'attractions/soc_2_digit_sic_%s.csv' % base_year
         soc_weights_path = os.path.join(import_home, path)
 
+    if msoa_lookup_path is None:
+        path = "default\zoning\msoa_zones.csv"
+        msoa_lookup_path = os.path.join(import_home, path)
+
     if set_controls and ntem_control_dir is None:
         path = 'ntem_constraints'
         ntem_control_dir = os.path.join(import_home, path)
@@ -1720,13 +1773,14 @@ def build_attraction_imports(import_home: str,
         'base_employment': employment_path,
         'mode_splits': mode_splits_path,
         'soc_weights': soc_weights_path,
+        'msoa_lookup': msoa_lookup_path,
         'ntem_control': ntem_control_dir,
-        'lad_lookup': lad_lookup_dir
+        'lad_lookup': lad_lookup_dir,
     }
 
     # Make sure all import paths exit
     for key, path in imports.items():
-        # TODO: Fix cross model inputs
+        # BACKLOG: Fix cross model inputs
         #  labels: demand merge
         if key == 'weights' and path is None:
             continue

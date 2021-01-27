@@ -18,7 +18,7 @@ from demand_utilities import utils as du
 class ZoneTranslator:
     def run(self,
             dataframe: pd.DataFrame,
-            translation_dataframe: pd.DataFrame,
+            translation_df: pd.DataFrame,
             from_zoning: str,
             to_zoning: str,
             non_split_cols: List[str],
@@ -36,7 +36,7 @@ class ZoneTranslator:
             Possible input is any Pandas Dataframe with a "model_zone_id" or
             (start_zoning_system_name + "_zone_id") column.
 
-        translation_dataframe:
+        translation_df:
             The dataframe to be used for translating the zoning system.
             No default input.
             Possible input is any Pandas Dataframe with the columns: [
@@ -81,22 +81,24 @@ class ZoneTranslator:
         """
         # copy
         dataframe = dataframe.copy()
-        translation_dataframe = translation_dataframe.copy()
+        translation_df = translation_df.copy()
 
         # avoid case problems
         from_zoning = from_zoning.lower()
         to_zoning = to_zoning.lower()
 
         # TODO: Add check to make sure non_split_columns are in dataframe
-        # set up columns
+        # Set up columns
         from_zone_col = from_zoning + "_zone_id"
         to_zone_col = to_zoning + "_zone_id"
         switch_col = "%s_to_%s" % (from_zoning, to_zoning)
 
         split_cols = list(set(dataframe.columns) - set(non_split_cols))
 
-        # Remove the zone column if in there
-        non_split_cols = du.list_safe_remove(non_split_cols, [from_zone_col])
+        # Remove the zone columns if in there
+        zone_cols = [from_zone_col, to_zone_col]
+        non_split_cols = du.list_safe_remove(non_split_cols, zone_cols)
+        split_cols = du.list_safe_remove(split_cols, zone_cols)
 
         # Get total for the splitting columns
         split_totals = dict()
@@ -106,15 +108,13 @@ class ZoneTranslator:
         if needs_zone_id_rename:
             dataframe = dataframe.rename(columns={"model_zone_id": from_zone_col})
 
-        translation_dataframe = translation_dataframe[[
-            from_zone_col,
-            to_zone_col,
-            switch_col
-        ]]
+        # Just grab the columns we need
+        needed_cols = [from_zone_col, to_zone_col, switch_col]
+        translation_df = translation_df.reindex(columns=needed_cols)
 
         new_dataframe = pd.merge(
             dataframe,
-            translation_dataframe,
+            translation_df,
             on=from_zone_col
         )
 
