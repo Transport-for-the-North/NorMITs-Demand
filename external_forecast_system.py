@@ -48,6 +48,8 @@ from demand_utilities import exceptional_growth as eg
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
+    # BACKLOG: import EFS Class version from package version
+    #  labels: demand merge
     __version__ = "2.5"
     _out_dir = "NorMITs Demand"
 
