@@ -6,26 +6,28 @@ Created on Mon Feb  3 14:32:53 2020
 """
 
 import os
-import sys
 import numpy as np
 import pandas as pd
 
 from typing import List
 from typing import Dict
 from typing import Tuple
-from typing import Union
 
 from itertools import product
 
 from tqdm import tqdm
 
-import efs_constants as consts
-from demand_utilities import d_log_processor as dlog_p
-from efs_constrainer import ForecastConstrainer
+# self imports
+from normits_demand import efs_constants as consts
+from normits_demand.utils import general as du
 
-import demand_utilities.utils as du
+from normits_demand.d_log import processor as dlog_p
+
 
 # TODO: Align attraction model class to NHB Production Model
+
+# BACKLOG: Integrate EFS Attraction Model into TMS trip end models
+#  labels: EFS, demand merge
 
 
 class EFSAttractionGenerator:
@@ -45,7 +47,6 @@ class EFSAttractionGenerator:
         zoning_system = du.validate_zoning_system(zoning_system)
 
         # Assign
-        self.efs_constrainer = ForecastConstrainer()
         self.tag_certainty_bounds = tag_certainty_bounds
 
         self.model_name = model_name
@@ -153,8 +154,7 @@ class EFSAttractionGenerator:
             msoa_zone_id).
 
         employment_constraint:
-            Values to constrain the employment numbers to. See
-            efs_constrainer.ForecastConstrainer() for further information.
+            Values to constrain the employment numbers to.
 
         import_home:
             The home directory to find all the attraction imports. Usually
@@ -219,7 +219,7 @@ class EFSAttractionGenerator:
             not.
 
         designated_area:
-            See efs_constrainer.ForecastConstrainer()
+            TODO cladifiy what the designated_area is
 
         m_needed:
             Which mode to return productions for.

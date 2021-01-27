@@ -22,19 +22,23 @@ from functools import reduce
 
 from tqdm import tqdm
 
-import efs_constants as consts
-from efs_constrainer import ForecastConstrainer
-from demand_utilities import d_log_processor as dlog_p
+from normits_demand import efs_constants as consts
 
-from demand_utilities import timing
-from demand_utilities import utils as du
-from demand_utilities import concurrency as conc
+from normits_demand.utils import general as du
+from normits_demand.utils import timing
+
+from normits_demand.d_log import processor as dlog_p
+
+from normits_demand.concurrency import multiprocessing
 
 # TODO: Move functions that can be static elsewhere.
 #  Maybe utils?
 
 # TODO: Tidy up the no longer needed functions -
 #  Production model was re-written to use TMS method
+
+# BACKLOG: Integrate EFS Production Model into TMS trip end models
+#  labels: EFS, demand merge
 
 
 class EFSProductionGenerator:
@@ -54,7 +58,6 @@ class EFSProductionGenerator:
         zoning_system = du.validate_zoning_system(zoning_system)
 
         # Assign
-        self.efs_constrainer = ForecastConstrainer()
         self.tag_certainty_bounds = tag_certainty_bounds
 
         self.model_name = model_name
@@ -62,7 +65,7 @@ class EFSProductionGenerator:
         self.zoning_system = zoning_system
         self.zone_col = '%s_zone_id' % zoning_system
 
-        self.pop_fname = consts.POP_FNAME % (zoning_system)
+        self.pop_fname = consts.POP_FNAME % zoning_system
 
         # Define the segmentation we're using
         if seg_level == 'tfn':
@@ -234,7 +237,7 @@ class EFSProductionGenerator:
             not.
 
         designated_area:
-            See efs_constrainer.ForecastConstrainer()
+            TODO: Clarify what the designated area actually is
 
         m_needed:
             Which mode to return productions for.
@@ -1468,7 +1471,7 @@ class NhbProductionModel:
             kwargs['area_type'] = area_type
             kwargs_list.append(kwargs)
 
-        returns = conc.multiprocess(
+        returns = multiprocessing.multiprocess(
             _gen_base_productions_internal,
             kwargs=kwargs_list,
             process_count=self.process_count
@@ -2409,7 +2412,7 @@ def generate_productions(population: pd.DataFrame,
         kwargs_list.append(kwargs)
 
     # Make the function calls
-    yearly_productions = conc.multiprocess(
+    yearly_productions = multiprocessing.multiprocess(
         merge_pop_trip_rates,
         kwargs=kwargs_list,
         process_count=process_count,

@@ -233,6 +233,9 @@ TFN_MSOA_SECTOR_LOOKUPS = {
     "employment": "tfn_sector_msoa_emp_weighted_lookup.csv"
 }
 
+# BACKLOG: Move EFS running constants into a config file instead of constants
+#  labels: EFS, demand merge
+
 # RUNNING CONSTANTS
 MODEL_NAME = 'norms'
 

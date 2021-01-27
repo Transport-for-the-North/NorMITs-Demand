@@ -14,6 +14,8 @@ from audits import AuditError
 from demand_utilities import utils as du
 
 
+# BACKLOG: Replace efs_zone_translator with the zone translation in TMS
+#  labels: EFS, demand merge
 
 class ZoneTranslator:
     def run(self,

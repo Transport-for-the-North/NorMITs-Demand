@@ -15,7 +15,7 @@ def get_version(pkg_name):
     raise RuntimeError(f"Version not found in {version_filename}")
 
 
-PACKAGE_NAME = "NorMITs_Demand"
+PACKAGE_NAME = "normits_demand"
 
 setup(
     name=PACKAGE_NAME,

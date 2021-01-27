@@ -15,17 +15,11 @@ from typing import Tuple, List, Dict
 # Third party imports
 
 # Local imports
-# BACKLOG: Fix elasticity import paths
-#   labels: demand merge
-# The imports should work correctly if called from
-# a file in the main NorMITs-Demand folder
-# Appending to path to avoid import errors
-sys.path.append(str(Path(__file__).parent.parent))
-from elasticity_calcs import elasticity_model as em
+from normits_demand import elasticity_model as em
 
 
 ##### CONSTANTS #####
-CONFIG_FILE = "elasticity_calcs/config.txt"
+CONFIG_FILE = "config/setup/elasticity_config.txt"
 
 
 ##### FUNCTIONS #####

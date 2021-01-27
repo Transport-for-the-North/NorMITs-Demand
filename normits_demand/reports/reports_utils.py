@@ -8,6 +8,10 @@ Created on Thu Nov  5 12:40:21 2020
 import pandas as pd
 import numpy as np
 
+# BACKLOG: Properly integrate normits_demand.reports.reports_utils
+#  This functionality exists in TMS somewhere?
+#  labels: EFS, TMS, demand merge
+
 def get_trip_length(distance,
                     demand):
     """    
