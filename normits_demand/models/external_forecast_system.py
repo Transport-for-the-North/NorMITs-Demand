@@ -21,9 +21,6 @@ from typing import Tuple
 import pandas as pd
 
 # self imports
-import distribution as dm
-
-
 from normits_demand import version
 from normits_demand import efs_constants as consts
 from normits_demand import efs_production_model as pm
@@ -33,6 +30,8 @@ from normits_demand import efs_zone_translator as zt
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.matrices import od_to_pa as od2pa
 from normits_demand.matrices import matrix_processing as mat_p
+
+from normits_demand.distribution import furness
 
 from normits_demand.reports import pop_emp_comparator
 
@@ -851,7 +850,7 @@ class ExternalForecastSystem:
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
             print("Generating HB distributions...")
-            dm.distribute_pa(
+            furness.distribute_pa(
                 productions=converted_productions,
                 attraction_weights=converted_attractions,
                 trip_origin='hb',
@@ -869,7 +868,7 @@ class ExternalForecastSystem:
             )
 
             print("Generating NHB distributions...")
-            dm.distribute_pa(
+            furness.distribute_pa(
                 productions=converted_nhb_productions,
                 attraction_weights=converted_nhb_attractions,
                 trip_origin='nhb',
@@ -1274,7 +1273,7 @@ class ExternalForecastSystem:
         # TODO: Check if NHB matrices exist first
         if overwrite_nhb_od:
             print("Furnessing NHB productions...")
-            dm.nhb_furness(
+            furness.nhb_furness(
                 p_import=self.exports['productions'],
                 a_import=self.exports['attractions'],
                 seed_dist_dir=self.imports['seed_dists'],
