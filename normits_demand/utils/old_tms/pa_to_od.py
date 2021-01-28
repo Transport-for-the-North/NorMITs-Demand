@@ -12,7 +12,8 @@ import numpy as np # Here we go
 
 # import matrix_processing as mp
 
-from demand_utilities import utils as nup
+from normits_demand.utils import general as nup
+
 
 _default_lookup_folder = 'Y:/NorMITs Synthesiser/import/phi_factors'
 

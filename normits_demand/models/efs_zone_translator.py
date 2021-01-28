@@ -10,8 +10,10 @@ from typing import List, Tuple
 import pandas as pd
 import numpy as np
 
-from audits import AuditError
-from demand_utilities import utils as du
+# Local imports
+from normits_demand import AuditError
+
+from normits_demand.utils import general as du
 
 
 # BACKLOG: Replace efs_zone_translator with the zone translation in TMS

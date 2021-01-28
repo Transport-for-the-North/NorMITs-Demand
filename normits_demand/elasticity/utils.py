@@ -16,9 +16,9 @@ import pandas as pd
 from tqdm import contrib
 
 # Local imports
-import zone_translator as zt
-from demand_utilities import utils as du
-from elasticity_calcs import constants as ec
+from normits_demand.utils import general as du
+from normits_demand.models import efs_zone_translator as zt
+from normits_demand.elasticity import constants as ec
 
 
 ##### FUNCTIONS #####

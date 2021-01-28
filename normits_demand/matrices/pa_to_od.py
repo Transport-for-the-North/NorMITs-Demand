@@ -24,13 +24,14 @@ from itertools import product
 
 from tqdm import tqdm
 
-import efs_constants as consts
-
-from demand_utilities import utils as du
-import demand_utilities.concurrency as conc
+# self imports
+from normits_demand import efs_constants as consts
+from normits_demand.utils import general as du
+from normits_demand.concurrency import multiprocessing
 
 # Can call tms pa_to_od.py functions from here
-from old_tms.pa_to_od import *
+# TODO: Fix old_tms import
+from normits_demand.utils.old_tms.pa_to_od import *
 
 
 def simplify_time_period_splits(time_period_splits: pd.DataFrame):
@@ -352,7 +353,7 @@ def efs_build_tp_pa(tp_import: str,
             kwargs_list.append(kwargs)
 
     # Multiprocess - split by time period and write to disk
-    conc.multiprocess(
+    multiprocessing.multiprocess(
         _build_tp_pa_internal,
         kwargs=kwargs_list,
         process_count=process_count
@@ -611,7 +612,7 @@ def efs_build_od(pa_import: str,
             kwargs_list.append(kwargs)
 
     # Multiprocess - split by time period and write to disk
-    matrix_totals = conc.multiprocess(
+    matrix_totals = multiprocessing.multiprocess(
         _build_od_internal,
         kwargs=kwargs_list,
         process_count=process_count,
@@ -936,7 +937,7 @@ def _tms_od_from_tour_props(pa_import: str,
             })
             kwargs_list.append(kwargs)
 
-        conc.multiprocess(
+        multiprocessing.multiprocess(
             _tms_od_from_tour_props_internal,
             kwargs=kwargs_list,
             process_count=process_count
@@ -1095,7 +1096,7 @@ def _vdm_od_from_tour_props(pa_import: str,
             })
             kwargs_list.append(kwargs)
 
-        conc.multiprocess(
+        multiprocessing.multiprocess(
             _vdm_od_from_tour_props_internal,
             kwargs=kwargs_list,
             process_count=process_count

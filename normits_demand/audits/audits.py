@@ -20,7 +20,8 @@ import pandas as pd
 
 from collections import defaultdict
 
-import demand_utilities.utils as du
+# Local imports
+from normits_demand.utils import general as du
 
 
 class AuditError(du.NormitsDemandError):

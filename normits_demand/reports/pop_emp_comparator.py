@@ -16,10 +16,10 @@ import numpy as np
 from openpyxl.worksheet.worksheet import Worksheet
 
 # Local imports
-from demand_utilities import utils as du
-from demand_utilities.sector_reporter_v2 import SectorReporter
-from efs_production_generator import get_land_use_data, build_production_imports
-from efs_attraction_generator import build_attraction_imports, get_employment_data
+from normits_demand.utils import general as du
+from normits_demand.utils import sector_reporter_v2 as sr_v2
+from normits_demand.models import efs_production_model as pm
+from normits_demand.models import efs_attraction_model as am
 
 
 ##### CONSTANTS #####
@@ -208,25 +208,25 @@ class PopEmpComparator:
             # Set up args
             base_yr_col = "people"
             index_cols = [self.ZONE_COL, base_yr_col]
-            imports = build_production_imports(import_home)
+            imports = pm.build_production_imports(import_home)
             path = imports["land_use"]
 
             # Read base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
 
-            input_data = get_land_use_data(path).reindex(columns=index_cols)
+            input_data = pm.get_land_use_data(path).reindex(columns=index_cols)
             input_data = input_data.groupby(self.ZONE_COL, as_index=False).sum()
 
         elif self.data_type == "employment":
             # Set up args
             base_yr_col = "E01"
             index_cols = [self.ZONE_COL, base_yr_col]
-            imports = build_attraction_imports(import_home, self.base_year, None)
+            imports = am.build_attraction_imports(import_home, self.base_year, None)
             path = imports["base_employment"]
 
             # Read in base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
-            input_data = get_employment_data(path).reindex(columns=index_cols)
+            input_data = am.get_employment_data(path).reindex(columns=index_cols)
 
         else:
             # We shouldn't be able to get here
@@ -383,7 +383,7 @@ class PopEmpComparator:
         """
         # Init
         SPLIT_COL = 'overlap_msoa_split_factor'
-        sector_rep = SectorReporter()
+        sector_rep = sr_v2.SectorReporter()
         cols = [self.ZONE_COL, *self.years]
         msoa_coded_data = {
             'input': self.input_data[[self.ZONE_COL, self.base_year]],

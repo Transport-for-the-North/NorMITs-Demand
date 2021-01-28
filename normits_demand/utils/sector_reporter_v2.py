@@ -5,13 +5,10 @@ Created on Fri Jan 17 10:27:28 2020
 @author: Sneezy
 """
 
-from functools import reduce
 from typing import List, Union, Tuple
 
-import numpy as np
 import pandas as pd
 
-from demand_utilities import utils as du
 
 class SectorReporter:
     """

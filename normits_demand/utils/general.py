@@ -37,11 +37,11 @@ from tqdm import tqdm
 from itertools import product
 from collections import defaultdict
 
+# Local imports
+from normits_demand import efs_constants as consts
 
-import efs_constants as consts
-
-# Can call tms pa_to_od.py functions from here
-from old_tms.utils import *
+# Can call tms utils.py functions from here
+from normits_demand.utils.old_tms.utils import *
 
 # TODO: Utils is getting big. Refactor into smaller, more specific modules
 

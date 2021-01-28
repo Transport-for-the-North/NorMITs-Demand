@@ -21,11 +21,9 @@ from typing import Tuple
 import pandas as pd
 
 # self imports
+import normits_demand as nd
 from normits_demand import version
 from normits_demand import efs_constants as consts
-from normits_demand import efs_production_model as pm
-from normits_demand import efs_attraction_model as am
-from normits_demand import efs_zone_translator as zt
 
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.matrices import od_to_pa as od2pa
@@ -60,7 +58,7 @@ class ExternalForecastSystem:
                  iter_num: int,
                  scenario_name: str,
 
-                 integrate_dlog: bool,
+                 integrate_dlog: bool = False,
 
                  dlog_pop_path: str = None,
                  dlog_emp_path: str = None,
@@ -114,12 +112,12 @@ class ExternalForecastSystem:
         self.msoa_zones_path = os.path.join(self.imports["zoning"], "msoa_zones.csv")
 
         # sub-classes
-        self.production_generator = pm.EFSProductionGenerator(model_name=model_name)
-        self.attraction_generator = am.EFSAttractionGenerator(model_name=model_name)
+        self.production_generator = nd.EFSProductionGenerator(model_name=model_name)
+        self.attraction_generator = nd.EFSAttractionGenerator(model_name=model_name)
 
         # support utilities tools
         self.sector_reporter = sr_v2.SectorReporter()
-        self.zone_translator = zt.ZoneTranslator()
+        self.zone_translator = nd.ZoneTranslator()
 
         print("External Forecast System initiated!")
         last_time = current_time
@@ -670,7 +668,7 @@ class ExternalForecastSystem:
 
         # ## Generate NHB Productions ## #
         print("Generating Non-Home Based Productions...")
-        nhb_pm = pm.NhbProductionModel(
+        nhb_pm = nd.NhbProductionModel(
             import_home=self.imports['home'],
             export_home=self.exports['home'],
             model_name=self.model_name,

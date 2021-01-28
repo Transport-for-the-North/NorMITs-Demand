@@ -1,8 +1,14 @@
 from .version import __version__
 
-# Expose high level modules
-from normits_demand.models import external_forecast_system
-from normits_demand.models import efs_production_model
-from normits_demand.models import efs_attraction_model
-from normits_demand.models import efs_zone_translator
-from normits_demand.models import elasticity_model
+# ## EXPOSE CLASS LAYER ## #
+# NorMITs Demand Errors
+from normits_demand.audits.audits import AuditError
+
+# EFS Class Layer
+from normits_demand.models.external_forecast_system import ExternalForecastSystem
+from normits_demand.models.efs_production_model import EFSProductionGenerator
+from normits_demand.models.efs_production_model import NhbProductionModel
+from normits_demand.models.efs_attraction_model import EFSAttractionGenerator
+from normits_demand.models.efs_zone_translator import ZoneTranslator
+from normits_demand.models.elasticity_model import ElasticityModel
+

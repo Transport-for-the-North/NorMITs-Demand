@@ -28,7 +28,8 @@ from multiprocessing import Event
 from multiprocessing import TimeoutError
 from multiprocessing import Pool as ProcessPool
 
-import demand_utilities.utils as du
+# Local imports
+from normits_demand.utils import general as du
 
 
 class MultiprocessingError(Exception):

@@ -6,11 +6,11 @@ import pandas as pd
 from typing import List
 from functools import reduce
 
-import efs_constants as consts
-import demand_utilities.utils as du
-import demand_utilities.vehicle_occupancy as vo
-
-from audits import AuditError
+# Self imports
+from normits_demand import efs_constants as consts
+from normits_demand.utils import general as du
+from normits_demand.utils import vehicle_occupancy as vo
+from normits_demand import AuditError
 
 
 def decompile_od(od_import: str,

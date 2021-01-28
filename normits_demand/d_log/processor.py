@@ -1,13 +1,14 @@
 
 import os
 
-import pandas as pd
+from typing import List
 
-from typing import List, Tuple
+import pandas as pd
 
 from tqdm import tqdm
 
-from demand_utilities import utils as du
+# Local imports
+from normits_demand.utils import general as du
 
 
 def identify_exceptional_zones(pre_df: pd.DataFrame,

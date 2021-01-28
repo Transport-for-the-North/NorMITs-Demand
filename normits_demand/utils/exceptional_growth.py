@@ -13,12 +13,12 @@ from tqdm import tqdm
 # BACKLOG: Exceptional growth probably doesn't belong in utils!
 #  labels: EFS, demand merge
 
-# Import attraction generator to access soc splits
-import efs_attraction_generator as am
+# Local imports
+from normits_demand import efs_constants as consts
+from normits_demand.utils import general as du
 
-from zone_translator import ZoneTranslator
-from demand_utilities import utils as du
-import efs_constants as consts
+from normits_demand.models import efs_attraction_model as am
+from normits_demand.models import efs_zone_translator as zt
 
 
 def load_exceptional_zones(productions_export: str,
@@ -726,7 +726,7 @@ def growth_criteria(synth_productions: pd.DataFrame,
                     future_years: List[str],
                     prod_exceptional_zones: pd.DataFrame = None,
                     attr_exceptional_zones: pd.DataFrame = None,
-                    zone_translator: ZoneTranslator = None,
+                    zone_translator: zt.ZoneTranslator = None,
                     zt_from_zone: str = None,
                     zt_pop_df: pd.DataFrame = None,
                     zt_emp_df: pd.DataFrame = None,

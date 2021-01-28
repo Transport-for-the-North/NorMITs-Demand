@@ -15,11 +15,13 @@ import pandas as pd
 import tqdm
 
 # Local imports
-from demand_utilities import utils as du
-from elasticity_calcs import utils as eu
-from elasticity_calcs import generalised_costs as gc
-from elasticity_calcs import constants as ec
-import zone_translator as zt
+from normits_demand.utils import general as du
+
+from normits_demand.models import efs_zone_translator as zt
+
+from normits_demand.elasticity import utils as eu
+from normits_demand.elasticity import generalised_costs as gc
+from normits_demand.elasticity import constants as ec
 
 
 ##### CLASSES #####

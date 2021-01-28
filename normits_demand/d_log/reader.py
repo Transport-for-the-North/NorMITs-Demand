@@ -8,6 +8,9 @@ D-Log. Supplies both residential and non residential data
 @author: genie
 """
 
+# BACKLOG: Expose d_log reader to normits_demand as a function
+#  labels: EFS, demand merge
+
 import pyodbc
 
 import pandas as pd
@@ -103,6 +106,7 @@ def get_dlog_data(cursor):
     non_res_data = unpack_query(cursor)
 
     return(res_data, non_res_data)
+
 
 if __name__ == '__main__':
 

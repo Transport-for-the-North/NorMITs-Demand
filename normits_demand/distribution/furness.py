@@ -18,10 +18,11 @@ from numpy.testing import assert_approx_equal
 from typing import List
 from functools import reduce
 
-import audits
-import efs_constants as consts
-from demand_utilities import utils as du
-from demand_utilities import concurrency as conc
+# self imports
+from normits_demand import efs_constants as consts
+from normits_demand.utils import general as du
+from normits_demand.concurrency import multiprocessing
+from normits_demand.audits import audits
 
 
 def doubly_constrained_furness(seed_vals: np.array,
@@ -556,7 +557,7 @@ def distribute_pa(productions: pd.DataFrame,
             })
             kwargs_list.append(kwargs)
 
-        conc.multiprocess(
+        multiprocessing.multiprocess(
             fn=_distribute_pa_internal,
             kwargs=kwargs_list,
             process_count=process_count

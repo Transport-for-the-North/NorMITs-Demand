@@ -29,12 +29,13 @@ from collections import defaultdict
 
 from tqdm import tqdm
 
-import pa_to_od as pa2od
-import distribution as dm
+# self imports
+from normits_demand import efs_constants as consts
+from normits_demand.utils import general as du
 
-import efs_constants as consts
-import demand_utilities.utils as du
-import demand_utilities.concurrency as conc
+from normits_demand.matrices import pa_to_od as pa2od
+from normits_demand.distribution import furness
+from normits_demand.concurrency import multiprocessing
 
 
 def _aggregate(import_dir: str,
@@ -525,7 +526,7 @@ def furness_tour_proportions(orig_vals,
             furnessed_mat = np.zeros((len(tp_needed), len(tp_needed)))
 
         else:
-            furnessed_mat = dm.doubly_constrained_furness(
+            furnessed_mat = furness.doubly_constrained_furness(
                 seed_vals=seed_values,
                 row_targets=fh_target,
                 col_targets=th_target,
@@ -819,7 +820,7 @@ def _tms_seg_tour_props(od_import: str,
         kwargs_list.append(kwargs)
 
     # Multiprocess and write final matrices to disk
-    zero_counts = conc.multiprocess(
+    zero_counts = multiprocessing.multiprocess(
         _tms_seg_tour_props_internal,
         kwargs=kwargs_list,
         process_count=process_count
@@ -1092,7 +1093,7 @@ def _vdm_seg_tour_props(od_import: str,
         kwargs_list.append(kwargs)
 
     # Multiprocess and write final matrices to disk
-    zero_counts = conc.multiprocess(
+    zero_counts = multiprocessing.multiprocess(
         _vdm_seg_tour_props_internal,
         kwargs=kwargs_list,
         process_count=process_count

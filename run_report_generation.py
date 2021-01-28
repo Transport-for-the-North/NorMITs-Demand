@@ -9,14 +9,16 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 
-from demand_utilities import concurrency as conc
+# imports from normits demand
+from normits_demand import ExternalForecastSystem
+from normits_demand import efs_constants as consts
 
-from demand_utilities import utils as du
-from demand_utilities import reports as dr
-from demand_utilities.sector_reporter_v2 import SectorReporter
-from matrix_processing import aggregate_matrices
-import efs_constants as consts
-import external_forecast_system as efs
+from normits_demand.utils import general as du
+from normits_demand.utils import sector_reporter_v2 as sr_v2
+
+from normits_demand.reports import reports_utils as ru
+from normits_demand.matrices import matrix_processing as mat_p
+from normits_demand.concurrency import multiprocessing
 
 
 def _maybe_aggregate_matrices(import_dir,
@@ -76,7 +78,7 @@ def _maybe_aggregate_matrices(import_dir,
                 'dst': export_dir
             })
 
-        conc.multiprocess(
+        multiprocessing.multiprocess(
             fn=du.copy_and_rename,
             kwargs=kwargs_list,
             process_count=consts.PROCESS_COUNT
@@ -85,7 +87,7 @@ def _maybe_aggregate_matrices(import_dir,
     else:
         # We're gonna have to aggregate to make the matrices we need
         print("Aggregating matrices...")
-        aggregate_matrices(
+        mat_p.aggregate_matrices(
             import_dir=import_dir,
             export_dir=export_dir,
             trip_origin=trip_origin,
@@ -217,7 +219,7 @@ def matrix_reporting(matrix_directory: str,
 
         # Aggregate sectors if required
         if sectors_files is not None:
-            sr = SectorReporter()
+            sr = sr_v2.SectorReporter()
             valid_files = output_files.copy()
             output_files = []
             for sectors_name, sectors_file in sectors_files.items():
@@ -470,7 +472,7 @@ def _tld_reporting_internal(mat_dict,
 
     (trip_lengths_by_band_km,
      band_shares_by_band,
-     average_trip_length) = dr.get_trip_length_by_band(tlb,
+     average_trip_length) = ru.get_trip_length_by_band(tlb,
                                                        costs,
                                                        pad_matrix)
 
@@ -555,7 +557,7 @@ def tld_reporting(matrix_dir: str,
         kwarg_list.append(kwargs)
 
     # Call the function
-    conc.multiprocess(
+    multiprocessing.multiprocess(
         fn=_tld_reporting_internal,
         kwargs=kwarg_list,
         process_count=consts.PROCESS_COUNT
@@ -881,15 +883,15 @@ if __name__ == "__main__":
     # Power BI
 
     # Controls I/O
-    scenario = consts.SC03_DD
+    scenario = consts.SC00_NTEM
     iter_num = 1
     import_home = "Y:/"
     export_home = "Y:/"
     model_name = consts.MODEL_NAME
 
-    efs_main = efs.ExternalForecastSystem(
-        iter_num=iter_num,
+    efs_main = ExternalForecastSystem(
         model_name=model_name,
+        iter_num=iter_num,
         scenario_name=scenario,
         import_home=import_home,
         export_home=export_home,
