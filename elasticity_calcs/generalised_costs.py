@@ -283,6 +283,14 @@ def get_costs(
         columns={v: k for k, v in ec.COST_LOOKUP[mode].items()},
         inplace=True,
     )
+    cost_cols = costs.columns.tolist()
+    cost_cols.remove("origin")
+    cost_cols.remove("destination")
+    total_zeros = (costs[cost_cols] <= 0).all(axis=1).sum()
+    print(
+        f"{total_zeros} ({total_zeros / len(costs):.2%}) "
+        "OD pairs have 0 in all cost values"
+    )
 
     # Convert zone system if required
     if zone_system != ec.COMMON_ZONE_SYSTEM:
