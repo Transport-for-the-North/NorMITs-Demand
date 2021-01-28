@@ -638,11 +638,11 @@ def calculate_adjustment(
         )
         adj_gc = gc.gen_cost_mode(adj_cost, chg_mode, **adj_gc_params)
         # Set GC ratio to 1 (no demand adjustment) wherever
-        # base GC is 0, as cost shouldn't be 0
+        # base GC <= 0, as cost shouldn't be 0 (or negative)
         gc_ratio = np.divide(
             adj_gc,
             base_gc[chg_mode],
-            where=base_gc[chg_mode] != 0,
+            where=base_gc[chg_mode] > 0,
             out=np.full_like(adj_gc, 1.0),
         )
     else:
