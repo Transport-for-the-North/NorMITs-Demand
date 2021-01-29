@@ -51,3 +51,5 @@ properly integrated into the base year.
 Updated the furness auditing so summary files per year are now written to disk.
 Versioning has also been updated in the EFS class - meaning the version for the class is now
 pulled straight from the module version.
+
+Code has been refactored in this version - ready for merge with TMS
