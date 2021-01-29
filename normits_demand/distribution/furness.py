@@ -234,6 +234,7 @@ def _distribute_pa_internal(productions,
     )
 
     # ## BALANCE P/A FORECASTS ## #
+    # TODO: Avoid divide by zero! Happens for Furnessing hb_pa_yr2050_p7_m3_ns2.csv ...
     if productions[unique_col].sum() != a_weights[unique_col].sum():
         du.print_w_toggle("Row and Column targets do not match. Balancing...",
                           echo=echo)
