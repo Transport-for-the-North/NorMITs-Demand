@@ -125,11 +125,8 @@ class ZoneTranslator:
         if needs_zone_id_rename:
             new_dataframe = new_dataframe.rename(columns={to_zone_col: "model_zone_id"})
 
-        print('1')
-
         for split_column in split_cols:
             new_dataframe[split_column] *= new_dataframe[switch_col]
-        print('2')
 
         # Extract just the required columns
         group_cols = [to_zone_col] + non_split_cols.copy()

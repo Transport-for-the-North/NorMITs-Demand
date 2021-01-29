@@ -10,10 +10,7 @@ import warnings
 import pandas as pd
 import numpy as np # Here we go
 
-# import matrix_processing as mp
-
-from normits_demand.utils import general as nup
-
+from normits_demand.utils import utils as nup # Folder management, reindexing, optimisation
 
 _default_lookup_folder = 'Y:/NorMITs Synthesiser/import/phi_factors'
 
@@ -123,8 +120,13 @@ def path_config(file_drive,
 
     summary_matrix_import = os.path.join(distribution_path, '24hr PA Distributions')
 
-    external_import = os.path.join(distribution_path,
-                                   'External Distributions')
+    non_dist_import = os.path.join(distribution_path, '24hr Non Dist Matrices')
+
+    if external_input == 'synthetic':
+        external_import = os.path.join(distribution_path,
+                                       'External Distributions')
+    elif external_input == 'non_dist':
+        external_import = None
 
     synth_pa_export = os.path.join(distribution_path, 'PA Matrices')
     nup.create_folder(synth_pa_export, chDir=False)
@@ -134,6 +136,12 @@ def path_config(file_drive,
 
     synth_od_export = os.path.join(distribution_path, 'OD Matrices')
     nup.create_folder(synth_od_export, chDir=False)
+
+    non_dist_pa_export = os.path.join(distribution_path, 'PA Matrices Non Dist')
+    nup.create_folder(non_dist_pa_export, chDir=False)
+
+    non_dist_od_export = os.path.join(distribution_path, 'OD Matrices Non Dist')
+    nup.create_folder(non_dist_od_export, chDir=False)
 
     # Set fusion exports
     fusion_summary_import = os.path.join(fusion_path, '24hr Fusion PA Distributions')
@@ -146,6 +154,7 @@ def path_config(file_drive,
 
     fusion_od_export = os.path.join(fusion_path, 'Fusion OD Matrices')
     nup.create_folder(fusion_od_export, chDir=False)
+    
 
     if internal_input == 'synthetic':
         internal_import = summary_matrix_import
@@ -159,6 +168,12 @@ def path_config(file_drive,
         pa_export = fusion_pa_export
         pa_export_24 = fusion_pa_export_24
         od_export = fusion_od_export
+    elif internal_input == 'non_dist':
+        internal_import = non_dist_import
+        print('Picking up from non distributed outputs')
+        pa_export = non_dist_pa_export
+        pa_export_24 = synth_pa_export_24
+        od_export = non_dist_od_export
 
     # Compile into import and export
     imports = {'imports': import_path,
@@ -180,6 +195,32 @@ def path_config(file_drive,
 # TODO: Object layer
 # TODO: All writes as square format - for speed
 
+def get_production_time_split(productions,
+                              model_zone):
+    """
+    productions : production vector
+    model_zone : col name
+    """
+    p_totals = productions.reindex(
+        [model_zone, 'trips'], axis=1).groupby(
+            model_zone).sum().reset_index()
+    p_totals = p_totals.rename(columns={'trips':'p_totals'})
+    tp_totals = productions.reindex(
+        [model_zone,
+        'tp',
+        'trips'],
+        axis=1).groupby(
+            [model_zone,
+            'tp']).sum().reset_index()
+    time_splits = tp_totals.merge(p_totals,
+                                    how='left',
+                                    on=[model_zone])
+    time_splits['time_split'] = (time_splits['trips']/time_splits['p_totals'])
+    time_splits = time_splits.drop(['p_totals'], axis=1)
+  
+    return time_splits
+        
+        
 def build_tp_pa(file_drive = _default_file_drive,
                 model_name = _default_model_name,
                 iteration = _default_iteration,
@@ -223,9 +264,11 @@ def build_tp_pa(file_drive = _default_file_drive,
     # Set import folders
     internal_dir = os.listdir(i_paths['internal'])
     internal_dir = [x for x in internal_dir if 'nhb' not in x]
-    external_dir = os.listdir(i_paths['external'])
-    external_dir = [x for x in external_dir if 'nhb' not in x]
-
+    # If non dist, will index local folder, hence if
+    if i_paths['external'] is not None:
+        external_dir = os.listdir(i_paths['external'])
+        external_dir = [x for x in external_dir if 'nhb' not in x]
+    
     # Set export folders
     if arrivals:
         arrivals_path = arrival_export
@@ -235,6 +278,7 @@ def build_tp_pa(file_drive = _default_file_drive,
     tp_pa_path = (o_paths['pa'] +
                   '/hb_pa')
 
+    ts_vec = []
     matrix_totals = []
     for tp_pa in tp_pa_builds:
         print(tp_pa)
@@ -244,7 +288,6 @@ def build_tp_pa(file_drive = _default_file_drive,
             calib_params.update({ds:init_params[ds][tp_pa]})
             print(calib_params)
 
-        p_subset = productions.copy()
             # Subset productions
         for index,cp in calib_params.items():
             if cp != 'none':
@@ -252,21 +295,227 @@ def build_tp_pa(file_drive = _default_file_drive,
 
         # Work out time split
         # This won't work if there are duplicates
-        p_totals = p_subset.reindex(
-                [model_zone, 'trips'], axis=1).groupby(
-                        model_zone).sum().reset_index()
-        p_totals = p_totals.rename(columns={'trips':'p_totals'})
-        tp_totals = p_subset.reindex(
-                [model_zone,
-                 'tp',
-                 'trips'], axis=1).groupby(
-                 [model_zone, 'tp']).sum().reset_index()
-        time_splits = tp_totals.merge(p_totals,
-                                      how='left',
-                                      on=[model_zone])
-        time_splits['time_split'] = (time_splits['trips']/
-                   time_splits['p_totals'])
-        time_splits = time_splits.drop(['p_totals'], axis=1)
+        time_splits = get_production_time_split(productions)
+
+        ts_ph = time_splits.copy()
+        for cp, name in calib_params.items():
+            print(cp, name)
+            ts_ph[cp] = name
+        ts_vec.append(ts_ph)
+        del(ts_ph)
+
+        # Import internal & externals
+        # TODO: non dist handling is messy, clean up a bit
+        int_seg_import = internal_dir.copy()
+        if i_paths['external'] is not None:
+            ext_seg_import = external_dir.copy()
+        # Do internal & external at the same time because clever
+        for index,cp in calib_params.items():
+            if cp != 'none':
+                int_seg_import = [x for x in int_seg_import if (
+                        index + str(cp)) in x]
+                if i_paths['external'] is not None:
+                    ext_seg_import = [x for x in ext_seg_import if (
+                            index + str(cp)) in x]
+
+        # test len internal
+        if len(int_seg_import) > 1:
+            print('Duplicate import segment warning')
+            print(int_seg_import)
+            int_seg_import = int_seg_import[0]
+        elif len(int_seg_import) == 0:
+            print(int_seg_import)
+            raise ValueError('No segment to import')
+        else:
+            int_seg_import = int_seg_import[0]
+
+        # test len external
+        if i_paths['external'] is not None:
+            if len(ext_seg_import) > 1:
+                print('Duplicate export segment warning')
+                print(ext_seg_import)
+                ext_seg_import = int_seg_import[0]
+            elif len(ext_seg_import) == 0:
+                print(ext_seg_import)
+                raise ValueError('No segment to import')
+            else:
+                ext_seg_import = ext_seg_import[0]
+
+        # TODO: Make this 2 private function calls
+        internal = pd.read_csv(i_paths['internal'] + '/' + int_seg_import)
+        if list(internal)[0] == model_zone:
+            internal = internal.drop(model_zone, axis=1)
+        elif list(internal)[0] == 'o_zone':
+            internal = internal.drop('o_zone', axis=1)
+        elif list(internal)[0] == 'Unnamed: 0':
+            internal = internal.drop('Unnamed: 0', axis=1)
+        
+        if i_paths['external'] is not None:
+            external = pd.read_csv(i_paths['external'] + '/' + ext_seg_import)
+            if list(external)[0] == model_zone:
+                external = external.drop(model_zone, axis=1)
+            elif list(external)[0] == 'o_zone':
+                external = external.drop('o_zone', axis=1)
+            elif list(external)[0] == 'Unnamed: 0':
+                external = external.drop('Unnamed: 0', axis=1)
+            # external = external.drop(list(external)[0],axis=1)
+
+        if i_paths['external'] is not None:
+            internal = internal.values
+            i_ph = np.zeros([len(external), len(external)])
+            i_ph[0:len(internal),0:len(internal)] = internal
+            internal = i_ph.copy()
+
+            external = external.values
+
+            gb = internal + external
+        else:
+            gb = internal.values
+
+        # Export 24hr here if required.
+        if export_24hr:
+            if write:
+                write_path_24 = nup.build_path(tp_pa_path,
+                                               calib_params)
+                
+                if calib_params['m'] in write_modes:
+                    all_zone_ph = pd.DataFrame(
+                            {model_zone:[
+                                    i for i in np.arange(1, len(external)+1)]})
+                    all_zone_ph['ph'] = 1
+
+                    gb_24 = pd.DataFrame(gb,
+                                         index=all_zone_ph[model_zone],
+                                         columns=all_zone_ph[
+                                                 model_zone]).reset_index()
+
+                    gb_24.to_csv(write_path_24,
+                                 index=False)
+
+        # Apply time period - if not 24hr - see loop above
+        else:
+            unq_time = time_splits['tp'].drop_duplicates()
+            
+            for time in unq_time:
+                print('tp' + str(time))
+                time_ph = time_splits.copy()
+                time_ph = time_ph[time_ph['tp']==time].reset_index(drop=True)
+                time_ph = time_ph.drop('tp', axis=1)
+
+                compile_params.update(
+                        {'base_productions':time_ph['trips'].sum()})
+
+                all_zone_ph = pd.DataFrame(
+                        {model_zone:[
+                                i for i in np.arange(1, len(gb)+1)]}) # Changed this from external to gb - might break something else
+                all_zone_ph['ph'] = 1
+                time_ph = all_zone_ph.merge(time_ph,
+                                            how='left',
+                                            on=[model_zone])
+                time_ph['time_split'] = time_ph['time_split'].fillna(0)
+                time_factors = time_ph['time_split'].values
+
+                time_factors = np.broadcast_to(time_factors,
+                                               (len(time_factors),
+                                                len(time_factors))).T
+
+                gb_tp = gb * time_factors
+                compile_params.update({'gb_tp':gb_tp.sum()})    
+
+                if arrivals:
+                    arrivals_np = gb_tp.sum(axis=0)
+                    arrivals_mat = pd.DataFrame(all_zone_ph[model_zone])
+                    arrivals_mat['arrivals'] = arrivals_np
+                
+                    arrivals_write_path = nup.build_path(arrivals_path,
+                                                         calib_params,
+                                                         tp=time)
+
+                # Build write paths
+                tp_write_path = nup.build_path(tp_pa_path,
+                                               calib_params,
+                                               tp=time)
+                print(tp_write_path)
+
+                compile_params.update({'export_path':tp_write_path})
+
+                if write:
+                    # Define write path
+                    if calib_params['m'] in write_modes:
+
+                        gb_tp = pd.DataFrame(gb_tp,
+                                             index=all_zone_ph[model_zone],
+                                             columns=all_zone_ph[
+                                                     model_zone]).reset_index()
+
+                        gb_tp.to_csv(tp_write_path,
+                                     index=False)
+                
+                    if arrivals:
+                        # Write arrivals anyway
+                        arrivals_mat.to_csv(arrivals_write_path,
+                                            index=False)
+
+                matrix_totals.append(compile_params)
+                # End
+
+    time_split_path = i_paths['production_import'].replace(
+            'productions', 'time_splits')
+    time_split_ref = pd.concat(ts_vec)
+    time_split_ref.to_csv(time_split_path, index=False)
+
+    return(matrix_totals)
+
+def compile_nhb_pa(file_drive,
+                   model_name,
+                   iteration,
+                   distribution_segments,
+                   internal_input = 'synthetic',
+                   external_input = 'synthetic',
+                   export_modes = [3],
+                   write = True):
+    """
+    Compile nhb pa!
+    """
+    model_zone = (model_name.lower() + '_zone_id')
+
+    paths = path_config(file_drive,
+                        model_name,
+                        iteration,
+                        internal_input,
+                        external_input)
+    i_paths = paths[0]
+    o_paths = paths[1]
+
+    # Get init params
+    init_params = nup.get_init_params(i_paths['lookups'],
+                                      distribution_type='nhb',
+                                      model_name=model_name,
+                                      mode_subset=export_modes,
+                                      purpose_subset=None)
+
+    unq_purpose = init_params['p'].drop_duplicates(
+            ).reset_index(drop=True)
+
+    # Set import folders
+    internal_dir = os.listdir(i_paths['internal'])
+    internal_dir = [x for x in internal_dir if 'nhb' in x]
+    external_dir = os.listdir(i_paths['external'])
+    external_dir = [x for x in external_dir if 'nhb' in x]
+
+    nhb_pa_builds = init_params.index
+
+    nhb_pa_path = (o_paths['pa'] +
+                  '/nhb_pa')
+
+    matrix_totals = []
+    for nhb_pa in nhb_pa_builds:
+        print(nhb_pa)
+        calib_params = {}
+        compile_params = {}
+        for ds in distribution_segments:
+            calib_params.update({ds:init_params[ds][nhb_pa]})
+            print(calib_params)
 
         # Import internal & externals
         int_seg_import = internal_dir.copy()
@@ -326,8 +575,15 @@ def build_tp_pa(file_drive = _default_file_drive,
         external = external.values
 
         gb = internal + external
-        
-        # Export 24hr here if required.
+
+        # TODO: Should be the same in the other pa 2 od functions
+        # Best way of doing it
+        name = nup.build_path('',
+                              calib_params,
+                              no_csv=True).replace('_','')
+        compile_params = {name:gb.sum()}
+        # TODO: Export 24hr here if required.
+        """
         if export_24hr:
             if write:
                 write_path_24 = nup.build_path(tp_pa_path,
@@ -346,70 +602,26 @@ def build_tp_pa(file_drive = _default_file_drive,
 
                     gb_24.to_csv(write_path_24,
                                  index=False)
+        """
+        all_zone_ph = pd.DataFrame(
+                {model_zone:[
+                        i for i in np.arange(1, len(external)+1)]})
 
-        # Apply time period - if not 24hr - see loop above
-        else:
-            unq_time = time_splits['tp'].drop_duplicates()
-            
-            for time in unq_time:
-                print('tp' + str(time))
-                time_ph = time_splits.copy()
-                time_ph = time_ph[time_ph['tp']==time].reset_index(drop=True)
-                time_ph = time_ph.drop('tp', axis=1)
+        # Export
+        if write:
+            # Define write path
+            if calib_params['m'] in export_modes: # Will be like
+                gb = pd.DataFrame(gb,
+                                  index=all_zone_ph[model_zone],
+                                  columns=all_zone_ph[
+                                          model_zone]).reset_index()
 
-                compile_params.update(
-                        {'base_productions':time_ph['trips'].sum()})
-
-                all_zone_ph = pd.DataFrame(
-                        {model_zone:[
-                                i for i in np.arange(1, len(external)+1)]})
-                all_zone_ph['ph'] = 1
-                time_ph = all_zone_ph.merge(time_ph,
-                                            how='left',
-                                            on=[model_zone])
-                time_ph['time_split'] = time_ph['time_split'].fillna(0)
-                time_factors = time_ph['time_split'].values
-
-                time_factors = np.broadcast_to(time_factors,
-                                               (len(time_factors),
-                                                len(time_factors))).T
-
-                gb_tp = gb * time_factors
-                compile_params.update({'gb_tp':gb_tp.sum()})    
-
-                if arrivals:
-                    arrivals_np = gb_tp.sum(axis=0)
-                    arrivals_mat = pd.DataFrame(all_zone_ph[model_zone])
-                    arrivals_mat['arrivals'] = arrivals_np
-                
-                    arrivals_write_path = nup.build_path(arrivals_path,
-                                                         calib_params,
-                                                         tp=time)
-
-                # Build write paths
-                tp_write_path = nup.build_path(tp_pa_path,
-                                               calib_params,
-                                               tp=time)
-                print(tp_write_path)
-
-                compile_params.update({'export_path':tp_write_path})
-
-                if write:
-                    # Define write path
-                    if calib_params['m'] in write_modes:
-
-                        gb_tp = pd.DataFrame(gb_tp,
-                                             index=all_zone_ph[model_zone],
-                                             columns=all_zone_ph[
-                                                     model_zone]).reset_index()
-
-                        gb_tp.to_csv(tp_write_path,
-                                     index=False)
-                
-                    if arrivals:
-                        # Write arrivals anyway
-                        arrivals_mat.to_csv(arrivals_write_path,
-                                            index=False)
+                out_path = nup.build_path(nhb_pa_path,
+                                          calib_params,
+                                          tp=None,
+                                          no_csv=False)
+                gb.to_csv(out_path,
+                          index=False)
 
                 matrix_totals.append(compile_params)
                 # End
@@ -600,382 +812,6 @@ def build_od(file_drive = _default_file_drive,
             output_to.to_csv((o_paths['od'] + '/' + output_to_name), index=False)
 
     return(matrix_totals)
-
-def build_tp_pa_and_od(distribution_segments,
-                       model_name,
-                       internal_24hr_productions,
-                       external_pa,
-                       init_params, # init params
-                       i_paths,
-                       o_paths,
-                       production_splits,
-                       all_zone_movements,
-                       phi_type = 'fhp_tp',
-                       export_modes = None,
-                       fusion_only = False,
-                       fusion_modes = None, # List
-                       write_tp_pa = True,
-                       write_arrivals = True
-                       ):
-
-    """
-    Function to replace the compile and export loop.
-
-    Takes:
-        Everything
-    
-    phi_type:
-        Takes one of ['fhp_tp', 'fhp_24hr' 'p_tp']. From home purpose & time period
-        or from home and to home purpose & time period
-
-    """
-    unq_purpose = init_params['p'].drop_duplicates(
-            ).reset_index(drop=True)
-
-    if 12 in unq_purpose.values:
-        nhb = True
-        print('NHB run')
-    else:
-        nhb = False
-        print('HB run')
-
-    unq_seg = distribution_segments.copy()
-    unq_seg.remove('p')
-    unq_seg.remove('m')
-
-    # Fusion handling
-    if fusion_modes is not None:
-        if fusion_only:
-            # TODO: This is a bit dangerous in terms of overwriting stuff
-            init_params = init_params[init_params['mode'].isin(fusion_modes)].reset_index(drop=True)
-            init_params['source'] = 'moira_fusion'
-            # Set export folders
-            pa_export = o_paths['fusion_pa_export']
-            od_export = o_paths['fusion_od_export']
-        else:
-            ValueError('Fusion modes provided but Fusion only not specified')
-    else:
-        # Set export folders
-        pa_export = o_paths['pa']
-        od_export = o_paths['od_export']
-        if fusion_only:
-            ValueError('Please specify fusion modes, or toggle fusion only to False')
-
-    # Define handling for segments
-    if len(list(unq_seg)) > 0:
-        unq_seg = init_params.reindex(
-                unq_seg,
-                axis=1).drop_duplicates().reset_index(drop=True)
-    else:
-        a = {'null_seg': ['']}
-        unq_seg = pd.DataFrame(a)
-
-    # Use row.index, where index is col no to get segment names
-    for index, row in unq_seg.iterrows():
-        print(row)
-
-        # Filter out betas to segs
-        try:
-            seg_betas = init_params[
-                    init_params[
-                            row.index[0]]==row[0]].reset_index(drop=True)
-        except:
-            # If fail, there's no segments
-            print('No segments, passing init params')
-            # Copy betas straight across
-            seg_betas = init_params.copy()
-            # No seg subset required from 24hr productions
-            seg_subset = internal_24hr_productions.copy()
-
-        else:
-            print('Subsetting segment ' + str(row.index[0]))
-            # Filter internal 24 to segs.
-            seg_subset = internal_24hr_productions.copy()
-            seg_betas = init_params.copy()
-            # Build total productions placeolder, to avoid double counting across segments
-            
-            ## TODO: Difference between text and int causing havoc here
-            for seg in unq_seg:
-                print('Filtering input paths to: ' +
-                      seg + ' = ' + str(row[seg]))
-                # Build beta subset
-                seg_betas = seg_betas[
-                        seg_betas[seg]==row[seg]]
-                seg_betas = seg_betas.reset_index(drop=True)
-
-            for seg in unq_seg:
-                if row[seg] != 'none':
-                    print('Filtering input productions to: ' +
-                          seg + ' = ' + str(row[seg]))
-                    # Build production subset
-                    seg_subset = seg_subset[seg_subset[seg]==int(row[
-                                            seg])]
-                    seg_subset = seg_subset.reset_index(drop=True)
-
-        # Define unq mode for mode subset GB tp pa
-        unq_mode = init_params['m'].drop_duplicates().reset_index(drop=True)
-
-        for mode_subset in unq_mode:
-            print('Reapplying time period for mode ' + str(mode_subset))
-            # Get time period splits for OD conversion
-            # TODO: Add mode differentiation    
-            time_period_splits = get_time_period_splits(mode = mode_subset,
-                                                        phi_type = phi_type,
-                                                        aggregate_to_wday = True)
-
-            # if 'purpose_to_home' in these columns, you have to do the tp allocation with it
-            if 'purpose_to_home' in list(time_period_splits):
-                to_home_phi = True
-            else:
-                to_home_phi = False
-            print('To home phi: ' + str(to_home_phi))
-
-            print(mode_subset)
-            # Reimport full set of betas
-            mode_betas = seg_betas[
-                    seg_betas[
-                            'm']==mode_subset].reset_index(drop=True)
-
-            # So far takes 'cjtw', 'synthetic', 'moira_fusion'
-            # TODO: This is pretty handy now but need to optimise output
-            reimport_dict = {}
-            reimport_dict.update({'synthetic':o_paths['summaries']})
-            if not nhb:
-                reimport_dict.update({'cjtw':o_paths['cjtw']})
-            reimport_dict.update({'moira_fusion':o_paths['fusion_summaries']})
-
-            # Filter internal_24hr_productions to mode only
-            dist_subset = seg_subset[
-                    seg_subset[
-                            'm']==mode_subset].reset_index(drop=True)
-
-            # Should never balance if there are fusion modes
-            if fusion_modes is not None:
-                balance = False
-            else:
-                balance = True
-
-            # Create full matrix from re-imports
-            internal_pa = compile_internal_pa(reimport_dict,
-                                              mode_betas, # init_params
-                                              (model_name.lower() + '_zone_id'), # ia_name
-                                              dist_subset, # internal_24hr_productions
-                                              distribution_segments, # distribution_segments
-                                              current_segment = row, # current_segment
-                                              balance = balance,
-                                              nhb = nhb)
-
-            # Resum segments in case any duplication
-            ipa_cols = ['p_zone', 'a_zone']
-            for ds in distribution_segments:
-                ipa_cols.append(ds)
-
-            internal_pa = internal_pa.groupby(
-                    ipa_cols).sum().reset_index()
-
-            # TODO: production report or trip length audit call
-
-            # REAPPLY TIME PERIOD SPLITS TO GET TIME PERIOD PA
-
-            # Some segments don't have a full set of purposes
-            # redefine here
-            s_unq_purpose = internal_pa['p'].drop_duplicates(
-                    ).reset_index(drop=True)
-
-            # Define purpose list
-            for purpose in s_unq_purpose:
-                print('Compiling purpose ' +
-                      str(purpose) +
-                      ' at time period PA')
-
-                # Can name the full export now
-                export_name = ('_m' +
-                               str(mode_subset) +
-                               '_p' +
-                               str(purpose))
-
-                # External to Internal PA
-                subset_external_pa = external_pa[
-                        external_pa['m']==mode_subset].copy()
-                subset_external_pa = subset_external_pa[
-                        subset_external_pa ['p'] == purpose]
-
-                # Flexible segment detection and filter for externals
-                if row.index[0] != 'null_seg':
-                    for seg_heading in list(unq_seg):
-                        print(seg_heading)
-                        print(row[seg_heading])
-
-                        # Append to export name
-                        export_name += ('_' + seg_heading)
-                        export_name += (str(row[seg_heading]))
-
-                        # Filter externals
-                        if row[seg_heading] != 'none':
-                            subset_external_pa = subset_external_pa[
-                                    subset_external_pa[seg_heading] == int(row[seg_heading])]
-
-                subset_internal_pa = internal_pa[
-                        internal_pa['m']==mode_subset]
-                subset_internal_pa = subset_internal_pa[
-                        subset_internal_pa['p'] == purpose]
-
-                subset_pa = pd.concat([subset_internal_pa,
-                                       subset_external_pa], sort=True).reset_index(drop=True)
-
-                # Get subset total for comparison
-                s_pa_t = subset_pa['dt'].sum()
-                print(s_pa_t)
-
-                # Add model name to resplit 24hr
-                # TODO: This is where the segment split loop should start - avoid directly handling unsplit
-                subset_tp_pa = resplit_24hr_pa(i_paths['lookups'],
-                                               (model_name.lower() + '_zone_id'),
-                                               subset_pa,
-                                               # Default - does this need to be GB or Int only?
-                                               splits = production_splits,
-                                               mode_subset = mode_subset,
-                                               purpose_subset = [purpose],
-                                               aggregation_segments = distribution_segments)
-
-                # Comparison total
-                s_pa_tp_t = subset_tp_pa['dt'].sum()
-
-                print('Total before: ' + str(s_pa_t))
-                print('Total after: ' + str(s_pa_tp_t))
-
-                # TODO: Can delete subset_pa now?
-                del(subset_pa)
-
-                # Reindex tp_pa for mode purpose and time only
-                # Can drop mode now, if there's only ever one
-                # Define path to write out
-                # TODO: Define earlier
-                if nhb:
-                    trip_origin = 'nhb'
-                else:
-                    trip_origin = 'hb'
-                
-                # Define export path, export tp pa by mode
-                subset_tp_pa_path = (pa_export +
-                                     '/' + trip_origin +
-                                     '_tp_pa_' +
-                                     export_name +
-                                     '.csv')
-
-                if (write_tp_pa) and (mode_subset in export_modes):
-                    print('')
-                    subset_tp_pa.to_csv(subset_tp_pa_path,
-                                        index=False)
-
-                # Split to OD
-                # You can't do them in one go.
-                # TODO: End of function before this line!!
-                if nhb == True:
-                    subset_tp_od = subset_tp_pa.copy()
-                    
-                    subset_tp_od = subset_tp_od.rename(columns={'p_zone':'o_zone',
-                                                                'a_zone':'d_zone'})
-    
-                    for tp in subset_tp_od['time'].drop_duplicates(
-                            ).reset_index(drop=True):
-                        print(tp)
-                        mat = subset_tp_od[
-                                subset_tp_od[
-                                        'time']==tp].reset_index(drop=True)
-
-                        del(mat['time'])
-                        mat = mp.matrix_long_to_wide(mat,
-                                                     all_zone_movements,
-                                                     merge_cols = ['o_zone',
-                                                                   'd_zone'])
-                        od_nhb_path = (od_export +
-                                       '/nhb_od_tp' +
-                                       str(tp) +
-                                       '_' +
-                                       export_name +
-                                       '.csv')
-
-                        if mode_subset in export_modes:
-                            print('Exporting NHB for mode: ' + str(mode_subset))
-                            mat.to_csv(od_nhb_path)   
-
-                if nhb == False:
-                    subset_tp_od = tp_pa_to_od(subset_tp_pa,
-                                               time_period_splits = time_period_splits)
-
-                    # Split from
-                    subset_tp_od_from = subset_tp_od[0].reindex(
-                            ['o_zone', 'd_zone',
-                             'time', 'dt'],
-                             axis=1).groupby(
-                                     ['o_zone', 'd_zone',
-                                      'time']).sum().reset_index()
-
-                    for tp in subset_tp_od_from['time'].drop_duplicates(
-                            ).reset_index(drop=True):
-                        print(tp)
-                        mat = subset_tp_od_from[
-                                subset_tp_od_from[
-                                        'time']==tp].reset_index(drop=True)
-
-                        del(mat['time'])
-                        mat = mp.matrix_long_to_wide(mat,
-                                                     all_zone_movements,
-                                                     merge_cols = ['o_zone',
-                                                                   'd_zone'])
-
-                        # Export matrix format OD - leave index on!
-                        od_from_path = (
-                                        od_export +
-                                        '/hb_od_tp' +
-                                        str(tp) +
-                                        '_' +
-                                        export_name +
-                                        '_from.csv')
-        
-                        if mode_subset in export_modes:
-                            mat.to_csv(od_from_path)
-
-                    # Split to
-                    subset_tp_od_to = subset_tp_od[1].reindex(
-                            ['o_zone', 'd_zone',
-                             'time', 'dt'], axis=1).groupby(
-                             ['o_zone', 'd_zone', 'time']).sum().reset_index()
-
-                    for tp in subset_tp_od_to['time'].drop_duplicates().reset_index(drop=True):
-                        print(tp)
-                        mat = subset_tp_od_to[subset_tp_od_to['time']==tp].reset_index(drop=True)
-
-                        del(mat['time'])
-                        mat = mp.matrix_long_to_wide(mat,
-                                                     all_zone_movements,
-                                                     merge_cols = ['o_zone',
-                                                                   'd_zone'])
-
-                        od_to_path = (od_export +
-                                      '/hb_od_tp' +
-                                      str(tp) +
-                                      '_' +
-                                      export_name +
-                                      '_to.csv')
-                        if mode_subset in export_modes:
-                            mat.to_csv(od_to_path)
-
-                    # Export arrivals
-                    if fusion_only == False:
-                        arrivals = subset_tp_od[2]
-
-                        arrivals_path = (o_paths['arrival_export'] +
-                                         '/hb_' +
-                                         export_name +
-                                         '_arrivals.csv')
-
-                        if write_arrivals:
-                            arrivals.to_csv(arrivals_path, index=False)
-                        # End of HB OD
-
-    return(True)
 
 def compile_internal_pa(reimport_dict,
                         mode_betas,
@@ -1441,7 +1277,7 @@ def resplit_24hr_pa(model_lookup_path,
         print('subset after re-split: ' + str(ph_dat['dt'].sum()))
 
         # Loop to subset by given model categories for PA level writes
-        # Needed for Norms output print_audits (Norms does its own PA-OD conversion)
+        # Needed for Norms output audits (Norms does its own PA-OD conversion)
 
         # Define core aggregations
         format_list = ['p_zone',

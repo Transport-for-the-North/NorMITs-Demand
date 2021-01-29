@@ -18,10 +18,13 @@ import pandas as pd
 _default_home_dir = 'C:/'
 _default_iter = 'iter0'
 
+_M_KM = 1.609344
+
 # Index functions - functions to aggregate columns into new category variables
 def create_project_folder(projectName):
     """
     """
+
     if not os.path.exists(os.getcwd() + '/' + projectName):
         os.makedirs(os.getcwd() + '/' + projectName)
         os.chdir(os.getcwd() + '/' + projectName)
@@ -29,7 +32,6 @@ def create_project_folder(projectName):
     else:
         os.chdir(os.getcwd() + '/' + projectName)
         print('Project folder already exists, wd set there')
-
 
 def create_folder(folder, chDir=False):
     """
@@ -43,7 +45,6 @@ def create_folder(folder, chDir=False):
         if chDir:
             os.chdir(folder)
         print('Folder already exists')
-
 
 def set_time():
     """
@@ -325,7 +326,6 @@ def glimpse(dataframe):
     gl = dataframe.iloc[0:5]
     return gl
 
-
 def control_to_ntem(msoa_output,
                     ntem_totals,
                     lad_lookup,
@@ -374,10 +374,6 @@ def control_to_ntem(msoa_output,
         adjusted_output:
             DF with same msoa zoning as input but controlled to NTEM.
     """
-    # TODO: control_to_ntem() is a bottleneck in P/A models. Optimise?
-    # TODO: control_to_ntem() returns group cols in different dtype than given
-    # Possible to remove merge? align?
-
     # Copy output
     output = msoa_output.copy()
 
@@ -388,6 +384,14 @@ def control_to_ntem(msoa_output,
             raise ValueError('Column ' + col + ' not in MSOA data')
         if col not in list(ntem_totals):
             raise ValueError('Column ' + col + ' not in NTEM data')
+
+    # Establish all non trip segments
+    segments = []
+    for col in list(output):
+        if col not in [base_zone_name,
+                       base_value_name]:
+            segments.append(col)
+
     # Purposes
     hb_purpose = [1,2,3,4,5,6,7,8]
     nhb_purpose = [12,13,14,15,16,18]
@@ -479,6 +483,21 @@ def control_to_ntem(msoa_output,
 
     output[base_value_name] = output[base_value_name] * output['adj_fac']
 
+    # Output segmented lad totals
+    lad_groups = ['lad_zone_id']
+    for col in segments:
+        lad_groups.append(col)
+    lad_index = lad_groups.copy()
+    lad_index.append(base_value_name)
+
+    print(lad_groups)
+    print(lad_index)
+
+    lad_totals = output.reindex(lad_index,
+                                axis=1).groupby(
+                                        lad_groups).sum().reset_index()
+
+    # Reindex outputs
     output = output.drop(['lad_zone_id','adj_fac'], axis=1)
 
     after = output[base_value_name].sum()
@@ -488,7 +507,7 @@ def control_to_ntem(msoa_output,
              'target':target,
              'after':after}
 
-    return(output, audit, adjustments)
+    return(output, audit, adjustments, lad_totals)
 
 def aggregate_merger(dataframe,
                      target_segments,
@@ -546,7 +565,6 @@ def aggregate_merger(dataframe,
 
     return(dataframe)
 
-
 def df_to_np(df,
              values,
              unq_internal_zones,
@@ -572,6 +590,8 @@ def df_to_np(df,
     col_name = list(placeholder)[0]
 
     if h_heading is None:
+        placeholder = placeholder.rename(columns={
+                list(placeholder)[0]:v_heading})
         full_placeholder = placeholder.merge(df,
                                              how='left',
                                              on=[v_heading])
@@ -691,7 +711,6 @@ def n_matrix_split(matrix,
 
     return(mats)
 
-
 def compile_od(od_folder,
                write_folder,
                compile_param_path,
@@ -712,17 +731,13 @@ def compile_od(od_folder,
     files = os.listdir(od_folder)
     # Filter pickles or anything else odd in there
     files = [x for x in files if '.csv' in x]
-    # print(files)
-
-    from tqdm import tqdm
+    print(files)
 
     comp_ph = []
     od_pickle = {}
-    desc = 'Compiling matrices'
-    total = len(list(compilations.iterrows()))
-    for index, row in tqdm(compilations.iterrows(), desc=desc, total=total):
+    for index,row in compilations.iterrows():
         compilation_name = row['compilation']
-        # print(compilation_name)
+        print(compilation_name)
 
         if row['format'] == 'long':
             target_format = 'long'
@@ -737,7 +752,7 @@ def compile_od(od_folder,
 
         for each_one in import_me:
             reader = (od_folder + '/' + each_one)
-            # print('Importing ' + reader)
+            print('Importing ' + reader)
             temp = pd.read_csv(reader)
 
             if build_factor_pickle:
@@ -768,7 +783,7 @@ def compile_od(od_folder,
             for square in squares:
                 for key, dat in square.items():
                     od_factors = dat/ph_sq
-                    od_factors = np.float32(od_factors)
+                    od_factors = np.float64(od_factors)
                     compilation_dict.update({key:od_factors})
 
             od_pickle.update({row['compilation'].replace('.csv',
@@ -790,7 +805,7 @@ def compile_od(od_folder,
         final['dt'] = 0
 
         for add in range(mat_len):
-            # print('adding dt_' + str(add+1))
+            print('adding dt_' + str(add+1))
             final['dt'] = final['dt'] + final['dt_'+str(add+1)]
             final = final.drop('dt_'+str(add+1), axis=1)
 
@@ -804,7 +819,7 @@ def compile_od(od_folder,
                                               ['o_zone', 'd_zone']).reset_index()
 
         if target_format == 'wide':
-            # print('translating back to wide')
+            print('translating back to wide')
             final = final.pivot(index = 'o_zone',
                                 columns = 'd_zone',
                                 values = 'dt')
@@ -818,12 +833,12 @@ def compile_od(od_folder,
             for mat in comp_ph:
                 # Write compiled od
                 for key,value in mat.items():
-                    # print(key)
+                    print(key)
                     if key[-4:] == '.csv':
                         c_od_out = os.path.join(write_folder, key)
                     else:
                         c_od_out = os.path.join(write_folder, key + '.csv')
-                    # print(c_od_out)
+                    print(c_od_out)
                     value.to_csv(c_od_out, index=True)
             if build_factor_pickle:
                 fname = 'od_compilation_factors.pickle'
@@ -1198,7 +1213,129 @@ def filter_pa_cols(pa_frame,
 
     return(dp, total_dp)
 
+def get_costs(model_lookup_path,
+              calib_params,
+              tp = '24hr',
+              iz_infill = 0.5):
 
+    # units takes different parameters
+    # TODO: Needs a config guide for the costs somewhere
+    """
+    This function imports distances or costs from a given path.
+
+    Parameters
+    ----------
+    model_lookup_path:
+        Model folder to look in for distances/costs. Should be in call or global.
+
+    calib_params:
+        Calibration parameters dictionary'
+
+    tp:
+        Should ultimately take 24hr & tp, usually 24hr for hb and tp for NHB.
+
+    direction = None:
+        Takes None, 'To', 'From'
+
+    car_available = None:
+        Takes None, True, False
+
+    seed_intrazonal = True:
+        Takes True or False - whether to add a value half the minimum
+        interzonal value to the intrazonal cells. Currently needed for distance
+        but not cost.
+
+    Returns:
+    ----------
+    dat:
+        DataFrame containing required cost or distance values.
+    """
+    # TODO: Adapt model input costs to take time periods
+    # TODO: The name cost_cols is misleading
+    file_sys = os.listdir(os.path.join(model_lookup_path, 'costs'))
+    tp_path = [x for x in file_sys if tp in x]
+
+    dat = pd.read_csv(os.path.join(model_lookup_path,
+                                   'costs',
+                                   tp_path[0]))
+    cols = list(dat)
+
+    # Get purpose and direction from calib_params
+    ca = None
+    purpose = None
+    time_period = None
+
+    for index, param in calib_params.items():
+        # Need a purpose, if a ca is not picked up returns none
+        if index == 'p':
+            purpose = param
+        if index == 'ca':
+            if param == 1:
+                ca = 'nca'
+            elif param == 2:
+                ca = 'ca'
+        if index == 'tp':
+            time_period = param
+
+    # Purpose to string
+    commute = [1]
+    business = [2, 12]
+    other = [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
+    if purpose in commute:
+        str_purpose = 'commute'
+    elif purpose in business:
+        str_purpose = 'business'
+    elif purpose in other:
+        str_purpose = 'other'
+    else:
+        raise ValueError("Cannot convert purpose to string." +
+                         "Got %s" % str(purpose))
+
+    # Filter down on purpose
+    cost_cols = [x for x in cols if str_purpose in x]
+    # Handle if we have numeric purpose costs, hope so, they're better!
+    if len(cost_cols) == 0:
+        cost_cols = [x for x in cols if ('p' + str(purpose)) in x]
+
+    # Filter down on car availability
+    if ca is not None:
+        # Have to be fussy as ca is in nca...
+        if ca == 'ca':
+            cost_cols = [x for x in cost_cols if 'nca' not in x]
+        elif ca == 'nca':
+            cost_cols = [x for x in cost_cols if 'nca' in x]
+
+    if time_period is not None:
+        cost_cols = [x for x in cost_cols if str(time_period) in x]
+
+    target_cols = ['p_zone', 'a_zone']
+    for col in cost_cols:
+        target_cols.append(col)
+
+    cost_return_name = cost_cols[0]
+
+    dat = dat.reindex(target_cols, axis=1)
+    dat = dat.rename(columns={cost_cols[0]: 'cost'})
+
+    # Redefine cols
+    cols = list(dat)
+
+    if iz_infill is not None:
+        dat = dat.copy()
+        min_inter_dat = dat[dat[cols[2]]>0]
+        # Derive minimum intrazonal
+        min_inter_dat = min_inter_dat.groupby(
+                cols[0]).min().reset_index().drop(cols[1],axis=1)
+        intra_dat = min_inter_dat.copy()
+        intra_dat[cols[2]] = intra_dat[cols[2]]*iz_infill
+        iz = dat[dat[cols[0]] == dat[cols[1]]]
+        non_iz = dat[dat[cols[0]] != dat[cols[1]]]
+        iz = iz.drop(cols[2],axis=1)
+        # Rejoin
+        iz = iz.merge(intra_dat, how='inner', on=cols[0])
+        dat = pd.concat([iz, non_iz],axis=0,sort=True).reset_index(drop=True)
+
+    return(dat, cost_return_name)
 
 def get_distance_and_costs(model_lookup_path,
                            request_type='cost',
@@ -1705,6 +1842,71 @@ def import_pa(production_import_path,
     productions = pd.read_csv(production_import_path)
     attractions = pd.read_csv(attraction_import_path)
     return(productions, attractions)
+
+
+def get_trip_length_bands(import_folder,
+                          calib_params,
+                          segmentation,
+                          trip_origin,
+                          replace_nan=False,
+                          echo=True): # 'hb' or 'nhb'
+
+    """
+    Function to check a folder for trip length band parameters.
+    Returns a subset.
+    """
+    # Append name of tlb area
+
+
+    # Index folder
+    target_files = os.listdir(import_folder)
+    # Define file contents, should just be target files - should fix.
+    import_files = target_files.copy()
+
+    # TODO: Fixed for new ntem dists - pointless duplication now
+    if segmentation == 'ntem':
+        for key, value in calib_params.items():
+            # Don't want empty segments, don't want ca
+            if value != 'none' and key != 'ca':
+                 # print_w_toggle(key + str(value), echo=echo)
+                import_files = [x for x in import_files if
+                                ('_' + key + str(value)) in x]
+    elif segmentation == 'tfn':
+        for key, value in calib_params.items():
+            # Don't want empty segments, don't want ca
+            if value != 'none' and key != 'ca':
+                # print_w_toggle(key + str(value), echo=echo)
+                import_files = [x for x in import_files if
+                                ('_' + key + str(value)) in x]
+    else:
+        raise ValueError('Non-valid segmentation. How did you get this far?')
+
+    if trip_origin == 'hb':
+        import_files = [x for x in import_files if 'nhb' not in x]
+    elif trip_origin == 'nhb':
+        import_files = [x for x in import_files if 'nhb' in x]
+    else:
+        raise ValueError('Trip length band import failed,' +
+                         'provide valid trip origin')
+    if len(import_files) > 1:
+        raise Warning('Picking from two similar files,' +
+                      ' check import folder')
+
+    # Import
+    if echo:
+        print(import_files)
+        print(import_files[0])
+    tlb = pd.read_csv(import_folder + '/' + import_files[0])
+
+    # Filter to target purpose
+    # TODO: Don't want to have to do this for NTEM anymore. Just keep them individual.
+    # tlb = tlb[tlb[trip_origin +'_purpose']==purpose].copy()
+
+    if replace_nan:
+        for col_name in list(tlb):
+            tlb[col_name] = tlb[col_name].fillna(0)
+
+    return tlb
 
 
 def get_init_params(path,
@@ -2482,3 +2684,87 @@ def get_compilation_params(lookup_folder,
         out_dict.append(od)
 
     return out_dict
+
+def parse_mat_output(list_dir,
+                     sep = '_',
+                     mat_type = 'dat',
+                     file_format = '.csv',
+                     file_name = 'file'):
+    """
+    """
+    # Define UC format
+    uc = ['commute','business','other',
+          'Commute', 'Business', 'Other']
+
+    # Get target file format only
+    unq_files = [x for x in list_dir if file_format in x]
+    # If no numbers in then drop
+    unq_files = [x for x in list_dir if any(c.isdigit() for c in x)]
+
+    split_list = []
+    for file in unq_files:
+        split_dict = {file_name:file}
+        file = file.replace(file_format,'')
+        test = str(file).split('_')
+        for item in test:
+            if 'hb' in item:
+                name = 'trip_origin'
+                dat = item
+            elif item in uc:
+                name = 'p'
+                dat = item
+            elif item == mat_type:
+                name = 'mat_type'
+                dat = item
+            else:
+                name = ''
+                dat = ''
+                # name = letters, dat = numbers
+                for char in item:
+                    if char.isalpha():
+                        name += str(char)
+                    else:
+                        dat += str(char)
+            # Return None not nan
+            if len(dat) == 0:
+                dat = 'none'
+            split_dict.update({name:dat})
+        split_list.append(split_dict)           
+
+    segments = pd.DataFrame(split_list)
+    segments = segments.replace({np.nan:'none'})
+
+    return(segments)
+
+def unpack_tlb(tlb,
+               km_constant = _M_KM):
+
+    """
+    Function to unpack a trip length band table into constituents.
+    Parameters
+    ----------
+    tlb:
+        A trip length band DataFrame
+    Returns
+    ----------
+    min_dist:
+        ndarray of minimum distance by band
+    max_dist:
+        ndarray of maximum distance by band
+    obs_trip:
+        Band share by band as fraction of 1
+    obs_dist:
+        
+    """
+
+    # Convert miles from raw NTS to km
+    min_dist = tlb['lower'].astype('float').to_numpy()*_M_KM
+    max_dist = tlb['upper'].astype('float').to_numpy()*_M_KM
+    obs_trip = tlb['band_share'].astype('float').to_numpy()
+    # TODO: Check that this works!!
+    obs_dist = tlb['ave_km'].astype(float).to_numpy()
+
+    return(min_dist,
+           max_dist,
+           obs_trip,
+           obs_dist)
