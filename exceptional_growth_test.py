@@ -25,4 +25,4 @@ eg.adjust_bespoke_zones(test_generations_path,
                         efs.model_name,
                         base_year=consts.BASE_YEAR_STR,
                         recreate_donor=True,
-                        audit_path=efs.exports["print_audits"])
+                        audit_path=efs.exports["audits"])

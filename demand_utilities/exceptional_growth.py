@@ -1131,6 +1131,7 @@ def extract_donor_totals(matrix_path: str,
         "Sector ID"
     )[["origins", "dests"]].sum()
     donor_totals.index.name = "Donor Sector ID"
+    donor_totals = donor_totals.reset_index()
 
     return donor_totals, agg_tour_props
 
@@ -1194,7 +1195,7 @@ def get_donor_zone_data(sectors: pd.DataFrame,
                         nhb_segmented: bool,
                         ca_seg_needed: bool,
                         base_year: str,
-                        p_needed: List[int] = consts.PURPOSES_NEEDED,
+                        p_needed: List[int] = consts.ALL_PURPOSES_NEEDED,
                         m_needed: List[int] = consts.MODES_NEEDED,
                         soc_needed: List[int] = consts.SOC_NEEDED,
                         ns_needed: List[int] = consts.NS_NEEDED,
@@ -1370,7 +1371,7 @@ def _replace_generation_segments(generation_data: pd.DataFrame,
                                  purpose_data: pd.DataFrame,
                                  segmented_nhb: bool,
                                  ca_seg_needed: bool,
-                                 p_needed: List[int] = consts.PURPOSES_NEEDED,
+                                 p_needed: List[int] = consts.ALL_PURPOSES_NEEDED,
                                  soc_needed: List[int] = consts.SOC_NEEDED,
                                  ns_needed: List[int] = consts.NS_NEEDED,
                                  ca_needed: List[int] = consts.CA_NEEDED):
@@ -1524,7 +1525,7 @@ def _apply_underlying_segment_splits(generation_data: pd.DataFrame,
         segmentation
     """
 
-    ca_needed = "None" not in generation_data["ca"].unique()
+    ca_needed = ~generation_data["ca"].isin(["None"]).any()
 
     df = generation_data.copy()
 
@@ -1659,7 +1660,7 @@ def _convert_od_to_trips(sector_distributed_data: pd.DataFrame,
         to the relevant type for each purpose.
     """
 
-    ca_needed = "None" not in sector_distributed_data["ca"].unique()
+    ca_needed = ~sector_distributed_data["ca"].isin(["None"]).any()
 
     sector_dist = sector_distributed_data.copy()
     agg_tour_props = aggregated_tour_proportions.copy()
@@ -1883,7 +1884,7 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                             sector_data: pd.DataFrame,
                             export_dict: dict,
                             segmented_nhb: bool,
-                            p_needed: List[int] = consts.PURPOSES_NEEDED,
+                            p_needed: List[int] = consts.ALL_PURPOSES_NEEDED,
                             soc_needed: List[int] = consts.SOC_NEEDED,
                             ns_needed: List[int] = consts.NS_NEEDED,
                             ca_needed: List[int] = consts.CA_NEEDED
@@ -1941,7 +1942,7 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
     purps = converted_trips["Purpose"].unique()
     modes = converted_trips["mode"].unique()
     # Use CA values - only if CA segmentation is needed
-    ca_seg_needed = "None" not in converted_trips["ca"].unique()
+    ca_seg_needed = ~converted_trips["ca"].isin(["None"]).any()
     cas = ca_needed if ca_seg_needed else ["None"]
     # Extract the unique generation zones that need to be considered
     gen_zones = converted_trips["Zone ID"].unique()
