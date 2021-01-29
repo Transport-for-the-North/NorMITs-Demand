@@ -21,12 +21,12 @@ def main():
     # Running control
     integrate_dlog = False
 
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = False
     recreate_attractions = False
     recreate_nhb_productions = False
 
-    run_hb_pa_to_od = False
+    run_hb_pa_to_od = True
     run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False

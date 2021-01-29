@@ -1532,6 +1532,10 @@ def _apply_underlying_segment_splits(generation_data: pd.DataFrame,
     df = generation_data.copy()
 
     # Merge generation data to the donor_data to split where required
+    print(df)
+
+    print(donor_data)
+
     split_data = pd.merge(
         df,
         donor_data,

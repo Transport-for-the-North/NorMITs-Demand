@@ -2430,3 +2430,31 @@ def generate_productions(population: pd.DataFrame,
     )
 
     return productions
+
+
+# BACKLOG: Point code to get_production_time_split in TMS
+#  labels: demand merge, EFS
+def get_production_time_split(productions,
+                              model_zone):
+    """
+    productions : production vector
+    model_zone : col name
+    """
+    p_totals = productions.reindex(
+        [model_zone, 'trips'], axis=1).groupby(
+        model_zone).sum().reset_index()
+    p_totals = p_totals.rename(columns={'trips': 'p_totals'})
+    tp_totals = productions.reindex(
+        [model_zone,
+         'tp',
+         'trips'],
+        axis=1).groupby(
+        [model_zone,
+         'tp']).sum().reset_index()
+    time_splits = tp_totals.merge(p_totals,
+                                  how='left',
+                                  on=[model_zone])
+    time_splits['time_split'] = (time_splits['trips'] / time_splits['p_totals'])
+    time_splits = time_splits.drop(['p_totals'], axis=1)
+
+    return time_splits

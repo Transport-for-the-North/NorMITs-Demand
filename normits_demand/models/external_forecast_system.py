@@ -24,6 +24,7 @@ import pandas as pd
 import normits_demand as nd
 from normits_demand import version
 from normits_demand import efs_constants as consts
+from normits_demand.models import efs_production_model as pm
 
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.matrices import od_to_pa as od2pa
@@ -641,25 +642,25 @@ class ExternalForecastSystem:
 
         # TODO: Add toggle to turn pop/emp comparator on/off
 
-        # # Build the comparators
-        # pop_comp = pop_emp_comparator.PopEmpComparator(
-        #     **self.pop_emp_inputs['population'],
-        #     output_csv=pop_path,
-        #     data_type='population',
-        #     base_year=str(base_year),
-        #     verbose=self.verbose
-        # )
-        # emp_comp = pop_emp_comparator.PopEmpComparator(
-        #     **self.pop_emp_inputs['employment'],
-        #     output_csv=emp_path,
-        #     data_type='employment',
-        #     base_year=str(base_year),
-        #     verbose=self.verbose
-        # )
-        #
-        # # Write comparisons to disk
-        # pop_comp.write_comparisons(self.exports['reports'], 'csv', True)
-        # emp_comp.write_comparisons(self.exports['reports'], 'csv', True)
+        # Build the comparators
+        pop_comp = pop_emp_comparator.PopEmpComparator(
+            **self.pop_emp_inputs['population'],
+            output_csv=pop_path,
+            data_type='population',
+            base_year=str(base_year),
+            verbose=self.verbose
+        )
+        emp_comp = pop_emp_comparator.PopEmpComparator(
+            **self.pop_emp_inputs['employment'],
+            output_csv=emp_path,
+            data_type='employment',
+            base_year=str(base_year),
+            verbose=self.verbose
+        )
+
+        # Write comparisons to disk
+        pop_comp.write_comparisons(self.exports['reports'], 'csv', True)
+        emp_comp.write_comparisons(self.exports['reports'], 'csv', True)
 
         last_time = current_time
         current_time = time.time()
@@ -1084,8 +1085,8 @@ class ExternalForecastSystem:
 
     def pa_to_od(self,
                  years_needed: List[int] = consts.ALL_YEARS,
-                 modes_needed: List[int] = consts.MODES_NEEDED,
-                 purposes_needed: List[int] = consts.PURPOSES_NEEDED,
+                 m_needed: List[int] = consts.MODES_NEEDED,
+                 p_needed: List[int] = consts.PURPOSES_NEEDED,
                  soc_needed: List[int] = consts.SOC_NEEDED,
                  ns_needed: List[int] = consts.NS_NEEDED,
                  ca_needed: List[int] = consts.CA_NEEDED,
@@ -1132,9 +1133,44 @@ class ExternalForecastSystem:
         None
         """
         # Init
-        _input_checks(m_needed=modes_needed)
+        _input_checks(m_needed=m_needed)
+
+        if not self.is_ca_needed:
+            ca_needed = None
 
         # TODO: Add time print outs
+        # ## GET THE TIME PERIOD SPLITS ## #
+
+        # Read in raw production to get time period splits from
+        fname = consts.PRODS_FNAME % (self.input_zone_system, 'raw_hb')
+        raw_prods_path = os.path.join(self.exports['productions'], fname)
+        productions = pd.read_csv(raw_prods_path)
+
+        # Grab just the mode we need
+        mask = productions['m'].isin(m_needed)
+        productions = productions[mask]
+        productions = productions.drop('m', axis='columns')
+        productions = productions.reset_index(drop=True)
+
+        # Translate to the correct zoning system
+        pop_translation, _ = self.get_translation_dfs()
+        print(productions)
+
+        non_split_columns = list(productions.columns)
+        non_split_columns = du.list_safe_remove(non_split_columns, years_needed)
+        productions = self.zone_translator.run(
+            productions,
+            pop_translation,
+            self.input_zone_system,
+            self.output_zone_system,
+            non_split_cols=non_split_columns
+        )
+
+        # Extract the time splits
+        pm.get_production_time_split(productions, self.output_zone_system)
+
+        print(productions)
+        exit()
 
         # TODO: Check if tp pa matrices exist first
         if overwrite_hb_tp_pa:
@@ -1144,8 +1180,8 @@ class ExternalForecastSystem:
                 pa_import=self.exports['pa_24'],
                 pa_export=self.exports['pa'],
                 years_needed=years_needed,
-                p_needed=purposes_needed,
-                m_needed=modes_needed,
+                p_needed=p_needed,
+                m_needed=m_needed,
                 soc_needed=soc_needed,
                 ns_needed=ns_needed,
                 ca_needed=ca_needed
@@ -1159,8 +1195,8 @@ class ExternalForecastSystem:
                 pa_import=self.exports['pa'],
                 od_export=self.exports['od'],
                 model_name=self.model_name,
-                p_needed=purposes_needed,
-                m_needed=modes_needed,
+                p_needed=p_needed,
+                m_needed=m_needed,
                 soc_needed=soc_needed,
                 ns_needed=ns_needed,
                 ca_needed=ca_needed,
