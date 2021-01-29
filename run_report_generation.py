@@ -65,6 +65,9 @@ def _maybe_aggregate_matrices(import_dir,
 
     # ## ONLY AGGREGATE IF ALL NEEDED MATRICES DON'T EXIST ## #
     existing_mat_names = [x for x in os.listdir(import_dir) if '.csv' in x]
+    if existing_mat_names == list():
+        raise FileNotFoundError("Could not find any existing matrices at: %s"
+                                % import_dir)
 
     if all([name in existing_mat_names for name in mat_names]):
         # All matrices we need already exist. Just copy over!
@@ -883,7 +886,7 @@ if __name__ == "__main__":
     # Power BI
 
     # Controls I/O
-    scenario = consts.SC00_NTEM
+    scenario = consts.SC04_UZC
     iter_num = 1
     import_home = "Y:/"
     export_home = "Y:/"

@@ -11,9 +11,8 @@ File purpose:
 Running test runs of EFS
 """
 
+import normits_demand as nd
 from normits_demand import efs_constants as consts
-
-from normits_demand import external_forecast_system
 
 
 def main():
@@ -22,12 +21,12 @@ def main():
     # Running control
     integrate_dlog = False
 
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = True
     recreate_attractions = True
     recreate_nhb_productions = True
 
-    run_hb_pa_to_od = False
+    run_hb_pa_to_od = True
     run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False
@@ -40,7 +39,7 @@ def main():
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
-    efs = external_forecast_system.ExternalForecastSystem(
+    efs = nd.ExternalForecastSystem(
         iter_num=iter_num,
         model_name=model_name,
         integrate_dlog=integrate_dlog,
@@ -66,7 +65,6 @@ def main():
     if run_hb_pa_to_od:
         # Convert to HB to OD
         efs.pa_to_od(
-            model_name=model_name,
             overwrite_hb_tp_pa=True,
             overwrite_hb_tp_od=True,
             echo=verbose

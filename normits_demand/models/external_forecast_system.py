@@ -1080,7 +1080,6 @@ class ExternalForecastSystem:
         return pop_translation, emp_translation
 
     def pa_to_od(self,
-                 model_name: str,
                  years_needed: List[int] = consts.ALL_YEARS,
                  modes_needed: List[int] = consts.MODES_NEEDED,
                  purposes_needed: List[int] = consts.PURPOSES_NEEDED,
@@ -1097,9 +1096,6 @@ class ExternalForecastSystem:
 
         Parameters
         ----------
-        model_name:
-            The name of the model to convert from PA to OD
-
         years_needed:
             The years of PA matrices to convert to OD
 
@@ -1117,14 +1113,6 @@ class ExternalForecastSystem:
 
         ca_needed:
             The the car availability of PA matrices to convert to OD
-
-        output_location:
-            The directory to create the new output directory in - a dir named
-            self._out_dir (NorMITs Demand) should exist here. Usually
-            a drive name e.g. Y:/
-
-        iter_num:
-            The number of the iteration being run.
 
         # TODO: Update docs once correct functionality exists
         overwrite_hb_tp_pa:
@@ -1167,7 +1155,7 @@ class ExternalForecastSystem:
             pa2od.efs_build_od(
                 pa_import=self.exports['pa'],
                 od_export=self.exports['od'],
-                model_name=model_name,
+                model_name=self.model_name,
                 p_needed=purposes_needed,
                 m_needed=modes_needed,
                 soc_needed=soc_needed,
@@ -1180,124 +1168,6 @@ class ExternalForecastSystem:
             )
             print('HB OD matrices compiled!\n')
             # TODO: Create 24hr OD for HB
-
-    # TODO: Remove efs.run_nhb(). Has been superseeded by new model
-    def run_nhb(self,
-                years_needed: List[int] = consts.ALL_YEARS,
-                modes_needed: List[int] = consts.MODES_NEEDED,
-                hb_purposes_needed: List[int] = consts.PURPOSES_NEEDED,
-                hb_soc_needed: List[int] = consts.SOC_NEEDED,
-                hb_ns_needed: List[int] = consts.NS_NEEDED,
-                hb_ca_needed: List[int] = consts.CA_NEEDED,
-                nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
-                overwrite_nhb_productions: bool = True,
-                overwrite_nhb_od: bool = True,
-                overwrite_nhb_tp_od: bool = True,
-                ):
-        """
-        Generates NHB distributions based from the time-period split
-        HB distributions
-
-        Performs the following actions:
-            - Generates NHB productions using NHB factors and HB distributions
-            - Furnesses NHB productions Synthesiser distributions as a seed
-
-        Parameters
-        ----------
-        years_needed:
-            The years used to produce NHB distributions for.
-
-        modes_needed:
-            The mode to generate a NHB distributions for.
-
-        hb_purposes_needed:
-            The home based purposes to use when generating NHB productions.
-
-        hb_soc_needed:
-            The home based soc_ids to use when generating NHB productions.
-
-        hb_ns_needed:
-            The home based ns_ids to use when generating NHB productions.
-
-        hb_ca_needed:
-            The car availability ids to use when generating NHB productions.
-
-        nhb_purposes_needed:
-            Which NHB purposes to generate NHb distributions for.
-
-        output_location:
-            The directory to create the new output directory in - a dir named
-            self._out_dir (NorMITs Demand) should exist here. Usually
-            a drive name e.g. Y:/
-
-        iter_num:
-            The number of the iteration being run.
-
-        # TODO: Update docs once correct functionality exists
-        overwrite_nhb_productions:
-            Whether to generate nhb productions or not.
-
-        overwrite_nhb_od
-            Whether to generate nhb OD matrices or not.
-
-        overwrite_nhb_tp_od
-            Whether to generate nhb tp split OD matrices or not.
-
-        Returns
-        -------
-        None
-        """
-        # Init
-        _input_checks(m_needed=modes_needed)
-
-        # TODO: Add time print outs
-        # TODO: Change import paths to accept specific dir
-        # TODO: Allow flexible segmentations
-
-        # TODO: Check if nhb productions exist first
-        if overwrite_nhb_productions:
-            print("Generating NHB Productions...")
-            pm.old_nhb_production(hb_pa_import=self.exports['pa_24'],
-                                  nhb_export=self.exports['productions'],
-                                  required_purposes=hb_purposes_needed,
-                                  required_modes=modes_needed,
-                                  required_soc=hb_soc_needed,
-                                  required_ns=hb_ns_needed,
-                                  required_car_availabilities=hb_ca_needed,
-                                  years_needed=years_needed,
-                                  nhb_factor_import=self.imports['home'])
-            print('NHB productions generated!\n')
-
-        # TODO: Check if NHB matrices exist first
-        if overwrite_nhb_od:
-            print("Furnessing NHB productions...")
-            furness.nhb_furness(
-                p_import=self.exports['productions'],
-                a_import=self.exports['attractions'],
-                seed_dist_dir=self.imports['seed_dists'],
-                pa_export=self.exports['pa_24'],
-                model_name=self.model_name,
-                p_needed=nhb_purposes_needed,
-                m_needed=modes_needed,
-                years_needed=[str(x) for x in years_needed],
-                seed_infill=0.01
-            )
-            print('NHB productions "furnessed"\n')
-
-        if overwrite_nhb_tp_od:
-            print("Converting NHB 24hr OD to time period split OD...")
-            pa2od.efs_build_tp_pa(
-                tp_import=self.imports['tp_splits'],
-                pa_import=self.exports['pa_24'],
-                pa_export=self.exports['pa'],
-                years_needed=years_needed,
-                p_needed=nhb_purposes_needed,
-                m_needed=modes_needed,
-                matrix_format='pa'
-            )
-            print('NHB time period split PA matrices compiled!\n')
-
-        print("NHB run complete!")
 
     def pre_me_compile_od_matrices(self,
                                    year: int = consts.BASE_YEAR,
