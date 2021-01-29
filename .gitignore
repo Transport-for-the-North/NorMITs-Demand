@@ -130,4 +130,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-systra_splitting_factors/Params
+
+# Don't bring this with us - it's massive
+docs/systra_splitting_factors/Params
