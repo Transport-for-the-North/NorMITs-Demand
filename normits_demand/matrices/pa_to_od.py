@@ -30,8 +30,7 @@ from normits_demand.utils import general as du
 from normits_demand.concurrency import multiprocessing
 
 # Can call tms pa_to_od.py functions from here
-# TODO: Fix old_tms import
-from normits_demand.utils.old_tms.pa_to_od import *
+from normits_demand.matrices.tms_pa_to_od import *
 
 
 def simplify_time_period_splits(time_period_splits: pd.DataFrame):

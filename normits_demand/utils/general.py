@@ -41,7 +41,7 @@ from collections import defaultdict
 from normits_demand import efs_constants as consts
 
 # Can call tms utils.py functions from here
-from normits_demand.utils.old_tms.utils import *
+from normits_demand.utils.utils import *
 
 # TODO: Utils is getting big. Refactor into smaller, more specific modules
 

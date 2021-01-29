@@ -37,6 +37,8 @@ from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
 
+from normits_demand.matrices.tms_matrix_processing import *
+
 
 def _aggregate(import_dir: str,
                in_fnames: List[str],
