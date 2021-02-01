@@ -83,6 +83,11 @@ ZONING_SYSTEMS = [
     'norms_2015'
 ]
 
+ZONE_SYSTEM_ZONE_COUNTS = {
+    'norms': 1300,
+    'noham': 2770,
+}
+
 # Valid model names
 _model_name_modes = [
     ('noham',       [3]),
