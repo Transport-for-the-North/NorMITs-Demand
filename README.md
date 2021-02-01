@@ -23,30 +23,34 @@ the command `pytest` in the main repository folder. Pytest will search for any f
 `test_*.py` or `*_test.py` and run all tests within them, see
 [pytest documentation](https://docs.pytest.org/en/stable/) for more information.
 
-## Class Versioning
+## Versioning
+The NorMITs Demand codebase follows [Semantic Versioning](https://semver.org/); the convention
+for most software products. In Summary this means the version numbers should be read in the 
+following way.
 
-Versioning follows the following version control, as defined in the TfN Coding Standards
-(correct as of 20/01/21):
+Given a version number MAJOR.MINOR.PATCH (e.g. 1.0.0), increment the:
 
-- Apply version control with the following format Epic.Beta.Alpha 
-    - ‘Epic’ is a number corresponding to the Epic currently undertaken 
-    - ‘Beta’ is the release version currently available to TfN as a whole 
-    - ‘Alpha’ is the release version currently available to the TAME team 
+- MAJOR version when you make incompatible API changes,
+- MINOR version when you add functionality in a backwards compatible manner, and
+- PATCH version when you make backwards compatible bug fixes.
 
-A brief log of the changes and additions made to the NorMITs Demand codebase between
-versions of classes. can be found below.
+Below, a brief summary of previous version can be found. Note that this should be moved in future
+to reflect future releases to avoid filling up this readme with version notes.
 
+### v0.1.0
+Initial version number. Before the TMS codebase has been merged into this codebase (which is really
+only EFS). No Elasticity model is included, and neither is the exceptional/bespoke zones. The first 
+version of EFS outputs can be found from this version onwards.
 
+### v0.2.0
+The Elasticity Model and Bespoke Zones code now exist in the codebase - although they are not fully
+integrated. The D-Log has been added and can be optionally integrated. Observed data can now be 
+properly integrated into the base year.
 
-### ExternalForecastSystem
+### v0.2.1
+Updated the furness auditing so summary files per year are now written to disk.
+Versioning has also been updated in the EFS class - meaning the version for the class is now
+pulled straight from the module version.
 
-##### V2.4
- - Start of this version documentation.
- - Scenario front end added to allow easy running of different TfN Future Travel Scenarios.
- 
-##### V2.5
- - Updated Version number in ExternalForecastSystem - replaced underscores with dots. 
- - Additional reporting and audit checks added.
- - Internal PopEmpComparator added to check and report on the expected and produced population/emplyment data of the Production and Attraction models.
- - Reporting tool added to display a dashboard of outputs from the External Forecast System.
- 
+### v0.3.0
+Code has been refactored in this version - ready for merge with TMS
