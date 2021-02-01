@@ -1940,7 +1940,8 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                             p_needed: List[int] = consts.ALL_PURPOSES_NEEDED,
                             soc_needed: List[int] = consts.SOC_NEEDED,
                             ns_needed: List[int] = consts.NS_NEEDED,
-                            ca_needed: List[int] = consts.CA_NEEDED
+                            ca_needed: List[int] = consts.CA_NEEDED,
+                            matrix_rounding: int = 4
                             ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Loops through all segmentation in the EFS output matrices, applying the
     generation data to the bespoke zones.
@@ -1964,6 +1965,8 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
         for each segmentation.
     segmented_nhb : bool
         Flag that is True if NHB matrices contain all possible segmentation
+    matrix_rounding : int
+        Number of decimal places to round matrix values to. By default, 4
 
     Returns
     -------
@@ -1992,6 +1995,9 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
     skipped = []
     # Store any warning message here
     warning_message = None
+    # Build float format string for outputs
+    flt_format = f"%.{matrix_rounding}f"
+
     # Extract the required segmentation from the generation data
     year_list = converted_trips["Year"].unique()
     purps = converted_trips["Purpose"].unique()
@@ -2119,7 +2125,7 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                 index=trips_df.index,
                 columns=trips_df.columns
             )
-            new_trips_df.to_csv(new_matrix_path)
+            new_trips_df.to_csv(new_matrix_path, float_format=flt_format)
     # Raise the warning on replacing zeros
     if warning_message is not None:
         warnings.warn(warning_message)
