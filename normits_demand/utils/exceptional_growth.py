@@ -1533,10 +1533,6 @@ def _apply_underlying_segment_splits(generation_data: pd.DataFrame,
     df = generation_data.copy()
 
     # Merge generation data to the donor_data to split where required
-    print(df)
-
-    print(donor_data)
-
     split_data = pd.merge(
         df,
         donor_data,
@@ -1728,8 +1724,9 @@ def _convert_od_to_trips(sector_distributed_data: pd.DataFrame,
 def _build_addition_matrix(filtered_trips: pd.DataFrame,
                            sector_data: pd.DataFrame,
                            old_trips: np.array,
-                           purpose: int
-                           ) -> np.array:
+                           purpose: int,
+                           keep_zeros: bool = False
+                           ) -> Tuple[np.array, str]:
     """Builds the matrix of trips to be added to the existing EFS output for 
     a given segmentation.
 
@@ -1753,12 +1750,20 @@ def _build_addition_matrix(filtered_trips: pd.DataFrame,
         by zone contained in this matrix.
     purpose : int
         Used to determine if we need to apply as PAs or ODs
+    keep_zeros : bool
+        How to handle instances where the underlying zonal distribution 
+        contains only 0s - introduced due to rounding of matrices.
+        If False, the trips will be evenly distributed in that sector (all 
+        zones in the sector receive an equal proportion).
+        If True, the zeros will remain and no bespoke trips will be distributed
+        in this sector. By default, False
 
     Returns
     -------
-    np.array
+    Tuple[np.array, str]
         The matrix of bespoke zone data that will be applied to the original 
         matrix for this segmentation.
+        Warning message if relevant or None
 
     Raises
     ------
@@ -1769,6 +1774,8 @@ def _build_addition_matrix(filtered_trips: pd.DataFrame,
 
     # Build new matrix to combine with existing
     add_trips = np.zeros_like(old_trips)
+    # Variable to store warning message
+    warning_message = None
     # Add the new volumes to the relevant zones
     for row_dict in filtered_trips.to_dict(orient="records"):
         # Check if intrazonals should be included
@@ -1791,34 +1798,73 @@ def _build_addition_matrix(filtered_trips: pd.DataFrame,
         # Distribute using the underlying distribution in that sector
         row_dist = old_trips[bespoke_zone_idx, zone_idxs]
         col_dist = old_trips[zone_idxs, bespoke_zone_idx]
+        # Extract the trip that need to be distributed
+        trips_tot = {
+            "prods": row_dict["prod"],
+            "attrs": row_dict["attr"],
+            "ods_from": row_dict["dist_volume"],
+            "ods_to": row_dict["dist_volume"]
+        }
+        
+        # Handle case where all zero in the distribution data
+        keep_warning = (
+            "Not distributing some trips as 0 trips in original matrix"
+        )
+        replace_warning = (
+            "Evenly distributing some trips where there were 0 in the original"
+            " matrix"
+        )
+        if np.count_nonzero(row_dist) == 0:
+            # Replace wil all ones to remove any errors and distribute evenly
+            # if needed
+            row_dist = np.ones_like(row_dist)
+            # If we do not want to distribute these trips
+            if keep_zeros:
+                warning_message = keep_warning
+                trips_tot["prods"] = 0
+                trips_tot["ods_from"] = 0
+            else:
+                warning_message = replace_warning
+        if np.count_nonzero(col_dist) == 0:
+            # Replace wil all ones to remove any errors and distribute evenly
+            # if needed
+            col_dist = np.ones_like(col_dist)
+            # If we do not want to distribute these trips
+            if keep_zeros:
+                warning_message = keep_warning
+                trips_tot["attrs"] = 0
+                trips_tot["ods_to"] = 0
+            else:
+                warning_message = replace_warning
+                
         if purpose in consts.ALL_HB_P:
             # For HB - add both productions and attractions
             add_trips[bespoke_zone_idx, zone_idxs] += (
-                row_dict["prod"]
+                trips_tot["prods"]
                 * row_dist
                 / row_dist.sum()
             )
             add_trips[zone_idxs, bespoke_zone_idx] += (
-                row_dict["attr"]
+                trips_tot["attrs"]
                 * col_dist
                 / col_dist.sum()
             )
         elif row_dict["Direction"] == 1:
             # For NHB - use the direction and add the ODs
             add_trips[bespoke_zone_idx, zone_idxs] += (
-                row_dict["dist_volume"]
+                trips_tot["ods_from"]
                 * row_dist
                 / row_dist.sum()
             )
         elif row_dict["Direction"] == 2:
             add_trips[zone_idxs, bespoke_zone_idx] += (
-                row_dict["dist_volume"]
+                trips_tot["ods_to"]
                 * col_dist
                 / col_dist.sum()
             )
         else:
             raise ValueError("Invalid Purpose or Direction")
-    return add_trips
+    return add_trips, warning_message
 
 
 def _constrain_to_sector_total(trip_matrix: np.array,
@@ -1944,6 +1990,8 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
     additions = []
     # For storing info on any matrices that needed to be skipped
     skipped = []
+    # Store any warning message here
+    warning_message = None
     # Extract the required segmentation from the generation data
     year_list = converted_trips["Year"].unique()
     purps = converted_trips["Purpose"].unique()
@@ -2025,12 +2073,14 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                 raise ValueError("Error: Inconsistent Constraint Type")
             constraint_type = constraint_type[0]
 
-            add_trips = _build_addition_matrix(
+            add_trips, warning_returned = _build_addition_matrix(
                 filtered_trips,
                 sector_data,
                 trips,
                 purp
             )
+            if warning_returned is not None:
+                warning_message = warning_returned
 
             additions.append([
                 year, purp, mode, ca, segment, trips.sum(), add_trips.sum()
@@ -2070,6 +2120,9 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                 columns=trips_df.columns
             )
             new_trips_df.to_csv(new_matrix_path)
+    # Raise the warning on replacing zeros
+    if warning_message is not None:
+        warnings.warn(warning_message)
     additions = pd.DataFrame(
         additions,
         columns=["Year", "Purp", "Mode", "CA", "Segment", "Old Trips",
