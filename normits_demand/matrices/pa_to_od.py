@@ -338,6 +338,7 @@ def efs_build_tp_pa(pa_import: str,
                 'car_availability': ca
             })
             kwargs_list.append(kwargs)
+    process_count = 0
 
     # Multiprocess - split by time period and write to disk
     multiprocessing.multiprocess(

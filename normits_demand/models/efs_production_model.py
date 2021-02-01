@@ -2432,7 +2432,8 @@ def generate_productions(population: pd.DataFrame,
     return productions
 
 
-# BACKLOG: Point code to get_production_time_split in TMS
+# BACKLOG: Point code to here get_production_time_split()
+#  this is more updated and flexible
 #  labels: demand merge, EFS
 def get_production_time_split(productions,
                               non_split_cols,

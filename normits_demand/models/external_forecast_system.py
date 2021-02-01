@@ -1083,10 +1083,71 @@ class ExternalForecastSystem:
 
         return pop_translation, emp_translation
 
+    def _get_time_splits_from_p_vector(self,
+                                       trip_origin: str,
+                                       years_needed: List[int] = consts.ALL_YEARS,
+                                       ignore_cache: bool = False,
+                                       ) -> pd.DataFrame:
+        # TODO: cache!
+        # TODO: check trip_origin is valid
+        # If the file already exists, just return that
+        file_type = '%s_tp_splits' % trip_origin
+        fname = consts.PRODS_FNAME % (self.output_zone_system, file_type)
+        output_path = os.path.join(self.exports['productions'], fname)
+        if not ignore_cache and os.path.exists(output_path):
+            return pd.read_csv(output_path)
+
+        # Init
+        yr_cols = [str(x) for x in years_needed]
+        base_zone_col = "%s_zone_id"
+        input_zone_col = base_zone_col % self.input_zone_system.lower()
+        output_zone_col = base_zone_col % self.output_zone_system
+
+        # Figure out the segmentation to keep
+        seg_level = du.validate_seg_level('tfn')
+        seg_cols = du.get_seg_level_cols(seg_level,
+                                         keep_ca=self.is_ca_needed)
+        non_split_cols = [input_zone_col] + seg_cols
+
+        # Read in raw production to get time period splits from
+        file_type = 'raw_%s' % trip_origin
+        fname = consts.PRODS_FNAME % (self.input_zone_system, file_type)
+        raw_prods_path = os.path.join(self.exports['productions'], fname)
+        productions = pd.read_csv(raw_prods_path)
+
+        # Filter down to just the segmentation we need
+        group_cols = non_split_cols.copy()
+        index_cols = non_split_cols + yr_cols
+
+        productions = productions.reindex(columns=index_cols)
+        productions = productions.groupby(group_cols).sum().reset_index()
+
+        # Translate to the correct zoning system
+        pop_translation, _ = self.get_translation_dfs()
+
+        group_cols = list(productions.columns)
+        group_cols = du.list_safe_remove(group_cols, yr_cols)
+        productions = self.zone_translator.run(
+            productions,
+            pop_translation,
+            self.input_zone_system,
+            self.output_zone_system,
+            non_split_cols=group_cols
+        )
+
+        # Extract the time splits
+        non_split_cols = [output_zone_col] + seg_cols
+        tp_splits = pm.get_production_time_split(productions,
+                                                 non_split_cols=non_split_cols,
+                                                 data_cols=yr_cols)
+
+        # Write the time period splits to disk
+        tp_splits.to_csv(output_path, index=False)
+
     def pa_to_od(self,
                  years_needed: List[int] = consts.ALL_YEARS,
                  m_needed: List[int] = consts.MODES_NEEDED,
-                 p_needed: List[int] = consts.PURPOSES_NEEDED,
+                 p_needed: List[int] = consts.ALL_P,
                  soc_needed: List[int] = consts.SOC_NEEDED,
                  ns_needed: List[int] = consts.NS_NEEDED,
                  ca_needed: List[int] = consts.CA_NEEDED,
@@ -1134,96 +1195,72 @@ class ExternalForecastSystem:
         """
         # Init
         _input_checks(m_needed=m_needed)
-        yr_cols = [str(x) for x in years_needed]
         base_zone_col = "%s_zone_id"
-        input_zone_col = base_zone_col % self.input_zone_system.lower()
         output_zone_col = base_zone_col % self.output_zone_system
 
         if not self.is_ca_needed:
             ca_needed = None
 
+        # Split into hb and nhb purposes
+        hb_p_needed = list()
+        nhb_p_needed = list()
+        for p in p_needed:
+            if p in consts.ALL_HB_P:
+                hb_p_needed.append(p)
+            elif p in consts.ALL_NHB_P:
+                nhb_p_needed.append(p)
+            else:
+                raise ValueError(
+                    "%s is not a valid HB or NHB purpose" % str(p)
+                )
+
         # TODO: Add time print outs
+        hb_nhb_iterator = zip(['hb', 'nhb'], [hb_p_needed, nhb_p_needed])
+        for trip_origin, to_p_needed in hb_nhb_iterator:
+            print("Running conversions for %s trips..." % trip_origin)
 
-        # TODO: Check if tp pa matrices exist first
-        if overwrite_hb_tp_pa:
-            # TODO: functionalise and cache!
-            # ## GET THE TIME PERIOD SPLITS ## #
-            # Figure out the segmentation to keep
-            seg_level = du.validate_seg_level('tfn')
-            seg_cols = du.get_seg_level_cols(seg_level,
-                                             keep_ca=self.is_ca_needed)
-            non_split_cols = [input_zone_col] + seg_cols
+            print("WARNING SKIPPING HB !!!!!!!!!")
+            if trip_origin == 'hb':
+                continue
 
-            # Read in raw production to get time period splits from
-            fname = consts.PRODS_FNAME % (self.input_zone_system, 'raw_hb')
-            raw_prods_path = os.path.join(self.exports['productions'], fname)
-            productions = pd.read_csv(raw_prods_path)
+            # TODO: Check if tp pa matrices exist first
+            if overwrite_hb_tp_pa:
+                tp_splits = self._get_time_splits_from_p_vector(trip_origin)
 
-            # Filter down to just the segmentation we need
-            group_cols = non_split_cols.copy()
-            index_cols = non_split_cols + yr_cols
+                print("Converting %s 24hr PA to time period split PA..." % trip_origin)
+                pa2od.efs_build_tp_pa(
+                    pa_import=self.exports['pa_24'],
+                    pa_export=self.exports['pa'],
+                    tp_splits=tp_splits,
+                    model_zone_col=output_zone_col,
+                    years_needed=years_needed,
+                    p_needed=to_p_needed,
+                    m_needed=m_needed,
+                    soc_needed=soc_needed,
+                    ns_needed=ns_needed,
+                    ca_needed=ca_needed
+                )
+                print('HB time period split PA matrices compiled!\n')
 
-            productions = productions.reindex(columns=index_cols)
-            productions = productions.groupby(group_cols).sum().reset_index()
-
-            # Translate to the correct zoning system
-            pop_translation, _ = self.get_translation_dfs()
-
-            group_cols = list(productions.columns)
-            group_cols = du.list_safe_remove(group_cols, yr_cols)
-            productions = self.zone_translator.run(
-                productions,
-                pop_translation,
-                self.input_zone_system,
-                self.output_zone_system,
-                non_split_cols=group_cols
-            )
-
-            # Extract the time splits
-            non_split_cols = [output_zone_col] + seg_cols
-            tp_splits = pm.get_production_time_split(productions,
-                                                     non_split_cols=non_split_cols,
-                                                     data_cols=yr_cols)
-
-            # Write the time period splits to disk
-            fname = consts.PRODS_FNAME % (self.output_zone_system, 'tp_splits')
-            output_path = os.path.join(self.exports['productions'], fname)
-            tp_splits.to_csv(output_path, index=False)
-
-            print("Converting HB 24hr PA to time period split PA...")
-            pa2od.efs_build_tp_pa(
-                pa_import=self.exports['pa_24'],
-                pa_export=self.exports['pa'],
-                tp_splits=tp_splits,
-                model_zone_col=output_zone_col,
-                years_needed=years_needed,
-                p_needed=p_needed,
-                m_needed=m_needed,
-                soc_needed=soc_needed,
-                ns_needed=ns_needed,
-                ca_needed=ca_needed
-            )
-            print('HB time period split PA matrices compiled!\n')
-
-        # TODO: Check if od matrices exist first
-        if overwrite_hb_tp_od:
-            print('Converting time period split PA to OD...')
-            pa2od.efs_build_od(
-                pa_import=self.exports['pa'],
-                od_export=self.exports['od'],
-                model_name=self.model_name,
-                p_needed=p_needed,
-                m_needed=m_needed,
-                soc_needed=soc_needed,
-                ns_needed=ns_needed,
-                ca_needed=ca_needed,
-                years_needed=years_needed,
-                phi_type='fhp_tp',
-                aggregate_to_wday=True,
-                echo=echo
-            )
-            print('HB OD matrices compiled!\n')
-            # TODO: Create 24hr OD for HB
+            # TODO: Check if od matrices exist first
+            if overwrite_hb_tp_od:
+                print('Converting time period split PA to OD...')
+                pa2od.efs_build_od(
+                    pa_import=self.exports['pa'],
+                    od_export=self.exports['od'],
+                    model_name=self.model_name,
+                    p_needed=to_p_needed,
+                    m_needed=m_needed,
+                    soc_needed=soc_needed,
+                    ns_needed=ns_needed,
+                    ca_needed=ca_needed,
+                    years_needed=years_needed,
+                    phi_type='fhp_tp',
+                    aggregate_to_wday=True,
+                    echo=echo
+                )
+                print('HB OD matrices compiled!\n')
+                # TODO: Create 24hr OD for HB
 
     def pre_me_compile_od_matrices(self,
                                    year: int = consts.BASE_YEAR,

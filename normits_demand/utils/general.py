@@ -1572,12 +1572,16 @@ def expand_distribution(dist: pd.DataFrame,
         dist[ca_col] = car_availability
 
     if not is_none_like(segment):
-        if purpose in [1, 2]:
+        if purpose in consts.SOC_P:
             dist[soc_col] = segment
             dist[ns_col] = 'none'
-        else:
+        elif purpose in consts.NS_P:
             dist[soc_col] = 'none'
             dist[ns_col] = segment
+        else:
+            raise ValueError(
+                "%s is not a valid HB or NHB purpose" % str(purpose)
+            )
 
     return dist
 
