@@ -11,7 +11,7 @@ from pathlib import Path
 import pandas as pd
 
 # Local imports
-from .utils import get_zone_translation
+from normits_demand.utils.general import get_zone_translation
 
 
 ##### FUNCTIONS #####
