@@ -64,12 +64,14 @@ P_STR2INT = {s: i for s, i in _p_str_int}
 P_INT2STR = {i: s for s, i in _p_str_int}
 
 # Valid levels of segmentation
-SEG_LEVELS = [
-    'tms',      # Distribution segmentation - only p/m
-    'me2',      # Compiled for Matrix Estimation. User classes + time periods
-    'vdm',      # Similar to ME but split by trip origin 3 HB, and 2 NHB
-    'tfn',      # Segment as much as possible - likely TfN segmentation
-]
+SEG_LEVEL_COLS = {
+    'tms': ['p', 'tp'],             # Distribution segmentation - only p/m
+    'me2': ['uc', 'tp'],            # Compiled for Matrix Estimation. User classes + time periods
+    'vdm': ['uc', 'tp'],            # Similar to ME but split by trip origin 3 HB, and 2 NHB
+    'tfn': ['p', 'm', 'soc', 'ns', 'ca', 'tp'],  # Segment as much as possible - likely TfN segmentation
+}
+
+SEG_LEVELS = list(SEG_LEVEL_COLS.keys())
 
 # Valid zoning systems
 ZONING_SYSTEMS = [

@@ -77,13 +77,14 @@ def simplify_time_period_splits(time_period_splits: pd.DataFrame):
 
 def _build_tp_pa_internal(pa_import,
                           pa_export,
+                          tp_splits,
+                          model_zone_col,
                           matrix_format,
                           year,
                           purpose,
                           mode,
                           segment,
                           car_availability,
-                          tp_import
                           ):
     """
     The internals of build_tp_pa(). Useful for making the code more
@@ -95,40 +96,19 @@ def _build_tp_pa_internal(pa_import,
     """
     # ## READ IN TIME PERIOD SPLITS FILE ## #
     if purpose in consts.ALL_NHB_P:
-        tp_split_fname = 'export_nhb_productions_norms.csv'
-        tp_split_path = os.path.join(tp_import, tp_split_fname)
         trip_origin = 'nhb'
-        model_zone = 'o_zone'
+        in_zone_col = 'o_zone'
     elif purpose in consts.ALL_HB_P:
-        tp_split_fname = 'export_productions_norms.csv'
-        tp_split_path = os.path.join(tp_import, tp_split_fname)
         trip_origin = 'hb'
-        model_zone = 'p_zone'
+        in_zone_col = 'p_zone'
     else:
         raise ValueError(
             "%s is neither a home based nor non-home based purpose."
             % str(purpose)
         )
 
-    # Read in the seed values for tp splits
-    tp_split = pd.read_csv(tp_split_path).rename(
-        columns={
-            'norms_zone_id': model_zone,
-            'p': 'purpose_id',
-            'm': 'mode_id',
-            'soc': 'soc_id',
-            'ns': 'ns_id',
-            'ca': 'car_availability_id',
-            'time': 'tp'
-        }
-    )
-    tp_split[model_zone] = tp_split[model_zone].astype(int)
-
-    # Aggregate to p/m if NHB
-    if trip_origin == 'nhb':
-        tp_split = tp_split.groupby(
-            [model_zone, 'purpose_id', 'mode_id', 'tp']
-        )['trips'].sum().reset_index()
+    # Rename model zone col to be more accurate
+    tp_splits = tp_splits.rename(columns={model_zone_col: in_zone_col})
 
     # ## Read in 24hr matrix ## #
     dist_fname = du.get_dist_name(
@@ -147,7 +127,7 @@ def _build_tp_pa_internal(pa_import,
     print("Working on splitting %s..." % dist_fname)
 
     # Convert from wide to long format
-    y_zone = 'a_zone' if model_zone == 'p_zone' else 'd_zone'
+    out_zone_col = 'a_zone' if in_zone_col == 'p_zone' else 'd_zone'
     pa_24hr = du.expand_distribution(
         pa_24hr,
         year,
@@ -155,74 +135,76 @@ def _build_tp_pa_internal(pa_import,
         mode,
         segment,
         car_availability,
-        id_vars=model_zone,
-        var_name=y_zone,
+        id_vars=in_zone_col,
+        var_name=out_zone_col,
         value_name='trips'
     )
 
     # ## Narrow tp_split down to just the segment here ## #
-    segment_id = 'soc_id' if purpose in [1, 2] else 'ns_id'
+    segment_id = 'soc' if purpose in consts.SOC_P else 'ns'
     segmentation_mask = du.get_segmentation_mask(
-        tp_split,
+        tp_splits,
         col_vals={
-            'purpose_id': purpose,
-            'mode_id': mode,
+            'yr': year,
+            'p': purpose,
+            'm': mode,
             segment_id: str(segment),
-            'car_availability_id': car_availability,
+            'ca': car_availability,
         },
         ignore_missing_cols=True
     )
-    tp_split = tp_split.loc[segmentation_mask]
-    tp_split = tp_split.reindex([model_zone, 'tp', 'trips'], axis=1)
+    tp_splits = tp_splits.loc[segmentation_mask]
+    tp_splits = tp_splits.rename(columns={str(year): 'tp_split_factor'})
 
-    # ## Calculate the time split factors for each zone ## #
-    unq_zone = tp_split[model_zone].drop_duplicates()
-    for zone in unq_zone:
-        zone_mask = (tp_split[model_zone] == zone)
-        tp_split.loc[zone_mask, 'time_split'] = (
-                tp_split[zone_mask]['trips'].values
-                /
-                tp_split[zone_mask]['trips'].sum()
-        )
-    time_splits = tp_split.reindex(
-        [model_zone, 'tp', 'time_split'],
-        axis=1
-    )
+    # Drop either soc or ns, whichever is none is productions
+    if pa_24hr['soc'].dtype == object and pa_24hr['soc'].unique()[0] == 'none':
+        pa_24hr = pa_24hr.drop(columns=['soc'])
+        tp_splits = tp_splits.drop(columns=['soc'])
+
+        pa_24hr['ns'] = pa_24hr['ns'].astype(int)
+        tp_splits['ns'] = tp_splits['ns'].astype(int)
+
+    if pa_24hr['ns'].dtype == object and pa_24hr['ns'].unique()[0] == 'none':
+        pa_24hr = pa_24hr.drop(columns=['ns'])
+        tp_splits = tp_splits.drop(columns=['ns'])
+
+        pa_24hr['soc'] = pa_24hr['soc'].astype(int)
+        tp_splits['soc'] = tp_splits['soc'].astype(int)
+
+    # ## Aggregate to tp_splits to match pa_24hr segmentation ## #
+    merge_cols = du.intersection(list(tp_splits), list(pa_24hr))
+    group_cols = merge_cols.copy() + ['tp']
+    index_cols = group_cols.copy() + ['tp_split_factor']
+
+    tp_splits = tp_splits.reindex(columns=index_cols)
+    tp_splits = tp_splits.groupby(group_cols).sum().reset_index()
 
     # ## Apply tp-split factors to total pa_24hr ## #
-    unq_time = time_splits['tp'].drop_duplicates()
+    unq_time = tp_splits['tp'].drop_duplicates()
     for time in unq_time:
-        # Need to do a left join, and set any missing vals. Ensures
-        # zones don't go missing if there's an issue with tp_split input
-        # NOTE: tp3 is missing for p2, m1, soc0, ca1
-        time_factors = time_splits.loc[time_splits['tp'] == time]
-        gb_tp = pd.merge(
+        # Left join to make sure we don't drop any demand
+        time_factors = tp_splits[tp_splits['tp'] == time]
+        tp_split_pa = pd.merge(
             pa_24hr,
             time_factors,
-            on=[model_zone],
+            on=merge_cols,
             how='left'
-        ).rename(columns={'trips': 'dt'})
-        gb_tp['time_split'] = gb_tp['time_split'].fillna(0)
-        gb_tp['tp'] = gb_tp['tp'].fillna(time).astype(int)
+        )
+
+        # Fill in any NaNs from the left join
+        tp_split_pa['tp_split_factor'] = tp_split_pa['tp_split_factor'].fillna(0)
+        tp_split_pa['tp'] = tp_split_pa['tp'].fillna(time).astype(int)
 
         # Calculate the number of trips for this time_period
-        gb_tp['dt'] = gb_tp['dt'] * gb_tp['time_split']
+        tp_split_pa['trips'] *= tp_split_pa['tp_split_factor']
 
         # ## Aggregate back up to our segmentation ## #
-        all_seg_cols = [
-            model_zone,
-            y_zone,
-            "purpose_id",
-            "mode_id",
-            "soc_id",
-            "ns_id",
-            "car_availability_id",
-            "tp"
-        ]
+        seg_cols = du.list_safe_remove(merge_cols, [in_zone_col])
+        group_cols = [in_zone_col, out_zone_col] + seg_cols + ['tp']
+        index_cols = group_cols.copy() + ['trips']
 
-        # Get rid of cols we're not using
-        seg_cols = [x for x in all_seg_cols if x in gb_tp.columns]
-        gb_tp = gb_tp.groupby(seg_cols)["dt"].sum().reset_index()
+        tp_split_pa = tp_split_pa.reindex(columns=index_cols)
+        tp_split_pa = tp_split_pa.groupby(group_cols).sum().reset_index()
 
         # Build write path
         tp_pa_name = du.get_dist_name(
@@ -242,19 +224,20 @@ def _build_tp_pa_internal(pa_import,
         )
 
         # Convert table from long to wide format and save
-        # TODO: Generate header based on mode used
+        # TODO: Generate header based on model used
         du.long_to_wide_out(
-            gb_tp.rename(columns={model_zone: zoning_system}),
+            tp_split_pa.rename(columns={in_zone_col: zoning_system}),
             v_heading=zoning_system,
-            h_heading=y_zone,
-            values='dt',
+            h_heading=out_zone_col,
+            values='trips',
             out_path=out_tp_pa_path
         )
 
 
-def efs_build_tp_pa(tp_import: str,
-                    pa_import: str,
+def efs_build_tp_pa(pa_import: str,
                     pa_export: str,
+                    tp_splits: pd.DataFrame,
+                    model_zone_col: str,
                     years_needed: List[int],
                     p_needed: List[int],
                     m_needed: List[int],
@@ -262,7 +245,7 @@ def efs_build_tp_pa(tp_import: str,
                     ns_needed: List[int] = None,
                     ca_needed: List[int] = None,
                     matrix_format: str = 'pa',
-                    process_count: int = -2
+                    process_count: int = consts.PROCESS_COUNT
                     ) -> None:
     """
     Converts the 24hr matrices in pa_import into time_period segmented
@@ -270,15 +253,19 @@ def efs_build_tp_pa(tp_import: str,
 
     Parameters
     ----------
-    tp_import:
-        Path to the dir containing the seed values to use for splitting
-        pa_import matrices by tp
-
     pa_import:
         Path to the directory containing the 24hr matrices
 
     pa_export:
         Path to the directory to export the tp split matrices
+
+    tp_splits:
+        pandas DataFrame containing the time period splitting factors. The
+        more segmented this dataframe is, the better the splitting will be
+
+    model_zone_col:
+        The name of the column in tp_splits that contains the model zone
+        information
 
     years_needed:
         A list of which years of 24hr Matrices to convert.
@@ -326,7 +313,8 @@ def efs_build_tp_pa(tp_import: str,
         'pa_import': pa_import,
         'pa_export': pa_export,
         'matrix_format': matrix_format,
-        'tp_import': tp_import
+        'tp_splits': tp_splits,
+        'model_zone_col': model_zone_col,
     }
 
     # Build a list of the changing arguments

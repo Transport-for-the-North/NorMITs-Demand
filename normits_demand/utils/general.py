@@ -18,6 +18,7 @@ import re
 import shutil
 import random
 
+
 import pandas as pd
 import numpy as np
 
@@ -63,6 +64,46 @@ class ExternalForecastSystemError(NormitsDemandError):
     def __init__(self, message=None):
         self.message = message
         super().__init__(self.message)
+
+
+def get_seg_level_cols(seg_level: str,
+                       keep_ca: bool = True,
+                       keep_tp: bool = True,
+                       ) -> List[str]:
+    """
+    Returns the column names used by the given segmentation
+
+    Parameters
+    ----------
+    seg_level:
+        The name of the segmentation level to get columns for
+
+    keep_ca:
+        Whether to keep ca segmentation in the return or not. If ca does not
+        exist for seg_level, this arg is ignored.
+
+    keep_tp:
+        Whether to keep tp segmentation in the return or not. If tp does not
+        exist for seg_level, this arg is ignored.
+
+
+    Returns
+    -------
+    seg_cols:
+        A list of columns names for the given seg_level
+    """
+    # Init
+    seg_level = validate_seg_level(seg_level)
+    seg_cols = consts.SEG_LEVEL_COLS[seg_level]
+
+    # Remove cols if asked to and they exist
+    if not keep_ca:
+        seg_cols = list_safe_remove(seg_cols, ['ca'])
+
+    if not keep_tp:
+        seg_cols = list_safe_remove(seg_cols, ['tp'])
+
+    return seg_cols
 
 
 def validate_seg_level(seg_level: str) -> str:
@@ -1487,12 +1528,12 @@ def expand_distribution(dist: pd.DataFrame,
                         id_vars='p_zone',
                         var_name='a_zone',
                         value_name='trips',
-                        year_col: str = 'year',
-                        purpose_col: str = 'purpose_id',
-                        mode_col: str = 'mode_id',
-                        soc_col: str = 'soc_id',
-                        ns_col: str = 'ns_id',
-                        ca_col: str = 'car_availability_id',
+                        year_col: str = 'yr',
+                        purpose_col: str = 'p',
+                        mode_col: str = 'm',
+                        soc_col: str = 'soc',
+                        ns_col: str = 'ns',
+                        ca_col: str = 'ca',
                         int_conversion: bool = True
                         ) -> pd.DataFrame:
     """
@@ -2031,7 +2072,8 @@ def long_to_wide_out(df: pd.DataFrame,
                      h_heading: str,
                      values: str,
                      out_path: str,
-                     unq_zones: List[str] = None
+                     unq_zones: List[str] = None,
+                     round: int = 4,
                      ) -> None:
     """
     Converts a long format pd.Dataframe, converts it to long and writes
@@ -2061,10 +2103,16 @@ def long_to_wide_out(df: pd.DataFrame,
         If left as None, it assumes all zones in the range 1 to max zone number
         should exist.
 
+    round:
+        The number of decimal places to round the output to
+
     Returns
     -------
         None
     """
+    # Init
+    df = df.copy()
+
     # Get the unique column names
     if unq_zones is None:
         unq_zones = df[v_heading].drop_duplicates().reset_index(drop=True).copy()
@@ -2076,12 +2124,15 @@ def long_to_wide_out(df: pd.DataFrame,
         index_dict={v_heading: unq_zones, h_heading: unq_zones},
     )
 
-    # Convert to wide format and output
-    df.pivot(
+    # Convert to wide format and round
+    df = df.pivot(
         index=v_heading,
         columns=h_heading,
         values=values
-    ).to_csv(out_path)
+    ).round(4)
+
+    # Finally, write to disk
+    df.to_csv(out_path)
 
 
 def wide_to_long_out(df: pd.DataFrame,

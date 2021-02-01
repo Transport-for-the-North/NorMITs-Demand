@@ -2435,26 +2435,61 @@ def generate_productions(population: pd.DataFrame,
 # BACKLOG: Point code to get_production_time_split in TMS
 #  labels: demand merge, EFS
 def get_production_time_split(productions,
-                              model_zone):
+                              non_split_cols,
+                              tp_col: str = 'tp',
+                              data_cols: List[str] = None,
+                              ) -> pd.DataFrame:
     """
-    productions : production vector
-    model_zone : col name
+    # TODO: Write get_production_time_split() docs
+
+    Parameters
+    ----------
+    productions
+    non_split_cols
+    tp_col
+    data_cols
+
+    Returns
+    -------
+
     """
-    p_totals = productions.reindex(
-        [model_zone, 'trips'], axis=1).groupby(
-        model_zone).sum().reset_index()
-    p_totals = p_totals.rename(columns={'trips': 'p_totals'})
-    tp_totals = productions.reindex(
-        [model_zone,
-         'tp',
-         'trips'],
-        axis=1).groupby(
-        [model_zone,
-         'tp']).sum().reset_index()
-    time_splits = tp_totals.merge(p_totals,
-                                  how='left',
-                                  on=[model_zone])
-    time_splits['time_split'] = (time_splits['trips'] / time_splits['p_totals'])
-    time_splits = time_splits.drop(['p_totals'], axis=1)
+    # Init
+    data_cols = ['trips'] if data_cols is None else data_cols
+
+    # Figure out which columns to keep, excluding tp
+    if tp_col in non_split_cols:
+        seg_cols = du.list_safe_remove(non_split_cols, [tp_col])
+    else:
+        seg_cols = non_split_cols.sopy()
+
+    # Get the totals per zone
+    group_cols = seg_cols
+    index_cols = group_cols.copy() + data_cols
+
+    p_totals = productions.reindex(columns=index_cols)
+    p_totals = p_totals.groupby(group_cols).sum().reset_index()
+
+    # Get tp splits per zone
+    group_cols = seg_cols + [tp_col]
+    index_cols = group_cols.copy() + data_cols
+
+    tp_totals = productions.reindex(columns=index_cols)
+    tp_totals = tp_totals.groupby(group_cols).sum().reset_index()
+
+    # Avoid name clashes on merge
+    rename_cols = {col: '%s_total' % col for col in data_cols}
+    p_totals = p_totals.rename(columns=rename_cols)
+
+    time_splits = pd.merge(
+        tp_totals,
+        p_totals,
+        how='left',
+        on=seg_cols,
+    )
+
+    # Calculate time splits per zone for each data col
+    for col in data_cols:
+        time_splits[col] /= time_splits['%s_total' % col]
+        time_splits = time_splits.drop(columns=['%s_total' % col])
 
     return time_splits

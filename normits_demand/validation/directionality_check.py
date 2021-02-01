@@ -20,7 +20,9 @@ def directionality_check(folder = _default_folder,
                          purpose_type = 'numeric',
                          subset_zones = [129],
                          purpose_subset = [4],
-                         mode_subset = ['mode3']):
+                         mode_subset = ['m3'],
+                         model_zone_col = 'o_zone'
+                         ):
 
     """
     Folder = path
@@ -56,7 +58,7 @@ def directionality_check(folder = _default_folder,
             if purpose_type == 'string':
                 p_sub = [x for x in mats if p in x]
             elif purpose_type == 'numeric':
-                p_sub = [x for x in mats if ('purpose' + str(p)) in x or ('purpose_' + str(p)) in x]
+                p_sub = [x for x in mats if ('p' + str(p)) in x or ('p_' + str(p)) in x]
             for t in tp:
                 row = {}
                 print(t)
@@ -68,11 +70,11 @@ def directionality_check(folder = _default_folder,
                     d_sub = [x for x in t_sub if dc in x]
                     
                     # Read
-                    mat = pd.read_csv(folder + '/' + d_sub[0])
+                    mat = pd.read_csv(os.path.join(folder, d_sub[0]))
                     
                     # Subset
-                    o_sub = mat[mat['o_zone']==z]
-                    o_sub = o_sub.drop('o_zone', axis=1)
+                    o_sub = mat[mat[model_zone_col]==z]
+                    o_sub = o_sub.drop(model_zone_col, axis=1)
                     
                     d_sub = mat[str(z)]
                     

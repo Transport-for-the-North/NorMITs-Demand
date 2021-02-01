@@ -65,7 +65,8 @@ def main():
     if run_hb_pa_to_od:
         # Convert to HB to OD
         efs.pa_to_od(
-            overwrite_hb_tp_pa=True,
+            years_needed=[2018],
+            overwrite_hb_tp_pa=False,
             overwrite_hb_tp_od=True,
             echo=verbose
         )
