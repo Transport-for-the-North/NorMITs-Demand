@@ -1144,6 +1144,8 @@ class ExternalForecastSystem:
         # Write the time period splits to disk
         tp_splits.to_csv(output_path, index=False)
 
+        return tp_splits
+
     def pa_to_od(self,
                  years_needed: List[int] = consts.ALL_YEARS,
                  m_needed: List[int] = consts.MODES_NEEDED,
@@ -1219,13 +1221,9 @@ class ExternalForecastSystem:
         for trip_origin, to_p_needed in hb_nhb_iterator:
             print("Running conversions for %s trips..." % trip_origin)
 
-            print("WARNING SKIPPING HB !!!!!!!!!")
-            if trip_origin == 'hb':
-                continue
-
             # TODO: Check if tp pa matrices exist first
             if overwrite_hb_tp_pa:
-                tp_splits = self._get_time_splits_from_p_vector(trip_origin)
+                tp_splits = self._get_time_splits_from_p_vector(trip_origin, ignore_cache=True)
 
                 print("Converting %s 24hr PA to time period split PA..." % trip_origin)
                 pa2od.efs_build_tp_pa(
