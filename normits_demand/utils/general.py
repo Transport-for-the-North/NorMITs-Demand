@@ -930,7 +930,7 @@ def copy_and_rename(src: str, dst: str) -> None:
 
     if not os.path.isfile(src):
         raise IOError("The given src file is not a file. Cannot handle "
-                         "directories.")
+                      "directories.")
 
     # If no filename given, don't need to rename - just use src filename
     if '.' not in os.path.basename(dst):

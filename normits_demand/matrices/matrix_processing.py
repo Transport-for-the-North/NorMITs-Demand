@@ -1273,7 +1273,7 @@ def build_compile_params(import_dir: str,
                          output_headers: List[str] = None,
                          output_format: str = 'wide',
                          output_fname: str = None
-                         ) -> None:
+                         ) -> str:
     """
     Create a compile_params file to be used with compile_od().
     In the future this should also work with compile_pa().
@@ -1327,7 +1327,8 @@ def build_compile_params(import_dir: str,
 
     Returns
     -------
-    None
+    compile_params_path:
+        The path to the compile parameters produced
     """
     # Error checking
     if len(m_needed) > 1:
@@ -1419,6 +1420,8 @@ def build_compile_params(import_dir: str,
             output_fname = du.get_compile_params_name(matrix_format, str(year))
         out_path = os.path.join(export_dir, output_fname)
         du.write_csv(output_headers, out_lines, out_path)
+
+        return out_path
 
 
 def build_24hr_vdm_mats(import_dir: str,
@@ -1660,7 +1663,35 @@ def build_24hr_mats(import_dir: str,
             full_mat.to_csv(os.path.join(export_dir, output_dist_name))
 
 
-def copy_nhb_matrices(import_dir: str, export_dir: str) -> None:
+def copy_nhb_matrices(import_dir: str,
+                      export_dir: str,
+                      replace_pa_with_od: bool = False,
+                      replace_od_with_pa: bool = False,
+                      ) -> None:
+    """
+    Copies NHB matrices from import dir to export dir.
+
+    Optionally replaces the pa in the matrix names with od, or the od in
+    matrix names in pa.
+
+    Parameters
+    ----------
+    import_dir:
+        Path to the directory where the nhb matrices to copy exist.
+    
+    export_dir:
+        Path to the directory to copy the nhb matrices to.
+    
+    replace_pa_with_od:
+        Whether to replace the '_pa_' in the matrix names with '_od_'.
+
+    replace_od_with_pa:
+        Whether to replace the '_od_' in the matrix names with '_pa_'.
+
+    Returns
+    -------
+    None
+    """
     # Find the .csv nhb mats
     mats = du.list_files(import_dir)
     mats = [x for x in mats if '.csv' in x]
@@ -1668,11 +1699,36 @@ def copy_nhb_matrices(import_dir: str, export_dir: str) -> None:
 
     # Copy them over without a rename
     for mat_fname in nhb_mats:
+        # Deal with the simple case
+        if not replace_pa_with_od and not replace_od_with_pa:
+            out_mat_fname = mat_fname
+
+        # Try to rename if needed
+        elif replace_pa_with_od:
+            if '_pa_' not in mat_fname:
+                raise ValueError(
+                    "Cannot find '_pa_' in '%s' to replace." % mat_fname
+                )
+            out_mat_fname = mat_fname.replace('_pa_', '_od_')
+
+        elif replace_od_with_pa:
+            if '_od_' not in mat_fname:
+                raise ValueError(
+                    "Cannot find '_od_' in '%s' to replace." % mat_fname
+                )
+            out_mat_fname = mat_fname.replace('_od_', '_pa_')
+        else:
+            raise ValueError(
+                "This shouldn't happen! Somehow replace_od_with_pa and "
+                "replace_pa_with_od are set and not set?!"
+            )
+
+        # Copy over and rename
         du.copy_and_rename(
             src=os.path.join(import_dir, mat_fname),
-            dst=export_dir
+            dst=os.path.join(export_dir, out_mat_fname),
         )
-
+        
 
 def compile_matrices(mat_import: str,
                      mat_export: str,
@@ -1766,6 +1822,7 @@ def compile_matrices(mat_import: str,
         for part_mat, mat_name in zip(in_mats, input_mat_names):
             # Avoid divide by zero
             part_mat = np.where(part_mat == 0, 0.0001, part_mat)
+            print(comp_name, mat_name)
             decompile_factors[comp_name][mat_name] = part_mat / full_mat
 
     # Write factors to disk if we made them

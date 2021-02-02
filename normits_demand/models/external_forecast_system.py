@@ -810,9 +810,10 @@ class ExternalForecastSystem:
             index=False
         )
 
-
-        # TODO: Is something weird going on with datatypes and making
-        #  this return 0 segemnts???
+        # BACKLOG: Us something weird going on with data types in
+        #  _handle_growth_criteria(), making it return 0 demand in
+        #  future years?
+        #  labels: bug, EFS
         if apply_growth_criteria:
             # Apply the growth criteria using the post-ME P/A vectors
             # (normal and exceptional zones)
@@ -1159,7 +1160,10 @@ class ExternalForecastSystem:
                  ) -> None:
         """
         Converts home based PA matrices into time periods split PA matrices,
-        then OD matrices (to_home, from_home, and full OD)
+        then OD matrices (to_home, from_home, and full OD).
+
+        NHB tp split PA matrices are simply copied and renamed as they are
+        already in OD format
 
         Parameters
         ----------
@@ -1240,25 +1244,33 @@ class ExternalForecastSystem:
                 )
                 print('HB time period split PA matrices compiled!\n')
 
-            # TODO: Check if od matrices exist first
-            if overwrite_hb_tp_od:
-                print('Converting time period split PA to OD...')
-                pa2od.efs_build_od(
-                    pa_import=self.exports['pa'],
-                    od_export=self.exports['od'],
-                    model_name=self.model_name,
-                    p_needed=to_p_needed,
-                    m_needed=m_needed,
-                    soc_needed=soc_needed,
-                    ns_needed=ns_needed,
-                    ca_needed=ca_needed,
-                    years_needed=years_needed,
-                    phi_type='fhp_tp',
-                    aggregate_to_wday=True,
-                    echo=echo
-                )
-                print('HB OD matrices compiled!\n')
-                # TODO: Create 24hr OD for HB
+        # TODO: Check if od matrices exist first
+        if overwrite_hb_tp_od:
+            print('Converting time period split PA to OD...')
+            pa2od.efs_build_od(
+                pa_import=self.exports['pa'],
+                od_export=self.exports['od'],
+                model_name=self.model_name,
+                p_needed=hb_p_needed,
+                m_needed=m_needed,
+                soc_needed=soc_needed,
+                ns_needed=ns_needed,
+                ca_needed=ca_needed,
+                years_needed=years_needed,
+                phi_type='fhp_tp',
+                aggregate_to_wday=True,
+                echo=echo
+            )
+
+            # Copy over NHB matrices as they are already in NHB format
+            mat_p.copy_nhb_matrices(
+                import_dir=self.exports['pa'],
+                export_dir=self.exports['od'],
+                replace_pa_with_od=True,
+            )
+
+            print('HB OD matrices compiled!\n')
+            # TODO: Create 24hr OD for HB
 
     def pre_me_compile_od_matrices(self,
                                    year: int = consts.BASE_YEAR,
@@ -1267,7 +1279,7 @@ class ExternalForecastSystem:
                                    m_needed: List[int] = consts.MODES_NEEDED,
                                    tp_needed: List[int] = consts.TIME_PERIODS,
                                    overwrite_aggregated_od: bool = True,
-                                   overwrite_compiled_od: bool = True
+                                   overwrite_compiled_od: bool = True,
                                    ) -> None:
         """
         Compiles pre-ME OD matrices produced by EFS into User Class format
@@ -1300,14 +1312,6 @@ class ExternalForecastSystem:
         tp_needed:
             The time periods to use when compiling and aggregating OD matrices.
 
-        output_location:
-            The directory to create the new output directory in - a dir named
-            self._out_dir (NorMITs Demand) should exist here. Usually
-            a drive name e.g. Y:/
-
-        iter_num:
-            The number of the iteration being run.
-
         # TODO: Update docs once correct functionality exists
         overwrite_aggregated_od:
             Whether to generate aggregated od matrices or not.
@@ -1323,16 +1327,11 @@ class ExternalForecastSystem:
         # Init
         _input_checks(m_needed=m_needed)
 
-        # TODO: Dynamically set CA needed in EFS Init
-        if self.model_name == 'norms' or self.model_name == 'norms_2015':
+        if self.is_ca_needed:
             ca_needed = consts.CA_NEEDED
-        elif self.model_name == 'noham':
-            ca_needed = [None]
         else:
-            raise ValueError("Got an unexpected model name. Got %s, expected "
-                             "either 'norms', 'norms_2015' or 'noham'."
-                             % str(self.model_name))
-
+            ca_needed = [None]
+            
         if overwrite_aggregated_od:
             for matrix_format in ['od_from', 'od_to']:
                 mat_p.aggregate_matrices(
@@ -1359,22 +1358,20 @@ class ExternalForecastSystem:
             )
 
         if overwrite_compiled_od:
-            mat_p.build_compile_params(
+            compile_params_path = mat_p.build_compile_params(
                 import_dir=self.exports['aggregated_od'],
                 export_dir=self.params['compile'],
                 matrix_format='od',
                 years_needed=[year],
+                m_needed=m_needed,
                 ca_needed=ca_needed,
-                tp_needed=tp_needed
+                tp_needed=tp_needed,
             )
-
-            compile_params_fname = du.get_compile_params_name('od', str(year))
-            compile_param_path = os.path.join(self.params['compile'],
-                                              compile_params_fname)
-            du.compile_od(
-                od_folder=self.exports['aggregated_od'],
-                write_folder=self.exports['compiled_od'],
-                compile_param_path=compile_param_path,
+    
+            mat_p.compile_matrices(
+                mat_import=self.exports['aggregated_od'],
+                mat_export=self.exports['compiled_od'],
+                compile_params_path=compile_params_path,
                 build_factor_pickle=True,
                 factor_pickle_path=self.params['compile']
             )

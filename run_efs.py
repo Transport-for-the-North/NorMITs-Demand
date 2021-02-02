@@ -26,8 +26,8 @@ def main():
     recreate_attractions = False
     recreate_nhb_productions = False
 
-    run_hb_pa_to_od = True
-    run_compile_od = False
+    run_hb_pa_to_od = False
+    run_compile_od = True
     run_decompile_od = False
     run_future_year_compile_od = False
 
@@ -61,12 +61,11 @@ def main():
             echo_distribution=verbose,
         )
 
-    # TODO: Get PA2OD to compile HB and NHB mats
     if run_hb_pa_to_od:
         # Convert to HB to OD
         efs.pa_to_od(
             years_needed=[2050],
-            overwrite_hb_tp_pa=True,
+            overwrite_hb_tp_pa=False,
             overwrite_hb_tp_od=True,
             echo=verbose
         )
@@ -75,8 +74,9 @@ def main():
     if run_compile_od:
         # Compiles base year OD matrices
         efs.pre_me_compile_od_matrices(
+            year=2050,
             overwrite_aggregated_od=True,
-            overwrite_compiled_od=True
+            overwrite_compiled_od=True,
         )
 
     if run_decompile_od:
