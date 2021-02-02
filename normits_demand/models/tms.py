@@ -713,13 +713,13 @@ class TravelMarketSynthesiser:
     
             # Convert to vehicles
             if params['vehicle_demand']:
-                vo.people_vehicle_conversion(input_folder = os.path.join(params['base_directory'],
+                vo.people_vehicle_conversion(mat_import = os.path.join(params['base_directory'],
                                                  'NorMITs Synthesiser',
                                                  params['model_name'],
                                                  params['iteration'],
                                                  'Distribution Outputs',
                                                  'Compiled OD Matrices'),
-                                             export_folder = 'D:/',
+                                             mat_export = 'D:/',
                                              mode = '3',
                                              method = 'to_vehicles',
                                              hourly_average = True,

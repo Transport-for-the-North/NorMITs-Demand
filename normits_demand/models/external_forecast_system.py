@@ -35,6 +35,7 @@ from normits_demand.distribution import furness
 from normits_demand.reports import pop_emp_comparator
 
 from normits_demand.utils import general as du
+from normits_demand.utils import vehicle_occupancy as vo
 from normits_demand.utils import exceptional_growth as eg
 from normits_demand.utils import sector_reporter_v2 as sr_v2
 
@@ -1358,16 +1359,23 @@ class ExternalForecastSystem:
             )
 
         if overwrite_compiled_od:
-            compile_params_path = mat_p.build_compile_params(
-                import_dir=self.exports['aggregated_od'],
-                export_dir=self.params['compile'],
-                matrix_format='od',
-                years_needed=[year],
-                m_needed=m_needed,
-                ca_needed=ca_needed,
-                tp_needed=tp_needed,
-            )
-    
+            # Build the compile params for this model
+            if self.model_name == 'noham':
+                compile_params_path = mat_p.build_compile_params(
+                    import_dir=self.exports['aggregated_od'],
+                    export_dir=self.params['compile'],
+                    matrix_format='od',
+                    years_needed=[year],
+                    m_needed=m_needed,
+                    ca_needed=ca_needed,
+                    tp_needed=tp_needed,
+                )
+            else:
+                raise ValueError(
+                    "Not sure how to compile matrices for model %s"
+                    % self.model_name
+                )
+
             mat_p.compile_matrices(
                 mat_import=self.exports['aggregated_od'],
                 mat_export=self.exports['compiled_od'],
@@ -1375,6 +1383,19 @@ class ExternalForecastSystem:
                 build_factor_pickle=True,
                 factor_pickle_path=self.params['compile']
             )
+
+            # Need to convert into hourly average PCU for noham
+            if self.model_name == 'noham':
+                vo.people_vehicle_conversion(
+                    mat_import=self.exports['compiled_od'],
+                    mat_export=self.exports['compiled_od_pcu'],
+                    import_folder=self.imports['home'],
+                    mode=m_needed[0],
+                    method='to_vehicles',
+                    out_format='wide',
+                    hourly_average=True
+                )
+
 
     def generate_post_me_tour_proportions(self,
                                           model_name: str,

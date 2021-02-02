@@ -457,6 +457,7 @@ def build_io_paths(import_location: str,
     compiled = 'Compiled'
     aggregated = 'Aggregated'
     pa_24_bespoke = '24hr PA Matrices - Bespoke Zones'
+    pcu = 'PCU'
 
     exports = {
         'home': export_home,
@@ -474,6 +475,7 @@ def build_io_paths(import_location: str,
         'od_24': os.path.join(matrices_home, od_24),
 
         'compiled_od': os.path.join(matrices_home, ' '.join([compiled, od])),
+        'compiled_od_pcu': os.path.join(matrices_home, ' '.join([compiled, od, pcu])),
 
         'aggregated_pa_24': os.path.join(matrices_home, ' '.join([aggregated, pa_24])),
         'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
