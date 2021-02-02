@@ -26,7 +26,7 @@ def main():
     recreate_attractions = False
     recreate_nhb_productions = False
 
-    run_hb_pa_to_od = False
+    run_hb_pa_to_od = True
     run_compile_od = True
     run_decompile_od = False
     run_future_year_compile_od = False
@@ -64,8 +64,8 @@ def main():
     if run_hb_pa_to_od:
         # Convert to HB to OD
         efs.pa_to_od(
-            # years_needed=[2050],
-            years_needed=[2018],
+            years_needed=[2050],
+            use_bespoke_pa=True,
             overwrite_hb_tp_pa=True,
             overwrite_hb_tp_od=True,
             echo=verbose

@@ -1155,6 +1155,7 @@ class ExternalForecastSystem:
                  soc_needed: List[int] = consts.SOC_NEEDED,
                  ns_needed: List[int] = consts.NS_NEEDED,
                  ca_needed: List[int] = consts.CA_NEEDED,
+                 use_bespoke_pa: bool= True,
                  overwrite_hb_tp_pa: bool = True,
                  overwrite_hb_tp_od: bool = True,
                  echo: bool = True
@@ -1231,8 +1232,9 @@ class ExternalForecastSystem:
                 tp_splits = self._get_time_splits_from_p_vector(trip_origin, ignore_cache=True)
 
                 print("Converting %s 24hr PA to time period split PA..." % trip_origin)
+                pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24'
                 pa2od.efs_build_tp_pa(
-                    pa_import=self.exports['pa_24'],
+                    pa_import=self.exports[pa_import],
                     pa_export=self.exports['pa'],
                     tp_splits=tp_splits,
                     model_zone_col=output_zone_col,
