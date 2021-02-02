@@ -14,7 +14,7 @@ efs = nd.ExternalForecastSystem(
     import_home="Y:/",
     export_home="E:/",
     integrate_dlog=True,
-    scenario_name=consts.SC00_NTEM
+    scenario_name=consts.SC04_UZC
 )
 
 generation_file = (
