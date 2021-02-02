@@ -11,7 +11,7 @@ using the census journey to work data reformatted to model dimensions
 import pandas as pd # most of the heavy lifting
 import os # File ops
 
-from normits_demand.concurrency import multiprocessing_wrapper as mp
+from normits_demand.concurrency import multiprocessing as mp
 from normits_demand.distribution import gravity_model as gm # For distribution functions
 from normits_demand.utils import utils as nup # Folder management, reindexing, optimisation
 

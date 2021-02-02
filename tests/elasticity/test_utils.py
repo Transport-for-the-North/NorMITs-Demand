@@ -14,7 +14,7 @@ import pandas as pd
 import numpy as np
 
 # Local imports
-from elasticity_calcs import utils as eu
+from normits_demand.elasticity import utils as eu
 
 
 ##### CONSTANTS #####

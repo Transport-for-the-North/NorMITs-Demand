@@ -17,9 +17,9 @@ import pandas as pd
 from openpyxl import Workbook
 
 # Local imports
-from pop_emp_comparator import PopEmpComparator, _excel_column_format
-from demand_utilities import utils as du
-from external_forecast_system import ExternalForecastSystem
+from normits_demand.reports import pop_emp_comparator as pec
+from normits_demand.utils import general as du
+from normits_demand import ExternalForecastSystem
 
 
 ##### CONSTANTS #####
@@ -77,7 +77,11 @@ BASE_DATA = pd.DataFrame(
     {ZONE_COL: TEST_MSOAS, BASE_YEAR: np.random.randint(1, 10000, 5)}
 )
 GROWTH_DATA = pd.DataFrame(
-    {ZONE_COL: TEST_MSOAS, YEARS[0]: np.random.rand(5), YEARS[1]: np.random.rand(5)}
+    {
+        ZONE_COL: TEST_MSOAS,
+        YEARS[0]: np.random.rand(5),
+        YEARS[1]: np.random.rand(5),
+    }
 )
 CONSTRAINT_DATA = pd.DataFrame(
     {
@@ -116,7 +120,9 @@ SECTOR_LOOKUP = pd.DataFrame(
 
 
 ##### FUNCTIONS #####
-@pytest.mark.skip(reason="test on real data which can be run by running this module")
+@pytest.mark.skip(
+    reason="test on real data which can be run by running this module"
+)
 def test_real_data():
     """Tests the PopEmpComparator class on data from previous run of EFS. """
     imports, exports, _ = du.build_io_paths(
@@ -135,7 +141,7 @@ def test_real_data():
     worker_constraint_file = "employment/future_workers_growth_values.csv"
 
     # Compare the population inputs and outputs
-    pop_comp = PopEmpComparator(
+    pop_comp = pec.PopEmpComparator(
         imports["home"],
         os.path.join(imports["default_inputs"], population_growth_file),
         os.path.join(imports["default_inputs"], population_constraint_file),
@@ -146,10 +152,14 @@ def test_real_data():
             imports["zoning"], "tfn_sector_msoa_pop_weighted_lookup.csv"
         ),
     )
-    pop_comp.write_comparisons(exports["reports"], output_as="csv", year_col=True)
-    pop_comp.write_comparisons(exports["reports"], output_as="excel", year_col=True)
+    pop_comp.write_comparisons(
+        exports["reports"], output_as="csv", year_col=True
+    )
+    pop_comp.write_comparisons(
+        exports["reports"], output_as="excel", year_col=True
+    )
     # Compare the employment inputs and outputs
-    emp_comp = PopEmpComparator(
+    emp_comp = pec.PopEmpComparator(
         imports["home"],
         os.path.join(imports["default_inputs"], worker_growth_file),
         os.path.join(imports["default_inputs"], worker_constraint_file),
@@ -160,8 +170,12 @@ def test_real_data():
             imports["zoning"], "tfn_sector_msoa_emp_weighted_lookup.csv"
         ),
     )
-    emp_comp.write_comparisons(exports["reports"], output_as="csv", year_col=True)
-    emp_comp.write_comparisons(exports["reports"], output_as="excel", year_col=True)
+    emp_comp.write_comparisons(
+        exports["reports"], output_as="csv", year_col=True
+    )
+    emp_comp.write_comparisons(
+        exports["reports"], output_as="excel", year_col=True
+    )
     return
 
 
@@ -185,14 +199,16 @@ def test_excel_column_format(style: str, ignore_rows: int):
     for r in range(rows):
         ws.cell(row=r + 1, column=1, value=np.random.randint(100))
 
-    _excel_column_format(ws, [style], ignore_rows=ignore_rows)
+    pec._excel_column_format(ws, [style], ignore_rows=ignore_rows)
 
     style = "Normal" if style is None else style
     # Check styles
     for r in range(rows):
         this_style = "Normal" if r < ignore_rows else style
         new_style = ws.cell(row=r + 1, column=1).style
-        assert new_style == this_style, f"'{new_style}' != '{this_style}' for row {r}"
+        assert (
+            new_style == this_style
+        ), f"'{new_style}' != '{this_style}' for row {r}"
 
 
 @pytest.fixture(name="test_files", scope="module")
@@ -212,7 +228,8 @@ def fixture_test_files(tmp_path_factory) -> Dict[str, Path]:
     tmpdir = tmp_path_factory.mktemp("pop_emp_comparator")
     paths = {
         "base_population": tmpdir / "land use/land_use_output_msoa.csv",
-        "base_employment": tmpdir / f"attractions/non_freight_msoa_{BASE_YEAR}.csv",
+        "base_employment": tmpdir
+        / f"attractions/non_freight_msoa_{BASE_YEAR}.csv",
         "growth": tmpdir / "growth_data.csv",
         "constraint": tmpdir / "constraint_data.csv",
         "sector_lookup": tmpdir / "sector_lookup.csv",
@@ -243,6 +260,7 @@ def fixture_test_files(tmp_path_factory) -> Dict[str, Path]:
         Path("tfn_segment_production_params/hb_mode_split.csv"),
         Path("attractions/attraction_mode_split.csv"),
         Path(f"attractions/soc_2_digit_sic_{BASE_YEAR}.csv"),
+        Path("default/zoning/msoa_zones.csv"),
     ]
     for path in files:
         path = tmpdir / path
@@ -256,7 +274,9 @@ def fixture_test_files(tmp_path_factory) -> Dict[str, Path]:
 
 
 @pytest.fixture(name="initialise_class")
-def fixture_initialise_class(test_files: pytest.fixture) -> Dict[str, PopEmpComparator]:
+def fixture_initialise_class(
+    test_files: pytest.fixture,
+) -> Dict[str, pec.PopEmpComparator]:
     """Initialise the PopEmpComarator class for both "population" and "employment".
 
     Parameters
@@ -272,7 +292,7 @@ def fixture_initialise_class(test_files: pytest.fixture) -> Dict[str, PopEmpComp
     """
     comparators = {}
     for i in ("population", "employment"):
-        comparators[i] = PopEmpComparator(
+        comparators[i] = pec.PopEmpComparator(
             test_files[f"base_{i}"],
             test_files["growth"],
             test_files["constraint"],
@@ -316,7 +336,9 @@ def test_initialisation(
         base_data = base_data[["geo_code", BASE_YEAR]].rename(
             columns={"geo_code": "msoa_zone_id"}
         )
-    pd.testing.assert_frame_equal(instance.input_data, base_data, check_dtype=False)
+    pd.testing.assert_frame_equal(
+        instance.input_data, base_data, check_dtype=False
+    )
     pd.testing.assert_frame_equal(
         instance.constraint_data, CONSTRAINT_DATA, check_dtype=False
     )
@@ -326,7 +348,9 @@ def test_initialisation(
     normalised = GROWTH_DATA.copy()
     for y in YEARS:
         normalised[y] = normalised[y] / GROWTH_DATA[BASE_YEAR]
-    pd.testing.assert_frame_equal(instance.growth_data, normalised, check_dtype=False)
+    pd.testing.assert_frame_equal(
+        instance.growth_data, normalised, check_dtype=False
+    )
 
 
 ##### MAIN #####

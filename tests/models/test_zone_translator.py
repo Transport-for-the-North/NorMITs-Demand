@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 # Local imports
-from zone_translator import translate_matrix, MatrixTotalError
+from normits_demand.models import efs_zone_translator as zt
 
 
 ##### CLASSES #####
@@ -53,7 +53,7 @@ class TestTranslateMatrix:
         expected: pd.DataFrame,
     ):
         """Test that the translation doesn't change the matrix total. """
-        test, _ = translate_matrix(
+        test, _ = zt.translate_matrix(
             mat, lookup, lookup_cols, split_column=split_col
         )
         assert np.sum(test.values) == np.sum(expected.values)
@@ -62,8 +62,8 @@ class TestTranslateMatrix:
         """Test that the correct error is raised if changes matrix total changes. """
         lookup = self.NORMS_2_NOHAM.copy()
         lookup["split"] = [0.8, 0.3, 1]
-        with pytest.raises(MatrixTotalError) as e:
-            translate_matrix(
+        with pytest.raises(zt.MatrixTotalError) as e:
+            zt.translate_matrix(
                 self.NORMS_MAT,
                 lookup,
                 ["norms", "noham"],
@@ -82,7 +82,7 @@ class TestTranslateMatrix:
         expected: pd.DataFrame,
     ):
         """Test that the translations works correctly between two test matrices. """
-        test, _ = translate_matrix(
+        test, _ = zt.translate_matrix(
             mat, lookup, lookup_cols, split_column=split_col
         )
         pd.testing.assert_frame_equal(test, expected)
@@ -106,7 +106,7 @@ class TestTranslateMatrix:
                 m.sort_values(["o", "d"]).reset_index(drop=True)
             )
 
-        test, _ = translate_matrix(
+        test, _ = zt.translate_matrix(
             list_matrices[0],
             lookup,
             lookup_cols,
@@ -130,7 +130,7 @@ class TestTranslateMatrix:
         expected: pd.DataFrame,
     ):
         """Test that the translation correctly produces reverse lookup."""
-        test, reverse = translate_matrix(
+        test, reverse = zt.translate_matrix(
             mat,
             lookup,
             lookup_cols,
