@@ -18,7 +18,7 @@ from openpyxl import Workbook
 
 # Local imports
 from normits_demand.reports import pop_emp_comparator as pec
-from normits_demand.utils import utils as du
+from normits_demand.utils import general as du
 from normits_demand import ExternalForecastSystem
 
 
