@@ -7,8 +7,11 @@ Also works the opposite way to get person trips from vehicle trips
 @author: genie
 """
 
-import pandas as pd # most of the heavy lifting
-import os # File ops
+import os
+
+import pandas as pd
+
+from tqdm import tqdm
 
 # File paths
 _default_home_dir = 'Y:/NorMITs Synthesiser/Noham'
@@ -27,36 +30,45 @@ _default_folder = ('Y:/NorMITs Synthesiser/Noham/' +
                    _default_iter +
                    '/Distribution Outputs/OD Matrices')
 
-def people_vehicle_conversion(input_folder = _default_folder,
-                              import_folder = _import_folder,
-                              export_folder = None,
-                              mode = '3',
-                              method = 'to_vehicles',
-                              hourly_average = True,
-                              out_format = 'long',
-                              header = True,
-                              write = True):
+
+def people_vehicle_conversion(mat_import: str,
+                              import_folder: str,
+                              mat_export: str,
+                              mode: int,
+                              method: str = 'to_vehicles',
+                              hourly_average: bool = True,
+                              out_format: str = 'long',
+                              header: bool = True,
+                              write: bool = True
+                              ) -> None:
+    # TODO: Write people_vehicle_conversion() docs
 
     # TODO: Add refactor up to totals after conversion
     if method not in ['to_vehicles', 'to_people']:
         raise ValueError('method should be to_vehicles or to_people')
 
-    file_sys = os.listdir(input_folder)
+    file_sys = os.listdir(mat_import)
 
     # Should be isin and take list
-    internal_file = [x for x in file_sys if ('m' + mode) in x]
+    m_str = 'm' + str(mode)
+    internal_file = [x for x in file_sys if m_str in x]
 
     c_o = pd.read_csv(import_folder + '/vehicle_occupancies/car_vehicle_occupancies.csv')
 
     # read in
     tps = ['tp1', 'tp2', 'tp3', 'tp4']
 
-    period_hours = {1:3, 2:6, 3:3, 4:12}
+    period_hours = {
+        1: 3,
+        2: 6,
+        3: 3,
+        4: 12
+    }
 
     # Define purpose lookup list
-    purpose_lookup = [['commute','commuting'],
-                      ['business','work'],
-                      ['other','other']]
+    purpose_lookup = [['commute', 'commuting'],
+                      ['business', 'work'],
+                      ['other', 'other']]
 
     # If people to vehicles, export to vehicle export
 
@@ -86,7 +98,7 @@ def people_vehicle_conversion(input_folder = _default_folder,
             for f_loop in tp_mat:
 
                 # print(input_folder + '/' + f_loop)
-                ph_mat = pd.read_csv(input_folder + '/' + f_loop)
+                ph_mat = pd.read_csv(mat_import + '/' + f_loop)
 
                 cols = list(ph_mat)[1:-1]
 
@@ -106,7 +118,7 @@ def people_vehicle_conversion(input_folder = _default_folder,
                             ph_mat[col] = ph_mat[col] * p_factor
                         ph_mat[col] = ph_mat[col] * factor
 
-                export_path = (export_folder + '/' + f_loop)
+                export_path = (mat_export + '/' + f_loop)
                 # print(export_path)
 
                 if out_format == 'long':

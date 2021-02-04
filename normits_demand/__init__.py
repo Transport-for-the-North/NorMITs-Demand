@@ -1,9 +1,9 @@
 from .version import __version__
 
-# ## EXPOSE CLASS LAYER ## #
 # NorMITs Demand Errors
 from normits_demand.audits.audits import AuditError
 
+# ## EXPOSE CLASS LAYER ## #
 # EFS Class Layer
 from normits_demand.models.external_forecast_system import ExternalForecastSystem
 from normits_demand.models.efs_production_model import EFSProductionGenerator

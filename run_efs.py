@@ -21,19 +21,19 @@ def main():
     # Running control
     integrate_dlog = False
 
-    run_base_efs = False
-    recreate_productions = False
-    recreate_attractions = False
-    recreate_nhb_productions = False
+    run_base_efs = True
+    recreate_productions = True
+    recreate_attractions = True
+    recreate_nhb_productions = True
 
-    run_hb_pa_to_od = True
+    run_hb_pa_to_od = False
     run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC04_UZC
-    iter_num = 1
+    scenario = consts.SC00_NTEM
+    iter_num = 0
     import_home = "Y:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
@@ -61,10 +61,11 @@ def main():
             echo_distribution=verbose,
         )
 
-    # TODO: Get PA2OD to compile HB and NHB mats
     if run_hb_pa_to_od:
         # Convert to HB to OD
         efs.pa_to_od(
+            years_needed=[2050],
+            use_bespoke_pa=True,
             overwrite_hb_tp_pa=True,
             overwrite_hb_tp_od=True,
             echo=verbose
@@ -74,8 +75,9 @@ def main():
     if run_compile_od:
         # Compiles base year OD matrices
         efs.pre_me_compile_od_matrices(
-            overwrite_aggregated_od=True,
-            overwrite_compiled_od=True
+            year=2050,
+            overwrite_aggregated_od=False,
+            overwrite_compiled_od=True,
         )
 
     if run_decompile_od:
@@ -83,7 +85,7 @@ def main():
         # proportions in the process
         efs.generate_post_me_tour_proportions(
             model_name=model_name,
-            overwrite_decompiled_od=False,
+            overwrite_decompiled_od=True,
             overwrite_tour_proportions=True,
         )
 

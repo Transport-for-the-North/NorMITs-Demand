@@ -711,6 +711,8 @@ def n_matrix_split(matrix,
 
     return(mats)
 
+# BACKLOG: Replace compile_od() with mat_p.compile_matrices()
+#  labels: demand merge, EFS, TMS
 def compile_od(od_folder,
                write_folder,
                compile_param_path,
