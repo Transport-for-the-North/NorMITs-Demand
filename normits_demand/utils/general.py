@@ -3011,7 +3011,7 @@ def compile_efficient_df(eff_df: List[Dict[str, Any]],
         Efficient df structure as described in the function description.
 
     col_names:
-        asdasda
+        The name and order of columns in the returned compiled_df
 
     Returns
     -------
@@ -3020,7 +3020,6 @@ def compile_efficient_df(eff_df: List[Dict[str, Any]],
     """
     # Init
     concat_ph = list()
-    stack_ph = list()
 
     for part_df in eff_df:
         # Grab the dataframe
@@ -3030,14 +3029,10 @@ def compile_efficient_df(eff_df: List[Dict[str, Any]],
         for col_name, col_val in part_df.items():
             df[col_name] = col_val
 
-        # Sort the indexers
+        # Make sure all dfs are in the same format
         df = df.reindex(columns=col_names)
-
         concat_ph.append(df)
-        # stack_ph.append(df.values)
 
-    # Stick all the dfs together and put back into a df
-    # return pd.DataFrame(data=np.vstack(stack_ph), columns=col_names)
     return pd.concat(concat_ph)
 
 
