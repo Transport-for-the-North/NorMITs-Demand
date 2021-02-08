@@ -1,2 +1,8 @@
-__version__ = "0.3.0"
-# __version__ = "2.5"
+from packaging import version
+
+__version__ = "0.3.1"
+
+v = version.parse(__version__)
+MAJOR = v.major
+MINOR = v.minor
+PATCH = v.micro

@@ -49,7 +49,7 @@ from normits_demand.utils import sector_reporter_v2 as sr_v2
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
-    __version__ = version.__version__
+    __version__ = '%s.%s' % (version.MAJOR, version.MINOR)
     _out_dir = "NorMITs Demand"
 
     # defines all non-year columns
