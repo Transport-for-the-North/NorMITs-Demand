@@ -33,11 +33,11 @@ _default_ntem = ('Y:/NorMITs Synthesiser/import/' +
                  'ntem_constraints/ntem_pa_ave_wday_2018.csv')
 _default_trip_rates = ('Y:/NorMITs Synthesiser/import/' +
                        'trip_rates/tfn_hb_trip_rates_18_0620.csv')
-_default_time_splits = ('Y:/NorMITs Synthesiser/import/' +
+_default_time_split = ('Y:/NorMITs Synthesiser/import/' +
                         'trip_rates/tfn_hb_time_split_18_0620.csv')
-_default_mode_splits = ('Y:/NorMITs Synthesiser/import/' +
+_default_mode_split = ('Y:/NorMITs Synthesiser/import/' +
                         'trip_rates/tfn_hb_mode_split_18_0620.csv')
-_default_ave_time_splits = ('Y:/NorMITs Synthesiser/import/' +
+_default_ave_time_split = ('Y:/NorMITs Synthesiser/import/' +
                             'trip_rates/hb_ave_time_split.csv')
 _default_msoa_lad = ('Y:/NorMITs Synthesiser/import/lad_to_msoa.csv')
 
@@ -58,9 +58,9 @@ class ProductionModel:
             output_segments: List[str] = ['p','m'],
             lu_path: str = 'Y:/Path to Land use',
             trip_rates = _default_trip_rates,
-            time_splits = _default_time_splits,
-            ave_time_splits = _default_ave_time_splits,
-            mode_splits = _default_mode_splits,
+            time_split = _default_time_split,
+            ave_time_split = _default_ave_time_split,
+            mode_split = _default_mode_split,
             production_vector: str = '',
             attraction_vector: str = '',
             ntem_control: bool = True,
@@ -84,16 +84,16 @@ class ProductionModel:
         self.output_zones = output_zones
         self.import_folder = import_folder
         self.model_folder = model_folder
-        
+
         # Model option variables
         self.output_segments = output_segments
         if trip_rates == 'default':
             trip_rates = _default_trip_rates
         self.trip_rates = trip_rates
-        self.time_splits = time_splits
-        self.ave_time_splits = ave_time_splits
-        self.mode_splits = mode_splits
-        self.ntem_control = ntem_control      
+        self.time_split = time_split
+        self.ave_time_split = ave_time_split
+        self.mode_split = mode_split
+        self.ntem_control = ntem_control
         if ntem_path == 'default':
             ntem_path = _default_ntem
         self.ntem_path = ntem_path
@@ -131,6 +131,7 @@ class ProductionModel:
             DataFrame containing NTEM trip rates.
         """
         trip_rates = pd.read_csv(os.path.join(self.import_folder,
+                                              'trip_params',
                                               self.trip_rates))
     
         return(trip_rates)
@@ -159,7 +160,8 @@ class ProductionModel:
         with warnings.catch_warnings():
                 warnings.simplefilter(action='ignore',
                                       category=FutureWarning)
-                land_use_output = pd.read_csv(self.lu_path)
+                land_use_output = pd.read_csv(self.lu_path,
+                                              low_memory=False)
                 
         return(land_use_output)
 
@@ -366,9 +368,10 @@ class ProductionModel:
     
     # Merge functions - functions to bring datasets together
     
-    def merge_trip_rates(productions,
+    def merge_trip_rates(self,
+                         productions,
                          trip_rates,
-                         join_cols = ['area_type', 'traveller_type', 'soc', 'ns']):
+                         join_cols: List['str']):
         """
         Merge NTEM trip rates into productions on traveller type and area type.
         Create trips by multiplying people from land use by NTEM productions.
@@ -390,7 +393,6 @@ class ProductionModel:
         productions:
             Productions with trips by traveller type appended.
         """
-    
         productions = productions[productions['people']>0].copy()
         productions = productions.merge(trip_rates,
                                         on=join_cols)
@@ -398,118 +400,13 @@ class ProductionModel:
         productions = productions.drop(['trip_rate'], axis=1)
         return(productions)
 
-    def apply_k_factors(self,
-                        productions,
-                        k_factor_path):
+    def apply_k_factors(self):
     
         """
-        Function to apply k-factors from previous run to MSOA productions.
-    
-        Parameters
-        ----------
-        productions:
-            a productions dataframe with purposes and trips. Other segmentation
-            will be ignored. Purposes should be NTEM standard HB (1-8)
-    
-        k_factor_path:
-            a path to the k-factor lookup. Should be in model folders and specified
-            by iteration.
-    
-        Returns
-        ----------
-        productions:
-            Productions with trips updated at sector level.
-    
-        adjusted_trip_rates:
-            Trip rates after k-factor adjustment.
-    
-        district_toplines:
-            Summary of change applied at GB district level.
-    
-        purpose_toplines:
-            Summary of change applied at aggregate purpose level.
+
         """
-        # Import k factors
-        k_factors = pd.read_csv(k_factor_path)
-        k_factors = k_factors.reindex(
-                ['lad_zone_id', 'purpose', 'k_factor_10'], axis=1)
     
-        # Rename purpose to p mask to facilitate join
-        k_factors = k_factors.rename(columns={'purpose':'p_mask'})
-    
-        lad_to_msoa = pd.read_csv(self.import_folder + '/lad_to_msoa.csv')
-        lad_to_msoa = lad_to_msoa.reindex(['lad_zone_id', 'msoa_zone_id'],
-                                          axis=1)
-        # Join
-        productions = productions.merge(lad_to_msoa,
-                                        how='left',
-                                        on='msoa_zone_id')
-    
-        # Put a production type mesh/mask on the productions to join on purpose
-        commute_p = [1]
-        business_p = [2]
-        other_p = [3,4,5,6,7,8]
-        productions['p_mask'] = productions['purpose']
-        productions.loc[productions['purpose'].isin(commute_p), 'p_mask'] = 'commute'
-        productions.loc[productions['purpose'].isin(business_p), 'p_mask'] = 'business'
-        productions.loc[productions['purpose'].isin(other_p), 'p_mask'] = 'other'
-    
-        productions = productions.merge(k_factors,
-                                        how='left',
-                                        on = ['lad_zone_id', 'p_mask'])
-    
-        # Fill gaps with 1s
-        productions['k_factor_10'] = productions['k_factor_10'].fillna(0)
-        # Get factored trips
-        productions['k_trips'] = productions['trips']*productions['k_factor_10']
-    
-        # Backfill new trip rates
-        trip_rate_cols = ['purpose',
-                          'traveller_type',
-                          'area_type',
-                          'people',
-                          'trips']
-        adjusted_trip_rates = productions.reindex(trip_rate_cols,
-                                                  axis=1).groupby(['purpose',
-                                                        'traveller_type',
-                                                        'area_type']).sum(
-                                                        ).reset_index()
-        adjusted_trip_rates['trip_rate'] = (adjusted_trip_rates['trips']/
-                           adjusted_trip_rates['people'])
-        adjusted_trip_rates = adjusted_trip_rates.drop(
-                ['people', 'trips'], axis=1)
-    
-        # Get district toplines
-        district_toplines = productions.reindex(['lad_zone_id',
-                                                 'trips',
-                                                 'k_trips'],
-        axis=1).groupby('lad_zone_id').sum().reset_index()
-    
-        # Apply percentage
-        district_toplines['perc'] = (district_toplines['k_trips'] -
-                         district_toplines['trips']) / district_toplines['trips']
-    
-        # Get purpose toplines
-        purpose_toplines = productions.reindex(['purpose',
-                                                'trips',
-                                                'k_trips'],
-        axis=1).groupby('purpose').sum().reset_index()
-    
-        # Apply percentage
-        purpose_toplines['perc'] = (purpose_toplines['k_trips'] -
-                        purpose_toplines['trips']) / purpose_toplines['trips']
-    
-        # Clean prods
-        productions['trips'] = productions['k_trips'].copy()
-        k_drops = ['lad_zone_id', 'p_mask', 'k_factor_10', 'k_trips']
-        productions = productions.drop(k_drops, axis=1)
-    
-        productions['trips'] = productions['trips'].fillna(0)
-    
-        return(productions,
-               adjusted_trip_rates,
-               district_toplines,
-               purpose_toplines)
+        return 0
     
     # Audit functions - Functions to aggregate and check
     
@@ -531,12 +428,11 @@ class ProductionModel:
   
         # population before trip rates per unique row
         lu_report = lu.groupby(group_cols)['people'].sum().reset_index()
-    
-    
-    
-        lu_report.to_csv((output_path +
-                         '/land_use_audit.csv'),
-                         index=False)
+
+        lu_report.to_csv(os.path.join(
+            output_path,
+            'land_use_audit.csv'),
+            index=False)
     
         return(lu_report)
 
@@ -551,9 +447,8 @@ class ProductionModel:
         # Assign filter set name to a placeholder variable
         start_time = nup.set_time()
         print(start_time)
-    
-    
-        # TODO: don't change wd working
+
+        # Build pathing
         output_dir = os.path.join(self.build_folder,
                                   self.iteration)
         output_f = 'Production Outputs'
@@ -566,7 +461,7 @@ class ProductionModel:
         # Get segmentation types, use to set import params
         # TODO: Functionalise
         p_params = {}
-    
+
         # Get drop params for import
         # LU columns: ['soc_cat', 'ns_sec']
         mandatory_lu = ['msoa_zone_id', 'area_type',
@@ -578,35 +473,30 @@ class ProductionModel:
             if seg in optional_lu:
                 mandatory_lu.append(seg)
 
-        # Set mean time period import for infill
-        p_params.update({'mean_time_periods':
-                self.ave_time_splits})
-
         # Set mode share cols for applications
         p_params.update({'ms_cols':['area_type', 'ca', 'p']})
 
         # Set output cols for re-aggregation
         # does this need to be ordered?
-        test = [ 'msoa_zone_id', 'area_type', 'tp', 'trips']
-        p_params.update({'output_cols': test + self.output_segments})
-    
-    
-        # TODO: Take segmentation from output_segments
+        out_cols = ['msoa_zone_id', 'area_type', 'tp']
+        p_params.update({'output_cols': out_cols +
+                         self.output_segments + ['trips']})
+
         # does this need to be ordered?
-        test2 = [(self.output_zones + '_zone_id'), 'area_type', 'tp', 'trips']
-        p_params.update({'target_output_cols': test2 + self.output_segments})
-        p_params['target_output_cols']
+        tout_cols = [(self.output_zones + '_zone_id'), 'area_type', 'tp']
+        p_params.update({'target_output_cols': tout_cols +
+                         self.output_segments + ['trips']})
 
         # Other params as dict
         land_use_output = self.get_land_use_output()
         # if not in p_params['output_cols'] add to dict
-        extra_landuse_columns = []
-        for column in land_use_output:
-            if column not in p_params['output_cols']:
-                extra_landuse_columns.append(column)
+        x_lu_cols = []
+        for col in land_use_output:
+            if col not in p_params['output_cols']:
+                x_lu_cols.append(col)
     
-        p_params.update({'extra_landuse_cols': extra_landuse_columns})
-        del(extra_landuse_columns)
+        p_params.update({'x_lu_cols': x_lu_cols})
+        del(x_lu_cols)
 
         # Apply ca
         # This should be in Land Use
@@ -627,51 +517,49 @@ class ProductionModel:
                                                 how='left',
                                                 on='gender')
 
-        #subset check:
-        landuse_subset = land_use_output.head(5)
-
         # cars and gender cols no longer needed -
         # these are re-formatted above
         land_use_output = land_use_output.drop(['gender','cars'], axis=1)
-        list(land_use_output)
 
         # Do a report
-        lu_rep = self.land_use_report(land_use_output,
-                                      var_cols = p_params['lu_cols'],
-                                      output_path = (output_dir + output_f))
+        print(mandatory_lu)
+        report_cols = mandatory_lu.copy()
+        report_cols.remove('msoa_zone_id')
+
+        lu_rep = self.land_use_report(
+            land_use_output,
+            var_cols = report_cols,
+            output_path = os.path.join(output_dir,
+                                       output_f))
 
         # Get trip rates
         trip_rates = self.get_trip_rates()
 
-        # Audit population numbers
-        print(land_use_output['people'].sum())
-    
+        # Get join columns for trip rates
+        tr_cols = ['traveller_type']
+        for col in list(trip_rates):
+            if col in p_params['output_cols']:
+                # Purpose is in there already
+                # Retain traveller type at all costs
+                if col != 'p':
+                    tr_cols.append(col)
+
+        # Build col list for reindex
+        tr_index_cols = p_params['output_cols'].copy()
+        tr_index_cols.append('traveller_type') # Need for tp
+        tr_index_cols.remove('tp') # Not in yet
+        tr_index_cols.remove('m') # Not in yet
+        tr_group_cols = tr_index_cols.copy()
+        tr_group_cols.remove('trips')
+
         # Merge trip rates
         # len should be production length * purposes :.
-        # TODO: By purpose in to ph dict
         target_purpose = trip_rates['p'].drop_duplicates(
                 ).reset_index(drop=True)
-    
+
         aggregate_ns_sec = [1,2]
         aggregate_soc = [3,4,5,6,7,8]
-    
-        # Consolidate segments with no reasonable differentiation
-        # TODO: Could take parameters in future, if you want to generalise
-        # Build col list for reindex
-        group_cols = ['msoa_zone_id',
-                      'area_type',
-                      'traveller_type',
-                      'soc',
-                      'ns',
-                      'g',
-                      'ca',
-                      'p']
-        index_cols = group_cols.copy()
-        index_cols.append('trips')
-    
-        # Build segments for merge
-    
-    
+
         # Weekly trip rate application loop
         # output per purpose
         purpose_ph = {}
@@ -679,46 +567,47 @@ class ProductionModel:
             trip_rate_subset = trip_rates[trip_rates['p']==p].copy()
     
             print('building purpose ' + str(p) + ' trip rates')
-            ph = land_use_output.copy()
+            lu_sub = land_use_output.copy()
     
             if p in aggregate_ns_sec:
                 # Update ns with none
-                ph['ns'] = 'none'
-                ph['soc'] = ph['soc'].astype(int)
+                lu_sub['ns'] = 'none'
+                lu_sub['soc'] = lu_sub['soc'].astype(int)
                 # Insurance policy
                 trip_rate_subset['ns'] = 'none'
                 trip_rate_subset['soc'] = trip_rate_subset['soc'].astype(int)
     
             elif p in aggregate_soc:
                 # Update soc with none
-                ph['soc'] = 'none'
-                ph['ns'] = ph['ns'].astype(int)
+                lu_sub['soc'] = 'none'
+                lu_sub['ns'] = lu_sub['ns'].astype(int)
                 # Insurance policy
                 trip_rate_subset['soc'] = 'none'
                 trip_rate_subset['ns'] = trip_rate_subset['ns'].astype(int)
-    
-            ph = self.merge_trip_rates(
-                ph, trip_rate_subset, p_params['tr_cols'])
-    
+
+            lu_sub = self.merge_trip_rates(lu_sub,
+                                           trip_rate_subset,
+                                           tr_cols)
             # Group and sum
-            ph = ph.reindex(index_cols,
-                            axis=1).groupby(
-                                    group_cols).sum(
+            lu_sub = lu_sub.reindex(tr_index_cols,
+                                    axis=1).groupby(
+                                        tr_group_cols).sum(
                                             ).reset_index()
     
             # Update dictionary
-            purpose_ph.update({p:ph})
+            purpose_ph.update({p:lu_sub})
 
-        approx_totals = []
-        for key, dat in purpose_ph.items():
-            total = dat['trips'].sum()
-            print(key)
-            print(total)
-            approx_totals.append(total/7)
-    
-        time_splits = pd.read_csv(p_params['time_periods'])
-        mean_time_splits = pd.read_csv(p_params['mean_time_periods'])
-    
+        time_splits = pd.read_csv(
+            os.path.join(self.import_folder,
+                         'trip_params',
+                         self.time_split,
+                         ))
+        mean_time_splits = pd.read_csv(
+            os.path.join(self.import_folder,
+                         'trip_params',
+                         self.ave_time_split
+                         ))
+
         #  Time Period: 1= AM(peak), 2=IP(interpeak), 3=PM(peak), 4=OP(off-peak)
         target_tp = ['tp1', 'tp2', 'tp3', 'tp4']
         tp_ph = {}
@@ -734,20 +623,23 @@ class ProductionModel:
                 tp_mean = tp_mean_subset[tp_mean_subset['p']==key][tp]
     
                 tp_mat = dat.copy()
-                tp_mat = tp_mat.merge(tp_subset, how='left', on=['area_type',
-                                                                 'traveller_type',
-                                                                 'p'])
+                tp_mat = tp_mat.merge(
+                    tp_subset,
+                    how='left', on=['area_type',
+                                    'traveller_type',
+                                    'p'])
+
                 tp_mat[tp] = tp_mat[tp].fillna(tp_mean)
     
                 # Apply tp split and divide by 5 to get average weekday by tp
                 tp_mat['trips'] = (tp_mat['trips'] * tp_mat[tp])/5
-    
+
                 # Drop tp col
                 tp_mat = tp_mat.drop(tp, axis=1)
-    
+
                 # Add to compilation dict
                 tp_ph.update({('p'+str(key)+'_'+tp):tp_mat})
-    
+
         approx_tp_totals = []
         for key, dat in tp_ph.items():
             total = dat['trips'].sum()
@@ -757,20 +649,40 @@ class ProductionModel:
     
         ave_wday = sum(approx_tp_totals)
         print('Average weekday productions: ' + str(round(ave_wday,0)))
-    
+
         # Get mode splits
-        # TODO: Apply at MSOA level rather than area type
-        mode_share = pd.read_csv(p_params['mode_share'])
-    
+        mode_share = pd.read_csv(
+            os.path.join(self.import_folder,
+                         'trip_params',
+                         self.mode_split
+                         ))
+
+        # Build join cols
+        m_cols = []
+        for col in list(mode_share):
+            if col in p_params['output_cols']:
+                # Mode is in there already
+                if col != 'm':
+                    m_cols.append(col)
+
+        # Build col list for reindex
+        m_index_cols = p_params['output_cols'].copy()
+        m_index_cols.remove('m')
+        m_group_cols = m_index_cols.copy()
+        m_group_cols.remove('trips')
+
         target_mode = ['m1', 'm2', 'm3', 'm5', 'm6']
-    
+
         # Loop to get mode share trips
         m_ph = {}
         for m in target_mode:
             print('Building modes ' + str(m))
-            m_subset = mode_share.reindex(['area_type','ca','p', m], axis=1).copy()
-            print(m_subset)
+            m_group = m_cols.copy()
+            m_group.append(m)
     
+            m_subset = mode_share.reindex(m_group, axis=1).copy()
+            print(m_subset)
+
             for key, dat in tp_ph.items():
                 # Get p from key
                 # Keep 2 chars and replace_, so I can copy for NHB
@@ -780,56 +692,26 @@ class ProductionModel:
     
                 m_mat = dat.copy()
                 # Would merge all purposes, but left join should pick out target mode
-                m_mat = m_mat.merge(m_subset, how='left', on=['area_type',
-                                                              'ca',
-                                                              'p'])
-    
+                m_mat = m_mat.merge(
+                    m_subset,
+                    how='left',
+                    on=m_cols)
+
                 # Apply m split
+                print(list(m_mat))
+                
                 m_mat['trips'] = (m_mat['trips'] * m_mat[m])
-    
+
                 # Reindex cols for efficiency
-                # Not a fan of the global definitions now - makes this tricky
-                group_cols = p_params['output_cols'].copy()
-                group_cols.remove('trips')
-                group_cols.remove('p')
-                group_cols.remove('tp')
-                group_cols.remove('m')
-    
                 m_mat = m_mat.reindex(
-                        p_params['output_cols'],
-                        axis=1).groupby(
-                                group_cols).sum().reset_index()
+                    m_index_cols,
+                    axis=1).groupby(
+                        m_group_cols).sum().reset_index()
     
                 m_mat = m_mat[m_mat['trips']>0]
     
                 m_ph.update({(str(key)+'_'+m):m_mat})
-    
-        # Drop unwanted columns
-        # TODO: Topline audit here
-        approx_mode_totals = []
-    
-        for key, dat in m_ph.items():
-            total = dat['trips'].sum()
-            approx_mode_totals.append([key, total])
-    
-        # Build topline report
-        # TODO: Functionalise
-        topline = pd.DataFrame(approx_mode_totals, columns=['desc', 'total'])
-        descs = topline['desc'].str.split('_', expand=True)
-        topline['p'] = descs[0]
-        topline['tp'] = descs[1]
-        topline['m'] = descs[2]
-        topline = topline.reindex(
-                ['p', 'tp', 'm', 'total'],
-                axis=1).groupby(
-                        ['p', 'tp', 'm']).sum().reset_index()
-        topline.to_csv((output_dir +
-                        run_log_f +
-                        '/production_topline.csv'), index=False)
-    
-        # K Factor adjustment here, mode specific
-        # TODO: Rewrite to take k factors at some point - doesn't work anymore
-    
+
         output_ph = []
         for key, dat in m_ph.items():
             print('Compiling productions for ' + key)
@@ -843,23 +725,19 @@ class ProductionModel:
             dat['p'] = purpose
             dat['tp'] = time_period
             dat['m'] = mode
-    
+
             output_ph.append(dat)
     
         msoa_output = pd.concat(output_ph)
-    
-        # add gender in here, sum the number of trips per unique row
-        sum_cols = ['msoa_zone_id', 'area_type', 'soc',
-                    'ns', 'ca', 'g', 'p', 'tp', 'm', 'trips']
-        group_cols = ['msoa_zone_id', 'area_type', 'soc',
-                      'ns', 'ca', 'g', 'p', 'tp', 'm']
+
+        # Output reindex
+        index_cols = p_params['output_cols'].copy()
+        group_cols = index_cols.copy()
+        m_group_cols.remove('trips')
     
         msoa_output = msoa_output.reindex(
-                sum_cols, axis=1).groupby(group_cols).sum().reset_index()
-    
-        msoa_output['p'] = msoa_output['p'].astype(int)
-        msoa_output['m'] = msoa_output['m'].astype(int)
-    
+                index_cols, axis=1).groupby(group_cols).sum().reset_index()
+
         # TODO: Topline audit
         # NTEM control
         msoa_lad_lookup = pd.read_csv(self._default_msoa_lad)
@@ -870,7 +748,7 @@ class ProductionModel:
                                 '/hb_productions_' +
                                 'uncorrected.csv'),
             index=False)
-    
+
         if self.ntem_control:
             # Get ntem totals
             # TODO: Depends on the time period - but this is fixed for now
@@ -892,8 +770,9 @@ class ProductionModel:
                 index=False)
     
         if self.k_factor_control is not None:
-            # TODO: Loop over all modes in the list. k factor paths as list only
-            # TODO: La level reports for ntem & k adjust < .2 & >5
+            # BACKLOG: Function
+            # BACKLOG: Loop over all modes in the list. k factor paths as list only
+            # BACKLOG: La level reports for ntem & k adjust < .2 & >5
             print('Before: ' + str(msoa_output['trips'].sum()))
     
             k_factors = pd.read_csv(self.k_factor_path)
@@ -955,30 +834,27 @@ class ProductionModel:
         # TODO: There is no productions unless k factors run
         if self.export_msoa:
             # TODO: Make work with aggregations
-            msoa_output.to_csv((output_dir +
-                                output_f +
-                            '/hb_productions_' +
-                            self.input_zones.lower() +
-                            '.csv'), index=False)
+            msoa_output.to_csv(
+                os.path.join(output_dir,
+                             output_f,
+                             'hb_productions_',
+                             self.input_zones.lower(),
+                             '.csv'), index=False)
     
         # Aggregate to target model zones
-        target_output = self.aggregate_to_zones(self,
-                                                msoa_output,
+        target_output = self.aggregate_to_zones(msoa_output,
                                                 p_params,
                                                 pop_weighted = True)
 
         # Compile and out
-        # add gender here
-        target_output = target_output.reindex([(self.output_zones + '_zone_id'),
-                                               'area_type',
-                                               'p', 'm', 'tp', 'soc',
-                                               'ns', 'ca', 'g', 'trips'],
-        axis=1).sort_values([(self.output_zones + '_zone_id'),
-                           'area_type',
-                           'p', 'm', 'tp', 'soc',
-                           'ns', 'g', 'ca']).reset_index(drop=True)
-    
-        # TODO: output_segments - should use the main params
+        t_group_cols = p_params['target_output_cols'].copy()
+        t_group_cols.remove('trips')
+        
+        target_output = target_output.reindex(
+            p_params['target_output_cols'],
+            axis=1).sort_values(
+                t_group_cols).reset_index(drop=True)
+
         out_path = os.path.join(
             output_dir,
             output_f,

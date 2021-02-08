@@ -21,30 +21,30 @@ _default_iter = 'iter0'
 _M_KM = 1.609344
 
 # Index functions - functions to aggregate columns into new category variables
-def create_project_folder(projectName):
+def create_project_folder(projectName, echo=True):
     """
     """
 
     if not os.path.exists(os.getcwd() + '/' + projectName):
         os.makedirs(os.getcwd() + '/' + projectName)
         os.chdir(os.getcwd() + '/' + projectName)
-        print('New project folder created in ' + os.getcwd() + ', wd set there')
+        print_w_toggle('New project folder created in ' + os.getcwd() + ', wd set there', echo)
     else:
         os.chdir(os.getcwd() + '/' + projectName)
-        print('Project folder already exists, wd set there')
+        print_w_toggle('Project folder already exists, wd set there', echo)
 
-def create_folder(folder, chDir=False):
+def create_folder(folder, chDir=False, echo=True):
     """
     """
     if not os.path.exists(folder):
         os.makedirs(folder)
         if chDir:
             os.chdir(folder)
-        print('New project folder created in ' + folder)
+        print_w_toggle("New project folder created in " + folder, echo=echo)
     else:
         if chDir:
             os.chdir(folder)
-        print('Folder already exists')
+        print_w_toggle('Folder already exists', echo=echo)
 
 def set_time():
     """
