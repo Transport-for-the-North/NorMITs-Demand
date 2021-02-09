@@ -815,6 +815,10 @@ class ExternalForecastSystem:
         #  _handle_growth_criteria(), making it return 0 demand in
         #  future years?
         #  labels: bug, EFS
+
+        print(converted_productions.dtypes)
+        print(converted_pure_attractions.dtypes)
+
         if apply_growth_criteria:
             # Apply the growth criteria using the post-ME P/A vectors
             # (normal and exceptional zones)
@@ -826,6 +830,11 @@ class ExternalForecastSystem:
                 integrate_dlog=self.integrate_dlog
             )
             converted_productions, converted_pure_attractions = pa_dfs
+
+        print(converted_productions.dtypes)
+        print(converted_pure_attractions.dtypes)
+
+        exit()
 
         # Convert the new attractions to weights
         converted_attractions = du.convert_to_weights(

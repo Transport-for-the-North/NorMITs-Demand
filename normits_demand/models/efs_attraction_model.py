@@ -1445,7 +1445,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
         print("Performing HB NTEM constraint...")
         # TODO: Allow control_to_ntem() to take flexible col names
         attractions = attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        attractions, hb_audit, _ = du.control_to_ntem(
+        attractions, hb_audit, *_ = du.control_to_ntem(
             attractions,
             ntem_totals,
             ntem_lad_lookup,
@@ -1458,7 +1458,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
 
         print("Performing NHB NTEM constraint...")
         nhb_attractions = nhb_attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        nhb_attractions, nhb_audit, _ = du.control_to_ntem(
+        nhb_attractions, nhb_audit, *_ = du.control_to_ntem(
             nhb_attractions,
             ntem_totals,
             ntem_lad_lookup,
