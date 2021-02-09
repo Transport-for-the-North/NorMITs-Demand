@@ -325,7 +325,7 @@ def glimpse(dataframe):
     """
     gl = dataframe.iloc[0:5]
     return gl
-
+ 
 def control_to_ntem(msoa_output,
                     ntem_totals,
                     lad_lookup,
@@ -337,6 +337,8 @@ def control_to_ntem(msoa_output,
     """
     Control to a vector of NTEM constraints using single factor.
     Return productions controlled to NTEM.
+    
+    HAS SEPARATE SCRIPT REMOVE FROM UTILS
 
     Parameters:
     ----------
@@ -508,7 +510,7 @@ def control_to_ntem(msoa_output,
              'after':after}
 
     return(output, audit, adjustments, lad_totals)
-
+   
 def aggregate_merger(dataframe,
                      target_segments,
                      merge_dat,
