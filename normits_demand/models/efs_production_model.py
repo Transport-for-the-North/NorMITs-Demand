@@ -2364,7 +2364,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
 
     # Add growth back on
     for year in future_years:
-        productions[year] *= growth_factors[year].values
+        productions[year] = productions[base_year] * growth_factors[year].values
 
     return productions
 
