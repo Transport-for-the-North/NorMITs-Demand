@@ -218,7 +218,7 @@ class TravelMarketSynthesiser:
         # Check status of lookup folder        
         self.lookups = self.lookup_audit()
 
-        # TODO: Project status
+        # BACKLOG: Project status
         self.project_status = self.project_check()
         
         """

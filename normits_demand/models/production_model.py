@@ -21,6 +21,7 @@ import pandas as pd # Bread and butter
 
 from normits_demand.utils import utils as nup # Folder build utils
 from normits_demand.utils import ntem_control as ntem
+from normits_demand.utils.general import safe_dataframe_to_csv
 
 class ProductionModel:
     """
@@ -155,9 +156,6 @@ class ProductionModel:
     def aggregate_to_zones(self,
                            productions,
                            p_params,
-                           spatial_aggregation_input = None,
-                           spatial_aggregation_output = None,
-                           model_folder = None,
                            pop_weighted = False):
         """
         Aggregates a DataFrame to a target zoning system.
@@ -194,7 +192,10 @@ class ProductionModel:
             DataFrame of segmented productions converted to a given model
             zoning system.
         """
-    
+        # BACKLOG: Need this function so often it should be broader.
+        # Some of the inputs are out of date, could be simpler too
+        model_folder = self.model_folder
+
         if model_folder is None:
             zone_col = list(productions)[0]
             print('No target zoning system provided')
@@ -206,6 +207,9 @@ class ProductionModel:
                                                                    ).reset_index()
             return(zone_productions)
         else:
+            spatial_aggregation_input = self.input_zones
+            spatial_aggregation_output = self.output_zones
+
             # Find and import correct lookup from model folder
             # These need to be in the correct format!
             if pop_weighted == False:
@@ -404,7 +408,8 @@ class ProductionModel:
         # population before trip rates per unique row
         lu_report = lu.groupby(group_cols)['people'].sum().reset_index()
 
-        lu_report.to_csv(os.path.join(
+        safe_dataframe_to_csv(lu_report,
+                              os.path.join(
             output_path,
             'land_use_audit.csv'),
             index=False)
@@ -725,10 +730,11 @@ class ProductionModel:
         msoa_lad_lookup = pd.read_csv(self._default_msoa_lad)
 
         if self.export_uncorrected:
-            msoa_output.to_csv((output_dir +
-                                output_f +
-                                '/hb_productions_' +
-                                'uncorrected.csv'),
+            safe_dataframe_to_csv(msoa_output,
+                                  (output_dir +
+                                   output_f +
+                                   '/hb_productions_' +
+                                   'uncorrected.csv'),
             index=False)
 
         if self.ntem_control:
@@ -745,11 +751,13 @@ class ProductionModel:
                     purpose = 'hb')
 
             if self.export_lad:
-                lad_output.to_csv((output_dir +
-                                   output_f +
-                                   '/hb_productions_lad_ntem.csv'),
-                index=False)
-    
+                safe_dataframe_to_csv(
+                    lad_output,
+                    (output_dir +
+                    output_f +
+                    '/hb_productions_lad_ntem.csv'),
+                    index=False)
+
         if self.k_factor_control:
             # BACKLOG: Function
             # BACKLOG: Loop over all modes in the list. k factor paths as list only
@@ -812,7 +820,8 @@ class ProductionModel:
 
         # Export outputs with full segmentation
         if self.export_msoa:
-            msoa_output.to_csv(
+            safe_dataframe_to_csv(
+                msoa_output,
                 os.path.join(output_dir,
                              output_f,
                              'hb_productions_' +
@@ -823,7 +832,6 @@ class ProductionModel:
         target_output = self.aggregate_to_zones(
             msoa_output,
             p_params,
-            spatial_aggregation_output = self.output_zones,
             pop_weighted = True)
 
         print(target_output)
@@ -850,7 +858,7 @@ class ProductionModel:
             self.output_zones +
             '.csv')
         if self.export_target:
-            target_output.to_csv(
+            safe_dataframe_to_csv(target_output,
                 out_path,
                 index=False)
 
@@ -1154,8 +1162,8 @@ class ProductionModel:
             raw_nhb_path = os.path.join(o_paths['production_export'],
                                     'nhb_productions_' +
                                     'uncorrected.csv')
-            nhb.to_csv(raw_nhb_path, index=False)
-    
+            safe_dataframe_to_csv(nhb, raw_nhb_path, index=False)
+
         ## NTEM Controls
         if self.ntem_control:
             # TODO: Global ntem location
@@ -1187,7 +1195,8 @@ class ProductionModel:
             print(ntem_a)
     
             if export_lad:
-                nhb_lad.to_csv(os.path.join(o_paths['production_export'],
+                safe_dataframe_to_csv(nhb_lad,
+                                      os.path.join(o_paths['production_export'],
                                             'nhb_productions_' +
                                             'lad_ntem.csv'))
     
@@ -1267,6 +1276,7 @@ class ProductionModel:
             '.csv')
 
         if export_target:
-            nhb.to_csv(nhb_path, index=False)
-    
+            safe_dataframe_to_csv(nhb,
+                                  nhb_path, index=False)
+
         return(nhb_path, nhb)
