@@ -26,10 +26,9 @@ Wrapper script to run TMS start to finish.
 import os
 import sys
 
-sys.path.append(r'C:\Users\genie\Documents\GitHub\NorMITs-Demand')
+# sys.path.append(r'C:\Users\genie\Documents\GitHub\NorMITs-Demand')
 
 import pandas as pd
-import numpy as np
 
 from normits_demand.models import production_model as pm
 from normits_demand.models import attraction_model as am

@@ -345,8 +345,7 @@ class ProductionModel:
                 final_trips = target_productions['trips'].sum()
     
                 print('Ending with ' + str(final_trips))
-    
-    
+
         return(target_productions)
     
     # Merge functions - functions to bring datasets together

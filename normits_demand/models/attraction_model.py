@@ -10,6 +10,8 @@ import pandas as pd # Bread & butter
 import numpy as np
 
 from normits_demand.utils import utils as nup # Folder build utils
+from normits_demand.utils import ntem_control as ntem
+from normits_demand.utils.general import safe_dataframe_to_csv
 
 _default_msoa_lad = ('Y:/NorMITs Synthesiser/import/lad_to_msoa.csv')
 _default_attraction_weights = 'attraction_weights.csv'
@@ -108,7 +110,8 @@ class AttractionModel:
         
         return(all_msoa)
     
-    def profile_attractions(msoa_attractions,
+    def profile_attractions(self,
+                            msoa_attractions,
                             attr_profile):
         """
         Takes an attraction profile defined by an import file in a model folder
@@ -161,7 +164,8 @@ class AttractionModel:
     
         return(a_list)
     
-    def aggregate_to_model_zones_attr(attractions,
+    def aggregate_to_model_zones_attr(self,
+                                      attractions,
                                       model_zone_lookup_path,
                                       translation_name = None,
                                       max_level=True):
@@ -190,26 +194,23 @@ class AttractionModel:
         """
     
         print(attractions['attractions'].sum())
-        # TODO: This is where the model index comes in - would be nice to define and lookup automatically
-        # Partially solved by the above but ALSO:
-        # TODO: Need to figure out relative columning, which is a zoning translation fix
-        # e.g Norms = model 1
+
         model_zone_conversion = pd.read_csv(model_zone_lookup_path)
-    
+
         major_zone_name = list(model_zone_conversion)[0]
         # ia_name needs to pick up the minor zone name, should do usually
         minor_zone_name = list(model_zone_conversion)[1]
         # Count unique model zones in minor zoning system
         unq_minor_zones = model_zone_conversion[minor_zone_name].drop_duplicates()
         print(unq_minor_zones)
-        
+
         # If there are zone splits - just go with the zone that overlaps the most
         # Slightly cheaty and I think can be fixed by multiplying out.
         # TODO: Replace with multiply out method
-    
+
         # Reindex
-        mzcCols = [major_zone_name, minor_zone_name, translation_name]
-        model_zone_conversion = model_zone_conversion.reindex(mzcCols, axis=1)
+        mzc_cols = [major_zone_name, minor_zone_name, translation_name]
+        model_zone_conversion = model_zone_conversion.reindex(mzc_cols, axis=1)
         # Need another function to pick the biggest zone in a split & make sure it's not in the internal area
         # Print totals to topline.
     
@@ -312,8 +313,10 @@ class AttractionModel:
             print('Running soc weighting')
             # If there are TfN segments import the segmentation
             # BACKLOG: Could be more relative
-            soc_weighted_jobs = pd.read_csv((self.import_folder +
-                                             'soc_2_digit_sic_2018.csv'))
+            soc_weighted_jobs = pd.read_csv(
+                os.path.join(
+                    self.import_folder,
+                    'soc_2_digit_sic_2018.csv'))
 
             # Make the soc integer a category
             soc_weighted_jobs['soc_class'] = 'soc' + soc_weighted_jobs[
@@ -517,12 +520,13 @@ class AttractionModel:
         ntem_lad_lookup = pd.read_csv('Y:/NorMITs Synthesiser/import/lad_to_msoa.csv')
     
         if self.export_uncorrected:
-            hb_attr.to_csv(
+            safe_dataframe_to_csv(
+                hb_attr,
                 os.path.join(
                     self.output_dir,
                     'hb_attractions_uncorrected.csv'),
                 index=False)
-            nhb_attr.to_csv(
+            safe_dataframe_to_csv(nhb_attr,
                 os.path.join(
                     self.output_dir,
                     'nhb_attractions_uncorrected.csv'),
@@ -533,24 +537,25 @@ class AttractionModel:
     
             ntem_totals = pd.read_csv(self.ntem_path)
 
-            hb_attr, hb_adj, hb_audit, hb_lad = nup.control_to_ntem(hb_attr,
-                                                                    ntem_totals,
-                                                                    ntem_lad_lookup,
-                                                                    group_cols = ['p', 'm'],
-                                                                    base_value_name = 'attractions',
-                                                                    ntem_value_name = 'Attractions',
-                                                                    purpose = 'hb')
+            hb_attr, hb_adj, hb_audit, hb_lad = ntem.control_to_ntem(
+                hb_attr,
+                ntem_totals,
+                ntem_lad_lookup,
+                group_cols = ['p', 'm'],
+                base_value_name = 'attractions',
+                ntem_value_name = 'Attractions',
+                purpose = 'hb')
             print(hb_audit)
 
-            nhb_attr, nhb_adj, nhb_audit, nhb_lad = nup.control_to_ntem(nhb_attr,
-                                                                       ntem_totals,
-                                                                       ntem_lad_lookup,
-                                                                       group_cols = ['p', 'm', 'tp'],
-                                                                       base_value_name = 'attractions',
-                                                                       ntem_value_name = 'Attractions',
-                                                                       purpose = 'nhb')
-            
-    
+            nhb_attr, nhb_adj, nhb_audit, nhb_lad = ntem.control_to_ntem(
+                nhb_attr,
+                ntem_totals,
+                ntem_lad_lookup,
+                group_cols = ['p', 'm', 'tp'],
+                base_value_name = 'attractions',
+                ntem_value_name = 'Attractions',
+                purpose = 'nhb')
+
             if self.export_lad:
                 hb_lad.to_csv(
                     os.path.join(output_dir,
