@@ -101,8 +101,8 @@ class ExternalForecastSystem:
         self.msoa_lookup_path = msoa_lookup_path
         self.lad_msoa_lookup_path = lad_msoa_lookup_path
 
-        # Don't NTEM Control Future years in scenarios
-        self.ntem_control_future_years = not (scenario_name in consts.TFN_SCENARIOS)
+        # We never control future years, not even in NTEM!
+        self.ntem_control_future_years = False
 
         # Setup up import/export paths
         path_dicts = self.generate_output_paths(consts.BASE_YEAR_STR)

@@ -146,7 +146,7 @@ PRODS_FNAME = '%s_%s_productions.csv'
 ATTRS_FNAME = '%s_%s_attractions.csv'
 
 # Additive growth audit
-PRODS_AG_FNAME = '%s_%s_productions_additive_growth.csv'
+PRODS_MG_FNAME = '%s_%s_productions_multiplicative_growth.csv'
 
 # zone_system
 POP_FNAME = '%s_population.csv'

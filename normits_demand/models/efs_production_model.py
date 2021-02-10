@@ -2272,7 +2272,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
                                 base_year: str,
                                 future_years: List[str] = None,
                                 control_base_year: bool = True,
-                                control_future_years: bool = True,
+                                control_future_years: bool = False,
                                 ntem_control_cols: List[str] = None,
                                 ntem_control_dtypes: List[Callable] = None,
                                 audit_dir: str = None
@@ -2293,21 +2293,21 @@ def control_productions_to_ntem(productions: pd.DataFrame,
     sort_cols = du.list_safe_remove(list(productions), all_years)
     productions = productions.sort_values(sort_cols)
 
-    # Do we need to grow on top of a controlled base year?
-    perform_additive_growth = control_base_year and not control_future_years
+    # Do we need to grow on top of a controlled base year? (multiplicative)
+    grow_over_base = control_base_year and not control_future_years
 
     # Get growth values over base
-    if perform_additive_growth:
-        growth_values = productions.copy()
+    if grow_over_base:
+        growth_factors = productions.copy()
         for year in future_years:
-            growth_values[year] -= growth_values[base_year]
-        growth_values.drop(columns=[base_year], inplace=True)
+            growth_factors[year] /= growth_factors[base_year]
+        growth_factors.drop(columns=[base_year], inplace=True)
 
-        # Output an audit of the growth values calculated
+        # Output an audit of the growth factors calculated
         if audit_dir is not None:
-            fname = consts.PRODS_AG_FNAME % ('msoa', trip_origin)
+            fname = consts.PRODS_MG_FNAME % ('msoa', trip_origin)
             path = os.path.join(audit_dir, fname)
-            pd.DataFrame(growth_values).to_csv(path, index=False)
+            pd.DataFrame(growth_factors).to_csv(path, index=False)
 
     # ## NTEM CONTROL YEARS ## #
     # Figure out which years to control
@@ -2355,7 +2355,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
         path = os.path.join(audit_dir, fname)
         pd.DataFrame(audits).to_csv(path, index=False)
 
-    if not perform_additive_growth:
+    if not grow_over_base:
         return productions
 
     # ## ADD PRE CONTROL GROWTH BACK ON ## #
@@ -2364,7 +2364,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
 
     # Add growth back on
     for year in future_years:
-        productions[year] += growth_values[year].values
+        productions[year] *= growth_factors[year].values
 
     return productions
 
