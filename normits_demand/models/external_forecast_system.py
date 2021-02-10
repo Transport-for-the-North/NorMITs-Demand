@@ -811,10 +811,6 @@ class ExternalForecastSystem:
             index=False
         )
 
-        # BACKLOG: Us something weird going on with data types in
-        #  _handle_growth_criteria(), making it return 0 demand in
-        #  future years?
-        #  labels: bug, EFS
         if apply_growth_criteria:
             # Apply the growth criteria using the post-ME P/A vectors
             # (normal and exceptional zones)

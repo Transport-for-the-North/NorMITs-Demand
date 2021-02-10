@@ -587,6 +587,7 @@ def grow_to_future_years(base_year_df: pd.DataFrame,
         merge_cols=growth_merge_cols
     )
 
+    # TODO: Maybe allow negative growth at MSOA but not LAD
     # Ensure there is no minus growth
     if no_neg_growth:
         for year in all_years:

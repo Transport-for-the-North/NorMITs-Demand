@@ -372,7 +372,7 @@ class EFSProductionGenerator:
             growth_merge_cols=merge_cols
         )
 
-        # ## POST D-LOG CONSTRAINT ## #
+        # ## PRE D-LOG CONSTRAINT ## #
         if pre_dlog_constraint:
             print("Performing the first constraint on population...")
             print(". Pre Constraint:\n%s" % population[future_years].sum())
@@ -495,8 +495,10 @@ class EFSProductionGenerator:
         # ## CONVERT TO OLD EFS FORMAT ## #
         # Make sure columns are the correct data type
         productions['area_type'] = productions['area_type'].astype(int)
-        productions['m'] = productions['m'].astype(int)
         productions['p'] = productions['p'].astype(int)
+        productions['m'] = productions['m'].astype(int)
+        productions['soc'] = productions['soc'].astype(str)
+        productions['ns'] = productions['ns'].astype(str)
         productions['ca'] = productions['ca'].astype(int)
         productions.columns = productions.columns.astype(str)
 
@@ -2329,7 +2331,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
         ntem_lad_lookup = pd.read_csv(lad_lookup_path)
 
         print("\nPerforming NTEM constraint for %s..." % year)
-        productions, audit, _, = du.control_to_ntem(
+        productions, audit, *_, = du.control_to_ntem(
             productions,
             ntem_totals,
             ntem_lad_lookup,

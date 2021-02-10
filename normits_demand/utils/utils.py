@@ -326,6 +326,7 @@ def glimpse(dataframe):
     gl = dataframe.iloc[0:5]
     return gl
 
+
 def control_to_ntem(msoa_output,
                     ntem_totals,
                     lad_lookup,
@@ -490,9 +491,6 @@ def control_to_ntem(msoa_output,
     lad_index = lad_groups.copy()
     lad_index.append(base_value_name)
 
-    print(lad_groups)
-    print(lad_index)
-
     lad_totals = output.reindex(lad_index,
                                 axis=1).groupby(
                                         lad_groups).sum().reset_index()
@@ -507,7 +505,7 @@ def control_to_ntem(msoa_output,
              'target':target,
              'after':after}
 
-    return(output, audit, adjustments, lad_totals)
+    return output, audit, adjustments, lad_totals
 
 def aggregate_merger(dataframe,
                      target_segments,

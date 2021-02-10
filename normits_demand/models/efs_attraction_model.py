@@ -531,6 +531,7 @@ class EFSAttractionGenerator:
         # Align purpose and mode columns to standards
         p_col = 'p'
         m_col = 'm'
+        soc_col = 'soc'
         columns = {a_weights_p_col: p_col, mode_split_m_col: m_col}
         attractions = attractions.rename(columns=columns)
         nhb_att = nhb_att.rename(columns=columns)
@@ -547,6 +548,7 @@ class EFSAttractionGenerator:
         # Make sure columns are the correct data type
         attractions[p_col] = attractions[p_col].astype(int)
         attractions[m_col] = attractions[m_col].astype(int)
+        attractions[soc_col] = attractions[soc_col].astype(int)
         attractions.columns = attractions.columns.astype(str)
 
         nhb_att[p_col] = nhb_att[p_col].astype(int)
@@ -1445,7 +1447,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
         print("Performing HB NTEM constraint...")
         # TODO: Allow control_to_ntem() to take flexible col names
         attractions = attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        attractions, hb_audit, _ = du.control_to_ntem(
+        attractions, hb_audit, *_ = du.control_to_ntem(
             attractions,
             ntem_totals,
             ntem_lad_lookup,
@@ -1458,7 +1460,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
 
         print("Performing NHB NTEM constraint...")
         nhb_attractions = nhb_attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        nhb_attractions, nhb_audit, _ = du.control_to_ntem(
+        nhb_attractions, nhb_audit, *_ = du.control_to_ntem(
             nhb_attractions,
             ntem_totals,
             ntem_lad_lookup,
