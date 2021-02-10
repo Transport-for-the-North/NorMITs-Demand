@@ -455,7 +455,8 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
                               purpose_col: str = 'p',
                               audit_location: str = None
                               ) -> pd.DataFrame:
-    """Applies the following growth criteria depending on the zone type 
+    """
+    Applies the following growth criteria depending on the zone type
     (normal growth or exceptional) -
     normal = observed_base * synthetic_forecast / synthetic_base
     exceptional = land_use_future * sector_trip_rate
@@ -510,6 +511,11 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
         Contains all segmentation columns, the intermediate synthetic and 
         observed data, and the final grown trips.
     """
+    # BACKLOG: Break Exceptional Growth Functionality into separate
+    #  productions and attractions functions. Atm the code is difficult
+    #  to read while it tried to deal with both at once.
+    #  labels: QoL Updates, EFS
+
     # Note this could result in lower trips generated than before. See
     # the audit output for the changes
 
@@ -547,6 +553,7 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
 
     # Handle Exceptional Zones
     # Get the relevant land use data and save in e_land_use (exceptional)
+    # TODO: Just don't do this if mask is nothing??
     mask = land_use[zone_column].isin(exceptional_zones[zone_column])
     e_land_use = land_use.loc[mask].copy()
     # Map the land use to the sector used for the trip rates
@@ -598,7 +605,6 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
             os.path.join(audit_location, "exceptional_land_use.csv"),
             index=False
         )
-    # This looks like a mini production/attraction model?
 
     # Merge on the common segmentation and re-calculate the synthetic forecast
     # using the new sector level trip rates
@@ -793,6 +799,15 @@ def growth_criteria(synth_productions: pd.DataFrame,
     zt_from_zone_col = zt_from_zone.lower() + '_zone_id'
     model_zone_col = model_name.lower() + '_zone_id'
 
+    # Validate attraction input
+    if synth_attractions['soc'].dtype == object:
+        try:
+            synth_attractions['soc'] = synth_attractions['soc'].astype(int)
+        except ValueError as e:
+            print("When converting attractions soc column to integers, I"
+                  "got the following error: ")
+            raise e
+
     # Load files and format inputs as necessary
     print("Loading Files")
     population = du.safe_read_csv(population_path)
@@ -821,6 +836,18 @@ def growth_criteria(synth_productions: pd.DataFrame,
         zone_column=model_zone_col,
         trip_type="attractions"
     )
+
+    # Make sure the synth and observed productions are all str in soc/ns
+    for col in ['soc', 'ns']:
+        try:
+            synth_productions[col] = synth_productions[col].astype(str)
+            observed_productions[col] = observed_productions[col].astype(str)
+        except KeyError:
+            print(
+                "WARNING: Tried to cast %s in productions to a string, but "
+                "couldn't find the column. If this is meant to happen, you "
+                "can ignore this warning."
+            )
 
     # Set up the grouping columns
     prod_group_cols = [model_zone_col] + segments["prod"]

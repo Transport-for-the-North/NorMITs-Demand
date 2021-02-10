@@ -531,6 +531,7 @@ class EFSAttractionGenerator:
         # Align purpose and mode columns to standards
         p_col = 'p'
         m_col = 'm'
+        soc_col = 'soc'
         columns = {a_weights_p_col: p_col, mode_split_m_col: m_col}
         attractions = attractions.rename(columns=columns)
         nhb_att = nhb_att.rename(columns=columns)
@@ -547,6 +548,7 @@ class EFSAttractionGenerator:
         # Make sure columns are the correct data type
         attractions[p_col] = attractions[p_col].astype(int)
         attractions[m_col] = attractions[m_col].astype(int)
+        attractions[soc_col] = attractions[soc_col].astype(int)
         attractions.columns = attractions.columns.astype(str)
 
         nhb_att[p_col] = nhb_att[p_col].astype(int)

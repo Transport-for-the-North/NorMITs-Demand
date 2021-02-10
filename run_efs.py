@@ -23,8 +23,8 @@ def main():
 
     run_base_efs = True
     recreate_productions = True
-    recreate_attractions = True
-    recreate_nhb_productions = True
+    recreate_attractions = False
+    recreate_nhb_productions = False
 
     run_hb_pa_to_od = False
     run_compile_od = False

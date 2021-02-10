@@ -495,8 +495,10 @@ class EFSProductionGenerator:
         # ## CONVERT TO OLD EFS FORMAT ## #
         # Make sure columns are the correct data type
         productions['area_type'] = productions['area_type'].astype(int)
-        productions['m'] = productions['m'].astype(int)
         productions['p'] = productions['p'].astype(int)
+        productions['m'] = productions['m'].astype(int)
+        productions['soc'] = productions['soc'].astype(str)
+        productions['ns'] = productions['ns'].astype(str)
         productions['ca'] = productions['ca'].astype(int)
         productions.columns = productions.columns.astype(str)
 
