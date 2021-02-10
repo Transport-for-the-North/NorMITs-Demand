@@ -21,30 +21,30 @@ _default_iter = 'iter0'
 _M_KM = 1.609344
 
 # Index functions - functions to aggregate columns into new category variables
-def create_project_folder(projectName):
+def create_project_folder(projectName, echo=True):
     """
     """
 
     if not os.path.exists(os.getcwd() + '/' + projectName):
         os.makedirs(os.getcwd() + '/' + projectName)
         os.chdir(os.getcwd() + '/' + projectName)
-        print('New project folder created in ' + os.getcwd() + ', wd set there')
+        print_w_toggle('New project folder created in ' + os.getcwd() + ', wd set there', echo)
     else:
         os.chdir(os.getcwd() + '/' + projectName)
-        print('Project folder already exists, wd set there')
+        print_w_toggle('Project folder already exists, wd set there', echo)
 
-def create_folder(folder, chDir=False):
+def create_folder(folder, chDir=False, echo=True):
     """
     """
     if not os.path.exists(folder):
         os.makedirs(folder)
         if chDir:
             os.chdir(folder)
-        print('New project folder created in ' + folder)
+        print_w_toggle("New project folder created in " + folder, echo=echo)
     else:
         if chDir:
             os.chdir(folder)
-        print('Folder already exists')
+        print_w_toggle('Folder already exists', echo=echo)
 
 def set_time():
     """
@@ -326,7 +326,6 @@ def glimpse(dataframe):
     gl = dataframe.iloc[0:5]
     return gl
 
-
 def control_to_ntem(msoa_output,
                     ntem_totals,
                     lad_lookup,
@@ -338,6 +337,8 @@ def control_to_ntem(msoa_output,
     """
     Control to a vector of NTEM constraints using single factor.
     Return productions controlled to NTEM.
+
+    HAS SEPARATE SCRIPT REMOVE FROM UTILS
 
     Parameters:
     ----------
@@ -361,7 +362,7 @@ def control_to_ntem(msoa_output,
     ntem_value_name = 'Attractions':
         Name of the value column in the NTEM dataset. Usually 'Productions'
         or 'Attractions' but could be used for ca variable or growth.
-    
+
     base_zone_name = 'msoa_zone_id':
         name of base zoning system. Will be dictated by the lad lookup.
         Should be msoa in hb production model and attraction model but will
@@ -2589,9 +2590,9 @@ def get_pa_diff(new_p,
             len(p_target))
         ** .5
     )
-    
+
     return pa_diff
-    
+
 """
 
 def correct_band_share(external_pa,
@@ -2602,7 +2603,7 @@ def correct_band_share(external_pa,
                        echo=False):
     """
     Adjust band shares of rows or columnns
-    
+
     external pa:
         Square matrix
     band_totals:
@@ -2670,14 +2671,14 @@ def get_compilation_params(lookup_folder,
     """
     """
     out_dict = []
-    
+
     lookup_list = os.listdir(lookup_folder)
 
     if get_pa:
         pa_path = [x for x in lookup_list if 'pa_matrix_params' in x][0]
         pa = pd.read_csv(lookup_folder + '/' + pa_path)
         out_dict.append(pa)
-        
+
     if get_od:
         od_path = [x for x in lookup_list if 'od_matrix_params' in x][0]
         od = pd.read_csv(lookup_folder + '/' + od_path)
@@ -2729,7 +2730,7 @@ def parse_mat_output(list_dir,
             if len(dat) == 0:
                 dat = 'none'
             split_dict.update({name:dat})
-        split_list.append(split_dict)           
+        split_list.append(split_dict)
 
     segments = pd.DataFrame(split_list)
     segments = segments.replace({np.nan:'none'})
@@ -2754,7 +2755,7 @@ def unpack_tlb(tlb,
     obs_trip:
         Band share by band as fraction of 1
     obs_dist:
-        
+
     """
 
     # Convert miles from raw NTS to km

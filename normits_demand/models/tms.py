@@ -26,7 +26,7 @@ Wrapper script to run TMS start to finish.
 import os
 import sys
 
-sys.path.append(r'C:\Users\genie\Documents\GitHub\Travel-Market-Synthesiser')
+sys.path.append(r'C:\Users\genie\Documents\GitHub\NorMITs-Demand')
 
 import pandas as pd
 import numpy as np
@@ -78,7 +78,7 @@ class TravelMarketSynthesiser:
 
         param_dict = {}
         for index, row in params.iterrows():
-            param_name = row['param_name'].lower().replace(' ','_')
+            param_name = str(row['param_name']).lower().replace(' ','_')
             param_dat = row['param']
     
             if ',' in str(param_dat):
@@ -236,16 +236,17 @@ class TravelMarketSynthesiser:
             output_segments = ni6.params['hb_trip_end_segmentation'],
             lu_path = ni6.params['land_use_path'],
             trip_rates = ni6.params['hb_trip_rates'],
-            time_splits = ni6.params['hb_time_splits'],
-            mode_splits = ni6.params['hb_mode_splits'],
+            time_split = ni6.params['hb_time_split'],
+            ave_time_split = ni6.params['hb_ave_time_split'],
+            mode_split = ni6.params['hb_mode_split'],
             ntem_control = ni6.params['production_ntem_control'],
             ntem_path = ni6.params['ntem_control_path'],
             k_factor_control = ni6.params['production_k_factor_control'],
             k_factor_path = ni6.params['production_k_factor_path'],
             export_msoa = False,
-            export_uncorrected = True,
+            export_uncorrected = False,
             export_target = True)
-        
+
         a = am.AttractionModel(
             model_name = ni6.params['model_name'].lower(),
             build_folder = ni6.run_folder,
@@ -313,7 +314,7 @@ class TravelMarketSynthesiser:
             export_msoa = self.params['export_msoa'],
             export_lad = self.params['export_lad'],
             export_uncorrected = self.params['export_uncorrected'],
-            export_target = self.params['export_model_zoning']) # For current k factors only
+            export_target = self.params['export_model_zoning'])
 
         hb_p_out = hb_p.run_hb()
         # Update run dict
@@ -425,10 +426,10 @@ class TravelMarketSynthesiser:
 
         int_hb.run()
 
-        int_nhb = dm.DistributionModel(,
-                                       model_name = params['model_name'],
-                                       iteration = params['iteration'],
-                                       tlb_area = 'north',
+        int_nhb = dm.DistributionModel(
+            model_name = params['model_name'],
+            iteration = params['iteration'],
+                      tlb_area = 'north',
                                        segmentation = 'tfn',
                                        distribution_segments = params['nhb_distribution_segments'],
                                        dist_function = 'ln',

@@ -10,7 +10,7 @@ import os
 import pandas as pd
 import numpy as np
 
-from normits_demand.concurrency import multiprocessing_wrapper as mp
+from normits_demand.concurrency import multiprocessing as mp
 
 from normits_demand.utils import utils as nup
 from normits_demand.reports import reports_audits as ra
