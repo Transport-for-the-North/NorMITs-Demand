@@ -243,7 +243,7 @@ class TravelMarketSynthesiser:
             ntem_path = ni6.params['ntem_control_path'],
             k_factor_control = ni6.params['production_k_factor_control'],
             k_factor_path = ni6.params['production_k_factor_path'],
-            export_msoa = True,
+            export_msoa = False,
             export_uncorrected = False,
             export_target = True)
 

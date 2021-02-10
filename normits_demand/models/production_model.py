@@ -818,20 +818,30 @@ class ProductionModel:
                              'hb_productions_' +
                              self.input_zones.lower() +
                              '.csv'), index=False)
-    
+
         # Aggregate to target model zones
-        target_output = self.aggregate_to_zones(msoa_output,
-                                                p_params,
-                                                pop_weighted = True)
+        target_output = self.aggregate_to_zones(
+            msoa_output,
+            p_params,
+            spatial_aggregation_output = self.output_zones,
+            pop_weighted = True)
+
+        print(target_output)
+        print(list(target_output))
+        print(target_output['trips'].sum())
 
         # Compile and out
         t_group_cols = p_params['target_output_cols'].copy()
         t_group_cols.remove('trips')
-        
+
+        print(p_params['target_output_cols'])
+        print(t_group_cols)
+
         target_output = target_output.reindex(
             p_params['target_output_cols'],
-            axis=1).sort_values(
-                t_group_cols).reset_index(drop=True)
+            axis=1).groupby(t_group_cols).sum().reset_index()
+        target_output = target_output.sort_values(
+            t_group_cols).reset_index(drop=True)
 
         out_path = os.path.join(
             output_dir,
@@ -846,7 +856,7 @@ class ProductionModel:
 
         end_time = nup.set_time()
         print(end_time)
-    
+
         # Call mp.production_report w/ hb param
         """
         pr = ra.run_production_reports(file_drive='Y:/',
