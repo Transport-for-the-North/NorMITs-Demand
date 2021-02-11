@@ -2627,7 +2627,11 @@ def file_write_check(path: Union[str, Path], wait: bool=True) -> Path:
                     raise ValueError('Too many files in use!')
 
 
-def safe_dataframe_to_csv(df, out_path, flatten_header=False, **to_csv_kwargs):
+def safe_dataframe_to_csv(df: pd.DataFrame,
+                          out_path: str,
+                          flatten_header: bool = False,
+                          **to_csv_kwargs: Any,
+                          ) -> None:
     """
     Wrapper around df.to_csv. Gives the user a chance to close the open file.
 
@@ -3171,6 +3175,10 @@ def add_all_commute_cat(df: pd.DataFrame,
     df = df.append(all_commute)
     df = df.sort_values(by=group_cols + ["employment_cat"])
     return df.reset_index(drop=True)
+
+
+def create_iter_name(iter_num: int) -> str:
+    return 'iter' + str(iter_num)
 
 
 # ## BELOW HERE IS OLD TMS CODE ## #

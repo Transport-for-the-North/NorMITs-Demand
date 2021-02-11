@@ -3,46 +3,76 @@
 Created on Thu Sep  3 12:34:24 2020
 
 @author: genie
-"""
 
-import pyodbc
+Download access drivers:
+https://www.microsoft.com/en-us/download/confirmation.aspx?id=54920
+"""
+# Builtins
 import os
 
+from typing import List
+
+# Third Party
+import pyodbc
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
 
-from typing import List
 
 class TemproParser:
     """
     """
+    _access_driver = '{Microsoft Access Driver (*.mdb, *.accdb)}'
+    _data_source = 'Y:\Data Strategy\Data\TEMPRO'
+    _out_folder = r'Y:\NorMITs Demand\import\tempro'
+    _region_list = [
+        'EAST_',
+        'EM_',
+        'LON_',
+        'NE_',
+        'NW_',
+        'SCOTLAND_',
+        'SE_',
+        'SW_',
+        'WALES_',
+        'WM_',
+        'YH_'
+    ]
+    _output_years = [2018, 2033, 2035, 2050]
+
     def __init__(self,
-                 access_driver = '{Microsoft Access Driver (*.mdb, *.accdb)}',
-                 data_source: str = 'C:/Program Files (x86)/TEMPRO7/DATA/',
-                 region_list: list = ['EAST_', 'EM_', 'LON_', 'NE_', 'NW_',
-                                'SCOTLAND_', 'SE_', 'SW_', 'WALES_',
-                                'WM_', 'YH_'],
-                 output_years: List[int] = [2018, 2033, 2035, 2050],
-                 out_folder: str = 'Y:/NorMITs Synthesiser/import/ntem_constraints',
+                 access_driver: str = None,
+                 data_source: str = None,
+                 region_list: List[str] = None,
+                 output_years: List[int] = None,
+                 out_folder: str = None,
                  ):
         """
         """
+        print('Initialising tempro extractor...')
 
-        print('Tempro extractor running')
-        
-        self.access_driver = access_driver
-        
+        # Set to default values if not passed in
+        access_driver = self._access_driver if access_driver is None else access_driver
+        data_source = self._data_source if data_source is None else data_source
+        out_folder = self._out_folder if out_folder is None else out_folder
+        region_list = self._region_list if region_list is None else region_list
+        output_years = self._output_years if output_years is None else output_years
+
         if not os.path.exists(data_source):
             raise ValueError('Tempro not installed at' + data_source)
 
+        # Assign variables
+        self.access_driver = access_driver
         self.data_source = data_source
         self.region_list = region_list
         self.output_years = output_years
         self.out_folder = out_folder
 
+        print('Tempro extractor running!')
+
     def parse_tempro(self,
-                     trip_type = 'pa',  
-                     aggregate_car = True):
+                     trip_type: str = 'pa',
+                     aggregate_car: bool = True):
 
         """
         trip_type = 'pa' or 'od'
@@ -52,14 +82,6 @@ class TemproParser:
             mode 3 only - ie. growth in car drivers.
             If False, will add Modes 3 & 4, so car driver and passenger.
         """
-        access_driver = self.access_driver
-        
-        data_source = self.data_source
-        region_list = self.region_list
-
-        output_years = self.output_years
-        out_folder = self.out_folder
-
         if trip_type == 'pa':
             tt_q = '(1,2)'
             col_a = 'Productions'
@@ -69,7 +91,7 @@ class TemproParser:
             col_a = 'Origin'
             col_b = 'Destination'
 
-        ## Good stuff
+        # Good stuff
         ntem_zone_lookup = pd.read_csv(os.path.join(os.getcwd(),
                                                     'config',
                                                     'tempro',
@@ -84,13 +106,16 @@ class TemproParser:
                                                   'tempro',
                                                   'ntem_lad_pop_weighted_lookup.csv'))
 
-        read_dbs = []
-        db_list = [x for x in os.listdir(data_source) if '.mdb' in x]
-        for db in db_list:
-            for region in region_list:
-                if region in db:
-                    read_dbs.append(db)
+        available_dbs = []
+        db_list = [x for x in os.listdir(self.data_source) if '.mdb' in x]
+        for db_fname in db_list:
+            for region in self.region_list:
+                if region in db_fname:
+                    available_dbs.append(db_fname)
                     break
+
+        if available_dbs == list():
+            raise IOError("Couldn't find any dbs to load from.")
 
         # TODO: Check there's the full whack of regions here - say which aren't - error if any North missing
 
@@ -98,12 +123,13 @@ class TemproParser:
         # TODO: multithread wrapper
 
         db_ph = []
-        for db in read_dbs:
-            print(db)
-        
+        for db_fname in tqdm(available_dbs, desc="Extracting from DBs..."):
             # Connect
-            conn_string = ('Driver=' + access_driver +
-                           ';DBQ=' + data_source + db + ';')
+            db_path = os.path.join(self.data_source, db_fname)
+            conn_string = (
+                'Driver=' + self.access_driver + ';'
+                'DBQ=' + db_path + ';'
+            )
             conn = pyodbc.connect(conn_string)
             cursor = conn.cursor()
 
@@ -135,14 +161,14 @@ class TemproParser:
             zones = pd.DataFrame(zones)
             zones.columns = zone_cols
 
-            # Close db
+            # Close db_fname
             conn.close()
 
             # Get years
             av_years = [int(x) for x in list(trip_ends) if x.isdigit()]
             year_index = []
             year_dicts = []
-            for year in output_years:
+            for year in self.output_years:
         
                 if year > 2051:
                     print('Impossible to interpolate past 2051')
@@ -150,21 +176,21 @@ class TemproParser:
                 else:
                     year_index.append(str(year))
                     if year in av_years:
-                        year_dicts.append({'t_year':year,
-                                           'start_year':year,
-                                           'end_year':year})
+                        year_dicts.append({'t_year': year,
+                                           'start_year': year,
+                                           'end_year': year})
                     else:
                         year_diff = np.array([year - x for x in av_years])
                         # Get lower than
-                        ly = np.argmin(np.where(year_diff>0, year_diff, 100))
+                        ly = np.argmin(np.where(year_diff > 0, year_diff, 100))
                         ly = av_years[ly]
                         # Get greater than
-                        hy = np.argmax(np.where(year_diff<0, year_diff, -100))
+                        hy = np.argmax(np.where(year_diff < 0, year_diff, -100))
                         hy = av_years[hy]
 
-                        year_dicts.append({'t_year':year,
-                                           'start_year':ly,
-                                           'end_year':hy})
+                        year_dicts.append({'t_year': year,
+                                           'start_year': ly,
+                                           'end_year': hy})
 
             # Interpolate mid point years if needed
             for year in year_dicts:
@@ -183,23 +209,23 @@ class TemproParser:
 
             # Add LA names
             trip_ends = trip_ends.merge(zones,
-                                        how = 'left',
-                                        on = 'ZoneID')
+                                        how='left',
+                                        on='ZoneID')
 
             # TODO: Join LA (as NTEM) to new LA (lookup)
             # Nightmare because NTEM zone id != NTEM_zone_id - have to go round the houses
             trip_ends = trip_ends.merge(ntem_zone_lookup,
-                                        how = 'inner',
-                                        on = 'ZoneName')
+                                        how='inner',
+                                        on='ZoneName')
 
             trip_ends = trip_ends.merge(ntem_code_lookup,
-                                        how = 'inner',
-                                        on = 'ntem_id')
+                                        how='inner',
+                                        on='ntem_id')
 
             trip_ends = trip_ends.merge(gb_ntem_lookup,
                                         how='inner',
-                                        left_on = 'Zone_ID',
-                                        right_on ='ntem_zone_id')
+                                        left_on='Zone_ID',
+                                        right_on='ntem_zone_id')
 
             # Reindex
             group_cols = ['lad_zone_id', 'Purpose', 'Mode', 'TimePeriod', 'TripType']
@@ -209,13 +235,13 @@ class TemproParser:
 
             # Compile segments (mode 3&4 == 3, purpose 11 & 12 == 12)
             # Weekdays only - ave weekday = weekday / 5 - see below
-            trip_ends['Purpose'] = trip_ends['Purpose'].replace([11],12)
+            trip_ends['Purpose'] = trip_ends['Purpose'].replace([11], 12)
         
             if aggregate_car:
-                trip_ends['Mode'] = trip_ends['Mode'].replace(4,3)
+                trip_ends['Mode'] = trip_ends['Mode'].replace(4, 3)
 
             trip_ends = trip_ends[
-                    trip_ends['TimePeriod'].isin([1,2,3,4])].reset_index(drop=True)
+                    trip_ends['TimePeriod'].isin([1, 2, 3, 4])].reset_index(drop=True)
 
             # Aggregate @ LA
             trip_ends = trip_ends.reindex(target_cols, axis=1).groupby(
@@ -247,35 +273,31 @@ class TemproParser:
 
             # Pivot to PA
             single_year = single_year.pivot_table(
-                    index = pivot_cols,
-                    columns = ['TripType'],
-                    values = str(year)).reset_index()
+                    index=pivot_cols,
+                    columns=['TripType'],
+                    values=str(year)).reset_index()
             # Rename
             single_year = single_year.rename(
-                    columns={1:col_a, 2:col_b,
-                             3:col_a, 4:col_b})
+                    columns={1: col_a, 2: col_b,
+                             3: col_a, 4: col_b})
 
-            # Build outname
-            out_path = os.path.join(out_folder,
-                                    'ntem_' +
-                                    trip_type +
-                                    '_ave_wday_' + str(year) + '.csv')
-
-            # write
+            # Write to disk
+            out_fname = "ntem_%s_ave_wday_%s.csv" % (trip_type, str(year))
+            out_path = os.path.join(self.out_folder, out_fname)
             single_year.to_csv(out_path, index=False)
-            return('Done' + trip_type)
 
 # TODO: Ask Nhan - about VO application here
+
 
 if __name__ == '__main__':
 
     pa = TemproParser(out_folder=r'C:\Users\Genie\Documents\Tempro',
-                      output_years = [2015])
+                      output_years=[2015])
     od = TemproParser(out_folder=r'C:\Users\Genie\Documents\Tempro',
-                      output_years = [2015])
+                      output_years=[2015])
 
-    pa.parse_tempro(trip_type = 'pa',
-                    aggregate_car = True)
+    pa.parse_tempro(trip_type='pa',
+                    aggregate_car=True)
 
-    od.parse_tempro(trip_type = 'od',
-                    aggregate_car = True)
+    od.parse_tempro(trip_type='od',
+                    aggregate_car=True)

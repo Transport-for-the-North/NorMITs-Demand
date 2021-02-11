@@ -81,7 +81,7 @@ class ExternalForecastSystem:
         # Initialise
         du.validate_model_name_and_mode(model_name, consts.MODES_NEEDED)
         self.model_name = du.validate_model_name(model_name)
-        self.iter_name = 'iter' + str(iter_num)
+        self.iter_name = du.create_iter_name(iter_num)
         self.scenario_name = du.validate_scenario_name(scenario_name)
         self.integrate_dlog = integrate_dlog
         self.import_location = import_home
@@ -1630,6 +1630,10 @@ class ExternalForecastSystem:
                                  self.scenario_name,
                                  self.__version__,
                                  self._out_dir)
+
+    @property
+    def out_dir(self):
+        return self._out_dir
 
 
 def _input_checks(iter_num: int = None,
