@@ -21,6 +21,8 @@ from tqdm import tqdm
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
 
+from normits_demand.constraints import ntem_control as ntem
+
 from normits_demand.d_log import processor as dlog_p
 
 
@@ -1445,9 +1447,8 @@ def merge_attraction_weights(employment: pd.DataFrame,
                                                    lad_lookup_name))
 
         print("Performing HB NTEM constraint...")
-        # TODO: Allow control_to_ntem() to take flexible col names
         attractions = attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        attractions, hb_audit, *_ = du.control_to_ntem(
+        attractions, hb_audit, *_ = ntem.control_to_ntem(
             attractions,
             ntem_totals,
             ntem_lad_lookup,
@@ -1460,7 +1461,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
 
         print("Performing NHB NTEM constraint...")
         nhb_attractions = nhb_attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        nhb_attractions, nhb_audit, *_ = du.control_to_ntem(
+        nhb_attractions, nhb_audit, *_ = ntem.control_to_ntem(
             nhb_attractions,
             ntem_totals,
             ntem_lad_lookup,

@@ -27,9 +27,10 @@ from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
 from normits_demand.utils import timing
 
-from normits_demand.d_log import processor as dlog_p
 
+from normits_demand.d_log import processor as dlog_p
 from normits_demand.concurrency import multiprocessing
+from normits_demand.constraints import ntem_control as ntem
 
 # TODO: Move functions that can be static elsewhere.
 #  Maybe utils?
@@ -2331,7 +2332,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
         ntem_lad_lookup = pd.read_csv(lad_lookup_path)
 
         print("\nPerforming NTEM constraint for %s..." % year)
-        productions, audit, *_, = du.control_to_ntem(
+        productions, audit, *_, = ntem.control_to_ntem(
             productions,
             ntem_totals,
             ntem_lad_lookup,

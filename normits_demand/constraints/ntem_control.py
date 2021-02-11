@@ -7,6 +7,8 @@ Created on Tue Feb  9 17:36:43 2021
 
 import numpy as np
 
+
+# TODO: Allow control_to_ntem() to take flexible col names
 def control_to_ntem(msoa_output,
                     ntem_totals,
                     lad_lookup,
@@ -170,9 +172,6 @@ def control_to_ntem(msoa_output,
         lad_groups.append(col)
     lad_index = lad_groups.copy()
     lad_index.append(base_value_name)
-
-    print(lad_groups)
-    print(lad_index)
 
     lad_totals = output.reindex(lad_index,
                                 axis=1).groupby(

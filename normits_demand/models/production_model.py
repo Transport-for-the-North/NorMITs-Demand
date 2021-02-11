@@ -13,15 +13,19 @@ pandas v0.23.4
 
 """
 
-import os, warnings # File operations
+import os
+import warnings
+
 from typing import List
 
-import numpy as np # Vector operations
-import pandas as pd # Bread and butter
+import numpy as np
+import pandas as pd
 
-from normits_demand.utils import utils as nup # Folder build utils
-from normits_demand.utils import ntem_control as ntem
+from normits_demand.constraints import ntem_control as ntem
+
+from normits_demand.utils import utils as nup
 from normits_demand.utils.general import safe_dataframe_to_csv
+
 
 class ProductionModel:
     """
@@ -1184,7 +1188,7 @@ class ProductionModel:
     
             ntem_totals = pd.read_csv(ntem_path)
     
-            nhb_msoa, ntem_a, ntem_f, nhb_lad = nup.control_to_ntem(
+            nhb_msoa, ntem_a, ntem_f, nhb_lad = ntem.control_to_ntem(
                     nhb_msoa,
                     ntem_totals,
                     ntem_lad_lookup,
