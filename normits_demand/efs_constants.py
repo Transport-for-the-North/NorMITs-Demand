@@ -13,6 +13,7 @@ Keeps all constants in one place, for all files in the project to refer to,
 and keeps the code more readable.
 """
 # TODO: Re-organise constants
+import os
 
 # ### Constant Values ### #
 
@@ -269,6 +270,18 @@ ALL_YEARS = [BASE_YEAR] + FUTURE_YEARS
 BASE_YEAR_STR = str(BASE_YEAR)
 FUTURE_YEARS_STR = [str(x) for x in FUTURE_YEARS]
 ALL_YEARS_STR = [str(x) for x in ALL_YEARS]
+
+# Bespoke zones
+# BACKLOG: Move bespoke zone input into a config file
+#  labels: EFS, QoL updates
+
+BESPOKE_ZONES_INPUT_FILE = os.path.join(
+    "Y:/",
+    "NorMITs Demand",
+    "inputs",
+    "MANSAM",
+    "Bespoke Zone - MANSAM Inputs v1b.xlsx",
+)
 
 
 

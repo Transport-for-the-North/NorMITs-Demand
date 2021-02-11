@@ -14,6 +14,8 @@ Running test runs of EFS
 import normits_demand as nd
 from normits_demand import efs_constants as consts
 
+from normits_demand.utils import exceptional_growth as eg
+
 
 def main():
     verbose = False
@@ -27,7 +29,7 @@ def main():
     recreate_nhb_productions = False
 
     run_bespoke_zones = False
-    run_hb_pa_to_od = True
+    run_hb_pa_to_od = False
     run_compile_od = True
     run_decompile_od = False
     run_future_year_compile_od = False
@@ -70,10 +72,14 @@ def main():
             verbose=verbose
         )
 
-        # Which matrices do we need? Just the HB ones?? YES!
-
-        # BACKLOG: Properly integrate bespoke zones code
-        #  labels: demand merge
+        eg.adjust_bespoke_zones(
+            consts.BESPOKE_ZONES_INPUT_FILE,
+            efs.exports,
+            efs.model_name,
+            base_year=consts.BASE_YEAR_STR,
+            recreate_donor=True,
+            audit_path=efs.exports["audits"],
+        )
 
     if run_hb_pa_to_od:
         efs.pa_to_od(
@@ -88,7 +94,7 @@ def main():
         # Compiles base year OD matrices
         efs.pre_me_compile_od_matrices(
             year=2050,
-            overwrite_aggregated_od=False,
+            overwrite_aggregated_od=True,
             overwrite_compiled_od=True,
         )
 

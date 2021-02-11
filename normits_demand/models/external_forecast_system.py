@@ -1658,7 +1658,7 @@ class ExternalForecastSystem:
 
 def _input_checks(iter_num: int = None,
                   m_needed: List[int] = None,
-                  constraint_required: Dict[str, bool] = None
+                  constraint_required: Dict[str, bool] = None,
                   ) -> None:
     """
     Checks that any arguments given are OK. Will raise an error
