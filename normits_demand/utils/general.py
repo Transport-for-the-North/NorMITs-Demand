@@ -338,12 +338,12 @@ def print_w_toggle(*args, echo, **kwargs):
 
 def build_io_paths(import_location: str,
                    export_location: str,
-                   base_year: str,
                    model_name: str,
                    iter_name: str,
                    scenario_name: str,
                    demand_version: str,
                    demand_dir_name: str = 'NorMITs Demand',
+                   base_year: str = consts.BASE_YEAR_STR,
                    ) -> Tuple[dict, dict, dict]:
     """
     Builds three dictionaries of paths to the locations of all inputs and
@@ -353,12 +353,12 @@ def build_io_paths(import_location: str,
     ----------
     import_location:
         The directory the import directory exists - a dir named
-        self._out_dir (NorMITs Demand) should exist here. Usually
+        self.out_dir (NorMITs Demand) should exist here. Usually
         a drive name e.g. Y:/
 
     export_location:
         The directory to create the new output directory in - a dir named
-        self._out_dir (NorMITs Demand) should exist here. Usually
+        self.out_dir (NorMITs Demand) should exist here. Usually
         a drive name e.g. Y:/
 
     model_name:

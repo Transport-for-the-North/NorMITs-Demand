@@ -131,7 +131,7 @@ def test_real_data():
         MODEL_NAME,
         f"iter{ITER_NUM}",
         ExternalForecastSystem.__version__,
-        ExternalForecastSystem._out_dir,
+        ExternalForecastSystem.out_dir,
     )
     # Population csv files, locations from ExternalForecastSysten.__init__ parameters
     population_growth_file = "population/future_population_growth.csv"

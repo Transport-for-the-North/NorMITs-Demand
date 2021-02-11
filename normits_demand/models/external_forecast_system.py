@@ -50,7 +50,7 @@ from normits_demand.utils import sector_reporter_v2 as sr_v2
 class ExternalForecastSystem:
     # ## Class Constants ## #
     __version__ = '%s.%s' % (version.MAJOR, version.MINOR)
-    _out_dir = "NorMITs Demand"
+    out_dir = "NorMITs Demand"
 
     # defines all non-year columns
     column_dictionary = consts.EFS_COLUMN_DICTIONARY
@@ -1452,7 +1452,7 @@ class ExternalForecastSystem:
 
         output_location:
             The directory to create the new output directory in - a dir named
-            self._out_dir (NorMITs Demand) should exist here. Usually
+            self.out_dir (NorMITs Demand) should exist here. Usually
             a drive name e.g. Y:/
 
         iter_num:
@@ -1562,7 +1562,7 @@ class ExternalForecastSystem:
 
         output_location:
             The directory to create the new output directory in - a dir named
-            self._out_dir (NorMITs Demand) should exist here. Usually
+            self.out_dir (NorMITs Demand) should exist here. Usually
             a drive name e.g. Y:/
 
         iter_num:
@@ -1649,11 +1649,7 @@ class ExternalForecastSystem:
                                  self.iter_name,
                                  self.scenario_name,
                                  self.__version__,
-                                 self._out_dir)
-
-    @property
-    def out_dir(self):
-        return self._out_dir
+                                 self.out_dir)
 
 
 def _input_checks(iter_num: int = None,
