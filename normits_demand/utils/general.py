@@ -2080,7 +2080,7 @@ def long_to_wide_out(df: pd.DataFrame,
                      values: str,
                      out_path: str,
                      unq_zones: List[str] = None,
-                     round: int = 4,
+                     round_dp: int = 12,
                      ) -> None:
     """
     Converts a long format pd.Dataframe, converts it to long and writes
@@ -2110,7 +2110,7 @@ def long_to_wide_out(df: pd.DataFrame,
         If left as None, it assumes all zones in the range 1 to max zone number
         should exist.
 
-    round:
+    round_dp:
         The number of decimal places to round the output to
 
     Returns
@@ -2136,7 +2136,7 @@ def long_to_wide_out(df: pd.DataFrame,
         index=v_heading,
         columns=h_heading,
         values=values
-    ).round(4)
+    ).round(decimals=round_dp)
 
     # Finally, write to disk
     df.to_csv(out_path)

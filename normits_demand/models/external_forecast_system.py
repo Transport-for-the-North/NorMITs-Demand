@@ -269,7 +269,7 @@ class ExternalForecastSystem:
             alt_worker_growth_assumption_file: str = None,
             alt_pop_split_file: str = None,  # THIS ISN'T USED ANYWHERE
             distribution_method: str = "Furness",
-            purposes_needed: List[int] = consts.PURPOSES_NEEDED,
+            hb_purposes_needed: List[int] = consts.HB_PURPOSES_NEEDED,
             nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
             modes_needed: List[int] = consts.MODES_NEEDED,
             soc_needed: List[int] = consts.SOC_NEEDED,
@@ -387,7 +387,7 @@ class ExternalForecastSystem:
             Possible input is any dictionary corresponding to the correct
             order.
 
-        purposes_needed:
+        hb_purposes_needed:
             What purposes are needed on distribution.
             Default input is: [1, 2, 3, 4, 5, 6, 7, 8]
             Possible input is a list containing integers corresponding to the
@@ -557,7 +557,7 @@ class ExternalForecastSystem:
             alt_pop_split_file,
             distribution_method,
             self.imports['seed_dists'],
-            purposes_needed,
+            hb_purposes_needed,
             modes_needed,
             soc_needed,
             ns_needed,
@@ -855,7 +855,7 @@ class ExternalForecastSystem:
                 attraction_weights=converted_attractions,
                 trip_origin='hb',
                 years_needed=year_list,
-                p_needed=purposes_needed,
+                p_needed=hb_purposes_needed,
                 m_needed=modes_needed,
                 soc_needed=soc_needed,
                 ns_needed=ns_needed,
@@ -908,7 +908,7 @@ class ExternalForecastSystem:
 
         pm_sector_total_dictionary = {}
 
-        for purpose in purposes_needed:
+        for purpose in hb_purposes_needed:
             # TODO: Update sector reporter.
             #  Sector totals don't currently allow per purpose reporting
 
@@ -1151,10 +1151,11 @@ class ExternalForecastSystem:
                  soc_needed: List[int] = consts.SOC_NEEDED,
                  ns_needed: List[int] = consts.NS_NEEDED,
                  ca_needed: List[int] = consts.CA_NEEDED,
+                 round_dp: int = consts.DEFAULT_ROUNDING,
                  use_bespoke_pa: bool= True,
                  overwrite_hb_tp_pa: bool = True,
                  overwrite_hb_tp_od: bool = True,
-                 echo: bool = True
+                 verbose: bool = True
                  ) -> None:
         """
         Converts home based PA matrices into time periods split PA matrices,
@@ -1183,6 +1184,10 @@ class ExternalForecastSystem:
         ca_needed:
             The the car availability of PA matrices to convert to OD
 
+        round_dp:
+            The number of decimal places to round the output values to.
+            Uses consts.DEFAULT_ROUNDING by default.
+
         # TODO: Update docs once correct functionality exists
         overwrite_hb_tp_pa:
             Whether to split home based PA matrices into time periods.
@@ -1190,7 +1195,7 @@ class ExternalForecastSystem:
         overwrite_hb_tp_od:
             Whether to convert time period split PA matrices into OD matrices.
 
-        echo:
+        verbose:
             If True, suppresses some of the non-essential terminal outputs.
 
         Returns
@@ -1223,6 +1228,11 @@ class ExternalForecastSystem:
         for trip_origin, to_p_needed in hb_nhb_iterator:
             print("Running conversions for %s trips..." % trip_origin)
 
+            if to_p_needed == list():
+                print("Not splitting %s trips into time period as no "
+                      "purposes for this mode were given.")
+                continue
+
             # TODO: Check if tp pa matrices exist first
             if overwrite_hb_tp_pa:
                 tp_splits = self._get_time_splits_from_p_vector(trip_origin, ignore_cache=True)
@@ -1239,7 +1249,8 @@ class ExternalForecastSystem:
                     m_needed=m_needed,
                     soc_needed=soc_needed,
                     ns_needed=ns_needed,
-                    ca_needed=ca_needed
+                    ca_needed=ca_needed,
+                    round_dp=round_dp,
                 )
                 print('HB time period split PA matrices compiled!\n')
 
@@ -1258,7 +1269,8 @@ class ExternalForecastSystem:
                 years_needed=years_needed,
                 phi_type='fhp_tp',
                 aggregate_to_wday=True,
-                echo=echo
+                round_dp=round_dp,
+                verbose=verbose,
             )
 
             # Copy over NHB matrices as they are already in NHB format
@@ -1273,10 +1285,11 @@ class ExternalForecastSystem:
 
     def pre_me_compile_od_matrices(self,
                                    year: int = consts.BASE_YEAR,
-                                   hb_p_needed: List[int] = consts.PURPOSES_NEEDED,
+                                   hb_p_needed: List[int] = consts.HB_PURPOSES_NEEDED,
                                    nhb_p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
                                    m_needed: List[int] = consts.MODES_NEEDED,
                                    tp_needed: List[int] = consts.TIME_PERIODS,
+                                   round_dp: int = consts.DEFAULT_ROUNDING,
                                    overwrite_aggregated_od: bool = True,
                                    overwrite_compiled_od: bool = True,
                                    ) -> None:
@@ -1311,6 +1324,10 @@ class ExternalForecastSystem:
         tp_needed:
             The time periods to use when compiling and aggregating OD matrices.
 
+        round_dp:
+            The number of decimal places to round the output values to.
+            Uses consts.DEFAULT_ROUNDING by default.
+
         # TODO: Update docs once correct functionality exists
         overwrite_aggregated_od:
             Whether to generate aggregated od matrices or not.
@@ -1342,7 +1359,8 @@ class ExternalForecastSystem:
                     p_needed=hb_p_needed,
                     m_needed=m_needed,
                     ca_needed=ca_needed,
-                    tp_needed=tp_needed
+                    tp_needed=tp_needed,
+                    round_dp=round_dp,
                 )
             mat_p.aggregate_matrices(
                 import_dir=self.exports['od'],
@@ -1353,7 +1371,8 @@ class ExternalForecastSystem:
                 p_needed=nhb_p_needed,
                 m_needed=m_needed,
                 ca_needed=ca_needed,
-                tp_needed=tp_needed
+                tp_needed=tp_needed,
+                round_dp=round_dp,
             )
 
         if overwrite_compiled_od:
@@ -1378,8 +1397,9 @@ class ExternalForecastSystem:
                 mat_import=self.exports['aggregated_od'],
                 mat_export=self.exports['compiled_od'],
                 compile_params_path=compile_params_path,
+                round_dp=round_dp,
                 build_factor_pickle=True,
-                factor_pickle_path=self.params['compile']
+                factor_pickle_path=self.params['compile'],
             )
 
             # Need to convert into hourly average PCU for noham
@@ -1391,9 +1411,9 @@ class ExternalForecastSystem:
                     mode=m_needed[0],
                     method='to_vehicles',
                     out_format='wide',
-                    hourly_average=True
+                    hourly_average=True,
+                    round_dp=round_dp,
                 )
-
 
     def generate_post_me_tour_proportions(self,
                                           model_name: str,
@@ -1679,7 +1699,7 @@ def write_input_info(output_path,
                      alt_pop_split_file: str,
                      distribution_method: str,
                      seed_dist_location: str,
-                     purposes_needed: List[int],
+                     hb_purposes_needed: List[int],
                      modes_needed: List[int],
                      soc_needed: List[int],
                      ns_needed: List[int],
@@ -1705,7 +1725,7 @@ def write_input_info(output_path,
         "Alternate Population Split File: " + str(alt_pop_split_file),
         "Distribution Method: " + distribution_method,
         "Seed Distribution Location: " + seed_dist_location,
-        "Purposes Used: " + str(purposes_needed),
+        "Purposes Used: " + str(hb_purposes_needed),
         "Modes Used: " + str(modes_needed),
         "Soc Used: " + str(soc_needed),
         "Ns Used: " + str(ns_needed),

@@ -21,19 +21,20 @@ def main():
     # Running control
     integrate_dlog = False
 
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = True
     recreate_attractions = True
     recreate_nhb_productions = False
 
-    run_hb_pa_to_od = False
-    run_compile_od = False
+    run_bespoke_zones = False
+    run_hb_pa_to_od = True
+    run_compile_od = True
     run_decompile_od = False
     run_future_year_compile_od = False
 
     # Controls I/O
     scenario = consts.SC00_NTEM
-    iter_num = 0
+    iter_num = 1
     import_home = "Y:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
@@ -49,9 +50,6 @@ def main():
         verbose=verbose
     )
 
-    # BACKLOG: Properly integrate bespoke zones code
-    #  labels: demand merge
-
     if run_base_efs:
         # Generates HB PA matrices
         efs.run(
@@ -61,17 +59,31 @@ def main():
             echo_distribution=verbose,
         )
 
-    if run_hb_pa_to_od:
+    if run_bespoke_zones:
         # Convert to HB to OD
+        efs.pa_to_od(
+            years_needed=[2018],
+            p_needed=consts.ALL_HB_P,
+            use_bespoke_pa=False,
+            overwrite_hb_tp_pa=True,
+            overwrite_hb_tp_od=True,
+            verbose=verbose
+        )
+
+        # Which matrices do we need? Just the HB ones?? YES!
+
+        # BACKLOG: Properly integrate bespoke zones code
+        #  labels: demand merge
+
+    if run_hb_pa_to_od:
         efs.pa_to_od(
             years_needed=[2050],
             use_bespoke_pa=True,
             overwrite_hb_tp_pa=True,
             overwrite_hb_tp_od=True,
-            echo=verbose
+            verbose=verbose
         )
 
-    # TODO: Update Integrated OD2PA codebase
     if run_compile_od:
         # Compiles base year OD matrices
         efs.pre_me_compile_od_matrices(
@@ -80,6 +92,7 @@ def main():
             overwrite_compiled_od=True,
         )
 
+    # TODO: Check Post ME process works for NOHAM
     if run_decompile_od:
         # Decompiles post-me base year OD matrices - generates tour
         # proportions in the process

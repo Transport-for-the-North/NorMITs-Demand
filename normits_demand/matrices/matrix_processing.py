@@ -42,7 +42,8 @@ from normits_demand.matrices.tms_matrix_processing import *
 
 def _aggregate(import_dir: str,
                in_fnames: List[str],
-               export_path: str
+               export_path: str,
+               round_dp: int = consts.DEFAULT_ROUNDING,
                ) -> str:
     """
     Loads the given files, aggregates together and saves in given location
@@ -66,7 +67,7 @@ def _aggregate(import_dir: str,
         aggregated_mat += mat
 
     # Write new matrix out
-    aggregated_mat.to_csv(export_path)
+    aggregated_mat.round(decimals=round_dp).to_csv(export_path)
     print("Aggregated matrix written: %s" % os.path.basename(export_path))
 
 
@@ -74,7 +75,8 @@ def _recursive_aggregate(candidates: List[str],
                          segmentations: List[List[int]],
                          segmentation_strs: List[List[str]],
                          import_dir: str,
-                         export_path: str
+                         export_path: str,
+                         round_dp: int = consts.DEFAULT_ROUNDING,
                          ) -> None:
     """
     The internal function of aggregate_matrices(). Recursively steps through
@@ -102,6 +104,10 @@ def _recursive_aggregate(candidates: List[str],
 
     export_path:
         Directory to output the aggregated matrices.
+
+    round_dp:
+        The number of decimal places to round the output values to.
+        Uses consts.DEFAULT_ROUNDING by default.
     """
 
     # ## EXIT CONDITION ## #
@@ -115,7 +121,8 @@ def _recursive_aggregate(candidates: List[str],
             _aggregate(
                 import_dir=import_dir,
                 in_fnames=candidates,
-                export_path=export_path + '.csv'
+                export_path=export_path + '.csv',
+                round_dp=round_dp,
             )
         else:
             # Loop through and aggregate
@@ -123,7 +130,8 @@ def _recursive_aggregate(candidates: List[str],
                 _aggregate(
                     import_dir=import_dir,
                     in_fnames=[x for x in candidates.copy() if seg_str in x],
-                    export_path=export_path + seg_str + '.csv'
+                    export_path=export_path + seg_str + '.csv',
+                    round_dp=round_dp,
                 )
         # Exit condition done, leave recursion
         return
@@ -134,11 +142,14 @@ def _recursive_aggregate(candidates: List[str],
 
     if du.is_none_like(seg):
         # Don't need to segment here, next loop
-        _recursive_aggregate(candidates=candidates,
-                             segmentations=other_seg,
-                             segmentation_strs=other_strs,
-                             import_dir=import_dir,
-                             export_path=export_path)
+        _recursive_aggregate(
+            candidates=candidates,
+            segmentations=other_seg,
+            segmentation_strs=other_strs,
+            import_dir=import_dir,
+            export_path=export_path,
+            round_dp=round_dp,
+        )
     else:
         # Narrow down search, loop again
         for segment, seg_str in zip(seg, strs):
@@ -147,7 +158,8 @@ def _recursive_aggregate(candidates: List[str],
                 segmentations=other_seg,
                 segmentation_strs=other_strs,
                 import_dir=import_dir,
-                export_path=export_path + seg_str
+                export_path=export_path + seg_str,
+                round_dp=round_dp,
             )
 
 
@@ -161,7 +173,8 @@ def aggregate_matrices(import_dir: str,
                        soc_needed: List[int] = None,
                        ns_needed: List[int] = None,
                        ca_needed: List[int] = None,
-                       tp_needed: List[int] = None
+                       tp_needed: List[int] = None,
+                       round_dp: int = consts.DEFAULT_ROUNDING,
                        ) -> List[str]:
     """
     Aggregates the matrices in import_dir up to the given level and writes
@@ -206,9 +219,9 @@ def aggregate_matrices(import_dir: str,
         If None, time periods will be aggregated. If set, chosen time periods
         will be retained.
 
-    return_paths:
-        If True then the paths of all aggregated matrices will be returned.
-        Otherwise, returns None.
+    round_dp:
+        The number of decimal places to round the output values to.
+        Uses consts.DEFAULT_ROUNDING by default.
 
     Returns
     -------
@@ -277,7 +290,8 @@ def aggregate_matrices(import_dir: str,
             segmentations=[segment_needed, ca_needed, tp_needed],
             segmentation_strs=[segment_str, ca_strs, tp_strs],
             import_dir=import_dir,
-            export_path=out_path
+            export_path=out_path,
+            round_dp=round_dp,
         )
 
 
@@ -1733,6 +1747,7 @@ def copy_nhb_matrices(import_dir: str,
 def compile_matrices(mat_import: str,
                      mat_export: str,
                      compile_params_path: str,
+                     round_dp: int = consts.DEFAULT_ROUNDING,
                      build_factor_pickle: bool = False,
                      factor_pickle_path: str = None,
                      factors_fname: str = 'od_compilation_factors.pickle'
@@ -1750,6 +1765,10 @@ def compile_matrices(mat_import: str,
 
     compile_params_path:
         Path to the compile params, as produced by build_compile_params()
+
+    round_dp:
+            The number of decimal places to round the output values to.
+            Uses consts.DEFAULT_ROUNDING by default.
 
     build_factor_pickle:
         If True, a dictionary of factors that can be used to decompile the
@@ -1812,7 +1831,8 @@ def compile_matrices(mat_import: str,
         full_mat = reduce(lambda x, y: x.add(y, fill_value=0), in_mats)
 
         # Output to file
-        full_mat.to_csv(os.path.join(mat_export, comp_name))
+        output_path = os.path.join(mat_export, comp_name)
+        full_mat.round(decimals=round_dp).to_csv(output_path)
 
         # Go to the next iteration if we don't need the factors
         if not build_factor_pickle:

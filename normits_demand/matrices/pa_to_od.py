@@ -85,6 +85,7 @@ def _build_tp_pa_internal(pa_import,
                           mode,
                           segment,
                           car_availability,
+                          round_dp,
                           ):
     """
     The internals of build_tp_pa(). Useful for making the code more
@@ -230,6 +231,7 @@ def _build_tp_pa_internal(pa_import,
             v_heading=zoning_system,
             h_heading=out_zone_col,
             values='trips',
+            round_dp=round_dp,
             out_path=out_tp_pa_path
         )
 
@@ -245,6 +247,7 @@ def efs_build_tp_pa(pa_import: str,
                     ns_needed: List[int] = None,
                     ca_needed: List[int] = None,
                     matrix_format: str = 'pa',
+                    round_dp: int = consts.DEFAULT_ROUNDING,
                     process_count: int = consts.PROCESS_COUNT
                     ) -> None:
     """
@@ -288,6 +291,10 @@ def efs_build_tp_pa(pa_import: str,
     matrix_format:
         Which format the matrix is in. Either 'pa' or 'od'
 
+    round_dp:
+        The number of decimal places to round the output values to.
+        Uses consts.DEFAULT_ROUNDING by default.
+
     process_count:
         The number of processes to use when multiprocessing. Negative numbers
         use that many processes less than the max. i.e. -1 ->
@@ -315,6 +322,7 @@ def efs_build_tp_pa(pa_import: str,
         'matrix_format': matrix_format,
         'tp_splits': tp_splits,
         'model_zone_col': model_zone_col,
+        'round_dp': round_dp,
     }
 
     # Build a list of the changing arguments
@@ -354,6 +362,7 @@ def _build_od_internal(pa_import,
                        phi_lookup_folder,
                        phi_type,
                        aggregate_to_wday,
+                       round_dp,
                        full_od_out=False,
                        echo=True):
     """
@@ -506,7 +515,13 @@ def _build_od_internal(pa_import,
         output_to_path = os.path.join(od_export, output_to_name)
         output_od_path = os.path.join(od_export, output_od_name)
 
-        # TODO: Add tidality checks into efs_build_od()
+        # Round the outputs
+        output_from = output_from.round(decimals=round_dp)
+        output_to = output_to.round(decimals=round_dp)
+        output_od = output_od.round(decimals=round_dp)
+
+        # BACKLOG: Add tidality checks into efs_build_od()
+        #  labels: demand merge, audits, EFS
         # Auditing checks - tidality
         # OD from = PA
         # OD to = if it leaves it should come back
@@ -533,7 +548,8 @@ def efs_build_od(pa_import: str,
                  phi_lookup_folder: str = None,
                  phi_type: str = 'fhp_tp',
                  aggregate_to_wday: bool = True,
-                 echo: bool = True,
+                 verbose: bool = True,
+                 round_dp: int = consts.DEFAULT_ROUNDING,
                  process_count: int = -2
                  ) -> None:
     """
@@ -554,7 +570,11 @@ def efs_build_od(pa_import: str,
     phi_lookup_folder
     phi_type
     aggregate_to_wday
-    echo
+    verbose
+    round_dp:
+        The number of decimal places to round the output values to.
+        Uses consts.DEFAULT_ROUNDING by default.
+
     process_count:
         The number of processes to use when multiprocessing. Set to 0 to not
         use multiprocessing at all. Set to -1 to use all expect 1 available
@@ -576,7 +596,8 @@ def efs_build_od(pa_import: str,
        'phi_lookup_folder': phi_lookup_folder,
        'phi_type': phi_type,
        'aggregate_to_wday': aggregate_to_wday,
-       'echo': echo
+       'round_dp': round_dp,
+       'echo': verbose
     }
 
     # Build a list of the changing arguments
