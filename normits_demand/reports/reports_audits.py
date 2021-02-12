@@ -797,7 +797,7 @@ def distribution_report(file_drive='Y:/',
 def run_production_reports(file_drive='Y:/',
                            model_name='Norms_2015',
                            iteration='iter2',
-                           production_type = 'nhb',
+                           production_type = 'hb',
                            model_segments = ['mode', 'purpose', 'car_availability'],
                            internal_only = False,
                            write = True):
@@ -808,9 +808,9 @@ def run_production_reports(file_drive='Y:/',
 
     # Define productions path & validate passed prod type var
     if production_type.lower() == 'hb':
-        p_desc = '_hb_'
+        p_desc = 'hb_'
     elif production_type.lower() == 'nhb':
-        p_desc = '_nhb_'
+        p_desc = 'nhb_'
     else:
         ValueError('Production type must be \'hb\' or \'nhb\'')
     productions_path = (file_drive +

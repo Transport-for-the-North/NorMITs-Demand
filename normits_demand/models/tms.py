@@ -50,7 +50,7 @@ class TravelMarketSynthesiser:
     """
 
     def __init__(self,
-                 config_path = 'Y:/NorMITs Synthesiser/config/',
+                 config_path = 'I:/NorMITs Synthesiser/config/',
                  params_file = 'norms_params_sheet_i6.xlsx'):
         """
         """
