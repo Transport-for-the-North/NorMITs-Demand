@@ -1846,7 +1846,7 @@ def build_production_imports(import_home: str,
         mode_share_path = os.path.join(import_home, path)
 
     if msoa_lookup_path is None:
-        path = "default\zoning\msoa_zones.csv"
+        path = "zone_translation\msoa_zones.csv"
         msoa_lookup_path = os.path.join(import_home, path)
 
     if set_controls and ntem_control_dir is None:

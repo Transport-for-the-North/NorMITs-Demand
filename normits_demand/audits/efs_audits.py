@@ -175,21 +175,30 @@ class EfsAudits:
             vector['m'] = model_modes[0]
 
         # See how close the vector is to NTEM in each year
+        audit_ph = list()
         for year in self.years_needed:
             # Get the ntem control for this year
             ntem_fname = consts.NTEM_CONTROL_FNAME % ('pa', year)
             ntem_path = os.path.join(self.imports['ntem']['totals'], ntem_fname)
             ntem_totals = pd.read_csv(ntem_path)
 
-            _, audit, adjustments, lad_totals = ntem_control.control_to_ntem(control_df=vector,
-                                                                             ntem_totals=ntem_totals,
-                                                                             zone_to_lad=msoa_to_lad,
-                                                                             constraint_cols=self.ntem_control_cols,
-                                                                             base_value_name=year,
-                                                                             ntem_value_name=vec_type,
-                                                                             trip_origin=trip_origin)
+            # Get an audit of how close we are to ntem
+            _, audit, *_ = ntem_control.control_to_ntem(
+                control_df=vector,
+                ntem_totals=ntem_totals,
+                zone_to_lad=msoa_to_lad,
+                constraint_cols=self.ntem_control_cols,
+                base_value_name=year,
+                ntem_value_name=vec_type,
+                trip_origin=trip_origin,
+                verbose=False,
+            )
 
-            print(audit)
-            print()
-            print(adjustments)
+            # Add the year to the audit and store in the placeholder
+            audit['year'] = year
+            audit_ph.append(audit)
+
+        # Convert to a dataframe for output
+        audit = pd.DataFrame(audit_ph)
+        print(audit)
 
