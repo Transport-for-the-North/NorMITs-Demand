@@ -65,9 +65,6 @@ class ExternalForecastSystem:
                  dlog_pop_path: str = None,
                  dlog_emp_path: str = None,
 
-                 msoa_lookup_path: str = "zoning/msoa_zones.csv",
-                 lad_msoa_lookup_path: str = "zoning/lad_msoa_grouping.csv",
-
                  import_home: str = "Y:/",
                  export_home: str = "E:/",
                  verbose: str = True
@@ -96,22 +93,16 @@ class ExternalForecastSystem:
         self.input_zone_system = "MSOA"
         self.output_zone_system = self.model_name
 
-        # TODO: Build zone lookup paths inside generate_output_paths()
-        # TODO: Rename generate_output_paths() to _generate_paths()
-        self.msoa_lookup_path = msoa_lookup_path
-        self.lad_msoa_lookup_path = lad_msoa_lookup_path
-
         # We never control future years, not even in NTEM!
         self.ntem_control_future_years = False
 
         # Setup up import/export paths
-        path_dicts = self.generate_output_paths(consts.BASE_YEAR_STR)
+        path_dicts = self._generate_paths(consts.BASE_YEAR_STR)
         self.imports, self.exports, self.params = path_dicts
         self._setup_scenario_paths()
         self._build_pop_emp_paths()
         self._read_in_default_inputs()
         self._set_up_dlog(dlog_pop_path, dlog_emp_path)
-        self.msoa_zones_path = os.path.join(self.imports["zoning"], "msoa_zones.csv")
 
         # sub-classes
         self.production_generator = nd.EFSProductionGenerator(model_name=model_name)
@@ -148,11 +139,10 @@ class ExternalForecastSystem:
         self.emp_constraint = du.safe_read_csv(file_path, dtype=dtypes)
 
         # Zone and area files
-        input_dir = self.imports['default_inputs']
-        file_path = os.path.join(input_dir, self.msoa_lookup_path)
-        self.msoa_lookup = du.safe_read_csv(file_path)
+        zt_dict = self.imports['zone_translation']
+        self.msoa_lookup = du.safe_read_csv(zt_dict['msoa_str_int'])
 
-        file_path = os.path.join(input_dir, self.lad_msoa_lookup_path)
+        file_path = os.path.join(zt_dict['one_to_one'], 'lad_to_msoa.csv')
         self.lad_msoa_lookup = du.safe_read_csv(file_path)
 
     def _setup_scenario_paths(self) -> None:
@@ -592,7 +582,7 @@ class ExternalForecastSystem:
             population_constraint=pop_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],
-            msoa_lookup_path=self.msoa_zones_path,
+            msoa_lookup_path=self.imports['zone_translation']['msoa_str_int'],
             control_productions=True,
             control_fy_productions=self.ntem_control_future_years,
             dlog=self.dlog_paths['pop'],
@@ -617,7 +607,7 @@ class ExternalForecastSystem:
             employment_constraint=emp_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],
-            msoa_lookup_path=self.msoa_zones_path,
+            msoa_lookup_path=self.imports['zone_translation']['msoa_str_int'],
             attraction_weights_path=self.imports['a_weights'],
             control_attractions=True,
             control_fy_attractions=self.ntem_control_future_years,
@@ -674,7 +664,7 @@ class ExternalForecastSystem:
             import_home=self.imports['home'],
             export_home=self.exports['home'],
             model_name=self.model_name,
-            msoa_conversion_path=self.msoa_zones_path,
+            msoa_conversion_path=self.imports['zone_translation']['msoa_str_int'],
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
             control_productions=True,
@@ -1612,9 +1602,9 @@ class ExternalForecastSystem:
 
         # TODO: Compile to OD/PA when we know the correct format
 
-    def generate_output_paths(self, base_year: str) -> Tuple[Dict[str, str],
-                                                             Dict[str, str],
-                                                             Dict[str, str]]:
+    def _generate_paths(self, base_year: str) -> Tuple[Dict[str, str],
+                                                       Dict[str, str],
+                                                       Dict[str, str]]:
         """
         Returns imports, efs_exports and params dictionaries
 
@@ -1641,14 +1631,14 @@ class ExternalForecastSystem:
             compile, tours
         """
         return du.build_efs_io_paths(
-            self.import_location,
-            self.output_location,
-            base_year,
-            self.model_name,
-            self.iter_name,
-            self.scenario_name,
-            self.__version__,
-            self.out_dir
+            import_location=self.import_location,
+            export_location=self.output_location,
+            model_name=self.model_name,
+            base_year=base_year,
+            iter_name=self.iter_name,
+            scenario_name=self.scenario_name,
+            demand_version=self.__version__,
+            demand_dir_name=self.out_dir,
         )
 
 

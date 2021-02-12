@@ -429,6 +429,7 @@ def build_efs_io_paths(import_location: str,
         'one_to_one': os.path.join(zt_home, 'one_to_one'),
         'weighted': os.path.join(zt_home, 'weighted'),
         'no_overlap': os.path.join(zt_home, 'no_overlap'),
+        'msoa_str_int': os.path.join(zt_home, 'msoa_zones.csv'),
     }
 
     imports = {
