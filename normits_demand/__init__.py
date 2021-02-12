@@ -13,4 +13,4 @@ from normits_demand.models.efs_zone_translator import ZoneTranslator
 from normits_demand.models.elasticity_model import ElasticityModel
 
 # Audit classes
-from normits_demand.audits.efs_audits import EfsAudits
+from normits_demand.reports.efs_reporting import EfsReporter

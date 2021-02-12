@@ -992,7 +992,7 @@ class ExternalForecastSystem:
         #  Should these be pop/emp weighted too?
         sector_system = "tfn_sectors"
         model_zone_to_sector_path = os.path.join(
-            self.imports["zone_translation"],
+            self.imports["zone_translation"]['one_to_one'],
             "{}_to_{}.csv".format(self.output_zone_system, sector_system)
         )
         from_zone_column = "{}_zone_id".format(self.output_zone_system)

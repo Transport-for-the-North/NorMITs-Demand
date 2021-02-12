@@ -26,7 +26,7 @@ def main():
     export_home = "E:/"
     model_name = consts.MODEL_NAME
 
-    auditor = nd.EfsAudits(
+    auditor = nd.EfsReporter(
         iter_num=iter_num,
         model_name=model_name,
         scenario_name=scenario,
