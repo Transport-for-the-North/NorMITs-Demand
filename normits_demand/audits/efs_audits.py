@@ -181,15 +181,13 @@ class EfsAudits:
             ntem_path = os.path.join(self.imports['ntem']['totals'], ntem_fname)
             ntem_totals = pd.read_csv(ntem_path)
 
-            _, audit, adjustments, lad_totals = ntem_control.control_to_ntem(
-                vector,
-                ntem_totals,
-                msoa_to_lad,
-                group_cols=self.ntem_control_cols,
-                base_value_name=year,
-                ntem_value_name=vec_type,
-                purpose=trip_origin
-            )
+            _, audit, adjustments, lad_totals = ntem_control.control_to_ntem(control_df=vector,
+                                                                             ntem_totals=ntem_totals,
+                                                                             zone_to_lad=msoa_to_lad,
+                                                                             constraint_cols=self.ntem_control_cols,
+                                                                             base_value_name=year,
+                                                                             ntem_value_name=vec_type,
+                                                                             trip_origin=trip_origin)
 
             print(audit)
             print()

@@ -2334,13 +2334,13 @@ def control_productions_to_ntem(productions: pd.DataFrame,
 
         print("\nPerforming NTEM constraint for %s..." % year)
         productions, audit, *_, = ntem.control_to_ntem(
-            productions,
-            ntem_totals,
-            ntem_lad_lookup,
-            group_cols=ntem_control_cols,
+            control_df=productions,
+            ntem_totals=ntem_totals,
+            zone_to_lad=ntem_lad_lookup,
+            constraint_cols=ntem_control_cols,
             base_value_name=year,
             ntem_value_name='Productions',
-            purpose=trip_origin
+            trip_origin=trip_origin
         )
 
         # Update Audits for output

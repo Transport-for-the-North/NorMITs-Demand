@@ -4,19 +4,29 @@ Created on Tue Feb  9 17:36:43 2021
 
 @author: genie
 """
+# builtins
+from typing import List
 
+# Third party
 import numpy as np
+import pandas as pd
+
+# Local imports
+from normits_demand import constants as consts
+from normits_demand.utils import general as du
 
 
 # TODO: Allow control_to_ntem() to take flexible col names
-def control_to_ntem(msoa_output,
-                    ntem_totals,
-                    lad_lookup,
-                    group_cols = ['p', 'm'],
-                    base_value_name = 'attractions',
-                    ntem_value_name = 'attractions',
-                    base_zone_name = 'msoa_zone_id',
-                    purpose = 'hb'):
+def control_to_ntem(control_df: pd.DataFrame,
+                    ntem_totals: pd.DataFrame,
+                    zone_to_lad: pd.DataFrame,
+                    constraint_cols: List[str] = None,
+                    base_value_name: str = 'attractions',
+                    ntem_value_name: str = 'attractions',
+                    base_zone_name: str = 'msoa_zone_id',
+                    trip_origin: str = 'hb',
+                    verbose=True,
+                    ):
     """
     Control to a vector of NTEM constraints using single factor.
     Return productions controlled to NTEM.
@@ -57,50 +67,53 @@ def control_to_ntem(msoa_output,
         adjusted_output:
             DF with same msoa zoning as input but controlled to NTEM.
     """
-    # Init
-    lad_lookup = lad_lookup.copy()
-    ntem_totals = ntem_totals.copy()
+    # set defaults
+    if constraint_cols is None:
+        constraint_cols = ['p', 'm']
 
+    # Init
+    output = control_df.copy()
+    zone_to_lad = zone_to_lad.copy()
+    ntem_totals = ntem_totals.copy()
     ntem_value_name = ntem_value_name.strip().lower()
 
-    # Copy output
-    output = msoa_output.copy()
-
-    # Check params
-    # Groups
-    for col in group_cols:
+    # ## VALIDATE INPUTS ## #
+    # constraint columns exit
+    for col in constraint_cols:
         if col not in list(output):
             raise ValueError('Column ' + col + ' not in MSOA data')
         if col not in list(ntem_totals):
             raise ValueError('Column ' + col + ' not in NTEM data')
 
     # Establish all non trip segments
-    segments = []
+    segments = list()
     for col in list(output):
-        if col not in [base_zone_name,
-                       base_value_name]:
+        if col not in [base_zone_name, base_value_name]:
             segments.append(col)
 
     # Purposes
-    hb_purpose = [1,2,3,4,5,6,7,8]
-    nhb_purpose = [12,13,14,15,16,18]
-    if purpose not in ['hb', 'nhb']:
+    if trip_origin not in ['hb', 'nhb']:
         raise ValueError('Invalid purpose type')
-    else:
-        if purpose == 'hb':
-            p_vector = hb_purpose
-        else:
-            p_vector = nhb_purpose
 
-    # Print target value
+    if trip_origin == 'hb':
+        p_vector = consts.ALL_HB_P
+    else:
+        p_vector = consts.ALL_NHB_P
+
+    # See if our control_df is a subset
+    constraint_subset = dict()
+    for col in constraint_cols:
+        constraint_subset[col] = control_df[col].unique()
+
+    # Print starting value
     before = output[base_value_name].sum()
-    print('Before: ' + str(before))
+    du.print_w_toggle('Before: ' + str(before), echo=verbose)
 
     # Build factors
     ntem_k_factors = ntem_totals[ntem_totals['p'].isin(p_vector)].copy()
 
     kf_groups = ['lad_zone_id']
-    for col in group_cols:
+    for col in constraint_cols:
         kf_groups.append(col)
     kf_sums = kf_groups.copy()
     kf_sums.append(ntem_value_name)
@@ -110,26 +123,32 @@ def control_to_ntem(msoa_output,
                                             axis=1).groupby(
                                                     kf_groups).sum().reset_index()
 
-    target = ntem_k_factors[ntem_value_name].sum()
-    print('NTEM: ' + str(target))
+    # Calculate the total we are aiming for
+    ntem_subset = ntem_k_factors.copy()
+    for col, vals in constraint_subset.items():
+        subset_mask = ntem_subset[col].isin(vals)
+        ntem_subset = ntem_subset[subset_mask]
+
+    target = ntem_subset[ntem_value_name].sum()
+    du.print_w_toggle('NTEM: ' + str(target), echo=verbose)
 
     # Assumes vectors are called productions or attractions
-    for col in group_cols:
+    for col in constraint_cols:
         ntem_k_factors.loc[:,col] = ntem_k_factors[
                 col].astype(int).astype(str)
     ntem_k_factors['lad_zone_id'] = ntem_k_factors[
             'lad_zone_id'].astype(float).astype(int)
 
-    lad_lookup = lad_lookup.reindex(['lad_zone_id', base_zone_name], axis=1)
+    zone_to_lad = zone_to_lad.reindex(['lad_zone_id', base_zone_name], axis=1)
 
-    output = output.merge(lad_lookup,
+    output = output.merge(zone_to_lad,
                           how = 'left',
                           on = base_zone_name)
 
     # No lad match == likely an island - have to drop
     output = output[~output['lad_zone_id'].isna()]
 
-    for col in group_cols:
+    for col in constraint_cols:
         output.loc[:,col] = output[col].astype(int).astype(str)
     output['lad_zone_id'] = output['lad_zone_id'].astype(float).astype(int)
 
@@ -139,7 +158,7 @@ def control_to_ntem(msoa_output,
     # Build LA adjustment
     # Note tp not in the picture
     af_groups = ['lad_zone_id']
-    for col in group_cols:
+    for col in constraint_cols:
         af_groups.append(col)
     af_sums = af_groups.copy()
     af_sums.append(base_value_name)
@@ -160,7 +179,7 @@ def control_to_ntem(msoa_output,
     adj_fac = adj_fac.reindex(af_only, axis=1)
     adj_fac['adj_fac'] = adj_fac['adj_fac'].replace(np.nan, 1)
 
-    for col in group_cols:
+    for col in constraint_cols:
         adj_fac.loc[:,col] = adj_fac[col].astype(int).astype(str)
 
     adjustments = adj_fac['adj_fac']
@@ -187,7 +206,7 @@ def control_to_ntem(msoa_output,
     output = output.drop(['lad_zone_id', 'adj_fac'], axis=1)
 
     after = output[base_value_name].sum()
-    print('After: ' + str(after))
+    du.print_w_toggle('After: ' + str(after), echo=verbose)
 
     audit = {
         'before': before,

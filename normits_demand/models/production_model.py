@@ -745,14 +745,14 @@ class ProductionModel:
             # Get ntem totals
             ntem_totals = pd.read_csv(self.ntem_path)
 
-            msoa_output, ntem_p, ntem_a, lad_output = ntem.control_to_ntem(
-                    msoa_output,
-                    ntem_totals,
-                    msoa_lad_lookup,
-                    group_cols = ['p','m'],
-                    base_value_name = 'trips',
-                    ntem_value_name = 'Productions',
-                    purpose = 'hb')
+            msoa_output, ntem_p, ntem_a, lad_output = ntem.control_to_ntem(msoa_output,
+                                                                           ntem_totals,
+                                                                           msoa_lad_lookup,
+                                                                           constraint_cols=['p',
+                                                                                            'm'],
+                                                                           base_value_name='trips',
+                                                                           ntem_value_name='Productions',
+                                                                           trip_origin='hb')
 
             if self.export_lad:
                 safe_dataframe_to_csv(
@@ -1188,14 +1188,13 @@ class ProductionModel:
     
             ntem_totals = pd.read_csv(ntem_path)
     
-            nhb_msoa, ntem_a, ntem_f, nhb_lad = ntem.control_to_ntem(
-                    nhb_msoa,
-                    ntem_totals,
-                    ntem_lad_lookup,
-                    group_cols = ['p', 'm', 'tp'],
-                    base_value_name = 'trips',
-                    ntem_value_name = 'Productions',
-                    purpose = 'nhb')
+            nhb_msoa, ntem_a, ntem_f, nhb_lad = ntem.control_to_ntem(nhb_msoa, ntem_totals,
+                                                                     ntem_lad_lookup,
+                                                                     constraint_cols=['p', 'm',
+                                                                                      'tp'],
+                                                                     base_value_name='trips',
+                                                                     ntem_value_name='Productions',
+                                                                     trip_origin='nhb')
             print(ntem_a)
     
             if export_lad:

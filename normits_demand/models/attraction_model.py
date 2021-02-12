@@ -535,22 +535,21 @@ class AttractionModel:
     
             ntem_totals = pd.read_csv(self.ntem_path)
 
-            hb_attr, hb_adj, hb_audit, hb_lad = ntem.control_to_ntem(hb_attr,
-                                                                    ntem_totals,
-                                                                    ntem_lad_lookup,
-                                                                    group_cols = ['p', 'm'],
-                                                                    base_value_name = 'attractions',
-                                                                    ntem_value_name = 'Attractions',
-                                                                    purpose = 'hb')
+            hb_attr, hb_adj, hb_audit, hb_lad = ntem.control_to_ntem(hb_attr, ntem_totals,
+                                                                     ntem_lad_lookup,
+                                                                     constraint_cols=['p', 'm'],
+                                                                     base_value_name='attractions',
+                                                                     ntem_value_name='Attractions',
+                                                                     trip_origin='hb')
             print(hb_audit)
 
-            nhb_attr, nhb_adj, nhb_audit, nhb_lad = ntem.control_to_ntem(nhb_attr,
-                                                                       ntem_totals,
-                                                                       ntem_lad_lookup,
-                                                                       group_cols = ['p', 'm', 'tp'],
-                                                                       base_value_name = 'attractions',
-                                                                       ntem_value_name = 'Attractions',
-                                                                       purpose = 'nhb')
+            nhb_attr, nhb_adj, nhb_audit, nhb_lad = ntem.control_to_ntem(nhb_attr, ntem_totals,
+                                                                         ntem_lad_lookup,
+                                                                         constraint_cols=['p', 'm',
+                                                                                          'tp'],
+                                                                         base_value_name='attractions',
+                                                                         ntem_value_name='Attractions',
+                                                                         trip_origin='nhb')
             
     
             if self.export_lad:

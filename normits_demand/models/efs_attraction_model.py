@@ -1449,26 +1449,26 @@ def merge_attraction_weights(employment: pd.DataFrame,
         print("Performing HB NTEM constraint...")
         attractions = attractions.rename(columns={p_col: 'p', m_col: 'm'})
         attractions, hb_audit, *_ = ntem.control_to_ntem(
-            attractions,
-            ntem_totals,
-            ntem_lad_lookup,
-            group_cols=['p', 'm'],
+            control_df=attractions,
+            ntem_totals=ntem_totals,
+            zone_to_lad=ntem_lad_lookup,
+            constraint_cols=['p', 'm'],
             base_value_name='trips',
             ntem_value_name='Attractions',
-            purpose='hb'
+            trip_origin='hb'
         )
         attractions = attractions.rename(columns={'p': p_col, 'm': m_col})
 
         print("Performing NHB NTEM constraint...")
         nhb_attractions = nhb_attractions.rename(columns={p_col: 'p', m_col: 'm'})
         nhb_attractions, nhb_audit, *_ = ntem.control_to_ntem(
-            nhb_attractions,
-            ntem_totals,
-            ntem_lad_lookup,
-            group_cols=['p', 'm', 'tp'],
+            control_df=nhb_attractions,
+            ntem_totals=ntem_totals,
+            zone_to_lad=ntem_lad_lookup,
+            constraint_cols=['p', 'm', 'tp'],
             base_value_name='trips',
             ntem_value_name='Attractions',
-            purpose='nhb'
+            trip_origin='nhb'
         )
         nhb_attractions = nhb_attractions.rename(columns={'p': p_col, 'm': m_col})
 
