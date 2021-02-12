@@ -156,7 +156,15 @@ class EfsReporter:
 
         return imports, exports
 
-    def compare_base_pa_vectors_to_ntem(self) -> None:
+    def compare_base_pa_vectors_to_ntem(self) -> pd.DataFrame:
+        """
+        Generates a report of the base P/A Vectors to NTEM data
+
+        Returns
+        -------
+        report:
+            A copy of the report comparing the base vectors to NTEM
+        """
         # Init
         out_col_order = ['Vector Type', 'Trip Origin', 'Year']
         out_col_order += ['NTEM', 'Achieved', 'NTEM - Achieved', '% Difference']
@@ -174,9 +182,11 @@ class EfsReporter:
         report_ph = list()
         base_vector_iterator = itertools.product(self._vector_types, self._trip_origins)
         for vector_type, trip_origin in base_vector_iterator:
+            # Read in the correct vector
+            vector_name = '%s_%s' % (trip_origin, vector_type)
+            vector = pd.read_csv(path_dict[vector_name])
 
-            # Read in the vector - we need to add a mode column if not there
-            vector = pd.read_csv(path_dict['hb_productions'])
+            # We need to add a mode column if not there
             if 'm' not in list(vector):
                 model_modes = consts.MODEL_MODES[self.model_name]
                 if len(model_modes) > 1:
@@ -191,42 +201,130 @@ class EfsReporter:
                 # Add the missing mode column in
                 vector['m'] = model_modes[0]
 
-            # See how close the vector is to NTEM in each year
-            for year in self.years_needed:
-                # Get the ntem control for this year
-                ntem_fname = consts.NTEM_CONTROL_FNAME % ('pa', year)
-                ntem_path = os.path.join(self.imports['ntem']['totals'], ntem_fname)
-                ntem_totals = pd.read_csv(ntem_path)
-
-                # Get an report of how close we are to ntem
-                _, report, *_ = ntem_control.control_to_ntem(
-                    control_df=vector,
-                    ntem_totals=ntem_totals,
-                    zone_to_lad=msoa_to_lad,
-                    constraint_cols=self.ntem_control_cols,
-                    base_value_name=year,
-                    ntem_value_name=vector_type,
-                    trip_origin=trip_origin,
-                    verbose=False,
-                )
-
-                # Generate the report based on the one we got back
-                del report['after']
-                report['NTEM'] = report.pop('target')
-                report['Achieved'] = report.pop('before')
-                report['NTEM - Achieved'] = report['NTEM'] - report['Achieved']
-                report['% Difference'] = report['NTEM - Achieved'] / report['NTEM'] * 100
-
-                # Add more info to the report and store in the placeholder
-                report['Year'] = year
-                report['Vector Type'] = vector_type
-                report['Trip Origin'] = trip_origin
-
-                report_ph.append(report)
+            report_ph.append(compare_vector_to_ntem(
+                vector=vector,
+                compare_cols=self.years_needed,
+                compare_cols_name='Year',
+                zone_to_lad=msoa_to_lad,
+                ntem_totals_dir=self.imports['ntem']['totals'],
+                vector_type=vector_type,
+                trip_origin=trip_origin,
+                constraint_cols=self.ntem_control_cols,
+            ))
 
         # Convert to a dataframe for output
-        report = pd.DataFrame(report_ph)
-        report = report.reindex(columns=out_col_order)
-        print(report)
-        print(list(report))
+        report = pd.concat(report_ph)
 
+        # Write the report to disk
+        fname = "base_vector_report.csv"
+        out_path = os.path.join(self.exports['home'], fname)
+        report.to_csv(out_path, index=False)
+
+        return report
+
+
+# TODO: Move compare_vector_to_ntem() to a general pa_reporting module
+def compare_vector_to_ntem(vector: pd.DataFrame,
+                           compare_cols: List[str],
+                           compare_cols_name: str,
+                           zone_to_lad: pd.DataFrame,
+                           ntem_totals_dir: Union[pathlib.Path, str],
+                           vector_type: str,
+                           trip_origin: str,
+                           constraint_cols: List[str] = None,
+                           compare_year: str = None,
+                           ) -> pd.DataFrame:
+    """
+    Returns a report comparing the base P/A Vectors to NTEM data
+
+    Parameters
+    ----------
+    vector:
+        The vector to compare to NTEM
+
+    compare_cols:
+        The columns of vector to compare to NTEM
+
+    compare_cols_name:
+        The name to give to the compare_cols column in the report
+
+    zone_to_lad:
+        A DataFrame converting the vector zone system to LAD zone system
+
+    ntem_totals_dir:
+        The path to a directory containing the NTEM data to compare to
+
+    vector_type:
+        The type of vector. Either 'productions' or 'attractions'
+
+    trip_origin:
+        The trip origin of vector. Either 'hb' or 'nhb.
+
+    constraint_cols:
+        The columns of vector to compare to NTEM. If left as None, defaults
+        to ['p', 'm']
+
+    compare_year:
+        The year to use when comparing to NTEM. If left as None, compare_cols
+        is assumed to contain the years
+
+    Returns
+    -------
+    report:
+        A copy of the report comparing the given vector to NTEM. It will
+        contain the following columns:
+        ['Vector Type', 'Trip Origin', 'Year', 'NTEM', 'Achieved',
+         'NTEM - Achieved', '% Difference']
+    """
+    # Init
+    out_col_order = ['Vector Type', 'Trip Origin', 'Year']
+    out_col_order += ['NTEM', 'Achieved', 'NTEM - Achieved', '% Difference']
+
+    # If compare_year is None, assume compare_cols is years
+    if compare_year is None:
+        col_years = compare_cols
+    else:
+        col_years = [compare_year] * len(compare_cols)
+
+    if constraint_cols is None:
+        constraint_cols = ['p', 'm']
+
+    # See how close the vector is to NTEM in each year
+    report_ph = list()
+    for col, year in zip(compare_cols, col_years):
+        # Get the ntem control for this year
+        ntem_fname = consts.NTEM_CONTROL_FNAME % ('pa', year)
+        ntem_path = os.path.join(ntem_totals_dir, ntem_fname)
+        ntem_totals = pd.read_csv(ntem_path)
+
+        # Get an report of how close we are to ntem
+        _, report, *_ = ntem_control.control_to_ntem(
+            control_df=vector,
+            ntem_totals=ntem_totals,
+            zone_to_lad=zone_to_lad,
+            constraint_cols=constraint_cols,
+            base_value_name=col,
+            ntem_value_name=vector_type,
+            trip_origin=trip_origin,
+            verbose=False,
+        )
+
+        # Generate the report based on the one we got back
+        del report['after']
+        report['NTEM'] = report.pop('target')
+        report['Achieved'] = report.pop('before')
+        report['NTEM - Achieved'] = report['NTEM'] - report['Achieved']
+        report['% Difference'] = report['NTEM - Achieved'] / report['NTEM'] * 100
+
+        # Add more info to the report and store in the placeholder
+        report[compare_cols_name] = col
+        report['Vector Type'] = vector_type
+        report['Trip Origin'] = trip_origin
+
+        report_ph.append(report)
+
+    # Convert to a dataframe for output
+    report = pd.DataFrame(report_ph)
+    report = report.reindex(columns=out_col_order)
+
+    return report
