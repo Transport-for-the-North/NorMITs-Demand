@@ -75,7 +75,7 @@ def set_wd(home_dir = _default_home_dir, iteration=_default_iter):
         Path to base directory to sit under project.
 
     iteration:
-        Project folder for exports
+        Project folder for efs_exports
 
     Returns
     ----------

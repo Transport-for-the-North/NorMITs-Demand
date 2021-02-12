@@ -72,7 +72,7 @@ def path_config(file_drive,
     [0] imports:
         Paths to all Synthesiser import parameters.
 
-    [1] exports:
+    [1] efs_exports:
         Paths to all Synthesiser output parameters
     """
 
@@ -143,7 +143,7 @@ def path_config(file_drive,
     non_dist_od_export = os.path.join(distribution_path, 'OD Matrices Non Dist')
     nup.create_folder(non_dist_od_export, chDir=False)
 
-    # Set fusion exports
+    # Set fusion efs_exports
     fusion_summary_import = os.path.join(fusion_path, '24hr Fusion PA Distributions')
 
     fusion_pa_export = os.path.join(fusion_path, 'Fusion PA Matrices')
@@ -1219,7 +1219,7 @@ def resplit_24hr_pa(model_lookup_path,
         I don't actually know! Can I add a mainland GB by mode here?
 
     aggregation_cols:
-        Columns to aggregate by for aggregation exports. Includes core of
+        Columns to aggregate by for aggregation efs_exports. Includes core of
         ['p_zone', 'a_zone', 'mode', 'purpose'] by default. Time is non-core
         and will need to be specified.
 

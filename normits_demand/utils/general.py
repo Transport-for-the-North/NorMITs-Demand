@@ -49,7 +49,7 @@ from normits_demand.utils.utils import *
 
 class NormitsDemandError(Exception):
     """
-    Base Exception for all custom NotMITS demand errors
+    Base Exception for all custom NorMITS demand errors
     """
 
     def __init__(self, message=None):
@@ -336,15 +336,15 @@ def print_w_toggle(*args, echo, **kwargs):
         print(*args, **kwargs)
 
 
-def build_io_paths(import_location: str,
-                   export_location: str,
-                   model_name: str,
-                   iter_name: str,
-                   scenario_name: str,
-                   demand_version: str,
-                   demand_dir_name: str = 'NorMITs Demand',
-                   base_year: str = consts.BASE_YEAR_STR,
-                   ) -> Tuple[dict, dict, dict]:
+def build_efs_io_paths(import_location: str,
+                       export_location: str,
+                       model_name: str,
+                       iter_name: str,
+                       scenario_name: str,
+                       demand_version: str,
+                       demand_dir_name: str = 'NorMITs Demand',
+                       base_year: str = consts.BASE_YEAR_STR,
+                       ) -> Tuple[dict, dict, dict]:
     """
     Builds three dictionaries of paths to the locations of all inputs and
     outputs for EFS
@@ -386,7 +386,7 @@ def build_io_paths(import_location: str,
         Dictionary of import paths with the following keys:
         imports, lookups, seed_dists, default
 
-    exports:
+    efs_exports:
         Dictionary of export paths with the following keys:
         productions, attractions, pa, od, pa_24, od_24, sectors
 
@@ -422,17 +422,26 @@ def build_io_paths(import_location: str,
     path = 'attractions/soc_2_digit_sic_%s.csv' % base_year
     soc_weights_path = os.path.join(import_home, path)
 
+    # Build the zone translation dict
+    zt_home = os.path.join(import_home, 'zone_translation')
+    zone_translation = {
+        'home': zt_home,
+        'one_to_one': os.path.join(zt_home, 'one_to_one'),
+        'weighted': os.path.join(zt_home, 'weighted'),
+        'no_overlap': os.path.join(zt_home, 'no_overlap'),
+    }
+
     imports = {
         'home': import_home,
         'default_inputs': input_home,
         'tp_splits': os.path.join(import_home, 'tp_splits'),
-        'zone_translation': os.path.join(import_home, 'zone_translation'),
+        'zone_translation': zone_translation,
         'lookups': os.path.join(model_home, 'lookup'),
         'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
-        'zoning': os.path.join(input_home, 'zoning'),
         'scenarios': os.path.join(import_home, 'scenarios'),
         'a_weights': a_weights_path,
-        'soc_weights': soc_weights_path
+        'soc_weights': soc_weights_path,
+        'ntem_control': os.path.join(import_home, 'ntem_constraints'),
     }
 
     #  ## EXPORT PATHS ## #

@@ -214,7 +214,7 @@ class ExternalForecastSystem:
             "import_home": self.imports["home"],
             "growth_csv": self.pop_growth_path,
             "constraint_csv": self.pop_constraint_path,
-            "sector_grouping_file": os.path.join(self.imports['zoning'],
+            "sector_grouping_file": os.path.join(self.imports['zone_translation']['weighted'],
                                                  zone_lookups["population"])
         }
 
@@ -223,7 +223,7 @@ class ExternalForecastSystem:
             "import_home": self.imports["home"],
             "growth_csv": self.emp_growth_path,
             "constraint_csv": self.emp_constraint_path,
-            "sector_grouping_file": os.path.join(self.imports['zoning'],
+            "sector_grouping_file": os.path.join(self.imports['zone_translation']['weighted'],
                                                  zone_lookups["employment"])
         }
 
@@ -894,9 +894,7 @@ class ExternalForecastSystem:
                              (str(distribution_method)))
 
         # ## SECTOR TOTALS ## #
-        zone_system_file = os.path.join(self.imports['zoning'],
-                                        self.output_zone_system + '.csv')
-        sector_grouping_file = os.path.join(self.imports['zoning'],
+        sector_grouping_file = os.path.join(self.imports['zone_translation']['home'],
                                             "tfn_level_one_sectors_norms_grouping.csv")
 
         sector_totals = self.sector_reporter.calculate_sector_totals(
@@ -1071,12 +1069,12 @@ class ExternalForecastSystem:
 
         # Read in pop translation
         fname = consts.POP_TRANSLATION_FNAME % fname_args
-        path = os.path.join(self.imports['zoning'], fname)
+        path = os.path.join(self.imports['zone_translation']['weighted'], fname)
         pop_translation = pd.read_csv(path)
 
         # Read in emp translation
         fname = consts.EMP_TRANSLATION_FNAME % fname_args
-        path = os.path.join(self.imports['zoning'], fname)
+        path = os.path.join(self.imports['zone_translation']['weighted'], fname)
         emp_translation = pd.read_csv(path)
 
         return pop_translation, emp_translation
@@ -1618,7 +1616,7 @@ class ExternalForecastSystem:
                                                              Dict[str, str],
                                                              Dict[str, str]]:
         """
-        Returns imports, exports and params dictionaries
+        Returns imports, efs_exports and params dictionaries
 
         Calls du.build_io_paths() with class attributes.
 
@@ -1634,7 +1632,7 @@ class ExternalForecastSystem:
             Dictionary of import paths with the following keys:
             imports, lookups, seed_dists, default
 
-        exports:
+        efs_exports:
             Dictionary of export paths with the following keys:
             productions, attractions, pa, od, pa_24, od_24, sectors
 
@@ -1642,14 +1640,16 @@ class ExternalForecastSystem:
             Dictionary of parameter export paths with the following keys:
             compile, tours
         """
-        return du.build_io_paths(self.import_location,
-                                 self.output_location,
-                                 base_year,
-                                 self.model_name,
-                                 self.iter_name,
-                                 self.scenario_name,
-                                 self.__version__,
-                                 self.out_dir)
+        return du.build_efs_io_paths(
+            self.import_location,
+            self.output_location,
+            base_year,
+            self.model_name,
+            self.iter_name,
+            self.scenario_name,
+            self.__version__,
+            self.out_dir
+        )
 
 
 def _input_checks(iter_num: int = None,

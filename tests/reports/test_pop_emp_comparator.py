@@ -125,13 +125,13 @@ SECTOR_LOOKUP = pd.DataFrame(
 )
 def test_real_data():
     """Tests the PopEmpComparator class on data from previous run of EFS. """
-    imports, exports, _ = du.build_io_paths(
+    imports, exports, _ = du.build_efs_io_paths(
         IMPORT_LOC,
         EXPORT_LOC,
         MODEL_NAME,
         f"iter{ITER_NUM}",
         ExternalForecastSystem.__version__,
-        ExternalForecastSystem.out_dir,
+        ExternalForecastSystem.out_dir
     )
     # Population csv files, locations from ExternalForecastSysten.__init__ parameters
     population_growth_file = "population/future_population_growth.csv"

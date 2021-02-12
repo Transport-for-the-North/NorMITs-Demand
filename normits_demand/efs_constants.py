@@ -164,7 +164,7 @@ EMP_TRANSLATION_FNAME = '%s_%s_emp_weighted_lookup.csv'
 
 # ## NTEM Controls
 # year
-NTEM_CONTROL_FNAME = 'ntem_pa_ave_wday_%s.csv'
+NTEM_CONTROL_FNAME = 'ntem_%s_ave_wday_%s.csv'
 DEFAULT_LAD_LOOKUP = 'lad_to_msoa.csv'
 
 # TODO: can likely remove lots of EFS_COLUMN_DICTIONARY

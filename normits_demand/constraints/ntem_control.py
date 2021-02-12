@@ -14,7 +14,7 @@ def control_to_ntem(msoa_output,
                     lad_lookup,
                     group_cols = ['p', 'm'],
                     base_value_name = 'attractions',
-                    ntem_value_name = 'Attractions',
+                    ntem_value_name = 'attractions',
                     base_zone_name = 'msoa_zone_id',
                     purpose = 'hb'):
     """
@@ -57,6 +57,12 @@ def control_to_ntem(msoa_output,
         adjusted_output:
             DF with same msoa zoning as input but controlled to NTEM.
     """
+    # Init
+    lad_lookup = lad_lookup.copy()
+    ntem_totals = ntem_totals.copy()
+
+    ntem_value_name = ntem_value_name.strip().lower()
+
     # Copy output
     output = msoa_output.copy()
 
@@ -178,13 +184,15 @@ def control_to_ntem(msoa_output,
                                         lad_groups).sum().reset_index()
 
     # Reindex outputs
-    output = output.drop(['lad_zone_id','adj_fac'], axis=1)
+    output = output.drop(['lad_zone_id', 'adj_fac'], axis=1)
 
     after = output[base_value_name].sum()
     print('After: ' + str(after))
 
-    audit = {'before':before,
-             'target':target,
-             'after':after}
+    audit = {
+        'before': before,
+        'target': target,
+        'after': after
+    }
 
-    return(output, audit, adjustments, lad_totals)
+    return output, audit, adjustments, lad_totals

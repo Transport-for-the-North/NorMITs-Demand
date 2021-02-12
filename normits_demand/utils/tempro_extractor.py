@@ -24,7 +24,7 @@ class TemproParser:
     """
     _access_driver = '{Microsoft Access Driver (*.mdb, *.accdb)}'
     _data_source = 'Y:\Data Strategy\Data\TEMPRO'
-    _out_folder = r'Y:\NorMITs Demand\import\tempro'
+    _out_folder = r'I:\NorMITs Demand\import\ntem_constraints'
     _region_list = [
         'EAST_',
         'EM_',

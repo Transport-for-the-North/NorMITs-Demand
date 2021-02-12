@@ -1768,7 +1768,8 @@ def build_attraction_imports(import_home: str,
         ntem_control_dir = os.path.join(import_home, path)
 
     if set_controls and lad_lookup_dir is None:
-        lad_lookup_dir = import_home
+        path = os.path.join('zone_translation', 'no_overlap')
+        lad_lookup_dir = os.path.join(import_home, path)
 
     # Assign to dict
     imports = {
@@ -1802,7 +1803,7 @@ def build_attraction_exports(export_home: str,
                              ) -> Dict[str, str]:
     """
     Builds a dictionary of attraction export paths, forming a standard calling
-    procedure for attraction exports. Arguments allow default paths to be
+    procedure for attraction efs_exports. Arguments allow default paths to be
     replaced.
 
 
@@ -1830,7 +1831,7 @@ def build_attraction_exports(export_home: str,
                                        'Attractions')
     du.create_folder(audit_write_dir, chDir=False)
 
-    # Build the exports dictionary
+    # Build the efs_exports dictionary
     exports = {
         'audits': audit_write_dir
     }

@@ -1239,7 +1239,7 @@ class NhbProductionModel:
                     "exist.\nFull path: %s" % (key, path)
                 )
 
-        # Build the exports dictionary
+        # Build the efs_exports dictionary
         exports = {
             'productions': os.path.join(export_home, consts.PRODUCTIONS_DIRNAME),
             'attractions': os.path.join(export_home, consts.ATTRACTIONS_DIRNAME),
@@ -1854,7 +1854,8 @@ def build_production_imports(import_home: str,
         ntem_control_dir = os.path.join(import_home, path)
 
     if set_controls and lad_lookup_dir is None:
-        lad_lookup_dir = import_home
+        path = os.path.join('zone_translation', 'no_overlap')
+        lad_lookup_dir = os.path.join(import_home, path)
 
     # Assign to dict
     imports = {
@@ -1884,7 +1885,7 @@ def build_production_exports(export_home: str,
                              ) -> Dict[str, str]:
     """
     Builds a dictionary of production export paths, forming a standard calling
-    procedure for production exports. Arguments allow default paths to be
+    procedure for production efs_exports. Arguments allow default paths to be
     replaced.
 
     Parameters
@@ -1911,7 +1912,7 @@ def build_production_exports(export_home: str,
                                        'Productions')
     du.create_folder(audit_write_dir, chDir=False)
 
-    # Build the exports dictionary
+    # Build the efs_exports dictionary
     exports = {
         'audits': audit_write_dir
     }
@@ -2324,7 +2325,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
         year_audit = {'year': year}
 
         # Setup paths
-        ntem_fname = consts.NTEM_CONTROL_FNAME % year
+        ntem_fname = consts.NTEM_CONTROL_FNAME % ('pa', year)
         ntem_path = os.path.join(ntem_dir, ntem_fname)
 
         # Read in control files

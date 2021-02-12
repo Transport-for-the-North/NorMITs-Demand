@@ -19,7 +19,7 @@ import warnings # Non-critical warnings
 
 # TODO: Keep separate area type lookups.
 # TODO: Write params for various outputs - full, fast, custom
-# TODO: More numpy & more square format exports. Especially for TDM & PA2OD
+# TODO: More numpy & more square format efs_exports. Especially for TDM & PA2OD
 
 _default_import_file_drive = "Y:/"
 _default_model_name = 'Noham'
@@ -54,7 +54,7 @@ def path_config(file_drive = _default_import_file_drive,
     [0] imports:
         Paths to all Synthesiser import parameters.
 
-    [1] exports:
+    [1] efs_exports:
         Paths to all Synthesiser output parameters
     """
 
@@ -159,7 +159,7 @@ def path_config(file_drive = _default_import_file_drive,
     compiled_od_export = os.path.join(distribution_path, 'Compiled OD Matrices')
     nup.create_folder(compiled_od_export)
 
-    # Set fusion exports
+    # Set fusion efs_exports
     fusion_summary_export = os.path.join(fusion_path, '24hr Fusion PA Distributions')
     nup.create_folder(fusion_summary_export)
 
