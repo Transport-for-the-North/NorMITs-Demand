@@ -34,10 +34,12 @@ from tqdm import tqdm
 # Local imports
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
+from normits_demand.utils import file_ops as fo
 
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
+from normits_demand.validation import checks
 
 from normits_demand.matrices.tms_matrix_processing import *
 
@@ -1858,10 +1860,145 @@ def compile_matrices(mat_import: str,
 
 def matrices_to_vector(mat_import_dir: pathlib.Path,
                        years_needed: List[str],
+                       verbose: bool = True,
                        ) -> pd.DataFrame:
     # TODO: Write matrices_to_vector() docs
+
+    # BACKLOG: matrices_to_vector() needs checks adding for edge cases
+    #  labels: EFS, error checks
     # Init
-    raise NotImplementedError
+    mat_names = [x for x in du.list_files(mat_import_dir) if fo.is_csv(x)]
+
+    # Split the matrices into years
+    year_to_segment_dicts = defaultdict(list)
+    for fname in mat_names:
+        # Parse the matrix fname into a segment dict
+        segment_dict = du.fname_to_calib_params(
+            fname=fname,
+            get_trip_origin=True,
+            get_matrix_format=True,
+        )
+
+        mat_year = str(segment_dict['yr'])
+        year_to_segment_dicts[mat_year].append(segment_dict)
+
+    # Make sure all the years we need exist
+    for year in years_needed:
+        if year not in year_to_segment_dicts.keys():
+            raise du.NormitsDemandError(
+                "Cannot find matrices for all the years asked for. "
+                "Specifically there does not seem to be any matrices for"
+                "year %s." % str(year)
+            )
+
+    # Build a vector for each year
+    for year in years_needed:
+
+        # This shouldn't change across matrices
+        temp_seg_dict = year_to_segment_dicts[year][0]
+        matrix_format = checks.validate_matrix_type(temp_seg_dict['matrix_format'])
+
+        # Figure out which column names we should use
+        if matrix_format == 'pa':
+            p_or_o_val_name = 'productions'
+            a_or_d_val_name = 'attractions'
+        elif matrix_format == 'od':
+            p_or_o_val_name = 'origin'
+            a_or_d_val_name = 'destination'
+        else:
+            raise ValueError(
+                "%s seems to be a valid matrix format, but I don't know "
+                "how to handle it!"
+                % str(matrix_format)
+            )
+
+        # Build the iterator
+        iterator = tqdm(year_to_segment_dicts[year],
+                        desc='Building P/A vectors for %s' % str(year),
+                        disable=(not verbose))
+
+        # Build an efficient_df for each matrix
+        final_col_names = set()
+        year_eff_dfs = list()
+        for segment_dict in iterator:
+            # Validate trip origin and matrix format
+            trip_origin = checks.validate_trip_origin(segment_dict['trip_origin'])
+
+            # ## GET THE ROW AND COLUMN TOTALS AND NAMES ## #
+            # Read in the matrix
+            mat_fname = du.calib_params_to_dist_name(
+                trip_origin=trip_origin,
+                matrix_format=matrix_format,
+                calib_params=segment_dict,
+                csv=True,
+            )
+            mat_path = os.path.join(mat_import_dir, mat_fname)
+            matrix = pd.read_csv(mat_path, index_col=0)
+
+            # Convert into p/a or o/d
+            p_or_o = matrix.sum(axis=1)
+            a_or_d = matrix.sum(axis=0)
+
+            # Sort out the column naming
+            zone_col_name = matrix.index.name
+            p_or_o.index.name = zone_col_name
+            a_or_d.index.name = zone_col_name
+
+            p_or_o = p_or_o.reset_index()
+            a_or_d = a_or_d.reset_index()
+
+            p_or_o[zone_col_name] = p_or_o[zone_col_name].astype(int)
+            a_or_d[zone_col_name] = a_or_d[zone_col_name].astype(int)
+
+            p_or_o = p_or_o.rename(columns={0: p_or_o_val_name})
+            a_or_d = a_or_d.rename(columns={0: a_or_d_val_name})
+
+            # ## COMPILE INTO AN EFFICIENT DF ## #
+            # Remove the info we no longer need
+            eff_df = segment_dict.copy()
+            del eff_df['trip_origin']
+            del eff_df['matrix_format']
+
+            # Keep track of the column names we're keeping
+            final_col_names = set(list(final_col_names) + list(eff_df.keys()))
+
+            # Add the dataframe and we're done!
+            # After this the df value is a df of either cols:
+            # zone_col, productions, attractions
+            # zone_col, origin, destination
+            eff_df['df'] = pd.merge(
+                p_or_o,
+                a_or_d,
+                on=zone_col_name
+            )
+            year_eff_dfs.append(eff_df)
+
+        # Figure out the final column names
+        value_cols = [p_or_o_val_name, a_or_d_val_name]
+        final_col_names = list(final_col_names) + value_cols
+        # TODO: How to split HB/NHB. Two different lists per year? Split at end?!
+        #  pass in matrix format?
+
+        # Compile into a vector for this year
+        year_pa = du.compile_efficient_df(year_eff_dfs, col_names=final_col_names)
+
+        # Tidy up soc/ns columns
+        for col_name in ['soc', 'ns']:
+            if col_name in list(year_pa):
+                year_pa[col_name] = year_pa[col_name].fillna('none').astype(str)
+
+        print(year_pa)
+        exit()
+
+
+
+
+    # Stick all the yearly vectors together
+
+
+    exit()
+
+    return [pd.DataFrame()] * 4
 
     # def load_seed_dists(mat_folder: str,
     #                     segments_needed: List[str],

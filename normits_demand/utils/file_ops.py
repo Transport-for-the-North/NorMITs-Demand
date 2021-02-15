@@ -44,3 +44,28 @@ def check_file_exists(file_path: Union[str, pathlib.Path]) -> None:
             "The given path exists, but does not point to a file. "
             "Given path: %s" % str(file_path)
         )
+
+
+def is_csv(file_path: Union[str, pathlib.Path]) -> bool:
+    """
+    Returns True if given file path points to a csv, else False
+
+    Parameters
+    ----------
+    file_path:
+        path to the file to check
+
+    Returns
+    -------
+    boolean:
+        True if given file path points to a csv, else False
+    """
+    # Try to extract the filename extension
+    filename_parts = str(file_path).split('.')
+
+    # File doesn't seem to have an file_extension?
+    if len(filename_parts) < 1:
+        return False
+
+    file_extension = filename_parts[-1].lower()
+    return file_extension == 'csv'
