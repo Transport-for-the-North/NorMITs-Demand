@@ -41,10 +41,10 @@ def main():
 
     # Compare post-exceptional_growth P/A vectors to NTEM
     auditor.compare_eg_pa_vectors_to_ntem()
+    exit()
 
     # Compare furnessed PA matrices to NTEM
     auditor.compare_pa_matrices_to_ntem()
-    exit()
 
     # Compare furnessed PA matrices to NTEM - bespoke zones?
 

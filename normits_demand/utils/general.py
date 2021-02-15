@@ -3210,3 +3210,21 @@ def convert_to_weights(df: pd.DataFrame,
                 df.loc[mask, year].sum()
             )
     return df
+
+
+def trip_origin_to_purposes(trip_origin: str) -> List[int]:
+    """
+    Returns a list of purposes for the given trip origin
+
+    Parameters
+    ----------
+    trip_origin:
+        The trip origin to get purposes for.
+
+    Returns
+    -------
+    purposes:
+        A list of integers representing purposes
+    """
+    # TODO Validate trip origin
+    return consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]

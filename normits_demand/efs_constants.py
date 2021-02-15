@@ -29,7 +29,14 @@ ALL_MODES = [1, 2, 3, 5, 6]
 TIME_PERIODS = [1, 2, 3, 4]
 TIME_PERIOD_STRS = ['tp' + str(x) for x in TIME_PERIODS]
 
-VALID_TRIP_ORIGINS = ['hb', 'nhb']
+
+# Trip origins to purpose
+_trip_origin_purposes = [
+    ('hb', ALL_HB_P),
+    ('nhb', ALL_NHB_P),
+]
+TRIP_ORIGINS = [x[0] for x in _trip_origin_purposes]
+TRIP_ORIGIN_TO_PURPOSE = {to: p for to, p in _trip_origin_purposes}
 
 PROCESS_COUNT = -2
 DEFAULT_ROUNDING = 6

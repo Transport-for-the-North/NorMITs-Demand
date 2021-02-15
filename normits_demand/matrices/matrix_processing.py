@@ -1861,10 +1861,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
                        ) -> pd.DataFrame:
     # TODO: Write matrices_to_vector() docs
     # Init
-
-
-
-
+    raise NotImplementedError
 
     # def load_seed_dists(mat_folder: str,
     #                     segments_needed: List[str],

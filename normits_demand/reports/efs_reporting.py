@@ -43,7 +43,8 @@ class EfsReporter:
     ntem_control_cols = ['p', 'm']
 
     _vector_types = ['productions', 'attractions']
-    _trip_origins = consts.VALID_TRIP_ORIGINS
+    _trip_origins = consts.TRIP_ORIGINS
+    _zone_col_base = '%s_zone_id'
 
     _ntem_report_cols = [
         'Vector Type',
@@ -147,7 +148,7 @@ class EfsReporter:
         ntem_imports = {
             'totals': ntem_totals_path,
             'msoa_to_lad': os.path.join(zone_conversion_path, 'lad_to_msoa.csv'),
-            'model_to_lad': os.path.join(zone_conversion_path, '%s_to_msoa.csv' % self.model_name),
+            'model_to_lad': os.path.join(zone_conversion_path, '%s_to_lad.csv' % self.model_name),
         }
 
         # Finally, build the outer imports dict!
@@ -176,6 +177,7 @@ class EfsReporter:
                                 vector_type: str,
                                 matrix_type: str,
                                 trip_origin: str,
+                                base_zone_name: str,
                                 ) -> pd.DataFrame:
         """
         An internal wrapper around compare_vector_to_ntem()
@@ -207,6 +209,7 @@ class EfsReporter:
             vector_type=vector_type,
             matrix_type=matrix_type,
             trip_origin=trip_origin,
+            base_zone_name=base_zone_name,
             constraint_cols=self.ntem_control_cols,
         )
 
@@ -244,6 +247,7 @@ class EfsReporter:
                 vector_type=vector_type,
                 matrix_type=matrix_type,
                 trip_origin=trip_origin,
+                base_zone_name=self._zone_col_base % self.synth_zone_name,
             ))
 
         # Convert to a dataframe for output
@@ -293,6 +297,7 @@ class EfsReporter:
                 vector_type=vector_type,
                 matrix_type=matrix_type,
                 trip_origin=trip_origin,
+                base_zone_name=self._zone_col_base % self.model_zone_name,
             ))
 
         # Convert to a dataframe for output
@@ -338,6 +343,7 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
                            vector_type: str,
                            trip_origin: str,
                            matrix_type: str,
+                           base_zone_name: str,
                            constraint_cols: List[str] = None,
                            compare_year: str = None,
                            ) -> pd.DataFrame:
@@ -369,6 +375,10 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
 
     matrix_type:
         The type of the vector being compared. Either 'pa' or 'od'.
+
+    base_zone_name:
+        The name of column containing the zone system data for the vector and
+        zone_to_lad given.
 
     constraint_cols:
         The columns of vector to compare to NTEM. If left as None, defaults
@@ -421,6 +431,7 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
             base_value_name=col,
             ntem_value_name=vector_type,
             trip_origin=trip_origin,
+            base_zone_name=base_zone_name,
             verbose=False,
         )
 
