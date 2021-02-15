@@ -11,11 +11,10 @@ File purpose:
 Matrix processing functionality belongs here. This will be any processes
 that do not belong specifically to pa_to_od.py, or od_to_pa.py.
 """
+# Builtins
 import os
-
-import numpy as np
-import pandas as pd
 import pickle
+import pathlib
 
 from typing import Any
 from typing import List
@@ -27,9 +26,12 @@ from functools import reduce
 from itertools import product
 from collections import defaultdict
 
+# Third Party
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
 
-# self imports
+# Local imports
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
 
@@ -1852,3 +1854,81 @@ def compile_matrices(mat_import: str,
         out_path = os.path.join(factor_pickle_path, factors_fname)
         with open(out_path, 'wb') as f:
             pickle.dump(decompile_factors, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def matrices_to_vector(mat_import_dir: pathlib.Path,
+                       years_needed: List[str],
+                       ) -> pd.DataFrame:
+    # TODO: Write matrices_to_vector() docs
+    # Init
+
+
+
+
+
+    # def load_seed_dists(mat_folder: str,
+    #                     segments_needed: List[str],
+    #                     base_year: str,
+    #                     zone_column: str,
+    #                     trip_type: str = "productions",
+    #                     ) -> pd.DataFrame:
+    # 
+    #     # Define the columns needed
+    #     group_cols = [zone_column] + segments_needed
+    #     required_cols = group_cols + [base_year]
+    # 
+    #     # Get the list of available files in the seed dist folder
+    #     files = du.parse_mat_output(
+    #         os.listdir(mat_folder),
+    #         mat_type="pa"
+    #     )
+    #     # Filter to just HB matrices
+    #     hb_files = files.loc[files["trip_origin"] == "hb"]
+    #     # Define dataframe to store the observed trip ends
+    #     all_obs = pd.DataFrame()
+    # 
+    #     iterator = tqdm(
+    #         hb_files.to_dict(orient="records"),
+    #         desc=f"Loading Base Observed {trip_type}"
+    #     )
+    #     # Loop through each matrix in the path and add to the overall dataframe
+    #     for row in iterator:
+    #         file_name = row.pop("file")
+    #         file_path = os.path.join(mat_folder, file_name)
+    # 
+    #         obs = pd.read_csv(file_path, index_col=0)
+    #         # Sum along columns for productions and rows for attractions
+    #         if trip_type == "productions":
+    #             obs = obs.sum(axis=1)
+    #         elif trip_type == "attractions":
+    #             obs = obs.sum(axis=0)
+    #         else:
+    #             raise ValueError("Invalid Trip Type supplied")
+    # 
+    #         # Set column names
+    #         obs = obs.reset_index()
+    #         obs.columns = [zone_column, base_year]
+    #         obs[zone_column] = obs[zone_column].astype("int")
+    # 
+    #         # Extract segments from the file names
+    #         for segment in segments_needed:
+    #             obs[segment] = row[segment]
+    # 
+    #         # Add to the overall dataframe
+    #         if all_obs.empty:
+    #             all_obs = obs
+    #         else:
+    #             all_obs = all_obs.append(obs)
+    # 
+    #     # Change data types for all integer columns
+    #     for col in ["p", "ca"]:
+    #         if col in all_obs.columns:
+    #             all_obs[col] = all_obs[col].astype("int")
+    # 
+    #     # Finally group and sum the dataframe
+    #     all_obs = all_obs.groupby(
+    #         group_cols,
+    #         as_index=False
+    #     )[base_year].sum()
+    # 
+    #     return all_obs[required_cols]

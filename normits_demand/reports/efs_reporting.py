@@ -29,10 +29,12 @@ from tqdm import tqdm
 import normits_demand as nd
 from normits_demand import efs_constants as consts
 
-from normits_demand.utils import general as du
-from normits_demand.utils import file_ops
-from normits_demand.constraints import ntem_control
 from normits_demand.validation import checks
+from normits_demand.constraints import ntem_control
+from normits_demand.matrices import matrix_processing as mat_p
+
+from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
 
 
 class EfsReporter:
@@ -263,7 +265,8 @@ class EfsReporter:
         Returns
         -------
         report:
-            A copy of the report comparing the base vectors to NTEM
+            A copy of the report comparing the post exceptional growth
+            P/A vectors to NTEM.
         """
         # Init
         matrix_type = 'pa'
@@ -274,8 +277,8 @@ class EfsReporter:
         for _, path in path_dict.items():
             file_ops.check_file_exists(path)
 
-        # Read in the lad<->msoa conversion
-        zone_to_lad = pd.read_csv(self.imports['ntem']['msoa_to_lad'])
+        # Read in the model_zone<->msoa conversion
+        zone_to_lad = pd.read_csv(self.imports['ntem']['model_to_lad'])
 
         # Compare every base year vector to NTEM and create a report
         report_ph = list()
@@ -302,6 +305,28 @@ class EfsReporter:
         report.to_csv(out_path, index=False)
 
         return report
+
+    def compare_pa_matrices_to_ntem(self) -> pd.DataFrame:
+        """
+        Generates a report of the PA matrices compared to NTEM data
+
+        Returns
+        -------
+        report:
+            A copy of the report comparing the PA matrices to NTEM
+        """
+        # Init
+
+        # TODO: Write a wrapper for this that caches the outputs
+        # Convert matrices into vector
+        hb_p, nhb_p, hb_a, nhb_a = mat_p.matrices_to_vector(
+            mat_import_dir=self.imports['matrices']['pa_24'],
+            years_needed=self.years_needed,
+        )
+        # EG code??
+        # Cache it and check if it exists
+
+        # Generate report like above
 
 
 # TODO: Move compare_vector_to_ntem() to a general pa_reporting module
