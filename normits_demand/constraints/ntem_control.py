@@ -35,21 +35,21 @@ def control_to_ntem(control_df: pd.DataFrame,
 
     Parameters:
     ----------
-    adj_control_df:
+    control_df:
         DF of productions, flexible segments.
 
     ntem_totals:
         DF of NTEM totals to control to. Needs to be in LADs.
 
     zone_to_lad:
-        DF of translation between adj_control_df zone system and LAD
+        DF of translation between control_df zone system and LAD
 
     constraint_cols = ['p', 'm']:
         Segments to include in control. Will usually be ['p','m'], or
         ['p','m','ca'] for rail
 
     base_value_name = 'attractions':
-        Name of the value column in adj_control_df - ie. productions or
+        Name of the value column in control_df - ie. productions or
         attractions. Might also be trips or dt, origin, destination
 
     ntem_value_name = 'attractions':
@@ -57,7 +57,7 @@ def control_to_ntem(control_df: pd.DataFrame,
         attractions. Might also be trips or dt, origin, destination
     
     base_zone_name = 'msoa_zone_id':
-        name of zoning column used in adj_control_df. Same column name should be
+        name of zoning column used in control_df. Same column name should be
         used in zone_to_lad for translation.
 
     trip_origin = 'hb':
@@ -66,7 +66,7 @@ def control_to_ntem(control_df: pd.DataFrame,
     Returns:
     ----------
     adjusted_control_df:
-        adj_control_df with same zoning as input but controlled to NTEM.
+        control_df with same zoning as input but controlled to NTEM.
     """
     # set defaults
     if constraint_cols is None:
@@ -74,7 +74,7 @@ def control_to_ntem(control_df: pd.DataFrame,
 
     # ## VALIDATE INPUTS ## #
     for col in constraint_cols:
-        for df, df_name in zip([control_df, ntem_totals], ['adj_control_df', 'NTEM']):
+        for df, df_name in zip([control_df, ntem_totals], ['control_df', 'NTEM']):
             if col not in list(df):
                 raise ValueError(
                     'Column %s not in %s dataframe' % (str(col), df_name)
@@ -83,28 +83,28 @@ def control_to_ntem(control_df: pd.DataFrame,
     trip_origin = checks.validate_trip_origin(trip_origin)
 
     # Init
-    adj_control_df = control_df.copy()
+    control_df = control_df.copy()
     zone_to_lad = zone_to_lad.copy()
     ntem_totals = ntem_totals.copy()
     ntem_value_name = ntem_value_name.strip().lower()
 
     purposes = du.trip_origin_to_purposes(trip_origin)
 
-    # See if our adj_control_df is a subset
+    # See if our control_df is a subset
     constraint_subset = dict()
     for col in constraint_cols:
-        constraint_subset[col] = adj_control_df[col].unique()
+        constraint_subset[col] = control_df[col].unique()
 
     # TODO: Not necessarily True for EFS
     # Establish all non trip segments
     segments = list()
-    for col in list(adj_control_df):
+    for col in list(control_df):
         if col not in [base_zone_name, base_value_name]:
             segments.append(col)
 
     # ## BEGIN CONTROLLING ## #
     # Print starting value
-    before = adj_control_df[base_value_name].sum()
+    before = control_df[base_value_name].sum()
     du.print_w_toggle('Before: ' + str(before), echo=verbose)
 
     # Build factors
@@ -138,19 +138,19 @@ def control_to_ntem(control_df: pd.DataFrame,
 
     zone_to_lad = zone_to_lad.reindex(['lad_zone_id', base_zone_name], axis=1)
 
-    adj_control_df = adj_control_df.merge(zone_to_lad,
-                                          how='left',
-                                          on=base_zone_name)
+    control_df = control_df.merge(zone_to_lad,
+                                  how='left',
+                                  on=base_zone_name)
 
     # No lad match == likely an island - have to drop
-    adj_control_df = adj_control_df[~adj_control_df['lad_zone_id'].isna()]
+    control_df = control_df[~control_df['lad_zone_id'].isna()]
 
     for col in constraint_cols:
-        adj_control_df.loc[:, col] = adj_control_df[col].astype(int).astype(str)
-    adj_control_df['lad_zone_id'] = adj_control_df['lad_zone_id'].astype(float).astype(int)
+        control_df.loc[:, col] = control_df[col].astype(int).astype(str)
+    control_df['lad_zone_id'] = control_df['lad_zone_id'].astype(float).astype(int)
 
     # Seed zero infill
-    adj_control_df[base_value_name] = adj_control_df[base_value_name].replace(0, 0.001)
+    control_df[base_value_name] = control_df[base_value_name].replace(0, 0.001)
 
     # Build LA adjustment
     # Note tp not in the picture
@@ -160,7 +160,7 @@ def control_to_ntem(control_df: pd.DataFrame,
     af_sums = af_groups.copy()
     af_sums.append(base_value_name)
 
-    adj_fac = adj_control_df.reindex(af_sums, axis=1).groupby(
+    adj_fac = control_df.reindex(af_sums, axis=1).groupby(
             af_groups).sum().reset_index().copy()
     # Just have to do this manually
     adj_fac['lad_zone_id'] = adj_fac['lad_zone_id'].astype(float).astype(int)
@@ -182,9 +182,9 @@ def control_to_ntem(control_df: pd.DataFrame,
     adjustments = adj_fac['adj_fac']
 
     # TODO: Report adj factors here
-    adj_control_df = adj_control_df.merge(adj_fac,
-                                          how='left',
-                                          on=kf_groups)
+    adj_control_df = control_df.merge(adj_fac,
+                                  how='left',
+                                  on=kf_groups)
 
     adj_control_df[base_value_name] *= adj_control_df['adj_fac']
 
