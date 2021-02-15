@@ -23,7 +23,7 @@ def main():
     # Running control
     integrate_dlog = False
 
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = True
     recreate_attractions = True
     recreate_nhb_productions = True

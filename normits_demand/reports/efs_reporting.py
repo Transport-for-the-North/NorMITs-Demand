@@ -32,6 +32,7 @@ from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 from normits_demand.constraints import ntem_control
+from normits_demand.validation import checks
 
 
 class EfsReporter:
@@ -41,6 +42,16 @@ class EfsReporter:
 
     _vector_types = ['productions', 'attractions']
     _trip_origins = consts.VALID_TRIP_ORIGINS
+
+    _ntem_report_cols = [
+        'Vector Type',
+        'Trip Origin',
+        'Year',
+        'NTEM',
+        'Achieved',
+        'NTEM - Achieved',
+        '% Difference'
+    ]
 
     def __init__(self,
                  import_home: Union[pathlib.Path, str],
@@ -113,13 +124,14 @@ class EfsReporter:
             'nhb_attractions': os.path.join(self.efs_exports['attractions'], nhb_a_fname),
         }
 
+        # TODO: Add in NHB exceptional growth when we have the files
         # post exceptional growth imports
-        hb_p_fname = consts.PRODS_FNAME % (self.synth_zone_name, 'hb_exc')
-        hb_a_fname = consts.ATTRS_FNAME % (self.synth_zone_name, 'hb_exc')
+        hb_p_fname = consts.PRODS_FNAME % (self.model_zone_name, 'hb_exc')
+        hb_a_fname = consts.ATTRS_FNAME % (self.model_zone_name, 'hb_exc')
 
         eg_vectors = {
-            'hb_p': os.path.join(self.efs_exports['productions'], hb_p_fname),
-            'hb_a': os.path.join(self.efs_exports['attractions'], hb_a_fname),
+            'hb_productions': os.path.join(self.efs_exports['productions'], hb_p_fname),
+            'hb_attractions': os.path.join(self.efs_exports['attractions'], hb_a_fname),
         }
 
         # matrix imports
@@ -156,6 +168,46 @@ class EfsReporter:
 
         return imports, exports
 
+    def _compare_vector_to_ntem(self,
+                                vector_path: pathlib.Path,
+                                zone_to_lad: pd.DataFrame,
+                                vector_type: str,
+                                matrix_type: str,
+                                trip_origin: str,
+                                ) -> pd.DataFrame:
+        """
+        An internal wrapper around compare_vector_to_ntem()
+        """
+        # Init
+        vector = pd.read_csv(vector_path)
+
+        # We need to add a mode column if not there
+        if 'm' not in list(vector):
+            model_modes = consts.MODEL_MODES[self.model_name]
+            if len(model_modes) > 1:
+                raise ValueError(
+                    "The vector loaded in from '%s' does not contain a mode "
+                    "column (label: 'm'). I tried to infer the mode based "
+                    "on the model_name given, but more than one mode exists! "
+                    "I don't know how to proceed."
+                    % (str(vector_path))
+                )
+
+            # Add the missing mode column in
+            vector['m'] = model_modes[0]
+
+        return compare_vector_to_ntem(
+            vector=vector,
+            compare_cols=self.years_needed,
+            compare_cols_name='Year',
+            zone_to_lad=zone_to_lad,
+            ntem_totals_dir=self.imports['ntem']['totals'],
+            vector_type=vector_type,
+            matrix_type=matrix_type,
+            trip_origin=trip_origin,
+            constraint_cols=self.ntem_control_cols,
+        )
+
     def compare_base_pa_vectors_to_ntem(self) -> pd.DataFrame:
         """
         Generates a report of the base P/A Vectors to NTEM data
@@ -166,8 +218,7 @@ class EfsReporter:
             A copy of the report comparing the base vectors to NTEM
         """
         # Init
-        out_col_order = ['Vector Type', 'Trip Origin', 'Year']
-        out_col_order += ['NTEM', 'Achieved', 'NTEM - Achieved', '% Difference']
+        matrix_type = 'pa'
 
         # Make sure the files we need exist
         path_dict = self.imports['base_vectors']
@@ -184,39 +235,69 @@ class EfsReporter:
         for vector_type, trip_origin in base_vector_iterator:
             # Read in the correct vector
             vector_name = '%s_%s' % (trip_origin, vector_type)
-            vector = pd.read_csv(path_dict[vector_name])
 
-            # We need to add a mode column if not there
-            if 'm' not in list(vector):
-                model_modes = consts.MODEL_MODES[self.model_name]
-                if len(model_modes) > 1:
-                    raise ValueError(
-                        "The vector loaded in from '%s' does not contain a mode "
-                        "column (label: 'm'). I tried to infer the mode based "
-                        "on the model_name given, but more than one mode exists! "
-                        "I don't know how to proceed."
-                        % (str(path_dict['hb_p']))
-                    )
-
-                # Add the missing mode column in
-                vector['m'] = model_modes[0]
-
-            report_ph.append(compare_vector_to_ntem(
-                vector=vector,
-                compare_cols=self.years_needed,
-                compare_cols_name='Year',
+            report_ph.append(self._compare_vector_to_ntem(
+                vector_path=path_dict[vector_name],
                 zone_to_lad=msoa_to_lad,
-                ntem_totals_dir=self.imports['ntem']['totals'],
                 vector_type=vector_type,
+                matrix_type=matrix_type,
                 trip_origin=trip_origin,
-                constraint_cols=self.ntem_control_cols,
             ))
 
         # Convert to a dataframe for output
         report = pd.concat(report_ph)
+        report = report.reindex(columns=self._ntem_report_cols)
 
         # Write the report to disk
         fname = "base_vector_report.csv"
+        out_path = os.path.join(self.exports['home'], fname)
+        report.to_csv(out_path, index=False)
+
+        return report
+
+    def compare_eg_pa_vectors_to_ntem(self) -> pd.DataFrame:
+        """
+        Generates a report of the post exceptional growth P/A vectors
+        compared to NTEM data
+
+        Returns
+        -------
+        report:
+            A copy of the report comparing the base vectors to NTEM
+        """
+        # Init
+        matrix_type = 'pa'
+
+        # Make sure the files we need exist
+        path_dict = self.imports['eg_vectors']
+
+        for _, path in path_dict.items():
+            file_ops.check_file_exists(path)
+
+        # Read in the lad<->msoa conversion
+        zone_to_lad = pd.read_csv(self.imports['ntem']['msoa_to_lad'])
+
+        # Compare every base year vector to NTEM and create a report
+        report_ph = list()
+        base_vector_iterator = itertools.product(self._vector_types, ['hb'])
+        for vector_type, trip_origin in base_vector_iterator:
+            # Read in the correct vector
+            vector_name = '%s_%s' % (trip_origin, vector_type)
+
+            report_ph.append(self._compare_vector_to_ntem(
+                vector_path=path_dict[vector_name],
+                zone_to_lad=zone_to_lad,
+                vector_type=vector_type,
+                matrix_type=matrix_type,
+                trip_origin=trip_origin,
+            ))
+
+        # Convert to a dataframe for output
+        report = pd.concat(report_ph)
+        report = report.reindex(columns=self._ntem_report_cols)
+
+        # Write the report to disk
+        fname = "exceptional_growth_vector_report.csv"
         out_path = os.path.join(self.exports['home'], fname)
         report.to_csv(out_path, index=False)
 
@@ -236,7 +317,7 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
                            compare_year: str = None,
                            ) -> pd.DataFrame:
     """
-    Returns a report comparing the base P/A Vectors to NTEM data
+    Returns a report comparing the given vector to NTEM data
 
     Parameters
     ----------
@@ -284,6 +365,11 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
     out_col_order = ['Vector Type', 'Trip Origin', 'Year']
     out_col_order += ['NTEM', 'Achieved', 'NTEM - Achieved', '% Difference']
 
+    # validation
+    vector_type = checks.validate_vector_type(vector_type)
+    trip_origin = checks.validate_trip_origin(trip_origin)
+    matrix_type = checks.validate_matrix_type(matrix_type)
+
     # If compare_year is None, assume compare_cols is years
     if compare_year is None:
         col_years = compare_cols
@@ -297,7 +383,7 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
     report_ph = list()
     for col, year in zip(compare_cols, col_years):
         # Get the ntem control for this year
-        ntem_fname = consts.NTEM_CONTROL_FNAME % ('pa', year)
+        ntem_fname = consts.NTEM_CONTROL_FNAME % (matrix_type, year)
         ntem_path = os.path.join(ntem_totals_dir, ntem_fname)
         ntem_totals = pd.read_csv(ntem_path)
 

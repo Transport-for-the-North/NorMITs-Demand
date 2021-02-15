@@ -550,7 +550,7 @@ def efs_build_od(pa_import: str,
                  aggregate_to_wday: bool = True,
                  verbose: bool = True,
                  round_dp: int = consts.DEFAULT_ROUNDING,
-                 process_count: int = -2
+                 process_count: int = consts.PROCESS_COUNT
                  ) -> None:
     """
      This function imports time period split factors from a given path.
@@ -584,9 +584,12 @@ def efs_build_od(pa_import: str,
     -------
     None
     """
+
+    # BACKLOG: Dynamically generate the path to phi_factors
+    #  labels: EFS
     # Init
     if phi_lookup_folder is None:
-        phi_lookup_folder = 'Y:/NorMITs Demand/import/phi_factors'
+        phi_lookup_folder = 'I:/NorMITs Demand/import/phi_factors'
 
     # ## MULTIPROCESS ## #
     unchanging_kwargs = {

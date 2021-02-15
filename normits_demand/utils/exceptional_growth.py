@@ -2338,9 +2338,7 @@ def adjust_bespoke_zones(gen_path: str,
     else:
         raise ValueError(f"Model Type {model_name} is not supported")
 
-    bespoke_audit_path = os.path.join(
-        audit_path, "Bespoke Zones"
-    )
+    bespoke_audit_path = os.path.join(audit_path, "Bespoke Zones")
     if not os.path.isdir(bespoke_audit_path):
         os.mkdir(bespoke_audit_path)
 

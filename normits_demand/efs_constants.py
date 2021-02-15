@@ -276,9 +276,10 @@ ALL_YEARS_STR = [str(x) for x in ALL_YEARS]
 #  labels: EFS, QoL updates
 
 BESPOKE_ZONES_INPUT_FILE = os.path.join(
-    "Y:/",
+    "I:/",
     "NorMITs Demand",
-    "inputs",
+    "import",
+    "bespoke zones",
     "MANSAM",
     "Bespoke Zone - MANSAM Inputs v1b.xlsx",
 )
