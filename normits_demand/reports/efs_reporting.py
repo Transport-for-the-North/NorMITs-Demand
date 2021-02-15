@@ -231,6 +231,7 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
                            ntem_totals_dir: Union[pathlib.Path, str],
                            vector_type: str,
                            trip_origin: str,
+                           matrix_type: str,
                            constraint_cols: List[str] = None,
                            compare_year: str = None,
                            ) -> pd.DataFrame:
@@ -255,10 +256,13 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
         The path to a directory containing the NTEM data to compare to
 
     vector_type:
-        The type of vector. Either 'productions' or 'attractions'
+        The type of vector. Either 'productions', 'attractions', 'origin', 'destination'.
 
     trip_origin:
         The trip origin of vector. Either 'hb' or 'nhb.
+
+    matrix_type:
+        The type of the vector being compared. Either 'pa' or 'od'.
 
     constraint_cols:
         The columns of vector to compare to NTEM. If left as None, defaults

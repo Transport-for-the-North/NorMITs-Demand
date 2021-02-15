@@ -1212,7 +1212,8 @@ class NhbProductionModel:
             ntem_control_dir = os.path.join(import_home, path)
 
         if lad_lookup_dir is None:
-            lad_lookup_dir = import_home
+            path = os.path.join('zone_translation', 'no_overlap')
+            lad_lookup_dir = os.path.join(import_home, path)
 
         if audit_write_dir is None:
             audit_write_dir = os.path.join(export_home,
