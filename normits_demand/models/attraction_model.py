@@ -307,7 +307,7 @@ class AttractionModel:
                                   '/' +
                                   self.output_zones.lower() +
                                   '_msoa_emp_weighted_lookup.csv')
-        
+
         # Set output params dict    
         if 'soc' in self.output_segments:
             print('Running soc weighting')
@@ -501,7 +501,7 @@ class AttractionModel:
     
         hb_attr = all_attr.copy()
         nhb_attr = all_attr.copy()
-        
+
         # Rename hb purpose to nhb
         nhb_attr = nhb_attr[nhb_attr['p']!=1]
         nhb_attr = nhb_attr[nhb_attr['p']!=7]

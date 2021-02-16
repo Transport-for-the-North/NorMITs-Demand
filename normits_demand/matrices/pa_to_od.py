@@ -32,6 +32,105 @@ from normits_demand.concurrency import multiprocessing
 # Can call tms pa_to_od.py functions from here
 from normits_demand.matrices.tms_pa_to_od import *
 
+def trip_end_pa_to_od(pa_productions,
+                      phi_lookup_folder: str,
+                      phi_type: str,
+                      modes: List[int],
+                      tp_col: str = 'tp',
+                      trip_col: str = 'trips',
+                      round_dp: int = 4,
+                      aggregate_to_wday: bool = True,
+                      verbose: bool = True):
+    
+    """
+    pa_productions
+    """
+    # Check for TP and trips
+    # What is this - error handling !?
+    if 'tp' not in list(pa_productions):
+        if tp_col == 'tp':
+            raise ValueError('No time period column in trip end vector')
+    if 'trips' not in list(pa_productions):
+        if trip_col == 'trips':
+            raise ValueError('No trips column in trip end vector')
+
+    # Initialise group and sum cols
+    out_cols = list(pa_productions)
+    out_cols.remove(trip_col)
+    group_cols = out_cols.copy()
+    append_cols = ['o_' + trip_col, 'd_' + trip_col]
+    [out_cols.append(x) for x in append_cols]
+    del(append_cols)
+    toh_cols = out_cols.copy()
+    toh_cols.remove('o_' + trip_col)
+
+    # initialise time periods
+    tp_nos = [1,2,3,4]
+    tp_list = []
+    [tp_list.append(tp_col+str(x)) for x in tp_nos]
+
+    # Do subset by mode
+    mode_subs = []
+    for mode in modes:
+        mode_sub = pa_productions.copy()
+        mode_sub = mode_sub[mode_sub['m']==mode]
+
+        phi_factors = get_time_period_splits(
+            mode,
+            phi_type,
+            aggregate_to_wday=aggregate_to_wday,
+            lookup_folder=phi_lookup_folder)
+        
+        # Rename phi factors
+        phi_factors = phi_factors.rename(
+            columns={'purpose_from_home':'p',
+                     'time_from_home':tp_col})
+        # BACKLOG: Handle different types of phi factor
+
+        time_subs = []
+        for time in tp_nos:
+            from_home = mode_sub.copy()
+            from_home = from_home[from_home[tp_col]==time]
+            from_home = from_home.rename(columns={trip_col:'o_' + trip_col})
+            to_home = from_home.copy()
+            to_home = to_home.merge(
+                phi_factors,
+                how='left',
+                on=['p',tp_col])
+            to_home['d_' + trip_col] = (to_home['o_trips'] *
+                                  to_home['direction_factor'])
+            to_home = to_home.drop(
+                ['tp', 'direction_factor', 'o_trips'], axis=1)
+            to_home = to_home.rename(
+                columns = {'time_to_home':'tp'})
+            to_home = to_home.groupby(group_cols).sum().reset_index()
+            to_home = to_home.sort_values(toh_cols)
+            
+            time_sub = from_home.merge(to_home,
+                                       how='left',
+                                       on=group_cols)
+            time_subs.append(time_sub)
+        
+        mode_subs.append(pd.concat(time_subs))
+    
+    od_productions = pd.concat(mode_subs)
+    od_productions = od_productions.groupby(
+        group_cols).sum().reset_index()
+    od_productions = od_productions.sort_values(
+        group_cols).reset_index(drop=True)
+    
+    # Round
+    od_productions['o_'+trip_col] = od_productions[
+        'o_'+trip_col].round(round_dp)
+    od_productions['d_'+trip_col] = od_productions[
+        'd_'+trip_col].round(round_dp)
+    
+    totals = {'o_total':od_productions['o_'+trip_col].sum(),
+              'd_total':od_productions['o_'+trip_col].sum()}
+    if verbose:
+        print(totals)
+
+    return od_productions, totals
 
 def simplify_time_period_splits(time_period_splits: pd.DataFrame):
     """
