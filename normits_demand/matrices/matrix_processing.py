@@ -22,7 +22,7 @@ from typing import Dict
 from typing import Tuple
 from typing import Iterable
 
-from functools import reduce
+import functools
 from itertools import product
 from collections import defaultdict
 
@@ -412,7 +412,7 @@ def get_vdm_tour_proportion_seed_values(m: int,
         return seed_values_list[0]
 
     # Get the average of the seed values
-    seed_values = reduce(lambda x, y: x + y, seed_values_list)
+    seed_values = functools.reduce(lambda x, y: x + y, seed_values_list)
     seed_values = seed_values / n_purposes
 
     # Normalise array to sum=1
@@ -1510,7 +1510,7 @@ def build_24hr_vdm_mats(import_dir: str,
                         "others." % str(tp_needed[i]))
 
             # Combine all matrices together
-            full_mat = reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
+            full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
 
             # Output to file
             full_mat.to_csv(os.path.join(export_dir, output_dist_name))
@@ -1675,7 +1675,7 @@ def build_24hr_mats(import_dir: str,
                                      "others." % str(tp_needed[i]))
 
             # Combine all matrices together
-            full_mat = reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
+            full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
 
             # Output to file
             full_mat.to_csv(os.path.join(export_dir, output_dist_name))
@@ -1832,7 +1832,7 @@ def compile_matrices(mat_import: str,
             in_mats.append(pd.read_csv(in_path, index_col=0))
 
         # Combine all matrices together
-        full_mat = reduce(lambda x, y: x.add(y, fill_value=0), in_mats)
+        full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), in_mats)
 
         # Output to file
         output_path = os.path.join(mat_export, comp_name)
@@ -1891,7 +1891,15 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
                 "year %s." % str(year)
             )
 
+    # Build the progress bar
+    total = sum([len(year_to_segment_dicts[year]) for year in years_needed])
+    desc = 'Building P/A vectors'
+    p_bar = tqdm(total=total, desc=desc, disable=(not verbose))
+
     # Build a vector for each year
+    yearly_p_or_o = list()
+    yearly_a_or_d = list()
+    segment_col_names = list()
     for year in years_needed:
 
         # This shouldn't change across matrices
@@ -1912,15 +1920,10 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
                 % str(matrix_format)
             )
 
-        # Build the iterator
-        iterator = tqdm(year_to_segment_dicts[year],
-                        desc='Building P/A vectors for %s' % str(year),
-                        disable=(not verbose))
-
         # Build an efficient_df for each matrix
-        final_col_names = set()
+        segment_col_names = set()
         year_eff_dfs = list()
-        for segment_dict in iterator:
+        for segment_dict in year_to_segment_dicts[year]:
             # Validate trip origin and matrix format
             trip_origin = checks.validate_trip_origin(segment_dict['trip_origin'])
 
@@ -1956,11 +1959,13 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
             # ## COMPILE INTO AN EFFICIENT DF ## #
             # Remove the info we no longer need
             eff_df = segment_dict.copy()
+            del eff_df['yr']
             del eff_df['trip_origin']
             del eff_df['matrix_format']
 
             # Keep track of the column names we're keeping
-            final_col_names = set(list(final_col_names) + list(eff_df.keys()))
+            vector_columns = [zone_col_name] + list(eff_df.keys())
+            segment_col_names = set(list(segment_col_names) + vector_columns)
 
             # Add the dataframe and we're done!
             # After this the df value is a df of either cols:
@@ -1973,96 +1978,105 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
             )
             year_eff_dfs.append(eff_df)
 
+            # Update the progress bar
+            p_bar.update(1)
+
         # Figure out the final column names
+        segment_col_names = list(segment_col_names)
         value_cols = [p_or_o_val_name, a_or_d_val_name]
-        final_col_names = list(final_col_names) + value_cols
+        final_col_names = segment_col_names + value_cols
         # TODO: How to split HB/NHB. Two different lists per year? Split at end?!
         #  pass in matrix format?
 
         # Compile into a vector for this year
         year_pa = du.compile_efficient_df(year_eff_dfs, col_names=final_col_names)
+        year_pa = du.sort_vector_cols(year_pa)
+        year_pa = year_pa.sort_values(by=segment_col_names)
 
         # Tidy up soc/ns columns
         for col_name in ['soc', 'ns']:
             if col_name in list(year_pa):
                 year_pa[col_name] = year_pa[col_name].fillna('none').astype(str)
 
-        print(year_pa)
-        exit()
+        # ## STORE DATAFRAMES FOR CONCAT LATER ## #
+        # Remove the other column from each
+        p_or_o_vec = year_pa.drop(columns=[a_or_d_val_name])
+        a_or_d_vec = year_pa.drop(columns=[p_or_o_val_name])
+
+        # Rename for the year we've just done and store for later
+        yearly_p_or_o.append(p_or_o_vec.rename(columns={p_or_o_val_name: year}))
+        yearly_a_or_d.append(a_or_d_vec.rename(columns={a_or_d_val_name: year}))
+
+    # At this point we have a list of vectors for different years
+
+    # Merge the years together
+    p_or_o = du.merge_df_list(yearly_p_or_o, on=segment_col_names)
+    a_or_d = du.merge_df_list(yearly_a_or_d, on=segment_col_names)
+
+    # Split out the HB and NHB and return
+    p_or_o_mask = p_or_o['p'].isin(consts.ALL_HB_P)
+    hb_p_or_o = p_or_o[p_or_o_mask].copy()
+    nhb_p_or_o = p_or_o[~p_or_o_mask].copy()
+
+    a_or_d_mask = a_or_d['p'].isin(consts.ALL_HB_P)
+    hb_a_or_d = a_or_d[a_or_d_mask].copy()
+    nhb_a_or_d = a_or_d[~a_or_d_mask].copy()
+
+    return hb_p_or_o, nhb_p_or_o, hb_a_or_d, nhb_a_or_d
 
 
+def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
+                                     years_needed: List[str],
+                                     cache_path: pathlib.Path,
+                                     matrix_format: str,
+                                     overwrite_cache: bool = False,
+                                     verbose: bool = True,
+                                     ) -> pd.DataFrame:
+    # TODO: Write maybe_convert_matrices_to_vector() docs
+    # Init
+    matrix_format = checks.validate_matrix_type(matrix_format)
 
+    # Figure out the file paths we should be using
+    if matrix_format == 'pa':
+        hb_p_or_o_fname = consts.PRODS_FNAME % ('cache', 'hb')
+        nhb_p_or_o_fname = consts.PRODS_FNAME % ('cache', 'nhb')
+        hb_a_or_o_fname = consts.ATTRS_FNAME % ('cache', 'hb')
+        nhb_a_or_o_fname = consts.ATTRS_FNAME % ('cache', 'nhb')
+    elif matrix_format == 'od':
+        hb_p_or_o_fname = consts.ORIGS_FNAME % ('cache', 'hb')
+        nhb_p_or_o_fname = consts.ORIGS_FNAME % ('cache', 'nhb')
+        hb_a_or_o_fname = consts.DESTS_FNAME % ('cache', 'hb')
+        nhb_a_or_o_fname = consts.DESTS_FNAME % ('cache', 'nhb')
+    else:
+        raise ValueError(
+            "%s seems to be a valid matrix format, but I don't know what to "
+            "do with it!" % matrix_format
+        )
 
-    # Stick all the yearly vectors together
+    cache_fnames = [
+        hb_p_or_o_fname,
+        nhb_p_or_o_fname,
+        hb_a_or_o_fname,
+        nhb_a_or_o_fname,
+    ]
+    cache_paths = [os.path.join(cache_path, f) for f in cache_fnames]
 
+    # Read from disk if files already exist
+    if all([fo.file_exists(f) for f in cache_paths]) and not overwrite_cache:
+        dtypes = {'soc': str, 'ns': str}
+        return [pd.read_csv(f, dtype=dtypes) for f in cache_paths]
 
-    exit()
+    # ## CREATE AND CACHE IF FILES DON'T EXIST YET ## #
 
-    return [pd.DataFrame()] * 4
+    # Make the files - returned in same order as filenames above
+    vectors = matrices_to_vector(
+        mat_import_dir=mat_import_dir,
+        years_needed=years_needed,
+        verbose=verbose
+    )
 
-    # def load_seed_dists(mat_folder: str,
-    #                     segments_needed: List[str],
-    #                     base_year: str,
-    #                     zone_column: str,
-    #                     trip_type: str = "productions",
-    #                     ) -> pd.DataFrame:
-    # 
-    #     # Define the columns needed
-    #     group_cols = [zone_column] + segments_needed
-    #     required_cols = group_cols + [base_year]
-    # 
-    #     # Get the list of available files in the seed dist folder
-    #     files = du.parse_mat_output(
-    #         os.listdir(mat_folder),
-    #         mat_type="pa"
-    #     )
-    #     # Filter to just HB matrices
-    #     hb_files = files.loc[files["trip_origin"] == "hb"]
-    #     # Define dataframe to store the observed trip ends
-    #     all_obs = pd.DataFrame()
-    # 
-    #     iterator = tqdm(
-    #         hb_files.to_dict(orient="records"),
-    #         desc=f"Loading Base Observed {trip_type}"
-    #     )
-    #     # Loop through each matrix in the path and add to the overall dataframe
-    #     for row in iterator:
-    #         file_name = row.pop("file")
-    #         file_path = os.path.join(mat_folder, file_name)
-    # 
-    #         obs = pd.read_csv(file_path, index_col=0)
-    #         # Sum along columns for productions and rows for attractions
-    #         if trip_type == "productions":
-    #             obs = obs.sum(axis=1)
-    #         elif trip_type == "attractions":
-    #             obs = obs.sum(axis=0)
-    #         else:
-    #             raise ValueError("Invalid Trip Type supplied")
-    # 
-    #         # Set column names
-    #         obs = obs.reset_index()
-    #         obs.columns = [zone_column, base_year]
-    #         obs[zone_column] = obs[zone_column].astype("int")
-    # 
-    #         # Extract segments from the file names
-    #         for segment in segments_needed:
-    #             obs[segment] = row[segment]
-    # 
-    #         # Add to the overall dataframe
-    #         if all_obs.empty:
-    #             all_obs = obs
-    #         else:
-    #             all_obs = all_obs.append(obs)
-    # 
-    #     # Change data types for all integer columns
-    #     for col in ["p", "ca"]:
-    #         if col in all_obs.columns:
-    #             all_obs[col] = all_obs[col].astype("int")
-    # 
-    #     # Finally group and sum the dataframe
-    #     all_obs = all_obs.groupby(
-    #         group_cols,
-    #         as_index=False
-    #     )[base_year].sum()
-    # 
-    #     return all_obs[required_cols]
+    # Save to disk, and return copies
+    for vector, path in zip(vectors, cache_paths):
+        vector.to_csv(path, index=False)
+
+    return vectors

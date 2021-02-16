@@ -34,6 +34,7 @@ from pathlib import Path
 
 from math import isclose
 
+import functools
 from tqdm import tqdm
 from itertools import product
 from collections import defaultdict
@@ -2066,6 +2067,60 @@ def segmentation_order(segmentation_lst: List[str]) -> List[str]:
     return ordered_seg_vals + non_seg_vals
 
 
+def sort_vector_cols(vector: pd.DataFrame,
+                     zone_col: str = None,
+                     in_place: bool = False,
+                     ) -> pd.DataFrame:
+    """
+    Re-orders the columns if vector to be in the correct segmentation order
+
+    The zone column will be placed first, and any other non-segment columns
+    are appended to the end of the order.
+
+    Parameters
+    ----------
+    vector:
+        The vector to re-order the columns of
+
+    zone_col:
+        The name of the column containing the zone_id data. If not given,
+        it will be inferred by looking for the first column containing
+        "zone_id".
+
+    in_place:
+        Whether to re-order in place or return a copy of the given dataframe.
+
+    Returns
+    -------
+    reindexed_vector:
+        The given vector re-indexed to to be in the correct segmentation order,
+        as defined by consts.SEGMENTATION_ORDER.
+    """
+    # init
+    columns = list(vector)
+
+    if not in_place:
+        vector = vector.copy()
+
+    # Infer the zone col if not given
+    if zone_col is None:
+        zone_col_candidates = [x for x in columns if '_zone_id' in x]
+        if zone_col_candidates == list():
+            raise ValueError(
+                "No zone_col argument was given. Tried to infer which "
+                "column to use, but there were not columns containing "
+                "'zone_col'."
+            )
+        zone_col = zone_col_candidates[0]
+
+    # Build a list of the final output order
+    col_order = segmentation_order(list_safe_remove(columns, [zone_col]))
+    col_order = [zone_col] + col_order
+
+    # Reindex and return
+    return vector.reindex(columns=col_order)
+
+
 def seg_dict_key_order(segmentation_dict: Dict[str, Any]) -> List[str]:
     """
     Returns the keys of segmentation_dict in their hierarchical order
@@ -3048,7 +3103,7 @@ def compile_efficient_df(eff_df: List[Dict[str, Any]],
         df = df.reindex(columns=col_names)
         concat_ph.append(df)
 
-    return pd.concat(concat_ph)
+    return pd.concat(concat_ph).reset_index(drop=True)
 
 
 def list_safe_remove(lst: List[Any],
@@ -3228,3 +3283,23 @@ def trip_origin_to_purposes(trip_origin: str) -> List[int]:
     """
     # TODO Validate trip origin
     return consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
+
+
+def merge_df_list(df_list, **kwargs):
+    """
+    Merge all dfs in df_list into a single dataframe
+
+    Parameters
+    ----------
+    df_list:
+        The list of dataframes to merge
+
+    kwargs:
+        ANy extra arguments to pass straight to pandas.merge()
+
+    Returns
+    -------
+    merged_df:
+        A single df of all items in df_list merged together
+    """
+    return functools.reduce(lambda l, r: pd.merge(l, r, **kwargs), df_list)

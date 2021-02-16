@@ -21,6 +21,32 @@ from typing import Union
 # Local imports
 
 
+def file_exists(file_path: Union[str, pathlib.Path]) -> bool:
+    """
+    Checks if a file exists at the given path.
+
+    Parameters
+    ----------
+    file_path:
+        path to the file to check.
+
+    Returns
+    -------
+    file_exists:
+        True if a file exists, else False
+    """
+    if not os.path.exists(file_path):
+        return False
+
+    if not os.path.isfile(file_path):
+        raise IOError(
+            "The given path exists, but does not point to a file. "
+            "Given path: %s" % str(file_path)
+        )
+
+    return True
+
+
 def check_file_exists(file_path: Union[str, pathlib.Path]) -> None:
     """
     Checks if a file exists at the given path. Throws an error if not.
@@ -34,15 +60,9 @@ def check_file_exists(file_path: Union[str, pathlib.Path]) -> None:
     -------
     None
     """
-    if not os.path.exists(file_path):
+    if not file_exists(file_path):
         raise IOError(
             "Cannot find a path to: %s" % str(file_path)
-        )
-
-    if not os.path.isfile(file_path):
-        raise IOError(
-            "The given path exists, but does not point to a file. "
-            "Given path: %s" % str(file_path)
         )
 
 

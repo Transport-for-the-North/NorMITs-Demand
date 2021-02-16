@@ -154,6 +154,9 @@ TAG_CERTAINTY_BOUNDS = {
 PRODS_FNAME = '%s_%s_productions.csv'
 ATTRS_FNAME = '%s_%s_attractions.csv'
 
+ORIGS_FNAME = '%s_%s_origins.csv'
+DESTS_FNAME = '%s_%s_destinations.csv'
+
 # Additive growth audit
 PRODS_MG_FNAME = '%s_%s_productions_multiplicative_growth.csv'
 

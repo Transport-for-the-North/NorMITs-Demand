@@ -164,18 +164,33 @@ class EfsReporter:
 
         # ## BUILD THE EXPORTS ## #
         export_home = os.path.join(self.efs_exports['reports'], 'EFS Reporter')
+
+        # Build the cache paths
+        cache_home = os.path.join(export_home, 'cache')
+        cache_paths = {
+            'pa_24': os.path.join(cache_home, 'pa_24'),
+            'pa': os.path.join(cache_home, 'pa'),
+            'od': os.path.join(cache_home, 'od'),
+        }
+        for _, path in cache_paths.items():
+            du.create_folder(path, chDir=False)
+
+        # Finally, build the outer exports dict!
         exports = {
-            'home': export_home
+            'home': export_home,
+            'cache': cache_paths,
         }
 
         # Create any paths that don't already exist
         for _, path in exports.items():
+            if isinstance(path, dict):
+                continue
             du.create_folder(path, chDir=False)
 
         return imports, exports
 
     def _compare_vector_to_ntem(self,
-                                vector_path: pathlib.Path,
+                                vector: pd.DataFrame,
                                 zone_to_lad: pd.DataFrame,
                                 vector_type: str,
                                 matrix_type: str,
@@ -185,19 +200,15 @@ class EfsReporter:
         """
         An internal wrapper around compare_vector_to_ntem()
         """
-        # Init
-        vector = pd.read_csv(vector_path)
-
         # We need to add a mode column if not there
         if 'm' not in list(vector):
             model_modes = consts.MODEL_MODES[self.model_name]
             if len(model_modes) > 1:
                 raise ValueError(
-                    "The vector loaded in from '%s' does not contain a mode "
+                    "The given vector does not contain a mode "
                     "column (label: 'm'). I tried to infer the mode based "
                     "on the model_name given, but more than one mode exists! "
                     "I don't know how to proceed."
-                    % (str(vector_path))
                 )
 
             # Add the missing mode column in
@@ -245,7 +256,7 @@ class EfsReporter:
             vector_name = '%s_%s' % (trip_origin, vector_type)
 
             report_ph.append(self._compare_vector_to_ntem(
-                vector_path=path_dict[vector_name],
+                vector=pd.read_csv(path_dict[vector_name]),
                 zone_to_lad=msoa_to_lad,
                 vector_type=vector_type,
                 matrix_type=matrix_type,
@@ -295,7 +306,7 @@ class EfsReporter:
             vector_name = '%s_%s' % (trip_origin, vector_type)
 
             report_ph.append(self._compare_vector_to_ntem(
-                vector_path=path_dict[vector_name],
+                vector=pd.read_csv(path_dict[vector_name]),
                 zone_to_lad=zone_to_lad,
                 vector_type=vector_type,
                 matrix_type=matrix_type,
@@ -324,17 +335,55 @@ class EfsReporter:
             A copy of the report comparing the PA matrices to NTEM
         """
         # Init
+        matrix_type = 'pa'
+        vector_order = [
+            'hb_productions',
+            'nhb_productions',
+            'hb_attractions',
+            'nhb_attractions',
+        ]
 
-        # TODO: Write a wrapper for this that caches the outputs
         # Convert matrices into vector
-        hb_p, nhb_p, hb_a, nhb_a = mat_p.matrices_to_vector(
+        vectors = mat_p.maybe_convert_matrices_to_vector(
             mat_import_dir=self.imports['matrices']['pa_24'],
             years_needed=self.years_needed,
+            cache_path=self.exports['cache']['pa_24'],
+            matrix_format=matrix_type,
         )
-        # EG code??
-        # Cache it and check if it exists
 
-        # Generate report like above
+        # Assign to a dictionary for accessing
+        vector_dict = {name: vec for name, vec in zip(vector_order, vectors)}
+
+        # ## GENERATE THE REPORT ## #
+        # Read in the model_zone<->msoa conversion
+        zone_to_lad = pd.read_csv(self.imports['ntem']['model_to_lad'])
+
+        # Compare every base year vector to NTEM and create a report
+        report_ph = list()
+        base_vector_iterator = itertools.product(self._vector_types, self._trip_origins)
+        for vector_type, trip_origin in base_vector_iterator:
+            # Read in the correct vector
+            vector_name = '%s_%s' % (trip_origin, vector_type)
+
+            report_ph.append(self._compare_vector_to_ntem(
+                vector=vector_dict[vector_name],
+                zone_to_lad=zone_to_lad,
+                vector_type=vector_type,
+                matrix_type=matrix_type,
+                trip_origin=trip_origin,
+                base_zone_name=self._zone_col_base % self.model_zone_name,
+            ))
+
+        # Convert to a dataframe for output
+        report = pd.concat(report_ph)
+        report = report.reindex(columns=self._ntem_report_cols)
+
+        # Write the report to disk
+        fname = "base_24hr_pa_matrices_report.csv"
+        out_path = os.path.join(self.exports['home'], fname)
+        report.to_csv(out_path, index=False)
+
+        return report
 
 
 # TODO: Move compare_vector_to_ntem() to a general pa_reporting module
