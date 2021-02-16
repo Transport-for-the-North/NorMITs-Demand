@@ -66,6 +66,7 @@ class AttractionModel:
         self.output_segments = output_segments
         self.attractions_name = attractions_name
         self.attraction_weights = attraction_weights
+        self.attraction_mode_split = attraction_mode_split
         self.ntem_control = ntem_control      
         if ntem_path == 'default':
             ntem_path = _default_ntem
@@ -222,7 +223,7 @@ class AttractionModel:
             group_col = minor_zone_name
         elif 'msoa' in minor_zone_name:
             group_col = major_zone_name
-        
+
         # get group cols
         group_cols = [group_col]
         for col in list(attractions):
@@ -251,7 +252,35 @@ class AttractionModel:
         print(attractions_w_zones['attractions'].sum())
     
         return(attractions_w_zones)
-    
+
+    def ping_outpath(self):
+
+        """
+        """
+        # BACKLOG: This solves a lot of problems, integrate into main
+        output_dir = os.path.join(self.build_folder,
+                                  self.iteration)
+        output_f = 'Attraction Outputs'
+
+        out_target_hb = os.path.join(output_dir,
+                                     output_f,
+                                     'hb_attractions_' +
+                                     self.input_zones.lower() +
+                                     '.csv')
+        if not os.path.exists(out_target_hb):
+            out_target_hb = ''
+
+        out_target_nhb = os.path.join(output_dir,
+                                      output_f,
+                                      'hb_attractions_' +
+                                      self.input_zones.lower() +
+                                      '.csv')
+        if not os.path.exists(out_target_nhb):
+            out_target_nhb = ''
+
+        return {'hb': out_target_hb,
+                'nhb': out_target_nhb}
+
     def run(self):
 
         """
@@ -570,8 +599,9 @@ class AttractionModel:
             print(nhb_audit)
     
         # Control to k factors
-        if self.k_factor_paths is not None:
+        if self.k_factor_control:
             # Adjust to k factor for hb
+            # BACKLOG: Fix k factor adjustments
             lad_lookup = pd.read_csv(self.lad_path)
             
             k_factors = os.listdir(self.k_factor_paths)[0]
@@ -670,13 +700,13 @@ class AttractionModel:
         if self.export_msoa == True:
             hb_attr.to_csv(
                 os.path.join(
-                    self.output_dir,
+                    output_dir,
                     self.input_zones.lower(),
                     '_hb_attractions.csv'),
                 index=False)
             nhb_attr.to_csv(
                 os.path.join(
-                    self.output_dir,
+                    output_dir,
                     self.input_zones.lower(),
                     '_nhb_attractions.csv'),
                 index=False)
@@ -695,11 +725,11 @@ class AttractionModel:
             max_level=True)
         
         hb_out_path = os.path.join(
-            self.output_dir,
+            output_dir,
             self.output_zones.lower() +
             '_hb_attractions.csv')
         nhb_out_path = os.path.join(
-            self.output_dir,
+            output_dir,
             self.output_zones.lower() +
             '_nhb_attractions.csv')
 

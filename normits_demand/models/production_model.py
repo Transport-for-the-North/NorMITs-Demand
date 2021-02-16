@@ -415,6 +415,35 @@ class ProductionModel:
     
         return(lu_report)
 
+    def ping_outpath(self):
+
+        """
+        """
+        # BACKLOG: This solves a lot of problems, integrate into main
+        output_dir = os.path.join(self.build_folder,
+                                  self.iteration)
+        output_f = 'Production Outputs'
+
+        out_target_hb = os.path.join(output_dir,
+                                    output_f,
+                                      'hb_productions_' +
+                                      self.input_zones.lower() +
+                                      '.csv')
+        if not os.path.exists(out_target_hb):
+            out_target_hb = ''
+
+        out_target_nhb = os.path.join(output_dir,
+                                    output_f,
+                                      'hb_productions_' +
+                                      self.input_zones.lower() +
+                                      '.csv')
+
+        if not os.path.exists(out_target_nhb):
+            out_target_nhb = ''
+
+        return {'hb':out_target_hb,
+                'nhb':out_target_nhb}
+
     # Run functions - run the whole production model
     def run_hb(self,
                verbose = False):

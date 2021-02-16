@@ -257,7 +257,7 @@ class TravelMarketSynthesiser:
             output_segments = ni6.params['hb_trip_end_segmentation'],
             attractions_name = ni6.params['attractions_name'],
             attraction_weights = ni6.params['attraction_weights'],
-            attraction_mode_split = ni6.params['attraction_mode_split']
+            attraction_mode_split = ni6.params['attraction_mode_split'],
             ntem_control = ni6.params['attraction_ntem_control'],
             ntem_path = ni6.params['ntem_control_path'],
             k_factor_control = ni6.params['production_k_factor_control'],
@@ -278,8 +278,10 @@ class TravelMarketSynthesiser:
             model_folder = ni6.lookup_folder,
             output_segments = ni6.params['nhb_trip_end_segmentation'],
             trip_rates = ni6.params['nhb_trip_rates'],
-            time_splits = ni6.params['nhb_time_splits'],
-            mode_splits = ni6.params['nhb_mode_splits'],
+            production_vector = self.run_dict['hb_p_run'],
+            attraction_vector = self.run_dict['hb_a_run'],
+            time_split = ni6.params['nhb_time_splits'],
+            mode_split = ni6.params['nhb_mode_splits'],
             ntem_control = ni6.params['production_ntem_control'],
             ntem_path = ni6.params['ntem_control_path'],
             k_factor_control = ni6.params['production_k_factor_control'],
@@ -288,7 +290,6 @@ class TravelMarketSynthesiser:
             export_lad = ni6.params['export_lad'],
             export_uncorrected = ni6.params['export_uncorrected'],
             export_target = ni6.params['export_model_zoning'])
-
         """
 
         # Initialise production model run
@@ -316,6 +317,8 @@ class TravelMarketSynthesiser:
             export_target = self.params['export_model_zoning'])
 
         hb_p_out = hb_p.run_hb()
+        hb_path = hb_p.ping_outpath()['hb']
+
         # Update run dict
         self.run_dict.update({'hb_p_run':hb_p_out[0]})
 
@@ -340,6 +343,8 @@ class TravelMarketSynthesiser:
             export_lad = self.params['export_lad'],
             export_uncorrected = self.params['export_uncorrected'],
             export_target = self.params['export_model_zoning'])
+
+
 
         a_out = a.run()
         # Update run dict
@@ -401,11 +406,11 @@ class TravelMarketSynthesiser:
         ext_nhb.run()
     
         # Run distribution model for hb
-        # TODO: flexible trip length band building, or at least pathing
+        # BACKLOG: flexible trip length band building, or at least pathing
     
         # Will also run external model
-        # TODO: Move path building out of DM function, make part of class
-        # TODO: Specify distribution method, or try both.
+        # BACKLOG: Move path building out of DM function, make part of class
+        # BACKLOG: Specify distribution method, or try both.
 
         int_hb = dm.DistributionModel(
             model_name = params['model_name'],
