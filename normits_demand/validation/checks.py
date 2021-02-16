@@ -89,32 +89,32 @@ def validate_trip_origin(trip_origin: str) -> str:
     return trip_origin
 
 
-def validate_matrix_type(matrix_type: str) -> str:
+def validate_matrix_format(matrix_format: str) -> str:
     """
     Tidies up matrix_type and raises an exception if not valid
 
     Parameters
     ----------
-    matrix_type:
-        The name of the matrix type to validate
+    matrix_format:
+        The name of the matrix format to validate
 
     Returns
     -------
-    matrix_type:
-        matrix_type with both strip and lower applied to remove any whitespace
+    matrix_format:
+        matrix_format with both strip and lower applied to remove any whitespace
         and make it all lowercase
 
     Raises
     -------
     ValueError:
-        If matrix_type is not a valid name for a type of matrix
+        If matrix_format is not a valid name for a type of matrix
     """
     # Init
-    matrix_type = matrix_type.strip().lower()
+    matrix_format = matrix_format.strip().lower()
 
-    if matrix_type not in efs_consts.VALID_MATRIX_FORMATS:
+    if matrix_format not in efs_consts.VALID_MATRIX_FORMATS:
         raise ValueError(
-            "%s is not a valid vector type. It should be one of: %s"
-            % (matrix_type, str(efs_consts.VALID_MATRIX_FORMATS))
+            "%s is not a valid matrix format. It should be one of: %s"
+            % (matrix_format, str(efs_consts.VALID_MATRIX_FORMATS))
         )
-    return matrix_type
+    return matrix_format

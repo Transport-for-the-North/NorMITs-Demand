@@ -37,10 +37,10 @@ def main():
 
     # ## RUN ## #
     # Compare HB and NHB P/A vectors to NTEM
-    # auditor.compare_base_pa_vectors_to_ntem()
+    auditor.compare_base_pa_vectors_to_ntem()
 
     # Compare post-exceptional_growth P/A vectors to NTEM
-    # auditor.compare_eg_pa_vectors_to_ntem()
+    auditor.compare_eg_pa_vectors_to_ntem()
 
     # Compare furnessed PA matrices to NTEM
     auditor.compare_pa_matrices_to_ntem()

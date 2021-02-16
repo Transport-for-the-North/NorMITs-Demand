@@ -1904,7 +1904,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
 
         # This shouldn't change across matrices
         temp_seg_dict = year_to_segment_dicts[year][0]
-        matrix_format = checks.validate_matrix_type(temp_seg_dict['matrix_format'])
+        matrix_format = checks.validate_matrix_format(temp_seg_dict['matrix_format'])
 
         # Figure out which column names we should use
         if matrix_format == 'pa':
@@ -2034,7 +2034,7 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
                                      ) -> pd.DataFrame:
     # TODO: Write maybe_convert_matrices_to_vector() docs
     # Init
-    matrix_format = checks.validate_matrix_type(matrix_format)
+    matrix_format = checks.validate_matrix_format(matrix_format)
 
     # Figure out the file paths we should be using
     if matrix_format == 'pa':

@@ -193,7 +193,7 @@ class EfsReporter:
                                 vector: pd.DataFrame,
                                 zone_to_lad: pd.DataFrame,
                                 vector_type: str,
-                                matrix_type: str,
+                                matrix_format: str,
                                 trip_origin: str,
                                 base_zone_name: str,
                                 ) -> pd.DataFrame:
@@ -221,11 +221,88 @@ class EfsReporter:
             zone_to_lad=zone_to_lad,
             ntem_totals_dir=self.imports['ntem']['totals'],
             vector_type=vector_type,
-            matrix_type=matrix_type,
+            matrix_format=matrix_format,
             trip_origin=trip_origin,
             base_zone_name=base_zone_name,
             constraint_cols=self.ntem_control_cols,
         )
+
+    def _generate_vector_report(self,
+                                vector_dict: Dict[str, pd.DataFrame],
+                                vector_zone_col: str,
+                                zone_to_lad: pd.DataFrame,
+                                matrix_format: str,
+                                output_path: pathlib.Path,
+                                vector_types: List[str] = None,
+                                trip_origins: List[str] = None,
+                                ) -> pd.DataFrame:
+        """
+        Generates a report comparing the given vectors to NTEM
+
+        A copy of the report is also written to disk at output_path
+
+        Parameters
+        ----------
+        vector_dict:
+            A dictionary of keys to vector pd.DataFrames where the keys are
+            underscore separated vector_types and trip_origins
+
+        vector_zone_col:
+            name of zoning column used in vector_dict. Same column name
+            should be used in zone_to_lad for translation.
+
+        zone_to_lad:
+            DF of translation between control_df zone system and LAD
+
+
+        matrix_format:
+            The format of the vectors being passed in. Either 'pa' or 'od'
+
+        output_path:
+            A full path, including filename, of where to write the produced
+            report to disk
+
+        vector_types:
+            The vector types to look for in vector_dict. If left as None,
+            defaults to self._vector_types.
+
+        trip_origins:
+            The trip origins to look for in vector_dict. If left as None,
+            defaults to self._trip_origins
+
+        Returns
+        -------
+        report:
+            A copy of the generated report inside a pandas dataframe.
+        """
+        # Init
+        vector_types = self._vector_types if vector_types is None else vector_types
+        trip_origins = self._trip_origins if trip_origins is None else trip_origins
+
+        # Compare every base year vector to NTEM and create a report
+        report_ph = list()
+        base_vector_iterator = itertools.product(vector_types, trip_origins)
+        for vector_type, trip_origin in base_vector_iterator:
+            # Read in the correct vector
+            vector_name = '%s_%s' % (trip_origin, vector_type)
+
+            report_ph.append(self._compare_vector_to_ntem(
+                vector=vector_dict[vector_name],
+                zone_to_lad=zone_to_lad,
+                vector_type=vector_type,
+                matrix_format=matrix_format,
+                trip_origin=trip_origin,
+                base_zone_name=vector_zone_col,
+            ))
+
+        # Convert to a dataframe for output
+        report = pd.concat(report_ph)
+        report = report.reindex(columns=self._ntem_report_cols)
+
+        # Write the report to disk
+        report.to_csv(output_path, index=False)
+
+        return report
 
     def compare_base_pa_vectors_to_ntem(self) -> pd.DataFrame:
         """
@@ -237,7 +314,8 @@ class EfsReporter:
             A copy of the report comparing the base vectors to NTEM
         """
         # Init
-        matrix_type = 'pa'
+        matrix_format = 'pa'
+        output_fname = "base_vector_report.csv"
 
         # Make sure the files we need exist
         path_dict = self.imports['base_vectors']
@@ -245,35 +323,18 @@ class EfsReporter:
         for _, path in path_dict.items():
             file_ops.check_file_exists(path)
 
-        # Read in the lad<->msoa conversion
-        msoa_to_lad = pd.read_csv(self.imports['ntem']['msoa_to_lad'])
+        # Load in the vectors
+        vector_dict = {k: pd.read_csv(v) for k, v in path_dict.items()}
 
-        # Compare every base year vector to NTEM and create a report
-        report_ph = list()
-        base_vector_iterator = itertools.product(self._vector_types, self._trip_origins)
-        for vector_type, trip_origin in base_vector_iterator:
-            # Read in the correct vector
-            vector_name = '%s_%s' % (trip_origin, vector_type)
-
-            report_ph.append(self._compare_vector_to_ntem(
-                vector=pd.read_csv(path_dict[vector_name]),
-                zone_to_lad=msoa_to_lad,
-                vector_type=vector_type,
-                matrix_type=matrix_type,
-                trip_origin=trip_origin,
-                base_zone_name=self._zone_col_base % self.synth_zone_name,
-            ))
-
-        # Convert to a dataframe for output
-        report = pd.concat(report_ph)
-        report = report.reindex(columns=self._ntem_report_cols)
-
-        # Write the report to disk
-        fname = "base_vector_report.csv"
-        out_path = os.path.join(self.exports['home'], fname)
-        report.to_csv(out_path, index=False)
-
-        return report
+        return self._generate_vector_report(
+            vector_dict=vector_dict,
+            vector_zone_col=self._zone_col_base % self.synth_zone_name,
+            zone_to_lad=pd.read_csv(self.imports['ntem']['msoa_to_lad']),
+            matrix_format=matrix_format,
+            output_path=os.path.join(self.exports['home'], output_fname),
+            vector_types=self._vector_types,
+            trip_origins=self._trip_origins,
+        )
 
     def compare_eg_pa_vectors_to_ntem(self) -> pd.DataFrame:
         """
@@ -287,7 +348,8 @@ class EfsReporter:
             P/A vectors to NTEM.
         """
         # Init
-        matrix_type = 'pa'
+        matrix_format = 'pa'
+        output_fname = "exceptional_growth_vector_report.csv"
 
         # Make sure the files we need exist
         path_dict = self.imports['eg_vectors']
@@ -295,35 +357,18 @@ class EfsReporter:
         for _, path in path_dict.items():
             file_ops.check_file_exists(path)
 
-        # Read in the model_zone<->msoa conversion
-        zone_to_lad = pd.read_csv(self.imports['ntem']['model_to_lad'])
+        # Load in the vectors
+        vector_dict = {k: pd.read_csv(v) for k, v in path_dict.items()}
 
-        # Compare every base year vector to NTEM and create a report
-        report_ph = list()
-        base_vector_iterator = itertools.product(self._vector_types, ['hb'])
-        for vector_type, trip_origin in base_vector_iterator:
-            # Read in the correct vector
-            vector_name = '%s_%s' % (trip_origin, vector_type)
-
-            report_ph.append(self._compare_vector_to_ntem(
-                vector=pd.read_csv(path_dict[vector_name]),
-                zone_to_lad=zone_to_lad,
-                vector_type=vector_type,
-                matrix_type=matrix_type,
-                trip_origin=trip_origin,
-                base_zone_name=self._zone_col_base % self.model_zone_name,
-            ))
-
-        # Convert to a dataframe for output
-        report = pd.concat(report_ph)
-        report = report.reindex(columns=self._ntem_report_cols)
-
-        # Write the report to disk
-        fname = "exceptional_growth_vector_report.csv"
-        out_path = os.path.join(self.exports['home'], fname)
-        report.to_csv(out_path, index=False)
-
-        return report
+        return self._generate_vector_report(
+            vector_dict=vector_dict,
+            vector_zone_col=self._zone_col_base % self.model_zone_name,
+            zone_to_lad=pd.read_csv(self.imports['ntem']['model_to_lad']),
+            matrix_format=matrix_format,
+            output_path=os.path.join(self.exports['home'], output_fname),
+            vector_types=self._vector_types,
+            trip_origins=['hb'],
+        )
 
     def compare_pa_matrices_to_ntem(self) -> pd.DataFrame:
         """
@@ -335,7 +380,8 @@ class EfsReporter:
             A copy of the report comparing the PA matrices to NTEM
         """
         # Init
-        matrix_type = 'pa'
+        matrix_format = 'pa'
+        output_fname = "base_24hr_pa_matrices_report.csv"
         vector_order = [
             'hb_productions',
             'nhb_productions',
@@ -348,42 +394,22 @@ class EfsReporter:
             mat_import_dir=self.imports['matrices']['pa_24'],
             years_needed=self.years_needed,
             cache_path=self.exports['cache']['pa_24'],
-            matrix_format=matrix_type,
+            matrix_format=matrix_format,
         )
 
         # Assign to a dictionary for accessing
         vector_dict = {name: vec for name, vec in zip(vector_order, vectors)}
 
         # ## GENERATE THE REPORT ## #
-        # Read in the model_zone<->msoa conversion
-        zone_to_lad = pd.read_csv(self.imports['ntem']['model_to_lad'])
-
-        # Compare every base year vector to NTEM and create a report
-        report_ph = list()
-        base_vector_iterator = itertools.product(self._vector_types, self._trip_origins)
-        for vector_type, trip_origin in base_vector_iterator:
-            # Read in the correct vector
-            vector_name = '%s_%s' % (trip_origin, vector_type)
-
-            report_ph.append(self._compare_vector_to_ntem(
-                vector=vector_dict[vector_name],
-                zone_to_lad=zone_to_lad,
-                vector_type=vector_type,
-                matrix_type=matrix_type,
-                trip_origin=trip_origin,
-                base_zone_name=self._zone_col_base % self.model_zone_name,
-            ))
-
-        # Convert to a dataframe for output
-        report = pd.concat(report_ph)
-        report = report.reindex(columns=self._ntem_report_cols)
-
-        # Write the report to disk
-        fname = "base_24hr_pa_matrices_report.csv"
-        out_path = os.path.join(self.exports['home'], fname)
-        report.to_csv(out_path, index=False)
-
-        return report
+        return self._generate_vector_report(
+            vector_dict=vector_dict,
+            vector_zone_col=self._zone_col_base % self.model_zone_name,
+            zone_to_lad=pd.read_csv(self.imports['ntem']['model_to_lad']),
+            matrix_format=matrix_format,
+            output_path=os.path.join(self.exports['home'], output_fname),
+            vector_types=self._vector_types,
+            trip_origins=self._trip_origins,
+        )
 
 
 # TODO: Move compare_vector_to_ntem() to a general pa_reporting module
@@ -394,7 +420,7 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
                            ntem_totals_dir: Union[pathlib.Path, str],
                            vector_type: str,
                            trip_origin: str,
-                           matrix_type: str,
+                           matrix_format: str,
                            base_zone_name: str,
                            constraint_cols: List[str] = None,
                            compare_year: str = None,
@@ -425,8 +451,8 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
     trip_origin:
         The trip origin of vector. Either 'hb' or 'nhb.
 
-    matrix_type:
-        The type of the vector being compared. Either 'pa' or 'od'.
+    matrix_format:
+        The format of the vector being compared. Either 'pa' or 'od'.
 
     base_zone_name:
         The name of column containing the zone system data for the vector and
@@ -455,7 +481,7 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
     # validation
     vector_type = checks.validate_vector_type(vector_type)
     trip_origin = checks.validate_trip_origin(trip_origin)
-    matrix_type = checks.validate_matrix_type(matrix_type)
+    matrix_format = checks.validate_matrix_format(matrix_format)
 
     # If compare_year is None, assume compare_cols is years
     if compare_year is None:
@@ -470,7 +496,7 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
     report_ph = list()
     for col, year in zip(compare_cols, col_years):
         # Get the ntem control for this year
-        ntem_fname = consts.NTEM_CONTROL_FNAME % (matrix_type, year)
+        ntem_fname = consts.NTEM_CONTROL_FNAME % (matrix_format, year)
         ntem_path = os.path.join(ntem_totals_dir, ntem_fname)
         ntem_totals = pd.read_csv(ntem_path)
 
