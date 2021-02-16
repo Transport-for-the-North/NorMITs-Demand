@@ -27,7 +27,7 @@ from tqdm import tqdm
 
 # Local imports
 import normits_demand as nd
-from normits_demand import efs_constants as consts
+from normits_demand import constants as consts
 
 from normits_demand.validation import checks
 from normits_demand.constraints import ntem_control
@@ -100,6 +100,9 @@ class EfsReporter:
         self.model_zone_name = self.model_name
 
         self.imports, self.exports = self._build_io_paths()
+
+        # Load in the data we'll need later
+        self._load_ie_zonal_info()
 
     def _build_io_paths(self,
                         ntem_totals_path: pathlib.Path = None,
@@ -188,6 +191,21 @@ class EfsReporter:
             du.create_folder(path, chDir=False)
 
         return imports, exports
+
+    def _load_ie_zonal_info(self):
+        """
+        Populates self.model_internal_zones and self.model_external_zones
+        """
+        # Init
+        zone_col = self._zone_col_base % self.model_name
+
+        int_fname = consts.INTERNAL_AREA % self.model_name
+        int_path = os.path.join(self.efs_imports['model_schema'], int_fname)
+        self.model_internal_zones = pd.read_csv(int_path)[zone_col].tolist()
+
+        ext_fname = consts.EXTERNAL_AREA % self.model_name
+        ext_path = os.path.join(self.efs_imports['model_schema'], ext_fname)
+        self.model_external_zones = pd.read_csv(ext_path)[zone_col].tolist()
 
     def _compare_vector_to_ntem(self,
                                 vector: pd.DataFrame,
@@ -476,7 +494,7 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
     """
     # Init
     out_col_order = ['Vector Type', 'Trip Origin', 'Year']
-    out_col_order += ['NTEM', 'Achieved', 'NTEM - Achieved', '% Difference']
+    out_col_order += ['NTEM', 'Achieved', 'Achieved - NTEM', '% Difference']
 
     # validation
     vector_type = checks.validate_vector_type(vector_type)
@@ -517,8 +535,8 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
         del report['after']
         report['NTEM'] = report.pop('target')
         report['Achieved'] = report.pop('before')
-        report['NTEM - Achieved'] = report['NTEM'] - report['Achieved']
-        report['% Difference'] = report['NTEM - Achieved'] / report['NTEM'] * 100
+        report['Achieved - NTEM'] = report['Achieved'] - report['NTEM']
+        report['% Difference'] = report['Achieved - NTEM'] / report['NTEM'] * 100
 
         # Add more info to the report and store in the placeholder
         report[compare_cols_name] = col

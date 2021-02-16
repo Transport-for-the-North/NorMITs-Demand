@@ -7,3 +7,9 @@ VECTOR_TYPES = [
     'origin',
     'destination',
 ]
+
+
+# STANDARD FILE NAMES
+# i/e areas - add model_zone
+INTERNAL_AREA = "%s_internal_area.csv"
+EXTERNAL_AREA = "%s_external_area.csv"
