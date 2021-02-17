@@ -39,6 +39,9 @@ def main():
     # Compare HB and NHB P/A vectors to NTEM
     auditor.compare_base_pa_vectors_to_ntem()
 
+    # Compare translated HB and NHB P/A vectors to NTEM
+    auditor.compare_translated_base_pa_vectors_to_ntem()
+
     # Compare post-exceptional_growth P/A vectors to NTEM
     auditor.compare_eg_pa_vectors_to_ntem()
 

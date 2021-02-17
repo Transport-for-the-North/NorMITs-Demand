@@ -5,7 +5,9 @@ Created on Tue Feb  9 17:36:43 2021
 @author: genie
 """
 # builtins
+from typing import Any
 from typing import List
+from typing import Dict
 
 # Third party
 import numpy as np
@@ -27,6 +29,8 @@ def control_to_ntem(control_df: pd.DataFrame,
                     ntem_value_name: str = 'attractions',
                     base_zone_name: str = 'msoa_zone_id',
                     trip_origin: str = 'hb',
+                    group_cols: List[str] = None,
+                    constraint_dtypes: Dict[str, Any] = None,
                     verbose=True,
                     ) -> pd.DataFrame:
     """
@@ -72,6 +76,14 @@ def control_to_ntem(control_df: pd.DataFrame,
     if constraint_cols is None:
         constraint_cols = ['p', 'm']
 
+    if constraint_dtypes is None:
+        constraint_dtypes = {c: str for c in constraint_cols}
+
+    if group_cols is None:
+        group_cols = du.list_safe_remove(list(control_df), [base_value_name])
+
+    index_cols = group_cols.copy() + [base_value_name]
+
     # ## VALIDATE INPUTS ## #
     for col in constraint_cols:
         for df, df_name in zip([control_df, ntem_totals], ['control_df', 'NTEM']):
@@ -88,6 +100,7 @@ def control_to_ntem(control_df: pd.DataFrame,
     ntem_totals = ntem_totals.copy()
     ntem_value_name = ntem_value_name.strip().lower()
 
+    index_df = control_df.reindex(columns=group_cols)
     purposes = du.trip_origin_to_purposes(trip_origin)
 
     # See if our control_df is a subset
@@ -131,8 +144,7 @@ def control_to_ntem(control_df: pd.DataFrame,
 
     # Assumes vectors are called productions or attractions
     for col in constraint_cols:
-        ntem_k_factors.loc[:, col] = ntem_k_factors[
-                col].astype(int).astype(str)
+        ntem_k_factors.loc[:, col] = ntem_k_factors[col].astype(constraint_dtypes[col])
     ntem_k_factors['lad_zone_id'] = ntem_k_factors[
             'lad_zone_id'].astype(float).astype(int)
 
@@ -146,7 +158,7 @@ def control_to_ntem(control_df: pd.DataFrame,
     control_df = control_df[~control_df['lad_zone_id'].isna()]
 
     for col in constraint_cols:
-        control_df.loc[:, col] = control_df[col].astype(int).astype(str)
+        control_df.loc[:, col] = control_df[col].astype(constraint_dtypes[col])
     control_df['lad_zone_id'] = control_df['lad_zone_id'].astype(float).astype(int)
 
     # Seed zero infill
@@ -177,7 +189,7 @@ def control_to_ntem(control_df: pd.DataFrame,
     adj_fac['adj_fac'] = adj_fac['adj_fac'].replace(np.nan, 1)
 
     for col in constraint_cols:
-        adj_fac.loc[:, col] = adj_fac[col].astype(int).astype(str)
+        adj_fac.loc[:, col] = adj_fac[col].astype(constraint_dtypes[col])
 
     adjustments = adj_fac['adj_fac']
 
@@ -209,5 +221,18 @@ def control_to_ntem(control_df: pd.DataFrame,
         'target': target,
         'after': after
     }
+
+    # Tidy up the return
+    adj_control_df = adj_control_df.reindex(columns=index_cols)
+    adj_control_df = adj_control_df.groupby(group_cols).sum().reset_index()
+
+    # If we have dropped zones, we need to add them back in
+    if len(adj_control_df) != len(index_df):
+        adj_control_df = pd.merge(
+            index_df,
+            adj_control_df,
+            on=group_cols,
+            how='left'
+        ).fillna(0)
 
     return adj_control_df, audit, adjustments, lad_totals

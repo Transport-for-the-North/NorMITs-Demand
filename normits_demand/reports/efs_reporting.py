@@ -15,6 +15,7 @@ import os
 import pathlib
 import itertools
 
+from typing import Any
 from typing import List
 from typing import Dict
 from typing import Union
@@ -22,8 +23,6 @@ from typing import Tuple
 
 # 3rd party
 import pandas as pd
-
-from tqdm import tqdm
 
 # Local imports
 import normits_demand as nd
@@ -43,7 +42,8 @@ class EfsReporter:
     # BACKLOG: Generate reports for future year mode shares
     #  labels: EFS
 
-    ntem_control_cols = ['p', 'm']
+    ntem_control_dtypes = {'p': int, 'm': int}
+    ntem_control_cols = list(ntem_control_dtypes.keys())
 
     _vector_types = ['productions', 'attractions']
     _trip_origins = consts.TRIP_ORIGINS
@@ -104,6 +104,11 @@ class EfsReporter:
         # Load in the data we'll need later
         self._load_ie_zonal_info()
 
+        self.reporting_subsets = {
+            'internal': self.model_internal_zones,
+            'external': self.model_external_zones,
+        }
+
     def _build_io_paths(self,
                         ntem_totals_path: pathlib.Path = None,
                         zone_conversion_path: pathlib.Path = None,
@@ -127,6 +132,19 @@ class EfsReporter:
         nhb_a_fname = consts.ATTRS_FNAME % (self.synth_zone_name, 'nhb')
 
         base_vectors = {
+            'hb_productions': os.path.join(self.efs_exports['productions'], hb_p_fname),
+            'nhb_productions': os.path.join(self.efs_exports['productions'], nhb_p_fname),
+            'hb_attractions': os.path.join(self.efs_exports['attractions'], hb_a_fname),
+            'nhb_attractions': os.path.join(self.efs_exports['attractions'], nhb_a_fname),
+        }
+
+        # Translated base vector imports
+        hb_p_fname = consts.PRODS_FNAME % (self.model_zone_name, 'hb')
+        nhb_p_fname = consts.PRODS_FNAME % (self.model_zone_name, 'nhb')
+        hb_a_fname = consts.ATTRS_FNAME % (self.model_zone_name, 'hb')
+        nhb_a_fname = consts.ATTRS_FNAME % (self.model_zone_name, 'nhb')
+
+        translated_base_vectors = {
             'hb_productions': os.path.join(self.efs_exports['productions'], hb_p_fname),
             'nhb_productions': os.path.join(self.efs_exports['productions'], nhb_p_fname),
             'hb_attractions': os.path.join(self.efs_exports['attractions'], hb_a_fname),
@@ -160,6 +178,7 @@ class EfsReporter:
         # Finally, build the outer imports dict!
         imports = {
             'base_vectors': base_vectors,
+            'translated_base_vectors': translated_base_vectors,
             'eg_vectors': eg_vectors,
             'matrices': matrices,
             'ntem': ntem_imports,
@@ -214,6 +233,8 @@ class EfsReporter:
                                 matrix_format: str,
                                 trip_origin: str,
                                 base_zone_name: str,
+                                report_subsets: Dict[str, Any] = None,
+                                subset_col_name: str = 'Subset',
                                 ) -> pd.DataFrame:
         """
         An internal wrapper around compare_vector_to_ntem()
@@ -243,6 +264,9 @@ class EfsReporter:
             trip_origin=trip_origin,
             base_zone_name=base_zone_name,
             constraint_cols=self.ntem_control_cols,
+            constraint_dtypes=self.ntem_control_dtypes,
+            report_subsets=report_subsets,
+            subset_col_name=subset_col_name,
         )
 
     def _generate_vector_report(self,
@@ -253,6 +277,8 @@ class EfsReporter:
                                 output_path: pathlib.Path,
                                 vector_types: List[str] = None,
                                 trip_origins: List[str] = None,
+                                report_subsets: Dict[str, Any] = None,
+                                subset_col_name: str = 'Subset',
                                 ) -> pd.DataFrame:
         """
         Generates a report comparing the given vectors to NTEM
@@ -311,11 +337,12 @@ class EfsReporter:
                 matrix_format=matrix_format,
                 trip_origin=trip_origin,
                 base_zone_name=vector_zone_col,
+                report_subsets=report_subsets,
+                subset_col_name=subset_col_name,
             ))
 
         # Convert to a dataframe for output
         report = pd.concat(report_ph)
-        report = report.reindex(columns=self._ntem_report_cols)
 
         # Write the report to disk
         report.to_csv(output_path, index=False)
@@ -354,6 +381,39 @@ class EfsReporter:
             trip_origins=self._trip_origins,
         )
 
+    def compare_translated_base_pa_vectors_to_ntem(self) -> pd.DataFrame:
+        """
+        Generates a report of the base P/A Vectors to NTEM data
+
+        Returns
+        -------
+        report:
+            A copy of the report comparing the base vectors to NTEM
+        """
+        # Init
+        matrix_format = 'pa'
+        output_fname = "translated_base_vector_report.csv"
+
+        # Make sure the files we need exist
+        path_dict = self.imports['translated_base_vectors']
+
+        for _, path in path_dict.items():
+            file_ops.check_file_exists(path)
+
+        # Load in the vectors
+        vector_dict = {k: pd.read_csv(v) for k, v in path_dict.items()}
+
+        return self._generate_vector_report(
+            vector_dict=vector_dict,
+            vector_zone_col=self._zone_col_base % self.model_zone_name,
+            zone_to_lad=pd.read_csv(self.imports['ntem']['model_to_lad']),
+            matrix_format=matrix_format,
+            output_path=os.path.join(self.exports['home'], output_fname),
+            vector_types=self._vector_types,
+            trip_origins=self._trip_origins,
+            report_subsets=self.reporting_subsets,
+        )
+
     def compare_eg_pa_vectors_to_ntem(self) -> pd.DataFrame:
         """
         Generates a report of the post exceptional growth P/A vectors
@@ -386,6 +446,7 @@ class EfsReporter:
             output_path=os.path.join(self.exports['home'], output_fname),
             vector_types=self._vector_types,
             trip_origins=['hb'],
+            report_subsets=self.reporting_subsets,
         )
 
     def compare_pa_matrices_to_ntem(self) -> pd.DataFrame:
@@ -427,6 +488,7 @@ class EfsReporter:
             output_path=os.path.join(self.exports['home'], output_fname),
             vector_types=self._vector_types,
             trip_origins=self._trip_origins,
+            report_subsets=self.reporting_subsets,
         )
 
 
@@ -441,7 +503,10 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
                            matrix_format: str,
                            base_zone_name: str,
                            constraint_cols: List[str] = None,
+                           constraint_dtypes: Dict[str, Any] = None,
                            compare_year: str = None,
+                           report_subsets: Dict[str, Any] = None,
+                           subset_col_name: str = 'Subset',
                            ) -> pd.DataFrame:
     """
     Returns a report comparing the given vector to NTEM data
@@ -484,6 +549,9 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
         The year to use when comparing to NTEM. If left as None, compare_cols
         is assumed to contain the years
 
+    report_subsets:
+
+
     Returns
     -------
     report:
@@ -494,6 +562,8 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
     """
     # Init
     out_col_order = ['Vector Type', 'Trip Origin', 'Year']
+    if report_subsets is not None:
+        out_col_order += [subset_col_name]
     out_col_order += ['NTEM', 'Achieved', 'Achieved - NTEM', '% Difference']
 
     # validation
@@ -510,6 +580,24 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
     if constraint_cols is None:
         constraint_cols = ['p', 'm']
 
+    segment_cols = du.list_safe_remove(list(vector), col_years)
+
+    # We'll need this to build reports in the loop below
+    def build_report(rep):
+        if 'after' in rep:
+            del rep['after']
+        rep['NTEM'] = rep.pop('target')
+        rep['Achieved'] = rep.pop('before')
+        rep['Achieved - NTEM'] = rep['Achieved'] - rep['NTEM']
+        rep['% Difference'] = rep['Achieved - NTEM'] / rep['NTEM'] * 100
+
+        # Add more info to the report and store in the placeholder
+        rep[compare_cols_name] = col
+        rep['Vector Type'] = vector_type
+        rep['Trip Origin'] = trip_origin
+
+        return rep
+
     # See how close the vector is to NTEM in each year
     report_ph = list()
     for col, year in zip(compare_cols, col_years):
@@ -519,31 +607,44 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
         ntem_totals = pd.read_csv(ntem_path)
 
         # Get an report of how close we are to ntem
-        _, report, *_ = ntem_control.control_to_ntem(
+        adj_vector, report, *_ = ntem_control.control_to_ntem(
             control_df=vector,
             ntem_totals=ntem_totals,
             zone_to_lad=zone_to_lad,
             constraint_cols=constraint_cols,
+            constraint_dtypes=constraint_dtypes,
             base_value_name=col,
             ntem_value_name=vector_type,
             trip_origin=trip_origin,
             base_zone_name=base_zone_name,
+            group_cols=segment_cols,
             verbose=False,
         )
 
-        # Generate the report based on the one we got back
-        del report['after']
-        report['NTEM'] = report.pop('target')
-        report['Achieved'] = report.pop('before')
-        report['Achieved - NTEM'] = report['Achieved'] - report['NTEM']
-        report['% Difference'] = report['Achieved - NTEM'] / report['NTEM'] * 100
+        # If we aren't dong subsets, just report in the whole thing
+        if report_subsets is None:
+            report_ph.append(build_report(report))
+            continue
 
-        # Add more info to the report and store in the placeholder
-        report[compare_cols_name] = col
-        report['Vector Type'] = vector_type
-        report['Trip Origin'] = trip_origin
+        # Build a report for each subset
+        for name, vals in report_subsets.items():
+            # Grab the subsets for this report
+            needed_cols = segment_cols + [col]
+            mask = vector[base_zone_name].isin(vals)
 
-        report_ph.append(report)
+            vector_subset = vector[mask].reindex(columns=needed_cols)
+            adj_vector_subset = adj_vector[mask].reindex(columns=needed_cols)
+
+            # Build a replicant of the control report
+            report = {
+                'before': vector_subset[col].sum(),
+                'target': adj_vector_subset[col].sum(),
+            }
+
+            # Create report
+            report = build_report(report)
+            report[subset_col_name] = name
+            report_ph.append(report)
 
     # Convert to a dataframe for output
     report = pd.DataFrame(report_ph)
