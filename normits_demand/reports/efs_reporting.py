@@ -314,6 +314,15 @@ class EfsReporter:
             The trip origins to look for in vector_dict. If left as None,
             defaults to self._trip_origins
 
+        report_subsets:
+            A dictionary of subset names to zonal subsets to generate reports for.
+            The subset names will be placed in subset_col_name of the report.
+            If left as None, no subsets are used in the report.
+
+        subset_col_name:
+            The name to give to the column that the subset names from
+            report_subsets will go into.
+
         Returns
         -------
         report:
@@ -348,6 +357,31 @@ class EfsReporter:
         report.to_csv(output_path, index=False)
 
         return report
+
+    def run(self) -> None:
+        """
+        Runs all the report generation functions.
+
+        Runs:
+            compare_base_pa_vectors_to_ntem()
+            compare_translated_base_pa_vectors_to_ntem()
+            compare_eg_pa_vectors_to_ntem()
+            compare_pa_matrices_to_ntem()
+
+        Returns
+        -------
+        None
+        """
+        self.compare_base_pa_vectors_to_ntem()
+        self.compare_translated_base_pa_vectors_to_ntem()
+        self.compare_eg_pa_vectors_to_ntem()
+        self.compare_pa_matrices_to_ntem()
+
+        # Compare furnessed PA matrices to NTEM - bespoke zones?
+
+        # Compare furnessed PA matrices to P/A vectors
+
+        # Compare furnessed OD matrices to NTEM
 
     def compare_base_pa_vectors_to_ntem(self) -> pd.DataFrame:
         """
@@ -545,12 +579,23 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
         The columns of vector to compare to NTEM. If left as None, defaults
         to ['p', 'm']
 
+    constraint_dtypes:
+        A dictionary of constraint col_names to constraint col dtypes.
+        If left as None, defaults to all dtypes being str.
+        e.g. {'p': str, 'm': str}.
+
     compare_year:
         The year to use when comparing to NTEM. If left as None, compare_cols
         is assumed to contain the years
 
     report_subsets:
+        A dictionary of subset names to zonal subsets to generate reports for.
+        The subset names will be placed in subset_col_name of the report.
+        If left as None, no subsets are used in the report.
 
+    subset_col_name:
+        The name to give to the column that the subset names from
+        report_subsets will go into.
 
     Returns
     -------

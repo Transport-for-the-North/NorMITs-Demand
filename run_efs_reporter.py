@@ -35,27 +35,7 @@ def main():
         export_home=export_home,
     )
 
-    # ## RUN ## #
-    # Compare HB and NHB P/A vectors to NTEM
-    auditor.compare_base_pa_vectors_to_ntem()
-
-    # Compare translated HB and NHB P/A vectors to NTEM
-    auditor.compare_translated_base_pa_vectors_to_ntem()
-
-    # Compare post-exceptional_growth P/A vectors to NTEM
-    auditor.compare_eg_pa_vectors_to_ntem()
-
-    # Compare furnessed PA matrices to NTEM
-    auditor.compare_pa_matrices_to_ntem()
-    exit()
-
-    # Compare furnessed PA matrices to NTEM - bespoke zones?
-
-    # Compare furnessed PA matrices to P/A vectors
-
-    # Compare furnessed OD matrices to NTEM
-
-    raise NotImplementedError
+    auditor.run()
 
 
 if __name__ == "__main__":

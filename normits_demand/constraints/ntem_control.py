@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 
 # Local imports
-from normits_demand import constants as consts
 from normits_demand.utils import general as du
 
 from normits_demand.validation import checks
@@ -67,6 +66,18 @@ def control_to_ntem(control_df: pd.DataFrame,
     trip_origin = 'hb':
         trip_origin set to aggregate on. Can be 'hb' or 'nhb'
 
+    group_cols:
+        A list of column names in control_df that contain segmentation data,
+        and can be used in a group_by call, incase the final dataframe is
+        not in the correct shape (due to zone_to_lad splits).
+        If left as None, all columns other than base_value_name are assumed
+        to be group_cols.
+
+    constraint_dtypes:
+        A dictionary of constraint col_names to constraint col dtypes.
+        If left as None, defaults to all dtypes being str.
+        e.g. {'p': str, 'm': str}.
+
     Returns:
     ----------
     adjusted_control_df:
@@ -78,6 +89,12 @@ def control_to_ntem(control_df: pd.DataFrame,
 
     if constraint_dtypes is None:
         constraint_dtypes = {c: str for c in constraint_cols}
+
+    if not all([c in constraint_dtypes.keys() for c in constraint_cols]):
+        raise ValueError(
+            "I haven't been given a datatype for all of the constraint_cols "
+            "given."
+        )
 
     if group_cols is None:
         group_cols = du.list_safe_remove(list(control_df), [base_value_name])

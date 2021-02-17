@@ -1861,9 +1861,47 @@ def compile_matrices(mat_import: str,
 def matrices_to_vector(mat_import_dir: pathlib.Path,
                        years_needed: List[str],
                        verbose: bool = True,
-                       ) -> pd.DataFrame:
-    # TODO: Write matrices_to_vector() docs
+                       ) -> Tuple[pd.DataFrame, pd.DataFrame,
+                                  pd.DataFrame, pd.DataFrame]:
+    """
+    Returns either P/A or O/D vectors based on the matrices in mat_import_dir
 
+    Parameters
+    ----------
+    mat_import_dir:
+        The path to a directory containing the pa or od matrices. Matrix
+        information will be inferred from the matrix names. This function
+        assumes all .csv files in the directory are matrices of the same
+        format (either pa or od).
+
+    years_needed:
+        A list of years to look for and build vectors for.
+
+    verbose:
+        Whether to write progress info to the terminal or not.
+
+    Returns
+    -------
+    hb_p_or_o:
+        A segmentation vector of home based productions or origins
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+
+    nhb_p_or_o:
+        A segmentation vector of non home based productions or origins
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+
+    hb_a_or_d:
+        A segmentation vector of home based attractions or destinations
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+
+    nhb_a_or_d:
+        A segmentation vector of non home based attractions or destinations
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+    """
     # BACKLOG: matrices_to_vector() needs checks adding for edge cases
     #  labels: EFS, error checks
     # Init
@@ -2032,7 +2070,62 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
                                      overwrite_cache: bool = False,
                                      verbose: bool = True,
                                      ) -> pd.DataFrame:
-    # TODO: Write maybe_convert_matrices_to_vector() docs
+    """
+    A cache wrapper around matrices_to_vector().
+
+    Checks if the asked for matrices already exist at the path given in
+    cache_path. If they exist, they're loaded. Otherwise matrices_to_vector()
+    is ran, and the output saved to disk at cache_path before returning
+    the vectors produced.
+
+    Parameters
+    ----------
+    mat_import_dir:
+        The path to a directory containing the pa or od matrices. Matrix
+        information will be inferred from the matrix names. This function
+        assumes all .csv files in the directory are matrices of the same
+        format (either pa or od).
+
+    years_needed:
+        A list of years to look for and build vectors for.
+
+    cache_path:
+        The path to a directory where the cached vectors should be saved/
+        loaded from.
+
+    matrix_format:
+        The format of the matrices being produced. Should be one of the
+        valid values from consts.MATRIX_FORMATS
+
+    overwrite_cache:
+        If True, the vectors are remade and overwrite any cache that may
+        already exist.
+
+    verbose:
+        Whether to write progress info to the terminal or not.
+
+    Returns
+    -------
+    hb_p_or_o:
+        A segmentation vector of home based productions or origins
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+
+    nhb_p_or_o:
+        A segmentation vector of non home based productions or origins
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+
+    hb_a_or_d:
+        A segmentation vector of home based attractions or destinations
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+
+    nhb_a_or_d:
+        A segmentation vector of non home based attractions or destinations
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+    """
     # Init
     matrix_format = checks.validate_matrix_format(matrix_format)
 
