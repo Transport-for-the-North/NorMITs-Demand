@@ -78,6 +78,9 @@ class AttractionModel:
         self.export_lad = export_lad
         self.export_uncorrected = export_uncorrected
         self.export_target = export_target
+
+        # Check for exports
+        self.export = self.ping_outpath()
     
     def get_attractions(self,
                         source = 'flat',
@@ -262,24 +265,51 @@ class AttractionModel:
                                   self.iteration)
         output_f = 'Attraction Outputs'
 
-        out_target_hb = os.path.join(output_dir,
-                                     output_f,
-                                     'hb_attractions_' +
-                                     self.input_zones.lower() +
-                                     '.csv')
-        if not os.path.exists(out_target_hb):
-            out_target_hb = ''
+        in_hb = os.path.join(
+            output_dir,
+            output_f,
+            'hb_attractions_' +
+            self.input_zones.lower() +
+            '.csv')
 
-        out_target_nhb = os.path.join(output_dir,
-                                      output_f,
-                                      'hb_attractions_' +
-                                      self.input_zones.lower() +
-                                      '.csv')
-        if not os.path.exists(out_target_nhb):
-            out_target_nhb = ''
+        in_nhb = os.path.join(
+            output_dir,
+            output_f,
+            'hb_attractions_' +
+            self.input_zones.lower() +
+            '.csv')
 
-        return {'hb': out_target_hb,
-                'nhb': out_target_nhb}
+        out_hb = os.path.join(
+            output_dir,
+            output_f,
+            'hb_attractions_' +
+            self.output_zones.lower() +
+            '.csv')
+
+        out_nhb = os.path.join(
+            output_dir,
+            output_f,
+            'nhb_attractions_' +
+            self.output_zones.lower() +
+            '.csv')
+
+        if not os.path.exists(in_hb):
+            in_hb = ''
+        if not os.path.exists(in_nhb):
+            in_nhb = ''
+        if not os.path.exists(out_hb):
+            out_hb = ''
+        if not os.path.exists(out_nhb):
+            out_nhb = ''
+
+        export_dict = {'in_hb': in_hb,
+                       'in_nhb': in_nhb,
+                       'out_hb': out_hb,
+                       'out_nhb': out_nhb}
+
+        self.export = export_dict
+
+        return export_dict
 
     def run(self):
 
@@ -701,14 +731,16 @@ class AttractionModel:
             hb_attr.to_csv(
                 os.path.join(
                     output_dir,
-                    self.input_zones.lower(),
-                    '_hb_attractions.csv'),
+                    'hb_attractions' +
+                    self.input_zones.lower() +
+                    '.csv'),
                 index=False)
             nhb_attr.to_csv(
                 os.path.join(
                     output_dir,
-                    self.input_zones.lower(),
-                    '_nhb_attractions.csv'),
+                    'nhb_attractions.csv' +
+                    self.input_zones.lower() +
+                    '.csv'),
                 index=False)
 
         # Aggregate input productions to model zones.
@@ -726,12 +758,14 @@ class AttractionModel:
         
         hb_out_path = os.path.join(
             output_dir,
+            'hb_attractions_' +
             self.output_zones.lower() +
-            '_hb_attractions.csv')
+            '.csv')
         nhb_out_path = os.path.join(
             output_dir,
+            'nhb_attractions_' +
             self.output_zones.lower() +
-            '_nhb_attractions.csv')
+            '.csv')
 
         # Write output totals
         if self.export_target == True:

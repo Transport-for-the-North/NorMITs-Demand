@@ -278,8 +278,8 @@ class TravelMarketSynthesiser:
             model_folder = ni6.lookup_folder,
             output_segments = ni6.params['nhb_trip_end_segmentation'],
             trip_rates = ni6.params['nhb_trip_rates'],
-            production_vector = self.run_dict['hb_p_run'],
-            attraction_vector = self.run_dict['hb_a_run'],
+            production_vector = hb_p.export['out_hb'],
+            attraction_vector = a.export['out_hb'],
             time_split = ni6.params['nhb_time_splits'],
             mode_split = ni6.params['nhb_mode_splits'],
             ntem_control = ni6.params['production_ntem_control'],
@@ -320,7 +320,7 @@ class TravelMarketSynthesiser:
         hb_path = hb_p.ping_outpath()['hb']
 
         # Update run dict
-        self.run_dict.update({'hb_p_run':hb_p_out[0]})
+        self.run_dict.update({'hb_p_run': hb_p_out[0]})
 
         # Run attraction model - does hb & nhb
         a = am.AttractionModel(
@@ -498,7 +498,7 @@ class TravelMarketSynthesiser:
         base_hb_attractions = 'Y:/NorMITs Synthesiser/Noham/iter8c/Attraction Outputs/noham_hb_attractions.csv'
         base_nhb_attractions = 'Y:/NorMITs Synthesiser/Noham/iter8c/Attraction Outputs/noham_nhb_attractions.csv'
         export_folder = 'Y:/NorMITs Synthesiser/Noham/iter8c/Distribution Outputs/Segmented Distributions'
-        #lookup_folder = 'Y:/NorMITs Synthesiser/Noham/Model Zone Lookups'
+        # lookup_folder = 'Y:/NorMITs Synthesiser/Noham/Model Zone Lookups'
         # replaced above lookup_folder with NoRMS model zone lookups path
         lookup_folder = 'Y:/NorMITs Synthesiser/Norms/Model Zone Lookups'
     

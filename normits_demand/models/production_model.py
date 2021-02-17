@@ -13,13 +13,13 @@ pandas v0.23.4
 
 """
 
-import os, warnings # File operations
+import os, warnings
 from typing import List
 
-import numpy as np # Vector operations
-import pandas as pd # Bread and butter
+import numpy as np
+import pandas as pd
 
-from normits_demand.utils import utils as nup # Folder build utils
+from normits_demand.utils import utils as nup
 from normits_demand.utils import ntem_control as ntem
 from normits_demand.utils.general import safe_dataframe_to_csv
 
@@ -93,13 +93,15 @@ class ProductionModel:
             ntem_path = self._default_ntem
         self.ntem_path = ntem_path
         self.lu_path = lu_path
-        # self.lad_path = lad_path Need this???
         self.k_factor_control = k_factor_control
         self.k_factor_path = k_factor_path
         self.export_msoa = export_msoa
         self.export_lad = export_lad
         self.export_uncorrected = export_uncorrected
         self.export_target = export_target
+
+        # Check for existing exports
+        self.export = self.ping_outpath()
 
     def get_trip_rates(self):
 
@@ -146,12 +148,12 @@ class ProductionModel:
             given zoning system. Should be MSOA or LSOA.
         """
         with warnings.catch_warnings():
-                warnings.simplefilter(action='ignore',
-                                      category=FutureWarning)
-                land_use_output = pd.read_csv(self.lu_path,
-                                              low_memory=False)
-                
-        return(land_use_output)
+            warnings.simplefilter(action='ignore',
+                                  category=FutureWarning)
+            land_use_output = pd.read_csv(self.lu_path,
+                                          low_memory=False)
+
+        return land_use_output
 
     def aggregate_to_zones(self,
                            productions,
@@ -161,7 +163,7 @@ class ProductionModel:
         Aggregates a DataFrame to a target zoning system.
         If given no modelling folder will aggregate by zones provided.
         If given a modelling folder, it will look for a zone translation with
-        the correct format - apply the zonal splits & aggreagate to the target
+        the correct format - apply the zonal splits & aggregate to the target
         model zones.
     
         Parameters
@@ -205,14 +207,14 @@ class ProductionModel:
                                                    axis=1).groupby(
                                                            zone_col).sum(
                                                                    ).reset_index()
-            return(zone_productions)
+            return zone_productions
         else:
             spatial_aggregation_input = self.input_zones
             spatial_aggregation_output = self.output_zones
 
             # Find and import correct lookup from model folder
             # These need to be in the correct format!
-            if pop_weighted == False:
+            if not pop_weighted:
                 print('Aggregating to', spatial_aggregation_output, 'zones')
     
                 # Define lookup type
@@ -276,7 +278,7 @@ class ProductionModel:
                     target_productions.sort_values(by=index_cols,
                                                    inplace=True)
     
-            if pop_weighted == True:
+            if pop_weighted:
     
                 # Define lookup type
                 maj_to_min = (spatial_aggregation_output.lower() +
@@ -287,12 +289,13 @@ class ProductionModel:
                               '_pop')
                 # Some elif loop
                 file_sys = os.listdir(model_folder)
-                mzc_path = [x for x in file_sys if (maj_to_min) in x][0]
+                mzc_path = [x for x in file_sys if maj_to_min in x][0]
     
                 model_zone_conversion = pd.read_csv(model_folder +
                                                     '/' +
                                                     mzc_path).drop(
-                                                            'overlap_type',axis=1)
+                                                            'overlap_type',
+                    axis=1)
     
                 # Count unique model zones in minor zoning system
                 major_zone = list(model_zone_conversion)[0]
@@ -346,14 +349,14 @@ class ProductionModel:
     
                 print('Ending with ' + str(final_trips))
 
-        return(target_productions)
+        return target_productions
     
     # Merge functions - functions to bring datasets together
     
     def merge_trip_rates(self,
                          productions,
                          trip_rates,
-                         join_cols: List['str']):
+                         join_cols: List[str]):
         """
         Merge NTEM trip rates into productions on traveller type and area type.
         Create trips by multiplying people from land use by NTEM productions.
@@ -420,33 +423,61 @@ class ProductionModel:
         """
         """
         # BACKLOG: This solves a lot of problems, integrate into main
+        # BACKLOG: Should take paths from path building class
+
         output_dir = os.path.join(self.build_folder,
                                   self.iteration)
         output_f = 'Production Outputs'
 
-        out_target_hb = os.path.join(output_dir,
-                                    output_f,
-                                      'hb_productions_' +
-                                      self.input_zones.lower() +
-                                      '.csv')
-        if not os.path.exists(out_target_hb):
-            out_target_hb = ''
+        in_hb = os.path.join(
+            output_dir,
+            output_f,
+            'hb_productions_' +
+            self.input_zones.lower() +
+            '.csv')
 
-        out_target_nhb = os.path.join(output_dir,
-                                    output_f,
-                                      'hb_productions_' +
-                                      self.input_zones.lower() +
-                                      '.csv')
+        in_nhb = os.path.join(
+            output_dir,
+            output_f,
+            'nhb_productions_' +
+            self.input_zones.lower() +
+            '.csv')
 
-        if not os.path.exists(out_target_nhb):
-            out_target_nhb = ''
+        out_hb = os.path.join(
+            output_dir,
+            output_f,
+            'hb_productions_' +
+            self.output_zones.lower() +
+            '.csv')
 
-        return {'hb':out_target_hb,
-                'nhb':out_target_nhb}
+        out_nhb = os.path.join(
+            output_dir,
+            output_f,
+            'nhb_productions_' +
+            self.output_zones.lower() +
+            '.csv')
+
+        if not os.path.exists(in_hb):
+            in_hb = ''
+        if not os.path.exists(in_nhb):
+            in_nhb = ''
+        if not os.path.exists(out_hb):
+            out_hb = ''
+        if not os.path.exists(out_nhb):
+            out_nhb = ''
+
+        export_dict = {'in_hb': in_hb,
+                       'in_nhb': in_nhb,
+                       'out_hb': out_hb,
+                       'out_nhb': out_nhb}
+
+        self.export = export_dict
+
+        return export_dict
 
     # Run functions - run the whole production model
     def run_hb(self,
-               verbose = False):
+               verbose: bool = False):
 
         """
         """
@@ -907,16 +938,7 @@ class ProductionModel:
         return out_path, target_output, lu_rep
 
     def run_nhb(self,
-                input_segments = ['area_type', 'p', 'soc', 'ns', 'ca'],
-                output_segments = ['p', 'm', 'soc', 'ns', 'ca'],
-                filter_set = None,
-                ntem_control = True,
-                k_factor_paths = None,
-                export_uncorrected = False,
-                export_msoa = False,
-                export_lad = True,
-                export_target = True,
-                trip_rate_type = 'tms'):
+                verbose = False):
 
         """
         Builds NHB production vector from Homebased attraction vectors, while
@@ -962,9 +984,26 @@ class ProductionModel:
         output:
             TP Origin of non-homebased productions.
         """
-            
-        lad_path = self.lad_path,
+
+        """
+        Original segmentation that didn't break anything
+        
+        input_segments = ['area_type', 'p', 'soc', 'ns', 'ca'],
+        output_segments = ['p', 'm', 'soc', 'ns', 'ca'],
+        filter_set = None,
+        ntem_control = True,
+        k_factor_paths = None,
+        export_uncorrected = False,
+        export_msoa = False,
+        export_lad = True,
+        export_target = True,
+        trip_rate_type = 'tms'
+        """
+
+        # BACKLOG: Fix this lad lookup immediately
+        lad_path = 'I:/NorMITs Synthesiser/import/lad_to_msoa.csv'
         ntem_path = self.ntem_path
+        ia_name = self.output_zones + '_zone_id'
     
         # Assign filter set name to a placeholder variable
         start_time = nup.set_time()
@@ -974,13 +1013,15 @@ class ProductionModel:
         trip_rates = self.get_trip_rates()
 
         # Get nhb mode splits
-        nhb_mode_split = pd.read_csv(os.path.join(i_paths['imports'],
-                                                  'production_params',
-                                                  'nhb_ave_wday_mode_split.csv'))
+        nhb_mode_split = pd.read_csv(
+            os.path.join(self.import_folder,
+                         'trip_params',
+                         self.mode_split))
         # Get nhb time splits
-        nhb_time_split = pd.read_csv(os.path.join(i_paths['imports'],
-                                                  'production_params',
-                                                  'nhb_ave_wday_time_split.csv'))
+        nhb_time_split = pd.read_csv(
+            os.path.join(self.import_folder,
+                         'trip_params',
+                         self.time_split))
 
         # Import HB PA
         pa = nup.import_pa(self.production_vector,
@@ -989,9 +1030,19 @@ class ProductionModel:
         productions = pa[0]
         print(productions['trips'].sum())
         attractions = pa[1]
-        del(pa)
+        del pa
     
         # Get unique production segments
+        # TODO: Find another way to get these segments
+        # Unique segments are what we can get against what we have
+        input_segments = [
+            x for x in self.output_segments if x in list(productions)]
+        if verbose:
+            print('Returned:')
+            print(input_segments)
+            print('Target:')
+            print(self.output_segments)
+
         unq_seg = productions.reindex(
                 input_segments,
                 axis=1).drop_duplicates(
@@ -1013,20 +1064,20 @@ class ProductionModel:
             sub_p = nup.filter_pa_vector(productions,
                                          self.output_zones,
                                          calib_params,
-                                         round_val = 3,
-                                         value_var = 'trips',
+                                         round_val=3,
+                                         value_var='trips',
                                          echo=False)
     
             # Get the productions from the tuple
             sub_p = sub_p[0]
-            sub_p = sub_p.rename(columns={'trips':'productions'})
+            sub_p = sub_p.rename(columns={'trips': 'productions'})
     
             # Work out which attractions to use from purpose
             sub_a = nup.filter_pa_vector(attractions,
                                          self.output_zones,
                                          calib_params,
-                                         round_val = 3,
-                                         value_var = 'attractions',
+                                         round_val=3,
+                                         value_var='attractions',
                                          echo=False)
     
             # Get the Attractions from the tuple
@@ -1049,7 +1100,7 @@ class ProductionModel:
             for name, dat in calib_params.items():
                 if name in list(sub_tr):
                     if dat != 'none':
-                        sub_tr = sub_tr[sub_tr[name]==dat]
+                        sub_tr = sub_tr[sub_tr[name] == dat]
 
             print(sub_tr)
     
@@ -1121,9 +1172,8 @@ class ProductionModel:
         nhb = pd.concat(mode_bin)
     
         # Build the cols to retain and reindex from the output segments
-        # TODO: Needs area type
-        retain_cols = [self.output_zones]
-        for i_s in output_segments:
+        retain_cols = [ia_name]
+        for i_s in self.output_segments:
             # Train both types of purpose
             if i_s == 'p':
                 retain_cols.append('p')
@@ -1137,11 +1187,10 @@ class ProductionModel:
         retain_index = retain_cols.copy()
         retain_index.append('productions')
     
-        nhb = nhb.reindex(retain_index,
-            axis=1).groupby(
+        nhb = nhb.reindex(
+            retain_index, axis=1).groupby(
                     retain_cols).sum().reset_index()
 
-    
         # Time seg
         time_seg = nhb.reindex(
                 ['area_type', 'ca', 'nhb_p', 'm'],
@@ -1154,7 +1203,7 @@ class ProductionModel:
             # TODO: Pre sort to make join smoother
             p_sub = nhb.copy()
             for name, dat in row.iteritems():
-                p_sub = p_sub[p_sub[name]==dat]
+                p_sub = p_sub[p_sub[name] == dat]
             p_sub = p_sub.merge(nhb_time_split,
                                 how='left',
                                 on=['area_type', 'ca', 'nhb_p', 'm'])
@@ -1183,13 +1232,14 @@ class ProductionModel:
         nhb = nhb.rename(columns={'nhb_p':'p'})
         nhb = nhb.rename(columns={'productions':'trips'})
     
-        ntem_lad_lookup = pd.read_csv(_default_lad_path)
+        ntem_lad_lookup = pd.read_csv(lad_path)
     
         # Pre - NTEM export
-        if export_uncorrected:
-            raw_nhb_path = os.path.join(o_paths['production_export'],
-                                    'nhb_productions_' +
-                                    'uncorrected.csv')
+        if self.export_uncorrected:
+            raw_nhb_path = os.path.join(
+                o_paths['production_export'],
+                'nhb_productions_' +
+                'uncorrected.csv')
             safe_dataframe_to_csv(nhb, raw_nhb_path, index=False)
 
         ## NTEM Controls
@@ -1203,12 +1253,13 @@ class ProductionModel:
     
             # TODO: This is on the fly a little bit & the method drops a little demand.
             # Convert back to msoa
-            nhb_msoa = aggregate_to_zones(nhb,
-                                          p_params,
-                                          model_name.lower(),
-                                          'msoa',
-                                          model_folder,
-                                          pop_weighted = True)
+            nhb_msoa = self.aggregate_to_zones(
+                nhb,
+                p_params,
+                model_name.lower(),
+                'msoa',
+                model_folder,
+                pop_weighted = True)
     
             ntem_totals = pd.read_csv(ntem_path)
     
@@ -1222,33 +1273,37 @@ class ProductionModel:
                     purpose = 'nhb')
             print(ntem_a)
     
-            if export_lad:
+            if self.export_lad:
                 safe_dataframe_to_csv(nhb_lad,
-                                      os.path.join(o_paths['production_export'],
-                                            'nhb_productions_' +
+                                      os.path.join(
+                                          o_paths['production_export'],
+                                                      'nhb_productions_' +
                                             'lad_ntem.csv'))
     
-            if export_msoa:
+            if self.export_msoa:
                 # TODO: Actually export msoa..
                 print('Export msoa')
     
             # Convert back to zones
             p_params = {'target_output_cols':list(nhb)}
             nhb = self.aggregate_to_zones(nhb_msoa,
-                                     p_params,
+                                        p_params,
                                      'msoa',
-                                     model_name.lower(),
-                                     model_folder,
+                                     self.model_name.lower(),
+                                     self.model_folder,
                                      pop_weighted = True)
     
         # Factors
-        if k_factor_paths is not None:
-            k_factors = os.listdir(k_factor_paths)[0]
-            k_factors = pd.read_csv(k_factor_paths + '/' + k_factors)
-            k_factors = k_factors.reindex(['lad_zone_id','p','m','tp','prod_k'],
-                                          axis=1)
+        if self.k_factor_control:
+            k_factors = os.listdir(self.k_factor_path)[0]
+            k_factors = pd.read_csv(self.k_factor_path + '/' + k_factors)
+            k_factors = k_factors.reindex(['lad_zone_id',
+                                           'p',
+                                           'm',
+                                           'tp',
+                                           'prod_k'], axis=1)
     
-            nhb_purpose = [12,13,14,15,16,18]
+            nhb_purpose = [12, 13, 14, 15, 16, 18]
     
             nhb_k_factors = k_factors[k_factors['p'].isin(nhb_purpose)]
     
@@ -1258,9 +1313,9 @@ class ProductionModel:
             lad_lookup = lad_lookup.reindex(['lad_zone_id', ia_name], axis=1)
     
             nhb = nhb.merge(lad_lookup,
-                            how = 'left',
-                            on = ia_name)
-            nhb['trips'] = nhb['trips'].replace(0,0.001)
+                            how='left',
+                            on=ia_name)
+            nhb['trips'] = nhb['trips'].replace(0, 0.001)
     
             # Build LA adjustment
             adj_fac = nhb.reindex(['lad_zone_id',
@@ -1294,7 +1349,7 @@ class ProductionModel:
                                   'tp'])
             nhb['trips'] = nhb['trips'] * nhb['adj_fac']
     
-            nhb = nhb.drop(['lad_zone_id','adj_fac'], axis=1)
+            nhb = nhb.drop(['lad_zone_id', 'adj_fac'], axis=1)
     
         # Write out
         nhb_path = os.path.join(
@@ -1303,8 +1358,8 @@ class ProductionModel:
             self.model_name.lower() +
             '.csv')
 
-        if export_target:
+        if self.export_target:
             safe_dataframe_to_csv(nhb,
                                   nhb_path, index=False)
 
-        return(nhb_path, nhb)
+        return nhb_path, nhb
