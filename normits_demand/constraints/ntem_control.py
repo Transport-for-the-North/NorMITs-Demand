@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 # Local imports
+import normits_demand as nd
 from normits_demand.utils import general as du
 
 from normits_demand.validation import checks
@@ -251,5 +252,15 @@ def control_to_ntem(control_df: pd.DataFrame,
             on=group_cols,
             how='left'
         ).fillna(0)
+
+    # return and starting df aren't the same still, something really bad
+    # has happened
+    if len(adj_control_df) != len(index_df):
+        raise nd.NormitsDemandError(
+            "Tried to correct the missing zones after doing the translation, "
+            "but something has gone wrong.\nLength of the starting df: %d\n"
+            "Length of the ending df: %d"
+            % (len(index_df), len(adj_control_df))
+        )
 
     return adj_control_df, audit, adjustments, lad_totals

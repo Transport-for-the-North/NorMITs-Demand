@@ -1858,6 +1858,102 @@ def compile_matrices(mat_import: str,
             pickle.dump(decompile_factors, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+def load_matrix_from_disk(mat_import_dir: pathlib.Path,
+                          segment_dict: Dict[str, Any],
+                          completed_segments: List[Dict[str, Any]] = None,
+                          ) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    """
+    Returns a full OD or PA matrix loaded from disk
+
+    Parameters
+    ----------
+    mat_import_dir:
+        The path to a directory containing the pa or od matrices.
+
+    segment_dict:
+        A segment dictionary where the keys are segmentation types, and the
+        values are segmentation values. du.fname_to_calib_params() returns
+        a version of a segment_dict
+
+    completed_segments:
+        A list of segment_dicts without 'matrix_format' keys. This is used
+        to check whether a segment has already been loaded in. Useful for
+        making sure we don't load in od_to and od_from as two separate
+        od matrices.
+        NOTE: This argument is not used or needed if only loading PA or
+        OD matrices
+
+    Returns
+    -------
+    matrix:
+        The loaded matrix in a pandas dataframe.
+
+    completed_segments:
+        An updated version of the completed_segments passed in. If left as
+        None, then this will return an empty list intead. This return can be
+        safely ignored if only loading PA or OD matrices
+    """
+    # Init
+    trip_origin = checks.validate_trip_origin(segment_dict['trip_origin'])
+    matrix_format = checks.validate_matrix_format(segment_dict['matrix_format'])
+
+    completed_segments = list() if completed_segments is None else completed_segments
+
+    # Simple case - we have full PA or OD matrix. Read in and return
+    if segment_dict['matrix_format'] in ['pa', 'od']:
+        mat_fname = du.calib_params_to_dist_name(
+            trip_origin=trip_origin,
+            matrix_format=matrix_format,
+            calib_params=segment_dict,
+            csv=True,
+        )
+        mat_path = os.path.join(mat_import_dir, mat_fname)
+        return pd.read_csv(mat_path, index_col=0), completed_segments
+
+    # Lets make sure we only carry on with the right formats
+    if segment_dict['matrix_format'] not in ['od_from', 'od_to']:
+        raise ValueError(
+            "%s Seems to be a valid matrix format, but I don't know how to "
+            "deal with it." % str(segment_dict['matrix_format'])
+        )
+
+    # Can only get here if we have od_to or od_from
+
+    # Need to remove the matrix format so od_to and od_from will match
+    temp_seg_dict = segment_dict.copy()
+    del temp_seg_dict['matrix_format']
+
+    # Don't carry on if we've already done this segment
+    if temp_seg_dict in completed_segments:
+        return pd.DataFrame(), completed_segments
+
+    # Mark seg_dict as complete
+    completed_segments.append(temp_seg_dict)
+
+    # Load in both matrices and stick together
+    od_to_fname = du.calib_params_to_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='od_to',
+        calib_params=segment_dict,
+        csv=True,
+    )
+    od_to_path = os.path.join(mat_import_dir, od_to_fname)
+    od_to = pd.read_csv(od_to_path, index_col=0)
+
+    od_from_fname = du.calib_params_to_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='od_to',
+        calib_params=segment_dict,
+        csv=True,
+    )
+    od_from_path = os.path.join(mat_import_dir, od_from_fname)
+    od_from = pd.read_csv(od_from_path, index_col=0)
+
+    od_mat = od_to + od_from
+
+    return od_mat, completed_segments
+
+
 def matrices_to_vector(mat_import_dir: pathlib.Path,
                        years_needed: List[str],
                        verbose: bool = True,
@@ -1905,6 +2001,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
     # BACKLOG: matrices_to_vector() needs checks adding for edge cases
     #  labels: EFS, error checks
     # Init
+    du.print_w_toggle("Generating vectors from %s..." % mat_import_dir, echo=verbose)
     mat_names = [x for x in du.list_files(mat_import_dir) if fo.is_csv(x)]
 
     # Split the matrices into years
@@ -1931,7 +2028,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
 
     # Build the progress bar
     total = sum([len(year_to_segment_dicts[year]) for year in years_needed])
-    desc = 'Building P/A vectors'
+    desc = 'Building vectors'
     p_bar = tqdm(total=total, desc=desc, disable=(not verbose))
 
     # Build a vector for each year
@@ -1945,10 +2042,10 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
         matrix_format = checks.validate_matrix_format(temp_seg_dict['matrix_format'])
 
         # Figure out which column names we should use
-        if matrix_format == 'pa':
+        if matrix_format in consts.PA_MATRIX_FORMATS:
             p_or_o_val_name = 'productions'
             a_or_d_val_name = 'attractions'
-        elif matrix_format == 'od':
+        elif matrix_format in consts.OD_MATRIX_FORMATS:
             p_or_o_val_name = 'origin'
             a_or_d_val_name = 'destination'
         else:
@@ -1961,21 +2058,21 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
         # Build an efficient_df for each matrix
         segment_col_names = set()
         year_eff_dfs = list()
+        completed_segments = list()
         for segment_dict in year_to_segment_dicts[year]:
-            # Validate trip origin and matrix format
-            trip_origin = checks.validate_trip_origin(segment_dict['trip_origin'])
+
+            # ## LOAD THE MATRIX IN ## #
+            matrix, completed_segments = load_matrix_from_disk(
+                mat_import_dir=mat_import_dir,
+                segment_dict=segment_dict,
+                completed_segments=completed_segments,
+            )
+
+            # If empty, its od_from or od_to and we've already done it
+            if matrix.empty:
+                continue
 
             # ## GET THE ROW AND COLUMN TOTALS AND NAMES ## #
-            # Read in the matrix
-            mat_fname = du.calib_params_to_dist_name(
-                trip_origin=trip_origin,
-                matrix_format=matrix_format,
-                calib_params=segment_dict,
-                csv=True,
-            )
-            mat_path = os.path.join(mat_import_dir, mat_fname)
-            matrix = pd.read_csv(mat_path, index_col=0)
-
             # Convert into p/a or o/d
             p_or_o = matrix.sum(axis=1)
             a_or_d = matrix.sum(axis=0)

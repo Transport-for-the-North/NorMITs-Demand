@@ -164,6 +164,7 @@ class EfsReporter:
         # matrix imports
         matrices = {
             'pa_24': self.efs_exports['pa_24'],
+            'pa_24_bespoke': self.efs_exports['pa_24_bespoke'],
             'pa': self.efs_exports['pa'],
             'od': self.efs_exports['od'],
         }
@@ -191,6 +192,7 @@ class EfsReporter:
         cache_home = os.path.join(export_home, 'cache')
         cache_paths = {
             'pa_24': os.path.join(cache_home, 'pa_24'),
+            'pa_24_bespoke': os.path.join(cache_home, 'bespoke_pa_24'),
             'pa': os.path.join(cache_home, 'pa'),
             'od': os.path.join(cache_home, 'od'),
         }
@@ -367,6 +369,9 @@ class EfsReporter:
             compare_translated_base_pa_vectors_to_ntem()
             compare_eg_pa_vectors_to_ntem()
             compare_pa_matrices_to_ntem()
+            compare_bespoke_pa_matrices_to_ntem()
+            compare_tp_pa_matrices_to_ntem()
+            compare_od_matrices_to_ntem()
 
         Returns
         -------
@@ -376,12 +381,11 @@ class EfsReporter:
         self.compare_translated_base_pa_vectors_to_ntem()
         self.compare_eg_pa_vectors_to_ntem()
         self.compare_pa_matrices_to_ntem()
+        self.compare_bespoke_pa_matrices_to_ntem()
+        self.compare_tp_pa_matrices_to_ntem()
+        self.compare_od_matrices_to_ntem()
 
-        # Compare furnessed PA matrices to NTEM - bespoke zones?
-
-        # Compare furnessed PA matrices to P/A vectors
-
-        # Compare furnessed OD matrices to NTEM
+        # Compare furnessed PA matrices to P/A vectors?
 
     def compare_base_pa_vectors_to_ntem(self) -> pd.DataFrame:
         """
@@ -507,6 +511,135 @@ class EfsReporter:
             mat_import_dir=self.imports['matrices']['pa_24'],
             years_needed=self.years_needed,
             cache_path=self.exports['cache']['pa_24'],
+            matrix_format=matrix_format,
+        )
+
+        # Assign to a dictionary for accessing
+        vector_dict = {name: vec for name, vec in zip(vector_order, vectors)}
+
+        # ## GENERATE THE REPORT ## #
+        return self._generate_vector_report(
+            vector_dict=vector_dict,
+            vector_zone_col=self._zone_col_base % self.model_zone_name,
+            zone_to_lad=pd.read_csv(self.imports['ntem']['model_to_lad']),
+            matrix_format=matrix_format,
+            output_path=os.path.join(self.exports['home'], output_fname),
+            vector_types=self._vector_types,
+            trip_origins=self._trip_origins,
+            report_subsets=self.reporting_subsets,
+        )
+
+    def compare_bespoke_pa_matrices_to_ntem(self) -> pd.DataFrame:
+        """
+        Generates a report of the PA matrices (after bespoke zone integration)
+        compared to NTEM data.
+
+        Returns
+        -------
+        report:
+            A copy of the report comparing the PA matrices to NTEM
+        """
+        # Init
+        matrix_format = 'pa'
+        output_fname = "bespoke_24hr_pa_matrices_report.csv"
+        vector_order = [
+            'hb_productions',
+            'nhb_productions',
+            'hb_attractions',
+            'nhb_attractions',
+        ]
+
+        # Convert matrices into vector
+        vectors = mat_p.maybe_convert_matrices_to_vector(
+            mat_import_dir=self.imports['matrices']['pa_24_bespoke'],
+            years_needed=self.years_needed,
+            cache_path=self.exports['cache']['pa_24_bespoke'],
+            matrix_format=matrix_format,
+        )
+
+        # Assign to a dictionary for accessing
+        vector_dict = {name: vec for name, vec in zip(vector_order, vectors)}
+
+        # ## GENERATE THE REPORT ## #
+        return self._generate_vector_report(
+            vector_dict=vector_dict,
+            vector_zone_col=self._zone_col_base % self.model_zone_name,
+            zone_to_lad=pd.read_csv(self.imports['ntem']['model_to_lad']),
+            matrix_format=matrix_format,
+            output_path=os.path.join(self.exports['home'], output_fname),
+            vector_types=self._vector_types,
+            trip_origins=self._trip_origins,
+            report_subsets=self.reporting_subsets,
+        )
+
+    def compare_tp_pa_matrices_to_ntem(self) -> pd.DataFrame:
+        """
+        Generates a report of the time period split PA matrices compared
+        to NTEM data
+
+        Returns
+        -------
+        report:
+            A copy of the report comparing the time period split PA matrices
+            to NTEM
+        """
+        # Init
+        matrix_format = 'pa'
+        output_fname = "base_tp_pa_matrices_report.csv"
+        vector_order = [
+            'hb_productions',
+            'nhb_productions',
+            'hb_attractions',
+            'nhb_attractions',
+        ]
+
+        # Convert matrices into vector
+        vectors = mat_p.maybe_convert_matrices_to_vector(
+            mat_import_dir=self.imports['matrices']['pa'],
+            years_needed=self.years_needed,
+            cache_path=self.exports['cache']['pa'],
+            matrix_format=matrix_format,
+        )
+
+        # Assign to a dictionary for accessing
+        vector_dict = {name: vec for name, vec in zip(vector_order, vectors)}
+
+        # ## GENERATE THE REPORT ## #
+        return self._generate_vector_report(
+            vector_dict=vector_dict,
+            vector_zone_col=self._zone_col_base % self.model_zone_name,
+            zone_to_lad=pd.read_csv(self.imports['ntem']['model_to_lad']),
+            matrix_format=matrix_format,
+            output_path=os.path.join(self.exports['home'], output_fname),
+            vector_types=self._vector_types,
+            trip_origins=self._trip_origins,
+            report_subsets=self.reporting_subsets,
+        )
+
+    def compare_od_matrices_to_ntem(self) -> pd.DataFrame:
+        """
+        Generates a report of the OD matrices compared to NTEM data
+
+        Returns
+        -------
+        report:
+            A copy of the report comparing the OD matrices to NTEM
+        """
+        # Init
+        matrix_format = 'od'
+        output_fname = "base_tp_od_matrices_report.csv"
+        vector_order = [
+            'hb_origins',
+            'nhb_origins',
+            'hb_destinations',
+            'nhb_destinations',
+        ]
+
+        # Convert matrices into vector
+        vectors = mat_p.maybe_convert_matrices_to_vector(
+            mat_import_dir=self.imports['matrices']['od'],
+            years_needed=self.years_needed,
+            cache_path=self.exports['cache']['od'],
             matrix_format=matrix_format,
         )
 
@@ -676,9 +809,10 @@ def compare_vector_to_ntem(vector: pd.DataFrame,
             # Grab the subsets for this report
             needed_cols = segment_cols + [col]
             mask = vector[base_zone_name].isin(vals)
+            adj_mask = adj_vector[base_zone_name].isin(vals)
 
             vector_subset = vector[mask].reindex(columns=needed_cols)
-            adj_vector_subset = adj_vector[mask].reindex(columns=needed_cols)
+            adj_vector_subset = adj_vector[adj_mask].reindex(columns=needed_cols)
 
             # Build a replicant of the control report
             report = {

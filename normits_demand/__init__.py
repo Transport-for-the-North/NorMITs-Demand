@@ -1,6 +1,8 @@
 from .version import __version__
 
 # NorMITs Demand Errors
+from normits_demand.utils.general import NormitsDemandError
+from normits_demand.utils.general import ExternalForecastSystemError
 from normits_demand.audits.audits import AuditError
 
 # ## EXPOSE CLASS LAYER ## #
