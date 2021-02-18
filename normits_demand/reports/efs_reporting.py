@@ -45,7 +45,8 @@ class EfsReporter:
     ntem_control_dtypes = {'p': int, 'm': int}
     ntem_control_cols = list(ntem_control_dtypes.keys())
 
-    _vector_types = ['productions', 'attractions']
+    _pa_vector_types = ['productions', 'attractions']
+    _od_vector_types = ['origins', 'destinations']
     _trip_origins = consts.TRIP_ORIGINS
     _zone_col_base = '%s_zone_id'
 
@@ -331,7 +332,7 @@ class EfsReporter:
             A copy of the generated report inside a pandas dataframe.
         """
         # Init
-        vector_types = self._vector_types if vector_types is None else vector_types
+        vector_types = self._pa_vector_types if vector_types is None else vector_types
         trip_origins = self._trip_origins if trip_origins is None else trip_origins
 
         # Compare every base year vector to NTEM and create a report
@@ -415,7 +416,7 @@ class EfsReporter:
             zone_to_lad=pd.read_csv(self.imports['ntem']['msoa_to_lad']),
             matrix_format=matrix_format,
             output_path=os.path.join(self.exports['home'], output_fname),
-            vector_types=self._vector_types,
+            vector_types=self._pa_vector_types,
             trip_origins=self._trip_origins,
         )
 
@@ -447,7 +448,7 @@ class EfsReporter:
             zone_to_lad=pd.read_csv(self.imports['ntem']['model_to_lad']),
             matrix_format=matrix_format,
             output_path=os.path.join(self.exports['home'], output_fname),
-            vector_types=self._vector_types,
+            vector_types=self._pa_vector_types,
             trip_origins=self._trip_origins,
             report_subsets=self.reporting_subsets,
         )
@@ -482,7 +483,7 @@ class EfsReporter:
             zone_to_lad=pd.read_csv(self.imports['ntem']['model_to_lad']),
             matrix_format=matrix_format,
             output_path=os.path.join(self.exports['home'], output_fname),
-            vector_types=self._vector_types,
+            vector_types=self._pa_vector_types,
             trip_origins=['hb'],
             report_subsets=self.reporting_subsets,
         )
@@ -524,7 +525,7 @@ class EfsReporter:
             zone_to_lad=pd.read_csv(self.imports['ntem']['model_to_lad']),
             matrix_format=matrix_format,
             output_path=os.path.join(self.exports['home'], output_fname),
-            vector_types=self._vector_types,
+            vector_types=self._pa_vector_types,
             trip_origins=self._trip_origins,
             report_subsets=self.reporting_subsets,
         )
@@ -567,7 +568,7 @@ class EfsReporter:
             zone_to_lad=pd.read_csv(self.imports['ntem']['model_to_lad']),
             matrix_format=matrix_format,
             output_path=os.path.join(self.exports['home'], output_fname),
-            vector_types=self._vector_types,
+            vector_types=self._pa_vector_types,
             trip_origins=self._trip_origins,
             report_subsets=self.reporting_subsets,
         )
@@ -611,7 +612,7 @@ class EfsReporter:
             zone_to_lad=pd.read_csv(self.imports['ntem']['model_to_lad']),
             matrix_format=matrix_format,
             output_path=os.path.join(self.exports['home'], output_fname),
-            vector_types=self._vector_types,
+            vector_types=self._pa_vector_types,
             trip_origins=self._trip_origins,
             report_subsets=self.reporting_subsets,
         )
@@ -653,7 +654,7 @@ class EfsReporter:
             zone_to_lad=pd.read_csv(self.imports['ntem']['model_to_lad']),
             matrix_format=matrix_format,
             output_path=os.path.join(self.exports['home'], output_fname),
-            vector_types=self._vector_types,
+            vector_types=self._od_vector_types,
             trip_origins=self._trip_origins,
             report_subsets=self.reporting_subsets,
         )

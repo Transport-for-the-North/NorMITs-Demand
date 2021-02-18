@@ -110,6 +110,17 @@ def control_to_ntem(control_df: pd.DataFrame,
                     'Column %s not in %s dataframe' % (str(col), df_name)
                 )
 
+    # Make sure value columns exist
+    if base_value_name not in list(control_df):
+        raise ValueError(
+            'Column %s not in control_df dataframe' % str(base_value_name)
+        )
+
+    if ntem_value_name not in list(ntem_totals):
+        raise ValueError(
+            'Column %s not in ntem_totals dataframe' % str(ntem_value_name)
+        )
+
     trip_origin = checks.validate_trip_origin(trip_origin)
 
     # Init

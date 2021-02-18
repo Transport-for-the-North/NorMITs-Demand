@@ -4,8 +4,8 @@ from normits_demand.efs_constants import *
 VECTOR_TYPES = [
     'productions',
     'attractions',
-    'origin',
-    'destination',
+    'origins',
+    'destinations',
 ]
 
 
