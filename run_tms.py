@@ -2,7 +2,8 @@ import copy
 
 import normits_demand.demand as demand
 import normits_demand.models.tms as tms
-import normits_demand.models.production_model_objects as pm
+import normits_demand.models.production_model as pm
+import normits_demand.models.attraction_model as am
 
 """
 config_path = 'I:/NorMITs Synthesiser/config/',
@@ -28,8 +29,14 @@ def main(config_path,
     # BACKLOG: Project status
     tms_run.project_status = tms_run.project_check()
 
-    hb_p = pm.ProductionModel(config_path,
-                              params_file)
+    p = pm.ProductionModel(config_path, params_file)
+    hb_p = p.run_hb()
+
+    a = am.AttractionModel(config_path, params_file)
+    a.run()
+
+    nhb_p = p.run_nhb()
+
     """
     
     ni6 = TravelMarketSynthesiser()

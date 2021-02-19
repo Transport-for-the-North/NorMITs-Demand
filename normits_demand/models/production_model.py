@@ -28,7 +28,8 @@ from normits_demand.utils import utils as nup
 from normits_demand.utils import ntem_control as ntem
 from normits_demand.utils.general import safe_dataframe_to_csv
 
-class ProductionModel( demand.NormitsDemand ):
+
+class ProductionModel(demand.NormitsDemand):
 
     """
     """
@@ -43,43 +44,6 @@ class ProductionModel( demand.NormitsDemand ):
         # Check for existing exports
         self.export = self.ping_outpath()
 
-
-    """
-        # Globals
-        self.
-
-        # Model setup variables
-        self.model_name = model_name
-        self.build_folder = build_folder
-        self.iteration = iteration
-        self.trip_origin = trip_origin
-        self.input_zones = input_zones
-        self.output_zones = output_zones
-        self.import_folder = import_folder
-        self.model_folder = model_folder
-
-        # Model option variables
-        self.output_segments = output_segments
-        if trip_rates == 'default':
-            trip_rates = self._default_trip_rates
-        self.trip_rates = trip_rates
-        self.time_split = time_split
-        self.ave_time_split = ave_time_split
-        self.mode_split = mode_split
-        self.ntem_control = ntem_control
-        if ntem_path == 'default':
-            ntem_path = self._default_ntem
-        self.ntem_path = ntem_path
-        self.lu_path = lu_path
-        self.k_factor_control = k_factor_control
-        self.k_factor_path = k_factor_path
-        self.export_msoa = export_msoa
-        self.export_lad = export_lad
-        self.export_uncorrected = export_uncorrected
-        self.export_target = export_target
-
-        
-    """
     def get_trip_rates(self):
 
         """
