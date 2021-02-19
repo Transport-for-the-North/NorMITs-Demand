@@ -13,7 +13,8 @@ pandas v0.23.4
 
 """
 
-import os, warnings
+import os
+import warnings
 from typing import List
 
 import numpy as np
@@ -21,57 +22,31 @@ import pandas as pd
 
 import normits_demand.demand as demand
 
+import normits_demand.trip_end_constants as tec
+
 from normits_demand.utils import utils as nup
 from normits_demand.utils import ntem_control as ntem
 from normits_demand.utils.general import safe_dataframe_to_csv
 
-class ProductionModel(demand.NormitsDemand):
+class ProductionModel( demand.NormitsDemand ):
 
     """
     """
 
     def __init__(
             self,
-            model_name: str = 'test',
-            build_folder: str = 'Y:/NorMITs Synthesiser',
-            iteration: str = 'iterx',
-            trip_origin: str = 'hb',
-            input_zones: str = 'msoa',
-            output_zones: str = 'test',
-            import_folder: str = 'Y:/NorMITs Synthesiser/import',
-            model_folder: str = 'Y:/',
-            output_segments: List[str] = ['p','m'],
-            lu_path: str = 'Y:/Path to Land use',
-            trip_rates: str = '',
-            time_split: str = '',
-            ave_time_split: str = '',
-            mode_split: str = '',
-            production_vector: str = '',
-            attraction_vector: str = '',
-            ntem_control: bool = True,
-            ntem_path: str = '',
-            k_factor_control: bool = False,
-            k_factor_path = None,
-            export_msoa: bool = False,
-            export_lad: bool = False,
-            export_uncorrected: bool = True,
-            export_target: bool = True
+            config_path,
+            param_file
             ):
-        """
-        """
-        
+        super().__init__(config_path,
+                       param_file)
+        # Check for existing exports
+        self.export = self.ping_outpath()
+
+
+    """
         # Globals
-        self._default_ntem = ('Y:/NorMITs Synthesiser/import/' +
-                              'ntem_constraints/ntem_pa_ave_wday_2018.csv')
-        self._default_trip_rates = ('Y:/NorMITs Synthesiser/import/' +
-                                    'trip_rates/tfn_hb_trip_rates_18_0620.csv')
-        self._default_time_split = ('Y:/NorMITs Synthesiser/import/' +
-                                    'trip_rates/tfn_hb_time_split_18_0620.csv')
-        self._default_mode_split = ('Y:/NorMITs Synthesiser/import/' +
-                                    'trip_rates/tfn_hb_mode_split_18_0620.csv')
-        self._default_ave_time_split = ('Y:/NorMITs Synthesiser/import/' +
-                                        'trip_rates/hb_ave_time_split.csv')
-        self._default_msoa_lad = ('Y:/NorMITs Synthesiser/import/lad_to_msoa.csv')
+        self.
 
         # Model setup variables
         self.model_name = model_name
@@ -103,9 +78,8 @@ class ProductionModel(demand.NormitsDemand):
         self.export_uncorrected = export_uncorrected
         self.export_target = export_target
 
-        # Check for existing exports
-        self.export = self.ping_outpath()
-
+        
+    """
     def get_trip_rates(self):
 
         """
@@ -123,9 +97,9 @@ class ProductionModel(demand.NormitsDemand):
         ntem_trip_rates:
             DataFrame containing NTEM trip rates.
         """
-        trip_rates = pd.read_csv(os.path.join(self.import_folder,
+        trip_rates = pd.read_csv(os.path.join(self.params['import_folder'],
                                               'trip_params',
-                                              self.trip_rates))
+                                              self.params['trip_rates']))
     
         return(trip_rates)
         
@@ -153,7 +127,7 @@ class ProductionModel(demand.NormitsDemand):
         with warnings.catch_warnings():
             warnings.simplefilter(action='ignore',
                                   category=FutureWarning)
-            land_use_output = pd.read_csv(self.lu_path,
+            land_use_output = pd.read_csv(self.params['land_use_path'],
                                           low_memory=False)
 
         return land_use_output
@@ -199,21 +173,21 @@ class ProductionModel(demand.NormitsDemand):
         """
         # BACKLOG: Need this function so often it should be broader.
         # Some of the inputs are out of date, could be simpler too
-        model_folder = self.model_folder
+        model_folder = self.lookup_folder
 
         if model_folder is None:
             zone_col = list(productions)[0]
             print('No target zoning system provided')
             print('Aggregating on zones provided:', zone_col)
             zone_col = list(productions)[0]
-            zone_productions = productions.reindex([zone_col,'trips'],
+            zone_productions = productions.reindex([zone_col, 'trips'],
                                                    axis=1).groupby(
                                                            zone_col).sum(
                                                                    ).reset_index()
             return zone_productions
         else:
-            spatial_aggregation_input = self.input_zones
-            spatial_aggregation_output = self.output_zones
+            spatial_aggregation_input = self.params['land_use_zoning']
+            spatial_aggregation_output = self.params['output_zones']
 
             # Find and import correct lookup from model folder
             # These need to be in the correct format!
@@ -419,7 +393,7 @@ class ProductionModel(demand.NormitsDemand):
             'land_use_audit.csv'),
             index=False)
     
-        return(lu_report)
+        return lu_report
 
     def ping_outpath(self):
 
@@ -428,36 +402,36 @@ class ProductionModel(demand.NormitsDemand):
         # BACKLOG: This solves a lot of problems, integrate into main
         # BACKLOG: Should take paths from path building class
 
-        output_dir = os.path.join(self.build_folder,
-                                  self.iteration)
+        output_dir = os.path.join(self.run_folder,
+                                  self.params['iteration'])
         output_f = 'Production Outputs'
 
         in_hb = os.path.join(
             output_dir,
             output_f,
             'hb_productions_' +
-            self.input_zones.lower() +
+            self.params['land_use_zoning'].lower() +
             '.csv')
 
         in_nhb = os.path.join(
             output_dir,
             output_f,
             'nhb_productions_' +
-            self.input_zones.lower() +
+            self.params['land_use_zoning'] +
             '.csv')
 
         out_hb = os.path.join(
             output_dir,
             output_f,
             'hb_productions_' +
-            self.output_zones.lower() +
+            self.params['model_zoning'].lower() +
             '.csv')
 
         out_nhb = os.path.join(
             output_dir,
             output_f,
             'nhb_productions_' +
-            self.output_zones.lower() +
+            self.params['model_zoning'].lower() +
             '.csv')
 
         if not os.path.exists(in_hb):
@@ -490,8 +464,8 @@ class ProductionModel(demand.NormitsDemand):
         print(start_time)
 
         # Build pathing
-        output_dir = os.path.join(self.build_folder,
-                                  self.iteration)
+        output_dir = os.path.join(self.run_folder,
+                                  self.params['iteration'])
         output_f = 'Production Outputs'
         lookup_f = os.path.join(output_f, 'Production Lookups')
         run_log_f = os.path.join(output_f, 'Production Run Logs')
@@ -509,7 +483,7 @@ class ProductionModel(demand.NormitsDemand):
                         'ca', 'people']
         optional_lu = ['soc', 'ns', 'g']
 
-        for seg in self.output_segments:
+        for seg in self.params['hb_trip_end_segmentation']:
             if seg in optional_lu:
                 mandatory_lu.append(seg)
 
@@ -520,12 +494,13 @@ class ProductionModel(demand.NormitsDemand):
         # does this need to be ordered?
         out_cols = ['msoa_zone_id', 'area_type', 'tp']
         p_params.update({'output_cols': out_cols +
-                         self.output_segments + ['trips']})
+                         self.params['hb_trip_end_segmentation'] + ['trips']})
 
         # does this need to be ordered?
-        tout_cols = [(self.output_zones + '_zone_id'), 'area_type', 'tp']
+        tout_cols = [(
+                self.params['model_zoning'] + '_zone_id'), 'area_type', 'tp']
         p_params.update({'target_output_cols': tout_cols +
-                         self.output_segments + ['trips']})
+                         self.params['hb_trip_end_segmentation'] + ['trips']})
 
         # Other params as dict
         land_use_output = self.get_land_use_output()
@@ -536,14 +511,14 @@ class ProductionModel(demand.NormitsDemand):
                 x_lu_cols.append(col)
     
         p_params.update({'x_lu_cols': x_lu_cols})
-        del(x_lu_cols)
+        del x_lu_cols
 
         # Apply ca
         # This should be in Land Use
         # drop land use 'ca' column first - error in this column
         # Fix car ownership
-        ca = pd.DataFrame({'cars':['0',0,'1',1,'1+','2','2+'],
-                           'ca':[0,0,1,1,1,1,1]})
+        ca = pd.DataFrame({'cars':['0', 0, '1', 1, '1+', '2', '2+'],
+                           'ca':[0, 0, 1, 1, 1, 1, 1]})
         land_use_output = land_use_output.merge(ca,
                                                 how='left',
                                                 on='cars')
@@ -551,15 +526,15 @@ class ProductionModel(demand.NormitsDemand):
         # Add gender code and stick to it - Turn gender into an integer
         # Document code order for reference - Females(1), Male(2), Children(3)
         # This should be in land use
-        g_l = pd.DataFrame({'gender':['Females','Male','Children'],
-                            'g':[1,2,3]})
+        g_l = pd.DataFrame({'gender': ['Females','Male','Children'],
+                            'g': [1, 2, 3]})
         land_use_output = land_use_output.merge(g_l,
                                                 how='left',
                                                 on='gender')
 
         # cars and gender cols no longer needed -
         # these are re-formatted above
-        land_use_output = land_use_output.drop(['gender','cars'], axis=1)
+        land_use_output = land_use_output.drop(['gender', 'cars'], axis=1)
 
         # Do a report
         print(mandatory_lu)
@@ -597,14 +572,14 @@ class ProductionModel(demand.NormitsDemand):
         target_purpose = trip_rates['p'].drop_duplicates(
                 ).reset_index(drop=True)
 
-        aggregate_ns_sec = [1,2]
-        aggregate_soc = [3,4,5,6,7,8]
+        aggregate_ns_sec = [1, 2]
+        aggregate_soc = [3, 4, 5, 6, 7, 8]
 
         # Weekly trip rate application loop
         # output per purpose
         purpose_ph = {}
         for p in target_purpose:
-            trip_rate_subset = trip_rates[trip_rates['p']==p].copy()
+            trip_rate_subset = trip_rates[trip_rates['p'] == p].copy()
 
             print('building purpose ' + str(p) + ' trip rates')
             lu_sub = land_use_output.copy()
@@ -635,32 +610,32 @@ class ProductionModel(demand.NormitsDemand):
                                             ).reset_index()
     
             # Update dictionary
-            purpose_ph.update({p:lu_sub})
+            purpose_ph.update({p: lu_sub})
 
         time_splits = pd.read_csv(
             os.path.join(self.import_folder,
                          'trip_params',
-                         self.time_split,
+                         self.params['hb_time_split'],
                          ))
         mean_time_splits = pd.read_csv(
             os.path.join(self.import_folder,
                          'trip_params',
-                         self.ave_time_split
+                         self.params['hb_ave_time_split']
                          ))
 
-        #  Time Period: 1= AM(peak), 2=IP(interpeak), 3=PM(peak), 4=OP(off-peak)
+        #  Time Period: 1= AM(peak), 2=IP(inter peak), 3=PM(peak), 4=OP(off-peak)
         target_tp = ['tp1', 'tp2', 'tp3', 'tp4']
         tp_ph = {}
         for tp in target_tp:
             print('Building time period ' + str(tp))
-            tp_subset = time_splits.reindex(['area_type','traveller_type',
-                                             'p',tp], axis=1).copy()
-            tp_mean_subset = mean_time_splits.reindex(['p',tp], axis=1).copy()
+            tp_subset = time_splits.reindex(['area_type', 'traveller_type',
+                                             'p', tp], axis=1).copy()
+            tp_mean_subset = mean_time_splits.reindex(['p', tp], axis=1).copy()
     
             for key, dat in purpose_ph.items():
                 print('For purpose ' + str(key))
                 # Get mean for infill
-                tp_mean = tp_mean_subset[tp_mean_subset['p']==key][tp]
+                tp_mean = tp_mean_subset[tp_mean_subset['p'] == key][tp]
     
                 tp_mat = dat.copy()
                 tp_mat = tp_mat.merge(
@@ -694,7 +669,7 @@ class ProductionModel(demand.NormitsDemand):
         mode_share = pd.read_csv(
             os.path.join(self.import_folder,
                          'trip_params',
-                         self.mode_split
+                         self.params['hb_mode_split']
                          ))
 
         # Build join cols
@@ -731,7 +706,7 @@ class ProductionModel(demand.NormitsDemand):
                 # Get p from key
                 # Keep 2 chars and replace_, so I can copy for NHB
                 tp_p = (key[key.index('p')+1:key.index('p')+3])
-                tp_p = tp_p.replace('_','')
+                tp_p = tp_p.replace('_', '')
                 print('For purpose ' + str(tp_p))
     
                 m_mat = dat.copy()
@@ -755,7 +730,7 @@ class ProductionModel(demand.NormitsDemand):
                     axis=1).groupby(
                         m_group_cols).sum().reset_index()
     
-                m_mat = m_mat[m_mat['trips']>0]
+                m_mat = m_mat[m_mat['trips']> 0]
                 print(m_mat['trips'].sum())
     
                 m_ph.update({(str(key)+'_'+m):m_mat})
@@ -766,9 +741,9 @@ class ProductionModel(demand.NormitsDemand):
 
             output_list = key.split('_')
     
-            purpose = output_list[0].replace('p','')
-            time_period = output_list[1].replace('tp','')
-            mode = output_list[2].replace('m','')
+            purpose = output_list[0].replace('p', '')
+            time_period = output_list[1].replace('tp', '')
+            mode = output_list[2].replace('m', '')
 
             dat['p'] = purpose
             dat['tp'] = time_period
@@ -789,9 +764,9 @@ class ProductionModel(demand.NormitsDemand):
                 axis=1).groupby(group_cols).sum().reset_index()
 
         # NTEM control
-        msoa_lad_lookup = pd.read_csv(self._default_msoa_lad)
+        msoa_lad_lookup = pd.read_csv(tec.MSOA_LAD)
 
-        if self.export_uncorrected:
+        if self.params['export_uncorrected']:
             safe_dataframe_to_csv(msoa_output,
                                   (output_dir +
                                    output_f +
@@ -799,20 +774,20 @@ class ProductionModel(demand.NormitsDemand):
                                    'uncorrected.csv'),
             index=False)
 
-        if self.ntem_control:
+        if self.params['production_ntem_control']:
             # Get ntem totals
-            ntem_totals = pd.read_csv(self.ntem_path)
+            ntem_totals = pd.read_csv(self.params['ntem_control_path'])
 
             msoa_output, ntem_p, ntem_a, lad_output = ntem.control_to_ntem(
                     msoa_output,
                     ntem_totals,
                     msoa_lad_lookup,
-                    group_cols = ['p','m'],
-                    base_value_name = 'trips',
-                    ntem_value_name = 'Productions',
-                    purpose = 'hb')
+                    group_cols = ['p', 'm'],
+                    base_value_name='trips',
+                    ntem_value_name='Productions',
+                    purpose='hb')
 
-            if self.export_lad:
+            if self.params['export_lad']:
                 safe_dataframe_to_csv(
                     lad_output,
                     (output_dir +
@@ -820,18 +795,18 @@ class ProductionModel(demand.NormitsDemand):
                     '/hb_productions_lad_ntem.csv'),
                     index=False)
 
-        if self.k_factor_control:
+        if self.params['production_k_factor_control']:
             # BACKLOG: Function
             # BACKLOG: Loop over all modes in the list. k factor paths as list only
             # BACKLOG: La level reports for ntem & k adjust < .2 & >5
             print('Before: ' + str(msoa_output['trips'].sum()))
     
-            k_factors = pd.read_csv(self.k_factor_path)
-            k_factors = k_factors.reindex(['lad_zone_id','p','m','tp','prod_k'],
+            k_factors = pd.read_csv(self.params['production_k_factor_path'])
+            k_factors = k_factors.reindex(['lad_zone_id', 'p', 'm', 'tp', 'prod_k'],
                                           axis=1)
     
             # Adjustment to tweak time period
-            hb_purpose = [1,2,3,4,5,6,7,8]
+            hb_purpose = tec.HB_PURPOSE
             hb_k_factors = k_factors[k_factors['p'].isin(hb_purpose)]
             hb_k_factors = hb_k_factors.drop('tp', axis=1)
     
@@ -840,9 +815,9 @@ class ProductionModel(demand.NormitsDemand):
     
             msoa_output = msoa_output.merge(lad_lookup,
                                             how = 'left',
-                                            on = 'msoa_zone_id')
+                                            on='msoa_zone_id')
             # Seed zero infill
-            msoa_output['trips'] = msoa_output['trips'].replace(0,0.001)
+            msoa_output['trips'] = msoa_output['trips'].replace(0, 0.001)
 
             # Build LA adjustment
             adj_fac = msoa_output.reindex(['lad_zone_id',
@@ -853,8 +828,8 @@ class ProductionModel(demand.NormitsDemand):
                                                   'm']).sum().reset_index()
     
             adj_fac = adj_fac.merge(hb_k_factors,
-                                    how = 'left',
-                                    on = ['lad_zone_id',
+                                    how='left',
+                                    on=['lad_zone_id',
                                           'p',
                                           'm'])
             adj_fac['adj_fac'] = adj_fac['prod_k']/adj_fac['trips']
@@ -866,8 +841,8 @@ class ProductionModel(demand.NormitsDemand):
     
             # BACKLOG: Report adj factors here
             msoa_output = msoa_output.merge(adj_fac,
-                                            how = 'left',
-                                            on = ['lad_zone_id',
+                                            how='left',
+                                            on=['lad_zone_id',
                                                   'p',
                                                   'm'])
     
@@ -887,14 +862,14 @@ class ProductionModel(demand.NormitsDemand):
                 os.path.join(output_dir,
                              output_f,
                              'hb_productions_' +
-                             self.input_zones.lower() +
+                             self.params['land_use_zoning'].lower() +
                              '.csv'), index=False)
 
         # Aggregate to target model zones
         target_output = self.aggregate_to_zones(
             msoa_output,
             p_params,
-            pop_weighted = True)
+            pop_weighted=True)
 
         print(target_output)
         print(list(target_output))
@@ -917,9 +892,9 @@ class ProductionModel(demand.NormitsDemand):
             output_dir,
             output_f,
             'hb_productions_' +
-            self.output_zones +
+            self.params['model_zoning'].lower() +
             '.csv')
-        if self.export_target:
+        if self.params['export_model_zoning']:
             safe_dataframe_to_csv(target_output,
                 out_path,
                 index=False)
@@ -941,7 +916,7 @@ class ProductionModel(demand.NormitsDemand):
         return out_path, target_output, lu_rep
 
     def run_nhb(self,
-                verbose = False):
+                verbose=False):
 
         """
         Builds NHB production vector from Homebased attraction vectors, while

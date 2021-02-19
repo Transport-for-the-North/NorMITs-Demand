@@ -4,23 +4,7 @@ Normits Demand class wrapper
 """
 
 import os
-import sys
-
-# sys.path.append(r'C:\Users\genie\Documents\GitHub\NorMITs-Demand')
-
 import pandas as pd
-
-from normits_demand.models import production_model as pm
-from normits_demand.models import attraction_model as am
-from normits_demand.models import distribution_model as dm
-
-from normits_demand.reports import reports_audits as ra
-from normits_demand.utils import cjtw_processing as cjtw
-from normits_demand.models import external_model as em
-from normits_demand.matrices import tms_pa_to_od as pa2od
-from normits_demand.utils import utils as nup
-from normits_demand.utils import vehicle_occupancy as vo
-from normits_demand.distribution import segment_disaggregator as sd
 
 # TODO: define run as class
 # class TMS_Run()
@@ -31,8 +15,8 @@ class NormitsDemand:
     """
 
     def __init__(self,
-                 config_path = 'I:/NorMITs Synthesiser/config/',
-                 params_file = 'norms_params_sheet_i6.xlsx'):
+                 config_path='I:/NorMITs Synthesiser/config/',
+                 params_file='norms_params_sheet_i6.xlsx'):
         """
         """
         # Set config path

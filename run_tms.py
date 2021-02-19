@@ -1,19 +1,37 @@
+import copy
 
+import normits_demand.demand as demand
+import normits_demand.models.tms as tms
+import normits_demand.models.production_model_objects as pm
 
+"""
+config_path = 'I:/NorMITs Synthesiser/config/',
+params_file = 'norms_params_sheet_i6.xlsx'
+"""
 
+def main(config_path,
+         params_file):
 
-def main():
     """
     Wrapper function to run TMS start to finish based on specified params.
     """
 
+    demand_run = demand.NormitsDemand(config_path,
+                                      params_file)
+
+    tms_run = tms.TravelMarketSynthesiser(config_path,
+                                          params_file)
+
     # Check status of lookup folder
-    self.lookups = self.lookup_audit()
+    tms_run.lookups = tms_run.lookup_audit()
 
     # BACKLOG: Project status
-    self.project_status = self.project_check()
+    tms_run.project_status = tms_run.project_check()
 
+    hb_p = pm.ProductionModel(config_path,
+                              params_file)
     """
+    
     ni6 = TravelMarketSynthesiser()
 
     hb_p = pm.ProductionModel(
