@@ -24,6 +24,7 @@ from normits_demand.utils import ntem_control as ntem
 from normits_demand.utils.general import safe_dataframe_to_csv
 
 class ProductionModel:
+
     """
     """
 
