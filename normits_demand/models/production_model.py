@@ -19,11 +19,13 @@ from typing import List
 import numpy as np
 import pandas as pd
 
+import normits_demand.demand as demand
+
 from normits_demand.utils import utils as nup
 from normits_demand.utils import ntem_control as ntem
 from normits_demand.utils.general import safe_dataframe_to_csv
 
-class ProductionModel:
+class ProductionModel(demand.NormitsDemand):
 
     """
     """
