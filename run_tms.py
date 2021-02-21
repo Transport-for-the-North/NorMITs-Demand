@@ -1,12 +1,13 @@
-import copy
-
+"""
+Run the Travel Market Synthesiser
+"""
 import normits_demand.demand as demand
 import normits_demand.models.tms as tms
 import normits_demand.models.production_model as pm
 import normits_demand.models.attraction_model as am
 
 """
-config_path = 'I:/NorMITs Synthesiser/config/',
+config_path = 'I:/NorMITs Synthesiser/config/'
 params_file = 'norms_params_sheet_i6.xlsx'
 """
 
@@ -17,9 +18,6 @@ def main(config_path,
     Wrapper function to run TMS start to finish based on specified params.
     """
 
-    demand_run = demand.NormitsDemand(config_path,
-                                      params_file)
-
     tms_run = tms.TravelMarketSynthesiser(config_path,
                                           params_file)
 
@@ -29,171 +27,21 @@ def main(config_path,
     # BACKLOG: Project status
     tms_run.project_status = tms_run.project_check()
 
+    # BACKLOG: Do this stuff based on the project status
+
     p = pm.ProductionModel(config_path, params_file)
-    hb_p = p.run_hb()
+    hb_p_out = p.run_hb()
 
     a = am.AttractionModel(config_path, params_file)
-    a.run()
-
-    nhb_p = p.run_nhb()
-
-    """
-    
-    ni6 = TravelMarketSynthesiser()
-
-    hb_p = pm.ProductionModel(
-        model_name = ni6.params['model_name'].lower(),
-        build_folder = ni6.run_folder,
-        iteration = ni6.params['iteration'],
-        trip_origin = 'hb',
-        input_zones = 'msoa',
-        output_zones = ni6.params['model_name'].lower(),
-        import_folder = ni6.import_folder,
-        model_folder = ni6.lookup_folder,
-        output_segments = ni6.params['hb_trip_end_segmentation'],
-        lu_path = ni6.params['land_use_path'],
-        trip_rates = ni6.params['hb_trip_rates'],
-        time_split = ni6.params['hb_time_split'],
-        ave_time_split = ni6.params['hb_ave_time_split'],
-        mode_split = ni6.params['hb_mode_split'],
-        ntem_control = ni6.params['production_ntem_control'],
-        ntem_path = ni6.params['ntem_control_path'],
-        k_factor_control = ni6.params['production_k_factor_control'],
-        k_factor_path = ni6.params['production_k_factor_path'],
-        export_msoa = False,
-        export_uncorrected = False,
-        export_target = True)
-
-    a = am.AttractionModel(
-        model_name = ni6.params['model_name'].lower(),
-        build_folder = ni6.run_folder,
-        iteration = ni6.params['iteration'],
-        input_zones = 'msoa',
-        output_zones = ni6.params['model_zoning'].lower(),
-        import_folder = ni6.import_folder,
-        model_folder = ni6.lookup_folder,
-        output_segments = ni6.params['hb_trip_end_segmentation'],
-        attractions_name = ni6.params['attractions_name'],
-        attraction_weights = ni6.params['attraction_weights'],
-        attraction_mode_split = ni6.params['attraction_mode_split'],
-        ntem_control = ni6.params['attraction_ntem_control'],
-        ntem_path = ni6.params['ntem_control_path'],
-        k_factor_control = ni6.params['production_k_factor_control'],
-        k_factor_path = ni6.params['production_k_factor_path'],
-        export_msoa = ni6.params['export_msoa'],
-        export_lad = ni6.params['export_lad'],
-        export_uncorrected = ni6.params['export_uncorrected'],
-        export_target = ni6.params['export_model_zoning'])
-
-    nhb_p = pm.ProductionModel(
-        model_name = ni6.params['model_name'].lower(),
-        build_folder = ni6.run_folder,
-        iteration = ni6.params['iteration'],
-        trip_origin = 'nhb',
-        input_zones = 'msoa',
-        output_zones = ni6.params['model_zoning'].lower(),
-        import_folder = ni6.import_folder,
-        model_folder = ni6.lookup_folder,
-        output_segments = ni6.params['nhb_trip_end_segmentation'],
-        trip_rates = ni6.params['nhb_trip_rates'],
-        production_vector = hb_p.export['out_hb'],
-        attraction_vector = a.export['out_hb'],
-        time_split = ni6.params['nhb_time_splits'],
-        mode_split = ni6.params['nhb_mode_splits'],
-        ntem_control = ni6.params['production_ntem_control'],
-        ntem_path = ni6.params['ntem_control_path'],
-        k_factor_control = ni6.params['production_k_factor_control'],
-        k_factor_path = ni6.params['production_k_factor_path'],
-        export_msoa = ni6.params['export_msoa'],
-        export_lad = ni6.params['export_lad'],
-        export_uncorrected = ni6.params['export_uncorrected'],
-        export_target = ni6.params['export_model_zoning'])
-    """
-
-    # Initialise production model run
-    hb_p = pm.ProductionModel(
-        model_name=self.params['model_name'].lower(),
-        build_folder=self.run_folder,
-        iteration=self.params['iteration'],
-        trip_origin='hb',
-        input_zones='msoa',
-        output_zones=self.params['model_zoning'].lower(),
-        import_folder=self.import_folder,
-        model_folder=self.lookup_folder,
-        output_segments=self.params['hb_trip_end_segmentation'],
-        lu_path=self.params['land_use_path'],
-        trip_rates=self.params['hb_trip_rates'],
-        time_splits=self.params['hb_time_splits'],
-        mode_splits=self.params['hb_mode_splits'],
-        ntem_control=self.params['production_ntem_control'],
-        ntem_path=self.params['ntem_control_path'],
-        k_factor_control=self.params['production_k_factor_control'],
-        k_factor_path=self.params['production_k_factor_path'],
-        export_msoa=self.params['export_msoa'],
-        export_lad=self.params['export_lad'],
-        export_uncorrected=self.params['export_uncorrected'],
-        export_target=self.params['export_model_zoning'])
-
-    hb_p_out = hb_p.run_hb()
-    hb_path = hb_p.ping_outpath()['hb']
-
-    # Update run dict
-    self.run_dict.update({'hb_p_run': hb_p_out[0]})
-
-    # Run attraction model - does hb & nhb
-    a = am.AttractionModel(
-        model_name=self.params['model_name'].lower(),
-        build_folder=self.run_folder,
-        iteration=self.params['iteration'],
-        input_zones='msoa',
-        output_zones=self.params['model_zoning'].lower(),
-        import_folder=self.input_folder,
-        model_folder=self.lookup_folder,
-        output_segments=self.params['hb_trip_end_segmentation'],
-        attractions_name=self.params['attractions_name'],
-        attraction_weights=self.params['attraction_weights'],
-        attraction_mode_split=self.params['attraction_mode_split'],
-        ntem_control=self.params['attraction_ntem_control'],
-        ntem_path=self.params['ntem_control_path'],
-        k_factor_control=self.params['production_k_factor_control'],
-        k_factor_path=self.params['production_k_factor_path'],
-        export_msoa=self.params['export_msoa'],
-        export_lad=self.params['export_lad'],
-        export_uncorrected=self.params['export_uncorrected'],
-        export_target=self.params['export_model_zoning'])
-
     a_out = a.run()
-    # Update run dict
-    self.run_dict.update({'hb_a_run': a_out[0][0]})
-    self.run_dict.update({'nhb_a_run': a_out[0][1]})
 
-    # Run nhb production model
-    nhb_p = pm.ProductionModel(
-        model_name=self.params['model_name'].lower(),
-        build_folder=self.run_folder,
-        iteration=self.params['iteration'],
-        trip_origin='nhb',
-        input_zones='msoa',
-        output_zones=self.params['model_zoning'].lower(),
-        import_folder=self.import_folder,
-        model_folder=self.lookup_folder,
-        output_segments=self.params['nhb_trip_end_segmentation'],
-        trip_rates=self.params['nhb_trip_rates'],
-        time_splits=self.params['nhb_time_splits'],
-        mode_splits=self.params['nhb_mode_splits'],
-        production_vector=self.run_dict['hb_p_run'],
-        attraction_vector=self.run_dict['hb_a_run'],
-        ntem_control=self.params['production_ntem_control'],
-        ntem_path=self.params['ntem_control_path'],
-        k_factor_control=self.params['production_k_factor_control'],
-        k_factor_path=self.params['production_k_factor_path'],
-        export_msoa=self.params['export_msoa'],
-        export_lad=self.params['export_lad'],
-        export_uncorrected=self.params['export_uncorrected'],
-        export_target=self.params['export_model_zoning'])
+    p.ping_outpath()
+    a.ping_outpath()
 
-    nhb_p.run_nhb()
+    nhb_p_out = p.run_nhb(production_vector=p.export['out_hb'],
+                          attraction_vector=a.export['out_hb'])
 
+    """
     # TODO: LA PA report for external output
     # Run HB external model
     ext_hb = em.ExternalModel(file_drive=params['base_directory'],
@@ -714,5 +562,4 @@ def main(config_path,
                              iz_infill=0.5,
                              furness_loops=1999,
                              mp_threads=-1)
-
-    return 0
+    """
