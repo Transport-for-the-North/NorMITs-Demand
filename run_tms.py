@@ -1,10 +1,11 @@
 """
 Run the Travel Market Synthesiser
 """
-import normits_demand.demand as demand
 import normits_demand.models.tms as tms
 import normits_demand.models.production_model as pm
 import normits_demand.models.attraction_model as am
+import normits_demand.models.external_model as em
+import normits_demand.models.distribution_model as dm
 
 """
 config_path = 'I:/NorMITs Synthesiser/config/'
@@ -30,7 +31,7 @@ def main(config_path,
     # BACKLOG: Do this stuff based on the project status
 
     p = pm.ProductionModel(config_path, params_file)
-    hb_p_out = p.run_hb()
+    hb_p_out = p.run_hb(verbose=True)
 
     a = am.AttractionModel(config_path, params_file)
     a_out = a.run()
@@ -41,9 +42,23 @@ def main(config_path,
     nhb_p_out = p.run_nhb(production_vector=p.export['out_hb'],
                           attraction_vector=a.export['out_hb'])
 
-    """
-    # TODO: LA PA report for external output
+    # Delete trip end models
+    del p, a
+    # Update project status
+    # BACKLOG: Project status
+
     # Run HB external model
+    ext = em.ExternalModel(
+        config_path,
+        params_file)
+    hb_ext_out = ext.run(
+        trip_origin='hb',
+        cost_type='24hr')
+    nhb_ext_out = ext.run(
+        trip_origin='hb',
+        cost_type = 'tp')
+
+    """
     ext_hb = em.ExternalModel(file_drive=params['base_directory'],
                               model_name=params['model_name'],
                               iteration=params['iteration'],
@@ -54,7 +69,6 @@ def main(config_path,
                               cost_type='24hr',
                               export_ext_modes=[],
                               export_non_dist_modes=['6'])
-    ext_hb.run()
 
     # Run NHB external model
     ext_nhb = em.ExternalModel(file_drive=params['base_directory'],
@@ -67,18 +81,13 @@ def main(config_path,
                                cost_type='tp',
                                export_ext_modes=[],
                                export_non_dist_modes=['6'])
-    ext_nhb.run()
+    """
 
-    # Run distribution model for hb
-    # BACKLOG: flexible trip length band building, or at least pathing
+    dist = dm.DistributionModel(
+        config_path,
+        params_file)
 
-    # Will also run external model
-    # BACKLOG: Move path building out of DM function, make part of class
-    # BACKLOG: Specify distribution method, or try both.
-
-    int_hb = dm.DistributionModel(
-        model_name=params['model_name'],
-        iteration=params['iteration'],
+    int_hb = dist.run(
         tlb_area='north',
         segmentation='tfn',
         distribution_segments=params['hb_distribution_segments'],
@@ -92,11 +101,7 @@ def main(config_path,
         echo=True,
         mp_threads=-1)
 
-    int_hb.run()
-
-    int_nhb = dm.DistributionModel(
-        model_name=params['model_name'],
-        iteration=params['iteration'],
+    int_nhb = dist.run(
         tlb_area='north',
         segmentation='tfn',
         distribution_segments=params['nhb_distribution_segments'],
@@ -109,15 +114,8 @@ def main(config_path,
         export_modes=params['output_modes'],
         echo=True,
         mp_threads=-1)
-    int_nhb.run()
 
-    # BUILD INTERNAL 24HR PA BY MODE
-    # get all zone movements for OD conversion
-
-    # Definitions from dm calls
-
-    # TODO: Specify import export folders
-
+    # TODO: Specify import export folders using object
     # Compile tp pa
     pa2od.build_tp_pa(file_drive=params['base_directory'],
                       model_name=params['model_name'],

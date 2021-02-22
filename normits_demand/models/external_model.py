@@ -10,6 +10,8 @@ import warnings
 import pandas as pd
 import numpy as np
 
+import normits_demand.models.tms as tms
+
 from normits_demand.reports import reports_audits as ra
 from normits_demand.utils import utils as nup
 
@@ -20,154 +22,59 @@ from normits_demand.utils import utils as nup
 _default_pld_path = ('Y:/NorMITs Synthesiser/import/' +
                      'pld_od_matrices/external_pa_pld.csv')
 
-class ExternalModel:
+
+class ExternalModel(tms.TravelMarketSynthesiser):
+    pass
+
+    def run(self,
+            tlb_area = 'gb',
+            distribution_segments = ['p', 'm'],
+            trip_origin = 'hb',
+            cost_type = '24hr',
+            seed_infill = .1,
+            export_ext_modes = [1,2,3,4,5,6],
+            export_non_dist_modes = []):
     
-    def __init__(self):
-        print('inniting')
-    
-    def path_config(file_drive,
-                    model_name ,
-                    iteration,
-                    trip_origin = 'hb'):
         """
         """
-    
-        # Set base dir
-        home_path = (file_drive +
-                    'NorMITs Synthesiser/')
-    
-        # Set synth import folder
-        import_path = (home_path +
-                       'import/')
-    
-        # Set top level model folder, leave the slash on
-        model_path = (home_path +
-                      model_name +
-                      '/' +
-                      iteration + '/')
-    
-        # Set model lookups location
-        model_lookup_path = (home_path +
-                             model_name +
-                             '/Model Zone Lookups')
-    
-        # Set production path
-        production_path = (model_path +
-                           'Production Outputs/')
-    
-        # Set attraction path
-        attraction_path = (model_path +
-                         'Attraction Outputs/')
-    
-        # Production import path
-        if trip_origin =='hb':
-            p_import_path = (production_path +
-                             'hb_productions_' +
-                             model_name.lower() +
-                             '.csv')
-            a_import_path = (attraction_path +
-                             model_name +
-                             '_hb_attractions.csv')
+        # Define internal name
+        ia_name = (
+            self.params['model_zoning'].lower() + '_zone_id')
+
+        # Pick different imports if it's HB or NHB
+        if trip_origin == 'hb':
+            in_list = ['hb_p', 'hb_a']
         elif trip_origin == 'nhb':
-            p_import_path = (production_path +
-                             'nhb_productions_' +
-                             model_name.lower() +
-                             '.csv')
-            a_import_path = (attraction_path +
-                             model_name +
-                             '_nhb_attractions.csv')
-    
-        # Raise user warning if no productions by this name
-        if not os.path.exists(p_import_path):
-            warnings.warn('No productions in folder.' +
-                          'Check path or run production model')
-    
-    
-        # Raise user warning if no productions by this name
-        if not os.path.exists(a_import_path):
-            warnings.warn('No attractions in folder.' +
-                          'Check path or run attraction model')
-    
-        # Create project folders
-        distribution_path = (model_path + 'Distribution Outputs')
-        nup.create_folder(distribution_path, chDir=False)
-    
-        # Set distribution outputs (synthetic)
-        reports = (distribution_path + '/Logs & Reports')
-        nup.create_folder(reports)
-    
-        external_export = (distribution_path + '/External Distributions')
-        nup.create_folder(external_export)
-        
-        full_export = (distribution_path + '/24hr Non Dist Matrices')
-        nup.create_folder(full_export)
-    
-        # Compile into import and export
-        imports = {'imports':import_path,
-                   'lookups':model_lookup_path,
-                   'production_import':p_import_path,
-                   'attraction_import':a_import_path}
-    
-        exports = {'production_export':production_path,
-                   'attraction_export':attraction_path,
-                   'external':external_export,
-                   'reports':reports,
-                   'full_export':full_export}
-        return(imports, exports)
-    
-    def run(file_drive,
-                           model_name,
-                           iteration,
-                           tlb_area = 'gb',
-                           segmentation = 'tfn',
-                           distribution_segments = ['p', 'm'],
-                           trip_origin = 'hb',
-                           cost_type = '24hr',
-                           seed_infill = .1,
-                           export_ext_modes = [1,2,3,4,5,6],
-                           export_non_dist_modes = []):
-    
-        """
-        """
-        # TODO: PLD infill
-    
-        # Config paths
-        paths = path_config(file_drive,
-                            model_name,
-                            iteration,
-                            trip_origin)
-        i_paths = paths[0]
-        o_paths = paths[1]
-        del(paths)
-    
-        ia_name = (model_name.lower() + '_zone_id')
-    
-        # Do imports
-    
+            in_list = ['nhb_p', 'nhb_a']
         # Import PA
-        pa = nup.import_pa(i_paths['production_import'], # p import path
-                           i_paths['attraction_import'])
+        pa = nup.import_pa(self.tms_in[in_list[0]],  # p import path
+                           self.tms_in[in_list[1]])  # a import path
         productions = pa[0]
         attractions = pa[1]
-        del(pa)
+        del pa
     
         # Get unique zones from productions
         unq_zones = nup.get_zone_range(productions[ia_name])
     
         # Get internal area
-        int_area = nup.get_internal_area(i_paths['lookups'])
-        ext_area = nup.get_external_area(i_paths['lookups'])
+        int_area = nup.get_internal_area(
+            self.lookup_folder)
+        ext_area = nup.get_external_area(
+            self.lookup_folder)
     
-        init_params = nup.get_init_params(i_paths['lookups'],
-                                          distribution_type = trip_origin,
-                                          model_name = model_name,
-                                          mode_subset = None,
-                                          purpose_subset = None)
+        init_params = nup.get_init_params(
+            self.lookup_folder,
+            distribution_type=trip_origin,
+            model_name=self.params['model_zoning'],
+            mode_subset=None,
+            purpose_subset=None)
     
         # Path tlb folder
-        tlb_folder = (i_paths['imports'] +
-                      'trip_length_bands/' +
-                      tlb_area + '/standard_segments')
+        tlb_folder = os.path.join(
+            self.import_folder,
+            'trip_length_bands',
+            self.params['external_tlb_area'],
+            'standard_segments')
     
         # Drop any sic or soc segments from init params - not needed for externals
         init_params = init_params.reindex(distribution_segments,
@@ -187,9 +94,9 @@ class ExternalModel:
         # Import cjtw
         print('Importing cjtw')
         cjtw = nup.get_cjtw(i_paths['lookups'],
-                            model_name.lower(),
+                            self.params['model_zoning'].lower(),
                             subset=None,
-                            reduce_to_pa_factors = False)
+                            reduce_to_pa_factors=False)
         # Aggregate mode
         p_col = list(cjtw)[0]
         a_col = list(cjtw)[1]
@@ -209,7 +116,9 @@ class ExternalModel:
                             unq_internal_zones=unq_zones)
     
         # Small infill
-        cjtw = np.where(cjtw == 0,seed_infill,cjtw)
+        cjtw = np.where(cjtw == 0,
+                        seed_infill,
+                        cjtw)
     
         # external distribution in external index
         internal_bin = []
@@ -218,14 +127,14 @@ class ExternalModel:
         for ed in ei:
             calib_params = {}
             for ds in distribution_segments:
-                calib_params.update({ds:init_params[ds][ed]})
+                calib_params.update({ds: init_params[ds][ed]})
     
             # Get target tlb
             tlb = nup.get_trip_length_bands(tlb_folder,
                                             calib_params,
                                             segmentation = 'ntem', # normal segments - due a rewrite
                                             trip_origin = trip_origin)
-            calib_params.update({'tlb':tlb})
+            calib_params.update({'tlb': tlb})
     
             # Filter productions to target distribution type
             sub_p = nup.filter_pa_vector(productions,
@@ -280,11 +189,11 @@ class ExternalModel:
             # Join ps and a's onto full unq internal vector (infill placeholders)
             uiz_vector = pd.DataFrame(unq_internal_zones)
             uiz_vector = uiz_vector.rename(columns={
-                    'p_zone':(model_name.lower() + '_zone_id')})
+                    'p_zone':(self.params['model_zoning'].lower() + '_zone_id')})
             
             sub_p = uiz_vector.merge(sub_p,
                                      how='left',
-                                     on = (model_name.lower() + '_zone_id'))
+                                     on = (self.params['model_zoning'].lower() + '_zone_id'))
             sub_p['productions'] = sub_p['productions'].replace(np.nan,0)
     
             sub_a = uiz_vector.merge(sub_a,
@@ -321,15 +230,17 @@ class ExternalModel:
             ie_cost[3]['dat'].mean()
     
             # TODO Currently does not balance at row level
-            external_out = external_model(sub_p,
-                                          sub_a,
-                                          cjtw,
-                                          costs,
-                                          calib_params,
-                                          i_paths['lookups'],
-                                          model_name.lower(),
-                                          trip_origin)
-    
+            external_out = self.external_model(
+                sub_p,
+                sub_a,
+                cjtw,
+                costs,
+                calib_params,
+                i_paths['lookups'],
+                self.params['model_zoning'].lower(),
+                trip_origin)
+
+            # Unpack exports
             external_pa, external_pa_p, external_pa_a, tl_con, bs_con, max_diff = external_out
     
             report = tl_con[1]
@@ -339,7 +250,7 @@ class ExternalModel:
             # perc_iz = np.diag(external_pa)/external_pa.sum(axis=1)
     
             print(tl_con)
-            del(external_out)
+            del external_out
     
             # Check row totals
     
@@ -351,11 +262,12 @@ class ExternalModel:
             full_pa_a = external_pa_a.copy()
     
             # Do int-ext report
-            ie_report = nup.n_matrix_split(external_pa_p,
-                                           indices = [internal_index,
-                                                      external_index],
-                                                      index_names = ['i', 'e'],
-                                                      summarise = True)
+            ie_report = nup.n_matrix_split(
+                external_pa_p,
+                indices=[internal_index,
+                         external_index],
+                index_names = ['i', 'e'],
+                summarise = True)
     
             ie_report = pd.DataFrame(ie_report)
     
@@ -371,13 +283,13 @@ class ExternalModel:
             i_ph[0:len(internal_pa_p),0:len(internal_pa_p)] = internal_pa_p
     
             external_pa_p = external_pa_p - i_ph
-            del(i_ph)
+            del i_ph
     
-            internal_bin.append({'cp':calib_params,
-                                'int_pa':internal_pa_p})
+            internal_bin.append({'cp': calib_params,
+                                'int_pa': internal_pa_p})
             full_bin.append({'cp':calib_params,
-                             'full_pa_p':full_pa_p,
-                             'full_pa_a':full_pa_a})
+                             'full_pa_p': full_pa_p,
+                             'full_pa_a': full_pa_a})
     
             audit_path = os.path.join(o_paths['reports'],
                                       trip_origin + '_external_report')
@@ -482,12 +394,12 @@ class ExternalModel:
     
         # Export
         p_ph_path = os.path.join(o_paths['production_export'],
-                                 model_name.lower() +
+                                 self.params['model_zoning'].lower() +
                                  '_' +
                                  trip_origin +
                                  '_internal_productions.csv')
         a_ph_path = os.path.join(o_paths['attraction_export'],
-                                 model_name.lower() +
+                                 self.params['model_zoning'].lower() +
                                  '_' +
                                  trip_origin +
                                  '_internal_attractions.csv')
@@ -559,12 +471,12 @@ class ExternalModel:
     
         # Export
         full_p_ph_path = os.path.join(o_paths['production_export'],
-                                      model_name.lower() +
+                                      self.params['model_zoning'].lower() +
                                       '_' +
                                       trip_origin +
                                       '_full_productions.csv')
         full_a_ph_path = os.path.join(o_paths['attraction_export'],
-                                      model_name.lower() +
+                                      self.params['model_zoning'].lower() +
                                       '_' +
                                       trip_origin +
                                       '_full_attractions.csv')
@@ -574,16 +486,13 @@ class ExternalModel:
     
         audit = True
     
-        return(audit)
+        return audit
     
     def external_model(p,
                        a,
                        base_matrix,
                        costs,
-                       calib_params,
-                       model_lookup_path,
-                       model_name,
-                       trip_origin):
+                       calib_params):
         
         """
         p:
@@ -609,8 +518,8 @@ class ExternalModel:
         target_p = p['productions'].values
         target_a = a['attractions'].values
         # Infill zeroes
-        target_p = np.where(target_p==0, 0.0001, target_p)
-        target_a = np.where(target_a==0, 0.0001, target_a)
+        target_p = np.where(target_p == 0, 0.0001, target_p)
+        target_a = np.where(target_a == 0, 0.0001, target_a)
     
         # Seed base
         external_pa = base_matrix.copy()
@@ -621,7 +530,7 @@ class ExternalModel:
     
         # Calibrate
         bls = 1
-        while bs_con <.9:
+        while bs_con < .9:
             print('Band share loop: ' + str(bls))
     
             # Get mat by band
@@ -660,12 +569,12 @@ class ExternalModel:
                 # Balance a
                 external_pa = nup.balance_columns(external_pa,
                                                   target_a,
-                                                  infill = 0.001)
+                                                  infill=0.001)
     
                 # Balance p
                 external_pa = nup.balance_rows(external_pa,
                                                target_p,
-                                               infill = 0.001)
+                                               infill=0.001)
     
                 # Round
                 external_pa = external_pa.round(5)
@@ -693,29 +602,30 @@ class ExternalModel:
     
                     # Check validation
                     prev_pa_diff = pa_diff.copy()
-                    pa_diff = nup.get_pa_diff(new_p,
-                                          target_p,
-                                          new_a,
-                                          target_a)
+                    pa_diff = nup.get_pa_diff(
+                        new_p,
+                        target_p,
+                        new_a,
+                        target_a)
                     break
     
                 # iterate
-                fl +=1
-    
-     
+                fl += 1
+
             print('Max p/a diff: ' + str(pa_diff.max()))
     
             # Get convergence
-            tlb_con = ra.get_trip_length_by_band(calib_params['tlb'],
-                                                 costs,
-                                                 external_pa)
+            tlb_con = ra.get_trip_length_by_band(
+                calib_params['tlb'],
+                costs,
+                external_pa)
             
             prior_bs_con = bs_con
             bs_con = max(1-np.sum(
                 (tlb_con[1]['bs']-tlb_con[1]['tbs'])**2)/np.sum(
                         (tlb_con[1]['tbs']-np.sum(
                                 tlb_con[1]['tbs'])/len(
-                                        tlb_con[1]['tbs']))**2),0)
+                                        tlb_con[1]['tbs']))**2), 0)
     
             diff = prior_bs_con - bs_con
     
@@ -770,10 +680,11 @@ class ExternalModel:
                                              p_balanced)
     
         # Check validation
-        pa_diff = nup.get_pa_diff(new_p,
-                                  target_p,
-                                   new_a,
-                                   target_a)
+        pa_diff = nup.get_pa_diff(
+            new_p,
+            target_p,
+            new_a,
+            target_a)
         
         bs_con = max(1-np.sum(
                 (tlb_con[1]['bs']-tlb_con[1]['tbs'])**2)/np.sum(
@@ -781,9 +692,10 @@ class ExternalModel:
                                 tlb_con[1]['tbs'])/len(
                                         tlb_con[1]['tbs']))**2),0)
     
-        return(external_pa, p_balanced, a_balanced, tlb_con, bs_con, pa_diff.max())
+        return external_pa, p_balanced, a_balanced, tlb_con, bs_con, pa_diff.max()
     
-    def adjust_trip_length_by_band(band_atl,
+    def adjust_trip_length_by_band(self,
+                                   band_atl,
                                    adj_fac,
                                    distance,
                                    base_matrix):
@@ -821,7 +733,6 @@ class ExternalModel:
             adj_mat = band_mat * base_matrix * adj_fac['adj_fac'][index]
     
             mat_ph.append(adj_mat)
-        
         
         for o_mat in mat_ph:
             out_mat = out_mat + o_mat
@@ -971,4 +882,4 @@ class ExternalModel:
         
         np.fill_diagonal(costs, diag)
         
-        return(costs)
+        return costs

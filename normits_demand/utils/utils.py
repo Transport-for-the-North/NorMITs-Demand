@@ -1112,15 +1112,13 @@ def filter_distribution_p(internal_24hr_productions,
 def filter_pa_vector(pa_vector,
                      ia_name,
                      calib_params,
-                     value_var = 'trips',
+                     value_var='trips',
                      round_val=3,
                      echo=True):
     """
     This function adds new balancing factors in to a matrix. They are returned
     in the dt col and added to whichever col comes through in zone_col
     parameter.
-
-    # TODO: Generalise for P or A vectors
 
     Parameters
     ----------
@@ -1155,7 +1153,7 @@ def filter_pa_vector(pa_vector,
                 # Ignore nulled out segments (soc or ns)
                 # Force the parameter to integer, or it drops trips
                 param = cp
-                dp = dp[dp[index]==param]
+                dp = dp[dp[index] == param]
                 if echo:
                     print(index, cp)
             else:
@@ -1176,12 +1174,12 @@ def filter_pa_vector(pa_vector,
 
         if echo:
             print('Values=%f before rounding.' % total_dp)
-            print('Values=%f after rounding.' % (dp['productions'].sum()))
-            print('Same=%s' % str(total_dp == dp['productions'].sum()))
+            print('Values=%f after rounding.' % (dp[value_var].sum()))
+            print('Same=%s' % str(total_dp == dp[value_var].sum()))
     else:
         total_dp = None
 
-    return(dp, total_dp)
+    return dp, total_dp
 
 def filter_pa_cols(pa_frame,
                    ia_name,

@@ -470,19 +470,19 @@ class AttractionModel(demand.NormitsDemand):
         col_heads.remove('msoa_zone_id')
     
         all_attr = pd.melt(all_attr, id_vars='msoa_zone_id', value_vars=col_heads,
-                       value_name = 'attractions', var_name = 'ph')
+                       value_name='attractions', var_name='ph')
     
-        p_dist = pd.DataFrame({'ph' :
+        p_dist = pd.DataFrame({'ph':
             ['Commute', 'Commute_soc1', 'Commute_soc2', 'Commute_soc3',
              'Business', 'Business_soc1', 'Business_soc2', 'Business_soc3',
              'Education', 'Shopping', 'Personal_business',
              'Recreation_social', 'Visiting_friends', 'Holiday_day_trip'],
-             'p':[1,1,1,1,
-                  2,2,2,2,
-                  3,4,5,6,7,8],
-                  'soc':['0', '1', '2', '3',
-                         '0', '1', '2', '3',
-                         '0','0','0','0','0','0']
+             'p': [1, 1, 1, 1,
+                   2, 2, 2, 2,
+                   3, 4, 5, 6, 7, 8],
+                  'soc': ['0', '1', '2', '3',
+                          '0', '1', '2', '3',
+                          '0', '0', '0', '0', '0', '0']
         })
     
         if'soc' not in self.params['hb_trip_end_segmentation']:
