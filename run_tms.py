@@ -115,7 +115,6 @@ def main(config_path,
         echo=True,
         mp_threads=-1)
 
-    # TODO: Specify import export folders using object
     # Compile tp pa
     pa2od.build_tp_pa(file_drive=params['base_directory'],
                       model_name=params['model_name'],

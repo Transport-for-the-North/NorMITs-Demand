@@ -1863,23 +1863,12 @@ def get_trip_length_bands(import_folder,
     # Define file contents, should just be target files - should fix.
     import_files = target_files.copy()
 
-    # TODO: Fixed for new ntem dists - pointless duplication now
-    if segmentation == 'ntem':
-        for key, value in calib_params.items():
-            # Don't want empty segments, don't want ca
-            if value != 'none' and key != 'ca':
-                 # print_w_toggle(key + str(value), echo=echo)
-                import_files = [x for x in import_files if
-                                ('_' + key + str(value)) in x]
-    elif segmentation == 'tfn':
-        for key, value in calib_params.items():
-            # Don't want empty segments, don't want ca
-            if value != 'none' and key != 'ca':
-                # print_w_toggle(key + str(value), echo=echo)
-                import_files = [x for x in import_files if
-                                ('_' + key + str(value)) in x]
-    else:
-        raise ValueError('Non-valid segmentation. How did you get this far?')
+    for key, value in calib_params.items():
+        # Don't want empty segments, don't want ca
+        if value != 'none':
+            # print_w_toggle(key + str(value), echo=echo)
+            import_files = [x for x in import_files if
+                            ('_' + key + str(value)) in x]
 
     if trip_origin == 'hb':
         import_files = [x for x in import_files if 'nhb' not in x]
@@ -1897,10 +1886,6 @@ def get_trip_length_bands(import_folder,
         print(import_files)
         print(import_files[0])
     tlb = pd.read_csv(import_folder + '/' + import_files[0])
-
-    # Filter to target purpose
-    # TODO: Don't want to have to do this for NTEM anymore. Just keep them individual.
-    # tlb = tlb[tlb[trip_origin +'_purpose']==purpose].copy()
 
     if replace_nan:
         for col_name in list(tlb):
@@ -2768,3 +2753,17 @@ def unpack_tlb(tlb,
            max_dist,
            obs_trip,
            obs_dist)
+
+    def iz_costs_to_mean(costs):
+        """
+        Sort bands that are too big outside of the north
+        - nudge towards intrazonal
+        """
+        # Get mean
+        diag_mean = np.mean(np.diag(costs))
+        diag = costs.diagonal()
+        diag = np.where(diag > diag_mean, diag_mean, diag)
+
+        np.fill_diagonal(costs, diag)
+
+        return costs

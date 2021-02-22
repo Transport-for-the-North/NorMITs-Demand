@@ -161,8 +161,8 @@ class ProductionModel(demand.NormitsDemand):
                                                                    ).reset_index()
             return zone_productions
         else:
-            spatial_aggregation_input = self.params['land_use_zoning']
-            spatial_aggregation_output = self.params['model_zoning']
+            spatial_aggregation_input = self.params['land_use_zoning'].lower()
+            spatial_aggregation_output = self.params['model_zoning'].lower()
 
             # Find and import correct lookup from model folder
             # These need to be in the correct format!
@@ -280,17 +280,7 @@ class ProductionModel(demand.NormitsDemand):
     
                 target_productions['trips'] = (target_productions['trips'] *
                                   target_productions[overlap_col])
-    
-                target_productions = target_productions.reindex(
-                        p_params['target_output_cols'],
-                        axis=1)
-    
-                group_cols = p_params['target_output_cols'].copy()
-                group_cols.remove('trips')
-    
-                target_productions = target_productions.groupby(
-                        group_cols).sum().reset_index()
-    
+
                 final_trips = target_productions['trips'].sum()
     
                 # Control
@@ -475,8 +465,10 @@ class ProductionModel(demand.NormitsDemand):
                          self.params['hb_trip_end_segmentation'] + ['trips']})
 
         # does this need to be ordered?
-        tout_cols = [(
-                self.params['model_zoning'] + '_zone_id'), 'area_type', 'tp']
+        tout_cols = [self.params['model_zoning'].lower() + '_zone_id']
+        for col in ['area_type', 'tp']:
+            if col not in self.params['hb_trip_end_segmentation']:
+                out_cols.append(col)
         p_params.update({'target_output_cols': tout_cols +
                          self.params['hb_trip_end_segmentation'] + ['trips']})
 
@@ -1131,6 +1123,7 @@ class ProductionModel(demand.NormitsDemand):
             if verbose:
                 print('List of p sub')
                 print(list(p_sub))
+                print(p_sub)
                 print('List of mode split')
                 print(list(nhb_mode_split))
             p_sub = p_sub.merge(nhb_mode_split,
@@ -1138,40 +1131,17 @@ class ProductionModel(demand.NormitsDemand):
                                 on=['area_type', 'ca', 'p', 'nhb_p'])
             p_sub['productions'] = p_sub['mode_share'] * p_sub['productions']
             p_sub = p_sub.drop('mode_share', axis=1)
-            if verbose:
-                print(p_sub)
-                print(list(p_sub))
 
             mode_bin.append(p_sub)
 
         nhb = pd.concat(mode_bin)
-    
-        # Build the cols to retain and reindex from the output segments
-        retain_cols = [ia_name]
-        for i_s in self.params['nhb_trip_end_segmentation']:
-            # Train both types of purpose
-            if i_s == 'p':
-                retain_cols.append('p')
-                retain_cols.append('nhb_p')
-            elif i_s == 'tp':
-                continue
-            else:
-                retain_cols.append(i_s)
-        if 'area_type' not in retain_cols:
-            retain_cols.append('area_type')
-        retain_index = retain_cols.copy()
-        retain_index.append('productions')
-    
-        nhb = nhb.reindex(
-            retain_index, axis=1).groupby(
-                    retain_cols).sum().reset_index()
 
         # Time seg
         # BACKLOG: Need to check these are in all the way through
         time_seg = nhb.reindex(
                 ['area_type', 'ca', 'nhb_p', 'm'],
                 axis=1).drop_duplicates().reset_index(drop=True)
-    
+
         print('Building time shares')
         time_bin = []
         for index, row in time_seg.iterrows():
