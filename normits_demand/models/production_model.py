@@ -45,7 +45,7 @@ class ProductionModel(demand.Pathing):
         self.export = self.ping_outpath()
 
     def get_trip_rates(self,
-                       model_type: str='hb',
+                       model_type: str= 'hb',
                        verbose=True):
 
         """
@@ -369,6 +369,7 @@ class ProductionModel(demand.Pathing):
 
         """
         """
+
         # BACKLOG: This solves a lot of problems, integrate into main
         # BACKLOG: Should take paths from path building class
 
@@ -935,21 +936,6 @@ class ProductionModel(demand.Pathing):
         output:
             TP Origin of non-homebased productions.
         """
-
-        """
-        Original segmentation that didn't break anything
-
-        input_segments = ['area_type', 'p', 'soc', 'ns', 'ca'],
-        output_segments = ['p', 'm', 'soc', 'ns', 'ca'],
-        filter_set = None,
-        ntem_control = True,
-        k_factor_paths = None,
-        export_uncorrected = False,
-        export_msoa = False,
-        export_lad = True,
-        export_target = True,
-        trip_rate_type = 'tms'
-        """
         # Assign filter set name to a placeholder variable
         start_time = nup.set_time()
         print(start_time)
@@ -966,7 +952,6 @@ class ProductionModel(demand.Pathing):
 
         # Import LAD lookup from globals
         lad_path = tec.MSOA_LAD
-        ntem_path = tec.NTEM_PA
         ia_name = self.params['model_zoning'].lower() + '_zone_id'
 
         # Assign filter set name to a placeholder variable
@@ -1000,9 +985,8 @@ class ProductionModel(demand.Pathing):
 
         # Get unique production segments
         # Unique segments are what we can get against what we have
-        input_segments = [
-            x for x in self.params[
-                'nhb_trip_end_segmentation'] if x in list(productions)]
+        input_segments = ['area_type', 'p', 'm', 'ca']
+
         if verbose:
             print('Returned:')
             print(input_segments)
@@ -1010,6 +994,8 @@ class ProductionModel(demand.Pathing):
             print(self.params[
                 'nhb_trip_end_segmentation'])
 
+        # Get cols for iteration
+        # Based on the cols required
         unq_seg = productions.reindex(
                 input_segments,
                 axis=1).drop_duplicates(
@@ -1200,6 +1186,7 @@ class ProductionModel(demand.Pathing):
             axis=1).groupby(
             group_cols).sum().reset_index()
 
+        nhb = nhb.drop('p', axis=1)
         nhb = nhb.rename(columns={'nhb_p': 'p'})
         nhb = nhb.rename(columns={'productions': 'trips'})
 
@@ -1229,7 +1216,7 @@ class ProductionModel(demand.Pathing):
                 zone_to_target = False,
                 pop_weighted=True)
 
-            ntem_totals = pd.read_csv(tec.MSOA_LAD)
+            ntem_totals = pd.read_csv(tec.NTEM_PA)
 
             if verbose:
                 print('NTEM totals cols')
@@ -1241,8 +1228,9 @@ class ProductionModel(demand.Pathing):
                     ntem_lad_lookup,
                     constraint_cols=['p', 'm', 'tp'],
                     base_value_name='trips',
-                    ntem_value_name='Productions',
-                    trip_origin='nhb')
+                    ntem_value_name='productions',
+                    trip_origin='nhb',
+                    replace_drops=False)
             print(ntem_a)
     
             if self.params['export_lad']:
@@ -1266,7 +1254,8 @@ class ProductionModel(demand.Pathing):
 
         # Factors
         if self.params['production_k_factor_control']:
-            k_factors = os.listdir(self.params['production_k_factor_path'])[0]
+            k_factors = os.listdir(
+                self.params['production_k_factor_path'])[0]
             k_factors = pd.read_csv(
                 os.path.join(
                     self.params['production_k_factor_path'],

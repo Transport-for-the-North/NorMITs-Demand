@@ -19,8 +19,8 @@ def main(config_path,
     Wrapper function to run TMS start to finish based on specified params.
     """
 
-    tms_run = tms.TravelMarketSynthesiser(config_path,
-                                          params_file)
+    tms_run = tms.TMSPathing(config_path,
+                             params_file)
 
     # Check status of lookup folder
     tms_run.lookups = tms_run.lookup_audit()

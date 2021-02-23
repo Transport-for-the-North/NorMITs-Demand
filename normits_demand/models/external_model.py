@@ -23,7 +23,7 @@ _default_pld_path = ('Y:/NorMITs Synthesiser/import/' +
                      'pld_od_matrices/external_pa_pld.csv')
 
 
-class ExternalModel(tms.TravelMarketSynthesiser):
+class ExternalModel(tms.TMSPathing):
     pass
 
     def run(self,

@@ -22,7 +22,7 @@ class AttractionModel(demand.Pathing):
 
     """
     NorMITs Attraction model.
-    Attraction end of NorMITs Trip End Model in the NorMITs Demand siote.
+    Attraction end of NorMITs Trip End Model in the NorMITs Demand suite.
     """
 
     def __init__(self,

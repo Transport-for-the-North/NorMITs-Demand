@@ -8,7 +8,11 @@ import os
 
 import pandas as pd
 
-trip_length_bands = pd.read_csv('Y:/NorMITs Synthesiser/import/trip_length_bands/single_value_bands_miles.csv')
+import normits_demand.constants as con
+
+# BACKLOG: This is useful enough to deserve a proper wrapper that indexes the various params as options.
+
+trip_length_bands = pd.read_csv('I:/NorMITs Synthesiser/import/trip_length_bands/default_bands_miles.csv')
 
 _nts_import = pd.read_csv('Y:/NTS/import/classified_nts_pre-weighting.csv')
 
@@ -18,12 +22,20 @@ list(_nts_import)
 
 # Pick segments
 # _target_output_params = 'Y:/NorMITs Synthesiser/import/trip_length_bands/north_standard_segments.csv'
-_target_output_params = 'Y:/NorMITs Synthesiser/import/trip_length_bands/north_all_mode_enhanced_segments.csv'
+_target_output_params = 'I:/NorMITs Synthesiser/import/trip_length_bands/gb_standard_plus_ca_segments.csv'
 
-export = 'Y:/NorMITs Synthesiser/import/trip_length_bands/north/sandbox'
+
 
 # gb or north
-geo_area = 'north'
+if 'gb_' in _target_output_params:
+    geo_area = 'gb'
+elif 'north_' in _target_output_params:
+    geo_area = 'north'
+
+export = os.path.join(
+    'I:/NorMITs Synthesiser/import/trip_length_bands/',
+    geo_area,
+    'sandbox')
 
 output_params = pd.read_csv(_target_output_params)
 
@@ -31,33 +43,32 @@ weekdays = [1,2,3,4,5]
 
 agg_purp = [13, 14, 15, 18]
 
-north_la = ['E06000001', 'E06000002', 'E06000003', 'E06000004', 'E06000005',
-            'E06000006', 'E06000007', 'E06000008', 'E06000009', 'E06000010',
-            'E06000011', 'E06000012', 'E06000013', 'E06000014', 'E06000021',
-            'E06000047', 'E06000049', 'E06000050', 'E06000057', 'E07000026',
-            'E07000027', 'E07000028', 'E07000029', 'E07000030', 'E07000031',
-            'E07000033', 'E07000034', 'E07000035', 'E07000037', 'E07000038',
-            'E07000117', 'E07000118', 'E07000119', 'E07000120', 'E07000121',
-            'E07000122', 'E07000123', 'E07000124', 'E07000125', 'E07000126',
-            'E07000127', 'E07000128', 'E07000137', 'E07000142', 'E07000163',
-            'E07000164', 'E07000165', 'E07000166', 'E07000167', 'E07000168',
-            'E07000169', 'E07000170', 'E07000171', 'E07000174', 'E07000175',
-            'E07000198', 'E08000001', 'E08000002', 'E08000003', 'E08000004',
-            'E08000005', 'E08000006', 'E08000007', 'E08000008', 'E08000009',
-            'E08000010', 'E08000011', 'E08000012', 'E08000013', 'E08000014',
-            'E08000015', 'E08000016', 'E08000017', 'E08000018', 'E08000019',
-            'E08000021', 'E08000022', 'E08000023', 'E08000024', 'E08000032',
-            'E08000033', 'E08000034', 'E08000035', 'E08000036', 'E08000037',
-            'W06000001', 'W06000002', 'W06000003', 'W06000004', 'W06000005',
-            'W06000006']
+north_la = con.NORTH_LA
 
 # TODO: Traveller gender
-target_cols = ['SurveyYear', 'TravDay', 'HHoldOSLAUA_B01ID', 'soc_cat',
+target_cols = ['SurveyYear', 'TravDay', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc_cat',
                'ns_sec', 'main_mode', 'hb_purpose', 'nhb_purpose', 'Sex_B01ID',
                'trip_origin', 'start_time', 'TripDisIncSW', 'TripOrigGOR_B02ID',
                'TripDestGOR_B02ID', 'tfn_area_type', 'weighted_trip']
 
 output_dat = _nts_import.reindex(target_cols, axis=1)
+
+# CA Map
+"""
+1	Main driver of company car
+2	Other main driver
+3	Not main driver of household car
+4	Household car but non driver
+5	Driver but no car
+6	Non driver and no car
+7	NA
+"""
+ca_map = pd.DataFrame({'CarAccess_B01ID':[1, 2, 3, 4, 5, 6, 7],
+                       'ca':[2, 2, 2, 2, 1, 1, 1]})
+
+output_dat = output_dat.merge(ca_map,
+                              how='left',
+                              on='CarAccess_B01ID')
 
 # Aggregate area type application
 agg_at = pd.DataFrame({'tfn_area_type':[1,2,3,4,5,6,7,8],
@@ -83,7 +94,7 @@ for index, row in output_params.iterrows():
     # Seed values so they can go MIA
     trip_origin, purpose, mode, tp, soc, ns, tfn_at, agg_at, g = [0,0,0,0,0,
                                                                   0,0,0,0]
-
+    # TODO: Use nones to bypass some of these as required - or else it'll fail except on full seg
     for subset, value in row.iteritems():
         if subset == 'trip_origin':
             op_sub = op_sub[op_sub['trip_origin']==value].reset_index(drop=True)
@@ -94,6 +105,10 @@ for index, row in output_params.iterrows():
             elif trip_origin == 'nhb':
                 op_sub = op_sub[op_sub['nhb_purpose']==value].reset_index(drop=True)
             purpose = value
+        if subset == 'ca':
+            if value != 0:
+                op_sub = op_sub[op_sub['ca']==value].reset_index(drop=True)
+            ca = value
         if subset == 'm':
             if value != 0:
                 op_sub = op_sub[op_sub['main_mode']==value].reset_index(drop=True)
@@ -155,6 +170,8 @@ for index, row in output_params.iterrows():
     out['band_share'] = out['trips']/out['trips'].sum()
     
     name = (trip_origin + '_tlb' + '_p' + str(purpose)+ '_m' + str(mode))
+    if ca != 0:
+        name = name + '_ca' + str(ca)
     if tfn_at != 0:
         name = name + '_at' + str(tfn_at)
     if agg_at != 0:
@@ -176,6 +193,7 @@ for index, row in output_params.iterrows():
 
     out['mode'] = mode
     out['period'] = tp
+    out['ca'] = ca
     out['purpose'] = purpose
     out['soc'] = soc
     out['ns'] = ns

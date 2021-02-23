@@ -18,7 +18,7 @@ from normits_demand.distribution import gravity_model as gm # For distribution f
 from normits_demand.utils import utils as nup # Folder management, reindexing, optimisation
 
 
-class DistributionModel(tms.TravelMarketSynthesiser):
+class DistributionModel(tms.TMSPathing):
     pass
 
     def distribute_cjtw(

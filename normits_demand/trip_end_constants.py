@@ -4,7 +4,7 @@ Import constants for trip end models
 
 # BACKLOG: Check if these exist on import
 
-NTEM_PA = 'I:/NorMITs Synthesiser/import/ntem_constraints/ntem_pa_ave_wday_2018.csv'
+NTEM_PA = 'I:/NorMITs Demand/import/ntem_constraints/ntem_pa_ave_wday_2018.csv'
 
 TRIP_RATES = 'I:/NorMITs Synthesiser/import/trip_rates/tfn_hb_trip_rates_18_0620.csv'
 
