@@ -27,9 +27,10 @@ from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
 from normits_demand.utils import timing
 
-from normits_demand.d_log import processor as dlog_p
 
+from normits_demand.d_log import processor as dlog_p
 from normits_demand.concurrency import multiprocessing
+from normits_demand.constraints import ntem_control as ntem
 
 # TODO: Move functions that can be static elsewhere.
 #  Maybe utils?
@@ -1211,7 +1212,8 @@ class NhbProductionModel:
             ntem_control_dir = os.path.join(import_home, path)
 
         if lad_lookup_dir is None:
-            lad_lookup_dir = import_home
+            path = os.path.join('zone_translation', 'no_overlap')
+            lad_lookup_dir = os.path.join(import_home, path)
 
         if audit_write_dir is None:
             audit_write_dir = os.path.join(export_home,
@@ -1238,7 +1240,7 @@ class NhbProductionModel:
                     "exist.\nFull path: %s" % (key, path)
                 )
 
-        # Build the exports dictionary
+        # Build the efs_exports dictionary
         exports = {
             'productions': os.path.join(export_home, consts.PRODUCTIONS_DIRNAME),
             'attractions': os.path.join(export_home, consts.ATTRACTIONS_DIRNAME),
@@ -1845,7 +1847,7 @@ def build_production_imports(import_home: str,
         mode_share_path = os.path.join(import_home, path)
 
     if msoa_lookup_path is None:
-        path = "default\zoning\msoa_zones.csv"
+        path = "zone_translation\msoa_zones.csv"
         msoa_lookup_path = os.path.join(import_home, path)
 
     if set_controls and ntem_control_dir is None:
@@ -1853,7 +1855,8 @@ def build_production_imports(import_home: str,
         ntem_control_dir = os.path.join(import_home, path)
 
     if set_controls and lad_lookup_dir is None:
-        lad_lookup_dir = import_home
+        path = os.path.join('zone_translation', 'no_overlap')
+        lad_lookup_dir = os.path.join(import_home, path)
 
     # Assign to dict
     imports = {
@@ -1883,7 +1886,7 @@ def build_production_exports(export_home: str,
                              ) -> Dict[str, str]:
     """
     Builds a dictionary of production export paths, forming a standard calling
-    procedure for production exports. Arguments allow default paths to be
+    procedure for production efs_exports. Arguments allow default paths to be
     replaced.
 
     Parameters
@@ -1910,7 +1913,7 @@ def build_production_exports(export_home: str,
                                        'Productions')
     du.create_folder(audit_write_dir, chDir=False)
 
-    # Build the exports dictionary
+    # Build the efs_exports dictionary
     exports = {
         'audits': audit_write_dir
     }
@@ -2272,7 +2275,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
                                 base_year: str,
                                 future_years: List[str] = None,
                                 control_base_year: bool = True,
-                                control_future_years: bool = True,
+                                control_future_years: bool = False,
                                 ntem_control_cols: List[str] = None,
                                 ntem_control_dtypes: List[Callable] = None,
                                 audit_dir: str = None
@@ -2293,21 +2296,21 @@ def control_productions_to_ntem(productions: pd.DataFrame,
     sort_cols = du.list_safe_remove(list(productions), all_years)
     productions = productions.sort_values(sort_cols)
 
-    # Do we need to grow on top of a controlled base year?
-    perform_additive_growth = control_base_year and not control_future_years
+    # Do we need to grow on top of a controlled base year? (multiplicative)
+    grow_over_base = control_base_year and not control_future_years
 
     # Get growth values over base
-    if perform_additive_growth:
-        growth_values = productions.copy()
+    if grow_over_base:
+        growth_factors = productions.copy()
         for year in future_years:
-            growth_values[year] -= growth_values[base_year]
-        growth_values.drop(columns=[base_year], inplace=True)
+            growth_factors[year] /= growth_factors[base_year]
+        growth_factors.drop(columns=[base_year], inplace=True)
 
-        # Output an audit of the growth values calculated
+        # Output an audit of the growth factors calculated
         if audit_dir is not None:
-            fname = consts.PRODS_AG_FNAME % ('msoa', trip_origin)
+            fname = consts.PRODS_MG_FNAME % ('msoa', trip_origin)
             path = os.path.join(audit_dir, fname)
-            pd.DataFrame(growth_values).to_csv(path, index=False)
+            pd.DataFrame(growth_factors).to_csv(path, index=False)
 
     # ## NTEM CONTROL YEARS ## #
     # Figure out which years to control
@@ -2323,7 +2326,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
         year_audit = {'year': year}
 
         # Setup paths
-        ntem_fname = consts.NTEM_CONTROL_FNAME % year
+        ntem_fname = consts.NTEM_CONTROL_FNAME % ('pa', year)
         ntem_path = os.path.join(ntem_dir, ntem_fname)
 
         # Read in control files
@@ -2331,14 +2334,14 @@ def control_productions_to_ntem(productions: pd.DataFrame,
         ntem_lad_lookup = pd.read_csv(lad_lookup_path)
 
         print("\nPerforming NTEM constraint for %s..." % year)
-        productions, audit, *_, = du.control_to_ntem(
-            productions,
-            ntem_totals,
-            ntem_lad_lookup,
-            group_cols=ntem_control_cols,
+        productions, audit, *_, = ntem.control_to_ntem(
+            control_df=productions,
+            ntem_totals=ntem_totals,
+            zone_to_lad=ntem_lad_lookup,
+            constraint_cols=ntem_control_cols,
             base_value_name=year,
             ntem_value_name='Productions',
-            purpose=trip_origin
+            trip_origin=trip_origin
         )
 
         # Update Audits for output
@@ -2355,7 +2358,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
         path = os.path.join(audit_dir, fname)
         pd.DataFrame(audits).to_csv(path, index=False)
 
-    if not perform_additive_growth:
+    if not grow_over_base:
         return productions
 
     # ## ADD PRE CONTROL GROWTH BACK ON ## #
@@ -2364,7 +2367,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
 
     # Add growth back on
     for year in future_years:
-        productions[year] += growth_values[year].values
+        productions[year] = productions[base_year] * growth_factors[year].values
 
     return productions
 

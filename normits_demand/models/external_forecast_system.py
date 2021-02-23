@@ -50,7 +50,7 @@ from normits_demand.utils import sector_reporter_v2 as sr_v2
 class ExternalForecastSystem:
     # ## Class Constants ## #
     __version__ = '%s.%s' % (version.MAJOR, version.MINOR)
-    _out_dir = "NorMITs Demand"
+    out_dir = "NorMITs Demand"
 
     # defines all non-year columns
     column_dictionary = consts.EFS_COLUMN_DICTIONARY
@@ -65,9 +65,6 @@ class ExternalForecastSystem:
                  dlog_pop_path: str = None,
                  dlog_emp_path: str = None,
 
-                 msoa_lookup_path: str = "zoning/msoa_zones.csv",
-                 lad_msoa_lookup_path: str = "zoning/lad_msoa_grouping.csv",
-
                  import_home: str = "Y:/",
                  export_home: str = "E:/",
                  verbose: str = True
@@ -81,7 +78,7 @@ class ExternalForecastSystem:
         # Initialise
         du.validate_model_name_and_mode(model_name, consts.MODES_NEEDED)
         self.model_name = du.validate_model_name(model_name)
-        self.iter_name = 'iter' + str(iter_num)
+        self.iter_name = du.create_iter_name(iter_num)
         self.scenario_name = du.validate_scenario_name(scenario_name)
         self.integrate_dlog = integrate_dlog
         self.import_location = import_home
@@ -96,22 +93,16 @@ class ExternalForecastSystem:
         self.input_zone_system = "MSOA"
         self.output_zone_system = self.model_name
 
-        # TODO: Build zone lookup paths inside generate_output_paths()
-        # TODO: Rename generate_output_paths() to _generate_paths()
-        self.msoa_lookup_path = msoa_lookup_path
-        self.lad_msoa_lookup_path = lad_msoa_lookup_path
-
-        # Don't NTEM Control Future years in scenarios
-        self.ntem_control_future_years = not (scenario_name in consts.TFN_SCENARIOS)
+        # We never control future years, not even in NTEM!
+        self.ntem_control_future_years = False
 
         # Setup up import/export paths
-        path_dicts = self.generate_output_paths(consts.BASE_YEAR_STR)
+        path_dicts = self._generate_paths(consts.BASE_YEAR_STR)
         self.imports, self.exports, self.params = path_dicts
         self._setup_scenario_paths()
         self._build_pop_emp_paths()
         self._read_in_default_inputs()
         self._set_up_dlog(dlog_pop_path, dlog_emp_path)
-        self.msoa_zones_path = os.path.join(self.imports["zoning"], "msoa_zones.csv")
 
         # sub-classes
         self.production_generator = nd.EFSProductionGenerator(model_name=model_name)
@@ -148,11 +139,10 @@ class ExternalForecastSystem:
         self.emp_constraint = du.safe_read_csv(file_path, dtype=dtypes)
 
         # Zone and area files
-        input_dir = self.imports['default_inputs']
-        file_path = os.path.join(input_dir, self.msoa_lookup_path)
-        self.msoa_lookup = du.safe_read_csv(file_path)
+        zt_dict = self.imports['zone_translation']
+        self.msoa_lookup = du.safe_read_csv(zt_dict['msoa_str_int'])
 
-        file_path = os.path.join(input_dir, self.lad_msoa_lookup_path)
+        file_path = os.path.join(zt_dict['one_to_one'], 'lad_to_msoa.csv')
         self.lad_msoa_lookup = du.safe_read_csv(file_path)
 
     def _setup_scenario_paths(self) -> None:
@@ -214,7 +204,7 @@ class ExternalForecastSystem:
             "import_home": self.imports["home"],
             "growth_csv": self.pop_growth_path,
             "constraint_csv": self.pop_constraint_path,
-            "sector_grouping_file": os.path.join(self.imports['zoning'],
+            "sector_grouping_file": os.path.join(self.imports['zone_translation']['weighted'],
                                                  zone_lookups["population"])
         }
 
@@ -223,7 +213,7 @@ class ExternalForecastSystem:
             "import_home": self.imports["home"],
             "growth_csv": self.emp_growth_path,
             "constraint_csv": self.emp_constraint_path,
-            "sector_grouping_file": os.path.join(self.imports['zoning'],
+            "sector_grouping_file": os.path.join(self.imports['zone_translation']['weighted'],
                                                  zone_lookups["employment"])
         }
 
@@ -269,7 +259,7 @@ class ExternalForecastSystem:
             alt_worker_growth_assumption_file: str = None,
             alt_pop_split_file: str = None,  # THIS ISN'T USED ANYWHERE
             distribution_method: str = "Furness",
-            purposes_needed: List[int] = consts.PURPOSES_NEEDED,
+            hb_purposes_needed: List[int] = consts.HB_PURPOSES_NEEDED,
             nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
             modes_needed: List[int] = consts.MODES_NEEDED,
             soc_needed: List[int] = consts.SOC_NEEDED,
@@ -387,7 +377,7 @@ class ExternalForecastSystem:
             Possible input is any dictionary corresponding to the correct
             order.
 
-        purposes_needed:
+        hb_purposes_needed:
             What purposes are needed on distribution.
             Default input is: [1, 2, 3, 4, 5, 6, 7, 8]
             Possible input is a list containing integers corresponding to the
@@ -557,7 +547,7 @@ class ExternalForecastSystem:
             alt_pop_split_file,
             distribution_method,
             self.imports['seed_dists'],
-            purposes_needed,
+            hb_purposes_needed,
             modes_needed,
             soc_needed,
             ns_needed,
@@ -592,7 +582,7 @@ class ExternalForecastSystem:
             population_constraint=pop_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],
-            msoa_lookup_path=self.msoa_zones_path,
+            msoa_lookup_path=self.imports['zone_translation']['msoa_str_int'],
             control_productions=True,
             control_fy_productions=self.ntem_control_future_years,
             dlog=self.dlog_paths['pop'],
@@ -617,7 +607,7 @@ class ExternalForecastSystem:
             employment_constraint=emp_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],
-            msoa_lookup_path=self.msoa_zones_path,
+            msoa_lookup_path=self.imports['zone_translation']['msoa_str_int'],
             attraction_weights_path=self.imports['a_weights'],
             control_attractions=True,
             control_fy_attractions=self.ntem_control_future_years,
@@ -674,7 +664,7 @@ class ExternalForecastSystem:
             import_home=self.imports['home'],
             export_home=self.exports['home'],
             model_name=self.model_name,
-            msoa_conversion_path=self.msoa_zones_path,
+            msoa_conversion_path=self.imports['zone_translation']['msoa_str_int'],
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
             control_productions=True,
@@ -855,7 +845,7 @@ class ExternalForecastSystem:
                 attraction_weights=converted_attractions,
                 trip_origin='hb',
                 years_needed=year_list,
-                p_needed=purposes_needed,
+                p_needed=hb_purposes_needed,
                 m_needed=modes_needed,
                 soc_needed=soc_needed,
                 ns_needed=ns_needed,
@@ -894,9 +884,7 @@ class ExternalForecastSystem:
                              (str(distribution_method)))
 
         # ## SECTOR TOTALS ## #
-        zone_system_file = os.path.join(self.imports['zoning'],
-                                        self.output_zone_system + '.csv')
-        sector_grouping_file = os.path.join(self.imports['zoning'],
+        sector_grouping_file = os.path.join(self.imports['zone_translation']['home'],
                                             "tfn_level_one_sectors_norms_grouping.csv")
 
         sector_totals = self.sector_reporter.calculate_sector_totals(
@@ -908,7 +896,7 @@ class ExternalForecastSystem:
 
         pm_sector_total_dictionary = {}
 
-        for purpose in purposes_needed:
+        for purpose in hb_purposes_needed:
             # TODO: Update sector reporter.
             #  Sector totals don't currently allow per purpose reporting
 
@@ -1004,7 +992,7 @@ class ExternalForecastSystem:
         #  Should these be pop/emp weighted too?
         sector_system = "tfn_sectors"
         model_zone_to_sector_path = os.path.join(
-            self.imports["zone_translation"],
+            self.imports["zone_translation"]['one_to_one'],
             "{}_to_{}.csv".format(self.output_zone_system, sector_system)
         )
         from_zone_column = "{}_zone_id".format(self.output_zone_system)
@@ -1071,12 +1059,12 @@ class ExternalForecastSystem:
 
         # Read in pop translation
         fname = consts.POP_TRANSLATION_FNAME % fname_args
-        path = os.path.join(self.imports['zoning'], fname)
+        path = os.path.join(self.imports['zone_translation']['weighted'], fname)
         pop_translation = pd.read_csv(path)
 
         # Read in emp translation
         fname = consts.EMP_TRANSLATION_FNAME % fname_args
-        path = os.path.join(self.imports['zoning'], fname)
+        path = os.path.join(self.imports['zone_translation']['weighted'], fname)
         emp_translation = pd.read_csv(path)
 
         return pop_translation, emp_translation
@@ -1151,10 +1139,11 @@ class ExternalForecastSystem:
                  soc_needed: List[int] = consts.SOC_NEEDED,
                  ns_needed: List[int] = consts.NS_NEEDED,
                  ca_needed: List[int] = consts.CA_NEEDED,
+                 round_dp: int = consts.DEFAULT_ROUNDING,
                  use_bespoke_pa: bool= True,
                  overwrite_hb_tp_pa: bool = True,
                  overwrite_hb_tp_od: bool = True,
-                 echo: bool = True
+                 verbose: bool = True
                  ) -> None:
         """
         Converts home based PA matrices into time periods split PA matrices,
@@ -1183,6 +1172,10 @@ class ExternalForecastSystem:
         ca_needed:
             The the car availability of PA matrices to convert to OD
 
+        round_dp:
+            The number of decimal places to round the output values to.
+            Uses consts.DEFAULT_ROUNDING by default.
+
         # TODO: Update docs once correct functionality exists
         overwrite_hb_tp_pa:
             Whether to split home based PA matrices into time periods.
@@ -1190,7 +1183,7 @@ class ExternalForecastSystem:
         overwrite_hb_tp_od:
             Whether to convert time period split PA matrices into OD matrices.
 
-        echo:
+        verbose:
             If True, suppresses some of the non-essential terminal outputs.
 
         Returns
@@ -1223,6 +1216,11 @@ class ExternalForecastSystem:
         for trip_origin, to_p_needed in hb_nhb_iterator:
             print("Running conversions for %s trips..." % trip_origin)
 
+            if to_p_needed == list():
+                print("Not splitting %s trips into time period as no "
+                      "purposes for this mode were given.")
+                continue
+
             # TODO: Check if tp pa matrices exist first
             if overwrite_hb_tp_pa:
                 tp_splits = self._get_time_splits_from_p_vector(trip_origin, ignore_cache=True)
@@ -1239,7 +1237,8 @@ class ExternalForecastSystem:
                     m_needed=m_needed,
                     soc_needed=soc_needed,
                     ns_needed=ns_needed,
-                    ca_needed=ca_needed
+                    ca_needed=ca_needed,
+                    round_dp=round_dp,
                 )
                 print('HB time period split PA matrices compiled!\n')
 
@@ -1258,7 +1257,8 @@ class ExternalForecastSystem:
                 years_needed=years_needed,
                 phi_type='fhp_tp',
                 aggregate_to_wday=True,
-                echo=echo
+                round_dp=round_dp,
+                verbose=verbose,
             )
 
             # Copy over NHB matrices as they are already in NHB format
@@ -1273,10 +1273,11 @@ class ExternalForecastSystem:
 
     def pre_me_compile_od_matrices(self,
                                    year: int = consts.BASE_YEAR,
-                                   hb_p_needed: List[int] = consts.PURPOSES_NEEDED,
+                                   hb_p_needed: List[int] = consts.HB_PURPOSES_NEEDED,
                                    nhb_p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
                                    m_needed: List[int] = consts.MODES_NEEDED,
                                    tp_needed: List[int] = consts.TIME_PERIODS,
+                                   round_dp: int = consts.DEFAULT_ROUNDING,
                                    overwrite_aggregated_od: bool = True,
                                    overwrite_compiled_od: bool = True,
                                    ) -> None:
@@ -1311,6 +1312,10 @@ class ExternalForecastSystem:
         tp_needed:
             The time periods to use when compiling and aggregating OD matrices.
 
+        round_dp:
+            The number of decimal places to round the output values to.
+            Uses consts.DEFAULT_ROUNDING by default.
+
         # TODO: Update docs once correct functionality exists
         overwrite_aggregated_od:
             Whether to generate aggregated od matrices or not.
@@ -1342,7 +1347,8 @@ class ExternalForecastSystem:
                     p_needed=hb_p_needed,
                     m_needed=m_needed,
                     ca_needed=ca_needed,
-                    tp_needed=tp_needed
+                    tp_needed=tp_needed,
+                    round_dp=round_dp,
                 )
             mat_p.aggregate_matrices(
                 import_dir=self.exports['od'],
@@ -1353,7 +1359,8 @@ class ExternalForecastSystem:
                 p_needed=nhb_p_needed,
                 m_needed=m_needed,
                 ca_needed=ca_needed,
-                tp_needed=tp_needed
+                tp_needed=tp_needed,
+                round_dp=round_dp,
             )
 
         if overwrite_compiled_od:
@@ -1378,8 +1385,9 @@ class ExternalForecastSystem:
                 mat_import=self.exports['aggregated_od'],
                 mat_export=self.exports['compiled_od'],
                 compile_params_path=compile_params_path,
+                round_dp=round_dp,
                 build_factor_pickle=True,
-                factor_pickle_path=self.params['compile']
+                factor_pickle_path=self.params['compile'],
             )
 
             # Need to convert into hourly average PCU for noham
@@ -1391,9 +1399,9 @@ class ExternalForecastSystem:
                     mode=m_needed[0],
                     method='to_vehicles',
                     out_format='wide',
-                    hourly_average=True
+                    hourly_average=True,
+                    round_dp=round_dp,
                 )
-
 
     def generate_post_me_tour_proportions(self,
                                           model_name: str,
@@ -1432,7 +1440,7 @@ class ExternalForecastSystem:
 
         output_location:
             The directory to create the new output directory in - a dir named
-            self._out_dir (NorMITs Demand) should exist here. Usually
+            self.out_dir (NorMITs Demand) should exist here. Usually
             a drive name e.g. Y:/
 
         iter_num:
@@ -1542,7 +1550,7 @@ class ExternalForecastSystem:
 
         output_location:
             The directory to create the new output directory in - a dir named
-            self._out_dir (NorMITs Demand) should exist here. Usually
+            self.out_dir (NorMITs Demand) should exist here. Usually
             a drive name e.g. Y:/
 
         iter_num:
@@ -1594,11 +1602,11 @@ class ExternalForecastSystem:
 
         # TODO: Compile to OD/PA when we know the correct format
 
-    def generate_output_paths(self, base_year: str) -> Tuple[Dict[str, str],
-                                                             Dict[str, str],
-                                                             Dict[str, str]]:
+    def _generate_paths(self, base_year: str) -> Tuple[Dict[str, str],
+                                                       Dict[str, str],
+                                                       Dict[str, str]]:
         """
-        Returns imports, exports and params dictionaries
+        Returns imports, efs_exports and params dictionaries
 
         Calls du.build_io_paths() with class attributes.
 
@@ -1614,7 +1622,7 @@ class ExternalForecastSystem:
             Dictionary of import paths with the following keys:
             imports, lookups, seed_dists, default
 
-        exports:
+        efs_exports:
             Dictionary of export paths with the following keys:
             productions, attractions, pa, od, pa_24, od_24, sectors
 
@@ -1622,19 +1630,21 @@ class ExternalForecastSystem:
             Dictionary of parameter export paths with the following keys:
             compile, tours
         """
-        return du.build_io_paths(self.import_location,
-                                 self.output_location,
-                                 base_year,
-                                 self.model_name,
-                                 self.iter_name,
-                                 self.scenario_name,
-                                 self.__version__,
-                                 self._out_dir)
+        return du.build_efs_io_paths(
+            import_location=self.import_location,
+            export_location=self.output_location,
+            model_name=self.model_name,
+            base_year=base_year,
+            iter_name=self.iter_name,
+            scenario_name=self.scenario_name,
+            demand_version=self.__version__,
+            demand_dir_name=self.out_dir,
+        )
 
 
 def _input_checks(iter_num: int = None,
                   m_needed: List[int] = None,
-                  constraint_required: Dict[str, bool] = None
+                  constraint_required: Dict[str, bool] = None,
                   ) -> None:
     """
     Checks that any arguments given are OK. Will raise an error
@@ -1675,7 +1685,7 @@ def write_input_info(output_path,
                      alt_pop_split_file: str,
                      distribution_method: str,
                      seed_dist_location: str,
-                     purposes_needed: List[int],
+                     hb_purposes_needed: List[int],
                      modes_needed: List[int],
                      soc_needed: List[int],
                      ns_needed: List[int],
@@ -1701,7 +1711,7 @@ def write_input_info(output_path,
         "Alternate Population Split File: " + str(alt_pop_split_file),
         "Distribution Method: " + distribution_method,
         "Seed Distribution Location: " + seed_dist_location,
-        "Purposes Used: " + str(purposes_needed),
+        "Purposes Used: " + str(hb_purposes_needed),
         "Modes Used: " + str(modes_needed),
         "Soc Used: " + str(soc_needed),
         "Ns Used: " + str(ns_needed),

@@ -14,15 +14,15 @@ efs = nd.ExternalForecastSystem(
     import_home="Y:/",
     export_home="E:/",
     integrate_dlog=True,
-    scenario_name=consts.SC04_UZC
+    scenario_name=consts.SC00_NTEM
 )
 
 generation_file = (
-    "20201217 TfN EFS - Task D5 Bespoke Zone - MANSAM Example Inputs v1b.xlsx"
+    "Bespoke Zone - MANSAM Inputs v1b.xlsx"
 )
 
 test_generations_path = (
-    os.path.join(r"Y:\NorMITs Demand\inputs\MANSAM", generation_file)
+    os.path.join(r"Y:\NorMITs Demand\import\bespoke zones\MANSAM", generation_file)
 )
 eg.adjust_bespoke_zones(test_generations_path,
                         efs.exports,

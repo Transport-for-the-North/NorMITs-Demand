@@ -13,6 +13,9 @@ from tqdm import tqdm
 # BACKLOG: Exceptional growth probably doesn't belong in utils!
 #  labels: EFS, demand merge
 
+# BACKLOG: Split Exceptional growth and Bespoke zones code up
+#  labels: EFS, QoL updates
+
 # Local imports
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
@@ -2338,9 +2341,7 @@ def adjust_bespoke_zones(gen_path: str,
     else:
         raise ValueError(f"Model Type {model_name} is not supported")
 
-    bespoke_audit_path = os.path.join(
-        audit_path, "Bespoke Zones"
-    )
+    bespoke_audit_path = os.path.join(audit_path, "Bespoke Zones")
     if not os.path.isdir(bespoke_audit_path):
         os.mkdir(bespoke_audit_path)
 

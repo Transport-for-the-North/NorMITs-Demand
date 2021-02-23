@@ -34,6 +34,7 @@ from pathlib import Path
 
 from math import isclose
 
+import functools
 from tqdm import tqdm
 from itertools import product
 from collections import defaultdict
@@ -49,7 +50,7 @@ from normits_demand.utils.utils import *
 
 class NormitsDemandError(Exception):
     """
-    Base Exception for all custom NotMITS demand errors
+    Base Exception for all custom NorMITS demand errors
     """
 
     def __init__(self, message=None):
@@ -336,15 +337,15 @@ def print_w_toggle(*args, echo, **kwargs):
         print(*args, **kwargs)
 
 
-def build_io_paths(import_location: str,
-                   export_location: str,
-                   base_year: str,
-                   model_name: str,
-                   iter_name: str,
-                   scenario_name: str,
-                   demand_version: str,
-                   demand_dir_name: str = 'NorMITs Demand',
-                   ) -> Tuple[dict, dict, dict]:
+def build_efs_io_paths(import_location: str,
+                       export_location: str,
+                       model_name: str,
+                       iter_name: str,
+                       scenario_name: str,
+                       demand_version: str,
+                       demand_dir_name: str = 'NorMITs Demand',
+                       base_year: str = consts.BASE_YEAR_STR,
+                       ) -> Tuple[dict, dict, dict]:
     """
     Builds three dictionaries of paths to the locations of all inputs and
     outputs for EFS
@@ -353,12 +354,12 @@ def build_io_paths(import_location: str,
     ----------
     import_location:
         The directory the import directory exists - a dir named
-        self._out_dir (NorMITs Demand) should exist here. Usually
+        self.out_dir (NorMITs Demand) should exist here. Usually
         a drive name e.g. Y:/
 
     export_location:
         The directory to create the new output directory in - a dir named
-        self._out_dir (NorMITs Demand) should exist here. Usually
+        self.out_dir (NorMITs Demand) should exist here. Usually
         a drive name e.g. Y:/
 
     model_name:
@@ -386,7 +387,7 @@ def build_io_paths(import_location: str,
         Dictionary of import paths with the following keys:
         imports, lookups, seed_dists, default
 
-    exports:
+    efs_exports:
         Dictionary of export paths with the following keys:
         productions, attractions, pa, od, pa_24, od_24, sectors
 
@@ -422,17 +423,28 @@ def build_io_paths(import_location: str,
     path = 'attractions/soc_2_digit_sic_%s.csv' % base_year
     soc_weights_path = os.path.join(import_home, path)
 
+    # Build the zone translation dict
+    zt_home = os.path.join(import_home, 'zone_translation')
+    zone_translation = {
+        'home': zt_home,
+        'one_to_one': os.path.join(zt_home, 'one_to_one'),
+        'weighted': os.path.join(zt_home, 'weighted'),
+        'no_overlap': os.path.join(zt_home, 'no_overlap'),
+        'msoa_str_int': os.path.join(zt_home, 'msoa_zones.csv'),
+    }
+
     imports = {
         'home': import_home,
         'default_inputs': input_home,
         'tp_splits': os.path.join(import_home, 'tp_splits'),
-        'zone_translation': os.path.join(import_home, 'zone_translation'),
+        'zone_translation': zone_translation,
         'lookups': os.path.join(model_home, 'lookup'),
         'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
-        'zoning': os.path.join(input_home, 'zoning'),
         'scenarios': os.path.join(import_home, 'scenarios'),
         'a_weights': a_weights_path,
-        'soc_weights': soc_weights_path
+        'soc_weights': soc_weights_path,
+        'ntem_control': os.path.join(import_home, 'ntem_constraints'),
+        'model_schema': os.path.join(import_home, model_name, 'model schema'),
     }
 
     #  ## EXPORT PATHS ## #
@@ -2056,6 +2068,60 @@ def segmentation_order(segmentation_lst: List[str]) -> List[str]:
     return ordered_seg_vals + non_seg_vals
 
 
+def sort_vector_cols(vector: pd.DataFrame,
+                     zone_col: str = None,
+                     in_place: bool = False,
+                     ) -> pd.DataFrame:
+    """
+    Re-orders the columns if vector to be in the correct segmentation order
+
+    The zone column will be placed first, and any other non-segment columns
+    are appended to the end of the order.
+
+    Parameters
+    ----------
+    vector:
+        The vector to re-order the columns of
+
+    zone_col:
+        The name of the column containing the zone_id data. If not given,
+        it will be inferred by looking for the first column containing
+        "zone_id".
+
+    in_place:
+        Whether to re-order in place or return a copy of the given dataframe.
+
+    Returns
+    -------
+    reindexed_vector:
+        The given vector re-indexed to to be in the correct segmentation order,
+        as defined by consts.SEGMENTATION_ORDER.
+    """
+    # init
+    columns = list(vector)
+
+    if not in_place:
+        vector = vector.copy()
+
+    # Infer the zone col if not given
+    if zone_col is None:
+        zone_col_candidates = [x for x in columns if '_zone_id' in x]
+        if zone_col_candidates == list():
+            raise ValueError(
+                "No zone_col argument was given. Tried to infer which "
+                "column to use, but there were not columns containing "
+                "'zone_col'."
+            )
+        zone_col = zone_col_candidates[0]
+
+    # Build a list of the final output order
+    col_order = segmentation_order(list_safe_remove(columns, [zone_col]))
+    col_order = [zone_col] + col_order
+
+    # Reindex and return
+    return vector.reindex(columns=col_order)
+
+
 def seg_dict_key_order(segmentation_dict: Dict[str, Any]) -> List[str]:
     """
     Returns the keys of segmentation_dict in their hierarchical order
@@ -2080,7 +2146,7 @@ def long_to_wide_out(df: pd.DataFrame,
                      values: str,
                      out_path: str,
                      unq_zones: List[str] = None,
-                     round: int = 4,
+                     round_dp: int = 12,
                      ) -> None:
     """
     Converts a long format pd.Dataframe, converts it to long and writes
@@ -2110,7 +2176,7 @@ def long_to_wide_out(df: pd.DataFrame,
         If left as None, it assumes all zones in the range 1 to max zone number
         should exist.
 
-    round:
+    round_dp:
         The number of decimal places to round the output to
 
     Returns
@@ -2136,7 +2202,7 @@ def long_to_wide_out(df: pd.DataFrame,
         index=v_heading,
         columns=h_heading,
         values=values
-    ).round(4)
+    ).round(decimals=round_dp)
 
     # Finally, write to disk
     df.to_csv(out_path)
@@ -2627,7 +2693,11 @@ def file_write_check(path: Union[str, Path], wait: bool=True) -> Path:
                     raise ValueError('Too many files in use!')
 
 
-def safe_dataframe_to_csv(df, out_path, flatten_header=False, **to_csv_kwargs):
+def safe_dataframe_to_csv(df: pd.DataFrame,
+                          out_path: str,
+                          flatten_header: bool = False,
+                          **to_csv_kwargs: Any,
+                          ) -> None:
     """
     Wrapper around df.to_csv. Gives the user a chance to close the open file.
 
@@ -3034,7 +3104,7 @@ def compile_efficient_df(eff_df: List[Dict[str, Any]],
         df = df.reindex(columns=col_names)
         concat_ph.append(df)
 
-    return pd.concat(concat_ph)
+    return pd.concat(concat_ph).reset_index(drop=True)
 
 
 def list_safe_remove(lst: List[Any],
@@ -3173,237 +3243,8 @@ def add_all_commute_cat(df: pd.DataFrame,
     return df.reset_index(drop=True)
 
 
-# ## BELOW HERE IS OLD TMS CODE ## #
-
-
-def get_costs(model_lookup_path,
-              calib_params,
-              tp='24hr',
-              iz_infill = 0.5
-              ):
-    """
-    This function imports distances or costs from a given path.
-
-    Parameters
-    ----------
-    model_lookup_path:
-        Model folder to look in for distances/costs. Should be in call or global.
-
-    calib_params:
-        Calibration parameters dictionary'
-
-    tp:
-        Should ultimately take 24hr & tp, usually 24hr for hb and tp for NHB.
-
-    direction = None:
-        Takes None, 'To', 'From'
-
-    car_available = None:
-        Takes None, True, False
-
-    iz_infill = 0.5:
-        Currently needed for distance but not cost. Add a value of iz_infill *
-        the minimum inter-zonal value to the intra-zonal cells.
-
-    Returns
-    ----------
-    dat:
-        DataFrame containing required cost or distance values.
-        DataFrame containing required cost or distance values.
-    """
-    # units takes different parameters
-    # TODO: Needs a config guide for the costs somewhere
-    # TODO: Adapt model input costs to take time periods
-    # TODO: The name cost_cols is misleading
-    file_sys = os.listdir(os.path.join(model_lookup_path, 'costs'))
-    tp_path = [x for x in file_sys if tp in x]
-
-    dat = pd.read_csv(os.path.join(model_lookup_path,
-                                   'costs',
-                                   tp_path[0]))
-    cols = list(dat)
-
-    # Get purpose and direction from calib_params
-    ca = None
-    purpose = None
-    time_period = None
-
-    for index, param in calib_params.items():
-        # Need a purpose, if a ca is not picked up returns none
-        if index == 'p':
-            purpose = param
-        if index == 'ca':
-            if param == 1:
-                ca = 'nca'
-            elif param == 2:
-                ca = 'ca'
-        if index == 'tp':
-            time_period = param
-
-    # Purpose to string
-    commute = [1]
-    business = [2, 12]
-    other = [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
-    if purpose in commute:
-        str_purpose = 'commute'
-    elif purpose in business:
-        str_purpose = 'business'
-    elif purpose in other:
-        str_purpose = 'other'
-    else:
-        raise ValueError("Cannot convert purpose to string." +
-                         "Got %s" % str(purpose))
-
-    # Filter down on purpose
-    cost_cols = [x for x in cols if str_purpose in x]
-
-    # Handle if we have numeric purpose costs, hope so, they're better!
-    if len(cost_cols) == 0:
-        cost_cols = [x for x in cols if ('p' + str(purpose)) in x]
-
-    # Filter down on car availability
-    if ca is not None:
-        # Have to be fussy as ca is in nca...
-        if ca == 'ca':
-            cost_cols = [x for x in cost_cols if 'nca' not in x]
-        elif ca == 'nca':
-            cost_cols = [x for x in cost_cols if 'nca' in x]
-
-    if time_period is not None:
-        cost_cols = [x for x in cost_cols if str(time_period) in x]
-
-    target_cols = ['p_zone', 'a_zone']
-    for col in cost_cols:
-        target_cols.append(col)
-
-    cost_return_name = cost_cols[0]
-
-    dat = dat.reindex(target_cols, axis=1)
-    dat = dat.rename(columns={cost_cols[0]: 'cost'})
-
-    # Redefine cols
-    cols = list(dat)
-
-    if iz_infill is not None:
-        dat = dat.copy()
-        min_inter_dat = dat[dat[cols[2]]>0]
-        # Derive minimum intra-zonal
-        min_inter_dat = min_inter_dat.groupby(
-                cols[0]).min().reset_index().drop(cols[1],axis=1)
-        intra_dat = min_inter_dat.copy()
-        intra_dat[cols[2]] = intra_dat[cols[2]]*iz_infill
-        iz = dat[dat[cols[0]] == dat[cols[1]]]
-        non_iz = dat[dat[cols[0]] != dat[cols[1]]]
-        iz = iz.drop(cols[2], axis=1)
-        # Rejoin
-        iz = iz.merge(intra_dat, how='inner', on=cols[0])
-        dat = pd.concat([iz, non_iz], axis=0, sort=True).reset_index(drop=True)
-
-    return dat, cost_return_name
-
-
-def get_trip_length_bands(import_folder,
-                          calib_params,
-                          segmentation,
-                          trip_origin,
-                          replace_nan=False,
-                          echo=True):
-    # TODO: Overwrite the segmentation parameter, sorry Ben
-    """
-    Function to check a folder for trip length band parameters.
-    Returns a subset.
-    """
-    # Index folder
-    target_files = os.listdir(import_folder)
-    # Define file contents, should just be target files - should fix.
-    import_files = target_files.copy()
-
-    # TODO: Fixed for new ntem dists - pointless duplication now
-    if segmentation == 'ntem':
-        for key, value in calib_params.items():
-            # Don't want empty segments, don't want ca
-            if value != 'none' and key != 'ca':
-                # print_w_toggle(key + str(value), echo=echo)
-                import_files = [x for x in import_files if
-                                ('_' + key + str(value)) in x]
-    elif segmentation == 'tfn':
-        for key, value in calib_params.items():
-            # Don't want empty segments, don't want ca
-            if value != 'none' and key != 'ca':
-                # print_w_toggle(key + str(value), echo=echo)
-                import_files = [x for x in import_files if
-                                ('_' + key + str(value)) in x]
-    else:
-        raise ValueError('Non-valid segmentation. How did you get this far?')
-
-    if trip_origin == 'hb':
-        import_files = [x for x in import_files if 'nhb' not in x]
-    elif trip_origin == 'nhb':
-        import_files = [x for x in import_files if 'nhb' in x]
-    else:
-        raise ValueError('Trip length band import failed,' +
-                         'provide valid trip origin')
-    if len(import_files) > 1:
-        raise Warning('Picking from two similar files,' +
-                      ' check import folder')
-
-    # Import
-    tlb = pd.read_csv(import_folder + '/' + import_files[0])
-
-    # Filter to target purpose
-    # TODO: Don't want to have to do this for NTEM anymore. Just keep them individual.
-    # tlb = tlb[tlb[trip_origin +'_purpose']==purpose].copy()
-
-    if replace_nan:
-        for col_name in list(tlb):
-            tlb[col_name] = tlb[col_name].fillna(0)
-
-    return tlb
-
-
-def parse_mat_output(list_dir,
-                     sep='_',
-                     mat_type='dat',
-                     file_format='.csv',
-                     file_name='file'):
-    """
-    """
-    # Get target file format only
-    unq_files = [x for x in list_dir if file_format in x]
-    # If no numbers in then drop
-    unq_files = [x for x in list_dir if any(c.isdigit() for c in x)]
-
-    split_list = []
-    for file in unq_files:
-        split_dict = {file_name:file}
-        file = file.replace(file_format,'')
-        test = str(file).split('_')
-        for item in test:
-            if 'hb' in item:
-                name = 'trip_origin'
-                dat = item
-            elif item == mat_type:
-                name = ''
-                dat = ''
-            else:
-                name = ''
-                dat = ''
-                # name = letters, dat = numbers
-                for char in item:
-                    if char.isalpha():
-                        name += str(char)
-                    else:
-                        dat += str(char)
-            # Return None not nan
-            if len(dat) == 0:
-                dat = 'none'
-            split_dict.update({name: dat})
-        split_list.append(split_dict)
-
-    segments = pd.DataFrame(split_list)
-    segments = segments.replace({np.nan:'none'})
-
-    return segments
+def create_iter_name(iter_num: int) -> str:
+    return 'iter' + str(iter_num)
 
 
 def convert_to_weights(df: pd.DataFrame,
@@ -3426,3 +3267,40 @@ def convert_to_weights(df: pd.DataFrame,
             )
     return df
 
+
+def trip_origin_to_purposes(trip_origin: str) -> List[int]:
+    """
+    Returns a list of purposes for the given trip origin
+
+    Parameters
+    ----------
+    trip_origin:
+        The trip origin to get purposes for.
+
+    Returns
+    -------
+    purposes:
+        A list of integers representing purposes
+    """
+    # TODO Validate trip origin
+    return consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
+
+
+def merge_df_list(df_list, **kwargs):
+    """
+    Merge all dfs in df_list into a single dataframe
+
+    Parameters
+    ----------
+    df_list:
+        The list of dataframes to merge
+
+    kwargs:
+        ANy extra arguments to pass straight to pandas.merge()
+
+    Returns
+    -------
+    merged_df:
+        A single df of all items in df_list merged together
+    """
+    return functools.reduce(lambda l, r: pd.merge(l, r, **kwargs), df_list)
