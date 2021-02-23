@@ -930,15 +930,13 @@ def filter_distribution_p(internal_24hr_productions,
 def filter_pa_vector(pa_vector,
                      ia_name,
                      calib_params,
-                     value_var = 'trips',
+                     value_var='trips',
                      round_val=3,
                      echo=True):
     """
     This function adds new balancing factors in to a matrix. They are returned
     in the dt col and added to whichever col comes through in zone_col
     parameter.
-
-    # TODO: Generalise for P or A vectors
 
     Parameters
     ----------
@@ -973,7 +971,7 @@ def filter_pa_vector(pa_vector,
                 # Ignore nulled out segments (soc or ns)
                 # Force the parameter to integer, or it drops trips
                 param = cp
-                dp = dp[dp[index]==param]
+                dp = dp[dp[index] == param]
                 if echo:
                     print(index, cp)
             else:
@@ -994,12 +992,12 @@ def filter_pa_vector(pa_vector,
 
         if echo:
             print('Values=%f before rounding.' % total_dp)
-            print('Values=%f after rounding.' % (dp['productions'].sum()))
-            print('Same=%s' % str(total_dp == dp['productions'].sum()))
+            print('Values=%f after rounding.' % (dp[value_var].sum()))
+            print('Same=%s' % str(total_dp == dp[value_var].sum()))
     else:
         total_dp = None
 
-    return(dp, total_dp)
+    return dp, total_dp
 
 def filter_pa_cols(pa_frame,
                    ia_name,
@@ -1683,23 +1681,12 @@ def get_trip_length_bands(import_folder,
     # Define file contents, should just be target files - should fix.
     import_files = target_files.copy()
 
-    # TODO: Fixed for new ntem dists - pointless duplication now
-    if segmentation == 'ntem':
-        for key, value in calib_params.items():
-            # Don't want empty segments, don't want ca
-            if value != 'none' and key != 'ca':
-                 # print_w_toggle(key + str(value), echo=echo)
-                import_files = [x for x in import_files if
-                                ('_' + key + str(value)) in x]
-    elif segmentation == 'tfn':
-        for key, value in calib_params.items():
-            # Don't want empty segments, don't want ca
-            if value != 'none' and key != 'ca':
-                # print_w_toggle(key + str(value), echo=echo)
-                import_files = [x for x in import_files if
-                                ('_' + key + str(value)) in x]
-    else:
-        raise ValueError('Non-valid segmentation. How did you get this far?')
+    for key, value in calib_params.items():
+        # Don't want empty segments, don't want ca
+        if value != 'none':
+            # print_w_toggle(key + str(value), echo=echo)
+            import_files = [x for x in import_files if
+                            ('_' + key + str(value)) in x]
 
     if trip_origin == 'hb':
         import_files = [x for x in import_files if 'nhb' not in x]
@@ -1717,10 +1704,6 @@ def get_trip_length_bands(import_folder,
         print(import_files)
         print(import_files[0])
     tlb = pd.read_csv(import_folder + '/' + import_files[0])
-
-    # Filter to target purpose
-    # TODO: Don't want to have to do this for NTEM anymore. Just keep them individual.
-    # tlb = tlb[tlb[trip_origin +'_purpose']==purpose].copy()
 
     if replace_nan:
         for col_name in list(tlb):
@@ -2588,3 +2571,17 @@ def unpack_tlb(tlb,
            max_dist,
            obs_trip,
            obs_dist)
+
+    def iz_costs_to_mean(costs):
+        """
+        Sort bands that are too big outside of the north
+        - nudge towards intrazonal
+        """
+        # Get mean
+        diag_mean = np.mean(np.diag(costs))
+        diag = costs.diagonal()
+        diag = np.where(diag > diag_mean, diag_mean, diag)
+
+        np.fill_diagonal(costs, diag)
+
+        return costs
