@@ -19,7 +19,7 @@ from normits_demand.utils.general import safe_dataframe_to_csv
 
 
 class AttractionModel(demand.NormitsDemand):
-    
+
     """
     NorMITs Attraction model.
     Attraction end of NorMITs Trip End Model in the NorMITs Demand siote.
@@ -34,23 +34,23 @@ class AttractionModel(demand.NormitsDemand):
 
         # Check for exports
         self.export = self.ping_outpath()
-    
+
     def get_attractions(self,
                         source = 'flat',
                         ):
         """
         Imports raw attraction data from either a flat file on the the Y://
         or direct from the SQL server.
-        
+
         Parameters
         ----------
         source:
             Where to look for the data. Will take 'flat' or 'sql', now just
             flat.
-        
+
         flat_source:
             Path to flat source. Just points at global import path.
-        
+
         Returns
         ----------
         all_msoa:
@@ -63,65 +63,65 @@ class AttractionModel(demand.NormitsDemand):
         # Blocking out most of this so it just imports everything.
         # BACKLOG: Adapt to handle the other 2 required datasets. Process if needed.
         all_msoa = pd.read_csv(flat_source)
-    
+
         all_msoa = all_msoa.rename(columns={'geo_code': 'msoa_zone_id'})
-        
+
         return all_msoa
-    
+
     def profile_attractions(self,
                             msoa_attractions,
                             attr_profile):
         """
         Takes an attraction profile defined by an import file in a model folder
         and creates attractions to those segments.
-    
+
         Parameters
         ----------
         model_folder:
             Takes a model folder to look for an internal area definition.
-    
+
         msoa_attractions:
             DataFrame containing msoa attractions by E segments, as imported from
             HSL data.
-    
+
         Returns
         ----------
         a_list:
-            A list of dataframe for each attraction type.    
+            A list of dataframe for each attraction type.
         """
-    
+
         # Build all job list for iteration
         all_jobs = list(msoa_attractions)
         all_jobs.remove('msoa_zone_id')
-    
+
         # Count purposes
         a_count = list(attr_profile['purpose'])
-    
+
         # Build placeholder
         a_list = []
-    
+
         # Loop over and weight
         for attraction in a_count:
             # Make a copy of attractions as placeholder
             attr_data = msoa_attractions.copy()
-    
+
             # Get unique weighting to apply
             weightings = attr_profile[attr_profile['purpose'] == attraction]
-    
+
             for job in all_jobs:
                 print(job)
                 this_weight = weightings[job]
-    
+
                 attr_data.loc[:,job] = attr_data.loc[:,job]*float(this_weight)
                 # TODO: Some audits to make sure nothing is falling out
-    
+
             attr_data.loc[:,attraction] = attr_data[all_jobs].sum(axis=1)
             attr_data = attr_data.drop(all_jobs, axis=1)
-    
+
             a_list.append(attr_data)
-    
+
         return(a_list)
-    
+
     def aggregate_to_model_zones_attr(self,
                                       attractions,
                                       model_zone_lookup_path,
@@ -131,26 +131,26 @@ class AttractionModel(demand.NormitsDemand):
         Function to aggregate to a target model zoning system. Translates from msoa
         base to whatever translation you give it.
         In future, will need control for splitting and custom zones included.
-        
+
         Parameters
         ----------
         attractions:
-            DataFrame, or a list of DataFrames describing attractions, likely to a 
+            DataFrame, or a list of DataFrames describing attractions, likely to a
             given attraction segmentation.
-    
+
         model_zone_lookup_path:
             Flat file containing correspondence factors between msoa and target
             model zoning system.
-    
+
         max_level = True:
             If True, drops columns used to calculate employment totals.
-    
+
         Returns
         ----------
         attractions_w_zones:
             DataFrame or list of attractions as input, aggregated to model zones.
         """
-    
+
         print(attractions['attractions'].sum())
 
         model_zone_conversion = pd.read_csv(model_zone_lookup_path)
@@ -171,10 +171,10 @@ class AttractionModel(demand.NormitsDemand):
         model_zone_conversion = model_zone_conversion.reindex(mzc_cols, axis=1)
         # Need another function to pick the biggest zone in a split & make sure it's not in the internal area
         # Print totals to topline.
-    
+
         # Reapply zonal splits to each
         # Msoa is hard coded
-    
+
         # Workaround for minor zone sometimes being major
         if 'msoa' in major_zone_name:
             group_col = minor_zone_name
@@ -186,28 +186,28 @@ class AttractionModel(demand.NormitsDemand):
         for col in list(attractions):
             if col != 'msoa_zone_id' and col != 'attractions':
                 group_cols.append(col)
-    
+
         # get sum cols
         sum_cols = group_cols.copy()
         sum_cols.append('attractions')
-        
+
         attractions = attractions.merge(model_zone_conversion,
                                         how='inner',
                                         on='msoa_zone_id')
-    
+
         attraction_w_zones = attractions.copy()
-        
+
         attractions_w_zones = attractions[
                 'attractions'] * attractions[translation_name]
-    
+
         attractions_w_zones = attraction_w_zones.reindex(
                 sum_cols,
                 axis=1).groupby(
                         group_cols).sum(
                                 ).reset_index()
-    
+
         print(attractions_w_zones['attractions'].sum())
-    
+
         return(attractions_w_zones)
 
     def ping_outpath(self):
@@ -270,50 +270,50 @@ class AttractionModel(demand.NormitsDemand):
         """
         Function to run the attraction model. Takes a path to a lookup folder
         containing
-    
+
         Parameters
         ----------
         model_folder = _zone_lookup_folder:
             Lookup folder for target model zoning system. Should contain the
             attraction splits required.
-    
+
         input_zones_name:
             Name for aggregation in input data. Should be MSOA or LSOA.
-    
+
         output_zones_name:
             Name for aggregation in output data. Should be the name of the target
             model zone.
-    
+
         segmentation_type:
             'tfn' or 'ntem'. Defines which segments to write attractions for.
             If 'tfn', will build SOC splits into output attractions.
             If 'ntem', will build for 8 NTEM purposes only.
-    
+
         model_zone_lookup_path:
             Path to area weighted correspondence between input and output zoning.
             Should be attraction weighting in future.
-    
+
         write_output = True:
             Write csvs out or not.
-    
+
         Returns
         ----------
         attractions:
             List of DataFrames containing attractions, split by attraction type.
             At ONS geography provided at input.
-    
+
         all_attr:
             Single DataFrame with all attraction splits side by side. At ONS
             geography provided at input.
-    
+
         zonal_attractions:
             List of DataFrames containing attractions, split by attraction type.
             At target model zoning system.
-    
+
         all_zonal_attr:
             Single DataFrame with all attraction splits side by side.
             At target model zoning system.
-    
+
         """
         # Define employment weighted msoa lookup path
         model_zone_lookup_path = os.path.join(
@@ -321,7 +321,7 @@ class AttractionModel(demand.NormitsDemand):
             self.params['model_zoning'].lower() +
             '_msoa_emp_weighted_lookup.csv')
 
-        # Set output params dict    
+        # Set output params dict
         if 'soc' in self.params['hb_trip_end_segmentation']:
             print('Running soc weighting')
             # If there are TfN segments import the segmentation
@@ -358,23 +358,23 @@ class AttractionModel(demand.NormitsDemand):
             # Reduce to factors
             for soc_seg in soc_segments:
                 skill_weight[soc_seg] = skill_weight[soc_seg] / skill_weight['total']
-        
+
             # Get rename total to soc0
             del(skill_weight['total'])
-        
+
             # Rebuild soc segments with soc back in
             new_soc_segments = []
             for seg in soc_segments:
                 new_soc_segments.append(seg)
             soc_segments = new_soc_segments.copy()
             del new_soc_segments
-    
+
             # Define export segments
             group_segments = ['msoa_zone_id',
                               'p', 'm', 'soc']
             sum_segments = group_segments.copy()
             sum_segments.append('attractions')
-    
+
         output_dir = os.path.join(self.run_folder,
                                   self.params['iteration'],
                                   'Attraction Outputs')
@@ -387,14 +387,14 @@ class AttractionModel(demand.NormitsDemand):
 
         all_jobs = list(msoa_attractions)
         all_jobs.remove('msoa_zone_id')
-    
+
         # Seed with all commute as E01
         msoa_attractions['E01'] = msoa_attractions[all_jobs].sum(axis=1)
-    
+
         # Import attraction profile
         model_dir = os.listdir(self.lookup_folder)
         attr_profile = [x for x in model_dir if self.params['attraction_weights'] in x][0]
-    
+
         # Profile attractions
         attr_profile = pd.read_csv(os.path.join(
             self.lookup_folder,
@@ -405,13 +405,13 @@ class AttractionModel(demand.NormitsDemand):
 
         # BACKLOG: Move segmentation to after base is built
         if 'soc' in self.params['hb_trip_end_segmentation']:
-            
+
             # Split into segments to split and those to retain
             retain_ph = []
             split_ph = []
-            
+
             soc_purposes = ['Commute', 'Business']
-    
+
             for attr in attractions:
                 attr_type = list(attr)[-1]
                 print(attr_type)
@@ -419,9 +419,9 @@ class AttractionModel(demand.NormitsDemand):
                     split_ph.append(attr)
                 else:
                     retain_ph.append(attr)
-    
+
             # soc_segments defined above
-    
+
             tfn_attr = []
             for attr_frame in split_ph:
                 purpose = list(attr_frame)[-1]
@@ -430,24 +430,24 @@ class AttractionModel(demand.NormitsDemand):
                           purpose + '_' + segment)
                     # Copy skill weights
                     target_weights = skill_weight.copy()
-                    
+
                     # Reindex to target cols
                     target_weights = target_weights.reindex(
                             ['msoa_zone_id', segment], axis=1)
-    
+
                     # Join the SOC weighting factors
                     ph_frame = attr_frame.copy()
                     ph_frame = ph_frame.merge(target_weights,
                                               how='left',
                                               on='msoa_zone_id')
-    
+
                     # Build weighted attractions with SOC
                     soc_seg_name = (purpose + '_' + segment)
                     ph_frame[soc_seg_name] = ph_frame[
                             purpose] * ph_frame[
                                     segment]
                     ph_frame = ph_frame.reindex(['msoa_zone_id', soc_seg_name], axis=1)
-    
+
                     # Append to placeholder
                     tfn_attr.append(ph_frame)
                     # END
@@ -465,13 +465,13 @@ class AttractionModel(demand.NormitsDemand):
         all_attr = pd.concat(attractions, sort=True)
         all_attr = all_attr.fillna(0)
         all_attr = all_attr.groupby('msoa_zone_id').sum().reset_index()
-    
+
         col_heads = list(all_attr)
         col_heads.remove('msoa_zone_id')
-    
+
         all_attr = pd.melt(all_attr, id_vars='msoa_zone_id', value_vars=col_heads,
                        value_name='attractions', var_name='ph')
-    
+
         p_dist = pd.DataFrame({'ph':
             ['Commute', 'Commute_soc1', 'Commute_soc2', 'Commute_soc3',
              'Business', 'Business_soc1', 'Business_soc2', 'Business_soc3',
@@ -484,7 +484,7 @@ class AttractionModel(demand.NormitsDemand):
                           '0', '1', '2', '3',
                           '0', '0', '0', '0', '0', '0']
         })
-    
+
         if'soc' not in self.params['hb_trip_end_segmentation']:
             p_dist = p_dist.drop('soc', axis=1)
 
@@ -493,7 +493,7 @@ class AttractionModel(demand.NormitsDemand):
                                   how='left',
                                   on='ph')
         all_attr = all_attr.drop('ph', axis=1)
-    
+
         # Attach msoa mode_splits
         mode_splits = pd.read_csv(
             os.path.join(self.import_folder,
@@ -503,17 +503,17 @@ class AttractionModel(demand.NormitsDemand):
         all_attr = all_attr.merge(mode_splits,
                                   how='left',
                                   on=['msoa_zone_id', 'p'])
-    
+
         all_attr['attractions'] = all_attr['attractions'] * all_attr['mode_share']
         all_attr = all_attr.drop('mode_share', axis=1)
-    
+
         all_attr = all_attr.reindex(sum_segments,
                                     axis=1).groupby(group_segments).sum(
               ).reset_index()
-    
+
         all_attr = all_attr.sort_values(
                 group_segments).reset_index(drop=True)
-    
+
         hb_attr = all_attr.copy()
         nhb_attr = all_attr.copy()
 
@@ -531,9 +531,9 @@ class AttractionModel(demand.NormitsDemand):
                                   on='ph')
         nhb_attr = nhb_attr.drop('ph', axis=1)
         del tp_infill
-    
+
         ntem_lad_lookup = pd.read_csv(tec.MSOA_LAD)
-    
+
         if self.params['export_uncorrected']:
             safe_dataframe_to_csv(
                 hb_attr,
@@ -547,10 +547,10 @@ class AttractionModel(demand.NormitsDemand):
                     output_dir,
                     'nhb_attractions_uncorrected.csv'),
                 index=False)
-    
+
         if self.params['attraction_ntem_control']:
             # Do an NTEM adjustment
-    
+
             ntem_totals = pd.read_csv(self.params['ntem_control_path'])
 
             hb_attr, hb_adj, hb_audit, hb_lad = ntem.control_to_ntem(
@@ -577,14 +577,14 @@ class AttractionModel(demand.NormitsDemand):
                     os.path.join(output_dir,
                                  'lad_hb_attractions.csv'),
                     index=False)
-    
+
                 nhb_lad.to_csv(
                     os.path.join(
                         output_dir,
                         'lad_nhb_attractions.csv'),
                     index=False)
             print(nhb_audit)
-    
+
         # Control to k factors
         if self.params['attraction_k_factor_control']:
             # Adjust to k factor for hb
@@ -597,23 +597,23 @@ class AttractionModel(demand.NormitsDemand):
                              k_factors))
             k_factors = k_factors.reindex(['lad_zone_id','p','m','tp','attr_k'],
                                           axis=1)
-    
+
             hb_purpose = tec.HB_PURPOSE
             nhb_purpose = tec.NHB_PURPOSE
-    
+
             hb_k_factors = k_factors[k_factors['p'].isin(hb_purpose)]
             hb_k_factors = hb_k_factors.drop('tp', axis=1)
             nhb_k_factors = k_factors[k_factors['p'].isin(nhb_purpose)]
-    
+
             # Get hb_adjustment factors
             lad_lookup = lad_lookup.reindex(['lad_zone_id', 'msoa_zone_id'], axis=1)
-            
+
             hb_attr = hb_attr.merge(lad_lookup,
                                     how='left',
                                     on='msoa_zone_id')
             # Seed zero infill
             hb_attr['attractions'] = hb_attr['attractions'].replace(0,0.001)
-    
+
             # Build LA adjustment
             adj_fac = hb_attr.reindex(['lad_zone_id',
                                        'p',
@@ -633,22 +633,22 @@ class AttractionModel(demand.NormitsDemand):
                                        'm',
                                        'adj_fac'], axis=1)
             adj_fac['adj_fac'] = adj_fac['adj_fac'].replace(np.nan, 1)
-            
+
             hb_attr = hb_attr.merge(adj_fac,
                                     how = 'left',
                                     on = ['lad_zone_id',
                                           'p',
                                           'm'])
             hb_attr['attractions'] = hb_attr['attractions'] * hb_attr['adj_fac']
-            
+
             hb_attr = hb_attr.drop(['lad_zone_id','adj_fac'], axis=1)
-            
+
             # BACKLOG: TP attr
             nhb_attr = nhb_attr.merge(lad_lookup,
                                     how = 'left',
                                     on = 'msoa_zone_id')
             nhb_attr['attractions'] = nhb_attr['attractions'].replace(0,0.001)
-            
+
             # Build LA adjustment
             adj_fac = nhb_attr.reindex(['lad_zone_id',
                                        'p',
@@ -672,7 +672,7 @@ class AttractionModel(demand.NormitsDemand):
                                        'tp',
                                        'adj_fac'], axis=1)
             adj_fac['adj_fac'] = adj_fac['adj_fac'].replace(np.nan, 1)
-            
+
             nhb_attr = nhb_attr.merge(adj_fac,
                                       how = 'left',
                                       on = ['lad_zone_id',
@@ -680,9 +680,9 @@ class AttractionModel(demand.NormitsDemand):
                                             'm',
                                             'tp'])
             nhb_attr['attractions'] = nhb_attr['attractions'] * nhb_attr['adj_fac']
-            
+
             nhb_attr = nhb_attr.drop(['lad_zone_id', 'adj_fac'], axis=1)
-    
+
         # Write input attractions
         if self.params['export_msoa']:
             hb_attr.to_csv(
@@ -712,7 +712,7 @@ class AttractionModel(demand.NormitsDemand):
             model_zone_lookup_path,
             translation_name='overlap_msoa_split_factor',
             max_level=True)
-        
+
         hb_out_path = os.path.join(
             output_dir,
             'hb_attractions_' +

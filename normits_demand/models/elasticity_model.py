@@ -623,9 +623,6 @@ def calculate_adjustment(
         elasticities["ModeCostChg"].str.lower() == chg_mode
     ]
 
-    # Set base gc to 1 if it is 0 as cannot divide by 0
-    tmp_base_gc = np.where(base_gc[chg_mode] == 0, 1, base_gc[chg_mode])
-
     # The cost and cost_factors are dependant on the cost that changes
     cost, cost_factor = _elasticity_gc_factors(
         base_costs[chg_mode],
@@ -642,7 +639,14 @@ def calculate_adjustment(
             cost_constraint,
         )
         adj_gc = gc.gen_cost_mode(adj_cost, chg_mode, **adj_gc_params)
-        gc_ratio = adj_gc / tmp_base_gc
+        # Set GC ratio to 1 (no demand adjustment) wherever
+        # base GC <= 0, as cost shouldn't be 0 (or negative)
+        gc_ratio = np.divide(
+            adj_gc,
+            base_gc[chg_mode],
+            where=base_gc[chg_mode] > 0,
+            out=np.full_like(adj_gc, 1.0),
+        )
     else:
         gc_ratio = np.where(cost_constraint == 1, cost_change, 1)
 

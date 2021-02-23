@@ -11,11 +11,10 @@ File purpose:
 Matrix processing functionality belongs here. This will be any processes
 that do not belong specifically to pa_to_od.py, or od_to_pa.py.
 """
+# Builtins
 import os
-
-import numpy as np
-import pandas as pd
 import pickle
+import pathlib
 
 from typing import Any
 from typing import List
@@ -23,26 +22,32 @@ from typing import Dict
 from typing import Tuple
 from typing import Iterable
 
-from functools import reduce
+import functools
 from itertools import product
 from collections import defaultdict
 
+# Third Party
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
 
-# self imports
+# Local imports
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
+from normits_demand.utils import file_ops as fo
 
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
+from normits_demand.validation import checks
 
 from normits_demand.matrices.tms_matrix_processing import *
 
 
 def _aggregate(import_dir: str,
                in_fnames: List[str],
-               export_path: str
+               export_path: str,
+               round_dp: int = consts.DEFAULT_ROUNDING,
                ) -> str:
     """
     Loads the given files, aggregates together and saves in given location
@@ -66,7 +71,7 @@ def _aggregate(import_dir: str,
         aggregated_mat += mat
 
     # Write new matrix out
-    aggregated_mat.to_csv(export_path)
+    aggregated_mat.round(decimals=round_dp).to_csv(export_path)
     print("Aggregated matrix written: %s" % os.path.basename(export_path))
 
 
@@ -74,7 +79,8 @@ def _recursive_aggregate(candidates: List[str],
                          segmentations: List[List[int]],
                          segmentation_strs: List[List[str]],
                          import_dir: str,
-                         export_path: str
+                         export_path: str,
+                         round_dp: int = consts.DEFAULT_ROUNDING,
                          ) -> None:
     """
     The internal function of aggregate_matrices(). Recursively steps through
@@ -102,6 +108,10 @@ def _recursive_aggregate(candidates: List[str],
 
     export_path:
         Directory to output the aggregated matrices.
+
+    round_dp:
+        The number of decimal places to round the output values to.
+        Uses consts.DEFAULT_ROUNDING by default.
     """
 
     # ## EXIT CONDITION ## #
@@ -115,7 +125,8 @@ def _recursive_aggregate(candidates: List[str],
             _aggregate(
                 import_dir=import_dir,
                 in_fnames=candidates,
-                export_path=export_path + '.csv'
+                export_path=export_path + '.csv',
+                round_dp=round_dp,
             )
         else:
             # Loop through and aggregate
@@ -123,7 +134,8 @@ def _recursive_aggregate(candidates: List[str],
                 _aggregate(
                     import_dir=import_dir,
                     in_fnames=[x for x in candidates.copy() if seg_str in x],
-                    export_path=export_path + seg_str + '.csv'
+                    export_path=export_path + seg_str + '.csv',
+                    round_dp=round_dp,
                 )
         # Exit condition done, leave recursion
         return
@@ -134,11 +146,14 @@ def _recursive_aggregate(candidates: List[str],
 
     if du.is_none_like(seg):
         # Don't need to segment here, next loop
-        _recursive_aggregate(candidates=candidates,
-                             segmentations=other_seg,
-                             segmentation_strs=other_strs,
-                             import_dir=import_dir,
-                             export_path=export_path)
+        _recursive_aggregate(
+            candidates=candidates,
+            segmentations=other_seg,
+            segmentation_strs=other_strs,
+            import_dir=import_dir,
+            export_path=export_path,
+            round_dp=round_dp,
+        )
     else:
         # Narrow down search, loop again
         for segment, seg_str in zip(seg, strs):
@@ -147,7 +162,8 @@ def _recursive_aggregate(candidates: List[str],
                 segmentations=other_seg,
                 segmentation_strs=other_strs,
                 import_dir=import_dir,
-                export_path=export_path + seg_str
+                export_path=export_path + seg_str,
+                round_dp=round_dp,
             )
 
 
@@ -161,7 +177,8 @@ def aggregate_matrices(import_dir: str,
                        soc_needed: List[int] = None,
                        ns_needed: List[int] = None,
                        ca_needed: List[int] = None,
-                       tp_needed: List[int] = None
+                       tp_needed: List[int] = None,
+                       round_dp: int = consts.DEFAULT_ROUNDING,
                        ) -> List[str]:
     """
     Aggregates the matrices in import_dir up to the given level and writes
@@ -206,9 +223,9 @@ def aggregate_matrices(import_dir: str,
         If None, time periods will be aggregated. If set, chosen time periods
         will be retained.
 
-    return_paths:
-        If True then the paths of all aggregated matrices will be returned.
-        Otherwise, returns None.
+    round_dp:
+        The number of decimal places to round the output values to.
+        Uses consts.DEFAULT_ROUNDING by default.
 
     Returns
     -------
@@ -277,7 +294,8 @@ def aggregate_matrices(import_dir: str,
             segmentations=[segment_needed, ca_needed, tp_needed],
             segmentation_strs=[segment_str, ca_strs, tp_strs],
             import_dir=import_dir,
-            export_path=out_path
+            export_path=out_path,
+            round_dp=round_dp,
         )
 
 
@@ -394,7 +412,7 @@ def get_vdm_tour_proportion_seed_values(m: int,
         return seed_values_list[0]
 
     # Get the average of the seed values
-    seed_values = reduce(lambda x, y: x + y, seed_values_list)
+    seed_values = functools.reduce(lambda x, y: x + y, seed_values_list)
     seed_values = seed_values / n_purposes
 
     # Normalise array to sum=1
@@ -1273,7 +1291,7 @@ def build_compile_params(import_dir: str,
                          output_headers: List[str] = None,
                          output_format: str = 'wide',
                          output_fname: str = None
-                         ) -> None:
+                         ) -> str:
     """
     Create a compile_params file to be used with compile_od().
     In the future this should also work with compile_pa().
@@ -1327,7 +1345,8 @@ def build_compile_params(import_dir: str,
 
     Returns
     -------
-    None
+    compile_params_path:
+        The path to the compile parameters produced
     """
     # Error checking
     if len(m_needed) > 1:
@@ -1420,6 +1439,8 @@ def build_compile_params(import_dir: str,
         out_path = os.path.join(export_dir, output_fname)
         du.write_csv(output_headers, out_lines, out_path)
 
+        return out_path
+
 
 def build_24hr_vdm_mats(import_dir: str,
                         export_dir: str,
@@ -1489,7 +1510,7 @@ def build_24hr_vdm_mats(import_dir: str,
                         "others." % str(tp_needed[i]))
 
             # Combine all matrices together
-            full_mat = reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
+            full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
 
             # Output to file
             full_mat.to_csv(os.path.join(export_dir, output_dist_name))
@@ -1654,13 +1675,41 @@ def build_24hr_mats(import_dir: str,
                                      "others." % str(tp_needed[i]))
 
             # Combine all matrices together
-            full_mat = reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
+            full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
 
             # Output to file
             full_mat.to_csv(os.path.join(export_dir, output_dist_name))
 
 
-def copy_nhb_matrices(import_dir: str, export_dir: str) -> None:
+def copy_nhb_matrices(import_dir: str,
+                      export_dir: str,
+                      replace_pa_with_od: bool = False,
+                      replace_od_with_pa: bool = False,
+                      ) -> None:
+    """
+    Copies NHB matrices from import dir to export dir.
+
+    Optionally replaces the pa in the matrix names with od, or the od in
+    matrix names in pa.
+
+    Parameters
+    ----------
+    import_dir:
+        Path to the directory where the nhb matrices to copy exist.
+    
+    export_dir:
+        Path to the directory to copy the nhb matrices to.
+    
+    replace_pa_with_od:
+        Whether to replace the '_pa_' in the matrix names with '_od_'.
+
+    replace_od_with_pa:
+        Whether to replace the '_od_' in the matrix names with '_pa_'.
+
+    Returns
+    -------
+    None
+    """
     # Find the .csv nhb mats
     mats = du.list_files(import_dir)
     mats = [x for x in mats if '.csv' in x]
@@ -1668,15 +1717,41 @@ def copy_nhb_matrices(import_dir: str, export_dir: str) -> None:
 
     # Copy them over without a rename
     for mat_fname in nhb_mats:
+        # Deal with the simple case
+        if not replace_pa_with_od and not replace_od_with_pa:
+            out_mat_fname = mat_fname
+
+        # Try to rename if needed
+        elif replace_pa_with_od:
+            if '_pa_' not in mat_fname:
+                raise ValueError(
+                    "Cannot find '_pa_' in '%s' to replace." % mat_fname
+                )
+            out_mat_fname = mat_fname.replace('_pa_', '_od_')
+
+        elif replace_od_with_pa:
+            if '_od_' not in mat_fname:
+                raise ValueError(
+                    "Cannot find '_od_' in '%s' to replace." % mat_fname
+                )
+            out_mat_fname = mat_fname.replace('_od_', '_pa_')
+        else:
+            raise ValueError(
+                "This shouldn't happen! Somehow replace_od_with_pa and "
+                "replace_pa_with_od are set and not set?!"
+            )
+
+        # Copy over and rename
         du.copy_and_rename(
             src=os.path.join(import_dir, mat_fname),
-            dst=export_dir
+            dst=os.path.join(export_dir, out_mat_fname),
         )
-
+        
 
 def compile_matrices(mat_import: str,
                      mat_export: str,
                      compile_params_path: str,
+                     round_dp: int = consts.DEFAULT_ROUNDING,
                      build_factor_pickle: bool = False,
                      factor_pickle_path: str = None,
                      factors_fname: str = 'od_compilation_factors.pickle'
@@ -1694,6 +1769,10 @@ def compile_matrices(mat_import: str,
 
     compile_params_path:
         Path to the compile params, as produced by build_compile_params()
+
+    round_dp:
+            The number of decimal places to round the output values to.
+            Uses consts.DEFAULT_ROUNDING by default.
 
     build_factor_pickle:
         If True, a dictionary of factors that can be used to decompile the
@@ -1753,10 +1832,11 @@ def compile_matrices(mat_import: str,
             in_mats.append(pd.read_csv(in_path, index_col=0))
 
         # Combine all matrices together
-        full_mat = reduce(lambda x, y: x.add(y, fill_value=0), in_mats)
+        full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), in_mats)
 
         # Output to file
-        full_mat.to_csv(os.path.join(mat_export, comp_name))
+        output_path = os.path.join(mat_export, comp_name)
+        full_mat.round(decimals=round_dp).to_csv(output_path)
 
         # Go to the next iteration if we don't need the factors
         if not build_factor_pickle:
@@ -1776,3 +1856,417 @@ def compile_matrices(mat_import: str,
         out_path = os.path.join(factor_pickle_path, factors_fname)
         with open(out_path, 'wb') as f:
             pickle.dump(decompile_factors, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def load_matrix_from_disk(mat_import_dir: pathlib.Path,
+                          segment_dict: Dict[str, Any],
+                          completed_segments: List[Dict[str, Any]] = None,
+                          ) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    """
+    Returns a full OD or PA matrix loaded from disk
+
+    Parameters
+    ----------
+    mat_import_dir:
+        The path to a directory containing the pa or od matrices.
+
+    segment_dict:
+        A segment dictionary where the keys are segmentation types, and the
+        values are segmentation values. du.fname_to_calib_params() returns
+        a version of a segment_dict
+
+    completed_segments:
+        A list of segment_dicts without 'matrix_format' keys. This is used
+        to check whether a segment has already been loaded in. Useful for
+        making sure we don't load in od_to and od_from as two separate
+        od matrices.
+        NOTE: This argument is not used or needed if only loading PA or
+        OD matrices
+
+    Returns
+    -------
+    matrix:
+        The loaded matrix in a pandas dataframe.
+
+    completed_segments:
+        An updated version of the completed_segments passed in. If left as
+        None, then this will return an empty list intead. This return can be
+        safely ignored if only loading PA or OD matrices
+    """
+    # Init
+    trip_origin = checks.validate_trip_origin(segment_dict['trip_origin'])
+    matrix_format = checks.validate_matrix_format(segment_dict['matrix_format'])
+
+    completed_segments = list() if completed_segments is None else completed_segments
+
+    # Simple case - we have full PA or OD matrix. Read in and return
+    if segment_dict['matrix_format'] in ['pa', 'od']:
+        mat_fname = du.calib_params_to_dist_name(
+            trip_origin=trip_origin,
+            matrix_format=matrix_format,
+            calib_params=segment_dict,
+            csv=True,
+        )
+        mat_path = os.path.join(mat_import_dir, mat_fname)
+        return pd.read_csv(mat_path, index_col=0), completed_segments
+
+    # Lets make sure we only carry on with the right formats
+    if segment_dict['matrix_format'] not in ['od_from', 'od_to']:
+        raise ValueError(
+            "%s Seems to be a valid matrix format, but I don't know how to "
+            "deal with it." % str(segment_dict['matrix_format'])
+        )
+
+    # Can only get here if we have od_to or od_from
+
+    # Need to remove the matrix format so od_to and od_from will match
+    temp_seg_dict = segment_dict.copy()
+    del temp_seg_dict['matrix_format']
+
+    # Don't carry on if we've already done this segment
+    if temp_seg_dict in completed_segments:
+        return pd.DataFrame(), completed_segments
+
+    # Mark seg_dict as complete
+    completed_segments.append(temp_seg_dict)
+
+    # Load in both matrices and stick together
+    od_to_fname = du.calib_params_to_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='od_to',
+        calib_params=segment_dict,
+        csv=True,
+    )
+    od_to_path = os.path.join(mat_import_dir, od_to_fname)
+    od_to = pd.read_csv(od_to_path, index_col=0)
+
+    od_from_fname = du.calib_params_to_dist_name(
+        trip_origin=trip_origin,
+        matrix_format='od_to',
+        calib_params=segment_dict,
+        csv=True,
+    )
+    od_from_path = os.path.join(mat_import_dir, od_from_fname)
+    od_from = pd.read_csv(od_from_path, index_col=0)
+
+    od_mat = od_to + od_from
+
+    return od_mat, completed_segments
+
+
+def matrices_to_vector(mat_import_dir: pathlib.Path,
+                       years_needed: List[str],
+                       verbose: bool = True,
+                       ) -> Tuple[pd.DataFrame, pd.DataFrame,
+                                  pd.DataFrame, pd.DataFrame]:
+    """
+    Returns either P/A or O/D vectors based on the matrices in mat_import_dir
+
+    Parameters
+    ----------
+    mat_import_dir:
+        The path to a directory containing the pa or od matrices. Matrix
+        information will be inferred from the matrix names. This function
+        assumes all .csv files in the directory are matrices of the same
+        format (either pa or od).
+
+    years_needed:
+        A list of years to look for and build vectors for.
+
+    verbose:
+        Whether to write progress info to the terminal or not.
+
+    Returns
+    -------
+    hb_p_or_o:
+        A segmentation vector of home based productions or origins
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+
+    nhb_p_or_o:
+        A segmentation vector of non home based productions or origins
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+
+    hb_a_or_d:
+        A segmentation vector of home based attractions or destinations
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+
+    nhb_a_or_d:
+        A segmentation vector of non home based attractions or destinations
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+    """
+    # BACKLOG: matrices_to_vector() needs checks adding for edge cases
+    #  labels: EFS, error checks
+    # Init
+    du.print_w_toggle("Generating vectors from %s..." % mat_import_dir, echo=verbose)
+    mat_names = [x for x in du.list_files(mat_import_dir) if fo.is_csv(x)]
+
+    # Split the matrices into years
+    year_to_segment_dicts = defaultdict(list)
+    for fname in mat_names:
+        # Parse the matrix fname into a segment dict
+        segment_dict = du.fname_to_calib_params(
+            fname=fname,
+            get_trip_origin=True,
+            get_matrix_format=True,
+        )
+
+        mat_year = str(segment_dict['yr'])
+        year_to_segment_dicts[mat_year].append(segment_dict)
+
+    # Make sure all the years we need exist
+    for year in years_needed:
+        if year not in year_to_segment_dicts.keys():
+            raise du.NormitsDemandError(
+                "Cannot find matrices for all the years asked for. "
+                "Specifically there does not seem to be any matrices for"
+                "year %s." % str(year)
+            )
+
+    # Build the progress bar
+    total = sum([len(year_to_segment_dicts[year]) for year in years_needed])
+    desc = 'Building vectors'
+    p_bar = tqdm(total=total, desc=desc, disable=(not verbose))
+
+    # Build a vector for each year
+    yearly_p_or_o = list()
+    yearly_a_or_d = list()
+    segment_col_names = list()
+    for year in years_needed:
+
+        # This shouldn't change across matrices
+        temp_seg_dict = year_to_segment_dicts[year][0]
+        matrix_format = checks.validate_matrix_format(temp_seg_dict['matrix_format'])
+
+        # Figure out which column names we should use
+        if matrix_format in consts.PA_MATRIX_FORMATS:
+            p_or_o_val_name = 'productions'
+            a_or_d_val_name = 'attractions'
+        elif matrix_format in consts.OD_MATRIX_FORMATS:
+            p_or_o_val_name = 'origin'
+            a_or_d_val_name = 'destination'
+        else:
+            raise ValueError(
+                "%s seems to be a valid matrix format, but I don't know "
+                "how to handle it!"
+                % str(matrix_format)
+            )
+
+        # Build an efficient_df for each matrix
+        segment_col_names = set()
+        year_eff_dfs = list()
+        completed_segments = list()
+        for segment_dict in year_to_segment_dicts[year]:
+
+            # ## LOAD THE MATRIX IN ## #
+            matrix, completed_segments = load_matrix_from_disk(
+                mat_import_dir=mat_import_dir,
+                segment_dict=segment_dict,
+                completed_segments=completed_segments,
+            )
+
+            # If empty, its od_from or od_to and we've already done it
+            if matrix.empty:
+                continue
+
+            # ## GET THE ROW AND COLUMN TOTALS AND NAMES ## #
+            # Convert into p/a or o/d
+            p_or_o = matrix.sum(axis=1)
+            a_or_d = matrix.sum(axis=0)
+
+            # Sort out the column naming
+            zone_col_name = matrix.index.name
+            p_or_o.index.name = zone_col_name
+            a_or_d.index.name = zone_col_name
+
+            p_or_o = p_or_o.reset_index()
+            a_or_d = a_or_d.reset_index()
+
+            p_or_o[zone_col_name] = p_or_o[zone_col_name].astype(int)
+            a_or_d[zone_col_name] = a_or_d[zone_col_name].astype(int)
+
+            p_or_o = p_or_o.rename(columns={0: p_or_o_val_name})
+            a_or_d = a_or_d.rename(columns={0: a_or_d_val_name})
+
+            # ## COMPILE INTO AN EFFICIENT DF ## #
+            # Remove the info we no longer need
+            eff_df = segment_dict.copy()
+            del eff_df['yr']
+            del eff_df['trip_origin']
+            del eff_df['matrix_format']
+
+            # Keep track of the column names we're keeping
+            vector_columns = [zone_col_name] + list(eff_df.keys())
+            segment_col_names = set(list(segment_col_names) + vector_columns)
+
+            # Add the dataframe and we're done!
+            # After this the df value is a df of either cols:
+            # zone_col, productions, attractions
+            # zone_col, origin, destination
+            eff_df['df'] = pd.merge(
+                p_or_o,
+                a_or_d,
+                on=zone_col_name
+            )
+            year_eff_dfs.append(eff_df)
+
+            # Update the progress bar
+            p_bar.update(1)
+
+        # Figure out the final column names
+        segment_col_names = list(segment_col_names)
+        value_cols = [p_or_o_val_name, a_or_d_val_name]
+        final_col_names = segment_col_names + value_cols
+        # TODO: How to split HB/NHB. Two different lists per year? Split at end?!
+        #  pass in matrix format?
+
+        # Compile into a vector for this year
+        year_pa = du.compile_efficient_df(year_eff_dfs, col_names=final_col_names)
+        year_pa = du.sort_vector_cols(year_pa)
+        year_pa = year_pa.sort_values(by=segment_col_names)
+
+        # Tidy up soc/ns columns
+        for col_name in ['soc', 'ns']:
+            if col_name in list(year_pa):
+                year_pa[col_name] = year_pa[col_name].fillna('none').astype(str)
+
+        # ## STORE DATAFRAMES FOR CONCAT LATER ## #
+        # Remove the other column from each
+        p_or_o_vec = year_pa.drop(columns=[a_or_d_val_name])
+        a_or_d_vec = year_pa.drop(columns=[p_or_o_val_name])
+
+        # Rename for the year we've just done and store for later
+        yearly_p_or_o.append(p_or_o_vec.rename(columns={p_or_o_val_name: year}))
+        yearly_a_or_d.append(a_or_d_vec.rename(columns={a_or_d_val_name: year}))
+
+    # At this point we have a list of vectors for different years
+
+    # Merge the years together
+    p_or_o = du.merge_df_list(yearly_p_or_o, on=segment_col_names)
+    a_or_d = du.merge_df_list(yearly_a_or_d, on=segment_col_names)
+
+    # Split out the HB and NHB and return
+    p_or_o_mask = p_or_o['p'].isin(consts.ALL_HB_P)
+    hb_p_or_o = p_or_o[p_or_o_mask].copy()
+    nhb_p_or_o = p_or_o[~p_or_o_mask].copy()
+
+    a_or_d_mask = a_or_d['p'].isin(consts.ALL_HB_P)
+    hb_a_or_d = a_or_d[a_or_d_mask].copy()
+    nhb_a_or_d = a_or_d[~a_or_d_mask].copy()
+
+    return hb_p_or_o, nhb_p_or_o, hb_a_or_d, nhb_a_or_d
+
+
+def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
+                                     years_needed: List[str],
+                                     cache_path: pathlib.Path,
+                                     matrix_format: str,
+                                     overwrite_cache: bool = False,
+                                     verbose: bool = True,
+                                     ) -> pd.DataFrame:
+    """
+    A cache wrapper around matrices_to_vector().
+
+    Checks if the asked for matrices already exist at the path given in
+    cache_path. If they exist, they're loaded. Otherwise matrices_to_vector()
+    is ran, and the output saved to disk at cache_path before returning
+    the vectors produced.
+
+    Parameters
+    ----------
+    mat_import_dir:
+        The path to a directory containing the pa or od matrices. Matrix
+        information will be inferred from the matrix names. This function
+        assumes all .csv files in the directory are matrices of the same
+        format (either pa or od).
+
+    years_needed:
+        A list of years to look for and build vectors for.
+
+    cache_path:
+        The path to a directory where the cached vectors should be saved/
+        loaded from.
+
+    matrix_format:
+        The format of the matrices being produced. Should be one of the
+        valid values from consts.MATRIX_FORMATS
+
+    overwrite_cache:
+        If True, the vectors are remade and overwrite any cache that may
+        already exist.
+
+    verbose:
+        Whether to write progress info to the terminal or not.
+
+    Returns
+    -------
+    hb_p_or_o:
+        A segmentation vector of home based productions or origins
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+
+    nhb_p_or_o:
+        A segmentation vector of non home based productions or origins
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+
+    hb_a_or_d:
+        A segmentation vector of home based attractions or destinations
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+
+    nhb_a_or_d:
+        A segmentation vector of non home based attractions or destinations
+        (depending on the format of the matrices in mat_import_dir) for all
+        the years asked for in years_needed.
+    """
+    # Init
+    matrix_format = checks.validate_matrix_format(matrix_format)
+
+    # Figure out the file paths we should be using
+    if matrix_format == 'pa':
+        hb_p_or_o_fname = consts.PRODS_FNAME % ('cache', 'hb')
+        nhb_p_or_o_fname = consts.PRODS_FNAME % ('cache', 'nhb')
+        hb_a_or_o_fname = consts.ATTRS_FNAME % ('cache', 'hb')
+        nhb_a_or_o_fname = consts.ATTRS_FNAME % ('cache', 'nhb')
+    elif matrix_format == 'od':
+        hb_p_or_o_fname = consts.ORIGS_FNAME % ('cache', 'hb')
+        nhb_p_or_o_fname = consts.ORIGS_FNAME % ('cache', 'nhb')
+        hb_a_or_o_fname = consts.DESTS_FNAME % ('cache', 'hb')
+        nhb_a_or_o_fname = consts.DESTS_FNAME % ('cache', 'nhb')
+    else:
+        raise ValueError(
+            "%s seems to be a valid matrix format, but I don't know what to "
+            "do with it!" % matrix_format
+        )
+
+    cache_fnames = [
+        hb_p_or_o_fname,
+        nhb_p_or_o_fname,
+        hb_a_or_o_fname,
+        nhb_a_or_o_fname,
+    ]
+    cache_paths = [os.path.join(cache_path, f) for f in cache_fnames]
+
+    # Read from disk if files already exist
+    if all([fo.file_exists(f) for f in cache_paths]) and not overwrite_cache:
+        dtypes = {'soc': str, 'ns': str}
+        return [pd.read_csv(f, dtype=dtypes) for f in cache_paths]
+
+    # ## CREATE AND CACHE IF FILES DON'T EXIST YET ## #
+
+    # Make the files - returned in same order as filenames above
+    vectors = matrices_to_vector(
+        mat_import_dir=mat_import_dir,
+        years_needed=years_needed,
+        verbose=verbose
+    )
+
+    # Save to disk, and return copies
+    for vector, path in zip(vectors, cache_paths):
+        vector.to_csv(path, index=False)
+
+    return vectors

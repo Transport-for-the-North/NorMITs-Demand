@@ -13,6 +13,9 @@ from tqdm import tqdm
 # BACKLOG: Exceptional growth probably doesn't belong in utils!
 #  labels: EFS, demand merge
 
+# BACKLOG: Split Exceptional growth and Bespoke zones code up
+#  labels: EFS, QoL updates
+
 # Local imports
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
@@ -455,7 +458,8 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
                               purpose_col: str = 'p',
                               audit_location: str = None
                               ) -> pd.DataFrame:
-    """Applies the following growth criteria depending on the zone type 
+    """
+    Applies the following growth criteria depending on the zone type
     (normal growth or exceptional) -
     normal = observed_base * synthetic_forecast / synthetic_base
     exceptional = land_use_future * sector_trip_rate
@@ -510,6 +514,11 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
         Contains all segmentation columns, the intermediate synthetic and 
         observed data, and the final grown trips.
     """
+    # BACKLOG: Break Exceptional Growth Functionality into separate
+    #  productions and attractions functions. Atm the code is difficult
+    #  to read while it tried to deal with both at once.
+    #  labels: QoL Updates, EFS
+
     # Note this could result in lower trips generated than before. See
     # the audit output for the changes
 
@@ -547,6 +556,7 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
 
     # Handle Exceptional Zones
     # Get the relevant land use data and save in e_land_use (exceptional)
+    # TODO: Just don't do this if mask is nothing??
     mask = land_use[zone_column].isin(exceptional_zones[zone_column])
     e_land_use = land_use.loc[mask].copy()
     # Map the land use to the sector used for the trip rates
@@ -598,7 +608,6 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
             os.path.join(audit_location, "exceptional_land_use.csv"),
             index=False
         )
-    # This looks like a mini production/attraction model?
 
     # Merge on the common segmentation and re-calculate the synthetic forecast
     # using the new sector level trip rates
@@ -793,6 +802,15 @@ def growth_criteria(synth_productions: pd.DataFrame,
     zt_from_zone_col = zt_from_zone.lower() + '_zone_id'
     model_zone_col = model_name.lower() + '_zone_id'
 
+    # Validate attraction input
+    if synth_attractions['soc'].dtype == object:
+        try:
+            synth_attractions['soc'] = synth_attractions['soc'].astype(int)
+        except ValueError as e:
+            print("When converting attractions soc column to integers, I"
+                  "got the following error: ")
+            raise e
+
     # Load files and format inputs as necessary
     print("Loading Files")
     population = du.safe_read_csv(population_path)
@@ -821,6 +839,18 @@ def growth_criteria(synth_productions: pd.DataFrame,
         zone_column=model_zone_col,
         trip_type="attractions"
     )
+
+    # Make sure the synth and observed productions are all str in soc/ns
+    for col in ['soc', 'ns']:
+        try:
+            synth_productions[col] = synth_productions[col].astype(str)
+            observed_productions[col] = observed_productions[col].astype(str)
+        except KeyError:
+            print(
+                "WARNING: Tried to cast %s in productions to a string, but "
+                "couldn't find the column. If this is meant to happen, you "
+                "can ignore this warning."
+            )
 
     # Set up the grouping columns
     prod_group_cols = [model_zone_col] + segments["prod"]
@@ -1134,6 +1164,7 @@ def extract_donor_totals(matrix_path: str,
         "Sector ID"
     )[["origins", "dests"]].sum()
     donor_totals.index.name = "Donor Sector ID"
+    donor_totals = donor_totals.reset_index()
 
     return donor_totals, agg_tour_props
 
@@ -1197,7 +1228,7 @@ def get_donor_zone_data(sectors: pd.DataFrame,
                         nhb_segmented: bool,
                         ca_seg_needed: bool,
                         base_year: str,
-                        p_needed: List[int] = consts.PURPOSES_NEEDED,
+                        p_needed: List[int] = consts.ALL_PURPOSES_NEEDED,
                         m_needed: List[int] = consts.MODES_NEEDED,
                         soc_needed: List[int] = consts.SOC_NEEDED,
                         ns_needed: List[int] = consts.NS_NEEDED,
@@ -1373,7 +1404,7 @@ def _replace_generation_segments(generation_data: pd.DataFrame,
                                  purpose_data: pd.DataFrame,
                                  segmented_nhb: bool,
                                  ca_seg_needed: bool,
-                                 p_needed: List[int] = consts.PURPOSES_NEEDED,
+                                 p_needed: List[int] = consts.ALL_PURPOSES_NEEDED,
                                  soc_needed: List[int] = consts.SOC_NEEDED,
                                  ns_needed: List[int] = consts.NS_NEEDED,
                                  ca_needed: List[int] = consts.CA_NEEDED):
@@ -1527,15 +1558,11 @@ def _apply_underlying_segment_splits(generation_data: pd.DataFrame,
         segmentation
     """
 
-    ca_needed = "None" not in generation_data["ca"].unique()
+    ca_needed = ~generation_data["ca"].isin(["None"]).any()
 
     df = generation_data.copy()
 
     # Merge generation data to the donor_data to split where required
-    print(df)
-
-    print(donor_data)
-
     split_data = pd.merge(
         df,
         donor_data,
@@ -1666,7 +1693,7 @@ def _convert_od_to_trips(sector_distributed_data: pd.DataFrame,
         to the relevant type for each purpose.
     """
 
-    ca_needed = "None" not in sector_distributed_data["ca"].unique()
+    ca_needed = ~sector_distributed_data["ca"].isin(["None"]).any()
 
     sector_dist = sector_distributed_data.copy()
     agg_tour_props = aggregated_tour_proportions.copy()
@@ -1727,8 +1754,9 @@ def _convert_od_to_trips(sector_distributed_data: pd.DataFrame,
 def _build_addition_matrix(filtered_trips: pd.DataFrame,
                            sector_data: pd.DataFrame,
                            old_trips: np.array,
-                           purpose: int
-                           ) -> np.array:
+                           purpose: int,
+                           keep_zeros: bool = False
+                           ) -> Tuple[np.array, str]:
     """Builds the matrix of trips to be added to the existing EFS output for 
     a given segmentation.
 
@@ -1752,12 +1780,20 @@ def _build_addition_matrix(filtered_trips: pd.DataFrame,
         by zone contained in this matrix.
     purpose : int
         Used to determine if we need to apply as PAs or ODs
+    keep_zeros : bool
+        How to handle instances where the underlying zonal distribution 
+        contains only 0s - introduced due to rounding of matrices.
+        If False, the trips will be evenly distributed in that sector (all 
+        zones in the sector receive an equal proportion).
+        If True, the zeros will remain and no bespoke trips will be distributed
+        in this sector. By default, False
 
     Returns
     -------
-    np.array
+    Tuple[np.array, str]
         The matrix of bespoke zone data that will be applied to the original 
         matrix for this segmentation.
+        Warning message if relevant or None
 
     Raises
     ------
@@ -1768,6 +1804,8 @@ def _build_addition_matrix(filtered_trips: pd.DataFrame,
 
     # Build new matrix to combine with existing
     add_trips = np.zeros_like(old_trips)
+    # Variable to store warning message
+    warning_message = None
     # Add the new volumes to the relevant zones
     for row_dict in filtered_trips.to_dict(orient="records"):
         # Check if intrazonals should be included
@@ -1790,34 +1828,73 @@ def _build_addition_matrix(filtered_trips: pd.DataFrame,
         # Distribute using the underlying distribution in that sector
         row_dist = old_trips[bespoke_zone_idx, zone_idxs]
         col_dist = old_trips[zone_idxs, bespoke_zone_idx]
+        # Extract the trip that need to be distributed
+        trips_tot = {
+            "prods": row_dict["prod"],
+            "attrs": row_dict["attr"],
+            "ods_from": row_dict["dist_volume"],
+            "ods_to": row_dict["dist_volume"]
+        }
+        
+        # Handle case where all zero in the distribution data
+        keep_warning = (
+            "Not distributing some trips as 0 trips in original matrix"
+        )
+        replace_warning = (
+            "Evenly distributing some trips where there were 0 in the original"
+            " matrix"
+        )
+        if np.count_nonzero(row_dist) == 0:
+            # Replace wil all ones to remove any errors and distribute evenly
+            # if needed
+            row_dist = np.ones_like(row_dist)
+            # If we do not want to distribute these trips
+            if keep_zeros:
+                warning_message = keep_warning
+                trips_tot["prods"] = 0
+                trips_tot["ods_from"] = 0
+            else:
+                warning_message = replace_warning
+        if np.count_nonzero(col_dist) == 0:
+            # Replace wil all ones to remove any errors and distribute evenly
+            # if needed
+            col_dist = np.ones_like(col_dist)
+            # If we do not want to distribute these trips
+            if keep_zeros:
+                warning_message = keep_warning
+                trips_tot["attrs"] = 0
+                trips_tot["ods_to"] = 0
+            else:
+                warning_message = replace_warning
+                
         if purpose in consts.ALL_HB_P:
             # For HB - add both productions and attractions
             add_trips[bespoke_zone_idx, zone_idxs] += (
-                row_dict["prod"]
+                trips_tot["prods"]
                 * row_dist
                 / row_dist.sum()
             )
             add_trips[zone_idxs, bespoke_zone_idx] += (
-                row_dict["attr"]
+                trips_tot["attrs"]
                 * col_dist
                 / col_dist.sum()
             )
         elif row_dict["Direction"] == 1:
             # For NHB - use the direction and add the ODs
             add_trips[bespoke_zone_idx, zone_idxs] += (
-                row_dict["dist_volume"]
+                trips_tot["ods_from"]
                 * row_dist
                 / row_dist.sum()
             )
         elif row_dict["Direction"] == 2:
             add_trips[zone_idxs, bespoke_zone_idx] += (
-                row_dict["dist_volume"]
+                trips_tot["ods_to"]
                 * col_dist
                 / col_dist.sum()
             )
         else:
             raise ValueError("Invalid Purpose or Direction")
-    return add_trips
+    return add_trips, warning_message
 
 
 def _constrain_to_sector_total(trip_matrix: np.array,
@@ -1890,10 +1967,11 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                             sector_data: pd.DataFrame,
                             export_dict: dict,
                             segmented_nhb: bool,
-                            p_needed: List[int] = consts.PURPOSES_NEEDED,
+                            p_needed: List[int] = consts.ALL_PURPOSES_NEEDED,
                             soc_needed: List[int] = consts.SOC_NEEDED,
                             ns_needed: List[int] = consts.NS_NEEDED,
-                            ca_needed: List[int] = consts.CA_NEEDED
+                            ca_needed: List[int] = consts.CA_NEEDED,
+                            matrix_rounding: int = 4
                             ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Loops through all segmentation in the EFS output matrices, applying the
     generation data to the bespoke zones.
@@ -1917,6 +1995,8 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
         for each segmentation.
     segmented_nhb : bool
         Flag that is True if NHB matrices contain all possible segmentation
+    matrix_rounding : int
+        Number of decimal places to round matrix values to. By default, 4
 
     Returns
     -------
@@ -1943,12 +2023,17 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
     additions = []
     # For storing info on any matrices that needed to be skipped
     skipped = []
+    # Store any warning message here
+    warning_message = None
+    # Build float format string for outputs
+    flt_format = f"%.{matrix_rounding}f"
+
     # Extract the required segmentation from the generation data
     year_list = converted_trips["Year"].unique()
     purps = converted_trips["Purpose"].unique()
     modes = converted_trips["mode"].unique()
     # Use CA values - only if CA segmentation is needed
-    ca_seg_needed = "None" not in converted_trips["ca"].unique()
+    ca_seg_needed = ~converted_trips["ca"].isin(["None"]).any()
     cas = ca_needed if ca_seg_needed else ["None"]
     # Extract the unique generation zones that need to be considered
     gen_zones = converted_trips["Zone ID"].unique()
@@ -2024,12 +2109,14 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                 raise ValueError("Error: Inconsistent Constraint Type")
             constraint_type = constraint_type[0]
 
-            add_trips = _build_addition_matrix(
+            add_trips, warning_returned = _build_addition_matrix(
                 filtered_trips,
                 sector_data,
                 trips,
                 purp
             )
+            if warning_returned is not None:
+                warning_message = warning_returned
 
             additions.append([
                 year, purp, mode, ca, segment, trips.sum(), add_trips.sum()
@@ -2068,7 +2155,10 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
                 index=trips_df.index,
                 columns=trips_df.columns
             )
-            new_trips_df.to_csv(new_matrix_path)
+            new_trips_df.to_csv(new_matrix_path, float_format=flt_format)
+    # Raise the warning on replacing zeros
+    if warning_message is not None:
+        warnings.warn(warning_message)
     additions = pd.DataFrame(
         additions,
         columns=["Year", "Purp", "Mode", "CA", "Segment", "Old Trips",
@@ -2251,9 +2341,7 @@ def adjust_bespoke_zones(gen_path: str,
     else:
         raise ValueError(f"Model Type {model_name} is not supported")
 
-    bespoke_audit_path = os.path.join(
-        audit_path, "Bespoke Zones"
-    )
+    bespoke_audit_path = os.path.join(audit_path, "Bespoke Zones")
     if not os.path.isdir(bespoke_audit_path):
         os.mkdir(bespoke_audit_path)
 

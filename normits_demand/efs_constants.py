@@ -13,6 +13,7 @@ Keeps all constants in one place, for all files in the project to refer to,
 and keeps the code more readable.
 """
 # TODO: Re-organise constants
+import os
 
 # ### Constant Values ### #
 
@@ -28,9 +29,17 @@ ALL_MODES = [1, 2, 3, 5, 6]
 TIME_PERIODS = [1, 2, 3, 4]
 TIME_PERIOD_STRS = ['tp' + str(x) for x in TIME_PERIODS]
 
-VALID_TRIP_ORIGINS = ['hb', 'nhb']
+
+# Trip origins to purpose
+_trip_origin_purposes = [
+    ('hb', ALL_HB_P),
+    ('nhb', ALL_NHB_P),
+]
+TRIP_ORIGINS = [x[0] for x in _trip_origin_purposes]
+TRIP_ORIGIN_TO_PURPOSE = {to: p for to, p in _trip_origin_purposes}
 
 PROCESS_COUNT = -2
+DEFAULT_ROUNDING = 6
 
 # ## VDM/ME2 constants ## #
 VDM_TRIP_ORIGINS = ['hb', 'nhb']
@@ -64,12 +73,14 @@ P_STR2INT = {s: i for s, i in _p_str_int}
 P_INT2STR = {i: s for s, i in _p_str_int}
 
 # Valid levels of segmentation
-SEG_LEVELS = [
-    'tms',      # Distribution segmentation - only p/m
-    'me2',      # Compiled for Matrix Estimation. User classes + time periods
-    'vdm',      # Similar to ME but split by trip origin 3 HB, and 2 NHB
-    'tfn',      # Segment as much as possible - likely TfN segmentation
-]
+SEG_LEVEL_COLS = {
+    'tms': ['p', 'tp'],             # Distribution segmentation - only p/m
+    'me2': ['uc', 'tp'],            # Compiled for Matrix Estimation. User classes + time periods
+    'vdm': ['uc', 'tp'],            # Similar to ME but split by trip origin 3 HB, and 2 NHB
+    'tfn': ['p', 'm', 'soc', 'ns', 'ca', 'tp'],  # Segment as much as possible - likely TfN segmentation
+}
+
+SEG_LEVELS = list(SEG_LEVEL_COLS.keys())
 
 # Valid zoning systems
 ZONING_SYSTEMS = [
@@ -80,6 +91,11 @@ ZONING_SYSTEMS = [
     'norms',
     'norms_2015'
 ]
+
+ZONE_SYSTEM_ZONE_COUNTS = {
+    'norms': 1300,
+    'noham': 2770,
+}
 
 # Valid model names
 _model_name_modes = [
@@ -124,7 +140,10 @@ PRODUCTIONS_DIRNAME = 'Productions'
 ATTRACTIONS_DIRNAME = 'Attractions'
 NHB_PARAMS_DIRNAME = 'nhb_factors'
 
-VALID_MATRIX_FORMATS = ['pa', 'od']
+PA_MATRIX_FORMATS = ['pa']
+OD_MATRIX_FORMATS = ['od', 'od_to', 'od_from']
+VALID_MATRIX_FORMATS = PA_MATRIX_FORMATS + OD_MATRIX_FORMATS
+
 
 TAG_CERTAINTY_BOUNDS = {
     "NC": ["NC"],
@@ -138,8 +157,11 @@ TAG_CERTAINTY_BOUNDS = {
 PRODS_FNAME = '%s_%s_productions.csv'
 ATTRS_FNAME = '%s_%s_attractions.csv'
 
+ORIGS_FNAME = '%s_%s_origins.csv'
+DESTS_FNAME = '%s_%s_destinations.csv'
+
 # Additive growth audit
-PRODS_AG_FNAME = '%s_%s_productions_additive_growth.csv'
+PRODS_MG_FNAME = '%s_%s_productions_multiplicative_growth.csv'
 
 # zone_system
 POP_FNAME = '%s_population.csv'
@@ -155,7 +177,7 @@ EMP_TRANSLATION_FNAME = '%s_%s_emp_weighted_lookup.csv'
 
 # ## NTEM Controls
 # year
-NTEM_CONTROL_FNAME = 'ntem_pa_ave_wday_%s.csv'
+NTEM_CONTROL_FNAME = 'ntem_%s_ave_wday_%s.csv'
 DEFAULT_LAD_LOOKUP = 'lad_to_msoa.csv'
 
 # TODO: can likely remove lots of EFS_COLUMN_DICTIONARY
@@ -244,7 +266,7 @@ BASE_YEAR = 2018
 FUTURE_YEARS = [2033, 2035, 2050]
 
 # HB consts
-PURPOSES_NEEDED = ALL_HB_P
+HB_PURPOSES_NEEDED = ALL_HB_P
 MODES_NEEDED = MODEL_MODES[MODEL_NAME]
 SOC_NEEDED = [0, 1, 2, 3]
 NS_NEEDED = [1, 2, 3, 4, 5]
@@ -254,11 +276,26 @@ TP_NEEDED = [1, 2, 3, 4]
 # NHB consts
 NHB_PURPOSES_NEEDED = ALL_NHB_P
 
+ALL_PURPOSES_NEEDED = HB_PURPOSES_NEEDED + NHB_PURPOSES_NEEDED
+
 # Built from running args
 ALL_YEARS = [BASE_YEAR] + FUTURE_YEARS
 BASE_YEAR_STR = str(BASE_YEAR)
 FUTURE_YEARS_STR = [str(x) for x in FUTURE_YEARS]
 ALL_YEARS_STR = [str(x) for x in ALL_YEARS]
+
+# Bespoke zones
+# BACKLOG: Move bespoke zone input into a config file
+#  labels: EFS, QoL updates
+
+BESPOKE_ZONES_INPUT_FILE = os.path.join(
+    "I:/",
+    "NorMITs Demand",
+    "import",
+    "bespoke zones",
+    "MANSAM",
+    "Bespoke Zone - MANSAM Inputs v1b.xlsx",
+)
 
 
 

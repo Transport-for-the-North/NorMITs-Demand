@@ -21,6 +21,8 @@ from tqdm import tqdm
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
 
+from normits_demand.constraints import ntem_control as ntem
+
 from normits_demand.d_log import processor as dlog_p
 
 
@@ -531,6 +533,7 @@ class EFSAttractionGenerator:
         # Align purpose and mode columns to standards
         p_col = 'p'
         m_col = 'm'
+        soc_col = 'soc'
         columns = {a_weights_p_col: p_col, mode_split_m_col: m_col}
         attractions = attractions.rename(columns=columns)
         nhb_att = nhb_att.rename(columns=columns)
@@ -547,6 +550,7 @@ class EFSAttractionGenerator:
         # Make sure columns are the correct data type
         attractions[p_col] = attractions[p_col].astype(int)
         attractions[m_col] = attractions[m_col].astype(int)
+        attractions[soc_col] = attractions[soc_col].astype(int)
         attractions.columns = attractions.columns.astype(str)
 
         nhb_att[p_col] = nhb_att[p_col].astype(int)
@@ -1443,29 +1447,28 @@ def merge_attraction_weights(employment: pd.DataFrame,
                                                    lad_lookup_name))
 
         print("Performing HB NTEM constraint...")
-        # TODO: Allow control_to_ntem() to take flexible col names
         attractions = attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        attractions, hb_audit, _ = du.control_to_ntem(
-            attractions,
-            ntem_totals,
-            ntem_lad_lookup,
-            group_cols=['p', 'm'],
+        attractions, hb_audit, *_ = ntem.control_to_ntem(
+            control_df=attractions,
+            ntem_totals=ntem_totals,
+            zone_to_lad=ntem_lad_lookup,
+            constraint_cols=['p', 'm'],
             base_value_name='trips',
             ntem_value_name='Attractions',
-            purpose='hb'
+            trip_origin='hb'
         )
         attractions = attractions.rename(columns={'p': p_col, 'm': m_col})
 
         print("Performing NHB NTEM constraint...")
         nhb_attractions = nhb_attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        nhb_attractions, nhb_audit, _ = du.control_to_ntem(
-            nhb_attractions,
-            ntem_totals,
-            ntem_lad_lookup,
-            group_cols=['p', 'm', 'tp'],
+        nhb_attractions, nhb_audit, *_ = ntem.control_to_ntem(
+            control_df=nhb_attractions,
+            ntem_totals=ntem_totals,
+            zone_to_lad=ntem_lad_lookup,
+            constraint_cols=['p', 'm', 'tp'],
             base_value_name='trips',
             ntem_value_name='Attractions',
-            purpose='nhb'
+            trip_origin='nhb'
         )
         nhb_attractions = nhb_attractions.rename(columns={'p': p_col, 'm': m_col})
 
@@ -1757,7 +1760,7 @@ def build_attraction_imports(import_home: str,
         soc_weights_path = os.path.join(import_home, path)
 
     if msoa_lookup_path is None:
-        path = "default\zoning\msoa_zones.csv"
+        path = "zone_translation\msoa_zones.csv"
         msoa_lookup_path = os.path.join(import_home, path)
 
     if set_controls and ntem_control_dir is None:
@@ -1765,7 +1768,8 @@ def build_attraction_imports(import_home: str,
         ntem_control_dir = os.path.join(import_home, path)
 
     if set_controls and lad_lookup_dir is None:
-        lad_lookup_dir = import_home
+        path = os.path.join('zone_translation', 'no_overlap')
+        lad_lookup_dir = os.path.join(import_home, path)
 
     # Assign to dict
     imports = {
@@ -1799,7 +1803,7 @@ def build_attraction_exports(export_home: str,
                              ) -> Dict[str, str]:
     """
     Builds a dictionary of attraction export paths, forming a standard calling
-    procedure for attraction exports. Arguments allow default paths to be
+    procedure for attraction efs_exports. Arguments allow default paths to be
     replaced.
 
 
@@ -1827,7 +1831,7 @@ def build_attraction_exports(export_home: str,
                                        'Attractions')
     du.create_folder(audit_write_dir, chDir=False)
 
-    # Build the exports dictionary
+    # Build the efs_exports dictionary
     exports = {
         'audits': audit_write_dir
     }

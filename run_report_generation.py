@@ -711,9 +711,9 @@ def load_report_params(param_file: str) -> Union[List[Any], Dict[str, Any]]:
         Path to the options file - json format.
         Should contain the required keys:
          - "matrix_directories" - dictionary containing a key of either pa or
-            od, with the corresponding key in the exports dictionary from the
+            od, with the corresponding key in the efs_exports dictionary from the
             EFS
-         - "output_dir" - Subdirectory within EFS exports["reports"] that the
+         - "output_dir" - Subdirectory within EFS efs_exports["reports"] that the
             reports will be saved to
          - "matrix_format" - One of "pa" or "od"
          - "trip_origin" - "One of "hb" or "nhb"
@@ -888,8 +888,8 @@ if __name__ == "__main__":
     # Controls I/O
     scenario = consts.SC04_UZC
     iter_num = 1
-    import_home = "Y:/"
-    export_home = "Y:/"
+    import_home = "I:/"
+    export_home = "I:/"
     model_name = consts.MODEL_NAME
 
     efs_main = ExternalForecastSystem(

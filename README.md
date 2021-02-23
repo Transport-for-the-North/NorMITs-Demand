@@ -54,3 +54,14 @@ pulled straight from the module version.
 
 ### v0.3.0
 Code has been refactored in this version - ready for merge with TMS
+
+### v0.3.1
+- TMS added to codebase.
+- A bunch of minor fixes were added to get EFS and TMS working correctly.
+- EFS PA to OD process was fixed for NoHAM outputs.
+
+### v0.3.2
+- Added a new EFS reporter class, capable of comparing EFS outputs to NTEM.
+- Changed NTEM scenario future year growth for productions to match other scenarios.
+Only constrained in base year, and multiplicative growth on top.
+

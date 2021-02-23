@@ -14,8 +14,8 @@ import numpy as np
 import pandas as pd
 
 # Local imports
-from elasticity_calcs import constants as ec
-from elasticity_calcs import generalised_costs as gc
+from normits_demand.elasticity import constants as ec
+from normits_demand.elasticity import generalised_costs as gc
 
 
 ##### CLASSES #####
