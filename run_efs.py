@@ -29,8 +29,8 @@ def main():
     recreate_nhb_productions = True
 
     run_bespoke_zones = True
-    run_hb_pa_to_od = True
-    run_compile_od = True
+    run_hb_pa_to_od = False
+    run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False
 

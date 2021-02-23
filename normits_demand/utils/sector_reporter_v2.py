@@ -18,12 +18,15 @@ class SectorReporter:
     default_zone_system_name = str
     default_zone_system = pd.DataFrame
     default_sector_grouping = pd.DataFrame
-    
-    # TODO: TMS Merge: Update NorMITs Synthesiser paths on merge
+
+    # BACKLOG: Sector Reporter default paths need updating.
+    #  Should be built somewhat dynamically in constructor.
+    #  Need moving over to NorMITs Demand.
+    #  labels: demand merge, QoL updates
     def __init__(self,
                  default_zone_system: str = "MSOA",
-                 default_zone_file: str = "Y:/NorMITs Synthesiser/Repo/Normits-Utils/zone_groupings/msoa_zones.csv",
-                 default_sector_grouping_file: str = "Y:/NorMITs Synthesiser/Repo/Normits-Utils/zone_groupings/lad_msoa_grouping.csv"
+                 default_zone_file: str = "I:/NorMITs Synthesiser/Repo/Normits-Utils/zone_groupings/msoa_zones.csv",
+                 default_sector_grouping_file: str = "I:/NorMITs Synthesiser/Repo/Normits-Utils/zone_groupings/lad_msoa_grouping.csv"
                  ):
         """
         Initialises the sector reporting class.
