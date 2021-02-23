@@ -9,7 +9,7 @@ import pandas as pd
 # TODO: define run as class
 # class TMS_Run()
 
-class NormitsDemand:
+class Pathing:
 
     """
     """

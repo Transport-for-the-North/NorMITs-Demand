@@ -14,11 +14,11 @@ import normits_demand.demand as demand
 import normits_demand.trip_end_constants as tec
 
 from normits_demand.utils import utils as nup # Folder build utils
-from normits_demand.utils import ntem_control as ntem
+from normits_demand.constraints import ntem_control as ntem
 from normits_demand.utils.general import safe_dataframe_to_csv
 
 
-class AttractionModel(demand.NormitsDemand):
+class AttractionModel(demand.Pathing):
 
     """
     NorMITs Attraction model.

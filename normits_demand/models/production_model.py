@@ -25,11 +25,11 @@ import normits_demand.demand as demand
 import normits_demand.trip_end_constants as tec
 
 from normits_demand.utils import utils as nup
-from normits_demand.utils import ntem_control as ntem
+from normits_demand.constraints import ntem_control as ntem
 from normits_demand.utils.general import safe_dataframe_to_csv
 
 
-class ProductionModel(demand.NormitsDemand):
+class ProductionModel(demand.Pathing):
 
     """
     """
@@ -45,7 +45,7 @@ class ProductionModel(demand.NormitsDemand):
         self.export = self.ping_outpath()
 
     def get_trip_rates(self,
-                       model_type:str='hb',
+                       model_type: str='hb',
                        verbose=True):
 
         """
@@ -493,7 +493,7 @@ class ProductionModel(demand.NormitsDemand):
             print(p_params['ms_cols'])
 
         # Apply ca
-        # BACKLOG: This should be in Land Use
+        # TODO(CS/MS): This should be in Land Use
         # drop land use 'ca' column first - error in this column
         # Fix car ownership
         ca = pd.DataFrame({'cars': ['0', 0, '1', 1, '1+', '2', '2+'],
@@ -682,7 +682,7 @@ class ProductionModel(demand.NormitsDemand):
         for m in target_mode:
             print('Building modes ' + str(m))
 
-            # BACKLOG: Function
+            # TODO: Function
 
             m_group = m_cols.copy()
             m_group.append(m)
@@ -763,16 +763,16 @@ class ProductionModel(demand.NormitsDemand):
 
         if self.params['production_ntem_control']:
             # Get ntem totals
-            ntem_totals = pd.read_csv(self.params['ntem_control_path'])
+            ntem_totals = pd.read_csv(tec.NTEM_PA)
 
             msoa_output, ntem_p, ntem_a, lad_output = ntem.control_to_ntem(
                     msoa_output,
                     ntem_totals,
                     msoa_lad_lookup,
-                    group_cols = ['p', 'm'],
+                    constraint_cols = ['p', 'm', 'tp'],
                     base_value_name='trips',
                     ntem_value_name='Productions',
-                    purpose='hb')
+                    trip_origin='hb')
 
             if self.params['export_lad']:
                 safe_dataframe_to_csv(
@@ -783,9 +783,8 @@ class ProductionModel(demand.NormitsDemand):
                     index=False)
 
         if self.params['production_k_factor_control']:
-            # BACKLOG: Function
-            # BACKLOG: Loop over all modes in the list. k factor paths as list only
-            # BACKLOG: La level reports for ntem & k adjust < .2 & >5
+            # BACKLOG: Implement k factor adjustment
+
             print('Before: ' + str(msoa_output['trips'].sum()))
 
             k_factors = pd.read_csv(self.params['production_k_factor_path'])
@@ -1230,20 +1229,20 @@ class ProductionModel(demand.NormitsDemand):
                 zone_to_target = False,
                 pop_weighted=True)
 
-            ntem_totals = pd.read_csv(ntem_path)
+            ntem_totals = pd.read_csv(tec.MSOA_LAD)
 
             if verbose:
                 print('NTEM totals cols')
                 print(list(ntem_totals))
 
-            nhb_msoa, ntem_a, ntem_f, nhb_lad = nup.control_to_ntem(
+            nhb_msoa, ntem_a, ntem_f, nhb_lad = ntem.control_to_ntem(
                     nhb_msoa,
                     ntem_totals,
                     ntem_lad_lookup,
-                    group_cols=['p', 'm', 'tp'],
+                    constraint_cols=['p', 'm', 'tp'],
                     base_value_name='trips',
                     ntem_value_name='Productions',
-                    purpose='nhb')
+                    trip_origin='nhb')
             print(ntem_a)
     
             if self.params['export_lad']:

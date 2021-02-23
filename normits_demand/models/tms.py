@@ -7,7 +7,7 @@ import os
 import normits_demand.demand as demand
 import normits_demand.utils.utils as nup
 
-class TravelMarketSynthesiser(demand.NormitsDemand):
+class TMSPathing(demand.Pathing):
 
     def __init__(
             self,

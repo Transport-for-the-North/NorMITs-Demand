@@ -39,8 +39,9 @@ def main(config_path,
     p.ping_outpath()
     a.ping_outpath()
 
-    nhb_p_out = p.run_nhb(production_vector=p.export['out_hb'],
-                          attraction_vector=a.export['out_hb'])
+    nhb_p_out = p.run_nhb(
+        production_vector=p.export['out_hb'],
+        attraction_vector=a.export['out_hb'])
 
     # Delete trip end models
     del p, a
