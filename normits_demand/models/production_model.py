@@ -967,7 +967,7 @@ class ProductionModel(demand.NormitsDemand):
 
         # Import LAD lookup from globals
         lad_path = tec.MSOA_LAD
-        ntem_path = self.params['ntem_control_path']
+        ntem_path = tec.NTEM_PA
         ia_name = self.params['model_zoning'].lower() + '_zone_id'
     
         # Assign filter set name to a placeholder variable

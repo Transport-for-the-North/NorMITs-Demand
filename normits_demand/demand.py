@@ -165,7 +165,6 @@ class NormitsDemand:
 
     def project_check(self):
         """
-        
         """
         status = False
         
