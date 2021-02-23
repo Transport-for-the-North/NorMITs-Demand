@@ -428,7 +428,7 @@ def control_to_ntem(msoa_output,
 
     # Assumes vectors are called productions or attractions
     for col in group_cols:
-        ntem_k_factors.loc[:,col] = ntem_k_factors[
+        ntem_k_factors.loc[:, col] = ntem_k_factors[
                 col].astype(int).astype(str)
     ntem_k_factors['lad_zone_id'] = ntem_k_factors[
             'lad_zone_id'].astype(float).astype(int)
@@ -439,11 +439,14 @@ def control_to_ntem(msoa_output,
                           how = 'left',
                           on = base_zone_name)
 
+    print('Cols in output')
+    print(list(output))
+
     # No lad match == likely an island - have to drop
     output = output[~output['lad_zone_id'].isna()]
 
     for col in group_cols:
-        output.loc[:,col] = output[col].astype(int).astype(str)
+        output.loc[:, col] = output[col].astype(int).astype(str)
     output['lad_zone_id'] = output['lad_zone_id'].astype(float).astype(int)
 
     # Seed zero infill

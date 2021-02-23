@@ -115,7 +115,7 @@ class ProductionModel(demand.NormitsDemand):
 
     def aggregate_to_zones(self,
                            productions,
-                           p_params,
+                           zone_to_target = True,
                            pop_weighted: bool = False):
         """
         Aggregates a DataFrame to a target zoning system.
@@ -161,8 +161,13 @@ class ProductionModel(demand.NormitsDemand):
                                                                    ).reset_index()
             return zone_productions
         else:
-            spatial_aggregation_input = self.params['land_use_zoning'].lower()
-            spatial_aggregation_output = self.params['model_zoning'].lower()
+            if zone_to_target:
+                spatial_aggregation_input = self.params['land_use_zoning'].lower()
+                spatial_aggregation_output = self.params['model_zoning'].lower()
+            else:
+                # Target to zone
+                spatial_aggregation_input = self.params['model_zoning'].lower()
+                spatial_aggregation_output = self.params['land_use_zoning'].lower()
 
             # Find and import correct lookup from model folder
             # These need to be in the correct format!
@@ -1106,6 +1111,18 @@ class ProductionModel(demand.NormitsDemand):
             nhb_ph.append(new_row)
         nhb = pd.concat(nhb_ph)
 
+        if verbose:
+            print('Pre mode reindex')
+            print(list(nhb))
+        # Order
+        index_cols = list(nhb)
+        group_cols = index_cols.copy()
+        group_cols.remove('productions')
+        nhb = nhb.reindex(
+            index_cols,
+            axis=1).groupby(
+            group_cols).sum().reset_index()
+
         mode_seg = nhb.reindex(
                 ['area_type', 'p', 'ca', 'nhb_p'],
                 axis=1).drop_duplicates().reset_index(drop=True)
@@ -1136,6 +1153,18 @@ class ProductionModel(demand.NormitsDemand):
 
         nhb = pd.concat(mode_bin)
 
+        if verbose:
+            print('Pre time reindex')
+            print(list(nhb))
+        # Order
+        index_cols = list(nhb)
+        group_cols = index_cols.copy()
+        group_cols.remove('productions')
+        nhb = nhb.reindex(
+            index_cols,
+            axis=1).groupby(
+            group_cols).sum().reset_index()
+
         # Time seg
         # BACKLOG: Need to check these are in all the way through
         time_seg = nhb.reindex(
@@ -1160,21 +1189,17 @@ class ProductionModel(demand.NormitsDemand):
         nhb = pd.concat(time_bin)
     
         # Build the cols to retain and reindex from the output segments
-        retain_cols = [ia_name]
-        for i_s in self.params['nhb_trip_end_segmentation']:
-            # Train both types of purpose
-            if i_s == 'p':
-                retain_cols.append('nhb_p')
-            else:
-                retain_cols.append(i_s)
-        retain_index = retain_cols.copy()
-        retain_index.append('productions')
-    
+        if verbose:
+            print('Pre correct reindex')
+            print(list(nhb))
+        # Order
+        index_cols = list(nhb)
+        group_cols = index_cols.copy()
+        group_cols.remove('productions')
         nhb = nhb.reindex(
-            retain_index,
+            index_cols,
             axis=1).groupby(
-            retain_cols).sum().reset_index()
-        nhb = nhb.sort_values(retain_index).reset_index(drop=True)
+            group_cols).sum().reset_index()
     
         nhb = nhb.rename(columns={'nhb_p': 'p'})
         nhb = nhb.rename(columns={'productions': 'trips'})
@@ -1202,22 +1227,23 @@ class ProductionModel(demand.NormitsDemand):
             # Convert back to msoa
             nhb_msoa = self.aggregate_to_zones(
                 nhb,
-                p_params,
-                self.params['model_zoning'].lower(),
-                'msoa',
-                self.lookup_folder,
+                zone_to_target = False,
                 pop_weighted=True)
     
             ntem_totals = pd.read_csv(ntem_path)
+
+            if verbose:
+                print('NTEM totals cols')
+                print(list(ntem_totals))
     
             nhb_msoa, ntem_a, ntem_f, nhb_lad = nup.control_to_ntem(
                     nhb_msoa,
                     ntem_totals,
                     ntem_lad_lookup,
-                    group_cols = ['p', 'm', 'tp'],
-                    base_value_name = 'trips',
-                    ntem_value_name = 'Productions',
-                    purpose = 'nhb')
+                    group_cols=['p', 'm', 'tp'],
+                    base_value_name='trips',
+                    ntem_value_name='Productions',
+                    purpose='nhb')
             print(ntem_a)
     
             if self.params['export_lad']:
@@ -1237,10 +1263,6 @@ class ProductionModel(demand.NormitsDemand):
             p_params = {'target_output_cols': list(nhb)}
             nhb = self.aggregate_to_zones(
                 nhb_msoa,
-                p_params,
-                'msoa',
-                self.params['model_zoning'].lower(),
-                self.lookup_folder,
                 pop_weighted=True)
     
         # Factors
