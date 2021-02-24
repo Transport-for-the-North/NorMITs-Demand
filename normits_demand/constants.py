@@ -16,6 +16,7 @@ EXTERNAL_AREA = "%s_external_area.csv"
 
 # USEFUL GEO CONSTANTS
 # LAs in North area
+GEO_AREAS = ['gb', 'north']
 
 NORTH_LA = north_la = [
     'E06000001', 'E06000002', 'E06000003', 'E06000004', 'E06000005',
@@ -41,4 +42,5 @@ NORTH_LA = north_la = [
 # TfN area type to aggregate area type
 AGG_AT = {
     'tfn_area_type': [1, 2, 3, 4, 5, 6, 7, 8],
+    'nelum_area_type': [1, 1, 1, 2, 2, 2, 3, 3],  # ?? Needs audit
     'agg_tfn_area_type': [1, 1, 2, 2, 3, 3, 4, 4]}
