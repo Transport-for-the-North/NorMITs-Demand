@@ -1,23 +1,34 @@
 """
 Run the Travel Market Synthesiser
 """
+
+import os
+
+import pandas as pd
+
 import normits_demand.models.tms as tms
 import normits_demand.models.production_model as pm
 import normits_demand.models.attraction_model as am
 import normits_demand.models.external_model as em
 import normits_demand.models.distribution_model as dm
 
-"""
-config_path = 'I:/NorMITs Synthesiser/config/'
-params_file = 'norms_params_sheet_i6.xlsx'
-"""
-
-def main(config_path,
-         params_file):
+def main(config_path = 'I:/NorMITs Synthesiser/config/'):
 
     """
     Wrapper function to run TMS start to finish based on specified params.
     """
+
+    # Ask user which config file to use
+    params = [x for x in os.listdir(config_path) if 'config' in x]
+    if len(params) == 0:
+        raise ValueError('no trip length bands in folder')
+    for (i, option) in enumerate(params, 0):
+        print(i, option)
+        selection_c = input('Choose a config file (index): ')
+        params_file = pd.read_csv(
+            os.path.join(config_path,
+                         params[int(selection_c)])
+        )
 
     tms_run = tms.TMSPathing(config_path,
                              params_file)
@@ -31,17 +42,19 @@ def main(config_path,
     # BACKLOG: Do this stuff based on the project status
 
     p = pm.ProductionModel(config_path, params_file)
-    hb_p_out = p.run_hb(verbose=True)
+    p.ping_outpath()
+    if p.run_dict['hb_p_run'] == '':
+        hb_p_out = p.run_hb(verbose=True)
 
     a = am.AttractionModel(config_path, params_file)
-    a_out = a.run()
-
-    p.ping_outpath()
     a.ping_outpath()
+    if a.run_dict['hb_a_run'] == '':
+        a_out = a.run()
 
-    nhb_p_out = p.run_nhb(
-        production_vector=p.export['out_hb'],
-        attraction_vector=a.export['out_hb'])
+    if p.run_dict['nhb_p']:
+        nhb_p_out = p.run_nhb(
+            production_vector=p.export['out_hb'],
+            attraction_vector=a.export['out_hb'])
 
     # Delete trip end models
     del p, a
@@ -54,7 +67,7 @@ def main(config_path,
         params_file)
     hb_ext_out = ext.run(
         trip_origin='hb',
-        cost_type='24hr')
+        cost_type='24hr')  # Vectors??
     nhb_ext_out = ext.run(
         trip_origin='hb',
         cost_type = 'tp')

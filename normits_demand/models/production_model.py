@@ -150,6 +150,8 @@ class ProductionModel(demand.Pathing):
         # Some of the inputs are out of date, could be simpler too
         model_folder = self.lookup_folder
 
+        print(list(productions))
+
         if model_folder is None:
             zone_col = list(productions)[0]
             print('No target zoning system provided')
@@ -161,13 +163,9 @@ class ProductionModel(demand.Pathing):
                                                                    ).reset_index()
             return zone_productions
         else:
-            if zone_to_target:
-                spatial_aggregation_input = self.params['land_use_zoning'].lower()
-                spatial_aggregation_output = self.params['model_zoning'].lower()
-            else:
-                # Target to zone
-                spatial_aggregation_input = self.params['model_zoning'].lower()
-                spatial_aggregation_output = self.params['land_use_zoning'].lower()
+
+            spatial_aggregation_input = self.params['land_use_zoning'].lower()
+            spatial_aggregation_output = self.params['model_zoning'].lower()
 
             # Find and import correct lookup from model folder
             # These need to be in the correct format!
@@ -184,6 +182,7 @@ class ProductionModel(demand.Pathing):
 
                 file_sys = os.listdir(model_folder)
                 mzc_path = [x for x in file_sys if (maj_to_min + '.csv') in x][0]
+                print(mzc_path)
                 model_zone_conversion = pd.read_csv(model_folder +
                                                     '/' +
                                                     mzc_path)
@@ -235,7 +234,7 @@ class ProductionModel(demand.Pathing):
                     target_productions.sort_values(by=index_cols,
                                                    inplace=True)
 
-            if pop_weighted:
+            elif pop_weighted:
 
                 # Define lookup type
                 maj_to_min = (spatial_aggregation_output.lower() +
@@ -247,7 +246,7 @@ class ProductionModel(demand.Pathing):
                 # Some elif loop
                 file_sys = os.listdir(model_folder)
                 mzc_path = [x for x in file_sys if maj_to_min in x][0]
-
+                print(mzc_path)
                 model_zone_conversion = pd.read_csv(model_folder +
                                                     '/' +
                                                     mzc_path).drop(
@@ -269,19 +268,24 @@ class ProductionModel(demand.Pathing):
                         ].drop_duplicates()
                 umz_len = len(unq_minor_zones)
                 print(unq_major_zones)
+                print(list(productions))
 
                 total_trips = productions['trips'].sum()
                 print('Starting with ' + str(total_trips))
 
-                target_productions = productions.merge(model_zone_conversion,
-                                                       how='left',
-                                                       on=(spatial_aggregation_input.lower() +
-                                                             '_zone_id'))
+                if (spatial_aggregation_input.lower() + '_zone_id') not in list(productions):
+                    target_productions = productions.merge(model_zone_conversion,
+                                                           how='left',
+                                                           on=(spatial_aggregation_input.lower() +
+                                                           '_zone_id'))
+                else:
+                    target_productions = productions.copy()
 
                 # Relativise minor split column
                 overlap_col = ('overlap_' +
                                spatial_aggregation_input.lower() +
                                '_split_factor')
+                print(list(target_productions))
 
                 target_productions['trips'] = (target_productions['trips'] *
                                   target_productions[overlap_col])
@@ -1231,7 +1235,7 @@ class ProductionModel(demand.Pathing):
                     ntem_value_name='productions',
                     trip_origin='nhb',
                     replace_drops=False)
-            print(ntem_a)
+            print(list(nhb_msoa))
     
             if self.params['export_lad']:
                 safe_dataframe_to_csv(
@@ -1320,10 +1324,12 @@ class ProductionModel(demand.Pathing):
             output_dir,
             output_f,
             'nhb_productions_' +
-            self.model_name.lower() +
+            self.params['model_zoning'].lower() +
             '.csv')
 
         if self.params['export_model_zoning']:
+            print('Out to:')
+            print(nhb_path)
             safe_dataframe_to_csv(nhb,
                                   nhb_path, index=False)
 
