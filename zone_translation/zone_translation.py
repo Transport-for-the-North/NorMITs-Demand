@@ -26,8 +26,8 @@ class ZoneTranslation:
         self.zoning_name2 = zoning_name2
         self.zone_shape1 = zone_shape1
         self.zone_shape2 = zone_shape2
-        self.lsoa_trans1 = self.run_lsoa_translation(zoning_name1)
-        self.lsoa_trans2 = self.run_lsoa_translation(zoning_name2)
+        self.lsoa_trans1 = self.find_lsoa_translation(zoning_name1)
+        self.lsoa_trans2 = self.find_lsoa_translation(zoning_name2)
 
     def spatial_translation(self,
                             upper_tolerance=.85,
