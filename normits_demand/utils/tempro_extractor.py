@@ -328,8 +328,29 @@ class TemproParser:
             attr_ph.append(attrs)
 
         # Stick all the partials together
-        productions = pd.concat(prod_ph)
-        attractions = pd.concat(attr_ph)
+        prods = pd.concat(prod_ph)
+        attrs = pd.concat(attr_ph)
+
+        # Sort by zone_col
+        prods = prods.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+        attrs = attrs.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+
+        # TODO(BT): Remove hardcoded path
+        # Convert to string msoa naming, used in EFS
+        msoa_path = r"I:\NorMITs Demand\import\zone_translation\msoa_zones.csv"
+        prods = du.convert_msoa_naming(
+            prods,
+            msoa_col_name=['msoa_zone_id'],
+            msoa_path=msoa_path,
+            to='str'
+        )
+
+        attrs = du.convert_msoa_naming(
+            attrs,
+            msoa_col_name=['msoa_zone_id'],
+            msoa_path=msoa_path,
+            to='str'
+        )
 
         # ## CALCULATE GROWTH FACTORS ## #
         # Need to know which is the base year
@@ -337,19 +358,16 @@ class TemproParser:
         base_year_col = str(base_year)
         future_year_cols = [str(x) for x in future_years]
 
-        productions_gf = productions.copy()
-        attractions_gf = attractions.copy()
+        prods_gf = prods.copy()
+        attrs_gf = attrs.copy()
 
-        for vector in [productions_gf, attractions_gf]:
+        for vector in [prods_gf, attrs_gf]:
             # Calculate growth factors
             for col in future_year_cols:
                 vector[col] /= vector[base_year_col]
             vector[base_year_col] = 1
 
-            # sort by the model zone
-            vector.sort_values(by=['msoa_zone_id'], inplace=True)
-
-        return productions_gf, attractions_gf, productions, attractions
+        return prods_gf, attrs_gf, prods, attrs
 
     def parse_tempro(self,
                      trip_type: str = 'pa',
