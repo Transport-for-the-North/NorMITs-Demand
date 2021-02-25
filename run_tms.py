@@ -3,8 +3,8 @@ Run the Travel Market Synthesiser
 """
 
 import os
-
 import pandas as pd
+import importlib as ri
 
 import normits_demand.build.tms_pathing as tms
 import normits_demand.models.production_model as pm
@@ -63,13 +63,15 @@ def main(config_path = 'I:/NorMITs Synthesiser/config/'):
     # Update project status
     # BACKLOG: Project status
 
+    # TODO: Define init params
+
     # Run HB external model
     ext = em.ExternalModel(
         config_path,
         params_file)
     hb_ext_out = ext.run(
         trip_origin='hb',
-        cost_type='24hr')  # Vectors??
+        cost_type='24hr')
     nhb_ext_out = ext.run(
         trip_origin='nhb',
         cost_type = '24hr')

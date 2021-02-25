@@ -63,6 +63,7 @@ class ExternalModel(tms.TMSPathing):
             model_name=self.params['model_zoning'],
             mode_subset=None,
             purpose_subset=None)
+        print(init_params)
     
         # Path tlb folder
         tlb_folder = os.path.join(
@@ -72,19 +73,28 @@ class ExternalModel(tms.TMSPathing):
             self.params['external_tlb_name'])
     
         # Drop any sic or soc segments from init params - not needed for externals
+        # Also alert and error if there are any differences
+        for ts in  self.params['external_segmentation']:
+            if ts not in list(init_params):
+                raise ValueError('Init params and segmentation misaligned')
+
         init_params = init_params.reindex(
             self.params['external_segmentation'],
             axis=1).drop_duplicates(
             ).reset_index(drop=True)
         
         # Define mode subset
-        unq_mode = self.params['external_export_modes'].copy()
-        [unq_mode.append(
-            x) for x in self.params['non_dist_export_modes'] if x not in unq_mode]
+        unq_mode = self.params['external_export_modes']
+        # Append non dist modes to list for init params
+        if self.params['non_dist_export_modes'] is not None:
+            [unq_mode.append(
+                x) for x in self.params[
+                'non_dist_export_modes'] if x not in unq_mode]
+        print(unq_mode)
         init_params = init_params[
                 init_params[
                     'm'].isin(
-                    self.params['non_dist_export_modes'])].reset_index(drop=True)
+                    unq_mode)].reset_index(drop=True)
     
         # External index
         ei = init_params.index
@@ -168,6 +178,7 @@ class ExternalModel(tms.TMSPathing):
 
             # Import costs based on distribution parameters & car availability
             print('Importing costs')
+            print(calib_params, cost_type)
             internal_costs = nup.get_costs(self.lookup_folder,
                                            calib_params,
                                            tp=cost_type,
@@ -176,18 +187,21 @@ class ExternalModel(tms.TMSPathing):
             print('Cost lookup returned ' + internal_costs[1])
             internal_costs = internal_costs[0].copy()
 
-            # BACKLOG: Replace with the newer way of doing this
+            # Get unique zones
             unq_internal_zones = nup.get_zone_range(
                 internal_costs['p_zone'])
             
             # Join ps and a's onto full unq internal vector (infill placeholders)
             uiz_vector = pd.DataFrame(unq_internal_zones)
             uiz_vector = uiz_vector.rename(columns={
-                    'p_zone': (self.params['model_zoning'].lower() + '_zone_id')})
-            
+                    0: (self.params['model_zoning'].lower() + '_zone_id')})
+
+            print(list(uiz_vector))
+            print(list(sub_p))
+
             sub_p = uiz_vector.merge(sub_p,
                                      how='left',
-                                     on = (self.params['model_zoning'].lower() + '_zone_id'))
+                                     on=(self.params['model_zoning'].lower() + '_zone_id'))
             sub_p['productions'] = sub_p['productions'].replace(np.nan, 0)
     
             sub_a = uiz_vector.merge(sub_a,
@@ -225,8 +239,12 @@ class ExternalModel(tms.TMSPathing):
             ie_cost[3]['dat'].mean()
     
             # TODO Currently does not balance at row level
-            external_out = self._external_model(sub_a, cjtw, costs, calib_params,
-                                                self.lookup_folder)
+            external_out = self._external_model(
+                sub_p,
+                sub_a,
+                cjtw,
+                costs,
+                calib_params)
 
             # Unpack exports
             external_pa, external_pa_p, external_pa_a, tl_con, bs_con, max_diff = external_out
@@ -528,6 +546,8 @@ class ExternalModel(tms.TMSPathing):
         trip_origin:
             Is this HB or NHB? Takes 'hb' or 'nhb', shockingly.
         """
+        print(list(p))
+        print(list(a))
     
         # Transform original p/a into vectors
         target_p = p['productions'].values
@@ -735,7 +755,7 @@ class ExternalModel(tms.TMSPathing):
         del ph
     
         mat_ph = []
-        out_mat = np.empty(shape=[len(base_matrix),len(base_matrix)])
+        out_mat = np.empty(shape=[len(base_matrix), len(base_matrix)])
     
         # Loop over rows in band_atl
         for index, row in band_atl.iterrows():
