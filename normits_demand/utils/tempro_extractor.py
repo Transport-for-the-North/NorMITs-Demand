@@ -112,6 +112,7 @@ class TemproParser:
             trip_ends.append([x for x in row])
 
         trip_ends = pd.DataFrame(trip_ends)
+
         trip_ends.columns = trip_cols
 
         cursor.execute('select * from Zones')
@@ -251,7 +252,7 @@ class TemproParser:
         )
 
         # Aggregate up to just zones
-        group_cols = ['ntem_zone_id']
+        group_cols = ['ntem_zone_id', 'TripType']
         needed_cols = group_cols.copy() + [str(x) for x in self._output_years]
         trip_ends = trip_ends.reindex(columns=needed_cols)
         trip_ends = trip_ends.groupby(group_cols).sum().reset_index()
@@ -263,19 +264,30 @@ class TemproParser:
             pd.read_csv(self.ntem_to_msoa_path),
             'ntem',
             'msoa',
-            ['ntem_zone_id']
+            non_split_cols=group_cols,
         )
 
         # Tidy up and hold to join later
-        group_cols = ['msoa_zone_id']
+        group_cols = ['msoa_zone_id', 'TripType']
         needed_cols = group_cols.copy() + [str(x) for x in self._output_years]
         trip_ends = trip_ends.reindex(columns=needed_cols)
         trip_ends = trip_ends.groupby(group_cols).sum().reset_index()
 
+        # ## SPLIT INTO P/A VECTORS ##
+        # productions are trip type 1
+        mask = (trip_ends['TripType'] == 1)
+        productions = trip_ends[mask].copy()
+        productions.drop(columns=['TripType'], inplace=True)
+
+        # attractions are trip type 2
+        mask = (trip_ends['TripType'] == 2)
+        attractions = trip_ends[mask].copy()
+        attractions.drop(columns=['TripType'], inplace=True)
+
         if pbar is not None:
             pbar.update(1)
 
-        return trip_ends
+        return productions, attractions
 
     def get_available_dbs(self):
         available_dbs = []
@@ -298,7 +310,8 @@ class TemproParser:
         available_dbs = self.get_available_dbs()
 
         # Loop setup
-        db_ph = list()
+        prod_ph = list()
+        attr_ph = list()
         pbar = tqdm(
             total=len(available_dbs),
             desc="Extracting trip ends from DBs",
@@ -306,15 +319,17 @@ class TemproParser:
         )
 
         for db_fname in available_dbs:
-            trip_ends = self._get_growth_factors_internal(
+            prods, attrs = self._get_growth_factors_internal(
                 db_fname,
                 col_indices,
                 pbar,
             )
-            db_ph.append(trip_ends)
+            prod_ph.append(prods)
+            attr_ph.append(attrs)
 
         # Stick all the partials together
-        future_year_trip_ends = pd.concat(db_ph)
+        productions = pd.concat(prod_ph)
+        attractions = pd.concat(attr_ph)
 
         # ## CALCULATE GROWTH FACTORS ## #
         # Need to know which is the base year
@@ -322,16 +337,19 @@ class TemproParser:
         base_year_col = str(base_year)
         future_year_cols = [str(x) for x in future_years]
 
-        # Calculate growth factors
-        growth_factors = future_year_trip_ends.copy()
-        for col in future_year_cols:
-            growth_factors[col] /= growth_factors[base_year_col]
-        growth_factors[base_year_col] = 1
+        productions_gf = productions.copy()
+        attractions_gf = attractions.copy()
 
-        # sort by the model zone
-        growth_factors = growth_factors.sort_values(by=['msoa_zone_id'])
+        for vector in [productions_gf, attractions_gf]:
+            # Calculate growth factors
+            for col in future_year_cols:
+                vector[col] /= vector[base_year_col]
+            vector[base_year_col] = 1
 
-        return growth_factors
+            # sort by the model zone
+            vector.sort_values(by=['msoa_zone_id'], inplace=True)
+
+        return productions_gf, attractions_gf, productions, attractions
 
     def parse_tempro(self,
                      trip_type: str = 'pa',
