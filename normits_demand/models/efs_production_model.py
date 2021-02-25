@@ -2340,7 +2340,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
             zone_to_lad=ntem_lad_lookup,
             constraint_cols=ntem_control_cols,
             base_value_name=year,
-            ntem_value_name='Productions',
+            ntem_value_name='productions',
             trip_origin=trip_origin
         )
 

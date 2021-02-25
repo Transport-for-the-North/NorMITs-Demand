@@ -1454,7 +1454,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
             zone_to_lad=ntem_lad_lookup,
             constraint_cols=['p', 'm'],
             base_value_name='trips',
-            ntem_value_name='Attractions',
+            ntem_value_name='attractions',
             trip_origin='hb'
         )
         attractions = attractions.rename(columns={'p': p_col, 'm': m_col})
@@ -1467,7 +1467,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
             zone_to_lad=ntem_lad_lookup,
             constraint_cols=['p', 'm', 'tp'],
             base_value_name='trips',
-            ntem_value_name='Attractions',
+            ntem_value_name='attractions',
             trip_origin='nhb'
         )
         nhb_attractions = nhb_attractions.rename(columns={'p': p_col, 'm': m_col})

@@ -112,9 +112,25 @@ class ZoneTranslator:
         if needs_zone_id_rename:
             dataframe = dataframe.rename(columns={"model_zone_id": from_zone_col})
 
+        # Check that all the columns we need actually exist
+        translation_cols = [from_zone_col, to_zone_col, switch_col]
+        for col in translation_cols:
+            if col not in translation_df:
+                raise ValueError(
+                    "Cannot find all of the needed columns in the translation "
+                    "df. Cannot complete translation. Cannot find the "
+                    "following column: %s" % str(col)
+                )
+
+        if from_zone_col not in translation_df:
+            raise ValueError(
+                "Cannot find all of the needed columns in the given dataframe. "
+                "Cannot complete translation. Cannot find the "
+                "following column: %s" % str(from_zone_col)
+            )
+
         # Just grab the columns we need
-        needed_cols = [from_zone_col, to_zone_col, switch_col]
-        translation_df = translation_df.reindex(columns=needed_cols)
+        translation_df = translation_df.reindex(columns=translation_cols)
 
         new_dataframe = pd.merge(
             dataframe,

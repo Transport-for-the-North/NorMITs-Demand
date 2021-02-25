@@ -11,6 +11,7 @@ https://www.microsoft.com/en-us/download/confirmation.aspx?id=54920
 import os
 
 from typing import List
+from typing import Tuple
 
 # Third Party
 import pyodbc
@@ -46,6 +47,16 @@ class TemproParser:
     ]
     _output_years = [2018, 2033, 2035, 2050]
     _output_years_str = [str(x) for x in _output_years]
+
+    planning_data_types = {
+        'under16': [1],
+        '16-74': [2],
+        '75+': [3],
+        'total_pop': [1, 2, 3],
+        'HHs': [5],
+        'jobs': [6],
+        'workers': [4],
+    }
 
     def __init__(self,
                  access_driver: str = None,
@@ -86,10 +97,132 @@ class TemproParser:
 
         print('Tempro extractor running!')
 
-    def _do_stuff(self,
-                  db_fname: str,
-                  col_indices: str
-                  ):
+    def _get_pop_job_numbers(self,
+                             db_fname
+                             ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        # Init
+        db_path = os.path.join(self.data_source, db_fname)
+        conn_string = (
+            'Driver=' + self.access_driver + ';'
+            'DBQ=' + db_path + ';'
+        )
+        conn = None
+
+        try:
+            # Connect
+            conn = pyodbc.connect(conn_string)
+            cursor = conn.cursor()
+
+            # Grab and unpack the planning data
+            cursor.execute('select * from Planning')
+
+            planning_ph = list()
+            for row in cursor.fetchall():
+                planning_ph.append([x for x in row])
+
+            planning_data = pd.DataFrame(
+                data=planning_ph,
+                columns=[column[0] for column in cursor.description]
+            )
+
+            # GRab and unpack local db zone translations
+            cursor.execute('select * from Zones')
+
+            zonal_ph = list()
+            for row in cursor.fetchall():
+                zonal_ph.append([x for x in row])
+
+            zones = pd.DataFrame(
+                data=zonal_ph,
+                columns=[column[0] for column in cursor.description]
+            )
+        except BaseException as e:
+            if conn is not None:
+                conn.close()
+            raise e
+        finally:
+            if conn is not None:
+                conn.close()
+
+        # Get years
+        av_years = [int(x) for x in list(planning_data) if x.isdigit()]
+        year_index = list()
+        year_dicts = list()
+        for year in self.output_years:
+
+            if year > 2051:
+                print('Impossible to interpolate past 2051')
+                break
+            else:
+                year_index.append(str(year))
+                if year in av_years:
+                    year_dicts.append({'t_year': year,
+                                       'start_year': year,
+                                       'end_year': year})
+                else:
+                    year_diff = np.array([year - x for x in av_years])
+                    # Get lower than
+                    ly = np.argmin(np.where(year_diff > 0, year_diff, 100))
+                    ly = av_years[ly]
+                    # Get greater than
+                    hy = np.argmax(np.where(year_diff < 0, year_diff, -100))
+                    hy = av_years[hy]
+
+                    year_dicts.append({'t_year': year,
+                                       'start_year': ly,
+                                       'end_year': hy})
+
+        # Interpolate mid point years if needed
+        for year in year_dicts:
+            period_diff = year['end_year'] - year['start_year']
+            target_diff = year['t_year'] - year['start_year']
+            if target_diff > 0:
+                planning_data['annual_growth'] = (
+                    (
+                        planning_data[str(year['end_year'])]
+                        - planning_data[str(year['start_year'])]
+                    )
+                    / period_diff
+                )
+
+                planning_data[str(year['t_year'])] = (
+                    planning_data[str(year['start_year'])]
+                    + (target_diff * planning_data['annual_growth'])
+                )
+                planning_data = planning_data.drop('annual_growth', axis=1)
+
+        # ## SPLIT INTO POP AND JOBS ## #
+        # population
+        needed_types = self.planning_data_types['total_pop']
+        mask = planning_data['PlanningDataType'].isin(needed_types)
+        pop = planning_data[mask].copy()
+
+        # jobs
+        needed_types = self.planning_data_types['jobs']
+        mask = planning_data['PlanningDataType'].isin(needed_types)
+        emp = planning_data[mask].copy()
+
+        # ## ATTACH ZONE NAMES ## #
+        pop = pd.merge(
+            pop,
+            zones,
+            how='left',
+            on='ZoneID'
+        )
+
+        emp = pd.merge(
+            emp,
+            zones,
+            how='left',
+            on='ZoneID'
+        )
+
+        return pop, emp
+
+    def _get_pa_trip_ends(self,
+                          db_fname: str,
+                          col_indices: str
+                          ):
         # Connect
         db_path = os.path.join(self.data_source, db_fname)
         conn_string = (
@@ -245,7 +378,7 @@ class TemproParser:
         """
 
         # Grab the data from this database
-        trip_ends, years = self._do_stuff(db_fname, col_indices)
+        trip_ends, years = self._get_pa_trip_ends(db_fname, col_indices)
         trip_ends = self._tempro_ntem_to_normits_ntem(
             trip_ends,
             return_zone_col='ntem_zone_id',
@@ -289,6 +422,62 @@ class TemproParser:
 
         return productions, attractions
 
+    def _get_pop_emp_factors_internal(self, db_fname, pbar=None):
+        """
+        Grabs the trip ends from the database and converts to msoa zoning
+        """
+
+        # Grab the data from this database
+        pop, emp = self._get_pop_job_numbers(db_fname)
+
+        # Translate local ntem to global ntem
+        pop = self._tempro_ntem_to_normits_ntem(
+            pop,
+            return_zone_col='ntem_zone_id',
+        )
+
+        emp = self._tempro_ntem_to_normits_ntem(
+            emp,
+            return_zone_col='ntem_zone_id',
+        )
+
+        # ## AGGREGATE TO NEEDED DATA ONLY ## #
+        group_cols = ['ntem_zone_id']
+        needed_cols = group_cols.copy() + [str(x) for x in self._output_years]
+
+        pop = pop.reindex(columns=needed_cols).groupby(group_cols).sum().reset_index()
+        emp = emp.reindex(columns=needed_cols).groupby(group_cols).sum().reset_index()
+
+        # ## TRANSLATE TO MSOA ## #
+        translator = zt.ZoneTranslator()
+
+        pop = translator.run(
+            pop,
+            pd.read_csv(self.ntem_to_msoa_path),
+            'ntem',
+            'msoa',
+            non_split_cols=group_cols,
+        )
+        emp = translator.run(
+            emp,
+            pd.read_csv(self.ntem_to_msoa_path),
+            'ntem',
+            'msoa',
+            non_split_cols=group_cols,
+        )
+
+        # Tidy up and hold to join later
+        group_cols = ['msoa_zone_id']
+        needed_cols = group_cols.copy() + [str(x) for x in self._output_years]
+
+        pop = pop.reindex(columns=needed_cols).groupby(group_cols).sum().reset_index()
+        emp = emp.reindex(columns=needed_cols).groupby(group_cols).sum().reset_index()
+
+        if pbar is not None:
+            pbar.update(1)
+
+        return pop, emp
+
     def get_available_dbs(self):
         available_dbs = []
         db_list = [x for x in os.listdir(self.data_source) if '.mdb' in x]
@@ -302,6 +491,70 @@ class TemproParser:
             raise IOError("Couldn't find any dbs to load from.")
 
         return available_dbs
+
+    def get_pop_emp_growth_factors(self, verbose=True):
+        # Init
+        available_dbs = self.get_available_dbs()
+
+        # Loop setup
+        pop_ph = list()
+        emp_ph = list()
+        pbar = tqdm(
+            total=len(available_dbs),
+            desc="Extracting trip ends from DBs",
+            disable=(not verbose),
+        )
+
+        for db_fname in available_dbs:
+            pop, emp = self._get_pop_emp_factors_internal(
+                db_fname,
+                pbar,
+            )
+            pop_ph.append(pop)
+            emp_ph.append(emp)
+
+        # Stick all the partials together
+        pop = pd.concat(pop_ph)
+        emp = pd.concat(emp_ph)
+
+        # Sort by zone_col
+        pop = pop.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+        emp = emp.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+
+
+        # TODO(BT): Remove hardcoded path
+        # Convert to string msoa naming, used in EFS
+        msoa_path = r"I:\NorMITs Demand\import\zone_translation\msoa_zones.csv"
+        pop = du.convert_msoa_naming(
+            pop,
+            msoa_col_name='msoa_zone_id',
+            msoa_path=msoa_path,
+            to='str'
+        )
+
+        emp = du.convert_msoa_naming(
+            emp,
+            msoa_col_name='msoa_zone_id',
+            msoa_path=msoa_path,
+            to='str'
+        )
+
+        # ## CALCULATE GROWTH FACTORS ## #
+        # Need to know which is the base year
+        base_year, future_years = du.split_base_future_years(self._output_years)
+        base_year_col = str(base_year)
+        future_year_cols = [str(x) for x in future_years]
+
+        pop_df = pop.copy()
+        emp_gf = emp.copy()
+
+        for vector in [pop_df, emp_gf]:
+            # Calculate growth factors
+            for col in future_year_cols:
+                vector[col] /= vector[base_year_col]
+            vector[base_year_col] = 1
+
+        return pop_df, emp_gf, pop, emp
 
     def get_growth_factors(self, verbose=True):
         # Init
@@ -404,7 +657,7 @@ class TemproParser:
         db_ph = []
         for db_fname in tqdm(available_dbs, desc="Extracting from DBs..."):
             
-            trip_ends, years = self._do_stuff(db_fname, col_indices)
+            trip_ends, years = self._get_pa_trip_ends(db_fname, col_indices)
 
 
             # TODO: Join LA (as NTEM) to new LA (lookup)
