@@ -5,12 +5,11 @@ Created on Thu Feb 27 13:45:03 2020
 @author: cruella
 """
 import os
-import warnings
 
 import pandas as pd
 import numpy as np
 
-import normits_demand.models.tms as tms
+import normits_demand.build.tms_pathing as tms
 
 from normits_demand.reports import reports_audits as ra
 from normits_demand.utils import utils as nup
@@ -226,15 +225,8 @@ class ExternalModel(tms.TMSPathing):
             ie_cost[3]['dat'].mean()
     
             # TODO Currently does not balance at row level
-            external_out = self._external_model(
-                sub_p,
-                sub_a,
-                cjtw,
-                costs,
-                calib_params,
-                self.lookup_folder,
-                self.params['model_zoning'].lower(),
-                trip_origin)
+            external_out = self._external_model(sub_a, cjtw, costs, calib_params,
+                                                self.lookup_folder)
 
             # Unpack exports
             external_pa, external_pa_p, external_pa_a, tl_con, bs_con, max_diff = external_out
@@ -479,7 +471,7 @@ class ExternalModel(tms.TMSPathing):
             full_a = full_pa_a.reindex(['a_zone', 'dt'],
                                        axis=1).groupby(
                                                ['a_zone']).sum().reset_index()
-            full_a = full_a.rename(columns={'dt':full_path.replace('_', '')})
+            full_a = full_a.rename(columns={'dt': full_path.replace('_', '')})
     
             p_ph = p_ph.merge(full_p,
                               how='left',
@@ -508,15 +500,15 @@ class ExternalModel(tms.TMSPathing):
         audit = True
     
         return audit
-    
+
+    @staticmethod
     def _external_model(
-            self,
             p,
             a,
             base_matrix,
             costs,
             calib_params):
-        
+
         """
         p:
             Production vector
@@ -716,9 +708,9 @@ class ExternalModel(tms.TMSPathing):
                                         tlb_con[1]['tbs']))**2),0)
     
         return external_pa, p_balanced, a_balanced, tlb_con, bs_con, pa_diff.max()
-    
-    def adjust_trip_length_by_band(self,
-                                   band_atl,
+
+    @staticmethod
+    def adjust_trip_length_by_band(band_atl,
                                    adj_fac,
                                    distance,
                                    base_matrix):

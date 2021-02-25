@@ -6,11 +6,13 @@ import os
 
 import pandas as pd
 
-import normits_demand.models.tms as tms
+import normits_demand.build.tms_pathing as tms
 import normits_demand.models.production_model as pm
 import normits_demand.models.attraction_model as am
 import normits_demand.models.external_model as em
 import normits_demand.models.distribution_model as dm
+
+# params_file = 'norms_params_sheet_i6.xlsx'
 
 def main(config_path = 'I:/NorMITs Synthesiser/config/'):
 
@@ -69,8 +71,8 @@ def main(config_path = 'I:/NorMITs Synthesiser/config/'):
         trip_origin='hb',
         cost_type='24hr')  # Vectors??
     nhb_ext_out = ext.run(
-        trip_origin='hb',
-        cost_type = 'tp')
+        trip_origin='nhb',
+        cost_type = '24hr')
 
     """
     ext_hb = em.ExternalModel(file_drive=params['base_directory'],

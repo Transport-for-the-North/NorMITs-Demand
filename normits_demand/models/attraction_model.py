@@ -4,12 +4,11 @@ Attraction Model for NorMITs Demand
 """
 # Modules required
 import os # File operations
-from typing import List
 
 import pandas as pd
 import numpy as np
 
-import normits_demand.demand as demand
+import normits_demand.build.pathing as demand
 
 import normits_demand.trip_end_constants as tec
 

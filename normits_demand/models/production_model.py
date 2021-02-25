@@ -20,7 +20,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-import normits_demand.demand as demand
+import normits_demand.build.pathing as demand
 
 import normits_demand.trip_end_constants as tec
 
@@ -276,7 +276,7 @@ class ProductionModel(demand.Pathing):
                 if (spatial_aggregation_input.lower() + '_zone_id') not in list(productions):
                     target_productions = productions.merge(model_zone_conversion,
                                                            how='left',
-                                                           on=(spatial_aggregation_input.lower() +
+                                                           on=(spatial_aggregation_output.lower() +
                                                            '_zone_id'))
                 else:
                     target_productions = productions.copy()
