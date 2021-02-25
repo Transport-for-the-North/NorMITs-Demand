@@ -259,7 +259,7 @@ TFN_MSOA_SECTOR_LOOKUPS = {
 #  labels: EFS, demand merge
 
 # RUNNING CONSTANTS
-MODEL_NAME = 'norms'
+MODEL_NAME = 'noham'
 
 # YEARS
 BASE_YEAR = 2018

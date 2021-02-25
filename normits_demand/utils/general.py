@@ -3304,3 +3304,45 @@ def merge_df_list(df_list, **kwargs):
         A single df of all items in df_list merged together
     """
     return functools.reduce(lambda l, r: pd.merge(l, r, **kwargs), df_list)
+
+
+def split_base_future_years(years: List[int],
+                            ) -> Tuple[int, List[int]]:
+    """
+    Splits years into base and future years.
+
+    The smallest year in the list is assumed to be the base
+
+    Parameters
+    ----------
+    years:
+        A list of years to split
+
+    Returns
+    -------
+    base_year:
+        The base year from years
+
+    future_years:
+        A list of all other years than base_year in years.
+        This will be returned in order, from lowest to highest.
+    """
+    # Validate inputs
+    if not isinstance(years, list):
+        raise TypeError(
+            "Expecting a list of years but got %s instead."
+            % str(type(years))
+        )
+
+    if not all([isinstance(x, int) for x in years]):
+        raise TypeError(
+            "Expecting a list of integers, but not all items are integers."
+        )
+
+    # Find the smallest value
+    base_year = years.pop(years.index(min(years)))
+
+    # Sort other items
+    years.sort()
+
+    return base_year, years
