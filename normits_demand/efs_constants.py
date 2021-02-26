@@ -176,7 +176,7 @@ POP_TRANSLATION_FNAME = '%s_%s_pop_weighted_lookup.csv'
 EMP_TRANSLATION_FNAME = '%s_%s_emp_weighted_lookup.csv'
 
 # ## NTEM Controls
-# year
+# matrix_format, year
 NTEM_CONTROL_FNAME = 'ntem_%s_ave_wday_%s.csv'
 DEFAULT_LAD_LOOKUP = 'lad_to_msoa.csv'
 

@@ -27,7 +27,8 @@ class ZoneTranslator:
             to_zoning: str,
             non_split_cols: List[str],
             needs_zone_id_rename: bool = False,
-            tolerance: float = 0.005
+            tolerance: float = 0.005,
+            aggregate_method: str = 'sum',
             ) -> pd.DataFrame:
         """
         Calculates the sector totals off the given parameters.
@@ -90,6 +91,7 @@ class ZoneTranslator:
         # avoid case problems
         from_zoning = from_zoning.lower()
         to_zoning = to_zoning.lower()
+        aggregate_method = aggregate_method.strip().lower()
 
         # TODO: Add check to make sure non_split_columns are in dataframe
         # Set up columns
@@ -148,8 +150,22 @@ class ZoneTranslator:
         group_cols = [to_zone_col] + non_split_cols.copy()
         index_cols = group_cols.copy() + split_cols.copy()
 
-        new_dataframe = new_dataframe.reindex(columns=index_cols)
-        new_dataframe = new_dataframe.groupby(group_cols).sum().reset_index()
+        if aggregate_method == 'sum':
+            new_dataframe = new_dataframe.reindex(columns=index_cols)
+            new_dataframe = new_dataframe.groupby(group_cols).sum().reset_index()
+
+        elif aggregate_method == 'mean':
+            new_dataframe = new_dataframe.reindex(columns=index_cols)
+            new_dataframe = new_dataframe.groupby(group_cols).mean().reset_index()
+
+            # we can't audit when we aggregate using mean
+            return new_dataframe
+
+        else:
+            raise ValueError(
+                "I don't know what aggregate method '%s' is!"
+                % str(aggregate_method)
+            )
 
         # Audit what comes out the other side
         for col, val in split_totals.items():
