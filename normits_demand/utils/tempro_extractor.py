@@ -384,6 +384,10 @@ class TemproParser:
             return_zone_col='ntem_zone_id',
         )
 
+        # Filter down to just the needed time periods
+        mask = (trip_ends['TimePeriod'].isin([1, 2, 3, 4]))
+        trip_ends = trip_ends[mask].reset_index(drop=True)
+
         # Aggregate up to just zones
         group_cols = ['ntem_zone_id', 'TripType']
         needed_cols = group_cols.copy() + [str(x) for x in self._output_years]
@@ -405,6 +409,10 @@ class TemproParser:
         needed_cols = group_cols.copy() + [str(x) for x in self._output_years]
         trip_ends = trip_ends.reindex(columns=needed_cols)
         trip_ends = trip_ends.groupby(group_cols).sum().reset_index()
+
+        # Divide by 5 to get the average weekday
+        for year in self._output_years_str:
+            trip_ends[year] /= 5
 
         # ## SPLIT INTO P/A VECTORS ##
         # productions are trip type 1
@@ -521,23 +529,22 @@ class TemproParser:
         pop = pop.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
         emp = emp.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
 
-
         # TODO(BT): Remove hardcoded path
         # Convert to string msoa naming, used in EFS
-        msoa_path = r"I:\NorMITs Demand\import\zone_translation\msoa_zones.csv"
-        pop = du.convert_msoa_naming(
-            pop,
-            msoa_col_name='msoa_zone_id',
-            msoa_path=msoa_path,
-            to='str'
-        )
-
-        emp = du.convert_msoa_naming(
-            emp,
-            msoa_col_name='msoa_zone_id',
-            msoa_path=msoa_path,
-            to='str'
-        )
+        # msoa_path = r"I:\NorMITs Demand\import\zone_translation\msoa_zones.csv"
+        # pop = du.convert_msoa_naming(
+        #     pop,
+        #     msoa_col_name='msoa_zone_id',
+        #     msoa_path=msoa_path,
+        #     to='str'
+        # )
+        #
+        # emp = du.convert_msoa_naming(
+        #     emp,
+        #     msoa_col_name='msoa_zone_id',
+        #     msoa_path=msoa_path,
+        #     to='str'
+        # )
 
         # ## CALCULATE GROWTH FACTORS ## #
         # Need to know which is the base year
@@ -590,20 +597,20 @@ class TemproParser:
 
         # TODO(BT): Remove hardcoded path
         # Convert to string msoa naming, used in EFS
-        msoa_path = r"I:\NorMITs Demand\import\zone_translation\msoa_zones.csv"
-        prods = du.convert_msoa_naming(
-            prods,
-            msoa_col_name=['msoa_zone_id'],
-            msoa_path=msoa_path,
-            to='str'
-        )
-
-        attrs = du.convert_msoa_naming(
-            attrs,
-            msoa_col_name=['msoa_zone_id'],
-            msoa_path=msoa_path,
-            to='str'
-        )
+        # msoa_path = r"I:\NorMITs Demand\import\zone_translation\msoa_zones.csv"
+        # prods = du.convert_msoa_naming(
+        #     prods,
+        #     msoa_col_name='msoa_zone_id',
+        #     msoa_path=msoa_path,
+        #     to='str'
+        # )
+        #
+        # attrs = du.convert_msoa_naming(
+        #     attrs,
+        #     msoa_col_name='msoa_zone_id',
+        #     msoa_path=msoa_path,
+        #     to='str'
+        # )
 
         # ## CALCULATE GROWTH FACTORS ## #
         # Need to know which is the base year

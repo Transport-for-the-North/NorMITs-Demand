@@ -601,10 +601,10 @@ def grow_to_future_years(base_year_df: pd.DataFrame,
 
     # TODO: Maybe allow negative growth at MSOA but not LAD
     # Ensure there is no minus growth
-    if no_neg_growth:
-        for year in all_years:
-            mask = (grown_df[year] < 0)
-            grown_df.loc[mask, year] = infill
+    # if no_neg_growth:
+    #     for year in all_years:
+    #         mask = (grown_df[year] < 0)
+    #         grown_df.loc[mask, year] = infill
 
     # Add base year back in to get full grown values
     grown_df = growth_recombination(

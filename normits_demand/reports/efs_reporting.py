@@ -417,7 +417,8 @@ class EfsReporter:
             matrix_format=matrix_format,
             output_path=os.path.join(self.exports['home'], output_fname),
             vector_types=self._pa_vector_types,
-            trip_origins=self._trip_origins,
+            # trip_origins=self._trip_origins,
+            trip_origins=['hb'],
         )
 
     def compare_translated_base_pa_vectors_to_ntem(self) -> pd.DataFrame:
@@ -449,7 +450,8 @@ class EfsReporter:
             matrix_format=matrix_format,
             output_path=os.path.join(self.exports['home'], output_fname),
             vector_types=self._pa_vector_types,
-            trip_origins=self._trip_origins,
+            # trip_origins=self._trip_origins,
+            trip_origins=['hb'],
             report_subsets=self.reporting_subsets,
         )
 

@@ -77,7 +77,7 @@ def check_in_out():
     df.to_csv(path, index=False)
 
 
-def get_ntem_data():
+def get_ntem_data(m_subset=None, p_subset=None):
     base_year, future_years = du.split_base_future_years([int(x) for x in YEARS])
     base_year_str = str(base_year)
     future_years_str = [str(x) for x in future_years]
@@ -89,6 +89,14 @@ def get_ntem_data():
         ntem_fname = consts.NTEM_CONTROL_FNAME % ('pa', year)
         ntem_path = os.path.join(IMPORTS['ntem_control'], ntem_fname)
         ntem = pd.read_csv(ntem_path)
+
+        if m_subset is not None:
+            mask = (ntem['m'].isin(m_subset))
+            ntem = ntem[mask].copy()
+
+        if p_subset is not None:
+            mask = (ntem['p'].isin(p_subset))
+            ntem = ntem[mask].copy()
 
         group_cols = [ntem_mzc]
         needed_cols = group_cols.copy() + ['productions', 'attractions']
@@ -179,7 +187,33 @@ def get_efs_p_in_data():
     return efs_gf
 
 
-def check_application():
+def get_p_vector():
+    fname = consts.PRODS_FNAME % ('msoa', 'hb')
+    path = os.path.join(EXPORTS['productions'], fname)
+    p_vec = pd.read_csv(path)
+
+    group_cols = ['msoa_zone_id']
+    needed_cols = group_cols.copy() + YEARS
+
+    p_vec = p_vec.reindex(columns=needed_cols)
+    p_vec = p_vec.groupby(group_cols).sum().reset_index()
+
+    # Translate to lad
+    t_df = pd.read_csv(MSOA_TO_LAD_PATH)
+    trans = zt.ZoneTranslator()
+    p_vec = trans.run(
+        p_vec,
+        from_zoning='msoa',
+        to_zoning='lad',
+        non_split_cols=group_cols,
+        translation_df=t_df,
+        aggregate_method='mean'
+    )
+
+    return p_vec
+
+
+def check_diffs():
     base_year, future_years = du.split_base_future_years([int(x) for x in YEARS])
     base_year_str = str(base_year)
     future_years_str = [str(x) for x in future_years]
@@ -210,10 +244,32 @@ def check_application():
     print("GF_IN/GF_OUT total diff:\t%s" % str(efs_gf_in_diff.mean(axis=0)))
 
 
+def apply_ntem_on_base():
+
+    p_ntem, p_gf_ntem, a_ntem, a_gf_ntem = get_ntem_data(
+        m_subset=consts.MODEL_MODES[MODEL_NAME],
+        p_subset=consts.ALL_HB_P,
+    )
+
+    p_vec = get_p_vector()
+
+    both = pd.merge(
+        p_vec,
+        p_ntem,
+        on=['lad_zone_id'],
+        suffixes=['_efs', '_ntem']
+    )
+
+    print(both)
+
+
+
 
 def main():
     # check_in_out()
-    check_application()
+    check_diffs()
+    # apply_ntem_on_base()
+
 
 
 if __name__ == '__main__':
