@@ -445,6 +445,7 @@ def build_efs_io_paths(import_location: str,
         'soc_weights': soc_weights_path,
         'ntem_control': os.path.join(import_home, 'ntem_constraints'),
         'model_schema': os.path.join(import_home, model_name, 'model schema'),
+        'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
     }
 
     #  ## EXPORT PATHS ## #

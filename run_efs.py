@@ -23,20 +23,20 @@ def main():
     # Running control
     integrate_dlog = False
 
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = True
     recreate_attractions = True
     recreate_nhb_productions = True
 
     run_bespoke_zones = False
     run_hb_pa_to_od = False
-    run_compile_od = False
+    run_compile_od = True
     run_decompile_od = False
     run_future_year_compile_od = False
 
     # Controls I/O
     scenario = consts.SC00_NTEM
-    iter_num = 2
+    iter_num = 0
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME

@@ -467,6 +467,10 @@ def build_path(base_path,
     Build a finished param path from a base string containing file location
     and a list of input params for a given run.
     """
+    # BACKLOG: Update TMS filenames to include the year.
+    #  Will always be 2018 in TMS.
+    #  labels: demand merge, TMS
+
     if base_path[-4:] == '.csv':
         base_path = base_path[:-4]
 
