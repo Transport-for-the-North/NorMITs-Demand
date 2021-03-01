@@ -5,7 +5,7 @@
     which will run the whole ESF process.
 """
 
-##### IMPORTS #####
+##### imports #####
 # Standard imports
 import sys
 import configparser

@@ -1366,13 +1366,22 @@ class ExternalForecastSystem:
         if overwrite_compiled_od:
             # Build the compile params for this model
             if self.model_name == 'noham':
-                compile_params_path = mat_p.build_compile_params(
+                compile_params_paths = mat_p.build_compile_params(
                     import_dir=self.exports['aggregated_od'],
                     export_dir=self.params['compile'],
                     matrix_format='od',
                     years_needed=[year],
                     m_needed=m_needed,
                     ca_needed=ca_needed,
+                    tp_needed=tp_needed,
+                )
+            elif self.model_name == 'norms':
+                compile_params_paths = mat_p.build_norms_compile_params(
+                    import_dir=self.exports['aggregated_od'],
+                    export_dir=self.params['compile'],
+                    matrix_format='od',
+                    years_needed=[year],
+                    m_needed=m_needed,
                     tp_needed=tp_needed,
                 )
             else:
@@ -1384,7 +1393,7 @@ class ExternalForecastSystem:
             mat_p.compile_matrices(
                 mat_import=self.exports['aggregated_od'],
                 mat_export=self.exports['compiled_od'],
-                compile_params_path=compile_params_path,
+                compile_params_path=compile_params_paths[0],
                 round_dp=round_dp,
                 build_factor_pickle=True,
                 factor_pickle_path=self.params['compile'],

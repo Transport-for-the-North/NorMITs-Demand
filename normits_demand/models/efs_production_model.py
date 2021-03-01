@@ -2290,6 +2290,9 @@ def control_productions_to_ntem(productions: pd.DataFrame,
 
     # Init
     future_years = list() if future_years is None else future_years
+    all_years = [base_year] + future_years
+    init_index_cols = list(productions)
+    init_group_cols = du.list_safe_remove(list(productions), all_years)
 
     # Use sorting to avoid merge. Productions is a BIG DF
     all_years = [base_year] + future_years
@@ -2340,7 +2343,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
             zone_to_lad=ntem_lad_lookup,
             constraint_cols=ntem_control_cols,
             base_value_name=year,
-            ntem_value_name='Productions',
+            ntem_value_name='productions',
             trip_origin=trip_origin
         )
 
@@ -2362,12 +2365,23 @@ def control_productions_to_ntem(productions: pd.DataFrame,
         return productions
 
     # ## ADD PRE CONTROL GROWTH BACK ON ## #
-    # Make sure post-control productions are in the correct order
-    productions = productions.sort_values(sort_cols)
+    # Merge on all possible columns
+    merge_cols = du.list_safe_remove(list(growth_factors), all_years)
+    productions = pd.merge(
+        productions,
+        growth_factors,
+        how='left',
+        on=merge_cols,
+        suffixes=['_orig', '_gf'],
+    ).fillna(1)
 
     # Add growth back on
     for year in future_years:
-        productions[year] = productions[base_year] * growth_factors[year].values
+        productions[year] = productions[base_year] * productions["%s_gf" % year].values
+
+    # make sure we only have the columns we started with
+    productions = productions.reindex(columns=init_index_cols)
+    productions = productions.groupby(init_group_cols).sum().reset_index()
 
     return productions
 
