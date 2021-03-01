@@ -73,7 +73,7 @@ class ProductionModel(demand.Pathing):
 
         tr_path = os.path.join(
             self.import_folder,
-            'trip_params',
+            'production_params',
             self.params[tr_var])
 
         if verbose:
@@ -502,7 +502,7 @@ class ProductionModel(demand.Pathing):
         # drop land use 'ca' column first - error in this column
         # Fix car ownership
         ca = pd.DataFrame({'cars': ['0', 0, '1', 1, '1+', '2', '2+'],
-                           'ca': [0, 0, 1, 1, 1, 1, 1]})
+                           'ca': [1, 1, 2, 2, 2, 2, 2]})
         land_use_output = land_use_output.merge(ca,
                                                 how='left',
                                                 on='cars')
@@ -606,12 +606,12 @@ class ProductionModel(demand.Pathing):
 
         time_splits = pd.read_csv(
             os.path.join(self.import_folder,
-                         'trip_params',
+                         'production_params',
                          self.params['hb_time_split'],
                          ))
         mean_time_splits = pd.read_csv(
             os.path.join(self.import_folder,
-                         'trip_params',
+                         'production_params',
                          self.params['hb_ave_time_split']
                          ))
 
@@ -660,7 +660,7 @@ class ProductionModel(demand.Pathing):
         # Get mode splits
         mode_share = pd.read_csv(
             os.path.join(self.import_folder,
-                         'trip_params',
+                         'production_params',
                          self.params['hb_mode_split']
                          ))
 
@@ -776,7 +776,7 @@ class ProductionModel(demand.Pathing):
                     msoa_lad_lookup,
                     constraint_cols = ['p', 'm', 'tp'],
                     base_value_name='trips',
-                    ntem_value_name='Productions',
+                    ntem_value_name='productions',
                     trip_origin='hb')
 
             if self.params['export_lad']:
@@ -970,12 +970,12 @@ class ProductionModel(demand.Pathing):
         # Get nhb mode splits
         nhb_mode_split = pd.read_csv(
             os.path.join(self.import_folder,
-                         'trip_params',
+                         'production_params',
                          self.params['nhb_mode_split']))
         # Get nhb time splits
         nhb_time_split = pd.read_csv(
             os.path.join(self.import_folder,
-                         'trip_params',
+                         'production_params',
                          self.params['nhb_time_split']))
 
         # Import HB PA
