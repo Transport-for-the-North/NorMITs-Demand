@@ -21,7 +21,7 @@ def main():
     # ## SETUP ## #
     # Controls I/O
     scenario = consts.SC00_NTEM
-    iter_num = 1
+    iter_num = 2
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
@@ -30,8 +30,8 @@ def main():
         iter_num=iter_num,
         model_name=model_name,
         scenario_name=scenario,
-        # years_needed=consts.ALL_YEARS_STR,
-        years_needed=['2050'],
+        years_needed=consts.ALL_YEARS_STR,
+        # years_needed=['2050'],
         import_home=import_home,
         export_home=export_home,
     )

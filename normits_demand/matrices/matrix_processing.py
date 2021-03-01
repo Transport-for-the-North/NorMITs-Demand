@@ -15,6 +15,7 @@ that do not belong specifically to pa_to_od.py, or od_to_pa.py.
 import os
 import pickle
 import pathlib
+import itertools
 
 from typing import Any
 from typing import List
@@ -1279,6 +1280,113 @@ def generate_tour_proportions(od_import: str,
     )
 
 
+def build_norms_compile_params(import_dir: str,
+                               export_dir: str,
+                               matrix_format: str,
+                               years_needed: Iterable[int],
+                               m_needed: List[int] = consts.MODES_NEEDED,
+                               tp_needed: Iterable[int] = None,
+                               output_headers: List[str] = None,
+                               output_format: str = 'wide',
+                               output_fname: str = None
+                               ) -> List[str]:
+    # Error checking
+    if len(m_needed) > 1:
+        raise ValueError("Matrix compilation can only handle one mode at a "
+                         "time. Received %d modes" % len(m_needed))
+    mode = m_needed[0]
+
+    # Init
+    tp_needed = [None] if tp_needed is None else tp_needed
+    all_od_matrices = du.list_files(import_dir)
+    out_paths = list()
+
+    if output_headers is None:
+        output_headers = ['distribution_name', 'compilation', 'format']
+
+    for year in years_needed:
+        out_lines = list()
+
+        # Build the iterator
+        iterator = itertools.product(
+            consts.USER_CLASS_PURPOSES.items(),
+            tp_needed
+        )
+
+        for (user_class, purposes), tp in iterator:
+            for sub_uc, seg_dict in consts.NORMS_SUB_USER_CLASS_SEG.items():
+                # Init
+                compile_mats = all_od_matrices.copy()
+
+                # ## FILTER DOWN TO USER CLASS ## #
+                # include _ before and after to avoid clashes
+                ps = ['_p' + str(x) + '_' for x in purposes]
+                mode_str = '_m' + str(mode) + '_'
+                year_str = '_yr' + str(year) + '_'
+
+                # Narrow down to matrices for this compilation
+                compile_mats = [x for x in compile_mats if year_str in x]
+                compile_mats = [x for x in compile_mats if du.is_in_string(ps, x)]
+                compile_mats = [x for x in compile_mats if mode_str in x]
+
+                # Filter by time period if needed
+                if tp is not None:
+                    tp_str = '_tp' + str(tp)
+                    compile_mats = [x for x in compile_mats if tp_str in x]
+
+                # ## FILTER DOWN TO SUB USER CLASS ## #
+                # We're keeping the mats which contain any item in the list
+                filtered = list()
+                for to in seg_dict['to']:
+                    filtered += [x for x in compile_mats if du.starts_with(x, to)]
+                compile_mats = filtered.copy()
+
+                filtered = list()
+                for ca in seg_dict['ca']:
+                    ca_str = '_ca%s' % str(ca)
+                    filtered += [x for x in compile_mats if ca_str in x]
+                compile_mats = filtered.copy()
+
+                filtered = list()
+                # Split into trip origins, we can only do this for hb mats
+                hb_mats = [x for x in compile_mats if du.starts_with(x, 'hb')]
+                nhb_mats = [x for x in compile_mats if du.starts_with(x, 'nhb')]
+                for od_ft in seg_dict['od_ft']:
+                    # Filter to just the from/to we need
+                    od_ft_str = "_%s" % od_ft
+                    filtered += [x for x in hb_mats if od_ft_str in x]
+                # Stick everything back together
+                compile_mats = filtered.copy() + nhb_mats
+
+                # ## BUILD THE COMPILATION PARAMS ## #
+                # Build the final output name
+                compiled_mat_name = du.get_compiled_matrix_name(
+                    matrix_format,
+                    user_class,
+                    str(year),
+                    trip_origin=None,
+                    mode=str(mode),
+                    ca=None,
+                    tp=str(tp),
+                    suffix='_%s' % sub_uc,
+                    csv=True
+                )
+
+                # Add lines to output
+                for mat_name in compile_mats:
+                    line_parts = (mat_name, compiled_mat_name, output_format)
+                    out_lines.append(line_parts)
+
+        # Write outputs for this year
+        if output_fname is None:
+            output_fname = du.get_compile_params_name(matrix_format, str(year))
+        out_path = os.path.join(export_dir, output_fname)
+        du.write_csv(output_headers, out_lines, out_path)
+        out_paths.append(out_path)
+
+    return out_paths
+
+
 def build_compile_params(import_dir: str,
                          export_dir: str,
                          matrix_format: str,
@@ -1291,7 +1399,8 @@ def build_compile_params(import_dir: str,
                          output_headers: List[str] = None,
                          output_format: str = 'wide',
                          output_fname: str = None
-                         ) -> str:
+                         ) -> List[str]:
+
     """
     Create a compile_params file to be used with compile_od().
     In the future this should also work with compile_pa().
@@ -1364,12 +1473,13 @@ def build_compile_params(import_dir: str,
     to_needed = [None] if not split_hb_nhb else ['hb', 'nhb']
     od_from_to = [None] if not split_od_from_to else ['od_from', 'od_to']
     all_od_matrices = du.list_files(import_dir)
-    out_lines = list()
+    out_paths = list()
 
     if output_headers is None:
         output_headers = ['distribution_name', 'compilation', 'format']
 
     for year in years_needed:
+        out_lines = list()
         for user_class, purposes in consts.USER_CLASS_PURPOSES.items():
             for ca, tp, to, od_ft in product(ca_needed, tp_needed, to_needed, od_from_to):
                 # Init
@@ -1438,8 +1548,9 @@ def build_compile_params(import_dir: str,
             output_fname = du.get_compile_params_name(matrix_format, str(year))
         out_path = os.path.join(export_dir, output_fname)
         du.write_csv(output_headers, out_lines, out_path)
+        out_paths.append(out_path)
 
-        return out_path
+    return out_paths
 
 
 def build_24hr_vdm_mats(import_dir: str,

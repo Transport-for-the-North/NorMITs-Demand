@@ -38,7 +38,7 @@ _trip_origin_purposes = [
 TRIP_ORIGINS = [x[0] for x in _trip_origin_purposes]
 TRIP_ORIGIN_TO_PURPOSE = {to: p for to, p in _trip_origin_purposes}
 
-PROCESS_COUNT = -2
+PROCESS_COUNT = -3
 DEFAULT_ROUNDING = 6
 
 # ## VDM/ME2 constants ## #
@@ -56,6 +56,12 @@ HB_USER_CLASS_PURPOSES = {
     'commute': [1],
     'business': [2],
     'other': [3, 4, 5, 6, 7, 8]
+}
+
+NORMS_SUB_USER_CLASS_SEG = {
+    'ca_from':  {'to': ['hb', 'nhb'],   'ca': [2], 'od_ft': ['od_from']},
+    'ca_to':    {'to': ['hb'],          'ca': [2], 'od_ft': ['od_to']},
+    'nca':      {'to': ['hb', 'nhb'],   'ca': [1], 'od_ft': ['od_to', 'od_from']},
 }
 
 # Convert between Purpose int and strings
@@ -176,7 +182,7 @@ POP_TRANSLATION_FNAME = '%s_%s_pop_weighted_lookup.csv'
 EMP_TRANSLATION_FNAME = '%s_%s_emp_weighted_lookup.csv'
 
 # ## NTEM Controls
-# year
+# matrix_format, year
 NTEM_CONTROL_FNAME = 'ntem_%s_ave_wday_%s.csv'
 DEFAULT_LAD_LOOKUP = 'lad_to_msoa.csv'
 
