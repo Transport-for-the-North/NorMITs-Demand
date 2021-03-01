@@ -26,6 +26,8 @@ from normits_demand.models import efs_zone_translator as zt
 
 from normits_demand.utils import general as du
 
+# TODO(BT/CS): Functionalist query by DB and interpolate (separately)
+
 
 class TemproParser:
     """
@@ -58,6 +60,14 @@ class TemproParser:
         'jobs': [6],
         'workers': [4],
     }
+    
+    co_data_types = {
+        'no_car': [1],
+        '1_car': [2],
+        '2_cars': [3],
+        '3+_cars': [4],
+        'nca': [1],
+        'ca': [2,3,4]}
 
     def __init__(self,
                  access_driver: str = None,
@@ -98,6 +108,130 @@ class TemproParser:
 
         print('Tempro extractor running!')
 
+    def _get_co_data(self,
+                     db_fname
+                     ):
+        
+        # Init
+        db_path = os.path.join(self.data_source, db_fname)
+        conn_string = (
+            'Driver=' + self.access_driver + ';'
+            'DBQ=' + db_path + ';'
+        )
+        conn = None
+        
+        try:
+            # Connect
+            conn = pyodbc.connect(conn_string)
+            cursor = conn.cursor()
+
+            # Grab and unpack the planning data
+            cursor.execute('select * from CarOwnership')
+
+            co_ph = list()
+            for row in cursor.fetchall():
+                co_ph.append([x for x in row])
+
+            co_data = pd.DataFrame(
+                data=co_ph,
+                columns=[column[0] for column in cursor.description]
+            )
+
+            print(list(co_data))
+
+            # Grab and unpack local db zone translations
+            cursor.execute('select * from Zones')
+
+            zonal_ph = list()
+            for row in cursor.fetchall():
+                zonal_ph.append([x for x in row])
+
+            zones = pd.DataFrame(
+                data=zonal_ph,
+                columns=[column[0] for column in cursor.description]
+            )
+        except BaseException as e:
+            if conn is not None:
+                conn.close()
+            raise e
+        finally:
+            if conn is not None:
+                conn.close()
+
+        # Get years
+        av_years = [int(x) for x in list(co_data) if x.isdigit()]
+        year_index = list()
+        year_dicts = list()
+        for year in self.output_years:
+
+            if year > 2051:
+                print('Impossible to interpolate past 2051')
+                break
+            else:
+                year_index.append(str(year))
+                if year in av_years:
+                    year_dicts.append({'t_year': year,
+                                       'start_year': year,
+                                       'end_year': year})
+                else:
+                    year_diff = np.array([year - x for x in av_years])
+                    # Get lower than
+                    ly = np.argmin(np.where(year_diff > 0, year_diff, 100))
+                    ly = av_years[ly]
+                    # Get greater than
+                    hy = np.argmax(np.where(year_diff < 0, year_diff, -100))
+                    hy = av_years[hy]
+
+                    year_dicts.append({'t_year': year,
+                                       'start_year': ly,
+                                       'end_year': hy})
+
+        # Interpolate mid point years if needed
+        for year in year_dicts:
+            period_diff = year['end_year'] - year['start_year']
+            target_diff = year['t_year'] - year['start_year']
+            if target_diff > 0:
+                co_data['annual_growth'] = (
+                    (
+                        co_data[str(year['end_year'])]
+                        - co_data[str(year['start_year'])]
+                    )
+                    / period_diff
+                )
+
+                co_data[str(year['t_year'])] = (
+                    co_data[str(year['start_year'])]
+                    + (target_diff * co_data['annual_growth'])
+                )
+                co_data = co_data.drop('annual_growth', axis=1)
+
+        # ## SPLIT INTO POP AND JOBS ## #
+        # population
+        needed_types = self.co_data_types['nca']
+        mask = co_data['CarOwnershipType'].isin(needed_types)
+        nca = co_data[mask].copy()
+
+        # jobs
+        needed_types = self.co_data_types['ca']
+        mask = co_data['CarOwnershipType'].isin(needed_types)
+        ca = co_data[mask].copy()
+
+        # ## ATTACH ZONE NAMES ## #
+        nca = pd.merge(
+            nca,
+            zones,
+            how='left',
+            on='ZoneID'
+        )
+
+        ca = pd.merge(
+            ca,
+            zones,
+            how='left',
+            on='ZoneID'
+        )
+        return nca, ca
+
     def _get_pop_job_numbers(self,
                              db_fname
                              ) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -126,7 +260,7 @@ class TemproParser:
                 columns=[column[0] for column in cursor.description]
             )
 
-            # GRab and unpack local db zone translations
+            # Grab and unpack local db zone translations
             cursor.execute('select * from Zones')
 
             zonal_ph = list()
@@ -510,6 +644,66 @@ class TemproParser:
 
         return pop, emp
 
+    def _get_co_growth_factors_internal(self,
+                                        db_fname,
+                                        pbar=None):
+        """
+        Get CO data from databse and convert to MSOA
+        """
+        nca, ca = self._get_co_data(db_fname)
+        
+        # Translate local ntem to global ntem
+        nca = self._tempro_ntem_to_normits_ntem(
+            nca,
+            return_zone_col='ntem_zone_id',
+        )
+        
+        ca = self._tempro_ntem_to_normits_ntem(
+            ca,
+            return_zone_col='ntem_zone_id',
+        )
+        
+        # ## AGGREGATE TO NEEDED DATA ONLY ## #
+        group_cols = ['ntem_zone_id']
+        needed_cols = group_cols.copy() + [str(x) for x in self._output_years]
+
+        nca = nca.reindex(
+            columns=needed_cols).groupby(group_cols).sum().reset_index()
+        ca = ca.reindex(
+            columns=needed_cols).groupby(group_cols).sum().reset_index()
+
+        # ## TRANSLATE TO MSOA ## #
+        translator = zt.ZoneTranslator()
+
+        nca = translator.run(
+            nca,
+            pd.read_csv(self.ntem_to_msoa_path),
+            'ntem',
+            'msoa',
+            non_split_cols=group_cols,
+        )
+        ca = translator.run(
+            ca,
+            pd.read_csv(self.ntem_to_msoa_path),
+            'ntem',
+            'msoa',
+            non_split_cols=group_cols,
+        )
+
+        # Tidy up and hold to join later
+        group_cols = ['msoa_zone_id']
+        needed_cols = group_cols.copy() + [str(x) for x in self._output_years]
+
+        nca = nca.reindex(
+            columns=needed_cols).groupby(group_cols).sum().reset_index()
+        ca = ca.reindex(
+            columns=needed_cols).groupby(group_cols).sum().reset_index()
+
+        if pbar is not None:
+            pbar.update(1)
+        
+        return nca, ca
+
     def get_available_dbs(self):
         available_dbs = []
         db_list = [x for x in os.listdir(self.data_source) if '.mdb' in x]
@@ -619,7 +813,58 @@ class TemproParser:
 
         return prods_gf, attrs_gf, prods, attrs
 
-    def parse_tempro(self,
+    def get_co_growth_factors(self,
+                              verbose = True):
+        """
+        Get car ownership growth factors
+        """
+        
+        # Init
+        available_dbs = self.get_available_dbs()
+
+        # Loop setup
+        nca_ph = list()
+        ca_ph = list()
+        pbar = tqdm(
+            total=len(available_dbs),
+            desc="Extracting trip ends from DBs",
+            disable=(not verbose),
+        )
+
+        for db_fname in available_dbs:
+            nca, ca = self._get_co_growth_factors_internal(
+                db_fname,
+                pbar,
+            )
+            nca_ph.append(nca)
+            ca_ph.append(ca)
+
+        # Stick all the partials together
+        nca = pd.concat(nca_ph)
+        ca = pd.concat(ca_ph)
+
+        # Sort by zone_col
+        nca = nca.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+        ca = ca.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+
+        # ## CALCULATE GROWTH FACTORS ## #
+        # Need to know which is the base year
+        base_year, future_years = du.split_base_future_years(self._output_years)
+        base_year_col = str(base_year)
+        future_year_cols = [str(x) for x in future_years]
+
+        nca_df = nca.copy()
+        ca_df = ca.copy()
+
+        for vector in [nca_df, ca_df]:
+            # Calculate growth factors
+            for col in future_year_cols:
+                vector[col] /= vector[base_year_col]
+            vector[base_year_col] = 1
+
+        return nca_df, ca_df, nca, ca
+
+    def get_trip_ends(self,
                      trip_type: str = 'pa',
                      aggregate_car: bool = True):
 
@@ -730,19 +975,3 @@ class TemproParser:
             out_fname = "ntem_%s_ave_wday_%s.csv" % (trip_type, str(year))
             out_path = os.path.join(self.out_folder, out_fname)
             single_year.to_csv(out_path, index=False)
-
-# TODO: Ask Nhan - about VO application here
-
-
-if __name__ == '__main__':
-
-    pa = TemproParser(out_folder=r'C:\Users\Genie\Documents\Tempro',
-                      output_years=[2015])
-    od = TemproParser(out_folder=r'C:\Users\Genie\Documents\Tempro',
-                      output_years=[2015])
-
-    pa.parse_tempro(trip_type='pa',
-                    aggregate_car=True)
-
-    od.parse_tempro(trip_type='od',
-                    aggregate_car=True)
