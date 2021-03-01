@@ -21,6 +21,7 @@ from tqdm import tqdm
 
 # local imports
 from normits_demand import AuditError
+from normits_demand import constants as consts
 from normits_demand.models import efs_zone_translator as zt
 
 from normits_demand.utils import general as du
@@ -372,10 +373,29 @@ class TemproParser:
 
         return trip_ends.rename(columns={'Zone_ID': return_zone_col})
 
-    def _get_growth_factors_internal(self, db_fname, col_indices, pbar=None):
+    def _get_growth_factors_internal(self,
+                                     db_fname,
+                                     col_indices,
+                                     trip_origin: str = 'hb',
+                                     pbar=None,
+                                     ):
         """
         Grabs the trip ends from the database and converts to msoa zoning
         """
+        # Init
+        needed_purposes = list()
+        trip_origin = trip_origin.strip().lower()
+        if trip_origin == 'both' or trip_origin == 'hb':
+            needed_purposes += consts.ALL_HB_P
+
+        if trip_origin == 'both' or trip_origin == 'nhb':
+            needed_purposes += consts.ALL_NHB_P
+
+        if needed_purposes == list():
+            raise ValueError(
+                "Received an invalid trip origin. Expected one of ['hb', "
+                "'nhb', 'both']. Got %s instead." % str(trip_origin)
+            )
 
         # Grab the data from this database
         trip_ends, years = self._get_pa_trip_ends(db_fname, col_indices)
@@ -386,6 +406,10 @@ class TemproParser:
 
         # Filter down to just the needed time periods
         mask = (trip_ends['TimePeriod'].isin([1, 2, 3, 4]))
+        trip_ends = trip_ends[mask].reset_index(drop=True)
+
+        # Filter down to the needed purposes
+        mask = (trip_ends['Purpose'].isin(needed_purposes))
         trip_ends = trip_ends[mask].reset_index(drop=True)
 
         # Aggregate up to just zones
@@ -529,23 +553,6 @@ class TemproParser:
         pop = pop.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
         emp = emp.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
 
-        # TODO(BT): Remove hardcoded path
-        # Convert to string msoa naming, used in EFS
-        # msoa_path = r"I:\NorMITs Demand\import\zone_translation\msoa_zones.csv"
-        # pop = du.convert_msoa_naming(
-        #     pop,
-        #     msoa_col_name='msoa_zone_id',
-        #     msoa_path=msoa_path,
-        #     to='str'
-        # )
-        #
-        # emp = du.convert_msoa_naming(
-        #     emp,
-        #     msoa_col_name='msoa_zone_id',
-        #     msoa_path=msoa_path,
-        #     to='str'
-        # )
-
         # ## CALCULATE GROWTH FACTORS ## #
         # Need to know which is the base year
         base_year, future_years = du.split_base_future_years(self._output_years)
@@ -582,7 +589,7 @@ class TemproParser:
             prods, attrs = self._get_growth_factors_internal(
                 db_fname,
                 col_indices,
-                pbar,
+                pbar=pbar,
             )
             prod_ph.append(prods)
             attr_ph.append(attrs)
@@ -594,23 +601,6 @@ class TemproParser:
         # Sort by zone_col
         prods = prods.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
         attrs = attrs.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
-
-        # TODO(BT): Remove hardcoded path
-        # Convert to string msoa naming, used in EFS
-        # msoa_path = r"I:\NorMITs Demand\import\zone_translation\msoa_zones.csv"
-        # prods = du.convert_msoa_naming(
-        #     prods,
-        #     msoa_col_name='msoa_zone_id',
-        #     msoa_path=msoa_path,
-        #     to='str'
-        # )
-        #
-        # attrs = du.convert_msoa_naming(
-        #     attrs,
-        #     msoa_col_name='msoa_zone_id',
-        #     msoa_path=msoa_path,
-        #     to='str'
-        # )
 
         # ## CALCULATE GROWTH FACTORS ## #
         # Need to know which is the base year

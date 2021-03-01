@@ -263,13 +263,10 @@ def apply_ntem_on_base():
     print(both)
 
 
-
-
 def main():
     # check_in_out()
     check_diffs()
     # apply_ntem_on_base()
-
 
 
 if __name__ == '__main__':
