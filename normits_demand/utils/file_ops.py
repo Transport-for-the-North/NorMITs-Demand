@@ -14,14 +14,20 @@ A collections of utility functions for file operations
 import os
 import pathlib
 
-from typing import Union
-
 # Third Party
+import pandas as pd
 
 # Local imports
+import normits_demand as nd
+from normits_demand import constants as consts
+from normits_demand.utils import compress
+
+# Imports that need moving into here
+from normits_demand.utils.utils import create_folder
+from normits_demand.utils.general import list_files
 
 
-def file_exists(file_path: Union[str, pathlib.Path]) -> bool:
+def file_exists(file_path: nd.PathLike) -> bool:
     """
     Checks if a file exists at the given path.
 
@@ -47,7 +53,7 @@ def file_exists(file_path: Union[str, pathlib.Path]) -> bool:
     return True
 
 
-def check_file_exists(file_path: Union[str, pathlib.Path]) -> None:
+def check_file_exists(file_path: nd.PathLike) -> None:
     """
     Checks if a file exists at the given path. Throws an error if not.
 
@@ -66,7 +72,7 @@ def check_file_exists(file_path: Union[str, pathlib.Path]) -> None:
         )
 
 
-def is_csv(file_path: Union[str, pathlib.Path]) -> bool:
+def is_csv(file_path: nd.PathLike) -> bool:
     """
     Returns True if given file path points to a csv, else False
 
@@ -89,3 +95,81 @@ def is_csv(file_path: Union[str, pathlib.Path]) -> bool:
 
     file_extension = filename_parts[-1].lower()
     return file_extension == 'csv'
+
+
+def maybe_add_suffix(path: nd.PathLike,
+                     suffix: str,
+                     overwrite: bool = False,
+                     ) -> pathlib.Path:
+    """
+    Adds suffix to path if no suffix already exists.
+
+    Will overwrite any existing suffix if overwrite is set to True
+
+    Parameters
+    ----------
+    path:
+        The path to maybe add the suffix to.
+
+    suffix:
+        The suffix to add onto path.
+
+    overwrite:
+        If set to True, will overwrite any suffix that already exists in path.
+
+    Returns
+    -------
+    path:
+        The original passed in path with an updated suffix.
+    """
+    # Init
+    if not isinstance(path, pathlib.Path):
+        path = pathlib.Path(path)
+
+    # Remove current suffix if we're overwriting
+    if overwrite:
+        path = path.parent / path.stem
+
+    # Add suffix if not there
+    if path.suffix == '':
+        path = path.parent / (path.name + suffix)
+
+    return path
+
+
+def read_df(path: nd.PathLike, index_col=None, **kwargs) -> pd.DataFrame:
+    """
+    Reads in the dataframe at path. Decompresses the df if needed.
+    
+    Parameters
+    ----------
+    path:
+        The full path to the dataframe to read in
+
+    index_col:
+        Will set this column as the index if reading from a compressed
+        file, and the index is not already set.
+        If reading from a csv, this is passed straight to pd.read_csv()
+
+    Returns
+    -------
+    df:
+        The read in df at path.
+    """
+    # Determine how to read in df
+    if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
+        df = compress.read_in(path)
+
+        # Optionally try and set the index
+        if index_col is not None and df.index.name is None:
+            df = df.set_index(list(df)[index_col])
+        return df
+
+    elif pathlib.Path(path).suffix == '.csv':
+        return pd.read_csv(path, **kwargs)
+
+    else:
+        raise ValueError(
+            "Cannot determine the filetype of the given path. Expected "
+            "either '.csv' or '%s'" % consts.COMPRESSION_SUFFIX
+        )

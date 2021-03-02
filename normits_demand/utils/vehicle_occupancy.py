@@ -18,13 +18,13 @@ from normits_demand import efs_constants as consts
 
 
 def people_vehicle_conversion(mat_import: str,
-                              import_folder: str,
                               mat_export: str,
+                              import_folder: str,
                               mode: int,
                               method: str = 'to_vehicles',
                               round_dp: int = consts.DEFAULT_ROUNDING,
-                              hourly_average: bool = True,
                               out_format: str = 'long',
+                              hourly_average: bool = True,
                               header: bool = True,
                               write: bool = True
                               ) -> None:
