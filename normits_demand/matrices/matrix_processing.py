@@ -2676,7 +2676,7 @@ def _split_int_ext(mat_import,
     # Extract and write to disk
     for name, out_dir, zones, join_fn in iterator:
         # Get the mask and extract the data
-        mask = mat_utils.get_wide_mask(full_mat, zones)
+        mask = mat_utils.get_wide_mask(full_mat, zones, join_fn=join_fn)
         sub_mat = full_mat.where(mask, 0)
 
         fname = du.calib_params_to_dist_name(
