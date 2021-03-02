@@ -10,13 +10,14 @@ import _pickle as cPickle
 import pathlib
 
 from typing import Any
-from typing import Union
 
 # Third party
 
 
 # Local imports
+import normits_demand as nd
 from normits_demand.utils import file_ops
+import normits_demand.constants as consts
 
 """
 Test use
@@ -44,22 +45,20 @@ Out as 56mb
 """
 
 
-def write_out(path: Union[pathlib.Path, str],
-              o: Any,
-              ) -> pathlib.Path:
+def write_out(o: Any, path: nd.PathLike) -> pathlib.Path:
     """
-    Write the given object o to disk at the given out_path.gz
+    Write the given object o to disk at the given out_path
 
     The written object will be compressed on write out.
 
     Parameters
     ----------
+    o:
+        The object to write to disk. Must be serializable.
+
     path:
         The path to write out to. If no filetype suffix is provided .pbz2
         is added.
-
-    o:
-        The object to write to disk. Must be serializable.
 
     Returns
     -------
@@ -69,7 +68,7 @@ def write_out(path: Union[pathlib.Path, str],
     # Init
     if not isinstance(path, pathlib.Path):
         path = pathlib.Path(path)
-    path = file_ops.maybe_add_suffix(path, '.pbz2')
+    path = file_ops.maybe_add_suffix(path, consts.COMPRESSION_SUFFIX)
 
     with bz2.BZ2File(path, 'w') as f:
         cPickle.dump(o, f)
@@ -77,7 +76,7 @@ def write_out(path: Union[pathlib.Path, str],
     return path
 
 
-def read_in(path: Union[pathlib.Path, str]) -> Any:
+def read_in(path: nd.PathLike) -> Any:
     """
     Reads the data at path, decompresses, and returns the object.
 

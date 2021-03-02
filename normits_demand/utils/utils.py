@@ -33,18 +33,20 @@ def create_project_folder(projectName, echo=True):
         os.chdir(os.getcwd() + '/' + projectName)
         print_w_toggle('Project folder already exists, wd set there', echo)
 
-def create_folder(folder, chDir=False, echo=True):
+
+def create_folder(folder, chDir=False, verbose=True):
     """
     """
     if not os.path.exists(folder):
         os.makedirs(folder)
         if chDir:
             os.chdir(folder)
-        print_w_toggle("New project folder created in " + folder, echo=echo)
+        print_w_toggle("New project folder created in " + folder, echo=verbose)
     else:
         if chDir:
             os.chdir(folder)
-        print_w_toggle('Folder already exists', echo=echo)
+        print_w_toggle('Folder already exists', echo=verbose)
+
 
 def set_time():
     """
@@ -503,7 +505,7 @@ def n_matrix_split(matrix,
     # Check for missing indices in the given matrix
     sum_len = sum([len(x) for x in indices])
     if sum_len != len(matrix):
-        # build a third category with a name and a list of the missing
+        # TODO: build a third category with a name and a list of the missing
         print('Do something')
 
     # Bundle up indices into a dict
