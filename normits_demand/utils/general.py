@@ -346,6 +346,8 @@ def build_efs_io_paths(import_location: str,
                        demand_version: str,
                        demand_dir_name: str = 'NorMITs Demand',
                        base_year: str = efs_consts.BASE_YEAR_STR,
+                       land_use_iteration: str = None,
+                       land_use_drive: str = None,
                        ) -> Tuple[dict, dict, dict]:
     """
     Builds three dictionaries of paths to the locations of all inputs and
@@ -415,7 +417,7 @@ def build_efs_io_paths(import_location: str,
     ]
     a_weights_path = os.path.join(*tms_path_parts)
 
-    # Generate import and export paths
+    # Generate general import paths
     model_home = os.path.join(import_location, demand_dir_name)
     import_home = os.path.join(model_home, 'import')
     input_home = os.path.join(import_home, 'default')
@@ -448,6 +450,19 @@ def build_efs_io_paths(import_location: str,
         'model_schema': os.path.join(import_home, model_name, 'model schema'),
         'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
     }
+
+    # Add Land use import if we have an iteration
+    if land_use_drive is not None and land_use_iteration is not None:
+        land_use_import = os.path.join(
+            land_use_drive,
+            'NorMITs Land Use',
+            land_use_iteration,
+            'outputs',
+            'scenarios',
+            scenario_name,
+        )
+        imports['land_use'] = land_use_import
+
 
     #  ## EXPORT PATHS ## #
     # Create home paths

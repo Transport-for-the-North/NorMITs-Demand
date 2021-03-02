@@ -20,17 +20,21 @@ from normits_demand.utils import exceptional_growth as eg
 def main():
     verbose = False
 
+    # Land Use imports
+    land_use_drive = "Y:/",
+    land_use_iteration = 'iter3b',
+
     # Running control
     integrate_dlog = False
 
-    run_base_efs = False
+    run_base_efs = True
     recreate_productions = True
     recreate_attractions = True
     recreate_nhb_productions = True
 
     run_bespoke_zones = False
     run_hb_pa_to_od = False
-    run_compile_od = True
+    run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False
 
@@ -49,6 +53,8 @@ def main():
         scenario_name=scenario,
         import_home=import_home,
         export_home=export_home,
+        land_use_drive=land_use_drive,
+        land_use_iteration=land_use_iteration,
         verbose=verbose
     )
 

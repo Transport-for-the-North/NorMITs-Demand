@@ -1,27 +1,33 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Dec  9 12:13:07 2019
+Created on: Mon Dec  9 12:13:07 2019
+Updated on:
 
-@author: Sneezy
+Original author: Ben Taylor
+Last update made by:
+Other updates made by:
+
+File purpose:
+EFS Production Model
 """
-
+# Builtins
 import os
-import sys
 import warnings
 import operator
-
-import numpy as np
-import pandas as pd
+from functools import reduce
 
 from typing import List
 from typing import Dict
 from typing import Tuple
 from typing import Callable
 
-from functools import reduce
-
+# Third Party
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
 
+# Local Imports
+import normits_demand as nd
 from normits_demand import efs_constants as consts
 
 from normits_demand.utils import general as du
@@ -90,6 +96,8 @@ class EFSProductionGenerator:
             future_years: List[str],
 
             # Population growth
+            population_import_path: nd.PathLike,
+
             population_growth: pd.DataFrame,
             population_constraint: pd.DataFrame,
 
@@ -371,6 +379,13 @@ class EFSProductionGenerator:
             no_neg_growth=no_neg_growth,
             infill=population_infill,
             growth_merge_cols=merge_cols
+        )
+
+        # Read in all years of population from Land Use outputs
+        population = get_pop_data_from_land_use(
+            import_path=population_import_path,
+            years=all_years,
+            segmentation_cols=segmentation_cols,
         )
 
         # ## PRE D-LOG CONSTRAINT ## #
@@ -1927,6 +1942,66 @@ def build_production_exports(export_home: str,
             )
 
     return exports
+
+
+def get_pop_data_from_land_use(import_path: nd.PathLike,
+                               years: List[str],
+                               segmentation_cols: List[str],
+                               lu_zone_col: str = 'msoa_zone_id',
+                               ) -> pd.DataFrame:
+    """
+    Reads in land use outputs and aggregates up to land_use_cols.
+
+    Combines all the dataframe from each into a single dataframe.
+
+    Parameters
+    ----------
+    import_path:
+        Path to the land use directory containing population data for years
+
+    segmentation_cols:
+        The columns to keep in the land use data. If None, defaults to:
+         [
+            'area_type',
+            'traveller_type',
+            'soc',
+            'ns',
+        ]
+
+    lu_zone_col:
+        The name of the column in the land use data that refers to the zones.
+
+    Returns
+    -------
+    population:
+        A dataframe of population data for all years segmented by
+        segmentation_cols. Will also include lu_zone_col and people cols
+        from land use.
+    """
+    # Init
+    if segmentation_cols is None:
+        # Assume full segmentation if not told otherwise
+        segmentation_cols = [
+            'area_type',
+            'traveller_type',
+            'soc',
+            'ns',
+            'ca'
+        ]
+    land_use_cols = [lu_zone_col] + segmentation_cols + ['people']
+
+    # Set up the columns to keep
+    group_cols = land_use_cols.copy()
+    group_cols.remove('people')
+
+    for year in years:
+        # Build the path to this years data
+        fname = consts.LU_POP_FNAME % str(year)
+        lu_path = os.path.join(import_path, fname)
+        year_pop = pd.read_csv(lu_path)
+
+        print(year_pop)
+        exit()
 
 
 def get_land_use_data(land_use_path: str,

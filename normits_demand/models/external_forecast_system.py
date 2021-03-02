@@ -64,9 +64,12 @@ class ExternalForecastSystem:
                  dlog_pop_path: str = None,
                  dlog_emp_path: str = None,
 
-                 import_home: str = "Y:/",
+                 import_home: str = "I:/",
                  export_home: str = "E:/",
-                 verbose: str = True
+
+                 land_use_drive: str = "Y:/",
+                 land_use_iteration: str = 'iter3b',
+                 verbose: str = True,
                  ):
         # TODO: Write EFS constructor docs
         # Initialise the timer
@@ -84,6 +87,9 @@ class ExternalForecastSystem:
         self.output_location = export_home
         self.verbose = verbose
 
+        self.land_use_iteration = land_use_iteration
+        self.land_use_drive = land_use_drive
+
         # TODO: Write function to determine if CA is needed for model_names
         # TODO: Write function to determine if from/to PCU is needed for model_names
         self.is_ca_needed = True
@@ -91,8 +97,6 @@ class ExternalForecastSystem:
         if self.model_name == 'noham':
             self.is_ca_needed = False
             self.uses_pcu = True
-
-
 
         self.input_zone_system = "MSOA"
         self.output_zone_system = self.model_name
@@ -539,6 +543,7 @@ class ExternalForecastSystem:
         print("Initialising outputs...")
         write_input_info(
             os.path.join(self.exports['home'], "input_parameters.txt"),
+            self.__version__,
             base_year,
             future_years,
             self.output_zone_system,
@@ -1640,6 +1645,8 @@ class ExternalForecastSystem:
             scenario_name=self.scenario_name,
             demand_version=self.__version__,
             demand_dir_name=self.out_dir,
+            land_use_iteration=self.land_use_iteration,
+            land_use_drive=self.land_use_drive,
         )
 
 
@@ -1673,7 +1680,8 @@ def _input_checks(iter_num: int = None,
                 )
 
 
-def write_input_info(output_path,
+def write_input_info(output_path: str,
+                     efs_version: str,
                      base_year: int,
                      future_years: List[int],
                      desired_zoning: str,
@@ -1698,6 +1706,7 @@ def write_input_info(output_path,
                      ) -> None:
 
     out_lines = [
+        'EFS version: ' + str(efs_version),
         'Run Date: ' + str(time.strftime('%D').replace('/', '_')),
         'Start Time: ' + str(time.strftime('%T').replace('/', '_')),
         "Base Year: " + str(base_year),
