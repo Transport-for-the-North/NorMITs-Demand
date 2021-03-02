@@ -13,8 +13,7 @@ from tqdm import tqdm
 from normits_demand import ExternalForecastSystem
 from normits_demand import efs_constants as consts
 
-from normits_demand.utils import general as du
-from normits_demand.utils import sector_reporter_v2 as sr_v2
+from normits_demand.utils import general as du, sector_reporter_v2 as sr_v2
 
 from normits_demand.reports import reports_utils as ru
 from normits_demand.matrices import matrix_processing as mat_p

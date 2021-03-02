@@ -11,14 +11,14 @@ using the census journey to work data reformatted to model dimensions
 import pandas as pd # most of the heavy lifting
 import os # File ops
 
-import normits_demand.models.tms as tms
+import normits_demand.build.tms_pathing as tms
 
 from normits_demand.concurrency import multiprocessing as mp
 from normits_demand.distribution import gravity_model as gm # For distribution functions
 from normits_demand.utils import utils as nup # Folder management, reindexing, optimisation
 
 
-class DistributionModel(tms.TravelMarketSynthesiser):
+class DistributionModel(tms.TMSPathing):
     pass
 
     def distribute_cjtw(

@@ -68,7 +68,7 @@ unq_mp = unq_mp[unq_mp['mode'].isin(wanted_modes)].reset_index(drop=True)
 # Iterate over, allocate all trips to intra-zonals.
 for index, row in unq_mp.iterrows():
 
-    # If you see a 3,5 or 6 hit the eject button!
+    # If you see a 3,5 or 6 hit the eject ph!
     print(row['mode'])
 
     # Build calib dict

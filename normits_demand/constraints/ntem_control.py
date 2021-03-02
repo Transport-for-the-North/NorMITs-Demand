@@ -31,7 +31,8 @@ def control_to_ntem(control_df: pd.DataFrame,
                     trip_origin: str = 'hb',
                     group_cols: List[str] = None,
                     constraint_dtypes: Dict[str, Any] = None,
-                    verbose=True,
+                    replace_drops: bool = False,
+                    verbose: bool = True,
                     ) -> pd.DataFrame:
     """
     Control to a vector of NTEM constraints using single factor.
@@ -255,23 +256,24 @@ def control_to_ntem(control_df: pd.DataFrame,
     adj_control_df = adj_control_df.reindex(columns=index_cols)
     adj_control_df = adj_control_df.groupby(group_cols).sum().reset_index()
 
-    # If we have dropped zones, we need to add them back in
-    if len(adj_control_df) != len(index_df):
-        adj_control_df = pd.merge(
-            index_df,
-            adj_control_df,
-            on=group_cols,
-            how='left'
-        ).fillna(0)
+    if replace_drops:
+        # If we have dropped zones, we need to add them back in
+        if len(adj_control_df) != len(index_df):
+            adj_control_df = pd.merge(
+                index_df,
+                adj_control_df,
+                on=group_cols,
+                how='left'
+            ).fillna(0)
 
-    # return and starting df aren't the same still, something really bad
-    # has happened
-    if len(adj_control_df) != len(index_df):
-        raise nd.NormitsDemandError(
-            "Tried to correct the missing zones after doing the translation, "
-            "but something has gone wrong.\nLength of the starting df: %d\n"
-            "Length of the ending df: %d"
-            % (len(index_df), len(adj_control_df))
-        )
+        # return and starting df aren't the same still, something really bad
+        # has happened
+        if len(adj_control_df) != len(index_df):
+            raise nd.NormitsDemandError(
+                "Tried to correct the missing zones after doing the translation, "
+                "but something has gone wrong.\nLength of the starting df: %d\n"
+                "Length of the ending df: %d"
+                % (len(index_df), len(adj_control_df))
+            )
 
     return adj_control_df, audit, adjustments, lad_totals

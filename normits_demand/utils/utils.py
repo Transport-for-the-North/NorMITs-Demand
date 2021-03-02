@@ -2543,7 +2543,7 @@ def parse_mat_output(list_dir,
     segments = pd.DataFrame(split_list)
     segments = segments.replace({np.nan:'none'})
 
-    return(segments)
+    return segments
 
 def unpack_tlb(tlb,
                km_constant = _M_KM):
@@ -2573,21 +2573,18 @@ def unpack_tlb(tlb,
     # TODO: Check that this works!!
     obs_dist = tlb['ave_km'].astype(float).to_numpy()
 
-    return(min_dist,
-           max_dist,
-           obs_trip,
-           obs_dist)
+    return min_dist, max_dist, obs_trip, obs_dist
 
-    def iz_costs_to_mean(costs):
-        """
-        Sort bands that are too big outside of the north
-        - nudge towards intrazonal
-        """
-        # Get mean
-        diag_mean = np.mean(np.diag(costs))
-        diag = costs.diagonal()
-        diag = np.where(diag > diag_mean, diag_mean, diag)
+def iz_costs_to_mean(costs):
+    """
+    Sort bands that are too big outside of the north
+    - nudge towards intrazonal
+    """
+    # Get mean
+    diag_mean = np.mean(np.diag(costs))
+    diag = costs.diagonal()
+    diag = np.where(diag > diag_mean, diag_mean, diag)
 
-        np.fill_diagonal(costs, diag)
+    np.fill_diagonal(costs, diag)
 
-        return costs
+    return costs

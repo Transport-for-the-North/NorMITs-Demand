@@ -5,12 +5,11 @@ Created on Thu Feb 27 13:45:03 2020
 @author: cruella
 """
 import os
-import warnings
 
 import pandas as pd
 import numpy as np
 
-import normits_demand.models.tms as tms
+import normits_demand.build.tms_pathing as tms
 
 from normits_demand.reports import reports_audits as ra
 from normits_demand.utils import utils as nup
@@ -23,7 +22,7 @@ _default_pld_path = ('Y:/NorMITs Synthesiser/import/' +
                      'pld_od_matrices/external_pa_pld.csv')
 
 
-class ExternalModel(tms.TravelMarketSynthesiser):
+class ExternalModel(tms.TMSPathing):
     pass
 
     def run(self,
@@ -64,6 +63,7 @@ class ExternalModel(tms.TravelMarketSynthesiser):
             model_name=self.params['model_zoning'],
             mode_subset=None,
             purpose_subset=None)
+        print(init_params)
     
         # Path tlb folder
         tlb_folder = os.path.join(
@@ -73,19 +73,28 @@ class ExternalModel(tms.TravelMarketSynthesiser):
             self.params['external_tlb_name'])
     
         # Drop any sic or soc segments from init params - not needed for externals
+        # Also alert and error if there are any differences
+        for ts in  self.params['external_segmentation']:
+            if ts not in list(init_params):
+                raise ValueError('Init params and segmentation misaligned')
+
         init_params = init_params.reindex(
             self.params['external_segmentation'],
             axis=1).drop_duplicates(
             ).reset_index(drop=True)
         
         # Define mode subset
-        unq_mode = self.params['external_export_modes'].copy()
-        [unq_mode.append(
-            x) for x in self.params['non_dist_export_modes'] if x not in unq_mode]
+        unq_mode = self.params['external_export_modes']
+        # Append non dist modes to list for init params
+        if self.params['non_dist_export_modes'] is not None:
+            [unq_mode.append(
+                x) for x in self.params[
+                'non_dist_export_modes'] if x not in unq_mode]
+        print(unq_mode)
         init_params = init_params[
                 init_params[
                     'm'].isin(
-                    self.params['non_dist_export_modes'])].reset_index(drop=True)
+                    unq_mode)].reset_index(drop=True)
     
         # External index
         ei = init_params.index
@@ -169,6 +178,7 @@ class ExternalModel(tms.TravelMarketSynthesiser):
 
             # Import costs based on distribution parameters & car availability
             print('Importing costs')
+            print(calib_params, cost_type)
             internal_costs = nup.get_costs(self.lookup_folder,
                                            calib_params,
                                            tp=cost_type,
@@ -177,18 +187,21 @@ class ExternalModel(tms.TravelMarketSynthesiser):
             print('Cost lookup returned ' + internal_costs[1])
             internal_costs = internal_costs[0].copy()
 
-            # BACKLOG: Replace with the newer way of doing this
+            # Get unique zones
             unq_internal_zones = nup.get_zone_range(
                 internal_costs['p_zone'])
             
             # Join ps and a's onto full unq internal vector (infill placeholders)
             uiz_vector = pd.DataFrame(unq_internal_zones)
             uiz_vector = uiz_vector.rename(columns={
-                    'p_zone': (self.params['model_zoning'].lower() + '_zone_id')})
-            
+                    0: (self.params['model_zoning'].lower() + '_zone_id')})
+
+            print(list(uiz_vector))
+            print(list(sub_p))
+
             sub_p = uiz_vector.merge(sub_p,
                                      how='left',
-                                     on = (self.params['model_zoning'].lower() + '_zone_id'))
+                                     on=(self.params['model_zoning'].lower() + '_zone_id'))
             sub_p['productions'] = sub_p['productions'].replace(np.nan, 0)
     
             sub_a = uiz_vector.merge(sub_a,
@@ -231,10 +244,7 @@ class ExternalModel(tms.TravelMarketSynthesiser):
                 sub_a,
                 cjtw,
                 costs,
-                calib_params,
-                self.lookup_folder,
-                self.params['model_zoning'].lower(),
-                trip_origin)
+                calib_params)
 
             # Unpack exports
             external_pa, external_pa_p, external_pa_a, tl_con, bs_con, max_diff = external_out
@@ -479,7 +489,7 @@ class ExternalModel(tms.TravelMarketSynthesiser):
             full_a = full_pa_a.reindex(['a_zone', 'dt'],
                                        axis=1).groupby(
                                                ['a_zone']).sum().reset_index()
-            full_a = full_a.rename(columns={'dt':full_path.replace('_', '')})
+            full_a = full_a.rename(columns={'dt': full_path.replace('_', '')})
     
             p_ph = p_ph.merge(full_p,
                               how='left',
@@ -508,15 +518,15 @@ class ExternalModel(tms.TravelMarketSynthesiser):
         audit = True
     
         return audit
-    
+
+    @staticmethod
     def _external_model(
-            self,
             p,
             a,
             base_matrix,
             costs,
             calib_params):
-        
+
         """
         p:
             Production vector
@@ -536,6 +546,8 @@ class ExternalModel(tms.TravelMarketSynthesiser):
         trip_origin:
             Is this HB or NHB? Takes 'hb' or 'nhb', shockingly.
         """
+        print(list(p))
+        print(list(a))
     
         # Transform original p/a into vectors
         target_p = p['productions'].values
@@ -716,9 +728,9 @@ class ExternalModel(tms.TravelMarketSynthesiser):
                                         tlb_con[1]['tbs']))**2),0)
     
         return external_pa, p_balanced, a_balanced, tlb_con, bs_con, pa_diff.max()
-    
-    def adjust_trip_length_by_band(self,
-                                   band_atl,
+
+    @staticmethod
+    def adjust_trip_length_by_band(band_atl,
                                    adj_fac,
                                    distance,
                                    base_matrix):
@@ -743,7 +755,7 @@ class ExternalModel(tms.TravelMarketSynthesiser):
         del ph
     
         mat_ph = []
-        out_mat = np.empty(shape=[len(base_matrix),len(base_matrix)])
+        out_mat = np.empty(shape=[len(base_matrix), len(base_matrix)])
     
         # Loop over rows in band_atl
         for index, row in band_atl.iterrows():

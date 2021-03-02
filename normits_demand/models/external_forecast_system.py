@@ -34,10 +34,9 @@ from normits_demand.distribution import furness
 
 from normits_demand.reports import pop_emp_comparator
 
-from normits_demand.utils import general as du
+from normits_demand.utils import general as du, sector_reporter_v2 as sr_v2
 from normits_demand.utils import vehicle_occupancy as vo
 from normits_demand.utils import exceptional_growth as eg
-from normits_demand.utils import sector_reporter_v2 as sr_v2
 
 
 # TODO: Output a run log instead of printing everything to the terminal.

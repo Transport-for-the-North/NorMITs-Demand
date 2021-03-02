@@ -16,8 +16,7 @@ import numpy as np
 from openpyxl.worksheet.worksheet import Worksheet
 
 # Local imports
-from normits_demand.utils import general as du
-from normits_demand.utils import sector_reporter_v2 as sr_v2
+from normits_demand.utils import general as du, sector_reporter_v2 as sr_v2
 from normits_demand.models import efs_production_model as pm
 from normits_demand.models import efs_attraction_model as am
 
