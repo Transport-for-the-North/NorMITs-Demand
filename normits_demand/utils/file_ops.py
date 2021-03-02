@@ -89,3 +89,43 @@ def is_csv(file_path: Union[str, pathlib.Path]) -> bool:
 
     file_extension = filename_parts[-1].lower()
     return file_extension == 'csv'
+
+
+def maybe_add_suffix(path: Union[str, pathlib.Path],
+                     suffix: str,
+                     overwrite: bool = False,
+                     ) -> pathlib.Path:
+    """
+    Adds suffix to path if no suffix already exists.
+
+    Will overwrite any existing suffix if overwrite is set to True
+
+    Parameters
+    ----------
+    path:
+        The path to maybe add the suffix to.
+
+    suffix:
+        The suffix to add onto path.
+
+    overwrite:
+        If set to True, will overwrite any suffix that already exists in path.
+
+    Returns
+    -------
+    path:
+        The original passed in path with an updated suffix.
+    """
+    # Init
+    if not isinstance(path, pathlib.Path):
+        out_path = pathlib.Path(path)
+
+    # Remove current suffix if we're overwriting
+    if overwrite:
+        path = path.parent / path.stem
+
+    # Add suffix if not there
+    if path.suffix == '':
+        path = path.parent / (path.name + suffix)
+
+    return path

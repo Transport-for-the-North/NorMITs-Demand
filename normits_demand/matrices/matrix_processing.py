@@ -2381,3 +2381,44 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
         vector.to_csv(path, index=False)
 
     return vectors
+
+
+def compile_norms_to_vdm_internal():
+    raise NotImplementedError
+
+    # Build compile params
+    # Compile, return split factors
+
+
+def compile_norms_to_vdm_external():
+    raise NotImplementedError
+
+    # Build compile params
+    # Compile, return split factors
+
+
+def compile_norms_to_vdm(mat_import: pathlib.Path,
+                         mat_export: pathlib.Path,
+                         year: str,
+                         internal_zones: List[str],
+                         external_zones: List[str],
+                         post_me_import: pathlib.Path = None,
+                         ) -> str:
+    # Init
+    int_dir = os.path.join(mat_import, 'internal')
+    ext_dir = os.path.join(mat_import, 'external')
+
+    # Split internal and external
+
+
+    int_split_factors = compile_norms_to_vdm_internal()
+    ext_split_factors = compile_norms_to_vdm_external()
+
+    if post_me_import is None:
+        return int_split_factors, ext_split_factors
+
+    # Get splitting factors from norms
+
+    # split external from/to
+
+
