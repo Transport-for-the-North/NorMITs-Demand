@@ -2508,7 +2508,35 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
                                   params_export: nd.PathLike,
                                   years_needed: List[str],
                                   matrix_format: str,
-                                  ) -> np.ndarray:
+                                  ) -> List[str]:
+    """
+    Generates the compile params and compiles norms internal matrices.
+
+    Parameters
+    ----------
+    mat_import:
+        path to the directory containing the matrices to compile
+
+    mat_export:
+        path to the directory where the compiled matrices should be written
+
+    params_export:
+        path to the directory where the compile params and splitting factors
+        should be written
+
+    years_needed:
+        A list of years to compile matrices for. Each year is dealt with
+        individually. I.e. you cannot compile matrices across multiple years.
+
+    matrix_format:
+        The format of of the matrices to compile. Needs to be one of
+        consts.MATRIX_FORMATS
+
+    Returns
+    -------
+    splitting_factor_paths:
+        Returns a list of paths to all the generated splitting factors
+    """
     # Init
     fname_suffix = 'internal'
 
@@ -2523,6 +2551,7 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
     )
 
     # Compile, return split factors
+    sf_paths = list()
     for compile_params_path, year in zip(params_paths, years_needed):
         factors_fname = du.get_split_factors_fname(
             matrix_format=matrix_format,
@@ -2531,6 +2560,9 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
         )
         split_factors_path = os.path.join(params_export, factors_fname)
 
+        # Store for return
+        sf_paths.append(split_factors_path)
+
         compile_matrices(
             mat_import=mat_import,
             mat_export=mat_export,
@@ -2538,14 +2570,79 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
             build_factor_pickle=True,
             factor_pickle_path=split_factors_path,
         )
-    raise NotImplementedError
+
+    return sf_paths
 
 
-def compile_norms_to_vdm_external():
-    raise NotImplementedError
+def compile_norms_to_vdm_external(mat_import: nd.PathLike,
+                                  mat_export: nd.PathLike,
+                                  params_export: nd.PathLike,
+                                  years_needed: List[str],
+                                  matrix_format: str,
+                                  ) -> List[str]:
+    """
+    Generates the compile params and compiles norms external matrices.
+
+    Parameters
+    ----------
+    mat_import:
+        path to the directory containing the matrices to compile
+
+    mat_export:
+        path to the directory where the compiled matrices should be written
+
+    params_export:
+        path to the directory where the compile params and splitting factors
+        should be written
+
+    years_needed:
+        A list of years to compile matrices for. Each year is dealt with
+        individually. I.e. you cannot compile matrices across multiple years.
+
+    matrix_format:
+        The format of of the matrices to compile. Needs to be one of
+        consts.MATRIX_FORMATS
+
+    Returns
+    -------
+    splitting_factor_paths:
+        Returns a list of paths to all the generated splitting factors
+    """
+    # Init
+    fname_suffix = 'external'
 
     # Build compile params
+    params_paths = build_norms_vdm_compile_params(
+        import_dir=mat_import,
+        export_dir=params_export,
+        matrix_format=matrix_format,
+        segmentation_aggregation=consts.NORMS_VDM_SEG_EXTERNAL,
+        years_needed=years_needed,
+        params_suffix=fname_suffix,
+    )
+
     # Compile, return split factors
+    sf_paths = list()
+    for compile_params_path, year in zip(params_paths, years_needed):
+        factors_fname = du.get_split_factors_fname(
+            matrix_format=matrix_format,
+            year=str(year),
+            suffix=fname_suffix,
+        )
+        split_factors_path = os.path.join(params_export, factors_fname)
+
+        # Store for return
+        sf_paths.append(split_factors_path)
+
+        compile_matrices(
+            mat_import=mat_import,
+            mat_export=mat_export,
+            compile_params_path=compile_params_path,
+            build_factor_pickle=True,
+            factor_pickle_path=split_factors_path,
+        )
+
+    return sf_paths
 
 
 def _split_int_ext(mat_import,
@@ -2664,15 +2761,15 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
         file_ops.create_folder(path, verbose=False)
 
     # Split internal and external
-    # print("Splitting into internal and external matrices...")
-    # split_internal_external(
-    #     mat_import=mat_import,
-    #     internal_export=int_dir,
-    #     external_export=ext_dir,
-    #     year=year,
-    #     internal_zones=internal_zones,
-    #     external_zones=external_zones,
-    # )
+    print("Splitting into internal and external matrices...")
+    split_internal_external(
+        mat_import=mat_import,
+        internal_export=int_dir,
+        external_export=ext_dir,
+        year=year,
+        internal_zones=internal_zones,
+        external_zones=external_zones,
+    )
 
     # Compile and get the splitting factors for internal mats
     int_split_factors = compile_norms_to_vdm_internal(
@@ -2683,7 +2780,17 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
         matrix_format=matrix_format,
     )
 
-    ext_split_factors = compile_norms_to_vdm_external()
+    ext_split_factors = compile_norms_to_vdm_external(
+        mat_import=ext_dir,
+        mat_export=mat_export,
+        params_export=params_export,
+        years_needed=[year],
+        matrix_format=matrix_format,
+    )
+
+    # We know we're only doing a single year here
+    int_split_factors = int_split_factors[0]
+    ext_split_factors = ext_split_factors[0]
 
     if post_me_import is None:
         return int_split_factors, ext_split_factors
