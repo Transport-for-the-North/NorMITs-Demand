@@ -106,8 +106,6 @@ class TemproParser:
         self.ntem_lad_trans_path = os.path.join(home_path, 'ntem_lad_pop_weighted_lookup.csv')
         self.ntem_to_msoa_path = r"I:\NorMITs Demand\import\zone_translation\weighted\ntem_msoa_pop_weighted_lookup.csv"
 
-        print('Tempro extractor running!')
-
     def _get_co_data(self,
                      db_fname
                      ):
@@ -230,6 +228,7 @@ class TemproParser:
             how='left',
             on='ZoneID'
         )
+        
         return nca, ca
 
     def _get_pop_job_numbers(self,
@@ -813,8 +812,8 @@ class TemproParser:
 
         return prods_gf, attrs_gf, prods, attrs
 
-    def get_co_growth_factors(self,
-                              verbose = True):
+    def get_co_future_share(self,
+                            verbose = True):
         """
         Get car ownership growth factors
         """
@@ -853,16 +852,26 @@ class TemproParser:
         base_year_col = str(base_year)
         future_year_cols = [str(x) for x in future_years]
 
-        nca_df = nca.copy()
-        ca_df = ca.copy()
-
-        for vector in [nca_df, ca_df]:
-            # Calculate growth factors
-            for col in future_year_cols:
-                vector[col] /= vector[base_year_col]
-            vector[base_year_col] = 1
-
-        return nca_df, ca_df, nca, ca
+        nca_share = nca.copy()
+        ca_share = ca.copy()
+        
+        total = pd.concat([nca_share,ca_share])
+        total = total.groupby('msoa_zone_id').sum().reset_index()
+        
+        nca_share[[base_year_col]+future_year_cols] /= total[[base_year_col]+future_year_cols]
+        print(nca_share)
+        ca_share[[base_year_col]+future_year_cols] /= total[[base_year_col]+future_year_cols]
+        print(ca_share)
+        
+        nca_share['ca'] = '1'
+        ca_share['ca'] = '2'
+        
+        fy_ca = pd.concat(
+            [nca_share, ca_share])
+        
+        fy_ca = fy_ca.reindex(['msoa_zone_id', 'ca', base_year_col] + future_year_cols, axis=1)
+        
+        return fy_ca, nca, ca
 
     def get_trip_ends(self,
                      trip_type: str = 'pa',
