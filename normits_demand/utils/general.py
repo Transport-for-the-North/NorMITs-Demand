@@ -463,8 +463,7 @@ def build_efs_io_paths(import_location: str,
         )
         imports['land_use'] = land_use_import
 
-
-    #  ## EXPORT PATHS ## #
+    # ## EXPORT PATHS ## #
     # Create home paths
     fname_parts = [
         export_location,

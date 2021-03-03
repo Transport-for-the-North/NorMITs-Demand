@@ -407,7 +407,6 @@ class EFSAttractionGenerator:
                 base_year,
                 future_years,
                 self.zone_col,
-                msoa_path=imports['msoa_lookup'],
                 segment_cols=constraint_segments
             )
             print(". Post Constraint:\n%s" % employment[future_years].sum())
@@ -454,7 +453,6 @@ class EFSAttractionGenerator:
                 base_year,
                 future_years,
                 self.zone_col,
-                msoa_path=imports['msoa_lookup'],
                 segment_cols=constraint_segments
             )
             print(". Post Constraint:\n%s" % employment[future_years].sum())

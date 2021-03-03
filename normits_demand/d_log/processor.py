@@ -237,7 +237,6 @@ def constrain_forecast(pre_constraint_df: pd.DataFrame,
                        base_year: str,
                        future_years: List[str],
                        zone_column: str,
-                       msoa_path: str = None,
                        segment_cols: List[str] = None
                        ) -> pd.DataFrame:
     """Constrains a population / employment dataframe by growth values.
@@ -263,8 +262,6 @@ def constrain_forecast(pre_constraint_df: pd.DataFrame,
         The forecast years.
     zone_column : str
         Name of the column containing zone IDs
-    msoa_path : str, optional
-        Path to the file with MSOA code to ID equivalence, by default None
     segment_cols : List[str], optional
         The segmentation columns contained in the data. E.g. [purpose, soc, ns,
         ca] or [purpose, soc] generally for population and employment, 
@@ -280,20 +277,6 @@ def constrain_forecast(pre_constraint_df: pd.DataFrame,
     df = pre_constraint_df.copy()
     constraint = constraint_df.copy()
     constraint_seg = segment_cols or []
-
-    if msoa_path is not None:
-        df = du.convert_msoa_naming(
-            df,
-            msoa_col_name=zone_column,
-            msoa_path=msoa_path,
-            to='int'
-        )
-        constraint = du.convert_msoa_naming(
-            constraint,
-            msoa_col_name=zone_column,
-            msoa_path=msoa_path,
-            to='int'
-        )
 
     sector_equivalence = constraint_zone_equivalence.copy()
     sector_equivalence.rename(
@@ -326,15 +309,6 @@ def constrain_forecast(pre_constraint_df: pd.DataFrame,
 
     # Drop the temporary grouping id column
     df.drop("grouping_id", axis=1, inplace=True)
-
-    # Convert back to MSOA codes
-    if msoa_path is not None:
-        df = du.convert_msoa_naming(
-            df,
-            msoa_col_name=zone_column,
-            msoa_path=msoa_path,
-            to="string"
-        )
 
     return df
 

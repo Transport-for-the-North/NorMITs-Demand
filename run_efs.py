@@ -21,8 +21,8 @@ def main():
     verbose = False
 
     # Land Use imports
-    land_use_drive = "Y:/",
-    land_use_iteration = 'iter3b',
+    land_use_drive = "Y:/"
+    land_use_iteration = 'iter3b'
 
     # Running control
     integrate_dlog = False
