@@ -90,10 +90,8 @@ class EFSProductionGenerator:
             base_year: str,
             future_years: List[str],
 
-            # Population growth
+            # Population data
             population_import_path: nd.PathLike,
-
-            population_growth: pd.DataFrame,
             population_constraint: pd.DataFrame,
 
             # Build I/O paths
@@ -114,7 +112,7 @@ class EFSProductionGenerator:
             ntem_control_dir: str = None,
             lad_lookup_dir: str = None,
             control_productions: bool = True,
-            control_fy_productions: bool = True,
+            control_fy_productions: bool = False,
 
             # D-Log
             dlog: str = None,
@@ -128,7 +126,6 @@ class EFSProductionGenerator:
             m_needed: List[int] = consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
-            lu_year: int = 2018,
 
             # Handle outputs
             audits: bool = True,
@@ -166,11 +163,6 @@ class EFSProductionGenerator:
             Path to the directory containing the NorMITs Land Use outputs
             for future year population estimates. The filenames will
             be automatically generated based on consts.LU_POP_FNAME
-
-        population_growth:
-            dataframe containing the future year growth values for
-            growing the base year population. Must be segmented by the same
-            zoning system (at least) as land use data (usually msoa_zone_id).
 
         population_constraint:
             TODO: Need to clarify if population constrain is still needed,
@@ -254,12 +246,6 @@ class EFSProductionGenerator:
             model. This is used to make sure this model can translate to the
             zoning name used internally in land_use and trip_rates data.
 
-        lu_year:
-            Which year the land_use data has been generated for. At the moment,
-            if this is different to the base year and error is thrown. Used as
-            a safety measure to make sure the user is warned if the base year
-            changes without the land use.
-
         audits:
             Whether to output print_audits to the terminal during running. This can
             be used to monitor the population and production numbers being
@@ -304,21 +290,12 @@ class EFSProductionGenerator:
 
         # Fix column naming if different
         if external_zone_col != self.zone_col:
-            population_growth = population_growth.copy().rename(
-                columns={external_zone_col: self.zone_col}
-            )
             designated_area = designated_area.copy().rename(
                 columns={external_zone_col: self.zone_col}
             )
             population_constraint = population_constraint.rename(
                 columns={external_zone_col: self.zone_col}
             )
-
-        # TODO: Deal with case where land use year and base year don't match
-        if str(lu_year) != str(base_year):
-            raise ValueError("The base year and land use year are not the "
-                             "same. Don't know how to deal with that at the"
-                             "moment.")
 
         # Build paths to the needed files
         imports = build_production_imports(
@@ -339,7 +316,6 @@ class EFSProductionGenerator:
         )
 
         # # ## READ IN POPULATION DATA ## #
-        # Read in all years of population from Land Use outputs
         population = get_pop_data_from_land_use(
             import_path=population_import_path,
             years=all_years,
@@ -1508,7 +1484,7 @@ def get_pop_data_from_land_use(import_path: nd.PathLike,
                                lu_zone_col: str = 'msoa_zone_id',
                                ) -> pd.DataFrame:
     """
-    Reads in land use outputs and aggregates up to land_use_cols.
+    Reads in land use outputs and aggregates up to segmentation_cols.
 
     Combines all the dataframe from each into a single dataframe.
 
@@ -1536,7 +1512,7 @@ def get_pop_data_from_land_use(import_path: nd.PathLike,
     -------
     population:
         A dataframe of population data for all years segmented by
-        segmentation_cols. Will also include lu_zone_col and people cols
+        segmentation_cols. Will also include lu_zone_col and year cols
         from land use.
     """
     # Init
@@ -1583,9 +1559,7 @@ def get_pop_data_from_land_use(import_path: nd.PathLike,
 
         all_pop_ph.append(year_pop)
 
-    all_pop = du.merge_df_list(all_pop_ph, on=group_cols)
-
-    return all_pop
+    return du.merge_df_list(all_pop_ph, on=group_cols)
 
 
 def merge_pop_trip_rates(population: pd.DataFrame,

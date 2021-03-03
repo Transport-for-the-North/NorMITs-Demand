@@ -18,6 +18,7 @@ from itertools import product
 from tqdm import tqdm
 
 # self imports
+import normits_demand as nd
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
 
@@ -62,8 +63,7 @@ class EFSAttractionGenerator:
         # Define the segmentation we're using
         if seg_level == 'tfn':
             self.emp_segments = [self.emp_cat_col, 'soc']
-            self.attr_segments = ['p', 'soc']
-            self.return_segments = [self.zone_col] + self.attr_segments
+            self.return_segments = [self.zone_col, 'p', 'soc']
         else:
             raise ValueError(
                 "'%s' is a valid segmentation level, but I don't have a way "
@@ -76,8 +76,8 @@ class EFSAttractionGenerator:
             base_year: str,
             future_years: List[str],
 
-            # Employment Growth
-            employment_growth: pd.DataFrame,
+            # Population data
+            employment_import_path: nd.PathLike,
             employment_constraint: pd.DataFrame,
 
             # Build import paths
@@ -296,9 +296,6 @@ class EFSAttractionGenerator:
 
         # Fix column naming if different
         if external_zone_col != self.zone_col:
-            employment_growth = employment_growth.copy().rename(
-                columns={external_zone_col: self.zone_col}
-            )
             designated_area = designated_area.copy().rename(
                 columns={external_zone_col: self.zone_col}
             )
@@ -325,66 +322,11 @@ class EFSAttractionGenerator:
             audit_write_dir=audit_write_dir
         )
 
-        # ## BASE YEAR EMPLOYMENT ## #
-        print("Loading the base year employment data...")
-        base_year_emp = get_employment_data(
-            import_path=imports['base_employment'],
-            zone_col=self.zone_col,
-            emp_cat_col=self.emp_cat_col,
-            return_format='long',
-            value_col=base_year,
-        )
-
-        # Audit employment numbers
-        mask = (base_year_emp[self.emp_cat_col] == 'E01')
-        total_base_year_emp = base_year_emp.loc[mask, base_year].sum()
-        du.print_w_toggle("Base Year Employment: %d" % total_base_year_emp,
-                          echo=audits)
-
-        # ## FUTURE YEAR EMPLOYMENT ## #
-        print("Generating future year employment data...")
-        # If soc splits in the growth factors, we have a few extra steps
-        if 'soc' in employment_growth:
-            # Add Soc splits into the base year
-            base_year_emp = split_by_soc(
-                df=base_year_emp,
-                soc_weights=get_soc_weights(imports['soc_weights']),
-                unique_col=base_year,
-                split_cols=[self.zone_col, self.emp_cat_col]
-            )
-
-            # Aggregate the growth factors to remove extra segmentation
-            group_cols = [self.zone_col, 'soc']
-            index_cols = group_cols.copy() + all_years
-
-            # Make sure both soc columns are the same format
-            base_year_emp['soc'] = base_year_emp['soc'].astype('float').astype('int')
-            employment_growth['soc'] = employment_growth['soc'].astype('float').astype('int')
-        else:
-            # We're not using soc, remove it from our segmentations
-            self.emp_segments.remove('soc')
-            self.attr_segments.remove('soc')
-
-        # Make sure our growth factors are at the right segmentation
-        group_cols = [self.zone_col] + self.emp_segments.copy()
-        group_cols.remove(self.emp_cat_col)
-        index_cols = group_cols.copy() + all_years
-
-        employment_growth = employment_growth.reindex(columns=index_cols)
-        employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
-
-        # Merge on all possible segmentations - not years
-        merge_cols = du.intersection(list(base_year_emp), list(employment_growth))
-        merge_cols = du.list_safe_remove(merge_cols, all_years)
-
-        employment = du.grow_to_future_years(
-            base_year_df=base_year_emp,
-            growth_df=employment_growth,
-            base_year=base_year,
-            future_years=future_years,
-            growth_merge_cols=merge_cols,
-            no_neg_growth=no_neg_growth,
-            infill=employment_infill
+        # # ## READ IN EMPLOYMENT DATA ## #
+        employment = get_emp_data_from_land_use(
+            import_path=employment_import_path,
+            years=all_years,
+            segmentation_cols=segmentation_cols,
         )
 
         # Remove E01 for constraints / dlog
@@ -416,7 +358,7 @@ class EFSAttractionGenerator:
             print("Integrating the development log...")
 
             dlog_segments = ["employment_cat"]
-            if "soc" in employment_growth:
+            if "soc" in list(employment):
                 dlog_segments.append("soc")
 
             employment, hg_zones = dlog_p.apply_d_log(
@@ -475,7 +417,6 @@ class EFSAttractionGenerator:
             employment.to_csv(path, index=False)
 
         # Reindex and sum
-        # Removes soc splits - attractions weights can't cope
         group_cols = [self.zone_col] + self.emp_segments
         index_cols = group_cols.copy() + all_years
         employment = employment.reindex(index_cols, axis='columns')
@@ -1843,3 +1784,75 @@ def build_attraction_exports(export_home: str,
             )
 
     return exports
+
+
+def get_emp_data_from_land_use(import_path: nd.PathLike,
+                               years: List[str],
+                               segmentation_cols: List[str],
+                               lu_zone_col: str = 'msoa_zone_id',
+                               ) -> pd.DataFrame:
+    """
+    Reads in land use outputs and aggregates up to segmentation_cols.
+
+    Combines all the dataframe from each into a single dataframe.
+
+    Parameters
+    ----------
+    import_path:
+        Path to the land use directory containing employment data for years
+
+    years:
+        The years of future year employment data to read in.
+
+    segmentation_cols:
+        The columns to keep in the land use data. If None, defaults to:
+         ['employment_cat']
+
+    lu_zone_col:
+        The name of the column in the land use data that refers to the zones.
+
+    Returns
+    -------
+    employment:
+        A dataframe of employment data for all years segmented by
+        segmentation_cols. Will also include lu_zone_col and year cols
+        from land use.
+    """
+    # Init
+    if segmentation_cols is None:
+        segmentation_cols = ['employment_cat']
+    group_cols = [lu_zone_col] + segmentation_cols
+
+    all_emp_ph = list()
+    for year in tqdm(years):
+
+        # Build the path to this years data
+        fname = consts.LU_EMP_FNAME % str(year)
+        lu_path = os.path.join(import_path, fname)
+        year_emp = pd.read_csv(lu_path)
+
+        print(year_emp)
+        exit()
+
+        # ## FILTER TO JUST THE DATA WE NEED ## #
+        # Set up the columns to keep
+        index_cols = group_cols.copy() + [year]
+
+        # Check all columns exist
+        year_emp_cols = list(year_emp)
+        for col in index_cols:
+            if col not in year_emp_cols:
+                raise nd.NormitsDemandError(
+                    "Tried to read in population data from NorMITs Land Use "
+                    "for year %s. Cannot find all the needed columns in the "
+                    "data. Specifically, column %s does not exist."
+                    % (year, col)
+                )
+
+        # Filter down
+        year_emp = year_emp.reindex(columns=index_cols)
+        year_emp = year_emp.groupby(group_cols).sum().reset_index()
+
+        all_emp_ph.append(year_emp)
+
+    return du.merge_df_list(all_emp_ph, on=group_cols)
