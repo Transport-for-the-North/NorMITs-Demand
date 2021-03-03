@@ -1516,10 +1516,14 @@ def build_attraction_exports(export_home: str,
     return exports
 
 
-def get_emp_data_from_land_use(import_path: nd.PathLike,
-                               years: List[str],
-                               segmentation_cols: List[str],
+def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
+                               base_year: str,
+                               fy_emp_import_dir: nd.PathLike = None,
+                               future_years: List[str] = None,
+                               segmentation_cols: List[str] = None,
                                lu_zone_col: str = 'msoa_zone_id',
+                               base_year_data_col: str = 'people',
+                               dtype: Dict[str, np.dtype] = None,
                                ) -> pd.DataFrame:
     """
     Reads in land use outputs and aggregates up to segmentation_cols.
@@ -1528,38 +1532,69 @@ def get_emp_data_from_land_use(import_path: nd.PathLike,
 
     Parameters
     ----------
-    import_path:
-        Path to the land use directory containing employment data for years
+    by_emp_import_path:
+        Path to the file containing base year population data.
 
-    years:
-        The years of future year employment data to read in.
+    base_year:
+        The base year. The year the data in by_pop_import_path was created
+        for.
+
+    fy_emp_import_dir:
+        Path to the land use directory containing population data for future years
+
+    future_years:
+        The future years of population data to read in.
 
     segmentation_cols:
         The columns to keep in the land use data. If None, defaults to:
-         ['employment_cat']
+         [
+            'area_type',
+            'traveller_type',
+            'soc',
+            'ns',
+        ]
 
     lu_zone_col:
         The name of the column in the land use data that refers to the zones.
 
+    base_year_data_col:
+        The name of the column in by_pop_import_path that contains the
+        base year population figures.
+
+    dtype:
+        The data types to assign to columns in the read in data. Follows the
+        same format as dtypes argument in pd.read_csv()
+
     Returns
     -------
-    employment:
-        A dataframe of employment data for all years segmented by
+    population:
+        A dataframe of population data for all years segmented by
         segmentation_cols. Will also include lu_zone_col and year cols
         from land use.
     """
     # Init
+    future_years = list() if future_years is None else future_years
+    all_years = [base_year] + future_years
+
+    if dtype is None:
+        dtype = {'soc': int, 'ns': int}
+
     if segmentation_cols is None:
         segmentation_cols = ['employment_cat']
     group_cols = [lu_zone_col] + segmentation_cols
 
     all_emp_ph = list()
-    for year in tqdm(years):
+    for year in all_years:
 
-        # Build the path to this years data
-        fname = consts.LU_EMP_FNAME % str(year)
-        lu_path = os.path.join(import_path, fname)
-        year_emp = pd.read_csv(lu_path)
+        # Read in the dataframe - different if base year
+        if year == base_year:
+            year_emp = pd.read_csv(by_emp_import_path, dtype=dtype)
+            year_emp = year_emp.rename(columns={base_year_data_col: base_year})
+        else:
+            # Build the path to this years data
+            fname = consts.LU_POP_FNAME % str(year)
+            lu_path = os.path.join(fy_emp_import_dir, fname)
+            year_emp = pd.read_csv(lu_path, dtype=dtype)
 
         print(year_emp)
         exit()
@@ -1584,5 +1619,9 @@ def get_emp_data_from_land_use(import_path: nd.PathLike,
         year_emp = year_emp.groupby(group_cols).sum().reset_index()
 
         all_emp_ph.append(year_emp)
+
+    # Can't merge if there is only one dataframe!
+    if len(all_emp_ph) == 1:
+        return all_emp_ph[0]
 
     return du.merge_df_list(all_emp_ph, on=group_cols)

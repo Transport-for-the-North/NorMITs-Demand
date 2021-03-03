@@ -90,13 +90,15 @@ class EFSProductionGenerator:
             base_year: str,
             future_years: List[str],
 
-            # Population data
-            population_import_path: nd.PathLike,
-            population_constraint: pd.DataFrame,
-
             # Build I/O paths
             import_home: str,
             export_home: str,
+
+            # Population data
+            by_pop_import_path: nd.PathLike,
+            pop_constraint: pd.DataFrame,
+            fy_pop_import_dir: nd.PathLike = None,
+
 
             # Alternate population/production creation files
             trip_rates_path: str = None,
@@ -159,12 +161,16 @@ class EFSProductionGenerator:
         future_years:
             The future years to forecast.
 
-        population_import_path:
+        by_pop_import_path:
+            Path to the file containing the NorMITs Land Use outputs
+            for vase year population estimates.
+
+        fy_pop_import_dir:
             Path to the directory containing the NorMITs Land Use outputs
             for future year population estimates. The filenames will
             be automatically generated based on consts.LU_POP_FNAME
 
-        population_constraint:
+        pop_constraint:
             TODO: Need to clarify if population constrain is still needed,
              where the values come from, and how exactly the constrainer works.
 
@@ -293,7 +299,7 @@ class EFSProductionGenerator:
             designated_area = designated_area.copy().rename(
                 columns={external_zone_col: self.zone_col}
             )
-            population_constraint = population_constraint.rename(
+            pop_constraint = pop_constraint.rename(
                 columns={external_zone_col: self.zone_col}
             )
 
@@ -316,9 +322,12 @@ class EFSProductionGenerator:
         )
 
         # # ## READ IN POPULATION DATA ## #
+        print("Loading the population data...")
         population = get_pop_data_from_land_use(
-            import_path=population_import_path,
-            years=all_years,
+            by_pop_import_path=by_pop_import_path,
+            fy_pop_import_dir=fy_pop_import_dir,
+            base_year=base_year,
+            future_years=future_years,
             segmentation_cols=segmentation_cols,
         )
 
@@ -327,11 +336,11 @@ class EFSProductionGenerator:
             print("Performing the first constraint on population...")
             print(". Pre Constraint:\n%s" % population[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
-                                                  population_constraint)
+                                                  pop_constraint)
 
             population = dlog_p.constrain_forecast(
                 population,
-                population_constraint,
+                pop_constraint,
                 designated_area,
                 base_year,
                 future_years,
@@ -369,13 +378,13 @@ class EFSProductionGenerator:
         if post_dlog_constraint:
             print("Performing the post-development log constraint on population...")
             print(". Pre Constraint:\n%s" % population[future_years].sum())
-            print(". Constraint:\n%s" % population_constraint[future_years].sum())
+            print(". Constraint:\n%s" % pop_constraint[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
-                                                  population_constraint)
+                                                  pop_constraint)
 
             population = dlog_p.constrain_forecast(
                 population,
-                population_constraint,
+                pop_constraint,
                 designated_area,
                 base_year,
                 future_years,
@@ -1474,10 +1483,14 @@ def build_production_exports(export_home: str,
     return exports
 
 
-def get_pop_data_from_land_use(import_path: nd.PathLike,
-                               years: List[str],
+def get_pop_data_from_land_use(by_pop_import_path: nd.PathLike,
+                               base_year: str,
+                               fy_pop_import_dir: nd.PathLike = None,
+                               future_years: List[str] = None,
                                segmentation_cols: List[str] = None,
                                lu_zone_col: str = 'msoa_zone_id',
+                               base_year_data_col: str = 'people',
+                               dtype: Dict[str, np.dtype] = None,
                                ) -> pd.DataFrame:
     """
     Reads in land use outputs and aggregates up to segmentation_cols.
@@ -1486,11 +1499,18 @@ def get_pop_data_from_land_use(import_path: nd.PathLike,
 
     Parameters
     ----------
-    import_path:
-        Path to the land use directory containing population data for years
+    by_pop_import_path:
+        Path to the file containing base year population data.
 
-    years:
-        The years of future year population data to read in.
+    base_year:
+        The base year. The year the data in by_pop_import_path was created
+        for.
+
+    fy_pop_import_dir:
+        Path to the land use directory containing population data for future years
+
+    future_years:
+        The future years of population data to read in.
 
     segmentation_cols:
         The columns to keep in the land use data. If None, defaults to:
@@ -1504,6 +1524,14 @@ def get_pop_data_from_land_use(import_path: nd.PathLike,
     lu_zone_col:
         The name of the column in the land use data that refers to the zones.
 
+    base_year_data_col:
+        The name of the column in by_pop_import_path that contains the
+        base year population figures.
+
+    dtype:
+        The data types to assign to columns in the read in data. Follows the
+        same format as dtypes argument in pd.read_csv()
+
     Returns
     -------
     population:
@@ -1512,6 +1540,13 @@ def get_pop_data_from_land_use(import_path: nd.PathLike,
         from land use.
     """
     # Init
+    future_years = list() if future_years is None else future_years
+
+    all_years = [base_year] + future_years
+
+    if dtype is None:
+        dtype = {'soc': int, 'ns': int}
+
     if segmentation_cols is None:
         # Assume full segmentation if not told otherwise
         segmentation_cols = [
@@ -1524,15 +1559,17 @@ def get_pop_data_from_land_use(import_path: nd.PathLike,
     group_cols = [lu_zone_col] + segmentation_cols
 
     all_pop_ph = list()
-    for year in tqdm(years):
-        # BACKLOG: REMOVE SKIP OVER 2018!!!
-        if year == '2018':
-            continue
+    for year in all_years:
 
-        # Build the path to this years data
-        fname = consts.LU_POP_FNAME % str(year)
-        lu_path = os.path.join(import_path, fname)
-        year_pop = pd.read_csv(lu_path)
+        # Read in the dataframe - different if base year
+        if year == base_year:
+            year_pop = pd.read_csv(by_pop_import_path, dtype=dtype)
+            year_pop = year_pop.rename(columns={base_year_data_col: base_year})
+        else:
+            # Build the path to this years data
+            fname = consts.LU_POP_FNAME % str(year)
+            lu_path = os.path.join(fy_pop_import_dir, fname)
+            year_pop = pd.read_csv(lu_path, dtype=dtype)
 
         # ## FILTER TO JUST THE DATA WE NEED ## #
         # Set up the columns to keep
@@ -1554,6 +1591,10 @@ def get_pop_data_from_land_use(import_path: nd.PathLike,
         year_pop = year_pop.groupby(group_cols).sum().reset_index()
 
         all_pop_ph.append(year_pop)
+
+    # Can't merge if there is only one dataframe!
+    if len(all_pop_ph) == 1:
+        return all_pop_ph[0]
 
     return du.merge_df_list(all_pop_ph, on=group_cols)
 

@@ -445,6 +445,7 @@ def build_efs_io_paths(import_location: str,
         'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
         'scenarios': os.path.join(import_home, 'scenarios'),
         'a_weights': a_weights_path,
+        'attractions_by': os.path.join(import_home, 'attractions', 'non_freight_msoa_2018.csv'),
         'soc_weights': soc_weights_path,
         'ntem_control': os.path.join(import_home, 'ntem_constraints'),
         'model_schema': os.path.join(import_home, model_name, 'model schema'),
@@ -453,15 +454,16 @@ def build_efs_io_paths(import_location: str,
 
     # Add Land use import if we have an iteration
     if land_use_drive is not None and land_use_iteration is not None:
-        land_use_import = os.path.join(
+        land_use_home = os.path.join(
             land_use_drive,
             'NorMITs Land Use',
             land_use_iteration,
             'outputs',
-            'scenarios',
-            scenario_name,
         )
-        imports['land_use'] = land_use_import
+        land_use_fy = os.path.join(land_use_home, 'scenarios', scenario_name)
+
+        imports['land_use_by'] = os.path.join(land_use_home, consts.BASE_YEAR_POP_FNAME)
+        imports['land_use_fy_dir'] = land_use_fy
 
     # ## EXPORT PATHS ## #
     # Create home paths

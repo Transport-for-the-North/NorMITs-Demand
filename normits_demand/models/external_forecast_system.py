@@ -60,6 +60,7 @@ class ExternalForecastSystem:
                  scenario_name: str,
 
                  integrate_dlog: bool = False,
+                 run_pop_emp_comparison: bool = True,
 
                  dlog_pop_path: str = None,
                  dlog_emp_path: str = None,
@@ -83,6 +84,7 @@ class ExternalForecastSystem:
         self.iter_name = du.create_iter_name(iter_num)
         self.scenario_name = du.validate_scenario_name(scenario_name)
         self.integrate_dlog = integrate_dlog
+        self.run_pop_emp_comparison = run_pop_emp_comparison
         self.import_location = import_home
         self.output_location = export_home
         self.verbose = verbose
@@ -587,9 +589,9 @@ class ExternalForecastSystem:
         production_trips = self.production_generator.run(
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
-            population_import_path=self.imports['land_use'],
-            population_growth=pop_growth,
-            population_constraint=pop_constraint,
+            by_pop_import_path=self.imports['land_use_by'],
+            fy_pop_import_dir=self.imports['land_use_fy_dir'],
+            pop_constraint=pop_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],
             msoa_lookup_path=self.imports['zone_translation']['msoa_str_int'],
@@ -613,7 +615,7 @@ class ExternalForecastSystem:
             out_path=self.exports['attractions'],
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
-            employment_import_path=self.imports['land_use'],
+            employment_import_path=self.imports['land_use_fy_dir'],
             employment_constraint=emp_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],
@@ -641,27 +643,26 @@ class ExternalForecastSystem:
         emp_path = os.path.join(self.exports['attractions'],
                                 self.attraction_generator.emp_fname)
 
-        # TODO: Add toggle to turn pop/emp comparator on/off
+        if self.run_pop_emp_comparison:
+            # Build the comparators
+            pop_comp = pop_emp_comparator.PopEmpComparator(
+                **self.pop_emp_inputs['population'],
+                output_csv=pop_path,
+                data_type='population',
+                base_year=str(base_year),
+                verbose=self.verbose
+            )
+            emp_comp = pop_emp_comparator.PopEmpComparator(
+                **self.pop_emp_inputs['employment'],
+                output_csv=emp_path,
+                data_type='employment',
+                base_year=str(base_year),
+                verbose=self.verbose
+            )
 
-        # Build the comparators
-        pop_comp = pop_emp_comparator.PopEmpComparator(
-            **self.pop_emp_inputs['population'],
-            output_csv=pop_path,
-            data_type='population',
-            base_year=str(base_year),
-            verbose=self.verbose
-        )
-        emp_comp = pop_emp_comparator.PopEmpComparator(
-            **self.pop_emp_inputs['employment'],
-            output_csv=emp_path,
-            data_type='employment',
-            base_year=str(base_year),
-            verbose=self.verbose
-        )
-
-        # Write comparisons to disk
-        pop_comp.write_comparisons(self.exports['reports'], 'csv', True)
-        emp_comp.write_comparisons(self.exports['reports'], 'csv', True)
+            # Write comparisons to disk
+            pop_comp.write_comparisons(self.exports['reports'], 'csv', True)
+            emp_comp.write_comparisons(self.exports['reports'], 'csv', True)
 
         last_time = current_time
         current_time = time.time()

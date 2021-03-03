@@ -217,7 +217,9 @@ class PopEmpComparator:
             model_name=consts.MODEL_NAME,
             iter_name="iter0",
             scenario_name=consts.SC00_NTEM,
-            demand_version=nd.ExternalForecastSystem.__version__
+            demand_version=nd.ExternalForecastSystem.__version__,
+            land_use_drive='Y:/',
+            land_use_iteration='iter3b',
         )
 
         # Read input data
@@ -225,12 +227,12 @@ class PopEmpComparator:
             # Set up args
             base_yr_col = "people"
             index_cols = [self.ZONE_COL, base_yr_col]
-            path = os.path.join(imports["land_use"], consts.LU_POP_FNAME % base_year)
+            path = imports["land_use_by"]
 
             # Read base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
 
-            input_data = pm.get_pop_data_from_land_use(path, years=[base_year])
+            input_data = pm.get_pop_data_from_land_use(path, base_year=base_year)
             input_data = input_data.reindex(columns=index_cols)
             input_data = input_data.groupby(self.ZONE_COL, as_index=False).sum()
 
@@ -238,7 +240,7 @@ class PopEmpComparator:
             # Set up args
             base_yr_col = "E01"
             index_cols = [self.ZONE_COL, base_yr_col]
-            path = os.path.join(imports["land_use"], consts.LU_EMP_FNAME % base_year)
+            path = os.path.join(imports["attractions_by"])
 
             # Read in base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
