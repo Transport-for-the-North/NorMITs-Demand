@@ -1331,10 +1331,6 @@ def build_production_imports(import_home: str,
         The base path to base all of the other import paths from. This
         should usually be "Y:/NorMITs Demand/import" for default inputs.
 
-    lu_import_path:
-        An alternate land use import path to use. File will need to follow the
-        same format as default file.
-
     trip_rates_path:
         An alternate trip rates import path to use. File will need to follow the
         same format as default file.
@@ -1605,20 +1601,6 @@ def merge_pop_trip_rates(population: pd.DataFrame,
 
     audit_out:
         The directory to write out any audit files produced.
-
-    control_path:
-        Path to the file containing the data to control the produced
-        productions to. If left as None, no control will be carried out.
-
-
-    lad_lookup_dir:
-        Path to the file containing the conversion from msoa zoning to LAD
-        zoning, to be used for controlling the productions. If left as None, no
-        control will be carried out.
-
-    lad_lookup_name:
-        The name of the file in lad_lookup_dir that contains the msoa zoning
-        to LAD zoning conversion.
 
     tp_needed:
         A list of the time periods to split the productions by.

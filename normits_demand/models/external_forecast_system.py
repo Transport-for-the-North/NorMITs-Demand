@@ -613,7 +613,7 @@ class ExternalForecastSystem:
             out_path=self.exports['attractions'],
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
-            employment_growth=emp_growth,
+            employment_import_path=self.imports['land_use'],
             employment_constraint=emp_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],

@@ -5,6 +5,7 @@
 
 ##### IMPORTS #####
 # Standard imports
+import os
 import re
 import time
 from pathlib import Path
@@ -16,6 +17,8 @@ import numpy as np
 from openpyxl.worksheet.worksheet import Worksheet
 
 # Local imports
+import normits_demand as nd
+from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du, sector_reporter_v2 as sr_v2
 from normits_demand.models import efs_production_model as pm
 from normits_demand.models import efs_attraction_model as am
@@ -203,13 +206,26 @@ class PopEmpComparator:
         # Init
         start = time.perf_counter()
 
+        # BACKLOG: Update pop_emp_comparator path building
+        #  labels: EFS, demand merge
+
+        # Big old cludge!
+        # Half of these don't matter. We just want the imports!!
+        imports, *_ = du.build_efs_io_paths(
+            import_location=import_home,
+            export_location=import_home,
+            model_name=consts.MODEL_NAME,
+            iter_name="iter0",
+            scenario_name=consts.SC00_NTEM,
+            demand_version=nd.ExternalForecastSystem.__version__
+        )
+
         # Read input data
         if self.data_type == "population":
             # Set up args
             base_yr_col = "people"
             index_cols = [self.ZONE_COL, base_yr_col]
-            imports = pm.build_production_imports(import_home)
-            path = imports["land_use"]
+            path = os.path.join(imports["land_use"], consts.LU_POP_FNAME % base_year)
 
             # Read base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
@@ -222,8 +238,7 @@ class PopEmpComparator:
             # Set up args
             base_yr_col = "E01"
             index_cols = [self.ZONE_COL, base_yr_col]
-            imports = am.build_attraction_imports(import_home, self.base_year, None)
-            path = imports["base_employment"]
+            path = os.path.join(imports["land_use"], consts.LU_EMP_FNAME % base_year)
 
             # Read in base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)

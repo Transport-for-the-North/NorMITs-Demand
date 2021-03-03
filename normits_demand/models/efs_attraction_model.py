@@ -86,7 +86,6 @@ class EFSAttractionGenerator:
 
             # Alternate population/attraction creation files
             attraction_weights_path: str,
-            employment_path: str = None,
             mode_splits_path: str = None,
             soc_weights_path: str = None,
             msoa_lookup_path: str = None,
@@ -112,8 +111,6 @@ class EFSAttractionGenerator:
             m_needed: List[int] = consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
-            no_neg_growth: bool = True,
-            employment_infill: float = 0.001,
 
             # Handle outputs
             audits: bool = True,
@@ -149,11 +146,10 @@ class EFSAttractionGenerator:
         future_years:
             The future years to forecast.
 
-        employment_growth:
-            dataframe containing the future year growth values for
-            growing the base year employment. Must be segmented by the same
-            zoning system (at least) as employment_path data (usually
-            msoa_zone_id).
+        employment_import_path:
+            Path to the directory containing the NorMITs Land Use outputs
+            for future year employment estimates. The filenames will
+            be automatically generated based on consts.LU_EMP_FNAME
 
         employment_constraint:
             Values to constrain the employment numbers to.
@@ -171,10 +167,6 @@ class EFSAttractionGenerator:
         attraction_weights_path:
             The path to alternate attraction weights import data. If left as
             None, the attraction model will use the default land use data.
-
-        employment_path:
-            The path to alternate employment import data. If left as None, the
-            attraction model will use the default land use data.
 
         mode_splits_path:
             The path to alternate mode splits import data. If left as None, the
@@ -235,14 +227,6 @@ class EFSAttractionGenerator:
             model. This is used to make sure this model can translate to the
             zoning name used internally in employment_path and
             attraction_weights data.
-
-        no_neg_growth:
-            Whether to ensure there is no negative growth. If True, any growth
-            values below 0 will be replaced with employment_infill.
-
-        employment_infill:
-            If no_neg_growth is True, this value will be used to replace all
-            values that are less than 0.
 
         audits:
             Whether to output print_audits to the terminal during running. This can
@@ -308,7 +292,6 @@ class EFSAttractionGenerator:
             import_home=import_home,
             base_year=base_year,
             attraction_weights_path=attraction_weights_path,
-            employment_path=employment_path,
             mode_splits_path=mode_splits_path,
             soc_weights_path=soc_weights_path,
             msoa_lookup_path=msoa_lookup_path,
@@ -1376,7 +1359,6 @@ def generate_attractions(employment: pd.DataFrame,
 def build_attraction_imports(import_home: str,
                              base_year: str,
                              attraction_weights_path: str,
-                             employment_path: str = None,
                              mode_splits_path: str = None,
                              soc_weights_path: str = None,
                              msoa_lookup_path: str = None,
@@ -1402,10 +1384,6 @@ def build_attraction_imports(import_home: str,
     attraction_weights_path:
         The path to the attractions weights. Unable to give a default value for
         this as it changes depending on the mode.
-
-    employment_path:
-        An alternate base year employment import path to use. File will need to
-        follow the same format as default file.
 
     mode_splits_path:
         An alternate mode splits import path to use. File will need to follow
@@ -1443,10 +1421,6 @@ def build_attraction_imports(import_home: str,
         'lad_lookup'
     """
     # Set all unset paths
-    if employment_path is None:
-        path = 'attractions/non_freight_msoa_%s.csv' % base_year
-        employment_path = os.path.join(import_home, path)
-
     if mode_splits_path is None:
         path = 'attractions/attraction_mode_split.csv'
         mode_splits_path = os.path.join(import_home, path)
@@ -1470,7 +1444,6 @@ def build_attraction_imports(import_home: str,
     # Assign to dict
     imports = {
         'weights': attraction_weights_path,
-        'base_employment': employment_path,
         'mode_splits': mode_splits_path,
         'soc_weights': soc_weights_path,
         'msoa_lookup': msoa_lookup_path,
