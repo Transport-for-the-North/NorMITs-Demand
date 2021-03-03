@@ -1480,7 +1480,7 @@ def build_production_exports(export_home: str,
 
 def get_pop_data_from_land_use(import_path: nd.PathLike,
                                years: List[str],
-                               segmentation_cols: List[str],
+                               segmentation_cols: List[str] = None,
                                lu_zone_col: str = 'msoa_zone_id',
                                ) -> pd.DataFrame:
     """

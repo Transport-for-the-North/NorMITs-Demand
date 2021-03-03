@@ -175,7 +175,8 @@ class PopEmpComparator:
     def _read_inputs(self,
                      import_home: str,
                      constraint_csv: str,
-                     growth_csv: str
+                     growth_csv: str,
+                     base_year: str = '2018',
                      ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """Reads the input, constraint and growth CSV files.
 
@@ -213,7 +214,8 @@ class PopEmpComparator:
             # Read base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
 
-            input_data = pm.get_land_use_data(path).reindex(columns=index_cols)
+            input_data = pm.get_pop_data_from_land_use(path, years=[base_year])
+            input_data = input_data.reindex(columns=index_cols)
             input_data = input_data.groupby(self.ZONE_COL, as_index=False).sum()
 
         elif self.data_type == "employment":
@@ -225,7 +227,8 @@ class PopEmpComparator:
 
             # Read in base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
-            input_data = am.get_employment_data(path).reindex(columns=index_cols)
+            input_data = am.get_emp_data_from_land_use(path, years=[base_year])
+            input_data = input_data.reindex(columns=index_cols)
 
         else:
             # We shouldn't be able to get here
