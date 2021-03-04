@@ -103,7 +103,7 @@ def main():
         # Decompiles post-me base year OD matrices - generates tour
         # proportions in the process
         efs.decompile_post_me(
-            overwrite_decompiled_od=True,
+            overwrite_decompiled_matrices=True,
             overwrite_tour_proportions=True,
         )
 

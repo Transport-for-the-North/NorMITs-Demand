@@ -14,6 +14,8 @@ the possible selections.
 
 # BACKLOG: Re-organise EFS Constants. Make a generic constants module
 #  labels: EFS, demand merge
+import normits_demand as nd
+
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
 

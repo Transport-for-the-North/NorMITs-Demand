@@ -68,6 +68,15 @@ class ExternalForecastSystemError(NormitsDemandError):
         super().__init__(self.message)
 
 
+class InitialisationError(NormitsDemandError):
+    """
+    Exception for all errors that occur during normits_demand initialisation
+    """
+    def __init__(self, message=None):
+        self.message = message
+        super().__init__(self.message)
+
+
 def get_seg_level_cols(seg_level: str,
                        keep_ca: bool = True,
                        keep_tp: bool = True,

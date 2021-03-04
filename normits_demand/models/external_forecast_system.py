@@ -1419,7 +1419,7 @@ class ExternalForecastSystem:
     def decompile_post_me(self,
                           year: int = consts.BASE_YEAR,
                           m_needed: List[int] = consts.MODES_NEEDED,
-                          overwrite_decompiled_od=True,
+                          overwrite_decompiled_matrices=True,
                           overwrite_tour_proportions=True
                           ) -> None:
         """
@@ -1452,8 +1452,8 @@ class ExternalForecastSystem:
             to determine if car availability needs to be included or not.
 
         # TODO: Update docs once correct functionality exists
-        overwrite_decompiled_od:
-            Whether to decompile the post-me od matrices or not
+        overwrite_decompiled_matrices:
+            Whether to decompile the post-me matrices or not
 
         overwrite_tour_proportions:
             Whether to generate tour proportions or not.
@@ -1483,13 +1483,20 @@ class ExternalForecastSystem:
                 tour_proportions_export=self.params['tours'],
                 vehicle_occupancy_import=self.imports['home'],
                 decompile_factors_path=decompile_factors_path,
-                overwrite_decompiled_od=overwrite_decompiled_od,
+                overwrite_decompiled_od=overwrite_decompiled_matrices,
                 overwrite_tour_proportions=overwrite_tour_proportions,
             )
 
         elif self.model_name == 'norms':
+            if not overwrite_decompiled_matrices:
+                print("WARNING: Not decompiling Norms matrices!!!")
+                return
+
             decompilation.decompile_norms(
                 year=year,
+                post_me_import=self.imports['post_me_matrices'],
+                post_me_renamed_export=self.exports['post_me']['compiled_od'],
+                decompile_factors_dir=self.params['compile'],
             )
 
         else:

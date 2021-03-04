@@ -109,6 +109,42 @@ def decompile_noham(year: int,
         )
 
 
+def convert_norms_to_efs_matrices(import_dir: nd.PathLike,
+                                  export_dir: nd.PathLike,
+                                  matrix_format: str,
+                                  year: int,
+                                  wide_col_name: str = None,
+                                  ) -> None:
+    # TODO: Write convert_norms_to_efs_matrices() docs
+    raise NotImplementedError
+
+
 def decompile_norms(year: int,
+                    post_me_import: nd.PathLike,
+                    post_me_renamed_export: nd.PathLike,
+                    decompile_factors_dir: nd.PathLike,
                     ) -> None:
+    # TODO: Write decompile_norms() docs
+    # Init
+    model_name = 'norms'
+
+    print(year)
+    print(post_me_import)
+    print(post_me_renamed_export)
+    print(decompile_factors_dir)
+
+    need_convert = od2pa.need_to_convert_to_efs_matrices(
+        post_me_import=post_me_import,
+        converted_export=post_me_renamed_export
+    )
+
+    if need_convert:
+        rename_norms_to_efs_matrices(
+            import_dir=post_me_import,
+            export_dir=post_me_renamed_export,
+            matrix_format='pa',
+            year=year,
+            wide_col_name='%s_zone_id' % model_name,
+        )
+
     raise NotImplementedError
