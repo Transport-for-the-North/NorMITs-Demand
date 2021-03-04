@@ -23,6 +23,7 @@ from typing import Tuple
 
 # 3rd party
 import pandas as pd
+from tqdm import tqdm
 
 # Local imports
 import normits_demand as nd
@@ -395,7 +396,7 @@ class EfsReporter:
         """
         if run_raw_vector_report:
             print("Generating report across all modes...")
-            self.compare_raw_pa_vectors_to_ntem()
+            # self.compare_raw_pa_vectors_to_ntem()
 
             print("Generating a report per mode...")
             self.compare_raw_pa_vectors_to_ntem_by_mode()
@@ -452,7 +453,9 @@ class EfsReporter:
             trip_origins=self._trip_origins,
         )
 
-    def compare_raw_pa_vectors_to_ntem_by_mode(self) -> pd.DataFrame:
+    def compare_raw_pa_vectors_to_ntem_by_mode(self,
+                                               verbose: bool = True
+                                               ) -> pd.DataFrame:
         """
         Generates a report of the base P/A Vectors to NTEM data
 
@@ -484,14 +487,16 @@ class EfsReporter:
             vector_dict[k] = v
 
         # Generate a report per mode
-        for mode in consts.ALL_MODES:
+        report_ph = list()
+        desc = "Building modal reports"
+        for mode in tqdm(consts.ALL_MODES, desc=desc, disable=(not verbose)):
             # extract just the data for this mode
             m_vector_dict = {k: v[v['m'] == mode].copy() for k, v in vector_dict.items()}
 
             output_fname = base_output_fname % str(mode)
-            output_path = os.path.join(self.exports['home'], output_fname)
+            output_path = os.path.join(self.exports['modal'], output_fname)
 
-            return self._generate_vector_report(
+            report = self._generate_vector_report(
                 vector_dict=m_vector_dict,
                 vector_zone_col=self._zone_col_base % self.synth_zone_name,
                 zone_to_lad=pd.read_csv(self.imports['ntem']['msoa_to_lad']),
@@ -500,6 +505,16 @@ class EfsReporter:
                 vector_types=self._pa_vector_types,
                 trip_origins=self._trip_origins,
             )
+
+            report['m'] = mode
+            report_ph.append(report)
+
+        # Write the concatenated report to disk
+        full_report = pd.concat(report_ph)
+        path = os.path.join(self.exports['home'], 'raw_vector_modal_report.csv')
+        full_report.to_csv(path, index=False)
+
+        return full_report
 
     def compare_base_pa_vectors_to_ntem(self) -> pd.DataFrame:
         """
@@ -562,8 +577,7 @@ class EfsReporter:
             matrix_format=matrix_format,
             output_path=os.path.join(self.exports['home'], output_fname),
             vector_types=self._pa_vector_types,
-            # trip_origins=self._trip_origins,
-            trip_origins=['hb'],
+            trip_origins=self._trip_origins,
             report_subsets=self.reporting_subsets,
         )
 
