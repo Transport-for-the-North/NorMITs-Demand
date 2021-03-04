@@ -26,8 +26,8 @@ from normits_demand import version
 from normits_demand import efs_constants as consts
 from normits_demand.models import efs_production_model as pm
 
+from normits_demand.matrices import decompilation
 from normits_demand.matrices import pa_to_od as pa2od
-from normits_demand.matrices import od_to_pa as od2pa
 from normits_demand.matrices import matrix_processing as mat_p
 
 from normits_demand.distribution import furness
@@ -1416,48 +1416,40 @@ class ExternalForecastSystem:
                     round_dp=round_dp,
                 )
 
-    def generate_post_me_tour_proportions(self,
-                                          model_name: str,
-                                          year: int = consts.BASE_YEAR,
-                                          m_needed: List[int] = consts.MODES_NEEDED,
-                                          overwrite_decompiled_od=True,
-                                          overwrite_tour_proportions=True
-                                          ) -> None:
+    def decompile_post_me(self,
+                          year: int = consts.BASE_YEAR,
+                          m_needed: List[int] = consts.MODES_NEEDED,
+                          overwrite_decompiled_od=True,
+                          overwrite_tour_proportions=True
+                          ) -> None:
         """
-        Uses post-ME OD matrices from the TfN model (NoRMS/NoHAM) to generate
-        tour proportions for each OD pair, for each purpose (and ca as
-        needed). Also converts OD matrices to PA.
+        Decompiles post-me matrices ready to be used in an EFS future years run.
 
-        Performs the following actions:
-            - Converts post-ME files into and EFS format as needed. (file name
-              changes, converting long to wide as needed.)
-            - Decompiles the converted post-ME matrices into purposes (and ca
-              when needed) using the split factors produced during pre-me
-              OD compilation
-            - Generates tour proportions for each OD pair, for each purpose
-              (and ca as needed), saving for future year post-ME compilation
-              later.
-            - Converts OD matrices to PA.
+        Reads in the post-me matrices from the TfN model defined in
+        self.model_name and decompiles them into TfN segmented 24hr PA
+        matrices. These matrices are needed by EFS to generate future year
+        travel matrices.
+
+        In the case of NoHAM post-me matrices, they need converting from
+        OD to PA matrices, and therefore produce a set of tour proportions
+        alongside the decompiled matrices.
+
+        This process CANNOT run unless TMS has already completed a base year
+        run and compiled a set of matrices for the TfN model, therefore
+        producing a set of decompilation factors that EFS will need.
+
+        This function acts as a front end for calling model specific
+        decompilation functions. See model decompilation functions for more
+        information.
 
         Parameters
         ----------
-        model_name:
-            The name of the model this is being run for.
-
         year:
              The year to decompile OD matrices for. (Usually the base year)
 
         m_needed:
             The mode to use when decompiling OD matrices. This will be used
             to determine if car availability needs to be included or not.
-
-        output_location:
-            The directory to create the new output directory in - a dir named
-            self.out_dir (NorMITs Demand) should exist here. Usually
-            a drive name e.g. Y:/
-
-        iter_num:
-            The number of the iteration being run.
 
         # TODO: Update docs once correct functionality exists
         overwrite_decompiled_od:
@@ -1473,48 +1465,38 @@ class ExternalForecastSystem:
         # Init
         _input_checks(m_needed=m_needed)
 
-        if overwrite_decompiled_od:
-            print("Decompiling OD Matrices into purposes...")
-            need_convert = od2pa.need_to_convert_to_efs_matrices(
-                post_me_import=self.imports['post_me_matrices'],
-                converted_export=self.exports['post_me']['compiled_od']
-            )
-
-            if need_convert:
-                od2pa.convert_to_efs_matrices(
-                    import_path=self.imports['post_me_matrices'],
-                    export_path=self.exports['post_me']['compiled_od'],
-                    matrix_format='od',
-                    year=year,
-                    user_class=True,
-                    to_wide=True,
-                    wide_col_name='%s_zone_id' % model_name,
-                    from_pcu=self.uses_pcu,
-                    vehicle_occupancy_import=self.imports['home']
-                )
-
+        if self.model_name == 'noham':
             # TODO: Stop the filename being hardcoded after integration with TMS
             decompile_factors_path = os.path.join(
                 self.params['compile'],
                 'od_compilation_factors.pickle'
             )
-            od2pa.decompile_od(
-                od_import=self.exports['post_me']['compiled_od'],
-                od_export=self.exports['post_me']['od'],
+
+            # TODO: NEED TO TEST NOHAM DECOMPILE
+            decompilation.decompile_noham(
+                year=year,
+                post_me_import=self.imports['post_me_matrices'],
+                post_me_renamed_export=self.exports['post_me']['compiled_od'],
+                od_24hr_export=self.exports['post_me']['od'],
+                pa_24hr_export=self.exports['post_me']['pa'],
+                zone_translate_dir=self.imports['zone_translation'],
+                tour_proportions_export=self.params['tours'],
+                vehicle_occupancy_import=self.imports['home'],
                 decompile_factors_path=decompile_factors_path,
-                year=year
+                overwrite_decompiled_od=overwrite_decompiled_od,
+                overwrite_tour_proportions=overwrite_tour_proportions,
             )
 
-        if overwrite_tour_proportions:
-            print("Converting OD matrices to PA and generating tour "
-                  "proportions...")
-            mat_p.generate_tour_proportions(
-                od_import=self.exports['post_me']['od'],
-                zone_translate_dir=self.imports['zone_translation'],
-                pa_export=self.exports['post_me']['pa'],
-                tour_proportions_export=self.params['tours'],
+        elif self.model_name == 'norms':
+            decompilation.decompile_norms(
                 year=year,
-                ca_needed=ca_needed
+            )
+
+        else:
+            raise nd.NormitsDemandError(
+                "Cannot decompile post-me matrices for %s. No function "
+                "exists for this model to decompile matrices."
+                % self.model_name
             )
 
     def compile_future_year_od_matrices(self,
