@@ -126,6 +126,19 @@ class EfsReporter:
             zone_conversion_path = self.efs_imports['zone_translation']['no_overlap']
 
         # ## BUILD THE IMPORTS ## #
+        # Raw vectors
+        hb_p_fname = consts.PRODS_FNAME % (self.synth_zone_name, 'raw_hb')
+        nhb_p_fname = consts.PRODS_FNAME % (self.synth_zone_name, 'raw_nhb')
+        hb_a_fname = consts.ATTRS_FNAME % (self.synth_zone_name, 'raw_hb')
+        nhb_a_fname = consts.ATTRS_FNAME % (self.synth_zone_name, 'raw_nhb')
+
+        raw_vectors = {
+            'hb_productions': os.path.join(self.efs_exports['productions'], hb_p_fname),
+            'nhb_productions': os.path.join(self.efs_exports['productions'], nhb_p_fname),
+            'hb_attractions': os.path.join(self.efs_exports['attractions'], hb_a_fname),
+            'nhb_attractions': os.path.join(self.efs_exports['attractions'], nhb_a_fname),
+        }
+
         # Base vector imports
         hb_p_fname = consts.PRODS_FNAME % (self.synth_zone_name, 'hb')
         nhb_p_fname = consts.PRODS_FNAME % (self.synth_zone_name, 'nhb')
@@ -179,6 +192,7 @@ class EfsReporter:
 
         # Finally, build the outer imports dict!
         imports = {
+            'raw_vectors': raw_vectors,
             'base_vectors': base_vectors,
             'translated_base_vectors': translated_base_vectors,
             'eg_vectors': eg_vectors,
@@ -203,6 +217,7 @@ class EfsReporter:
         # Finally, build the outer exports dict!
         exports = {
             'home': export_home,
+            'modal': os.path.join(export_home, 'modal'),
             'cache': cache_paths,
         }
 
@@ -361,7 +376,7 @@ class EfsReporter:
 
         return report
 
-    def run(self) -> None:
+    def run(self, run_raw_vector_report: bool = True) -> None:
         """
         Runs all the report generation functions.
 
@@ -378,6 +393,14 @@ class EfsReporter:
         -------
         None
         """
+        if run_raw_vector_report:
+            print("Generating report across all modes...")
+            self.compare_raw_pa_vectors_to_ntem()
+
+            print("Generating a report per mode...")
+            self.compare_raw_pa_vectors_to_ntem_by_mode()
+
+        print("Generating %s specific reports..." % self.model_name)
         self.compare_base_pa_vectors_to_ntem()
         self.compare_translated_base_pa_vectors_to_ntem()
         self.compare_eg_pa_vectors_to_ntem()
@@ -387,6 +410,96 @@ class EfsReporter:
         self.compare_od_matrices_to_ntem()
 
         # Compare furnessed PA matrices to P/A vectors?
+
+    def compare_raw_pa_vectors_to_ntem(self) -> pd.DataFrame:
+        """
+        Generates a report of the base P/A Vectors to NTEM data
+
+        Returns
+        -------
+        report:
+            A copy of the report comparing the base vectors to NTEM
+        """
+        # Init
+        matrix_format = 'pa'
+        output_fname = "raw_vector_report.csv"
+
+        # Make sure the files we need exist
+        path_dict = self.imports['raw_vectors']
+
+        for _, path in path_dict.items():
+            file_ops.check_file_exists(path)
+
+        # Load in the vectors
+        vector_dict = {k: pd.read_csv(v) for k, v in path_dict.items()}
+
+        # Filter down the vectors for speed
+        group_cols = ['msoa_zone_id', 'p', 'm']
+        index_cols = group_cols.copy() + self.years_needed
+
+        for k, v in vector_dict.items():
+            v = v.reindex(columns=index_cols)
+            v = v.groupby(group_cols).sum().reset_index()
+            vector_dict[k] = v
+
+        return self._generate_vector_report(
+            vector_dict=vector_dict,
+            vector_zone_col=self._zone_col_base % self.synth_zone_name,
+            zone_to_lad=pd.read_csv(self.imports['ntem']['msoa_to_lad']),
+            matrix_format=matrix_format,
+            output_path=os.path.join(self.exports['home'], output_fname),
+            vector_types=self._pa_vector_types,
+            trip_origins=self._trip_origins,
+        )
+
+    def compare_raw_pa_vectors_to_ntem_by_mode(self) -> pd.DataFrame:
+        """
+        Generates a report of the base P/A Vectors to NTEM data
+
+        Returns
+        -------
+        report:
+            A copy of the report comparing the base vectors to NTEM
+        """
+        # Init
+        matrix_format = 'pa'
+        base_output_fname = "m%s_raw_vector_report.csv"
+
+        # Make sure the files we need exist
+        path_dict = self.imports['raw_vectors']
+
+        for _, path in path_dict.items():
+            file_ops.check_file_exists(path)
+
+        # Load in the vectors
+        vector_dict = {k: pd.read_csv(v) for k, v in path_dict.items()}
+
+        # Filter down the vectors for speed
+        group_cols = ['msoa_zone_id', 'p', 'm']
+        index_cols = group_cols.copy() + self.years_needed
+
+        for k, v in vector_dict.items():
+            v = v.reindex(columns=index_cols)
+            v = v.groupby(group_cols).sum().reset_index()
+            vector_dict[k] = v
+
+        # Generate a report per mode
+        for mode in consts.ALL_MODES:
+            # extract just the data for this mode
+            m_vector_dict = {k: v[v['m'] == mode].copy() for k, v in vector_dict.items()}
+
+            output_fname = base_output_fname % str(mode)
+            output_path = os.path.join(self.exports['home'], output_fname)
+
+            return self._generate_vector_report(
+                vector_dict=m_vector_dict,
+                vector_zone_col=self._zone_col_base % self.synth_zone_name,
+                zone_to_lad=pd.read_csv(self.imports['ntem']['msoa_to_lad']),
+                matrix_format=matrix_format,
+                output_path=output_path,
+                vector_types=self._pa_vector_types,
+                trip_origins=self._trip_origins,
+            )
 
     def compare_base_pa_vectors_to_ntem(self) -> pd.DataFrame:
         """
@@ -417,8 +530,7 @@ class EfsReporter:
             matrix_format=matrix_format,
             output_path=os.path.join(self.exports['home'], output_fname),
             vector_types=self._pa_vector_types,
-            # trip_origins=self._trip_origins,
-            trip_origins=['hb'],
+            trip_origins=self._trip_origins,
         )
 
     def compare_translated_base_pa_vectors_to_ntem(self) -> pd.DataFrame:
