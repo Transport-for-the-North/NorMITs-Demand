@@ -173,3 +173,41 @@ def read_df(path: nd.PathLike, index_col=None, **kwargs) -> pd.DataFrame:
             "Cannot determine the filetype of the given path. Expected "
             "either '.csv' or '%s'" % consts.COMPRESSION_SUFFIX
         )
+
+
+def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
+    """
+    Reads in the dataframe at path. Decompresses the df if needed.
+
+    Parameters
+    ----------
+    df:
+        The dataframe to write to disk
+
+    path:
+        The full path to the dataframe to read in
+
+    **kwargs:
+        Any arguments to pass to the underlying write function.
+
+    Returns
+    -------
+    df:
+        The read in df at path.
+    """
+    # Cast path if not correct type
+    if not isinstance(path, pathlib.Path):
+        path = pathlib.Path(path)
+
+    # Determine how to read in df
+    if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
+        compress.write_out(df, path)
+
+    elif pathlib.Path(path).suffix == '.csv':
+        df.to_csv(path, **kwargs)
+
+    else:
+        raise ValueError(
+            "Cannot determine the filetype of the given path. Expected "
+            "either '.csv' or '%s'" % consts.COMPRESSION_SUFFIX
+        )

@@ -3384,3 +3384,30 @@ def split_base_future_years(years: List[int],
     years.sort()
 
     return base_year, years
+
+
+def get_norms_vdm_segment_aggregation_dict(norms_vdm_seg_name: str
+                                           ) -> Dict[str, List[Any]]:
+    """
+    Returns a dictionary of valid segments for the given name
+
+    Parameters
+    ----------
+    norms_vdm_seg_name:
+        The name of the norms_vdm_matrix to get a dictionary for.
+        Should be one of the values in consts.NORMS_VDM_MATRIX_NAMES
+
+    Returns
+    -------
+    segment_aggregation_dictionary:
+        A dictionary of valid segments for norms_vdm_seg_name
+    """
+    if norms_vdm_seg_name in list(consts.NORMS_VDM_SEG_INTERNAL.keys()):
+        return consts.NORMS_VDM_SEG_INTERNAL[norms_vdm_seg_name]
+    elif norms_vdm_seg_name in list(consts.NORMS_VDM_SEG_EXTERNAL.keys()):
+        return consts.NORMS_VDM_SEG_EXTERNAL[norms_vdm_seg_name]
+
+    raise ValueError(
+        "norms_vdm_seg_name does not seem to be a valid name. Expecting "
+        "one of the values from consts.NORMS_VDM_MATRIX_NAMES"
+    )

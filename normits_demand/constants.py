@@ -55,7 +55,8 @@ NORMS_VDM_SEG_INTERNAL = {
     'NHB_O_NCA_int': {'to': ['nhb'], 'ca': [1], 'uc': 'other'},
 }
 
-# Note that NoRMS needs
+# Note that NoRMS needs CA splitting into to and from for the VDM
+# See NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING
 NORMS_VDM_SEG_EXTERNAL = {
     'W_CA_ext': {'to': ['hb', 'nhb'], 'ca': [2], 'uc': 'commute'},
     'W_NCA_ext': {'to': ['hb', 'nhb'], 'ca': [1], 'uc': 'commute'},
@@ -66,6 +67,8 @@ NORMS_VDM_SEG_EXTERNAL = {
     'O_CA_ext': {'to': ['hb', 'nhb'], 'ca': [2], 'uc': 'other'},
     'O_NCA_ext': {'to': ['hb', 'nhb'], 'ca': [1], 'uc': 'other'},
 }
+
+NORMS_VDM_MATRIX_NAMES = list(NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING.keys())
 
 # USEFUL GEO CONSTANTS
 # LAs in North area
