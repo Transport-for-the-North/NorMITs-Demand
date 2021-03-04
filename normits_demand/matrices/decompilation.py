@@ -16,11 +16,14 @@ import functools
 import operator
 
 # 3rd Party
+import numpy as np
 import pandas as pd
 
 # Local imports
 import normits_demand as nd
 import normits_demand.constants as consts
+
+from normits_demand.validation import checks
 
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
@@ -212,24 +215,129 @@ def convert_norms_to_efs_matrices(import_dir: nd.PathLike,
 
         # Write the new matrix to disk
         output_path = os.path.join(export_dir, full_efs_mat_name)
-        file_ops.write_df(mat, output_path, index=False)
+        file_ops.write_df(mat, output_path)
+
+
+def decompile_matrices(matrix_import: nd.PathLike,
+                       matrix_export: nd.PathLike,
+                       decompile_factors_path: nd.PathLike,
+                       audit: bool = True,
+                       audit_tol: float = 0.001
+                       ) -> None:
+    """
+    Decompiles the matrices in matrix_import.
+
+    Decompiled matrices are written to matrix_export, and matrices are
+    decompiled using the factors at decompile_factors_path.
+
+    Optionally performs an audit to make sure the resultant matrices
+    still sum to their compiled counterpart, within audit_tol.
+
+    Parameters
+    ----------
+    matrix_import:
+        Path to the directory containing the compiled matrices.
+
+    matrix_export:
+        Path to the directory to write the decompiled OD matrices.
+
+    decompile_factors_path:
+        Full path to the pickle file containing the decompile factors to use.
+
+    audit:
+        Whether to perform a check to make sure the decompiled matrices are
+        sufficiently similar to the compiled matrices when reversing the
+        process.
+
+    audit_tol:
+        The tolerance to apply when auditing. If the total absolute difference
+        between the original and audit matrices is greater than this value, an
+        error will be thrown.
+
+    Returns
+    -------
+    None
+    """
+    # Load the factors
+    decompile_factors = pd.read_pickle(decompile_factors_path)
+
+    # Loop through the compiled matrices and decompile
+    # TODO: Multiprocess decompile_od()
+    for comp_mat_name in decompile_factors.keys():
+        # Deal with potentially different suffixes
+        in_mat_name = file_ops.find_filename(
+            os.path.join(matrix_import, comp_mat_name),
+            return_full_path=False,
+        )
+        path = os.path.join(matrix_import, in_mat_name)
+        comp_mat = file_ops.read_df(path, index_col=0)
+        print("Decompiling %s..." % in_mat_name)
+        print(comp_mat_name)
+
+        # Loop through the factors and decompile the matrix
+        decompiled_mats = list()
+        for part_mat_name in decompile_factors[comp_mat_name].keys():
+            # Decompile the matrix using the factors
+            factors = decompile_factors[comp_mat_name][part_mat_name]
+            part_mat = comp_mat * factors
+
+            print("comp")
+            print(comp_mat)
+            print('\n\n')
+            print("factors")
+            print(factors)
+            print('\n\n')
+            print("partial")
+            print(part_mat)
+            exit()
+            print('\n\n\n\n\n\n')
+
+            # Write the decompiled matrix to disk
+            path = os.path.join(matrix_export, part_mat_name)
+            file_ops.write_df(part_mat, path)
+
+            # Save for audit later
+            decompiled_mats.append(part_mat)
+
+        # Check that the output matrices total the input matrices
+        if audit:
+            # Sum the split matrices
+            mats_sum = functools.reduce(lambda x, y: x.add(y, fill_value=0),
+                                        decompiled_mats)
+
+            # Get the absolute difference between the compiled and decompiled
+            abs_diff = np.absolute((mats_sum - comp_mat).values).sum()
+
+            if abs_diff > audit_tol:
+                raise nd.AuditError(
+                    "While decompiling matrices from %s, the absolute "
+                    "difference between the original and decompiled matrices "
+                    "exceeded the tolerance. Tolerance: %s, Absolute "
+                    "Difference: %s"
+                    % (in_mat_name, str(audit_tol), str(abs_diff)))
 
 
 def decompile_norms(year: int,
                     post_me_import: nd.PathLike,
                     post_me_renamed_export: nd.PathLike,
+                    post_me_decompiled_export: nd.PathLike,
                     decompile_factors_dir: nd.PathLike,
+                    matrix_format: str = 'pa',
                     overwrite_converted_matrices: bool = True,
+                    csv_out: bool = True,
+                    compress_out: bool = True,
                     ) -> None:
     # TODO: Write decompile_norms() docs
     # Init
     model_name = 'norms'
+    matrix_format = checks.validate_matrix_format(matrix_format)
 
     print(year)
     print(post_me_import)
     print(post_me_renamed_export)
     print(decompile_factors_dir)
 
+    # ## CONVERT MATRICES TO EFS VDM FORMAT ## #
     need_convert = need_to_convert_to_efs_matrices(
         post_me_import=post_me_import,
         converted_export=post_me_renamed_export
@@ -242,6 +350,24 @@ def decompile_norms(year: int,
             matrix_format='pa',
             year=year,
             wide_col_name='%s_zone_id' % model_name,
+            csv_out=csv_out,
+            compress_out=compress_out,
         )
+
+    # ## DECOMPILE THE NORMS MATRICES ## #
+    for int_or_ext in ['internal', 'external']:
+        factors_fname = du.get_split_factors_fname(
+            matrix_format=matrix_format,
+            year=str(year),
+            suffix=int_or_ext,
+        )
+        decompile_factors_path = os.path.join(decompile_factors_dir, factors_fname)
+
+        decompile_matrices(
+            matrix_import=post_me_renamed_export,
+            matrix_export=post_me_decompiled_export,
+            decompile_factors_path=decompile_factors_path,
+        )
+
 
     raise NotImplementedError

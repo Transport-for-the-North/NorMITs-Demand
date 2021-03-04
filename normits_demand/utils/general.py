@@ -475,6 +475,7 @@ def build_efs_io_paths(import_location: str,
     # Create consistent filenames
     pa = 'PA Matrices'
     pa_24 = '24hr PA Matrices'
+    vdm_pa_24 = '24hr VDM PA Matrices'
     od = 'OD Matrices'
     od_24 = '24hr OD Matrices'
     compiled = 'Compiled'
@@ -494,6 +495,7 @@ def build_efs_io_paths(import_location: str,
         # Pre-ME
         'pa': os.path.join(matrices_home, pa),
         'pa_24': os.path.join(matrices_home, pa_24),
+        'vdm_pa_24': os.path.join(matrices_home, vdm_pa_24),
         'od': os.path.join(matrices_home, od),
         'od_24': os.path.join(matrices_home, od_24),
 
@@ -514,6 +516,7 @@ def build_efs_io_paths(import_location: str,
     post_me_exports = {
         'pa': os.path.join(post_me_home, pa),
         'pa_24': os.path.join(post_me_home, pa_24),
+        'vdm_pa_24': os.path.join(post_me_home, vdm_pa_24),
         'od': os.path.join(post_me_home, od),
         'od_24': os.path.join(post_me_home, od_24),
         'compiled_od': compiled_od_path,

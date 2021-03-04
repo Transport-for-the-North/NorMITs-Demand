@@ -14,6 +14,8 @@ A collections of utility functions for file operations
 import os
 import pathlib
 
+from typing import List
+
 # Third Party
 import pandas as pd
 
@@ -21,10 +23,31 @@ import pandas as pd
 import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand.utils import compress
+from normits_demand.utils import general as du
 
 # Imports that need moving into here
 from normits_demand.utils.utils import create_folder
 from normits_demand.utils.general import list_files
+
+
+def cast_to_pathlib_path(path: nd.PathLike) -> pathlib.Path:
+    """
+    Tries to cast path to pathlib.Path
+
+    Parameters
+    ----------
+    path:
+        The path to convert
+
+    Returns
+    -------
+    path:
+        path, converted to a pathlib.Path object
+    """
+    if isinstance(path, pathlib.Path):
+        return path
+
+    return pathlib.Path(path)
 
 
 def file_exists(file_path: nd.PathLike) -> bool:
@@ -166,7 +189,7 @@ def read_df(path: nd.PathLike, index_col=None, **kwargs) -> pd.DataFrame:
         return df
 
     elif pathlib.Path(path).suffix == '.csv':
-        return pd.read_csv(path, **kwargs)
+        return pd.read_csv(path, index_col=index_col, **kwargs)
 
     else:
         raise ValueError(
@@ -195,9 +218,8 @@ def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
     df:
         The read in df at path.
     """
-    # Cast path if not correct type
-    if not isinstance(path, pathlib.Path):
-        path = pathlib.Path(path)
+    # Init
+    path = cast_to_pathlib_path(path)
 
     # Determine how to read in df
     if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
@@ -211,3 +233,71 @@ def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
             "Cannot determine the filetype of the given path. Expected "
             "either '.csv' or '%s'" % consts.COMPRESSION_SUFFIX
         )
+
+
+def find_filename(path: nd.PathLike,
+                  alt_types: List[str] = None,
+                  return_full_path: bool = True,
+                  ) -> pathlib.Path:
+    """
+    Checks if the file at path exists under a different file extension.
+
+    If path ends in a file extension, will try find that file first. If
+    that doesn't exist, it will look for a compressed, or '.csv' version.
+
+    Parameters
+    ----------
+    path:
+        The path to the file to try and find
+
+    alt_types:
+        A list of alternate filetypes to consider. By default, will be:
+        ['.pbz2', '.csv']
+
+    return_full_path:
+        If False, will only return the name of the file, and not the full path
+
+    Returns
+    -------
+    path:
+        The path to a matching, or closely matching (differing only on
+        filetype extension) file.
+    """
+    # Init
+    path = cast_to_pathlib_path(path)
+
+    # Wrapper around return to deal with full path or not
+    def return_fn(ret_path):
+        if return_full_path:
+            return ret_path
+        return ret_path.name
+
+    if alt_types is None:
+        alt_types = ['.pbz2', '.csv']
+
+    # Make sure they all start with a dot
+    temp_alt_types = list()
+    for ftype in alt_types:
+        if not du.starts_with(ftype, '.'):
+            ftype = '.' + ftype
+        temp_alt_types.append(ftype)
+    alt_types = temp_alt_types.copy()
+
+    # Try to find the path as is
+    if path.suffix != '':
+        if os.path.exists(path):
+            return return_fn(path)
+
+    # Try to find similar paths
+    attempted_paths = list()
+    for ftype in alt_types:
+        path = path.parent / (path.stem + ftype)
+        attempted_paths.append(path)
+        if os.path.exists(path):
+            return return_fn(path)
+
+    # If here, not paths were found!
+    raise FileNotFoundError(
+        "Cannot find any similar files. Tried all of the following paths: %s"
+        % str(attempted_paths)
+    )
