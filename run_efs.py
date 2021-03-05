@@ -25,7 +25,7 @@ def main():
 
     run_base_efs = False
     recreate_productions = True
-    recreate_attractions = True
+    recreate_attractions = False
     recreate_nhb_productions = True
 
     run_bespoke_zones = False
@@ -100,8 +100,7 @@ def main():
 
     # TODO: Check Post ME process works for NOHAM
     if run_decompile_post_me:
-        # Decompiles post-me base year OD matrices - generates tour
-        # proportions in the process
+        # Decompiles post-me base year matrices
         efs.decompile_post_me(
             overwrite_decompiled_matrices=True,
             overwrite_tour_proportions=True,

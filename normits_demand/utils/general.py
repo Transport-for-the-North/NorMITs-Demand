@@ -449,13 +449,14 @@ def build_efs_io_paths(import_location: str,
         'tp_splits': os.path.join(import_home, 'tp_splits'),
         'zone_translation': zone_translation,
         'lookups': os.path.join(model_home, 'lookup'),
-        'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
+        # 'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
         'scenarios': os.path.join(import_home, 'scenarios'),
         'a_weights': a_weights_path,
         'soc_weights': soc_weights_path,
         'ntem_control': os.path.join(import_home, 'ntem_constraints'),
         'model_schema': os.path.join(import_home, model_name, 'model schema'),
         'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
+        'decomp_post_me': os.path.join(import_home, model_name, 'decompiled_post_me'),
     }
 
     #  ## EXPORT PATHS ## #

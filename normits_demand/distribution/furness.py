@@ -302,7 +302,7 @@ def distribute_pa(productions: pd.DataFrame,
                   seed_mat_format: str = 'enhpa',
                   echo: bool = False,
                   audit_out: str = None,
-                  round_dp: int = 4,
+                  round_dp: int = consts.DEFAULT_ROUNDING,
                   process_count: int = consts.PROCESS_COUNT
                   ) -> None:
     """

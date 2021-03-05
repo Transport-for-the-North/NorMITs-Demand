@@ -34,9 +34,11 @@ from normits_demand.distribution import furness
 
 from normits_demand.reports import pop_emp_comparator
 
-from normits_demand.utils import general as du, sector_reporter_v2 as sr_v2
+from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
 from normits_demand.utils import vehicle_occupancy as vo
 from normits_demand.utils import exceptional_growth as eg
+from normits_demand.utils import sector_reporter_v2 as sr_v2
 
 
 # TODO: Output a run log instead of printing everything to the terminal.
@@ -1419,8 +1421,9 @@ class ExternalForecastSystem:
     def decompile_post_me(self,
                           year: int = consts.BASE_YEAR,
                           m_needed: List[int] = consts.MODES_NEEDED,
-                          overwrite_decompiled_matrices=True,
-                          overwrite_tour_proportions=True
+                          make_new_observed: bool = True,
+                          overwrite_decompiled_matrices: bool = True,
+                          overwrite_tour_proportions: bool = True,
                           ) -> None:
         """
         Decompiles post-me matrices ready to be used in an EFS future years run.
@@ -1451,12 +1454,18 @@ class ExternalForecastSystem:
             The mode to use when decompiling OD matrices. This will be used
             to determine if car availability needs to be included or not.
 
+        make_new_observed:
+            Whether to copy the decompiled matarices back into the EFS
+            imports ready for a new run of EFS, using these values as the
+            observed data.
+
         # TODO: Update docs once correct functionality exists
         overwrite_decompiled_matrices:
             Whether to decompile the post-me matrices or not
 
         overwrite_tour_proportions:
             Whether to generate tour proportions or not.
+
 
         Returns
         -------
@@ -1492,13 +1501,21 @@ class ExternalForecastSystem:
                 print("WARNING: Not decompiling Norms matrices!!!")
                 return
 
-            decompilation.decompile_norms(
-                year=year,
-                post_me_import=self.imports['post_me_matrices'],
-                post_me_renamed_export=self.exports['post_me']['vdm_pa_24'],
-                post_me_decompiled_export=self.exports['post_me']['pa_24'],
-                decompile_factors_dir=self.params['compile'],
-            )
+            # decompilation.decompile_norms(
+            #     year=year,
+            #     post_me_import=self.imports['post_me_matrices'],
+            #     post_me_renamed_export=self.exports['post_me']['vdm_pa_24'],
+            #     post_me_decompiled_export=self.exports['post_me']['pa_24'],
+            #     decompile_factors_dir=self.params['compile'],
+            # )
+
+            # Copy all of our outputs into the observed import location
+            if make_new_observed:
+                file_ops.copy_all_files(
+                    import_dir=self.exports['post_me']['pa_24'],
+                    export_dir=self.imports['decomp_post_me'],
+                    force_csv_out=True,
+                )
 
         else:
             raise nd.NormitsDemandError(

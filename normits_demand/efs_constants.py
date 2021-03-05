@@ -38,8 +38,8 @@ _trip_origin_purposes = [
 TRIP_ORIGINS = [x[0] for x in _trip_origin_purposes]
 TRIP_ORIGIN_TO_PURPOSE = {to: p for to, p in _trip_origin_purposes}
 
-PROCESS_COUNT = -3
-DEFAULT_ROUNDING = 6
+PROCESS_COUNT = -2
+DEFAULT_ROUNDING = 10
 
 # ## VDM/ME2 constants ## #
 VDM_TRIP_ORIGINS = ['hb', 'nhb']

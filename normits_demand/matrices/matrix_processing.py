@@ -2076,14 +2076,8 @@ def compile_matrices(mat_import: str,
 
         # ## CALCULATE THE DECOMPILE FACTORS ## #
         for part_mat, mat_name in zip(in_mats, input_mat_names):
-            print(full_mat)
-            print()
-            print(part_mat)
-            print()
             # Avoid divide by zero
             full_mat = np.where(full_mat == 0, 0.0001, full_mat)
-            print(part_mat / full_mat)
-            exit()
             decompile_factors[comp_name][mat_name] = part_mat / full_mat
 
     # Write factors to disk if we made them

@@ -301,3 +301,57 @@ def find_filename(path: nd.PathLike,
         "Cannot find any similar files. Tried all of the following paths: %s"
         % str(attempted_paths)
     )
+
+
+def copy_all_files(import_dir: nd.PathLike,
+                   export_dir: nd.PathLike,
+                   force_csv_out: bool = False,
+                   ) -> None:
+    """
+    Copies all of the files from import_dir into export_dir
+
+    Will attempt to read in any format of file, but the output can be
+    forced into csv format using force_csv_out.
+
+    Parameters
+    ----------
+    import_dir:
+        Path to the directory containing all the files to copy
+
+    export_dir:
+        Path to the directory where all the copied files should be placed
+
+    force_csv_out:
+        If True, the copied files will be translated into .csv files.
+
+    Returns
+    -------
+    None
+    """
+    # Init
+    fnames = du.list_files(import_dir)
+    import_dir = cast_to_pathlib_path(import_dir)
+    export_dir = cast_to_pathlib_path(export_dir)
+
+    # TODO: multiprocess
+    # Copy over each file
+    for in_fname in fnames:
+        print(in_fname)
+        in_fname = cast_to_pathlib_path(in_fname)
+
+        # Do we need to convert the file?
+        if not(force_csv_out and in_fname.suffix != '.csv'):
+            # If not, we can just copy over as is
+            du.copy_and_rename(
+                src=import_dir / in_fname,
+                dst=export_dir / in_fname,
+            )
+            continue
+
+        # Only get here if we do need to convert the file type
+        in_path = import_dir / in_fname
+        out_path = export_dir / (in_fname.stem + '.csv')
+
+        # Read in, then write out as csv
+        df = read_df(in_path)
+        write_df(df, out_path)

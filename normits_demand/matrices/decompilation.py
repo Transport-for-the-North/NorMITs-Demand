@@ -222,7 +222,7 @@ def decompile_matrices(matrix_import: nd.PathLike,
                        matrix_export: nd.PathLike,
                        decompile_factors_path: nd.PathLike,
                        audit: bool = True,
-                       audit_tol: float = 0.001
+                       audit_tol: float = 0.1
                        ) -> None:
     """
     Decompiles the matrices in matrix_import.
@@ -272,7 +272,6 @@ def decompile_matrices(matrix_import: nd.PathLike,
         path = os.path.join(matrix_import, in_mat_name)
         comp_mat = file_ops.read_df(path, index_col=0)
         print("Decompiling %s..." % in_mat_name)
-        print(comp_mat_name)
 
         # Loop through the factors and decompile the matrix
         decompiled_mats = list()
@@ -280,17 +279,6 @@ def decompile_matrices(matrix_import: nd.PathLike,
             # Decompile the matrix using the factors
             factors = decompile_factors[comp_mat_name][part_mat_name]
             part_mat = comp_mat * factors
-
-            print("comp")
-            print(comp_mat)
-            print('\n\n')
-            print("factors")
-            print(factors)
-            print('\n\n')
-            print("partial")
-            print(part_mat)
-            exit()
-            print('\n\n\n\n\n\n')
 
             # Write the decompiled matrix to disk
             path = os.path.join(matrix_export, part_mat_name)
@@ -305,16 +293,30 @@ def decompile_matrices(matrix_import: nd.PathLike,
             mats_sum = functools.reduce(lambda x, y: x.add(y, fill_value=0),
                                         decompiled_mats)
 
-            # Get the absolute difference between the compiled and decompiled
+            # Figure out the upper and lower tolerance limits
+            comp_total = comp_mat.to_numpy().sum()
+            lower = comp_total - (comp_total * audit_tol)
+            upper = comp_total + (comp_total * audit_tol)
+
+            # Calculate our decompiled absolute/percentage differences
+            mats_sum_total = mats_sum.to_numpy().sum()
             abs_diff = np.absolute((mats_sum - comp_mat).values).sum()
 
-            if abs_diff > audit_tol:
+            # We can skip this check if we're all 0
+            if mats_sum_total == comp_total == 0:
+                continue
+
+            perc_diff = abs_diff / comp_mat.to_numpy().sum()
+
+            if not (lower < mats_sum_total < upper):
                 raise nd.AuditError(
                     "While decompiling matrices from %s, the absolute "
                     "difference between the original and decompiled matrices "
-                    "exceeded the tolerance. Tolerance: %s, Absolute "
-                    "Difference: %s"
-                    % (in_mat_name, str(audit_tol), str(abs_diff)))
+                    "exceeded the tolerance.\n"
+                    "Percentage Tolerance: +- %s%%\n"
+                    "Percentage Difference: %.4f%%\n"
+                    "Absolute Difference: %.4f"
+                    % (in_mat_name, str(audit_tol), perc_diff, abs_diff))
 
 
 def decompile_norms(year: int,
@@ -324,18 +326,13 @@ def decompile_norms(year: int,
                     decompile_factors_dir: nd.PathLike,
                     matrix_format: str = 'pa',
                     overwrite_converted_matrices: bool = True,
-                    csv_out: bool = True,
+                    csv_out: bool = False,
                     compress_out: bool = True,
                     ) -> None:
     # TODO: Write decompile_norms() docs
     # Init
     model_name = 'norms'
     matrix_format = checks.validate_matrix_format(matrix_format)
-
-    print(year)
-    print(post_me_import)
-    print(post_me_renamed_export)
-    print(decompile_factors_dir)
 
     # ## CONVERT MATRICES TO EFS VDM FORMAT ## #
     need_convert = need_to_convert_to_efs_matrices(
@@ -368,6 +365,3 @@ def decompile_norms(year: int,
             matrix_export=post_me_decompiled_export,
             decompile_factors_path=decompile_factors_path,
         )
-
-
-    raise NotImplementedError
