@@ -76,16 +76,17 @@ class EFSAttractionGenerator:
             base_year: str,
             future_years: List[str],
 
-            # Population data
-            employment_import_path: nd.PathLike,
-            employment_constraint: pd.DataFrame,
-
             # Build import paths
             import_home: str,
             export_home: str,
 
+            # Employment data
+            by_emp_import_path: nd.PathLike,
+            emp_constraint: pd.DataFrame,
+            fy_emp_import_dir: nd.PathLike = None,
+
             # Alternate population/attraction creation files
-            attraction_weights_path: str,
+            attraction_weights_path: str = None,
             mode_splits_path: str = None,
             soc_weights_path: str = None,
             msoa_lookup_path: str = None,
@@ -151,7 +152,7 @@ class EFSAttractionGenerator:
             for future year employment estimates. The filenames will
             be automatically generated based on consts.LU_EMP_FNAME
 
-        employment_constraint:
+        emp_constraint:
             Values to constrain the employment numbers to.
 
         import_home:
@@ -283,7 +284,7 @@ class EFSAttractionGenerator:
             designated_area = designated_area.copy().rename(
                 columns={external_zone_col: self.zone_col}
             )
-            employment_constraint = employment_constraint.rename(
+            emp_constraint = emp_constraint.rename(
                 columns={external_zone_col: self.zone_col}
             )
 
@@ -307,8 +308,10 @@ class EFSAttractionGenerator:
 
         # # ## READ IN EMPLOYMENT DATA ## #
         employment = get_emp_data_from_land_use(
-            import_path=employment_import_path,
-            years=all_years,
+            by_emp_import_path=by_emp_import_path,
+            fy_emp_import_dir=fy_emp_import_dir,
+            base_year=base_year,
+            future_years=future_years,
             segmentation_cols=segmentation_cols,
         )
 
@@ -323,11 +326,11 @@ class EFSAttractionGenerator:
             print("Performing the first constraint on employment...")
             print(". Pre Constraint:\n%s" % employment[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
-                                                  employment_constraint)
+                                                  emp_constraint)
 
             employment = dlog_p.constrain_forecast(
                 employment,
-                employment_constraint,
+                emp_constraint,
                 designated_area,
                 base_year,
                 future_years,
@@ -367,13 +370,13 @@ class EFSAttractionGenerator:
             pd.set_option('display.float_format', str)
             print("Performing the post-development log constraint on employment...")
             print(". Pre Constraint:\n%s" % employment[future_years].sum())
-            print(". Constraint:\n%s" % employment_constraint[future_years].sum())
+            print(". Constraint:\n%s" % emp_constraint[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
-                                                  employment_constraint)
+                                                  emp_constraint)
 
             employment = dlog_p.constrain_forecast(
                 employment,
-                employment_constraint,
+                emp_constraint,
                 designated_area,
                 base_year,
                 future_years,
@@ -398,6 +401,9 @@ class EFSAttractionGenerator:
             print("Writing employment to file...")
             path = os.path.join(out_path, consts.EMP_FNAME % self.zone_col)
             employment.to_csv(path, index=False)
+
+        if 'soc' not in list(employment):
+            self.emp_segments = du.list_safe_remove( self.emp_segments, ['soc'])
 
         # Reindex and sum
         group_cols = [self.zone_col] + self.emp_segments
@@ -1575,6 +1581,7 @@ def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
     # Init
     future_years = list() if future_years is None else future_years
     all_years = [base_year] + future_years
+    all_commute_col = 'E01'
 
     if dtype is None:
         dtype = {'soc': int, 'ns': int}
@@ -1583,21 +1590,36 @@ def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
         segmentation_cols = ['employment_cat']
     group_cols = [lu_zone_col] + segmentation_cols
 
+    if segmentation_cols != ['employment_cat']:
+        raise nd.NormitsDemandError(
+            "Attractions doesn't know hwo to handle segmentations that aren't "
+            "just ['employment_cat']!!"
+        )
+
     all_emp_ph = list()
     for year in all_years:
 
         # Read in the dataframe - different if base year
         if year == base_year:
             year_emp = pd.read_csv(by_emp_import_path, dtype=dtype)
-            year_emp = year_emp.rename(columns={base_year_data_col: base_year})
+
+            # Add in the all commute col
+            emp_cats = list(year_emp.columns)
+            emp_cats.remove(lu_zone_col)
+            year_emp[all_commute_col] = year_emp[emp_cats].sum(axis='columns')
+
+            # Melt into same format as the rest
+            year_emp = pd.melt(
+                year_emp,
+                id_vars=[lu_zone_col],
+                var_name=segmentation_cols[0],
+                value_name=base_year
+            )
         else:
             # Build the path to this years data
-            fname = consts.LU_POP_FNAME % str(year)
+            fname = consts.LU_EMP_FNAME % str(year)
             lu_path = os.path.join(fy_emp_import_dir, fname)
             year_emp = pd.read_csv(lu_path, dtype=dtype)
-
-        print(year_emp)
-        exit()
 
         # ## FILTER TO JUST THE DATA WE NEED ## #
         # Set up the columns to keep
