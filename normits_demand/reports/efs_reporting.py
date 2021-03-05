@@ -396,7 +396,7 @@ class EfsReporter:
         """
         if run_raw_vector_report:
             print("Generating report across all modes...")
-            # self.compare_raw_pa_vectors_to_ntem()
+            self.compare_raw_pa_vectors_to_ntem()
 
             print("Generating a report per mode...")
             self.compare_raw_pa_vectors_to_ntem_by_mode()
