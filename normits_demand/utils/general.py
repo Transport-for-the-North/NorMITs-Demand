@@ -40,7 +40,8 @@ from itertools import product
 from collections import defaultdict
 
 # Local imports
-from normits_demand import efs_constants as consts
+from normits_demand import constants as consts
+from normits_demand import efs_constants as efs_consts
 
 # Can call tms utils.py functions from here
 from normits_demand.utils.utils import *
@@ -95,7 +96,7 @@ def get_seg_level_cols(seg_level: str,
     """
     # Init
     seg_level = validate_seg_level(seg_level)
-    seg_cols = consts.SEG_LEVEL_COLS[seg_level]
+    seg_cols = efs_consts.SEG_LEVEL_COLS[seg_level]
 
     # Remove cols if asked to and they exist
     if not keep_ca:
@@ -130,7 +131,7 @@ def validate_seg_level(seg_level: str) -> str:
     # Init
     seg_level = seg_level.strip().lower()
 
-    if seg_level not in consts.SEG_LEVELS:
+    if seg_level not in efs_consts.SEG_LEVELS:
         raise ValueError("%s is not a valid name for a level of segmentation"
                          % seg_level)
     return seg_level
@@ -159,7 +160,7 @@ def validate_zoning_system(zoning_system: str) -> str:
     # Init
     zoning_system = zoning_system.strip().lower()
 
-    if zoning_system not in consts.ZONING_SYSTEMS:
+    if zoning_system not in efs_consts.ZONING_SYSTEMS:
         raise ValueError("%s is not a valid name for a zoning system"
                          % zoning_system)
     return zoning_system
@@ -188,7 +189,7 @@ def validate_scenario_name(scenario_name: str) -> str:
     # Init
     scenario_name = scenario_name.strip().upper()
 
-    if scenario_name not in consts.SCENARIOS:
+    if scenario_name not in efs_consts.SCENARIOS:
         raise ValueError("%s is not a valid name for a scenario."
                          % scenario_name)
     return scenario_name
@@ -217,14 +218,14 @@ def validate_model_name(model_name: str) -> str:
     # Init
     model_name = model_name.strip().lower()
 
-    if model_name not in consts.MODEL_NAMES:
+    if model_name not in efs_consts.MODEL_NAMES:
         raise ValueError("%s is not a valid name for a model"
                          % model_name)
     return model_name
 
 
 def validate_model_name_and_mode(model_name: str,
-                                 m_needed: List[int] = consts.MODES_NEEDED
+                                 m_needed: List[int] = efs_consts.MODES_NEEDED
                                  ) -> None:
     """
     Checks that the given modes are valid modes for the given model name
@@ -251,7 +252,7 @@ def validate_model_name_and_mode(model_name: str,
     model_name = validate_model_name(model_name)
 
     for mode in m_needed:
-        if mode not in consts.MODEL_MODES[model_name]:
+        if mode not in efs_consts.MODEL_MODES[model_name]:
             raise ValueError("%s is not a valid mode for model %s"
                              % (str(mode), model_name))
 
@@ -279,7 +280,7 @@ def validate_user_class(user_class: str) -> str:
     # Init
     user_class = user_class.strip().lower()
 
-    if user_class not in consts.USER_CLASSES:
+    if user_class not in efs_consts.USER_CLASSES:
         raise ValueError("%s is not a valid name for user class"
                          % user_class)
     return user_class
@@ -344,7 +345,7 @@ def build_efs_io_paths(import_location: str,
                        scenario_name: str,
                        demand_version: str,
                        demand_dir_name: str = 'NorMITs Demand',
-                       base_year: str = consts.BASE_YEAR_STR,
+                       base_year: str = efs_consts.BASE_YEAR_STR,
                        ) -> Tuple[dict, dict, dict]:
     """
     Builds three dictionaries of paths to the locations of all inputs and
@@ -445,6 +446,7 @@ def build_efs_io_paths(import_location: str,
         'soc_weights': soc_weights_path,
         'ntem_control': os.path.join(import_home, 'ntem_constraints'),
         'model_schema': os.path.join(import_home, model_name, 'model schema'),
+        'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
     }
 
     #  ## EXPORT PATHS ## #
@@ -1111,6 +1113,7 @@ def get_dist_name(trip_origin: str,
                   car_availability: str = None,
                   tp: str = None,
                   csv: bool = False,
+                  compressed: bool = False,
                   suffix: str = None,
                   ) -> str:
     """
@@ -1133,7 +1136,7 @@ def get_dist_name(trip_origin: str,
         name_parts += ["m" + mode]
 
     if not is_none_like(segment) and not is_none_like(purpose):
-        seg_name = "soc" if int(purpose) in consts.SOC_P else "ns"
+        seg_name = "soc" if int(purpose) in efs_consts.SOC_P else "ns"
         name_parts += [seg_name + segment]
 
     if not is_none_like(car_availability):
@@ -1152,6 +1155,8 @@ def get_dist_name(trip_origin: str,
     # Optionally add on the csv if needed
     if csv:
         final_name += '.csv'
+    elif compressed:
+        final_name += consts.COMPRESSION_SUFFIX
 
     return final_name
 
@@ -1160,12 +1165,13 @@ def calib_params_to_dist_name(trip_origin: str,
                               matrix_format: str,
                               calib_params: Dict[str, int],
                               csv: bool = False,
+                              compressed: bool = False,
                               suffix: str = None,
                               ) -> str:
     """
     Wrapper for get_distribution_name() using calib params
     """
-    segment_str = 'soc' if calib_params['p'] in consts.SOC_P else 'ns'
+    segment_str = 'soc' if calib_params['p'] in efs_consts.SOC_P else 'ns'
 
     return get_dist_name(
         trip_origin=trip_origin,
@@ -1177,7 +1183,8 @@ def calib_params_to_dist_name(trip_origin: str,
         car_availability=str(calib_params.get('ca')),
         tp=str(calib_params.get('tp')),
         csv=csv,
-        suffix=suffix
+        compressed=compressed,
+        suffix=suffix,
     )
 
 
@@ -1293,7 +1300,7 @@ def generate_calib_params(year: str = None,
         raise ValueError("If segment is set, purpose needs to be set too, "
                          "otherwise segment text cannot be determined.")
     # Init
-    segment_str = 'soc' if purpose in consts.SOC_P else 'ns'
+    segment_str = 'soc' if purpose in efs_consts.SOC_P else 'ns'
 
     keys = ['yr', 'p', 'm', segment_str, 'ca', 'tp']
     vals = [year, purpose, mode, segment, ca, tp]
@@ -1587,10 +1594,10 @@ def expand_distribution(dist: pd.DataFrame,
         dist[ca_col] = car_availability
 
     if not is_none_like(segment):
-        if purpose in consts.SOC_P:
+        if purpose in efs_consts.SOC_P:
             dist[soc_col] = segment
             dist[ns_col] = 'none'
-        elif purpose in consts.NS_P:
+        elif purpose in efs_consts.NS_P:
             dist[soc_col] = 'none'
             dist[ns_col] = segment
         else:
@@ -1795,9 +1802,9 @@ def segmentation_loop_generator(p_list: Iterable[int],
     Simple generator to avoid the need for so many nested loops
     """
     for purpose in p_list:
-        if purpose in consts.SOC_P:
+        if purpose in efs_consts.SOC_P:
             required_segments = soc_list
-        elif purpose in consts.NS_P:
+        elif purpose in efs_consts.NS_P:
             required_segments = ns_list
         else:
             raise ValueError("'%s' does not seem to be a valid soc or ns "
@@ -2060,7 +2067,7 @@ def segmentation_order(segmentation_lst: List[str]) -> List[str]:
         same order as filenames etc.
     """
     # Init
-    seg_order = consts.SEGMENTATION_ORDER.copy()
+    seg_order = efs_consts.SEGMENTATION_ORDER.copy()
 
     # Order the segmentation keys, stick non seg back on the end
     non_seg_vals = [x for x in segmentation_lst if x not in seg_order]
@@ -2227,11 +2234,30 @@ def wide_to_long_out(df: pd.DataFrame,
     df.to_csv(out_path, index=False)
 
 
-def get_compile_params_name(matrix_format: str, year: str) -> str:
+def get_compile_params_name(matrix_format: str,
+                            year: str,
+                            suffix: str = None
+                            ) -> str:
     """
     Generates the compile params filename
     """
-    return "%s_yr%s_compile_params.csv" % (matrix_format, year)
+    if suffix is None:
+        return "%s_yr%s_compile_params.csv" % (matrix_format, year)
+
+    return "%s_yr%s_%s_compile_params.csv" % (matrix_format, year, suffix)
+
+
+def get_split_factors_fname(matrix_format: str,
+                            year: str,
+                            suffix: str = None
+                            ) -> str:
+    """
+    Generates the splitting factors filename
+    """
+    if suffix is None:
+        return "%s_yr%s_splitting_factors.pkl" % (matrix_format, year)
+
+    return "%s_yr%s_%s_splitting_factors.pkl" % (matrix_format, year, suffix)
 
 
 def build_full_paths(base_path: str,
@@ -2290,7 +2316,8 @@ def get_compiled_matrix_name(matrix_format: str,
                              mode: str = None,
                              ca: int = None,
                              tp: str = None,
-                             csv=False,
+                             csv: bool = False,
+                             compress: bool = False,
                              suffix: str = None,
                              ) -> str:
 
@@ -2335,6 +2362,8 @@ def get_compiled_matrix_name(matrix_format: str,
     # Optionally add on the csv if needed
     if csv:
         final_name += '.csv'
+    elif compress:
+        final_name += consts.COMPRESSION_SUFFIX
 
     return final_name
 
@@ -3283,7 +3312,7 @@ def trip_origin_to_purposes(trip_origin: str) -> List[int]:
         A list of integers representing purposes
     """
     # TODO Validate trip origin
-    return consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
+    return efs_consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
 
 
 def merge_df_list(df_list, **kwargs):
