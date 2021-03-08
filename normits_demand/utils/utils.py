@@ -1527,8 +1527,8 @@ def build_distribution_bins(internal_distance,
 def balance_a_to_p(ia_name,
                    productions,
                    attractions,
-                   p_var_name = 'productions',
-                   a_var_name = 'attractions',
+                   p_var_name='productions',
+                   a_var_name='attractions',
                    round_val=None,
                    echo=True):
 
@@ -1569,7 +1569,6 @@ def balance_a_to_p(ia_name,
     dp = productions.copy()
     ia = attractions.copy()
 
-
     total_internal_productions = dp['productions'].sum()
     # Add total attraction column for balancing
     ia['total_attractions'] = ia[a_var_name].sum()
@@ -1577,8 +1576,7 @@ def balance_a_to_p(ia_name,
 
     # Balance internal productions and attractions
     a_factors = ia.copy()
-    a_factors[a_var_name] = (a_factors[a_var_name]/
-             a_factors['total_attractions'])
+    a_factors[a_var_name] /= a_factors['total_attractions']
 
     if (len(dp[ia_name].drop_duplicates()) != len(a_factors[ia_name])):
         # Always print as it's a warning of future problems
@@ -1605,10 +1603,10 @@ def balance_a_to_p(ia_name,
 
     ia = ia.reset_index(drop=True)
 
-    # Round. This was commented out. Will become apparent why.
+    # Round
     ia[a_var_name] = ia[a_var_name].round(round_val)
 
-    return(ia)
+    return ia
 
 def define_internal_external_areas(model_lookup_path):
     """

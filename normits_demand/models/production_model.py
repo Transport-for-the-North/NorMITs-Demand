@@ -25,6 +25,7 @@ import normits_demand.build.pathing as demand
 import normits_demand.trip_end_constants as tec
 
 from normits_demand.utils import utils as nup
+from normits_demand.utils import compress as com
 from normits_demand.constraints import ntem_control as ntem
 from normits_demand.utils.general import safe_dataframe_to_csv
 
@@ -108,7 +109,7 @@ class ProductionModel(demand.Pathing):
         with warnings.catch_warnings():
             warnings.simplefilter(action='ignore',
                                   category=FutureWarning)
-            land_use_output = pd.read_csv(self.params['land_use_path'],
+            land_use_output = pd.read_csv(self.params['resi_land_use_path'],
                                           low_memory=False)
 
         return land_use_output
@@ -257,9 +258,6 @@ class ProductionModel(demand.Pathing):
                 major_zone = list(model_zone_conversion)[0]
                 minor_zone = list(model_zone_conversion)[1]
 
-                print(major_zone)
-                print(minor_zone)
-
                 # If not, bump minor overlap to 1.
                 unq_major_zones = model_zone_conversion[
                         major_zone].drop_duplicates()
@@ -283,7 +281,7 @@ class ProductionModel(demand.Pathing):
 
                 # Relativise minor split column
                 overlap_col = ('overlap_' +
-                               spatial_aggregation_input.lower() +
+                               spatial_aggregation_output.lower() +
                                '_split_factor')
                 print(list(target_productions))
 
@@ -497,29 +495,14 @@ class ProductionModel(demand.Pathing):
             print('MS Cols')
             print(p_params['ms_cols'])
 
-        # Apply ca
-        # TODO(CS/MS): This should be in Land Use
-        # drop land use 'ca' column first - error in this column
-        # Fix car ownership
-        ca = pd.DataFrame({'cars': ['0', 0, '1', 1, '1+', '2', '2+'],
-                           'ca': [1, 1, 2, 2, 2, 2, 2]})
-        land_use_output = land_use_output.merge(ca,
-                                                how='left',
-                                                on='cars')
-
         # Add gender code and stick to it - Turn gender into an integer
         # Document code order for reference - Females(1), Male(2), Children(3)
         # This should be in land use
-        g_l = pd.DataFrame({'gender': ['Females', 'Male', 'Children'],
-                            'g': [1, 2, 3]})
-        land_use_output = land_use_output.merge(g_l,
-                                                how='left',
-                                                on='gender')
-
-        # cars and gender cols no longer needed -
-        # these are re-formatted above
-        land_use_output = land_use_output.drop(
-            ['gender', 'cars'], axis=1)
+        if 'g' not in list(land_use_output):
+            g_l = pd.DataFrame(tec.TT_GENDER)
+            land_use_output = land_use_output.merge(g_l,
+                                                    how='left',
+                                                    on='traveller_type')
 
         # Do a report
         print(mandatory_lu)
@@ -650,8 +633,6 @@ class ProductionModel(demand.Pathing):
         approx_tp_totals = []
         for key, dat in tp_ph.items():
             total = dat['trips'].sum()
-            print(key)
-            print(total)
             approx_tp_totals.append(total)
 
         ave_wday = sum(approx_tp_totals)
@@ -710,12 +691,6 @@ class ProductionModel(demand.Pathing):
 
                 m_mat['trips'] = (m_mat['trips'] * m_mat[m])
 
-                print(m_mat['trips'].sum())
-
-                print(list(m_mat))
-                print(m_index_cols)
-                print(m_group_cols)
-
                 # Reindex cols for efficiency
                 m_mat = m_mat.reindex(
                     m_index_cols,
@@ -723,7 +698,13 @@ class ProductionModel(demand.Pathing):
                         m_group_cols).sum().reset_index()
 
                 m_mat = m_mat[m_mat['trips']> 0]
-                print(m_mat['trips'].sum())
+
+                if verbose:
+                    print(m_mat['trips'].sum())
+                    print(list(m_mat))
+                    print(m_index_cols)
+                    print(m_group_cols)
+                    print(m_mat['trips'].sum())
 
                 m_ph.update({(str(key)+'_'+m):m_mat})
 
@@ -744,7 +725,6 @@ class ProductionModel(demand.Pathing):
             output_ph.append(dat)
 
         msoa_output = pd.concat(output_ph)
-        print(msoa_output['trips'].sum())
 
         # Output reindex - the last one!
         index_cols = p_params['output_cols'].copy()
@@ -848,15 +828,17 @@ class ProductionModel(demand.Pathing):
 
         # Export outputs with full segmentation
         if self.params['export_msoa']:
-            safe_dataframe_to_csv(
-                msoa_output,
-                os.path.join(output_dir,
-                             output_f,
-                             'hb_productions_' +
-                             self.params['land_use_zoning'].lower() +
-                             '.csv'), index=False)
+            com.dat_out(
+                os.path.join(
+                    output_dir,
+                    output_f,
+                    'hb_productions_' +
+                    self.params['land_use_zoning'].lower()),
+                msoa_output)
 
         # Aggregate to target model zones
+        # Don't do this. It fails to often. NHB should be based off MSOA.
+        """
         target_output = self.aggregate_to_zones(
             msoa_output,
             p_params,
@@ -890,6 +872,7 @@ class ProductionModel(demand.Pathing):
                 target_output,
                 out_path,
                 index=False)
+        """
 
         end_time = nup.set_time()
         print(end_time)
@@ -905,7 +888,7 @@ class ProductionModel(demand.Pathing):
                                        write = True)
         """
 
-        return out_path, target_output, lu_rep
+        return msoa_output, lu_rep
 
     def run_nhb(self,
                 production_vector,
@@ -979,6 +962,7 @@ class ProductionModel(demand.Pathing):
                          self.params['nhb_time_split']))
 
         # Import HB PA
+        # TODO: Just attraction vector after balance
         pa = nup.import_pa(production_vector,
                            attraction_vector)
 
@@ -1053,6 +1037,7 @@ class ProductionModel(demand.Pathing):
             print(a_t)
 
             # Balance a to p
+            # TODO: Should be pre-done
             # This is why the productions are here!
             print(sub_p['productions'].sum())
             sub_a = nup.balance_a_to_p(ia_name,

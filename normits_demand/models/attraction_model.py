@@ -12,7 +12,7 @@ import normits_demand.build.pathing as demand
 
 import normits_demand.trip_end_constants as tec
 
-from normits_demand.utils import utils as nup # Folder build utils
+from normits_demand.utils import utils as nup  # Folder build utils
 from normits_demand.constraints import ntem_control as ntem
 from normits_demand.utils.general import safe_dataframe_to_csv
 
@@ -34,8 +34,7 @@ class AttractionModel(demand.Pathing):
         # Check for exports
         self.export = self.ping_outpath()
 
-    def get_attractions(self,
-                        source = 'flat',
+    def get_attractions(self
                         ):
         """
         Imports raw attraction data from either a flat file on the the Y://
@@ -57,13 +56,11 @@ class AttractionModel(demand.Pathing):
         """
         flat_source = os.path.join(self.import_folder,
                                    'attraction_data',
-                                   self.params['attractions_name'])
+                                   self.params['non_resi_land_use_path'])
 
         # Blocking out most of this so it just imports everything.
         # BACKLOG: Adapt to handle the other 2 required datasets. Process if needed.
         all_msoa = pd.read_csv(flat_source)
-
-        all_msoa = all_msoa.rename(columns={'geo_code': 'msoa_zone_id'})
 
         return all_msoa
 
@@ -120,94 +117,6 @@ class AttractionModel(demand.Pathing):
             a_list.append(attr_data)
 
         return(a_list)
-
-    def aggregate_to_model_zones_attr(self,
-                                      attractions,
-                                      model_zone_lookup_path,
-                                      translation_name = None,
-                                      max_level=True):
-        """
-        Function to aggregate to a target model zoning system. Translates from msoa
-        base to whatever translation you give it.
-        In future, will need control for splitting and custom zones included.
-
-        Parameters
-        ----------
-        attractions:
-            DataFrame, or a list of DataFrames describing attractions, likely to a
-            given attraction segmentation.
-
-        model_zone_lookup_path:
-            Flat file containing correspondence factors between msoa and target
-            model zoning system.
-
-        max_level = True:
-            If True, drops columns used to calculate employment totals.
-
-        Returns
-        ----------
-        attractions_w_zones:
-            DataFrame or list of attractions as input, aggregated to model zones.
-        """
-
-        print(attractions['attractions'].sum())
-
-        model_zone_conversion = pd.read_csv(model_zone_lookup_path)
-
-        major_zone_name = list(model_zone_conversion)[0]
-        # ia_name needs to pick up the minor zone name, should do usually
-        minor_zone_name = list(model_zone_conversion)[1]
-        # Count unique model zones in minor zoning system
-        unq_minor_zones = model_zone_conversion[minor_zone_name].drop_duplicates()
-        print(unq_minor_zones)
-
-        # If there are zone splits - just go with the zone that overlaps the most
-        # Slightly cheaty and I think can be fixed by multiplying out.
-        # TODO: Replace with multiply out method
-
-        # Reindex
-        mzc_cols = [major_zone_name, minor_zone_name, translation_name]
-        model_zone_conversion = model_zone_conversion.reindex(mzc_cols, axis=1)
-        # Need another function to pick the biggest zone in a split & make sure it's not in the internal area
-        # Print totals to topline.
-
-        # Reapply zonal splits to each
-        # Msoa is hard coded
-
-        # Workaround for minor zone sometimes being major
-        if 'msoa' in major_zone_name:
-            group_col = minor_zone_name
-        elif 'msoa' in minor_zone_name:
-            group_col = major_zone_name
-
-        # get group cols
-        group_cols = [group_col]
-        for col in list(attractions):
-            if col != 'msoa_zone_id' and col != 'attractions':
-                group_cols.append(col)
-
-        # get sum cols
-        sum_cols = group_cols.copy()
-        sum_cols.append('attractions')
-
-        attractions = attractions.merge(model_zone_conversion,
-                                        how='inner',
-                                        on='msoa_zone_id')
-
-        attraction_w_zones = attractions.copy()
-
-        attractions_w_zones = attractions[
-                'attractions'] * attractions[translation_name]
-
-        attractions_w_zones = attraction_w_zones.reindex(
-                sum_cols,
-                axis=1).groupby(
-                        group_cols).sum(
-                                ).reset_index()
-
-        print(attractions_w_zones['attractions'].sum())
-
-        return(attractions_w_zones)
 
     def ping_outpath(self):
 
@@ -270,31 +179,6 @@ class AttractionModel(demand.Pathing):
         Function to run the attraction model. Takes a path to a lookup folder
         containing
 
-        Parameters
-        ----------
-        model_folder = _zone_lookup_folder:
-            Lookup folder for target model zoning system. Should contain the
-            attraction splits required.
-
-        input_zones_name:
-            Name for aggregation in input data. Should be MSOA or LSOA.
-
-        output_zones_name:
-            Name for aggregation in output data. Should be the name of the target
-            model zone.
-
-        segmentation_type:
-            'tfn' or 'ntem'. Defines which segments to write attractions for.
-            If 'tfn', will build SOC splits into output attractions.
-            If 'ntem', will build for 8 NTEM purposes only.
-
-        model_zone_lookup_path:
-            Path to area weighted correspondence between input and output zoning.
-            Should be attraction weighting in future.
-
-        write_output = True:
-            Write csvs out or not.
-
         Returns
         ----------
         attractions:
@@ -320,7 +204,8 @@ class AttractionModel(demand.Pathing):
             self.params['model_zoning'].lower() +
             '_msoa_emp_weighted_lookup.csv')
 
-        # Set output params dict
+        """
+        # This was before the soc weighting happened in base
         if 'soc' in self.params['hb_trip_end_segmentation']:
             print('Running soc weighting')
             # If there are TfN segments import the segmentation
@@ -373,6 +258,7 @@ class AttractionModel(demand.Pathing):
                               'p', 'm', 'soc']
             sum_segments = group_segments.copy()
             sum_segments.append('attractions')
+        """
 
         output_dir = os.path.join(self.run_folder,
                                   self.params['iteration'],
@@ -386,9 +272,6 @@ class AttractionModel(demand.Pathing):
 
         all_jobs = list(msoa_attractions)
         all_jobs.remove('msoa_zone_id')
-
-        # Seed with all commute as E01
-        msoa_attractions['E01'] = msoa_attractions[all_jobs].sum(axis=1)
 
         # Import attraction profile
         model_dir = os.listdir(self.lookup_folder)
@@ -533,20 +416,6 @@ class AttractionModel(demand.Pathing):
 
         ntem_lad_lookup = pd.read_csv(tec.MSOA_LAD)
 
-        if self.params['export_uncorrected']:
-            safe_dataframe_to_csv(
-                hb_attr,
-                os.path.join(
-                    output_dir,
-                    'hb_attractions_uncorrected.csv'),
-                index=False)
-            safe_dataframe_to_csv(
-                nhb_attr,
-                os.path.join(
-                    output_dir,
-                    'nhb_attractions_uncorrected.csv'),
-                index=False)
-
         if self.params['attraction_ntem_control']:
             # Do an NTEM adjustment
 
@@ -556,10 +425,10 @@ class AttractionModel(demand.Pathing):
                 hb_attr,
                 ntem_totals,
                 ntem_lad_lookup,
-                group_cols = ['p', 'm'],
-                base_value_name = 'attractions',
-                ntem_value_name = 'Attractions',
-                purpose = 'hb')
+                group_cols=['p', 'm'],
+                base_value_name='attractions',
+                ntem_value_name='Attractions',
+                purpose='hb')
             print(hb_audit)
 
             nhb_attr, nhb_adj, nhb_audit, nhb_lad = ntem.control_to_ntem(
@@ -567,9 +436,9 @@ class AttractionModel(demand.Pathing):
                 ntem_totals,
                 ntem_lad_lookup,
                 group_cols = ['p', 'm', 'tp'],
-                base_value_name = 'attractions',
-                ntem_value_name = 'Attractions',
-                purpose = 'nhb')
+                base_value_name='attractions',
+                ntem_value_name='Attractions',
+                purpose='nhb')
 
             if self.params['export_lad']:
                 hb_lad.to_csv(
@@ -584,103 +453,26 @@ class AttractionModel(demand.Pathing):
                     index=False)
             print(nhb_audit)
 
+        if self.params['export_uncorrected']:
+            # TODO: Export compressed
+            safe_dataframe_to_csv(
+                hb_attr,
+                os.path.join(
+                    output_dir,
+                    'hb_attractions_uncorrected.csv'),
+                index=False)
+            safe_dataframe_to_csv(
+                nhb_attr,
+                os.path.join(
+                    output_dir,
+                    'nhb_attractions_uncorrected.csv'),
+                index=False)
+
         # Control to k factors
         if self.params['attraction_k_factor_control']:
+            print('...')
             # Adjust to k factor for hb
-            # BACKLOG: Fix k factor adjustments - dropping segs
-            lad_lookup = pd.read_csv(tec.MSOA_LAD)
-
-            k_factors = os.listdir(self.params['attraction_k_factor_path'])[0]
-            k_factors = pd.read_csv(
-                os.path.join(self.params['attraction_k_factor_path'],
-                             k_factors))
-            k_factors = k_factors.reindex(['lad_zone_id','p','m','tp','attr_k'],
-                                          axis=1)
-
-            hb_purpose = tec.HB_PURPOSE
-            nhb_purpose = tec.NHB_PURPOSE
-
-            hb_k_factors = k_factors[k_factors['p'].isin(hb_purpose)]
-            hb_k_factors = hb_k_factors.drop('tp', axis=1)
-            nhb_k_factors = k_factors[k_factors['p'].isin(nhb_purpose)]
-
-            # Get hb_adjustment factors
-            lad_lookup = lad_lookup.reindex(['lad_zone_id', 'msoa_zone_id'], axis=1)
-
-            hb_attr = hb_attr.merge(lad_lookup,
-                                    how='left',
-                                    on='msoa_zone_id')
-            # Seed zero infill
-            hb_attr['attractions'] = hb_attr['attractions'].replace(0,0.001)
-
-            # Build LA adjustment
-            adj_fac = hb_attr.reindex(['lad_zone_id',
-                                       'p',
-                                       'm',
-                                       'attractions'], axis=1).groupby(
-            ['lad_zone_id',
-             'p',
-             'm']).sum().reset_index()
-            adj_fac = adj_fac.merge(hb_k_factors,
-                                    how = 'left',
-                                    on = ['lad_zone_id',
-                                          'p',
-                                          'm'])
-            adj_fac['adj_fac'] = adj_fac['attr_k']/adj_fac['attractions']
-            adj_fac = adj_fac.reindex(['lad_zone_id',
-                                       'p',
-                                       'm',
-                                       'adj_fac'], axis=1)
-            adj_fac['adj_fac'] = adj_fac['adj_fac'].replace(np.nan, 1)
-
-            hb_attr = hb_attr.merge(adj_fac,
-                                    how = 'left',
-                                    on = ['lad_zone_id',
-                                          'p',
-                                          'm'])
-            hb_attr['attractions'] = hb_attr['attractions'] * hb_attr['adj_fac']
-
-            hb_attr = hb_attr.drop(['lad_zone_id','adj_fac'], axis=1)
-
-            # BACKLOG: TP attr
-            nhb_attr = nhb_attr.merge(lad_lookup,
-                                    how = 'left',
-                                    on = 'msoa_zone_id')
-            nhb_attr['attractions'] = nhb_attr['attractions'].replace(0,0.001)
-
-            # Build LA adjustment
-            adj_fac = nhb_attr.reindex(['lad_zone_id',
-                                       'p',
-                                       'm',
-                                       'tp',
-                                       'attractions'], axis=1).groupby(
-            ['lad_zone_id',
-             'p',
-             'm',
-             'tp']).sum().reset_index()
-            adj_fac = adj_fac.merge(nhb_k_factors,
-                                    how = 'left',
-                                    on = ['lad_zone_id',
-                                          'p',
-                                          'm',
-                                          'tp'])
-            adj_fac['adj_fac'] = adj_fac['attr_k']/adj_fac['attractions']
-            adj_fac = adj_fac.reindex(['lad_zone_id',
-                                       'p',
-                                       'm',
-                                       'tp',
-                                       'adj_fac'], axis=1)
-            adj_fac['adj_fac'] = adj_fac['adj_fac'].replace(np.nan, 1)
-
-            nhb_attr = nhb_attr.merge(adj_fac,
-                                      how = 'left',
-                                      on = ['lad_zone_id',
-                                            'p',
-                                            'm',
-                                            'tp'])
-            nhb_attr['attractions'] = nhb_attr['attractions'] * nhb_attr['adj_fac']
-
-            nhb_attr = nhb_attr.drop(['lad_zone_id', 'adj_fac'], axis=1)
+            # BACKLOG: reliable k-factor adjustment with fixed input
 
         # Write input attractions
         if self.params['export_msoa']:
@@ -699,7 +491,8 @@ class AttractionModel(demand.Pathing):
                     '.csv'),
                 index=False)
 
-        # Aggregate input productions to model zones.
+        # Aggregate input productions to model zones - not yet
+        """
         zonal_hb_attr = self.aggregate_to_model_zones_attr(
             hb_attr,
             model_zone_lookup_path,
@@ -731,5 +524,6 @@ class AttractionModel(demand.Pathing):
             zonal_nhb_attr.to_csv(
                 nhb_out_path,
                 index=False)
+        """
 
-        return zonal_hb_attr, zonal_nhb_attr
+        return hb_attr, nhb_attr

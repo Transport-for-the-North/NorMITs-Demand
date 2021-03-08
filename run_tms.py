@@ -42,7 +42,6 @@ def main(config_path = 'I:/NorMITs Synthesiser/config/'):
     tms_run.project_status = tms_run.project_check()
 
     # BACKLOG: Do this stuff based on the project status
-
     p = pm.ProductionModel(config_path, params_file)
     p.ping_outpath()
     if p.run_dict['hb_p_run'] == '':
@@ -52,6 +51,7 @@ def main(config_path = 'I:/NorMITs Synthesiser/config/'):
     a.ping_outpath()
     if a.run_dict['hb_a_run'] == '':
         a_out = a.run()
+        a.control_to_productions(a_out) # Control hb to hb productions
 
     if p.run_dict['nhb_p']:
         nhb_p_out = p.run_nhb(
