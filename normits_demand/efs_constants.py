@@ -166,10 +166,6 @@ ATTRS_FNAME = '%s_%s_attractions.csv'
 ORIGS_FNAME = '%s_%s_origins.csv'
 DESTS_FNAME = '%s_%s_destinations.csv'
 
-# Year
-LU_POP_FNAME = 'land_use_%s_pop.csv'
-LU_EMP_FNAME = 'land_use_%s_emp.csv'
-
 # Additive growth audit
 PRODS_MG_FNAME = '%s_%s_productions_multiplicative_growth.csv'
 
@@ -269,7 +265,7 @@ TFN_MSOA_SECTOR_LOOKUPS = {
 #  labels: EFS, demand merge
 
 # RUNNING CONSTANTS
-MODEL_NAME = 'noham'
+MODEL_NAME = 'norms'
 
 # YEARS
 BASE_YEAR = 2018

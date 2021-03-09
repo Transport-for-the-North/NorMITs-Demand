@@ -65,7 +65,3 @@ Code has been refactored in this version - ready for merge with TMS
 - Changed NTEM scenario future year growth for productions to match other scenarios.
 Only constrained in base year, and multiplicative growth on top.
 
-### v0.3.3
-- Removed pop/emp growth from EFS. Future year population and employment
-is now read in straight from NorMITs Land Use.
-

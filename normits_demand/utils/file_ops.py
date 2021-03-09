@@ -166,7 +166,7 @@ def read_df(path: nd.PathLike, index_col=None, **kwargs) -> pd.DataFrame:
         return df
 
     elif pathlib.Path(path).suffix == '.csv':
-        return pd.read_csv(path, index_col=index_col, **kwargs)
+        return pd.read_csv(path, **kwargs)
 
     else:
         raise ValueError(

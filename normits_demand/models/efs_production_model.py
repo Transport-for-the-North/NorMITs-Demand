@@ -1,33 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-Created on: Mon Dec  9 12:13:07 2019
-Updated on:
+Created on Mon Dec  9 12:13:07 2019
 
-Original author: Ben Taylor
-Last update made by:
-Other updates made by:
-
-File purpose:
-EFS Production Model
+@author: Sneezy
 """
-# Builtins
+
 import os
+import sys
 import warnings
 import operator
-from functools import reduce
+
+import numpy as np
+import pandas as pd
 
 from typing import List
 from typing import Dict
 from typing import Tuple
 from typing import Callable
 
-# Third Party
-import numpy as np
-import pandas as pd
+from functools import reduce
+
 from tqdm import tqdm
 
-# Local Imports
-import normits_demand as nd
 from normits_demand import efs_constants as consts
 
 from normits_demand.utils import general as du
@@ -38,6 +32,11 @@ from normits_demand.d_log import processor as dlog_p
 from normits_demand.concurrency import multiprocessing
 from normits_demand.constraints import ntem_control as ntem
 
+# TODO: Move functions that can be static elsewhere.
+#  Maybe utils?
+
+# TODO: Tidy up the no longer needed functions -
+#  Production model was re-written to use TMS method
 
 # BACKLOG: Integrate EFS Production Model into TMS trip end models
 #  labels: EFS, demand merge
@@ -90,17 +89,16 @@ class EFSProductionGenerator:
             base_year: str,
             future_years: List[str],
 
+            # Population growth
+            population_growth: pd.DataFrame,
+            population_constraint: pd.DataFrame,
+
             # Build I/O paths
             import_home: str,
             export_home: str,
 
-            # Population data
-            by_pop_import_path: nd.PathLike,
-            pop_constraint: pd.DataFrame,
-            fy_pop_import_dir: nd.PathLike = None,
-
-
             # Alternate population/production creation files
+            lu_import_path: str = None,
             trip_rates_path: str = None,
             time_splits_path: str = None,
             mean_time_splits_path: str = None,
@@ -114,7 +112,7 @@ class EFSProductionGenerator:
             ntem_control_dir: str = None,
             lad_lookup_dir: str = None,
             control_productions: bool = True,
-            control_fy_productions: bool = False,
+            control_fy_productions: bool = True,
 
             # D-Log
             dlog: str = None,
@@ -128,6 +126,9 @@ class EFSProductionGenerator:
             m_needed: List[int] = consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
+            lu_year: int = 2018,
+            no_neg_growth: bool = True,
+            population_infill: float = 0.001,
 
             # Handle outputs
             audits: bool = True,
@@ -161,16 +162,12 @@ class EFSProductionGenerator:
         future_years:
             The future years to forecast.
 
-        by_pop_import_path:
-            Path to the file containing the NorMITs Land Use outputs
-            for vase year population estimates.
+        population_growth:
+            dataframe containing the future year growth values for
+            growing the base year population. Must be segmented by the same
+            zoning system (at least) as land use data (usually msoa_zone_id).
 
-        fy_pop_import_dir:
-            Path to the directory containing the NorMITs Land Use outputs
-            for future year population estimates. The filenames will
-            be automatically generated based on consts.LU_POP_FNAME
-
-        pop_constraint:
+        population_constraint:
             TODO: Need to clarify if population constrain is still needed,
              where the values come from, and how exactly the constrainer works.
 
@@ -183,6 +180,10 @@ class EFSProductionGenerator:
             usually related to a specific run of the ExternalForecastSystem,
             and should be gotten from there using generate_output_paths().
             e.g. 'E:/NorMITs Demand/norms_2015/v2_3-EFS_Output/iter1'
+
+        lu_import_path:
+            The path to alternate land use import data. If left as None, the
+            production model will use the default land use data.
 
         trip_rates_path:
             The path to alternate trip rates data. If left as None, the
@@ -252,6 +253,20 @@ class EFSProductionGenerator:
             model. This is used to make sure this model can translate to the
             zoning name used internally in land_use and trip_rates data.
 
+        lu_year:
+            Which year the land_use data has been generated for. At the moment,
+            if this is different to the base year and error is thrown. Used as
+            a safety measure to make sure the user is warned if the base year
+            changes without the land use.
+
+        no_neg_growth:
+            Whether to ensure there is no negative growth. If True, any growth
+            values below 0 will be replaced with population_infill.
+
+        population_infill:
+            If no_neg_growth is True, this value will be used to replace all
+            values that are less than 0.
+
         audits:
             Whether to output print_audits to the terminal during running. This can
             be used to monitor the population and production numbers being
@@ -296,16 +311,26 @@ class EFSProductionGenerator:
 
         # Fix column naming if different
         if external_zone_col != self.zone_col:
+            population_growth = population_growth.copy().rename(
+                columns={external_zone_col: self.zone_col}
+            )
             designated_area = designated_area.copy().rename(
                 columns={external_zone_col: self.zone_col}
             )
-            pop_constraint = pop_constraint.rename(
+            population_constraint = population_constraint.rename(
                 columns={external_zone_col: self.zone_col}
             )
+
+        # TODO: Deal with case where land use year and base year don't match
+        if str(lu_year) != str(base_year):
+            raise ValueError("The base year and land use year are not the "
+                             "same. Don't know how to deal with that at the"
+                             "moment.")
 
         # Build paths to the needed files
         imports = build_production_imports(
             import_home=import_home,
+            lu_import_path=lu_import_path,
             trip_rates_path=trip_rates_path,
             time_splits_path=time_splits_path,
             mean_time_splits_path=mean_time_splits_path,
@@ -321,14 +346,31 @@ class EFSProductionGenerator:
             audit_write_dir=audit_write_dir
         )
 
-        # # ## READ IN POPULATION DATA ## #
-        print("Loading the population data...")
-        population = get_pop_data_from_land_use(
-            by_pop_import_path=by_pop_import_path,
-            fy_pop_import_dir=fy_pop_import_dir,
+        # ## BASE YEAR POPULATION ## #
+        print("Loading the base year population data...")
+        base_year_pop = get_land_use_data(imports['land_use'],
+                                          segmentation_cols=segmentation_cols)
+        base_year_pop = base_year_pop.rename(columns={'people': base_year})
+
+        # Audit population numbers
+        du.print_w_toggle("Base Year Population: %d"
+                          % base_year_pop[base_year].sum(),
+                          echo=audits)
+
+        # ## FUTURE YEAR POPULATION ## #
+        print("Generating future year population data...")
+        # Merge on all possible segmentations - not years
+        merge_cols = du.intersection(list(base_year_pop), list(population_growth))
+        merge_cols = du.list_safe_remove(merge_cols, all_years)
+
+        population = du.grow_to_future_years(
+            base_year_df=base_year_pop,
+            growth_df=population_growth,
             base_year=base_year,
             future_years=future_years,
-            segmentation_cols=segmentation_cols,
+            no_neg_growth=no_neg_growth,
+            infill=population_infill,
+            growth_merge_cols=merge_cols
         )
 
         # ## PRE D-LOG CONSTRAINT ## #
@@ -336,15 +378,16 @@ class EFSProductionGenerator:
             print("Performing the first constraint on population...")
             print(". Pre Constraint:\n%s" % population[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
-                                                  pop_constraint)
+                                                  population_constraint)
 
             population = dlog_p.constrain_forecast(
                 population,
-                pop_constraint,
+                population_constraint,
                 designated_area,
                 base_year,
                 future_years,
                 self.zone_col,
+                msoa_path=imports['msoa_lookup'],
                 segment_cols=constraint_segments
             )
             print(". Post Constraint:\n%s" % population[future_years].sum())
@@ -378,17 +421,18 @@ class EFSProductionGenerator:
         if post_dlog_constraint:
             print("Performing the post-development log constraint on population...")
             print(". Pre Constraint:\n%s" % population[future_years].sum())
-            print(". Constraint:\n%s" % pop_constraint[future_years].sum())
+            print(". Constraint:\n%s" % population_constraint[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
-                                                  pop_constraint)
+                                                  population_constraint)
 
             population = dlog_p.constrain_forecast(
                 population,
-                pop_constraint,
+                population_constraint,
                 designated_area,
                 base_year,
                 future_years,
                 self.zone_col,
+                msoa_path=imports['msoa_lookup'],
                 segment_cols=constraint_segments
             )
             print(". Post Constraint:\n%s" % population[future_years].sum())
@@ -477,6 +521,398 @@ class EFSProductionGenerator:
         productions.to_csv(path, index=False)
 
         return productions
+
+    def grow_population(self,
+                        population_values: pd.DataFrame,
+                        population_growth: pd.DataFrame,
+                        base_year: str = None,
+                        future_years: List[str] = List[None],
+                        growth_merge_col: str = 'msoa_zone_id'
+                        ) -> pd.DataFrame:
+        # TODO: Write grow_population() doc
+        # Init
+        all_years = [base_year] + future_years
+
+        print("Adjusting population growth to base year...")
+        population_growth = du.convert_growth_off_base_year(
+            population_growth,
+            base_year,
+            future_years
+        )
+
+        print("Growing population from base year...")
+        grown_population = du.get_growth_values(
+            population_values,
+            population_growth,
+            base_year,
+            future_years,
+            merge_cols=growth_merge_col
+        )
+
+        # Make sure there is no minus growth
+        for year in all_years:
+            mask = (grown_population[year] < 0)
+            grown_population.loc[mask, year] = self.pop_infill
+
+        # Add base year back in to get full grown values
+        grown_population = du.growth_recombination(
+            grown_population,
+            base_year_col=base_year,
+            future_year_cols=future_years,
+            drop_base_year=False
+        )
+
+        return grown_population
+
+    def production_generation(self,
+                              population: pd.DataFrame,
+                              area_type: pd.DataFrame,
+                              trip_rate: pd.DataFrame,
+                              year_list: List[str]
+                              ) -> pd.DataFrame:
+        """
+        #TODO
+        """
+        population = population.copy()
+        area_type = area_type.copy()
+        trip_rate = trip_rate.copy()
+
+        # Multiple Population zones belong to each MSOA area  type
+        population = pd.merge(
+            population,
+            area_type,
+            on=["model_zone_id"]
+        )
+
+        # Calculate the trips of each traveller in an area, based on
+        # their trip rates
+        trips = pd.merge(
+            population,
+            trip_rate,
+            on=["traveller_type_id", "area_type_id"],
+            suffixes=("", "_trip_rate")
+        )
+        for year in year_list:
+            trips.loc[:, year] = trips[year] * trips[year + "_trip_rate"]
+
+        # Extract just the needed columns
+        group_by_cols = [
+            "model_zone_id",
+            "purpose_id",
+            "traveller_type_id",
+            "soc",
+            "ns",
+            "area_type_id"
+        ]
+        needed_columns = group_by_cols.copy()
+        needed_columns.extend(year_list)
+        trips = trips[needed_columns]
+
+        productions = trips.groupby(
+            by=group_by_cols,
+            as_index=False
+        ).sum()
+
+        return productions
+
+    def convert_to_average_weekday(self,
+                                   production_dataframe: pd.DataFrame,
+                                   all_years: List[str]
+                                   ) -> pd.DataFrame:
+        """
+        #TODO
+        """
+        output_dataframe = production_dataframe.copy()
+
+        for year in all_years:
+            output_dataframe.loc[:, year] = output_dataframe.loc[:, year] / 5
+
+        return output_dataframe
+
+    def population_grower(self,
+                          population_growth: pd.DataFrame,
+                          population_values: pd.DataFrame,
+                          base_year: str,
+                          year_string_list: List[str]
+                          ) -> pd.DataFrame:
+        # get population growth from base year
+        print("Adjusting population growth to base year...")
+        population_growth = du.convert_growth_off_base_year(
+                population_growth,
+                base_year,
+                year_string_list
+                )
+        print("Adjusted population growth to base year!")
+
+        print("Growing population from base year...")
+        grown_population = du.get_growth_values(
+            population_values,
+            population_growth,
+            base_year,
+            year_string_list
+        )
+        print("Grown population from base year!")
+        
+        return grown_population
+            
+    def households_grower(self,
+                         households_growth: pd.DataFrame,
+                         households_values: pd.DataFrame,
+                         base_year: str,
+                         year_string_list: List[str]
+                         ) -> pd.DataFrame:
+        
+        households_growth = households_growth.copy()
+        households_values = households_values.copy()
+        print("Adjusting households growth to base year...")
+        households_growth = du.convert_growth_off_base_year(
+                households_growth,
+                base_year,
+                year_string_list
+                )
+        print("Adjusted households growth to base year!")
+        
+        print("Growing households from base year...")
+        grown_households = self.get_grown_values(households_values,
+                                                 households_growth,
+                                                 "base_year_households",
+                                                 year_string_list)
+        print("Grown households from base year!")
+        
+        return grown_households
+
+    
+    def split_housing(self,
+                      households_dataframe: pd.DataFrame,
+                      housing_split_dataframe: pd.DataFrame,
+                      base_year_string: str,
+                      all_years: List[str]
+                      ) -> pd.DataFrame:
+        households_dataframe = households_dataframe.copy()
+        housing_split_dataframe = housing_split_dataframe.copy()
+        
+        split_households_dataframe = pd.merge(
+                households_dataframe,
+                housing_split_dataframe,
+                on = ["model_zone_id"],
+                suffixes = {"", "_split"}
+                )
+
+        # Calculate the number of houses belonging to each split
+        split_households_dataframe["base_year_households"] = (
+                split_households_dataframe["base_year_households"]
+                *
+                split_households_dataframe[base_year_string + "_split"]
+                )
+        
+        for year in all_years:
+            # we iterate over each zone
+            split_households_dataframe[year] = (
+                    split_households_dataframe[year]
+                    *
+                    split_households_dataframe[year + "_split"]
+                    )
+
+        # extract just the needed columns
+        required_columns = [
+                "model_zone_id",
+                "property_type_id",
+                "base_year_households"
+                ]
+        required_columns.extend(all_years)
+        split_households_dataframe = split_households_dataframe[required_columns]
+
+        return split_households_dataframe
+    
+    def split_population(self,
+                      population_dataframe: pd.DataFrame,
+                      population_split_dataframe: pd.DataFrame,
+                      base_year_string: str,
+                      all_years: List[str]
+                      ) -> pd.DataFrame:
+        population_dataframe = population_dataframe.copy()
+        population_split_dataframe = population_split_dataframe.copy()
+        
+        split_population_dataframe = pd.merge(
+                population_dataframe,
+                population_split_dataframe,
+                on = ["model_zone_id", "property_type_id"],
+                suffixes = {"", "_split"}
+                )
+                
+        split_population_dataframe["base_year_population"] = (
+                split_population_dataframe["base_year_population"]
+                *
+                split_population_dataframe[base_year_string + "_split"]
+                )
+        
+        for year in all_years:
+            # we iterate over each zone
+            # create zone mask
+            split_population_dataframe[year] = (
+                    split_population_dataframe[year]
+                    *
+                    split_population_dataframe[year + "_split"]
+                    )
+
+        # Extract the required columns
+        required_columns = [
+                "model_zone_id",
+                "property_type_id",
+                "traveller_type_id",
+                "base_year_population"
+                ]
+        required_columns.extend(all_years)
+        split_population_dataframe = split_population_dataframe[required_columns]
+
+        return split_population_dataframe
+    
+    def generate_housing_occupancy(self,
+                                   households_dataframe: pd.DataFrame,
+                                   housing_occupancy_dataframe: pd.DataFrame,
+                                   base_year_string: str,
+                                   all_years: List[str]
+                                   ) -> pd.DataFrame:
+        """
+        #TODO
+        """
+        households_dataframe = households_dataframe.copy()
+        housing_occupancy_dataframe = housing_occupancy_dataframe.copy()
+        
+        households_population = pd.merge(
+                households_dataframe,
+                housing_occupancy_dataframe,
+                on = ["model_zone_id", "property_type_id"],
+                suffixes = {"", "_occupancy"}
+                )
+        
+        households_population["base_year_population"] = (
+                households_population["base_year_households"]
+                *
+                households_population[base_year_string + "_occupancy"]
+                )
+        
+        pop_columns = [
+                "model_zone_id",
+                "property_type_id",
+                "base_year_population"
+                ]
+        pop_dictionary = {}
+        
+        for year in all_years:
+            households_population[year + "_population"] = (
+                    households_population[year]
+                    *
+                    households_population[year + "_occupancy"]
+                    )
+            pop_columns.append(year + "_population")
+            pop_dictionary[year + "_population"] = year
+
+        # Extract just the needed columns and rename to years
+        households_population = households_population[pop_columns]
+        households_population = households_population.rename(columns=pop_dictionary)
+        
+        return households_population
+    
+    def development_log_house_generator(self,
+                                        development_log: pd.DataFrame,
+                                        development_log_split: pd.DataFrame,
+                                        minimum_development_certainty: str,
+                                        all_years: List[str]
+                                        ) -> pd.DataFrame:
+        """
+        #TODO
+        """
+        development_log = development_log.copy()
+        development_log_split = development_log_split.copy()
+        
+        development_log = development_log[
+                development_log["dev_type"] == "Housing"
+                ]
+        
+        webtag_certainty_bounds = self.tag_certainty_bounds[
+                minimum_development_certainty
+                ]
+        
+        development_log["used"] = False 
+        
+        for webtag_certainty in webtag_certainty_bounds:
+            mask = (development_log["webtag_certainty"] == webtag_certainty)
+            development_log.loc[
+                    mask,
+                    "used"
+                    ] = True
+        
+        required_columns = [
+                "model_zone_id"
+                ]
+        
+        required_columns.extend(all_years)
+        
+        development_log = development_log[
+                development_log["used"] == True
+                ]
+        
+        development_log = development_log[required_columns]
+        
+        development_households = pd.merge(
+                development_log,
+                development_log_split,
+                on = ["model_zone_id"],
+                suffixes = {"", "_split"}
+                )
+        
+        for year in all_years:
+            # we iterate over each zone
+            development_households[year] = (
+                    development_households[year]
+                    *
+                    development_households[year + "_split"]
+                    )
+        
+        required_columns = [
+                "model_zone_id",
+                "property_type_id"
+                ]
+        
+        required_columns.extend(all_years)        
+        
+        development_households = development_households[required_columns]
+        
+        development_households = development_households.groupby(
+                by = [
+                        "model_zone_id",
+                        "property_type_id"
+                        ],
+                as_index = False
+                ).sum()
+        
+        return development_households
+    
+    def combine_households_and_developments(self,
+                                            split_households: pd.DataFrame,
+                                            split_developments: pd.DataFrame
+                                            ) -> pd.DataFrame:
+        """
+        #TODO
+        """
+        split_households = split_households.copy()
+        split_developments = split_developments.copy()
+        
+        combined_households = split_households.append(
+                split_developments,
+                ignore_index = True
+                )
+        
+        combined_households = combined_households.groupby(
+                by = [
+                        "model_zone_id",
+                        "property_type_id"
+                        ],
+                as_index = False
+                ).sum()
+        
+        return combined_households
 
 
 class NhbProductionModel:
@@ -1320,6 +1756,7 @@ def _gen_base_productions_internal(area_type,
 
 
 def build_production_imports(import_home: str,
+                             lu_import_path: str = None,
                              trip_rates_path: str = None,
                              time_splits_path: str = None,
                              mean_time_splits_path: str = None,
@@ -1339,6 +1776,10 @@ def build_production_imports(import_home: str,
     import_home:
         The base path to base all of the other import paths from. This
         should usually be "Y:/NorMITs Demand/import" for default inputs.
+
+    lu_import_path:
+        An alternate land use import path to use. File will need to follow the
+        same format as default file.
 
     trip_rates_path:
         An alternate trip rates import path to use. File will need to follow the
@@ -1385,6 +1826,10 @@ def build_production_imports(import_home: str,
         'lad_lookup',
     """
     # Set all unset import paths to default values
+    if lu_import_path is None:
+        path = 'land use\land_use_output_msoa.csv'
+        lu_import_path = os.path.join(import_home, path)
+
     if trip_rates_path is None:
         path = 'tfn_segment_production_params\hb_trip_rates.csv'
         trip_rates_path = os.path.join(import_home, path)
@@ -1415,6 +1860,7 @@ def build_production_imports(import_home: str,
 
     # Assign to dict
     imports = {
+        'land_use': lu_import_path,
         'trip_rates': trip_rates_path,
         'time_splits': time_splits_path,
         'mean_time_splits': mean_time_splits_path,
@@ -1483,37 +1929,26 @@ def build_production_exports(export_home: str,
     return exports
 
 
-def get_pop_data_from_land_use(by_pop_import_path: nd.PathLike,
-                               base_year: str,
-                               fy_pop_import_dir: nd.PathLike = None,
-                               future_years: List[str] = None,
-                               segmentation_cols: List[str] = None,
-                               lu_zone_col: str = 'msoa_zone_id',
-                               base_year_data_col: str = 'people',
-                               dtype: Dict[str, np.dtype] = None,
-                               ) -> pd.DataFrame:
+def get_land_use_data(land_use_path: str,
+                      msoa_path: str = None,
+                      segmentation_cols: List[str] = None,
+                      lu_zone_col: str = 'msoa_zone_id'
+                      ) -> pd.DataFrame:
     """
-    Reads in land use outputs and aggregates up to segmentation_cols.
-
-    Combines all the dataframe from each into a single dataframe.
+    Reads in land use outputs and aggregates up to land_use_cols
 
     Parameters
     ----------
-    by_pop_import_path:
-        Path to the file containing base year population data.
+    land_use_path:
+        Path to the land use output file to import
 
-    base_year:
-        The base year. The year the data in by_pop_import_path was created
-        for.
-
-    fy_pop_import_dir:
-        Path to the land use directory containing population data for future years
-
-    future_years:
-        The future years of population data to read in.
+    msoa_path:
+        Path to the msoa file for converting from msoa string ids to
+        integer ids. If left as None, then MSOA codes are returned instead
 
     segmentation_cols:
-        The columns to keep in the land use data. If None, defaults to:
+        The columns to keep in the land use data. Must include. If None,
+        defaults to:
          [
             'area_type',
             'traveller_type',
@@ -1524,29 +1959,13 @@ def get_pop_data_from_land_use(by_pop_import_path: nd.PathLike,
     lu_zone_col:
         The name of the column in the land use data that refers to the zones.
 
-    base_year_data_col:
-        The name of the column in by_pop_import_path that contains the
-        base year population figures.
-
-    dtype:
-        The data types to assign to columns in the read in data. Follows the
-        same format as dtypes argument in pd.read_csv()
-
     Returns
     -------
     population:
-        A dataframe of population data for all years segmented by
-        segmentation_cols. Will also include lu_zone_col and year cols
-        from land use.
+        Population data segmented by segmentation_cols. Will also include
+        lu_zone_col and people cols from land use.
     """
     # Init
-    future_years = list() if future_years is None else future_years
-
-    all_years = [base_year] + future_years
-
-    if dtype is None:
-        dtype = {'soc': int, 'ns': int}
-
     if segmentation_cols is None:
         # Assume full segmentation if not told otherwise
         segmentation_cols = [
@@ -1556,47 +1975,34 @@ def get_pop_data_from_land_use(by_pop_import_path: nd.PathLike,
             'ns',
             'ca'
         ]
-    group_cols = [lu_zone_col] + segmentation_cols
+    land_use_cols = [lu_zone_col] + segmentation_cols + ['people']
 
-    all_pop_ph = list()
-    for year in all_years:
+    # Set up the columns to keep
+    group_cols = land_use_cols.copy()
+    group_cols.remove('people')
 
-        # Read in the dataframe - different if base year
-        if year == base_year:
-            year_pop = pd.read_csv(by_pop_import_path, dtype=dtype)
-            year_pop = year_pop.rename(columns={base_year_data_col: base_year})
-        else:
-            # Build the path to this years data
-            fname = consts.LU_POP_FNAME % str(year)
-            lu_path = os.path.join(fy_pop_import_dir, fname)
-            year_pop = pd.read_csv(lu_path, dtype=dtype)
+    # Read in Land use
+    with warnings.catch_warnings():
+        warnings.simplefilter(action='ignore')
+        dtypes = {'soc': str, 'ns': str}
+        land_use = pd.read_csv(land_use_path, dtype=dtypes)
 
-        # ## FILTER TO JUST THE DATA WE NEED ## #
-        # Set up the columns to keep
-        index_cols = group_cols.copy() + [year]
+    # Drop a lot of columns, group and sum the remaining
+    land_use = land_use.reindex(land_use_cols, axis=1)
+    land_use = land_use.groupby(group_cols).sum().reset_index()
+    land_use = land_use.sort_values(land_use_cols).reset_index(drop=True)
+    del group_cols
 
-        # Check all columns exist
-        year_pop_cols = list(year_pop)
-        for col in index_cols:
-            if col not in year_pop_cols:
-                raise nd.NormitsDemandError(
-                    "Tried to read in population data from NorMITs Land Use "
-                    "for year %s. Cannot find all the needed columns in the "
-                    "data. Specifically, column %s does not exist."
-                    % (year, col)
-                )
+    # Convert to msoa zone numbers if needed
+    if msoa_path is not None:
+        land_use = du.convert_msoa_naming(
+            land_use,
+            msoa_col_name=lu_zone_col,
+            msoa_path=msoa_path,
+            to='int'
+        )
 
-        # Filter down
-        year_pop = year_pop.reindex(columns=index_cols)
-        year_pop = year_pop.groupby(group_cols).sum().reset_index()
-
-        all_pop_ph.append(year_pop)
-
-    # Can't merge if there is only one dataframe!
-    if len(all_pop_ph) == 1:
-        return all_pop_ph[0]
-
-    return du.merge_df_list(all_pop_ph, on=group_cols)
+    return land_use
 
 
 def merge_pop_trip_rates(population: pd.DataFrame,
@@ -1642,6 +2048,20 @@ def merge_pop_trip_rates(population: pd.DataFrame,
 
     audit_out:
         The directory to write out any audit files produced.
+
+    control_path:
+        Path to the file containing the data to control the produced
+        productions to. If left as None, no control will be carried out.
+
+
+    lad_lookup_dir:
+        Path to the file containing the conversion from msoa zoning to LAD
+        zoning, to be used for controlling the productions. If left as None, no
+        control will be carried out.
+
+    lad_lookup_name:
+        The name of the file in lad_lookup_dir that contains the msoa zoning
+        to LAD zoning conversion.
 
     tp_needed:
         A list of the time periods to split the productions by.

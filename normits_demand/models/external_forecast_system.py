@@ -60,17 +60,13 @@ class ExternalForecastSystem:
                  scenario_name: str,
 
                  integrate_dlog: bool = False,
-                 run_pop_emp_comparison: bool = True,
 
                  dlog_pop_path: str = None,
                  dlog_emp_path: str = None,
 
-                 import_home: str = "I:/",
+                 import_home: str = "Y:/",
                  export_home: str = "E:/",
-
-                 land_use_drive: str = "Y:/",
-                 land_use_iteration: str = 'iter3b',
-                 verbose: str = True,
+                 verbose: str = True
                  ):
         # TODO: Write EFS constructor docs
         # Initialise the timer
@@ -84,13 +80,9 @@ class ExternalForecastSystem:
         self.iter_name = du.create_iter_name(iter_num)
         self.scenario_name = du.validate_scenario_name(scenario_name)
         self.integrate_dlog = integrate_dlog
-        self.run_pop_emp_comparison = run_pop_emp_comparison
         self.import_location = import_home
         self.output_location = export_home
         self.verbose = verbose
-
-        self.land_use_iteration = land_use_iteration
-        self.land_use_drive = land_use_drive
 
         # TODO: Write function to determine if CA is needed for model_names
         # TODO: Write function to determine if from/to PCU is needed for model_names
@@ -99,6 +91,8 @@ class ExternalForecastSystem:
         if self.model_name == 'noham':
             self.is_ca_needed = False
             self.uses_pcu = True
+
+
 
         self.input_zone_system = "MSOA"
         self.output_zone_system = self.model_name
@@ -545,7 +539,6 @@ class ExternalForecastSystem:
         print("Initialising outputs...")
         write_input_info(
             os.path.join(self.exports['home'], "input_parameters.txt"),
-            self.__version__,
             base_year,
             future_years,
             self.output_zone_system,
@@ -589,9 +582,8 @@ class ExternalForecastSystem:
         production_trips = self.production_generator.run(
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
-            by_pop_import_path=self.imports['pop_by'],
-            fy_pop_import_dir=self.imports['land_use_fy_dir'],
-            pop_constraint=pop_constraint,
+            population_growth=pop_growth,
+            population_constraint=pop_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],
             msoa_lookup_path=self.imports['zone_translation']['msoa_str_int'],
@@ -615,9 +607,8 @@ class ExternalForecastSystem:
             out_path=self.exports['attractions'],
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
-            by_emp_import_path=self.imports['emp_by'],
-            fy_emp_import_dir=self.imports['land_use_fy_dir'],
-            emp_constraint=emp_constraint,
+            employment_growth=emp_growth,
+            employment_constraint=emp_constraint,
             import_home=self.imports['home'],
             export_home=self.exports['home'],
             msoa_lookup_path=self.imports['zone_translation']['msoa_str_int'],
@@ -644,26 +635,27 @@ class ExternalForecastSystem:
         emp_path = os.path.join(self.exports['attractions'],
                                 self.attraction_generator.emp_fname)
 
-        if self.run_pop_emp_comparison:
-            # Build the comparators
-            pop_comp = pop_emp_comparator.PopEmpComparator(
-                **self.pop_emp_inputs['population'],
-                output_csv=pop_path,
-                data_type='population',
-                base_year=str(base_year),
-                verbose=self.verbose
-            )
-            emp_comp = pop_emp_comparator.PopEmpComparator(
-                **self.pop_emp_inputs['employment'],
-                output_csv=emp_path,
-                data_type='employment',
-                base_year=str(base_year),
-                verbose=self.verbose
-            )
+        # TODO: Add toggle to turn pop/emp comparator on/off
 
-            # Write comparisons to disk
-            pop_comp.write_comparisons(self.exports['reports'], 'csv', True)
-            emp_comp.write_comparisons(self.exports['reports'], 'csv', True)
+        # Build the comparators
+        pop_comp = pop_emp_comparator.PopEmpComparator(
+            **self.pop_emp_inputs['population'],
+            output_csv=pop_path,
+            data_type='population',
+            base_year=str(base_year),
+            verbose=self.verbose
+        )
+        emp_comp = pop_emp_comparator.PopEmpComparator(
+            **self.pop_emp_inputs['employment'],
+            output_csv=emp_path,
+            data_type='employment',
+            base_year=str(base_year),
+            verbose=self.verbose
+        )
+
+        # Write comparisons to disk
+        pop_comp.write_comparisons(self.exports['reports'], 'csv', True)
+        emp_comp.write_comparisons(self.exports['reports'], 'csv', True)
 
         last_time = current_time
         current_time = time.time()
@@ -1648,8 +1640,6 @@ class ExternalForecastSystem:
             scenario_name=self.scenario_name,
             demand_version=self.__version__,
             demand_dir_name=self.out_dir,
-            land_use_iteration=self.land_use_iteration,
-            land_use_drive=self.land_use_drive,
         )
 
 
@@ -1683,8 +1673,7 @@ def _input_checks(iter_num: int = None,
                 )
 
 
-def write_input_info(output_path: str,
-                     efs_version: str,
+def write_input_info(output_path,
                      base_year: int,
                      future_years: List[int],
                      desired_zoning: str,
@@ -1709,7 +1698,6 @@ def write_input_info(output_path: str,
                      ) -> None:
 
     out_lines = [
-        'EFS version: ' + str(efs_version),
         'Run Date: ' + str(time.strftime('%D').replace('/', '_')),
         'Start Time: ' + str(time.strftime('%T').replace('/', '_')),
         "Base Year: " + str(base_year),

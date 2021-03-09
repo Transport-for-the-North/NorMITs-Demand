@@ -36,9 +36,7 @@ def main():
         export_home=export_home,
     )
 
-    auditor.run(
-        run_raw_vector_report=True,
-    )
+    auditor.run()
 
 
 if __name__ == "__main__":
