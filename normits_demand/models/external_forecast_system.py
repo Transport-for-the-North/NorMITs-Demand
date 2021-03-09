@@ -547,7 +547,7 @@ class ExternalForecastSystem:
         print("Initialising outputs...")
         write_input_info(
             os.path.join(self.exports['home'], "input_parameters.txt"),
-            self.__version__,
+            version.__version__,
             base_year,
             future_years,
             self.output_zone_system,
@@ -1509,13 +1509,13 @@ class ExternalForecastSystem:
                 print("WARNING: Not decompiling Norms matrices!!!")
                 return
 
-            # decompilation.decompile_norms(
-            #     year=year,
-            #     post_me_import=self.imports['post_me_matrices'],
-            #     post_me_renamed_export=self.exports['post_me']['vdm_pa_24'],
-            #     post_me_decompiled_export=self.exports['post_me']['pa_24'],
-            #     decompile_factors_dir=self.params['compile'],
-            # )
+            decompilation.decompile_norms(
+                year=year,
+                post_me_import=self.imports['post_me_matrices'],
+                post_me_renamed_export=self.exports['post_me']['vdm_pa_24'],
+                post_me_decompiled_export=self.exports['post_me']['pa_24'],
+                decompile_factors_dir=self.params['compile'],
+            )
 
             # Copy all of our outputs into the observed import location
             if make_new_observed:

@@ -355,3 +355,97 @@ def copy_all_files(import_dir: nd.PathLike,
         # Read in, then write out as csv
         df = read_df(in_path)
         write_df(df, out_path)
+
+
+def remove_from_fname(path: nd.PathLike,
+                      to_remove: str,
+                      ) -> pathlib.Path:
+    """
+    Returns path without to_remove in it
+
+    Parameters
+    ----------
+    path:
+        The path to edit
+
+    to_remove:
+        The string to remove from path.
+
+    Returns
+    -------
+    path:
+        path without to_remove in it
+    """
+    # Init
+    path = cast_to_pathlib_path(path)
+
+    # Get a version of the filename without the suffix
+    new_fname = path.stem.replace(to_remove, '')
+
+    return path.parent / (new_fname + path.suffix)
+
+
+def add_to_fname(path: nd.PathLike,
+                 to_add: str,
+                 ) -> pathlib.Path:
+    """
+    Returns path with to_add in it
+
+    Parameters
+    ----------
+    path:
+        The path to edit
+
+    to_add:
+        The string to add to the end of path (before the file type extension).
+
+    Returns
+    -------
+    path:
+        path with to_add in it
+    """
+    # Init
+    path = cast_to_pathlib_path(path)
+
+    # Get a version of the filename without the suffix
+    new_fname = path.stem + to_add
+
+    return path.parent / (new_fname + path.suffix)
+
+
+def remove_internal_suffix(path: nd.PathLike) -> pathlib.Path:
+    """
+    Returns path without the internal suffix in it.
+
+    The internal suffix comes from consts.INTERNAL_SUFFIX
+
+    Parameters
+    ----------
+    path:
+        The path to remove the internal suffix from
+
+    Returns
+    -------
+    path:
+        path without the internal suffix in it
+    """
+    return remove_from_fname(path, consts.INTERNAL_SUFFIX)
+
+
+def add_external_suffix(path: nd.PathLike) -> pathlib.Path:
+    """
+    Returns path with the external suffix added to it
+
+    The external suffix comes from consts.EXTERNAL_SUFFIX
+
+    Parameters
+    ----------
+    path:
+        The path to edit
+
+    Returns
+    -------
+    path:
+        path with the external suffix added
+    """
+    return add_to_fname(path, consts.EXTERNAL_SUFFIX)

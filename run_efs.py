@@ -28,15 +28,15 @@ def main():
     integrate_dlog = False
     run_pop_emp_comparison = False
 
-    run_base_efs = True
-    recreate_productions = False
-    recreate_attractions = False
+    run_base_efs = False
+    recreate_productions = True
+    recreate_attractions = True
     recreate_nhb_productions = True
 
     run_bespoke_zones = False
     run_hb_pa_to_od = False
     run_compile_od = False
-    run_decompile_post_me = False
+    run_decompile_post_me = True
     run_future_year_compile_od = False
 
     # Controls I/O

@@ -21,6 +21,9 @@ COMPRESSION_SUFFIX = '.pbz2'
 
 
 # TODO: Parse norms input names in a function to generate this!!!
+INTERNAL_SUFFIX = '_int'
+EXTERNAL_SUFFIX = '_ext'
+
 NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING = {
     'HB_W_CA_int': ['HBWCA_Int'],
     'HB_W_NCA_int': ['HBWNCA_Int'],
