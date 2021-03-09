@@ -43,20 +43,19 @@ def main(config_path = 'I:/NorMITs Synthesiser/config/'):
 
     # BACKLOG: Do this stuff based on the project status
     p = pm.ProductionModel(config_path, params_file)
+
+    hb_p_out = p.run_hb(verbose=True)
     p.ping_outpath()
-    if p.run_dict['hb_p_run'] == '':
-        hb_p_out = p.run_hb(verbose=True)
 
     a = am.AttractionModel(config_path, params_file)
+    a_out = a.run(trip_origin='hb',
+                  control_to_productions = True,
+                  productions_path = p.export['in_hb'])
     a.ping_outpath()
-    if a.run_dict['hb_a_run'] == '':
-        a_out = a.run()
-        a.control_to_productions(a_out) # Control hb to hb productions
 
-    if p.run_dict['nhb_p']:
-        nhb_p_out = p.run_nhb(
-            production_vector=p.export['out_hb'],
-            attraction_vector=a.export['out_hb'])
+    nhb_p_out = p.run_nhb(
+        production_vector=p.export['out_hb'],
+        attraction_vector=a.export['out_hb'])
 
     # Delete trip end models
     del p, a

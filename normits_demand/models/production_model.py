@@ -384,28 +384,28 @@ class ProductionModel(demand.Pathing):
             output_f,
             'hb_productions_' +
             self.params['land_use_zoning'].lower() +
-            '.csv')
+            '.pbz2')
 
         in_nhb = os.path.join(
             output_dir,
             output_f,
             'nhb_productions_' +
             self.params['land_use_zoning'] +
-            '.csv')
+            '.pbz2')
 
         out_hb = os.path.join(
             output_dir,
             output_f,
             'hb_productions_' +
             self.params['model_zoning'].lower() +
-            '.csv')
+            '.pbz2')
 
         out_nhb = os.path.join(
             output_dir,
             output_f,
             'nhb_productions_' +
             self.params['model_zoning'].lower() +
-            '.csv')
+            '.pbz2')
 
         if not os.path.exists(in_hb):
             in_hb = ''
@@ -828,13 +828,14 @@ class ProductionModel(demand.Pathing):
 
         # Export outputs with full segmentation
         if self.params['export_msoa']:
-            com.dat_out(
+            com.write_out(
+                msoa_output,
                 os.path.join(
                     output_dir,
                     output_f,
                     'hb_productions_' +
-                    self.params['land_use_zoning'].lower()),
-                msoa_output)
+                    self.params['land_use_zoning'].lower())
+                )
 
         # Aggregate to target model zones
         # Don't do this. It fails to often. NHB should be based off MSOA.

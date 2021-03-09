@@ -12,7 +12,8 @@ import normits_demand.build.pathing as demand
 
 import normits_demand.trip_end_constants as tec
 
-from normits_demand.utils import utils as nup  # Folder build utils
+from normits_demand.utils import utils as nup
+from normits_demand.utils import compress as com
 from normits_demand.constraints import ntem_control as ntem
 from normits_demand.utils.general import safe_dataframe_to_csv
 
@@ -64,9 +65,10 @@ class AttractionModel(demand.Pathing):
 
         return all_msoa
 
-    def profile_attractions(self,
-                            msoa_attractions,
-                            attr_profile):
+    def _profile_attractions(self,
+                             msoa_attractions,
+                             attr_profile,
+                             soc_zero=True):
         """
         Takes an attraction profile defined by an import file in a model folder
         and creates attractions to those segments.
@@ -90,33 +92,41 @@ class AttractionModel(demand.Pathing):
         all_jobs = list(msoa_attractions)
         all_jobs.remove('msoa_zone_id')
 
-        # Count purposes
-        a_count = list(attr_profile['purpose'])
+        # Pivot attraction list
+        attr_profile = attr_profile.melt(
+            id_vars=['purpose', 'ntem_purpose'],
+            var_name='employment_cat',
+            value_name='a_factor'
+        )
 
-        # Build placeholder
-        a_list = []
+        attractions = msoa_attractions.merge(
+            attr_profile,
+            how='left',
+            on=['employment_cat']
+        )
 
-        # Loop over and weight
-        for attraction in a_count:
-            # Make a copy of attractions as placeholder
-            attr_data = msoa_attractions.copy()
+        attractions['2018'] *= attractions['a_factor']
 
-            # Get unique weighting to apply
-            weightings = attr_profile[attr_profile['purpose'] == attraction]
+        attractions = attractions.reindex(
+            ['msoa_zone_id', 'ntem_purpose', 'soc', '2018'],
+            axis=1).groupby(['msoa_zone_id', 'ntem_purpose', 'soc']).sum(
+        ).reset_index()
 
-            for job in all_jobs:
-                print(job)
-                this_weight = weightings[job]
+        # TODO: Just import with p in
+        attractions = attractions.rename(columns={'ntem_purpose': 'p'})
 
-                attr_data.loc[:,job] = attr_data.loc[:,job]*float(this_weight)
-                # TODO: Some audits to make sure nothing is falling out
+        if soc_zero:
+            attractions_s0 = attractions.groupby(
+                ['msoa_zone_id', 'p']).sum().reset_index()
+            attractions_s0['soc'] = 0
 
-            attr_data.loc[:,attraction] = attr_data[all_jobs].sum(axis=1)
-            attr_data = attr_data.drop(all_jobs, axis=1)
+            attractions = pd.concat([attractions, attractions_s0])
+            attractions = attractions.reindex(
+                ['msoa_zone_id', 'p', 'soc', '2018'],
+                axis=1).sort_values(
+                ['msoa_zone_id', 'p', 'soc']).reset_index(drop=True)
 
-            a_list.append(attr_data)
-
-        return(a_list)
+        return attractions
 
     def ping_outpath(self):
 
@@ -173,7 +183,95 @@ class AttractionModel(demand.Pathing):
 
         return export_dict
 
-    def run(self):
+    def _get_attraction_weights(self,
+                                trip_origin: str = 'hb'):
+
+        """
+        :param trip_origin:
+        string of 'hb' or 'nhb'
+        :return:
+        """
+        if trip_origin not in ['hb', 'nhb']:
+            raise ValueError('Invalid trip origin')
+
+        aw_path = os.path.join(
+            self.import_folder,
+            'attraction_params',
+            self.params[trip_origin + '_attraction_weights']
+        )
+
+        att_w = pd.read_csv(aw_path)
+
+        return att_w
+
+    def _get_mode_split(self,
+                        trip_origin='hb'):
+        """:arg
+        """
+
+        mode_split = pd.read_csv(
+            os.path.join(self.import_folder,
+                         'attraction_params',
+                         trip_origin +
+                         '_' +
+                         self.params['attraction_mode_split']))
+        return mode_split
+
+    @staticmethod
+    def _apply_mode_splits(attractions,
+                           mode_splits):
+        """
+        """
+        # TODO: Relativise group and sum cols
+
+        attractions = attractions.merge(
+            mode_splits,
+            how='left',
+            on=['msoa_zone_id', 'p'])
+
+        attractions['2018'] *= attractions['mode_share']
+        attractions = attractions.drop('mode_share', axis=1)
+
+        attractions = attractions.reindex(
+            ['msoa_zone_id', 'p', 'm', 'soc', '2018'],
+            axis=1).groupby(['msoa_zone_id', 'p', 'm', 'soc']).sum(
+        ).reset_index()
+
+        attractions = attractions.sort_values(
+            ['msoa_zone_id', 'p', 'm', 'soc']).reset_index(drop=True)
+
+        return attractions
+
+    def _balance_a_to_p(attractions,
+                        productions,
+                        attr_var_col='2018',
+                        prod_var_col='trips',
+                        zone_col='msoa_zone_id'):
+        """
+        """
+
+        # Get unq p segments
+        unq_seg = list(productions)
+        unq_seg.remove(prod_var_col)
+        unq_seg.remove(zone_col)
+        # TODO: Please Chris, learn to use itertools
+        us_iter = productions.reindex(
+            unq_seg,
+            axis=1).drop_duplicates().reset_index(drop=True)
+
+        for i, row in us_iter.iterrows():
+            print(row)
+
+
+
+
+        return attractions
+
+    def run(self,
+            trip_origin='hb',
+            control_to_productions=False,
+            productions_path=None
+            ):
 
         """
         Function to run the attraction model. Takes a path to a lookup folder
@@ -198,68 +296,6 @@ class AttractionModel(demand.Pathing):
             At target model zoning system.
 
         """
-        # Define employment weighted msoa lookup path
-        model_zone_lookup_path = os.path.join(
-            self.lookup_folder,
-            self.params['model_zoning'].lower() +
-            '_msoa_emp_weighted_lookup.csv')
-
-        """
-        # This was before the soc weighting happened in base
-        if 'soc' in self.params['hb_trip_end_segmentation']:
-            print('Running soc weighting')
-            # If there are TfN segments import the segmentation
-            # BACKLOG: Could be more relative
-            soc_weighted_jobs = pd.read_csv(
-                os.path.join(
-                    self.import_folder,
-                    'attraction_data',
-                    'soc_2_digit_sic_2018.csv'))
-
-            # Make the soc integer a category
-            soc_weighted_jobs['soc_class'] = 'soc' + soc_weighted_jobs[
-                    'soc_class'].astype(int).astype(str)
-
-            # Get uniq socs
-            soc_segments = soc_weighted_jobs[
-                    'soc_class'].drop_duplicates().reset_index(drop=True)
-
-            # We should apply the SOC attractions as a zonal weight
-            # not use it as a total jobs number
-            # this will give us the benefit of model purposes in HSL data
-            skill_index = ['msoa_zone_id', 'soc_class', 'seg_jobs']
-            skill_group = skill_index.copy()
-            skill_group.remove('seg_jobs')
-
-            skill_weight = soc_weighted_jobs.reindex(
-                    skill_index,
-                    axis=1).groupby(skill_group).sum().reset_index()
-            skill_weight = skill_weight.pivot(index='msoa_zone_id',
-                                              columns='soc_class',
-                                              values='seg_jobs').reset_index()
-            skill_weight['total'] = skill_weight['soc1'] + skill_weight['soc2'] + skill_weight['soc3']
-
-            # Reduce to factors
-            for soc_seg in soc_segments:
-                skill_weight[soc_seg] = skill_weight[soc_seg] / skill_weight['total']
-
-            # Get rename total to soc0
-            del(skill_weight['total'])
-
-            # Rebuild soc segments with soc back in
-            new_soc_segments = []
-            for seg in soc_segments:
-                new_soc_segments.append(seg)
-            soc_segments = new_soc_segments.copy()
-            del new_soc_segments
-
-            # Define export segments
-            group_segments = ['msoa_zone_id',
-                              'p', 'm', 'soc']
-            sum_segments = group_segments.copy()
-            sum_segments.append('attractions')
-        """
-
         output_dir = os.path.join(self.run_folder,
                                   self.params['iteration'],
                                   'Attraction Outputs')
@@ -268,204 +304,55 @@ class AttractionModel(demand.Pathing):
         print("Getting MSOA attractions")
         # Filters down to internal only here.
         # Uses global variables that aren't in the function call & shouldn't.
-        msoa_attractions = self.get_attractions(source='flat')
+        msoa_attractions = self.get_attractions()
 
         all_jobs = list(msoa_attractions)
         all_jobs.remove('msoa_zone_id')
 
         # Import attraction profile
-        model_dir = os.listdir(self.lookup_folder)
-        attr_profile = [x for x in model_dir if self.params['attraction_weights'] in x][0]
-
-        # Profile attractions
-        attr_profile = pd.read_csv(os.path.join(
-            self.lookup_folder,
-            attr_profile))
+        attr_profile = self._get_attraction_weights(trip_origin=trip_origin)
 
         # Profile and weight attractions
-        attractions = self.profile_attractions(msoa_attractions, attr_profile)
-
-        # BACKLOG: Move segmentation to after base is built
-        if 'soc' in self.params['hb_trip_end_segmentation']:
-
-            # Split into segments to split and those to retain
-            retain_ph = []
-            split_ph = []
-
-            soc_purposes = ['Commute', 'Business']
-
-            for attr in attractions:
-                attr_type = list(attr)[-1]
-                print(attr_type)
-                if attr_type in soc_purposes:
-                    split_ph.append(attr)
-                else:
-                    retain_ph.append(attr)
-
-            # soc_segments defined above
-
-            tfn_attr = []
-            for attr_frame in split_ph:
-                purpose = list(attr_frame)[-1]
-                for segment in soc_segments:
-                    print('Building TfN segment ' +
-                          purpose + '_' + segment)
-                    # Copy skill weights
-                    target_weights = skill_weight.copy()
-
-                    # Reindex to target cols
-                    target_weights = target_weights.reindex(
-                            ['msoa_zone_id', segment], axis=1)
-
-                    # Join the SOC weighting factors
-                    ph_frame = attr_frame.copy()
-                    ph_frame = ph_frame.merge(target_weights,
-                                              how='left',
-                                              on='msoa_zone_id')
-
-                    # Build weighted attractions with SOC
-                    soc_seg_name = (purpose + '_' + segment)
-                    ph_frame[soc_seg_name] = ph_frame[
-                            purpose] * ph_frame[
-                                    segment]
-                    ph_frame = ph_frame.reindex(['msoa_zone_id', soc_seg_name], axis=1)
-
-                    # Append to placeholder
-                    tfn_attr.append(ph_frame)
-                    # END
-                # END
-
-            # Append first list to end of TfN list
-            for attr in retain_ph:
-                tfn_attr.append(attr)
-            del retain_ph
-            del attractions
-            attractions = tfn_attr
-            del tfn_attr
-
-        # Concatenate and consolidate attractions into single table.
-        all_attr = pd.concat(attractions, sort=True)
-        all_attr = all_attr.fillna(0)
-        all_attr = all_attr.groupby('msoa_zone_id').sum().reset_index()
-
-        col_heads = list(all_attr)
-        col_heads.remove('msoa_zone_id')
-
-        all_attr = pd.melt(all_attr, id_vars='msoa_zone_id', value_vars=col_heads,
-                       value_name='attractions', var_name='ph')
-
-        p_dist = pd.DataFrame({'ph':
-            ['Commute', 'Commute_soc1', 'Commute_soc2', 'Commute_soc3',
-             'Business', 'Business_soc1', 'Business_soc2', 'Business_soc3',
-             'Education', 'Shopping', 'Personal_business',
-             'Recreation_social', 'Visiting_friends', 'Holiday_day_trip'],
-             'p': [1, 1, 1, 1,
-                   2, 2, 2, 2,
-                   3, 4, 5, 6, 7, 8],
-                  'soc': ['0', '1', '2', '3',
-                          '0', '1', '2', '3',
-                          '0', '0', '0', '0', '0', '0']
-        })
-
-        if'soc' not in self.params['hb_trip_end_segmentation']:
-            p_dist = p_dist.drop('soc', axis=1)
-
-        # Attach segments
-        all_attr = all_attr.merge(p_dist,
-                                  how='left',
-                                  on='ph')
-        all_attr = all_attr.drop('ph', axis=1)
+        attractions = self._profile_attractions(
+            msoa_attractions, attr_profile, soc_zero=True)
 
         # Attach msoa mode_splits
-        mode_splits = pd.read_csv(
-            os.path.join(self.import_folder,
-                         'attraction_data',
-                         self.params['attraction_mode_split']))
+        mode_splits = self._get_mode_split(trip_origin=trip_origin)
 
-        all_attr = all_attr.merge(mode_splits,
-                                  how='left',
-                                  on=['msoa_zone_id', 'p'])
-
-        all_attr['attractions'] = all_attr['attractions'] * all_attr['mode_share']
-        all_attr = all_attr.drop('mode_share', axis=1)
-
-        all_attr = all_attr.reindex(sum_segments,
-                                    axis=1).groupby(group_segments).sum(
-              ).reset_index()
-
-        all_attr = all_attr.sort_values(
-                group_segments).reset_index(drop=True)
-
-        hb_attr = all_attr.copy()
-        nhb_attr = all_attr.copy()
-
-        # Rename hb purpose to nhb
-        nhb_attr = nhb_attr[nhb_attr['p'] != 1]
-        nhb_attr = nhb_attr[nhb_attr['p'] != 7]
-        nhb_attr['p'] = nhb_attr['p']+10
-
-        # In the hack infill time period in nhb
-        tp_infill = pd.DataFrame({'ph':[1, 1, 1, 1],
-                                  'tp':[1, 2, 3, 4]})
-        nhb_attr['ph'] = 1
-        nhb_attr = nhb_attr.merge(tp_infill,
-                                  how='left',
-                                  on='ph')
-        nhb_attr = nhb_attr.drop('ph', axis=1)
-        del tp_infill
+        attractions = self._apply_mode_splits(attractions,
+                                              mode_splits)
 
         ntem_lad_lookup = pd.read_csv(tec.MSOA_LAD)
 
         if self.params['attraction_ntem_control']:
             # Do an NTEM adjustment
-
             ntem_totals = pd.read_csv(self.params['ntem_control_path'])
 
-            hb_attr, hb_adj, hb_audit, hb_lad = ntem.control_to_ntem(
-                hb_attr,
+            attractions, adj, audit, lad = ntem.control_to_ntem(
+                attractions,
                 ntem_totals,
                 ntem_lad_lookup,
-                group_cols=['p', 'm'],
-                base_value_name='attractions',
+                base_value_name='2018',
                 ntem_value_name='Attractions',
-                purpose='hb')
-            print(hb_audit)
-
-            nhb_attr, nhb_adj, nhb_audit, nhb_lad = ntem.control_to_ntem(
-                nhb_attr,
-                ntem_totals,
-                ntem_lad_lookup,
-                group_cols = ['p', 'm', 'tp'],
-                base_value_name='attractions',
-                ntem_value_name='Attractions',
-                purpose='nhb')
+                trip_origin='hb')
+            print(audit)
 
             if self.params['export_lad']:
-                hb_lad.to_csv(
+                lad.to_csv(
                     os.path.join(output_dir,
-                                 'lad_hb_attractions.csv'),
+                                 'lad_' +
+                                 trip_origin +
+                                 '_attractions.csv'),
                     index=False)
-
-                nhb_lad.to_csv(
-                    os.path.join(
-                        output_dir,
-                        'lad_nhb_attractions.csv'),
-                    index=False)
-            print(nhb_audit)
 
         if self.params['export_uncorrected']:
             # TODO: Export compressed
             safe_dataframe_to_csv(
-                hb_attr,
+                attractions,
                 os.path.join(
                     output_dir,
-                    'hb_attractions_uncorrected.csv'),
-                index=False)
-            safe_dataframe_to_csv(
-                nhb_attr,
-                os.path.join(
-                    output_dir,
-                    'nhb_attractions_uncorrected.csv'),
+                    trip_origin +
+                    '_attractions_uncorrected.csv'),
                 index=False)
 
         # Control to k factors
@@ -474,25 +361,37 @@ class AttractionModel(demand.Pathing):
             # Adjust to k factor for hb
             # BACKLOG: reliable k-factor adjustment with fixed input
 
+        if control_to_productions:
+            productions = com.read_in(productions_path)
+            
+            attractions = _balance_a_to_p(attractions,
+                                          productions)
+
+
+            nup.balance_a_to_p(ia_name,
+                           productions,
+                           attractions,
+                           p_var_name='productions',
+                           a_var_name='attractions',
+                           round_val=None,
+                           echo=True)
+
+
         # Write input attractions
         if self.params['export_msoa']:
-            hb_attr.to_csv(
+            attractions.to_csv(
                 os.path.join(
                     output_dir,
                     'hb_attractions' +
                     self.params['land_use_zoning'].lower() +
                     '.csv'),
                 index=False)
-            nhb_attr.to_csv(
-                os.path.join(
-                    output_dir,
-                    'nhb_attractions.csv' +
-                    self.params['land_use_zoning'].lower() +
-                    '.csv'),
-                index=False)
 
         # Aggregate input productions to model zones - not yet
         """
+        if control_to_productions:
+            productions_path=None
+        
         zonal_hb_attr = self.aggregate_to_model_zones_attr(
             hb_attr,
             model_zone_lookup_path,
@@ -526,4 +425,4 @@ class AttractionModel(demand.Pathing):
                 index=False)
         """
 
-        return hb_attr, nhb_attr
+        return attractions
