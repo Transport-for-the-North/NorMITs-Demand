@@ -277,7 +277,7 @@ class EFSAttractionGenerator:
         # TODO: Make this more adaptive
         # Set the level of segmentation being used
         if segmentation_cols is None:
-            segmentation_cols = [self.emp_cat_col]
+            segmentation_cols = self.emp_segments
 
         # Fix column naming if different
         if external_zone_col != self.zone_col:
@@ -403,7 +403,7 @@ class EFSAttractionGenerator:
             employment.to_csv(path, index=False)
 
         if 'soc' not in list(employment):
-            self.emp_segments = du.list_safe_remove( self.emp_segments, ['soc'])
+            self.emp_segments = du.list_safe_remove(self.emp_segments, ['soc'])
 
         # Reindex and sum
         group_cols = [self.zone_col] + self.emp_segments
@@ -1465,7 +1465,7 @@ def build_attraction_imports(import_home: str,
             continue
 
         if not os.path.exists(path):
-            raise IOError(
+            raise FileNotFoundError(
                 "Attraction Model Imports: The path for %s does not "
                 "exist.\nFull path: %s" % (key, path)
             )
@@ -1528,8 +1528,10 @@ def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
                                future_years: List[str] = None,
                                segmentation_cols: List[str] = None,
                                lu_zone_col: str = 'msoa_zone_id',
-                               base_year_data_col: str = 'people',
+                               base_year_data_col: str = '2018',
                                dtype: Dict[str, np.dtype] = None,
+                               soc_col: str = 'soc',
+                               ignore_missing_soc: bool = True,
                                ) -> pd.DataFrame:
     """
     Reads in land use outputs and aggregates up to segmentation_cols.
@@ -1571,6 +1573,15 @@ def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
         The data types to assign to columns in the read in data. Follows the
         same format as dtypes argument in pd.read_csv()
 
+    soc_col:
+        The name of the column containing soc data. If this column doesn't
+        exist, this argument can be safely ignored
+
+    ignore_missing_soc:
+        If the given segmentation_cols contain soc_col and this is set to
+        True an error will not be thrown if no soc col exists in the data.
+        Instead soc_col will be removed from segmentation_cols
+
     Returns
     -------
     population:
@@ -1581,7 +1592,6 @@ def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
     # Init
     future_years = list() if future_years is None else future_years
     all_years = [base_year] + future_years
-    all_commute_col = 'E01'
 
     if dtype is None:
         dtype = {'soc': int, 'ns': int}
@@ -1590,36 +1600,28 @@ def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
         segmentation_cols = ['employment_cat']
     group_cols = [lu_zone_col] + segmentation_cols
 
-    if segmentation_cols != ['employment_cat']:
-        raise nd.NormitsDemandError(
-            "Attractions doesn't know hwo to handle segmentations that aren't "
-            "just ['employment_cat']!!"
-        )
-
+    # We can use the future years to determine if we should keep soc in the
+    # base year. Do the years backwards!
     all_emp_ph = list()
-    for year in all_years:
+    for year in reversed(all_years):
 
         # Read in the dataframe - different if base year
         if year == base_year:
             year_emp = pd.read_csv(by_emp_import_path, dtype=dtype)
+            year_emp = year_emp.rename(columns={base_year_data_col: base_year})
 
-            # Add in the all commute col
-            emp_cats = list(year_emp.columns)
-            emp_cats.remove(lu_zone_col)
-            year_emp[all_commute_col] = year_emp[emp_cats].sum(axis='columns')
-
-            # Melt into same format as the rest
-            year_emp = pd.melt(
-                year_emp,
-                id_vars=[lu_zone_col],
-                var_name=segmentation_cols[0],
-                value_name=base_year
-            )
         else:
             # Build the path to this years data
             fname = consts.LU_EMP_FNAME % str(year)
             lu_path = os.path.join(fy_emp_import_dir, fname)
             year_emp = pd.read_csv(lu_path, dtype=dtype)
+
+        # ## CHECK IF WE SHOULD IGNORE SOC ## #
+        if soc_col in segmentation_cols and soc_col not in list(year_emp):
+            # We'll catch the error lower down, so don't need to here
+            if ignore_missing_soc:
+                segmentation_cols.pop(soc_col)
+                group_cols.pop(soc_col)
 
         # ## FILTER TO JUST THE DATA WE NEED ## #
         # Set up the columns to keep

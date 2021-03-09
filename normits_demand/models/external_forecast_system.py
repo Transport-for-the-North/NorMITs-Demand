@@ -589,7 +589,7 @@ class ExternalForecastSystem:
         production_trips = self.production_generator.run(
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
-            by_pop_import_path=self.imports['land_use_by'],
+            by_pop_import_path=self.imports['pop_by'],
             fy_pop_import_dir=self.imports['land_use_fy_dir'],
             pop_constraint=pop_constraint,
             import_home=self.imports['home'],
@@ -615,7 +615,7 @@ class ExternalForecastSystem:
             out_path=self.exports['attractions'],
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
-            by_emp_import_path=self.imports['employment_by'],
+            by_emp_import_path=self.imports['emp_by'],
             fy_emp_import_dir=self.imports['land_use_fy_dir'],
             emp_constraint=emp_constraint,
             import_home=self.imports['home'],

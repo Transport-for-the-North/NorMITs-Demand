@@ -405,18 +405,6 @@ def build_efs_io_paths(import_location: str,
     model_name = validate_model_name(model_name)
 
     # ## IMPORT PATHS ## #
-    # Attraction weights are a bit special, we get these directly from
-    # TMS to ensure they are the same - update this on integration
-    temp_model_name = 'norms' if model_name == 'norms_2015' else model_name
-    tms_path_parts = [
-        import_location,
-        "NorMITs Synthesiser",
-        temp_model_name,
-        "Model Zone Lookups",
-        "attraction_weights.csv"
-    ]
-    a_weights_path = os.path.join(*tms_path_parts)
-
     # Generate general import paths
     model_home = os.path.join(import_location, demand_dir_name)
     import_home = os.path.join(model_home, 'import')
@@ -436,6 +424,10 @@ def build_efs_io_paths(import_location: str,
         'msoa_str_int': os.path.join(zt_home, 'msoa_zones.csv'),
     }
 
+    # BACKLOG: EFS Attraction model needs to make use of HB and NHB
+    #  attraction weights. Currently only uses HB for both.
+    #  labels: demand merge, EFS
+
     imports = {
         'home': import_home,
         'default_inputs': input_home,
@@ -444,8 +436,7 @@ def build_efs_io_paths(import_location: str,
         'lookups': os.path.join(model_home, 'lookup'),
         'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
         'scenarios': os.path.join(import_home, 'scenarios'),
-        'a_weights': a_weights_path,
-        'employment_by': os.path.join(import_home, 'attractions', 'non_freight_msoa_2018.csv'),
+        'a_weights': os.path.join(import_home, 'attractions', 'hb_attraction_weights.csv'),
         'soc_weights': soc_weights_path,
         'ntem_control': os.path.join(import_home, 'ntem_constraints'),
         'model_schema': os.path.join(import_home, model_name, 'model schema'),
@@ -462,7 +453,8 @@ def build_efs_io_paths(import_location: str,
         )
         land_use_fy = os.path.join(land_use_home, 'scenarios', scenario_name)
 
-        imports['land_use_by'] = os.path.join(land_use_home, consts.BASE_YEAR_POP_FNAME)
+        imports['pop_by'] = os.path.join(land_use_home, consts.BASE_YEAR_POP_FNAME)
+        imports['emp_by'] = os.path.join(land_use_home, consts.BASE_YEAR_EMP_FNAME)
         imports['land_use_fy_dir'] = land_use_fy
 
     # ## EXPORT PATHS ## #

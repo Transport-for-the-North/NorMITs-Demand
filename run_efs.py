@@ -33,15 +33,15 @@ def main():
     recreate_attractions = True
     recreate_nhb_productions = True
 
-    run_bespoke_zones = True
-    run_hb_pa_to_od = True
-    run_compile_od = True
+    run_bespoke_zones = False
+    run_hb_pa_to_od = False
+    run_compile_od = False
     run_decompile_od = False
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC00_NTEM
-    iter_num = 3
+    scenario = consts.SC04_UZC
+    iter_num = 0
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
