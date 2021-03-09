@@ -68,4 +68,5 @@ Only constrained in base year, and multiplicative growth on top.
 ### v0.3.3
 - Removed pop/emp growth from EFS. Future year population and employment
 is now read in straight from NorMITs Land Use.
+- Integration of NoRMS IO to and from PA NoRMS VDM compilation
 
