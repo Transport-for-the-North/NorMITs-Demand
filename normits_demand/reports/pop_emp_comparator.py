@@ -5,6 +5,7 @@
 
 ##### IMPORTS #####
 # Standard imports
+import os
 import re
 import time
 from pathlib import Path
@@ -16,6 +17,8 @@ import numpy as np
 from openpyxl.worksheet.worksheet import Worksheet
 
 # Local imports
+import normits_demand as nd
+from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du, sector_reporter_v2 as sr_v2
 from normits_demand.models import efs_production_model as pm
 from normits_demand.models import efs_attraction_model as am
@@ -175,7 +178,8 @@ class PopEmpComparator:
     def _read_inputs(self,
                      import_home: str,
                      constraint_csv: str,
-                     growth_csv: str
+                     growth_csv: str,
+                     base_year: str = '2018',
                      ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """Reads the input, constraint and growth CSV files.
 
@@ -202,30 +206,46 @@ class PopEmpComparator:
         # Init
         start = time.perf_counter()
 
+        # BACKLOG: Update pop_emp_comparator path building
+        #  labels: EFS, demand merge
+
+        # Big old cludge!
+        # Half of these don't matter. We just want the imports!!
+        imports, *_ = du.build_efs_io_paths(
+            import_location=import_home,
+            export_location=import_home,
+            model_name=consts.MODEL_NAME,
+            iter_name="iter0",
+            scenario_name=consts.SC00_NTEM,
+            demand_version=nd.ExternalForecastSystem.__version__,
+            land_use_drive='Y:/',
+            land_use_iteration='iter3b',
+        )
+
         # Read input data
         if self.data_type == "population":
             # Set up args
-            base_yr_col = "people"
+            base_yr_col = base_year
             index_cols = [self.ZONE_COL, base_yr_col]
-            imports = pm.build_production_imports(import_home)
-            path = imports["land_use"]
+            path = imports["pop_by"]
 
             # Read base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
 
-            input_data = pm.get_land_use_data(path).reindex(columns=index_cols)
+            input_data = pm.get_pop_data_from_land_use(path, base_year=base_year)
+            input_data = input_data.reindex(columns=index_cols)
             input_data = input_data.groupby(self.ZONE_COL, as_index=False).sum()
 
         elif self.data_type == "employment":
             # Set up args
-            base_yr_col = "E01"
+            base_yr_col = base_year
             index_cols = [self.ZONE_COL, base_yr_col]
-            imports = am.build_attraction_imports(import_home, self.base_year, None)
-            path = imports["base_employment"]
+            path = os.path.join(imports["emp_by"])
 
             # Read in base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
-            input_data = am.get_employment_data(path).reindex(columns=index_cols)
+            input_data = am.get_emp_data_from_land_use(path, base_year=base_year)
+            input_data = input_data.reindex(columns=index_cols)
 
         else:
             # We shouldn't be able to get here

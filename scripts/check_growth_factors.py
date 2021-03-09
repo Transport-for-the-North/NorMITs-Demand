@@ -18,6 +18,10 @@ OUT_GF_PATH = r"E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter2\Audits\Produc
 
 MSOA_TO_LAD_PATH = r"I:\NorMITs Demand\import\zone_translation\no_overlap\lad_to_msoa.csv"
 
+RAW_PRODUCTIONS_PATH = r"E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter2\Productions\msoa_raw_hb_productions.csv"
+TEMPRO_PROD = r"I:\NorMITs Demand\import\default\population\future_population_values.csv"
+TEMPRO_ATTR = r"I:\NorMITs Demand\import\default\employment\future_workers_growth_values.csv"
+
 IMPORT = "I:/"
 EXPORT = "E:/"
 MODEL_NAME = 'noham'
@@ -263,10 +267,68 @@ def apply_ntem_on_base():
     print(both)
 
 
+def compare_all_modes():
+    modes = [1, 2, 3, 5, 6]
+
+    base_year, future_years = du.split_base_future_years([int(x) for x in YEARS])
+    base_year_str = str(base_year)
+    future_years_str = [str(x) for x in future_years]
+
+    synth = pd.read_csv(RAW_PRODUCTIONS_PATH)
+    ntem = pd.read_csv(TEMPRO_PROD)
+
+    # Aggregate to msoa
+    synth = synth.reindex(columns=['msoa_zone_id'] + YEARS)
+    synth = synth.groupby(['msoa_zone_id']).sum().reset_index()
+
+    print(synth)
+    print(ntem)
+
+    both = pd.merge(
+        synth,
+        ntem,
+        suffixes=['_synth', '_ntem'],
+        on=['msoa_zone_id'],
+    )
+
+    diff_cols = ['msoa_zone_id']
+    for year in YEARS:
+        diff_cols += ['%s_diff' % year]
+        both['%s_diff' % year] = both['%s_synth' % year] - both['%s_ntem' % year]
+
+        total_diff = both['%s_diff' % year].sum()
+        ntem_total = both['%s_ntem' % year].sum()
+        print(
+            'Difference across all modes for %s: %.3f\t %.3f%%'
+            % (str(year), total_diff, total_diff/ntem_total*100)
+        )
+
+    diff = both.reindex(columns=diff_cols)
+    print(diff)
+
+
+
+
+    # sum = 0
+    # for mode in modes:
+    #     synth = synth[synth['m'] == mode]
+    #     post_n = ntem[ntem['m'] == mode]
+    #     pre_sum = pre[year].sum()
+    #     post_sum = post_n['productions'].sum()
+    #     # print(post_sum)
+    #     # print(pre_sum)
+    #     diff = ((pre_sum - post_sum) / post_sum) * 100
+    #     abs_diff = pre_sum - post_sum
+    #     sum += abs_diff
+    #     print('\n')
+    # print(sum)
+
+
 def main():
     # check_in_out()
-    check_diffs()
+    # check_diffs()
     # apply_ntem_on_base()
+    compare_all_modes()
 
 
 if __name__ == '__main__':
