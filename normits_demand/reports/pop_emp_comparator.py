@@ -225,9 +225,9 @@ class PopEmpComparator:
         # Read input data
         if self.data_type == "population":
             # Set up args
-            base_yr_col = "people"
+            base_yr_col = base_year
             index_cols = [self.ZONE_COL, base_yr_col]
-            path = imports["land_use_by"]
+            path = imports["pop_by"]
 
             # Read base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
@@ -238,13 +238,13 @@ class PopEmpComparator:
 
         elif self.data_type == "employment":
             # Set up args
-            base_yr_col = "E01"
+            base_yr_col = base_year
             index_cols = [self.ZONE_COL, base_yr_col]
-            path = os.path.join(imports["attractions_by"])
+            path = os.path.join(imports["emp_by"])
 
             # Read in base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
-            input_data = am.get_emp_data_from_land_use(path, years=[base_year])
+            input_data = am.get_emp_data_from_land_use(path, base_year=base_year)
             input_data = input_data.reindex(columns=index_cols)
 
         else:
