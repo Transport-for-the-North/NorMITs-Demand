@@ -25,6 +25,8 @@ from normits_demand import constants as consts
 from normits_demand.utils import compress
 from normits_demand.utils import general as du
 
+from normits_demand.concurrency import multiprocessing as mp
+
 # Imports that need moving into here
 from normits_demand.utils.utils import create_folder
 from normits_demand.utils.general import list_files
@@ -303,9 +305,38 @@ def find_filename(path: nd.PathLike,
     )
 
 
+def _copy_all_files_internal(import_dir: nd.PathLike,
+                             export_dir: nd.PathLike,
+                             force_csv_out: bool,
+                             in_fname: nd.PathLike,
+                             ) -> None:
+    """
+    internal function of copy_all_files
+    """
+    in_fname = cast_to_pathlib_path(in_fname)
+
+    # Do we need to convert the file?
+    if not(force_csv_out and in_fname.suffix != '.csv'):
+        # If not, we can just copy over as is
+        du.copy_and_rename(
+            src=import_dir / in_fname,
+            dst=export_dir / in_fname,
+        )
+        return
+
+    # Only get here if we do need to convert the file type
+    in_path = import_dir / in_fname
+    out_path = export_dir / (in_fname.stem + '.csv')
+
+    # Read in, then write out as csv
+    df = read_df(in_path)
+    write_df(df, out_path)
+
+
 def copy_all_files(import_dir: nd.PathLike,
                    export_dir: nd.PathLike,
                    force_csv_out: bool = False,
+                   process_count: int = consts.PROCESS_COUNT,
                    ) -> None:
     """
     Copies all of the files from import_dir into export_dir
@@ -324,6 +355,12 @@ def copy_all_files(import_dir: nd.PathLike,
     force_csv_out:
         If True, the copied files will be translated into .csv files.
 
+    process_count:
+        THe number of processes to use when copying the data over.
+        0 - use no multiprocessing, run as a loop.
+        +ve value - the number of processes to use.
+        -ve value - the number of processes less than the cpu count to use.
+
     Returns
     -------
     None
@@ -333,28 +370,24 @@ def copy_all_files(import_dir: nd.PathLike,
     import_dir = cast_to_pathlib_path(import_dir)
     export_dir = cast_to_pathlib_path(export_dir)
 
-    # TODO: multiprocess
-    # Copy over each file
+    # ## MULTIPROCESS THE COPY ## #
+    unchanging_kwargs = {
+        'import_dir': import_dir,
+        'export_dir': export_dir,
+        'force_csv_out': force_csv_out,
+    }
+
+    kwarg_list = list()
     for in_fname in fnames:
-        print(in_fname)
-        in_fname = cast_to_pathlib_path(in_fname)
+        kwargs = unchanging_kwargs.copy()
+        kwargs['in_fname'] = in_fname
+        kwarg_list.append(kwargs)
 
-        # Do we need to convert the file?
-        if not(force_csv_out and in_fname.suffix != '.csv'):
-            # If not, we can just copy over as is
-            du.copy_and_rename(
-                src=import_dir / in_fname,
-                dst=export_dir / in_fname,
-            )
-            continue
-
-        # Only get here if we do need to convert the file type
-        in_path = import_dir / in_fname
-        out_path = export_dir / (in_fname.stem + '.csv')
-
-        # Read in, then write out as csv
-        df = read_df(in_path)
-        write_df(df, out_path)
+    mp.multiprocess(
+        fn=_copy_all_files_internal,
+        kwargs=kwarg_list,
+        process_count=process_count,
+    )
 
 
 def remove_from_fname(path: nd.PathLike,
