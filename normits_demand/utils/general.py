@@ -1966,10 +1966,11 @@ def get_split_factors_fname(matrix_format: str,
     """
     Generates the splitting factors filename
     """
+    ftype = consts.COMPRESSION_SUFFIX
     if suffix is None:
-        return "%s_yr%s_splitting_factors.pkl" % (matrix_format, year)
+        return "%s_yr%s_splitting_factors.%s" % (matrix_format, year, ftype)
 
-    return "%s_yr%s_%s_splitting_factors.pkl" % (matrix_format, year, suffix)
+    return "%s_yr%s_%s_splitting_factors.%s" % (matrix_format, year, suffix, ftype)
 
 
 def build_full_paths(base_path: str,

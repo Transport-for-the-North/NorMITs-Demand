@@ -124,7 +124,7 @@ def is_csv(file_path: nd.PathLike) -> bool:
 
 def maybe_add_suffix(path: nd.PathLike,
                      suffix: str,
-                     overwrite: bool = False,
+                     overwrite: bool = True,
                      ) -> pathlib.Path:
     """
     Adds suffix to path if no suffix already exists.

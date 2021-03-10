@@ -27,6 +27,7 @@ from normits_demand.validation import checks
 
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
+from normits_demand.utils import compress
 
 from normits_demand.matrices import matrix_processing as mat_p
 from normits_demand.matrices import od_to_pa as od2pa
@@ -259,7 +260,7 @@ def decompile_matrices(matrix_import: nd.PathLike,
     None
     """
     # Load the factors
-    decompile_factors = pd.read_pickle(decompile_factors_path)
+    decompile_factors = compress.read_in(decompile_factors_path)
 
     # Loop through the compiled matrices and decompile
     # TODO: Multiprocess decompile_od()
