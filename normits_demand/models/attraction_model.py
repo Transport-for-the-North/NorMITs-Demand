@@ -2,11 +2,10 @@
 """
 Attraction Model for NorMITs Demand
 """
-# Modules required
-import os # File operations
+# Modules requirede
+import os
 
 import pandas as pd
-import numpy as np
 
 import normits_demand.build.pathing as demand
 
@@ -142,7 +141,7 @@ class AttractionModel(demand.Pathing):
             output_f,
             'hb_attractions_' +
             self.params['land_use_zoning'].lower() +
-            '.csv')
+            '.pbz2')
 
         in_nhb = os.path.join(
             output_dir,
@@ -209,13 +208,14 @@ class AttractionModel(demand.Pathing):
         """:arg
         """
 
-        mode_split = pd.read_csv(
+        mode_splits = pd.read_csv(
             os.path.join(self.import_folder,
                          'attraction_params',
                          trip_origin +
                          '_' +
-                         self.params['attraction_mode_split']))
-        return mode_split
+                         self.params['attraction_mode_split']),
+        dtype={'m': int})
+        return mode_splits
 
     @staticmethod
     def _apply_mode_splits(attractions,
@@ -242,28 +242,94 @@ class AttractionModel(demand.Pathing):
 
         return attractions
 
+    @staticmethod
     def _balance_a_to_p(attractions,
                         productions,
                         attr_var_col='2018',
                         prod_var_col='trips',
-                        zone_col='msoa_zone_id'):
+                        exclude=None,
+                        zone_col='msoa_zone_id',
+                        rounding=5,
+                        verbose=True):
         """
         """
+        # Init
+        p_in = productions[prod_var_col].sum()
+        a_in = attractions[attr_var_col].sum()
 
         # Get unq p segments
         unq_seg = list(productions)
         unq_seg.remove(prod_var_col)
         unq_seg.remove(zone_col)
-        # TODO: Please Chris, learn to use itertools
+        for x_col in exclude:
+            if x_col in unq_seg:
+                unq_seg.remove(x_col)
+
+        # TODO: Replace with an itertools product
         us_iter = productions.reindex(
             unq_seg,
             axis=1).drop_duplicates().reset_index(drop=True)
 
+        # Coerce cols to object
+        a_out = []
         for i, row in us_iter.iterrows():
-            print(row)
+            print(str(i) + '/' + str(len(us_iter)))
+            # Get p sub
+            p_sub = productions.copy()
+            # Get a sub
+            a_sub = attractions.copy()
 
+            # Break down to attraction seg once.
+            for item, dat in row.iteritems():
+                if item in list(a_sub):
+                    if dat == 'none':
+                        a_sub = a_sub[a_sub[item] == 0]
+                    else:
+                        a_sub = a_sub[a_sub[item] == int(dat)]
 
+            # For each attraction seg break down prods
+            for item, dat in row.iteritems():
+                if item in list(p_sub):
+                    if dat != 'none':
+                        p_sub = p_sub[p_sub[item] == dat]
+                        a_sub[item] = dat
 
+            # Control to p_total - balance!
+            p_total = p_sub[prod_var_col].sum()
+            a_total = a_sub[attr_var_col].sum()
+
+            print('p total:' + str(p_total))
+            print('a_total: ' + str(a_total))
+
+            a_sub[attr_var_col] /= a_total
+            a_sub[attr_var_col] *= p_total
+
+            print('p total:' + str(p_total))
+            print('a_total: ' + str(a_total))
+
+            print(attr_var_col)
+            print(rounding)
+
+            # Round drop zeroes and re-control
+            a_sub[attr_var_col] = a_sub[attr_var_col].round(rounding)
+            a_sub = a_sub[a_sub[attr_var_col] > 0]
+            round_total = a_sub[attr_var_col].sum()
+            adj = p_total/round_total
+            a_sub[attr_var_col] *= adj
+
+            # Append to list
+            a_out.append(a_sub)
+
+        # Compile a out
+        attractions = pd.concat(a_out)
+        attractions = attractions.sort_values(
+            unq_seg).reset_index(drop=True)
+        a_out = attractions[attr_var_col].sum()
+
+        if verbose:
+            print('Attractions in: ' + str(a_in))
+            print('Total productions: ' + str(p_in))
+            print('Attractions out: ' + str(a_out))
 
         return attractions
 
@@ -306,9 +372,6 @@ class AttractionModel(demand.Pathing):
         # Uses global variables that aren't in the function call & shouldn't.
         msoa_attractions = self.get_attractions()
 
-        all_jobs = list(msoa_attractions)
-        all_jobs.remove('msoa_zone_id')
-
         # Import attraction profile
         attr_profile = self._get_attraction_weights(trip_origin=trip_origin)
 
@@ -334,7 +397,8 @@ class AttractionModel(demand.Pathing):
                 ntem_lad_lookup,
                 base_value_name='2018',
                 ntem_value_name='Attractions',
-                trip_origin='hb')
+                trip_origin='hb',
+                verbose=True)
             print(audit)
 
             if self.params['export_lad']:
@@ -363,29 +427,31 @@ class AttractionModel(demand.Pathing):
 
         if control_to_productions:
             productions = com.read_in(productions_path)
-            
-            attractions = _balance_a_to_p(attractions,
-                                          productions)
 
+            # Do not give this too many segments to control too.
+            # They don't all have to exist - this can be precautionary
+            if trip_origin == 'hb':
+                exclude_seg = ['tp', 'g']
+            elif trip_origin == 'nhb':
+                exclude_seg = ['g']
 
-            nup.balance_a_to_p(ia_name,
-                           productions,
-                           attractions,
-                           p_var_name='productions',
-                           a_var_name='attractions',
-                           round_val=None,
-                           echo=True)
-
+            attractions = self._balance_a_to_p(attractions,
+                                               productions,
+                                               attr_var_col='2018',
+                                               prod_var_col='trips',
+                                               exclude=exclude_seg,
+                                               zone_col='msoa_zone_id',
+                                               rounding=5,
+                                               verbose=True)
 
         # Write input attractions
         if self.params['export_msoa']:
-            attractions.to_csv(
+            com.write_out(
+                attractions,
                 os.path.join(
                     output_dir,
-                    'hb_attractions' +
-                    self.params['land_use_zoning'].lower() +
-                    '.csv'),
-                index=False)
+                    'hb_attractions_' +
+                    self.params['land_use_zoning'].lower()))
 
         # Aggregate input productions to model zones - not yet
         """

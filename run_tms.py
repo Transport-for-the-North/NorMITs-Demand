@@ -48,14 +48,18 @@ def main(config_path = 'I:/NorMITs Synthesiser/config/'):
     p.ping_outpath()
 
     a = am.AttractionModel(config_path, params_file)
-    a_out = a.run(trip_origin='hb',
+    hb_a_out = a.run(trip_origin='hb',
                   control_to_productions = True,
                   productions_path = p.export['in_hb'])
     a.ping_outpath()
 
     nhb_p_out = p.run_nhb(
-        production_vector=p.export['out_hb'],
-        attraction_vector=a.export['out_hb'])
+        attraction_vector=a.export['in_hb'])
+    p.ping_outpath()
+
+    nhb_a_out = a.run(trip_origin='nhb',
+                    control_to_productions = True,
+                    productions_path = p.export['in_nhb'])
 
     # Delete trip end models
     del p, a

@@ -940,9 +940,6 @@ def filter_pa_vector(pa_vector,
                      round_val=3,
                      echo=True):
     """
-    This function adds new balancing factors in to a matrix. They are returned
-    in the dt col and added to whichever col comes through in zone_col
-    parameter.
 
     Parameters
     ----------

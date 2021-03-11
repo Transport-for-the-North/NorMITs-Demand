@@ -892,7 +892,6 @@ class ProductionModel(demand.Pathing):
         return msoa_output, lu_rep
 
     def run_nhb(self,
-                production_vector,
                 attraction_vector,
                 verbose=True):
 
@@ -950,27 +949,23 @@ class ProductionModel(demand.Pathing):
         trip_rates = self.get_trip_rates(
             model_type='nhb',
             verbose=verbose)
+        trip_rates['p'] = trip_rates['p'].astype(str)
 
         # Get nhb mode splits
         nhb_mode_split = pd.read_csv(
             os.path.join(self.import_folder,
                          'production_params',
                          self.params['nhb_mode_split']))
+        nhb_mode_split['p'] = nhb_mode_split['p'].astype(str)
+
         # Get nhb time splits
         nhb_time_split = pd.read_csv(
             os.path.join(self.import_folder,
                          'production_params',
                          self.params['nhb_time_split']))
 
-        # Import HB PA
-        # TODO: Just attraction vector after balance
-        pa = nup.import_pa(production_vector,
-                           attraction_vector)
-
-        productions = pa[0]
-        print(productions['trips'].sum())
-        attractions = pa[1]
-        del pa
+        # Import HB attraction vector - should be balanced
+        attractions = com.read_in(attraction_vector)
 
         # Get unique production segments
         # Unique segments are what we can get against what we have
@@ -984,111 +979,36 @@ class ProductionModel(demand.Pathing):
                 'nhb_trip_end_segmentation'])
 
         # Get cols for iteration
-        # Based on the cols required
-        unq_seg = productions.reindex(
-                input_segments,
-                axis=1).drop_duplicates(
-                        ).sort_values(
-                                input_segments).reset_index(
-                                        drop=True)
+        tr_cols = list(trip_rates)
+        ignore_cols = ['nhb_p', 'trip_rate']
+        tr_filters = [x for x in tr_cols if x not in ignore_cols]
 
-        # Balance attractions to productions by target segments
-        prod_ph = []
-        a_vec = []
+        # Apply trip rates
+        tr_ph = []
+        for i, r in trip_rates.iterrows():
+            # Build subset
+            print(r)
 
-        for index, row in unq_seg.iterrows():
-            p_calib_params = {}
-            a_calib_params = {}
-            for label, dat in row.iteritems():
-                if label in list(productions):
-                    p_calib_params.update({label: dat})
-                if label in list(attractions):
-                    a_calib_params.update({label: dat})
-            if verbose:
-                print('p calib params')
-                print(p_calib_params)
-                print('a calib params')
-                print(a_calib_params)
-                print(list(productions))
-                print(list(attractions))
+            sub_a = attractions.copy()
+            for tr in tr_filters:
+                print(tr)
+                sub_a = sub_a[sub_a[tr] == r[tr]]
+                print(len(sub_a))
+            print(list(sub_a))
 
-            # Filter productions to target distribution type
-            sub_p = nup.filter_pa_vector(productions,
-                                         ia_name,
-                                         p_calib_params,
-                                         value_var='trips',
-                                         echo=verbose)
+            sub_a['productions'] = sub_a['2018'] * r['trip_rate']
+            sub_a['nhb_p'] = r['nhb_p']
+            sub_a = sub_a.drop(['2018'], axis=1)
 
-            # Get the productions from the tuple
-            sub_p = sub_p[0]
-            sub_p = sub_p.rename(columns={'trips': 'productions'})
+            tr_ph.append(sub_a)
+            del sub_a
 
-            # Work out which attractions to use from purpose
-            sub_a = nup.filter_pa_vector(attractions,
-                                         ia_name,
-                                         a_calib_params,
-                                         round_val=3,
-                                         value_var='attractions',
-                                         echo=verbose)
-
-            # Get the Attractions from the tuple
-            sub_a = sub_a[0]
-
-            a_t = nup.get_attraction_type(a_calib_params)
-            print(a_t)
-
-            # Balance a to p
-            # TODO: Should be pre-done
-            # This is why the productions are here!
-            print(sub_p['productions'].sum())
-            sub_a = nup.balance_a_to_p(ia_name,
-                                       sub_p,
-                                       sub_a,
-                                       round_val=3,
-                                       echo=False)
-            a_vec.append(sub_a['attractions'].sum())
-
-            sub_tr = trip_rates.copy()
-            for name, dat in p_calib_params.items():
-                if name in list(sub_tr):
-                    if dat != 'none':
-                        sub_tr = sub_tr[sub_tr[name] == dat]
-
-            for i, r in sub_tr.iterrows():
-                new_a = sub_a.copy()
-                new_a['productions'] = new_a['attractions'] * r['trip_rate']
-                new_a = new_a.drop(['attractions'], axis=1)
-
-                out_dict = {}
-                for name, dat in p_calib_params.items():
-                    if name in list(sub_tr):
-                        out_dict.update({name: dat})
-                out_dict.update({'nhb_p': int(r['nhb_p'])})
-                out_dict.update({'productions': new_a})
-                out_dict.update({'total': new_a['productions'].sum()})
-                prod_ph.append(out_dict)
-
-        vector = []
-        for item in prod_ph:
-            vector.append(item['total'])
-
-        print(sum(vector))
-        print(sum(a_vec))
-
-        # Recompile into dataframe
-        nhb_ph = []
-        for item in prod_ph:
-            new_row = item['productions']
-            for name, dat in item.items():
-                if name != 'productions':
-                    if name != 'total':
-                        new_row[name] = dat
-            nhb_ph.append(new_row)
-        nhb = pd.concat(nhb_ph)
+        nhb = pd.concat(tr_ph)
 
         if verbose:
             print('Pre mode reindex')
             print(list(nhb))
+
         # Order
         index_cols = list(nhb)
         group_cols = index_cols.copy()
@@ -1097,16 +1017,15 @@ class ProductionModel(demand.Pathing):
             index_cols,
             axis=1).groupby(
             group_cols).sum().reset_index()
+        nhb = nhb.sort_values(group_cols).reset_index(drop=True)
 
+        # Build iterator for mode segmentation
         mode_seg = nhb.reindex(
                 ['area_type', 'p', 'ca', 'nhb_p'],
                 axis=1).drop_duplicates().reset_index(drop=True)
 
+        # Apply mode segmentation
         print('Building mode shares')
-        if verbose:
-            print(mode_seg)
-            print(list(mode_seg))
-
         mode_bin = []
         for index, row in mode_seg.iterrows():
             p_sub = nhb.copy()
@@ -1131,6 +1050,7 @@ class ProductionModel(demand.Pathing):
         if verbose:
             print('Pre time reindex')
             print(list(nhb))
+
         # Order
         index_cols = list(nhb)
         group_cols = index_cols.copy()
@@ -1150,7 +1070,6 @@ class ProductionModel(demand.Pathing):
         time_bin = []
         for index, row in time_seg.iterrows():
             print('Time seg ' + str(index+1) + '/' + str(len(time_seg)))
-            # BACKLOG: Pre sort to make join smoother
             p_sub = nhb.copy()
             for name, dat in row.iteritems():
                 p_sub = p_sub[p_sub[name] == dat]
@@ -1169,6 +1088,7 @@ class ProductionModel(demand.Pathing):
             print(list(nhb))
         # Order
         index_cols = list(nhb)
+        index_cols.drop('p', axis=1)
         group_cols = index_cols.copy()
         group_cols.remove('productions')
         nhb = nhb.reindex(
@@ -1176,7 +1096,6 @@ class ProductionModel(demand.Pathing):
             axis=1).groupby(
             group_cols).sum().reset_index()
 
-        nhb = nhb.drop('p', axis=1)
         nhb = nhb.rename(columns={'nhb_p': 'p'})
         nhb = nhb.rename(columns={'productions': 'trips'})
 
@@ -1193,18 +1112,6 @@ class ProductionModel(demand.Pathing):
 
         # NTEM Controls
         if self.params['production_ntem_control']:
-            msoa_list = list(nhb)[1:]
-            msoa_toc = ['msoa_zone_id']
-            for col in msoa_list:
-                msoa_toc.append(col)
-            p_params = {'target_output_cols': msoa_toc}
-
-            # BACKLOG: More exacting method
-            # Convert back to msoa
-            nhb_msoa = self.aggregate_to_zones(
-                nhb,
-                zone_to_target = False,
-                pop_weighted=True)
 
             ntem_totals = pd.read_csv(tec.NTEM_PA)
 
@@ -1212,8 +1119,8 @@ class ProductionModel(demand.Pathing):
                 print('NTEM totals cols')
                 print(list(ntem_totals))
 
-            nhb_msoa, ntem_a, ntem_f, nhb_lad = ntem.control_to_ntem(
-                    nhb_msoa,
+            nhb, ntem_a, ntem_f, nhb_lad = ntem.control_to_ntem(
+                    nhb,
                     ntem_totals,
                     ntem_lad_lookup,
                     constraint_cols=['p', 'm', 'tp'],
@@ -1221,8 +1128,7 @@ class ProductionModel(demand.Pathing):
                     ntem_value_name='productions',
                     trip_origin='nhb',
                     replace_drops=False)
-            print(list(nhb_msoa))
-    
+
             if self.params['export_lad']:
                 safe_dataframe_to_csv(
                     nhb_lad,
@@ -1233,90 +1139,19 @@ class ProductionModel(demand.Pathing):
                         'lad_ntem.csv'))
 
             if self.params['export_msoa']:
-                # BACKLOG: Actually export msoa..
+                com.write_out(nhb,
+                              os.path.join(
+                                  output_dir,
+                                  output_f,
+                                  'nhb_productions_' +
+                                  self.params['land_use_zoning'].lower()
+                              ))
                 print('Export msoa')
-
-            # Convert back to zones
-            p_params = {'target_output_cols': list(nhb)}
-            nhb = self.aggregate_to_zones(
-                nhb_msoa,
-                pop_weighted=True)
 
         # Factors
         if self.params['production_k_factor_control']:
-            k_factors = os.listdir(
-                self.params['production_k_factor_path'])[0]
-            k_factors = pd.read_csv(
-                os.path.join(
-                    self.params['production_k_factor_path'],
-                    k_factors))
-            k_factors = k_factors.reindex(
-                ['lad_zone_id',
-                 'p',
-                 'm',
-                 'tp',
-                 'prod_k'], axis=1)
+            # BACKLOG: Reliable k factor control
+            print('k factor control - to be re-written')
 
-            nhb_purpose = tec.NHB_PURPOSE
 
-            nhb_k_factors = k_factors[k_factors['p'].isin(nhb_purpose)]
-
-            # Get hb_adjustment factors
-            # BACKLOG: Should be relative
-            lad_lookup = pd.read_csv(lad_path)
-            lad_lookup = lad_lookup.reindex(['lad_zone_id', ia_name], axis=1)
-
-            nhb = nhb.merge(lad_lookup,
-                            how='left',
-                            on=ia_name)
-            nhb['trips'] = nhb['trips'].replace(0, 0.001)
-
-            # Build LA adjustment
-            adj_fac = nhb.reindex(['lad_zone_id',
-                                   'p',
-                                   'm',
-                                   'tp',
-                                   'trips'], axis=1).groupby(
-            ['lad_zone_id',
-             'p',
-             'm',
-             'tp']).sum().reset_index()
-            adj_fac = adj_fac.merge(nhb_k_factors,
-                                    how='left',
-                                    on=['lad_zone_id',
-                                        'p',
-                                        'm',
-                                        'tp'])
-            adj_fac['adj_fac'] = adj_fac['prod_k']/adj_fac['trips']
-            adj_fac = adj_fac.reindex(['lad_zone_id',
-                                       'p',
-                                       'm',
-                                       'tp',
-                                       'adj_fac'], axis=1)
-            adj_fac['adj_fac'] = adj_fac['adj_fac'].replace(np.nan, 1)
-
-            nhb = nhb.merge(adj_fac,
-                            how='left',
-                            on=['lad_zone_id',
-                                'p',
-                                'm',
-                                'tp'])
-            nhb['trips'] = nhb['trips'] * nhb['adj_fac']
-
-            nhb = nhb.drop(['lad_zone_id', 'adj_fac'], axis=1)
-
-        # Write out
-        nhb_path = os.path.join(
-            output_dir,
-            output_f,
-            'nhb_productions_' +
-            self.params['model_zoning'].lower() +
-            '.csv')
-
-        if self.params['export_model_zoning']:
-            print('Out to:')
-            print(nhb_path)
-            safe_dataframe_to_csv(nhb,
-                                  nhb_path, index=False)
-
-        return nhb_path, nhb
+        return nhb
