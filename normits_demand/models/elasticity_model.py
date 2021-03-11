@@ -7,7 +7,13 @@
 ##### IMPORTS #####
 # Standard imports
 from pathlib import Path
-from typing import List, Dict, Tuple, Union
+from collections import defaultdict
+
+from typing import List
+from typing import Dict
+from typing import Tuple
+from typing import Union
+
 
 # Third party imports
 import numpy as np
@@ -28,13 +34,12 @@ from normits_demand.elasticity import constants as ec
 class ElasticityModel:
     """Class for applying elasticity calculations to EFS demand."""
 
-    def __init__(
-        self,
-        input_folders: Dict[str, Path],
-        input_files: Dict[str, Path],
-        output_folders: Dict[str, Path],
-        output_years: List[int],
-    ):
+    def __init__(self,
+                 input_folders: Dict[str, Path],
+                 input_files: Dict[str, Path],
+                 output_folders: Dict[str, Path],
+                 output_years: List[int],
+                 ):
         """Check input files and folders exist and create output folders.
 
         Parameters
@@ -93,12 +98,11 @@ class ElasticityModel:
     # BACKLOG: Move to utils/IO
     #   labels: demand merge
     @staticmethod
-    def _check_paths(
-        paths: Dict[str, Path],
-        expected: List[str],
-        path_type: str = "folder",
-        create_folders: bool = False,
-    ):
+    def _check_paths(paths: Dict[str, Path],
+                     expected: List[str],
+                     path_type: str = "folder",
+                     create_folders: bool = False,
+                     ) -> None:
         """Check if expected paths are given and exist.
 
         Parameters
@@ -126,16 +130,16 @@ class ElasticityModel:
         """
         path_type = path_type.lower()
         if path_type == "folder":
-            check = lambda p: p.is_dir()
+            def check(p): return p.is_dir()
         elif path_type == "file":
-            check = lambda p: p.is_file()
+            def check(p): return p.is_file()
         else:
             raise ValueError(
                 f"path_type should be 'folder' or 'file' not '{path_type}'"
             )
 
-        missing = []
-        not_dir = {}
+        missing = list()
+        not_dir = dict()
         for i in expected:
             if i not in paths.keys():
                 missing.append(i)
@@ -213,13 +217,12 @@ class ElasticityModel:
                     pbar.update(1)
             pbar.close()
 
-    def apply_elasticities(
-        self,
-        demand_params: Dict[str, str],
-        elasticity_params: Dict[str, str],
-        gc_params: Dict[str, Dict[str, float]],
-        cost_changes: pd.DataFrame,
-    ) -> Dict[str, pd.DataFrame]:
+    def apply_elasticities(self,
+                           demand_params: Dict[str, str],
+                           elasticity_params: Dict[str, str],
+                           gc_params: Dict[str, Dict[str, float]],
+                           cost_changes: pd.DataFrame,
+                           ) -> Dict[str, pd.DataFrame]:
         """Performs elasticity calculation for a single EFS segment.
 
         Parameters
@@ -290,16 +293,17 @@ class ElasticityModel:
         del car_original
         base_gc = gc.calculate_gen_costs(base_costs, gc_params)
 
-        # Loop through cost changes file and calculate demand adjustment
-        demand_adjustment = {k: [v] for k, v in base_demand.items()}
+        # Loop setup
         cols = [
             "elasticity_type",
             "constraint_matrix_name",
             "percentage_change",
         ]
-        for elast_type, cstr_name, change in cost_changes[cols].itertuples(
-            index=False, name=None
-        ):
+        iterator = cost_changes[cols].itertuples(index=False, name=None)
+        demand_adjustment = defaultdict(list)
+
+        # Loop through cost changes file and calculate demand adjustment
+        for elast_type, cstr_name, change in iterator:
             adj_dem = calculate_adjustment(
                 base_demand,
                 base_costs,
@@ -311,19 +315,24 @@ class ElasticityModel:
                 gc_params,
             )
 
-            for k in demand_adjustment:
-                demand_adjustment[k].append(adj_dem[k])
+            # Store all our adjustments to apply later
+            for mode in adj_dem.keys():
+                demand_adjustment[mode].append(adj_dem[mode])
 
         # Multiply base demand by adjustments for rail and car and convert to dataframe
-        adjusted_demand = {}
-        for m, adjustments in demand_adjustment.items():
-            adjusted_demand[m] = np.prod(adjustments, axis=0)
-            if isinstance(base_demand[m], pd.DataFrame):
-                adjusted_demand[m] = pd.DataFrame(
-                    adjusted_demand[m],
-                    columns=base_demand[m].columns,
-                    index=base_demand[m].index,
+        adjusted_demand = dict()
+        for mode, base_vals in base_demand.items():
+            # Check the adjustments exist!
+            if mode not in demand_adjustment.keys():
+                raise ValueError(
+                    "We haven't calculated any demand adjustments for the "
+                    "base demand in mode '%s'!!" % mode
                 )
+
+            # Adjust our base demand
+            full_adjustment = np.prod(demand_adjustment[mode], axis=0)
+            adjusted_demand[mode] = base_vals * full_adjustment
+
 
         # Split rail demand back into CA/NCA
         for nm, df in rail_ca_split.items():
@@ -344,18 +353,18 @@ class ElasticityModel:
             )
         adjusted_demand.pop("rail")
 
+        print("HERE")
+        print(demand_params)
         # Write demand output
         self._write_demand(adjusted_demand, demand_params, car_reverse)
         return adjusted_demand
 
-    def _get_demand(
-        self, demand_params: Dict[str, str]
-    ) -> Tuple[
-        Dict[str, pd.DataFrame],
-        Dict[str, np.array],
-        pd.DataFrame,
-        pd.DataFrame,
-    ]:
+    def _get_demand(self,
+                    demand_params: Dict[str, str]
+                    ) -> Tuple[Dict[str, pd.DataFrame],
+                               Dict[str, np.array],
+                               pd.DataFrame,
+                               pd.DataFrame]:
         """Read the rail and car demand, aggregating CA and NCA for rail.
 
         Parameters
@@ -463,12 +472,11 @@ class ElasticityModel:
         costs.update(dict.fromkeys(ec.OTHER_MODES, 1.0))
         return costs
 
-    def _write_demand(
-        self,
-        adjusted_demand: Dict[str, pd.DataFrame],
-        demand_params: Dict[str, str],
-        car_reverse: pd.DataFrame,
-    ):
+    def _write_demand(self,
+                      adjusted_demand: Dict[str, pd.DataFrame],
+                      demand_params: Dict[str, str],
+                      car_reverse: pd.DataFrame,
+                      ) -> None:
         """Write the adjusted demand to CSV files.
 
         The outputs are written to mode sub-folders in `self.output_folder`,
@@ -517,7 +525,7 @@ class ElasticityModel:
             original_zs.index.name = adjusted_demand["car"].index.name
             original_zs.columns.name = adjusted_demand["car"].columns.name
             # Check conversion hasn't changed total
-            totals = []
+            totals = list()
             for x in (original_zs, adjusted_demand["car"]):
                 totals.append(np.sum(x.values))
             if abs(totals[0] - totals[1]) > ec.MATRIX_TOTAL_TOLERANCE:

@@ -285,9 +285,11 @@ class TestGetCosts:
     @pytest.mark.parametrize(
         "mode, zone_system", [("car", "noham"), ("rail", "norms")]
     )
-    def test_read(
-        self, costs: Tuple[Dict[str, Path], Path], mode: str, zone_system: str
-    ):
+    def test_read(self,
+                  costs: Tuple[Dict[str, Path], Path],
+                  mode: str,
+                  zone_system: str
+                  ) -> None:
         """Test that the function reads the costs correctly.
 
         Parameters
