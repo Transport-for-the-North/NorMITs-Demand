@@ -2985,7 +2985,7 @@ def add_all_commute_cat(df: pd.DataFrame,
     return df.reset_index(drop=True)
 
 
-def create_iter_name(iter_num: int) -> str:
+def create_iter_name(iter_num: Union[int, str]) -> str:
     return 'iter' + str(iter_num)
 
 

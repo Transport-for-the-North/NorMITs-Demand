@@ -28,10 +28,10 @@ def main():
     integrate_dlog = False
     run_pop_emp_comparison = False
 
-    run_base_efs = False
-    recreate_productions = True
-    recreate_attractions = True
-    recreate_nhb_productions = True
+    run_base_efs = True
+    recreate_productions = False
+    recreate_attractions = False
+    recreate_nhb_productions = False
 
     run_bespoke_zones = False
     run_hb_pa_to_od = False
@@ -41,7 +41,7 @@ def main():
 
     # Controls I/O
     scenario = consts.SC00_NTEM
-    iter_num = 0
+    iter_num = '3b'
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME

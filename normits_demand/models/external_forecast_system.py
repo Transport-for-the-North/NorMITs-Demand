@@ -16,6 +16,7 @@ import time
 from typing import List
 from typing import Dict
 from typing import Tuple
+from typing import Union
 
 # External libs
 import pandas as pd
@@ -58,7 +59,7 @@ class ExternalForecastSystem:
 
     def __init__(self,
                  model_name: str,
-                 iter_num: int,
+                 iter_num: Union[int, str],
                  scenario_name: str,
 
                  integrate_dlog: bool = False,
@@ -559,7 +560,7 @@ class ExternalForecastSystem:
             alt_worker_growth_assumption_file,
             alt_pop_split_file,
             distribution_method,
-            self.imports['seed_dists'],
+            self.imports['decomp_post_me'],
             hb_purposes_needed,
             modes_needed,
             soc_needed,
@@ -588,7 +589,7 @@ class ExternalForecastSystem:
 
         # ## PRODUCTION GENERATION ## #
         print("Generating productions...")
-        production_trips = self.production_generator.run(
+        p_vector = self.production_generator.run(
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
             by_pop_import_path=self.imports['pop_by'],
@@ -613,7 +614,7 @@ class ExternalForecastSystem:
 
         # ## ATTRACTION GENERATION ###
         print("Generating attractions...")
-        attraction_dataframe, nhb_att = self.attraction_generator.run(
+        a_vector, nhb_a_vector = self.attraction_generator.run(
             out_path=self.exports['attractions'],
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
@@ -684,7 +685,7 @@ class ExternalForecastSystem:
             control_productions=True,
             control_fy_productions=self.ntem_control_future_years
         )
-        nhb_productions = nhb_pm.run(
+        nhb_p_vector = nhb_pm.run(
             recreate_productions=recreate_nhb_productions
         )
 
@@ -696,12 +697,12 @@ class ExternalForecastSystem:
         # # ## ATTRACTION WEIGHT GENERATION ## #
         print("Generating attraction weights...")
         attraction_weights = du.convert_to_weights(
-            attraction_dataframe,
+            a_vector,
             year_list
         )
 
         nhb_a_weights = du.convert_to_weights(
-            nhb_att,
+            nhb_a_vector,
             year_list
         )
 
@@ -712,10 +713,10 @@ class ExternalForecastSystem:
               (current_time - last_time))
 
         # To avoid errors lets make sure all columns have the same datatype
-        production_trips.columns = production_trips.columns.astype(str)
-        nhb_productions.columns = nhb_productions.columns.astype(str)
+        p_vector.columns = p_vector.columns.astype(str)
+        nhb_p_vector.columns = nhb_p_vector.columns.astype(str)
 
-        attraction_dataframe.columns = attraction_dataframe.columns.astype(str)
+        a_vector.columns = a_vector.columns.astype(str)
         attraction_weights.columns = attraction_weights.columns.astype(str)
         nhb_a_weights.columns = nhb_a_weights.columns.astype(str)
 
@@ -729,34 +730,34 @@ class ExternalForecastSystem:
             pop_translation, emp_translation = self.get_translation_dfs()
 
             # Figure out which columns are the segmentation
-            non_split_columns = list(production_trips.columns)
+            non_split_columns = list(p_vector.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
             converted_productions = self.zone_translator.run(
-                production_trips,
+                p_vector,
                 pop_translation,
                 self.input_zone_system,
                 self.output_zone_system,
                 non_split_cols=non_split_columns
             )
 
-            non_split_columns = list(nhb_productions.columns)
+            non_split_columns = list(nhb_p_vector.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_nhb_productions = self.zone_translator.run(nhb_productions, pop_translation,
+            converted_nhb_productions = self.zone_translator.run(nhb_p_vector, pop_translation,
                                                                  self.input_zone_system,
                                                                  self.output_zone_system,
                                                                  non_split_cols=non_split_columns)
 
-            non_split_columns = list(attraction_dataframe.columns)
+            non_split_columns = list(a_vector.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_pure_attractions = self.zone_translator.run(attraction_dataframe,
+            converted_pure_attractions = self.zone_translator.run(a_vector,
                                                                   emp_translation,
                                                                   self.input_zone_system,
                                                                   self.output_zone_system,
                                                                   non_split_cols=non_split_columns)
 
-            non_split_columns = list(nhb_att.columns)
+            non_split_columns = list(nhb_a_vector.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_nhb_att = self.zone_translator.run(nhb_att, emp_translation,
+            converted_nhb_att = self.zone_translator.run(nhb_a_vector, emp_translation,
                                                          self.input_zone_system,
                                                          self.output_zone_system,
                                                          non_split_cols=non_split_columns)
@@ -781,13 +782,13 @@ class ExternalForecastSystem:
             print("Zone translation took: %.2f seconds" %
                   (current_time - last_time))
         else:
-            converted_productions = production_trips.copy()
-            converted_nhb_productions = nhb_productions.copy()
+            converted_productions = p_vector.copy()
+            converted_nhb_productions = nhb_p_vector.copy()
 
             converted_attractions = attraction_weights.copy()
-            converted_pure_attractions = attraction_dataframe.copy()
+            converted_pure_attractions = a_vector.copy()
 
-            converted_nhb_att = nhb_att.copy()
+            converted_nhb_att = nhb_a_vector.copy()
             converted_nhb_attractions = nhb_a_weights.copy()
 
         # Write Translated p/a to file
@@ -865,7 +866,7 @@ class ExternalForecastSystem:
                 ns_needed=ns_needed,
                 ca_needed=car_availabilities_needed,
                 zone_col=model_zone_col,
-                seed_dist_dir=self.imports['seed_dists'],
+                seed_dist_dir=self.imports['decomp_post_me'],
                 dist_out=self.exports['pa_24'],
                 audit_out=self.exports['dist_audits'],
                 echo=echo_distribution
@@ -883,7 +884,7 @@ class ExternalForecastSystem:
                 ns_needed=ns_needed,
                 ca_needed=car_availabilities_needed,
                 zone_col=model_zone_col,
-                seed_dist_dir=self.imports['seed_dists'],
+                seed_dist_dir=self.imports['decomp_post_me'],
                 dist_out=self.exports['pa_24'],
                 audit_out=self.exports['dist_audits'],
                 echo=echo_distribution
@@ -997,8 +998,7 @@ class ExternalForecastSystem:
         fname = consts.EMP_FNAME % self.input_zone_system
         grown_emp_path = os.path.join(self.exports["attractions"], fname)
 
-        # Us the matrices in seed distribution as the base observed
-        observed_pa_path = self.imports["seed_dists"]
+        observed_pa_path = self.imports["decomp_post_me"]
 
         # ## APPLY GROWTH CRITERIA ## #
 
