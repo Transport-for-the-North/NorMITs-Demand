@@ -694,6 +694,128 @@ class ExternalForecastSystem:
         elapsed_time = current_time - last_time
         print("NHB Production generation took: %.2f seconds" % elapsed_time)
 
+        # To avoid errors lets make sure all columns have the same datatype
+        p_vector.columns = p_vector.columns.astype(str)
+        nhb_p_vector.columns = nhb_p_vector.columns.astype(str)
+
+        a_vector.columns = a_vector.columns.astype(str)
+        nhb_a_vector.columns = nhb_a_vector.columns.astype(str)
+
+        # ## ZONE TRANSLATION ## #
+        model_zone_col = '%s_zone_id' % self.model_name
+        if self.output_zone_system != self.input_zone_system:
+            print("Need to translate zones.")
+            print("Translating from: " + self.input_zone_system)
+            print("Translating to: " + self.output_zone_system)
+
+            pop_translation, emp_translation = self.get_translation_dfs()
+
+            # Figure out which columns are the segmentation
+            non_split_columns = list(p_vector.columns)
+            non_split_columns = du.list_safe_remove(non_split_columns, year_list)
+            model_p_vector = self.zone_translator.run(
+                p_vector,
+                pop_translation,
+                self.input_zone_system,
+                self.output_zone_system,
+                non_split_cols=non_split_columns
+            )
+
+            non_split_columns = list(nhb_p_vector.columns)
+            non_split_columns = du.list_safe_remove(non_split_columns, year_list)
+            model_nhb_p_vector = self.zone_translator.run(
+                nhb_p_vector,
+                pop_translation,
+                self.input_zone_system,
+                self.output_zone_system,
+                non_split_cols=non_split_columns
+            )
+
+            non_split_columns = list(a_vector.columns)
+            non_split_columns = du.list_safe_remove(non_split_columns, year_list)
+            model_a_vector = self.zone_translator.run(
+                a_vector,
+                emp_translation,
+                self.input_zone_system,
+                self.output_zone_system,
+                non_split_cols=non_split_columns
+            )
+
+            non_split_columns = list(nhb_a_vector.columns)
+            non_split_columns = du.list_safe_remove(non_split_columns, year_list)
+            model_nhb_a_vector = self.zone_translator.run(
+                nhb_a_vector,
+                emp_translation,
+                self.input_zone_system,
+                self.output_zone_system,
+                non_split_cols=non_split_columns
+            )
+
+            print("Zone translation completed!")
+            last_time = current_time
+            current_time = time.time()
+            print("Zone translation took: %.2f seconds" %
+                  (current_time - last_time))
+        else:
+            model_p_vector = p_vector.copy()
+            model_nhb_p_vector = nhb_p_vector.copy()
+
+            model_a_vector = a_vector.copy()
+            model_nhb_a_vector = nhb_a_vector.copy()
+
+        # Write Translated p/a to file
+        fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
+        model_p_vector.to_csv(
+            os.path.join(self.exports['productions'], fname),
+            index=False
+        )
+
+        fname = consts.PRODS_FNAME % (self.output_zone_system, 'nhb')
+        model_nhb_p_vector.to_csv(
+            os.path.join(self.exports['productions'], fname),
+            index=False
+        )
+
+        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
+        model_a_vector.to_csv(
+            os.path.join(self.exports['attractions'], fname),
+            index=False
+        )
+
+        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'nhb')
+        model_nhb_a_vector.to_csv(
+            os.path.join(self.exports['attractions'], fname),
+            index=False
+        )
+
+        if apply_growth_criteria:
+            # Apply the growth criteria using the post-ME P/A vectors
+            # (normal and exceptional zones)
+            pa_dfs = self._handle_growth_criteria(
+                synth_productions=model_p_vector,
+                synth_attractions=model_a_vector,
+                base_year=str(base_year),
+                future_years=[str(x) for x in future_years],
+                integrate_dlog=self.integrate_dlog
+            )
+            model_p_vector, model_a_vector = pa_dfs
+
+        # Write grown productions and attractions to file
+        # Save as exceptional - e.g. "exc_productions"
+        fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
+        fname = fname.replace("_productions", "_exc_productions")
+        model_p_vector.to_csv(
+            os.path.join(self.exports['productions'], fname),
+            index=False
+        )
+
+        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
+        fname = fname.replace("_attractions", "_exc_attractions")
+        model_a_vector.to_csv(
+            os.path.join(self.exports['attractions'], fname),
+            index=False
+        )
+
         # # ## ATTRACTION WEIGHT GENERATION ## #
         print("Generating attraction weights...")
         attraction_weights = du.convert_to_weights(
@@ -712,152 +834,12 @@ class ExternalForecastSystem:
         print("Attraction weight generation took: %.2f seconds" %
               (current_time - last_time))
 
-        # To avoid errors lets make sure all columns have the same datatype
-        p_vector.columns = p_vector.columns.astype(str)
-        nhb_p_vector.columns = nhb_p_vector.columns.astype(str)
-
-        a_vector.columns = a_vector.columns.astype(str)
-        attraction_weights.columns = attraction_weights.columns.astype(str)
-        nhb_a_weights.columns = nhb_a_weights.columns.astype(str)
-
-        # ## ZONE TRANSLATION ## #
-        model_zone_col = '%s_zone_id' % self.model_name
-        if self.output_zone_system != self.input_zone_system:
-            print("Need to translate zones.")
-            print("Translating from: " + self.input_zone_system)
-            print("Translating to: " + self.output_zone_system)
-
-            pop_translation, emp_translation = self.get_translation_dfs()
-
-            # Figure out which columns are the segmentation
-            non_split_columns = list(p_vector.columns)
-            non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_productions = self.zone_translator.run(
-                p_vector,
-                pop_translation,
-                self.input_zone_system,
-                self.output_zone_system,
-                non_split_cols=non_split_columns
-            )
-
-            non_split_columns = list(nhb_p_vector.columns)
-            non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_nhb_productions = self.zone_translator.run(nhb_p_vector, pop_translation,
-                                                                 self.input_zone_system,
-                                                                 self.output_zone_system,
-                                                                 non_split_cols=non_split_columns)
-
-            non_split_columns = list(a_vector.columns)
-            non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_pure_attractions = self.zone_translator.run(a_vector,
-                                                                  emp_translation,
-                                                                  self.input_zone_system,
-                                                                  self.output_zone_system,
-                                                                  non_split_cols=non_split_columns)
-
-            non_split_columns = list(nhb_a_vector.columns)
-            non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_nhb_att = self.zone_translator.run(nhb_a_vector, emp_translation,
-                                                         self.input_zone_system,
-                                                         self.output_zone_system,
-                                                         non_split_cols=non_split_columns)
-
-            non_split_columns = list(attraction_weights.columns)
-            non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_attractions = self.zone_translator.run(attraction_weights, emp_translation,
-                                                             self.input_zone_system,
-                                                             self.output_zone_system,
-                                                             non_split_cols=non_split_columns)
-
-            non_split_columns = list(nhb_a_weights.columns)
-            non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_nhb_attractions = self.zone_translator.run(nhb_a_weights, emp_translation,
-                                                                 self.input_zone_system,
-                                                                 self.output_zone_system,
-                                                                 non_split_cols=non_split_columns)
-
-            print("Zone translation completed!")
-            last_time = current_time
-            current_time = time.time()
-            print("Zone translation took: %.2f seconds" %
-                  (current_time - last_time))
-        else:
-            converted_productions = p_vector.copy()
-            converted_nhb_productions = nhb_p_vector.copy()
-
-            converted_attractions = attraction_weights.copy()
-            converted_pure_attractions = a_vector.copy()
-
-            converted_nhb_att = nhb_a_vector.copy()
-            converted_nhb_attractions = nhb_a_weights.copy()
-
-        # Write Translated p/a to file
-        fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
-        converted_productions.to_csv(
-            os.path.join(self.exports['productions'], fname),
-            index=False
-        )
-
-        fname = consts.PRODS_FNAME % (self.output_zone_system, 'nhb')
-        converted_nhb_productions.to_csv(
-            os.path.join(self.exports['productions'], fname),
-            index=False
-        )
-
-        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
-        converted_pure_attractions.to_csv(
-            os.path.join(self.exports['attractions'], fname),
-            index=False
-        )
-
-        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'nhb')
-        converted_nhb_att.to_csv(
-            os.path.join(self.exports['attractions'], fname),
-            index=False
-        )
-
-        if apply_growth_criteria:
-            # Apply the growth criteria using the post-ME P/A vectors
-            # (normal and exceptional zones)
-            pa_dfs = self._handle_growth_criteria(
-                synth_productions=converted_productions,
-                synth_attractions=converted_pure_attractions,
-                base_year=str(base_year),
-                future_years=[str(x) for x in future_years],
-                integrate_dlog=self.integrate_dlog
-            )
-            converted_productions, converted_pure_attractions = pa_dfs
-
-        # Convert the new attractions to weights
-        converted_attractions = du.convert_to_weights(
-            converted_pure_attractions,
-            year_list
-        )
-
-        # Write grown productions and attractions to file
-        # Save as exceptional - e.g. "exc_productions"
-        fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
-        fname = fname.replace("_productions", "_exc_productions")
-        converted_productions.to_csv(
-            os.path.join(self.exports['productions'], fname),
-            index=False
-        )
-
-        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
-        fname = fname.replace("_attractions", "_exc_attractions")
-        converted_pure_attractions.to_csv(
-            os.path.join(self.exports['attractions'], fname),
-            index=False
-        )
-
-        # TODO: Move conversion to attraction weights down here
-
         # ## DISTRIBUTION ## #
         if distribution_method == "furness":
             print("Generating HB distributions...")
             furness.distribute_pa(
-                productions=converted_productions,
-                attraction_weights=converted_attractions,
+                productions=model_p_vector,
+                attraction_weights=attraction_weights,
                 trip_origin='hb',
                 years_needed=year_list,
                 p_needed=hb_purposes_needed,
@@ -874,8 +856,8 @@ class ExternalForecastSystem:
 
             print("Generating NHB distributions...")
             furness.distribute_pa(
-                productions=converted_nhb_productions,
-                attraction_weights=converted_nhb_attractions,
+                productions=model_nhb_p_vector,
+                attraction_weights=nhb_a_weights,
                 trip_origin='nhb',
                 years_needed=year_list,
                 p_needed=nhb_purposes_needed,
@@ -903,7 +885,7 @@ class ExternalForecastSystem:
                                             "tfn_level_one_sectors_norms_grouping.csv")
 
         sector_totals = self.sector_reporter.calculate_sector_totals(
-                converted_productions,
+                model_p_vector,
                 grouping_metric_columns=year_list,
                 sector_grouping_file=sector_grouping_file,
                 zone_col=model_zone_col
@@ -915,7 +897,7 @@ class ExternalForecastSystem:
             # TODO: Update sector reporter.
             #  Sector totals don't currently allow per purpose reporting
 
-            pm_productions = converted_productions.copy()
+            pm_productions = model_p_vector.copy()
 
             pm_sector_totals = self.sector_reporter.calculate_sector_totals(
                 pm_productions,
