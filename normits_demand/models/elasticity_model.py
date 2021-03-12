@@ -197,11 +197,14 @@ class ElasticityModel:
                         "year": yr,
                         "purpose": str(row["EFS_SubPurpID"]),
                     }
+
                     if not np.isnan(row["EFS_SkillLevel"]):
                         seg = row["EFS_SkillLevel"]
+
                     else:
                         seg = row["EFS_IncLevel"]
                     demand_params["segment"] = f"{seg:.0f}"
+
                     try:
                         self.apply_elasticities(
                             demand_params,
