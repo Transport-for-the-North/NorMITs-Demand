@@ -85,9 +85,14 @@ class ExternalForecastSystem:
         self.verbose = verbose
 
         # TODO: Write function to determine if CA is needed for model_names
+        # TODO: Write function to determine if from/to PCU is needed for model_names
         self.is_ca_needed = True
+        self.uses_pcu = False
         if self.model_name == 'noham':
             self.is_ca_needed = False
+            self.uses_pcu = True
+
+
 
         self.input_zone_system = "MSOA"
         self.output_zone_system = self.model_name
@@ -1468,35 +1473,23 @@ class ExternalForecastSystem:
         # Init
         _input_checks(m_needed=m_needed)
 
-        if self.model_name == 'norms' or self.model_name == 'norms_2015':
-            ca_needed = consts.CA_NEEDED
-            from_pcu = False
-        elif self.model_name == 'noham':
-            ca_needed = [None]
-            from_pcu = True
-        else:
-            raise ValueError("Got an unexpected model name. Got %s, expected "
-                             "either 'norms', 'norms_2015' or 'noham'."
-                             % str(self.model_name))
-
-        # TODO: Fix OD2PA to use norms_2015/norms for zone names
-
         if overwrite_decompiled_od:
             print("Decompiling OD Matrices into purposes...")
             need_convert = od2pa.need_to_convert_to_efs_matrices(
-                model_import=self.exports['post_me']['model_output'],
-                od_import=self.exports['post_me']['compiled_od']
+                post_me_import=self.imports['post_me_matrices'],
+                converted_export=self.exports['post_me']['compiled_od']
             )
+
             if need_convert:
                 od2pa.convert_to_efs_matrices(
-                    import_path=self.exports['post_me']['model_output'],
+                    import_path=self.imports['post_me_matrices'],
                     export_path=self.exports['post_me']['compiled_od'],
                     matrix_format='od',
                     year=year,
                     user_class=True,
                     to_wide=True,
                     wide_col_name='%s_zone_id' % model_name,
-                    from_pcu=from_pcu,
+                    from_pcu=self.uses_pcu,
                     vehicle_occupancy_import=self.imports['home']
                 )
 
