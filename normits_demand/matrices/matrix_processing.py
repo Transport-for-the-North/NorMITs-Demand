@@ -2232,7 +2232,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
     # BACKLOG: matrices_to_vector() needs checks adding for edge cases
     #  labels: EFS, error checks
     # Init
-    du.print_w_toggle("Generating vectors from %s..." % mat_import_dir, echo=verbose)
+    du.print_w_toggle("Generating vectors from %s..." % mat_import_dir, verbose=verbose)
     mat_names = [x for x in du.list_files(mat_import_dir) if file_ops.is_csv(x)]
 
     # Split the matrices into years

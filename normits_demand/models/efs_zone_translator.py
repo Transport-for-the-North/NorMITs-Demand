@@ -190,21 +190,20 @@ class MatrixTotalError(ValueError):
 
 
 ##### FUNCTIONS #####
-def translate_matrix(
-    matrix: pd.DataFrame,
-    lookup: pd.DataFrame,
-    lookup_cols: Tuple[str, str],
-    square_format: bool = True,
-    zone_cols: Tuple[str, str] = None,
-    split_column: str = None,
-    aggregation_method: str = "sum",
-    weights: pd.DataFrame = None,
-    check_total: bool = True
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def translate_matrix(matrix: pd.DataFrame,
+                     lookup: pd.DataFrame,
+                     lookup_cols: Tuple[str, str],
+                     square_format: bool = True,
+                     zone_cols: Tuple[str, str] = None,
+                     split_column: str = None,
+                     aggregation_method: str = "sum",
+                     weights: pd.DataFrame = None,
+                     check_total: bool = True
+                     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Convert a matrix to a new zone system using given lookup.
 
     Based on the `translate_matrices.translate_matrices` function
-    from TMS, simplied for use here.
+    from TMS, simplified for use here.
 
     Parameters
     ----------

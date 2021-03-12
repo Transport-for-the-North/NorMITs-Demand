@@ -15,7 +15,7 @@ from typing import Tuple, List, Dict
 # Third party imports
 
 # Local imports
-from normits_demand import elasticity_model as em
+import normits_demand as nd
 
 
 ##### CONSTANTS #####
@@ -23,12 +23,10 @@ CONFIG_FILE = "config/setup/elasticity_config.txt"
 
 
 ##### FUNCTIONS #####
-def get_inputs() -> Tuple[
-    Dict[str, Path],
-    Dict[str, Path],
-    Dict[str, Path],
-    List[str],
-]:
+def get_inputs() -> Tuple[Dict[str, Path],
+                          Dict[str, Path],
+                          Dict[str, Path],
+                          List[str]]:
     """Read config file to get the input and output paths and information.
 
     The config file requires the following sections, with
@@ -80,8 +78,11 @@ def get_inputs() -> Tuple[
 def main():
     """Runs the elasticity model using parameters from the config file."""
     input_folders, input_files, output_folder, years = get_inputs()
-    elast_model = em.ElasticityModel(
-        input_folders, input_files, output_folder, years
+    elast_model = nd.ElasticityModel(
+        input_folders,
+        input_files,
+        output_folder,
+        years,
     )
     elast_model.apply_all()
 

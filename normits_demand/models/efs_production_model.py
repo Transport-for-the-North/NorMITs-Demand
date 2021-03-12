@@ -1102,10 +1102,8 @@ class NhbProductionModel:
 
         # Initialise timing
         start_time = timing.current_milli_time()
-        du.print_w_toggle(
-            "Starting NHB Production Model at: %s" % timing.get_datetime(),
-            echo=verbose
-        )
+        du.print_w_toggle("Starting NHB Production Model at: %s" % timing.get_datetime(),
+                          verbose=verbose)
 
         nhb_prods = self._gen_base_productions(verbose=verbose)
 
@@ -1200,15 +1198,10 @@ class NhbProductionModel:
 
         # End timing
         end_time = timing.current_milli_time()
-        du.print_w_toggle(
-            "Finished NHB Production Model at: %s" % timing.get_datetime(),
-            echo=verbose
-        )
-        du.print_w_toggle(
-            "NHB Production Model took: %s"
-            % timing.time_taken(start_time, end_time),
-            echo=verbose
-        )
+        du.print_w_toggle("Finished NHB Production Model at: %s" % timing.get_datetime(),
+                          verbose=verbose)
+        du.print_w_toggle("NHB Production Model took: %s"
+                          % timing.time_taken(start_time, end_time), verbose=verbose)
 
         return nhb_prods
 

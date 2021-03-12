@@ -525,7 +525,7 @@ def _build_od_internal(pa_import,
     # ## Build to_home matrices from the from_home PA ## #
     frh_ph = {}
     for tp_frh in tps:
-        du.print_w_toggle('From from_h ' + str(tp_frh), echo=echo)
+        du.print_w_toggle('From from_h ' + str(tp_frh), verbose=echo)
         frh_int = int(tp_frh.replace('tp', ''))
         phi_frh = phi_factors[phi_factors['time_from_home'] == frh_int]
 
@@ -536,7 +536,7 @@ def _build_od_internal(pa_import,
         toh_dists = {}
         for tp_toh in tps:
             # Get phi
-            du.print_w_toggle('\tBuilding to_h ' + str(tp_toh), echo=echo)
+            du.print_w_toggle('\tBuilding to_h ' + str(tp_toh), verbose=echo)
             toh_int = int(tp_toh.replace('tp', ''))
             phi_toh = phi_frh[phi_frh['time_to_home'] == toh_int]
             phi_toh = phi_toh['direction_factor']
@@ -603,11 +603,11 @@ def _build_od_internal(pa_import,
         output_od = output_from + output_to
         output_od_name = output_name.replace('pa', 'od')
 
-        du.print_w_toggle('Exporting ' + output_from_name, echo=echo)
-        du.print_w_toggle('& ' + output_to_name, echo=echo)
+        du.print_w_toggle('Exporting ' + output_from_name, verbose=echo)
+        du.print_w_toggle('& ' + output_to_name, verbose=echo)
         if full_od_out:
-            du.print_w_toggle('& ' + output_od_name, echo=echo)
-        du.print_w_toggle('To ' + od_export, echo=echo)
+            du.print_w_toggle('& ' + output_od_name, verbose=echo)
+        du.print_w_toggle('To ' + od_export, verbose=echo)
 
         # Output from_home, to_home and full OD matrices
         output_from_path = os.path.join(od_export, output_from_name)

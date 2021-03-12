@@ -318,9 +318,9 @@ def validate_vdm_seg_params(seg_params: Dict[str, Any]) -> Dict[str, Any]:
     return seg_params
 
 
-def print_w_toggle(*args, echo, **kwargs):
+def print_w_toggle(*args, verbose, **kwargs):
     """
-    Small wrapper to only print when echo=True
+    Small wrapper to only print when verbose=True
 
     Parameters
     ----------
@@ -328,13 +328,13 @@ def print_w_toggle(*args, echo, **kwargs):
         The text to print - can be passed in the same format as a usual
         print function
 
-    echo:
+    verbose:
         Whether to print the text or not
 
     **kwargs:
         Any other kwargs to pass directly to the print function call
     """
-    if echo:
+    if verbose:
         print(*args, **kwargs)
 
 

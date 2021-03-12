@@ -28,20 +28,20 @@ def main():
     integrate_dlog = False
     run_pop_emp_comparison = False
 
-    run_base_efs = True
-    recreate_productions = False
+    run_base_efs = False
+    recreate_productions = True
     recreate_attractions = True
     recreate_nhb_productions = True
 
     run_bespoke_zones = False
     run_hb_pa_to_od = False
-    run_compile_od = False
+    run_compile_od = True
     run_decompile_od = False
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC04_UZC
-    iter_num = 0
+    scenario = consts.SC00_NTEM
+    iter_num = 3
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
@@ -101,7 +101,7 @@ def main():
     if run_compile_od:
         # Compiles base year OD matrices
         efs.pre_me_compile_od_matrices(
-            year=2050,
+            year=2018,
             overwrite_aggregated_od=False,
             overwrite_compiled_od=True,
         )

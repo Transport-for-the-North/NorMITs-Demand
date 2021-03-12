@@ -262,8 +262,10 @@ class ElasticityModel:
             The adjusted demand for all modes.
         """
         elasticities = eu.read_elasticity_file(
-            self.elasticity_folder / ec.ELASTICITIES_FILE, **elasticity_params
+            self.elasticity_folder / ec.ELASTICITIES_FILE,
+            **elasticity_params,
         )
+
         # Check if any elasticities aren't provided in ELASTICITIES_FILE
         missing = np.isin(
             cost_changes["elasticity_type"].unique(),
@@ -346,15 +348,16 @@ class ElasticityModel:
             name = du.get_dist_name(
                 **demand_params, mode=str(ec.MODE_ID["rail"])
             )
-            print(
-                f"{name}: when splitting adjusted rail demand into "
-                "CA and NCA, NCA + CA != Total Rail, there is a "
-                f"maximum difference of {diff:.1E}"
+            verbose = diff > 1e-5
+            du.print_w_toggle(
+                "%s: when splitting adjusted rail demand into CA and NCA, "
+                "NCA + CA != Total Rail, there is a maximum difference "
+                "of %.1e"
+                % (name, diff),
+                verbose=verbose
             )
         adjusted_demand.pop("rail")
 
-        print("HERE")
-        print(demand_params)
         # Write demand output
         self._write_demand(adjusted_demand, demand_params, car_reverse)
         return adjusted_demand
