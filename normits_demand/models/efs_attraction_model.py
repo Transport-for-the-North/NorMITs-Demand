@@ -150,7 +150,7 @@ class EFSAttractionGenerator:
         employment_import_path:
             Path to the directory containing the NorMITs Land Use outputs
             for future year employment estimates. The filenames will
-            be automatically generated based on consts.LU_EMP_FNAME
+            be automatically generated based on efs_consts.LU_EMP_FNAME
 
         emp_constraint:
             Values to constrain the employment numbers to.

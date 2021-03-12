@@ -18,8 +18,12 @@ from numpy.testing import assert_approx_equal
 from typing import List
 
 # self imports
-from normits_demand import efs_constants as consts
+from normits_demand import constants as consts
+from normits_demand import efs_constants as efs_consts
+
+from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
+
 from normits_demand.concurrency import multiprocessing
 from normits_demand.audits import audits
 
@@ -134,7 +138,10 @@ def _distribute_pa_internal(productions,
                             echo,
                             audit_out,
                             dist_out,
-                            round_dp=4
+                            round_dp,
+                            fname_suffix,
+                            csv_out,
+                            compress_out,
                             ):
     """
     Internal function of distribute_pa(). See that for full documentation.
@@ -148,7 +155,9 @@ def _distribute_pa_internal(productions,
         trip_origin=trip_origin,
         matrix_format='pa',
         calib_params=calib_params,
-        csv=True
+        suffix=fname_suffix,
+        csv=csv_out,
+        compressed=compress_out,
     )
     print("Furnessing %s ..." % out_dist_name)
 
@@ -257,6 +266,7 @@ def _distribute_pa_internal(productions,
     if audit_out is not None:
         # Create output filename
         audit_fname = out_dist_name.replace('_pa_', '_dist_audit_')
+        audit_fname = audit_fname.replace(consts.COMPRESSION_SUFFIX, '.csv')
         audit_path = os.path.join(audit_out, audit_fname)
 
         audits.audit_furness(
@@ -274,7 +284,7 @@ def _distribute_pa_internal(productions,
     # ## OUTPUT TO DISK ## #
     # MODEL ZONE!
     output_path = os.path.join(dist_out, out_dist_name)
-    pa_dist.to_csv(output_path)
+    file_ops.write_df(pa_dist, output_path)
 
 
 def distribute_pa(productions: pd.DataFrame,
@@ -300,10 +310,13 @@ def distribute_pa(productions: pd.DataFrame,
                   seed_infill: float = 1e-5,
                   furness_tol: float = 1e-2,
                   seed_mat_format: str = 'enhpa',
+                  fname_suffix: str = None,
+                  csv_out: bool = True,
+                  compress_out: bool = True,
                   echo: bool = False,
                   audit_out: str = None,
-                  round_dp: int = consts.DEFAULT_ROUNDING,
-                  process_count: int = consts.PROCESS_COUNT
+                  round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                  process_count: int = efs_consts.PROCESS_COUNT
                   ) -> None:
     """
     Furnesses the given productions and attractions
@@ -416,6 +429,18 @@ def distribute_pa(productions: pd.DataFrame,
     seed_mat_format:
         The format of the seed matrices. Usually 'enhpa' from TMS disaggregator
 
+    fname_suffix:
+        Any additional suffix to add to the filename when writing out to disk.
+        Will be added at the end of the filename, before the ftype suffix.
+
+    csv_out:
+        Whether to write the matrices out as csv or not. IF both this and
+        compress_out are True, compress_out is ignored.
+
+    compress_out:
+        Whether to write the matrices out as a compressed file or not.
+        If both this and csv_out are True, this argument is ignored.
+
     echo:
         Controls the amount of printing to the terminal. If False, most of the
         print outs will be ignored.
@@ -470,7 +495,6 @@ def distribute_pa(productions: pd.DataFrame,
         'ns_col': ns_col,
         'ca_col': ca_col,
         'tp_col': tp_col,
-
     }
 
     # Check the productions and attractions
@@ -533,15 +557,18 @@ def distribute_pa(productions: pd.DataFrame,
             'audit_out': audit_out,
             'dist_out': dist_out,
             'round_dp': round_dp,
+            'fname_suffix': fname_suffix,
+            'csv_out': csv_out,
+            'compress_out': compress_out,
         }
 
         # Build a list of all kw arguments
         kwargs_list = list()
         for calib_params in loop_generator:
             # Set the column name of the ns/soc column
-            if calib_params['p'] in consts.SOC_P:
+            if calib_params['p'] in efs_consts.SOC_P:
                 seg_col = soc_col
-            elif calib_params['p'] in consts.NS_P:
+            elif calib_params['p'] in efs_consts.NS_P:
                 seg_col = ns_col
             else:
                 raise ValueError("'%s' does not seem to be a valid soc or ns "
@@ -576,6 +603,7 @@ def distribute_pa(productions: pd.DataFrame,
                 ns_needed=ns_needed,
                 ca_needed=ca_needed,
                 tp_needed=tp_needed,
+                fname_suffix=fname_suffix,
             )
 
 
@@ -587,7 +615,7 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
                            tol: float = 1e-9,
                            idx_col: str = 'model_zone_id',
                            unique_col: str = 'trips',
-                           round_dp: int = 4,
+                           round_dp: int = efs_consts.DEFAULT_ROUNDING,
                            ):
     """
     Wrapper around doubly_constrained_furness() to handle pandas in/out
@@ -693,6 +721,6 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         index=ref_index,
         columns=ref_index,
         data=furnessed_mat
-    )
+    ).round(round_dp)
 
     return furnessed_mat

@@ -450,7 +450,7 @@ def remove_internal_suffix(path: nd.PathLike) -> pathlib.Path:
     """
     Returns path without the internal suffix in it.
 
-    The internal suffix comes from consts.INTERNAL_SUFFIX
+    The internal suffix comes from efs_consts.INTERNAL_SUFFIX
 
     Parameters
     ----------
@@ -469,7 +469,7 @@ def add_external_suffix(path: nd.PathLike) -> pathlib.Path:
     """
     Returns path with the external suffix added to it
 
-    The external suffix comes from consts.EXTERNAL_SUFFIX
+    The external suffix comes from efs_consts.EXTERNAL_SUFFIX
 
     Parameters
     ----------

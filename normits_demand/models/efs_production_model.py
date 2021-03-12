@@ -168,7 +168,7 @@ class EFSProductionGenerator:
         fy_pop_import_dir:
             Path to the directory containing the NorMITs Land Use outputs
             for future year population estimates. The filenames will
-            be automatically generated based on consts.LU_POP_FNAME
+            be automatically generated based on efs_consts.LU_POP_FNAME
 
         pop_constraint:
             TODO: Need to clarify if population constrain is still needed,
@@ -555,7 +555,7 @@ class NhbProductionModel:
         seg_level:
             The level of segmentation to run at. This is used to determine
             how to produce the NHB Productions. Should be one of the values
-            from consts.SEG_LEVELS
+            from efs_consts.SEG_LEVELS
 
         return_segments:
             Which segmentation to use when returning the NHB productions.

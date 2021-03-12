@@ -392,7 +392,7 @@ def efs_build_tp_pa(pa_import: str,
 
     round_dp:
         The number of decimal places to round the output values to.
-        Uses consts.DEFAULT_ROUNDING by default.
+        Uses efs_consts.DEFAULT_ROUNDING by default.
 
     process_count:
         The number of processes to use when multiprocessing. Negative numbers
@@ -672,7 +672,7 @@ def efs_build_od(pa_import: str,
     verbose
     round_dp:
         The number of decimal places to round the output values to.
-        Uses consts.DEFAULT_ROUNDING by default.
+        Uses efs_consts.DEFAULT_ROUNDING by default.
 
     process_count:
         The number of processes to use when multiprocessing. Set to 0 to not

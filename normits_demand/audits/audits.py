@@ -145,6 +145,7 @@ def summarise_audit_furness(audit_furness_output_path: str,
                             ns_needed: List[int] = None,
                             ca_needed: List[int] = None,
                             tp_needed: List[int] = None,
+                            fname_suffix: str = None,
                             p_diff_col_name: str = 'p_difference',
                             a_diff_col_name: str = 'a_difference',
                             ) -> None:
@@ -173,6 +174,7 @@ def summarise_audit_furness(audit_furness_output_path: str,
             trip_origin=trip_origin,
             matrix_format=format_name,
             calib_params=name_dict,
+            suffix=fname_suffix,
             csv=True
         )
         df = pd.read_csv(os.path.join(audit_furness_output_path, dist_name))

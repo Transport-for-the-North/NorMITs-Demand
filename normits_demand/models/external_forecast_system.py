@@ -32,6 +32,7 @@ from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.matrices import matrix_processing as mat_p
 
 from normits_demand.distribution import furness
+from normits_demand.distribution import external_growth as ext_growth
 
 from normits_demand.reports import pop_emp_comparator
 
@@ -271,7 +272,6 @@ class ExternalForecastSystem:
             alt_households_growth_assumption_file: str = None,
             alt_worker_growth_assumption_file: str = None,
             alt_pop_split_file: str = None,  # THIS ISN'T USED ANYWHERE
-            distribution_method: str = "Furness",
             hb_purposes_needed: List[int] = consts.HB_PURPOSES_NEEDED,
             nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
             modes_needed: List[int] = consts.MODES_NEEDED,
@@ -535,7 +535,6 @@ class ExternalForecastSystem:
 
         # Format inputs
         constraint_source = constraint_source.lower()
-        distribution_method = distribution_method.lower()
         minimum_development_certainty = minimum_development_certainty.upper()
 
         year_list = [str(x) for x in [base_year] + future_years]
@@ -559,7 +558,6 @@ class ExternalForecastSystem:
             alt_households_growth_assumption_file,
             alt_worker_growth_assumption_file,
             alt_pop_split_file,
-            distribution_method,
             self.imports['decomp_post_me'],
             hb_purposes_needed,
             modes_needed,
@@ -763,29 +761,29 @@ class ExternalForecastSystem:
             model_a_vector = a_vector.copy()
             model_nhb_a_vector = nhb_a_vector.copy()
 
-        # Write Translated p/a to file
+        # ## WRITE TRANSLATED VECTORS TO DISK ## #
         fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
-        model_p_vector.to_csv(
-            os.path.join(self.exports['productions'], fname),
-            index=False
-        )
+        out_path = os.path.join(self.exports['productions'], fname)
+        model_p_vector.to_csv(out_path, index=False)
 
         fname = consts.PRODS_FNAME % (self.output_zone_system, 'nhb')
-        model_nhb_p_vector.to_csv(
-            os.path.join(self.exports['productions'], fname),
-            index=False
-        )
+        out_path = os.path.join(self.exports['productions'], fname)
+        model_nhb_p_vector.to_csv(out_path, index=False)
 
         fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
-        model_a_vector.to_csv(
-            os.path.join(self.exports['attractions'], fname),
-            index=False
-        )
+        out_path = os.path.join(self.exports['attractions'], fname)
+        model_a_vector.to_csv(out_path, index=False)
 
         fname = consts.ATTRS_FNAME % (self.output_zone_system, 'nhb')
-        model_nhb_a_vector.to_csv(
-            os.path.join(self.exports['attractions'], fname),
-            index=False
+        out_path = os.path.join(self.exports['attractions'], fname)
+        model_nhb_a_vector.to_csv(out_path, index=False)
+
+        # Save a copy of the vectors to deal with int/ext trips later
+        pre_eg_vectors = (
+            model_p_vector,
+            model_nhb_p_vector,
+            model_a_vector,
+            model_nhb_a_vector,
         )
 
         if apply_growth_criteria:
@@ -801,84 +799,77 @@ class ExternalForecastSystem:
             model_p_vector, model_a_vector = pa_dfs
 
         # Write grown productions and attractions to file
-        # Save as exceptional - e.g. "exc_productions"
-        fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
-        fname = fname.replace("_productions", "_exc_productions")
-        model_p_vector.to_csv(
-            os.path.join(self.exports['productions'], fname),
-            index=False
+        fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb_exc')
+        out_path = os.path.join(self.exports['productions'], fname)
+        model_p_vector.to_csv(out_path, index=False)
+
+        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb_exc')
+        out_path = os.path.join(self.exports['attractions'], fname)
+        model_a_vector.to_csv(out_path, index=False)
+
+        # ## DISTRIBUTE THE INTERNAL AND EXTERNAL DEMAND ## #
+        # Create the temporary output folders
+        dist_out = self.exports['pa_24']
+        int_out = os.path.join(dist_out, 'internal')
+        ext_out = os.path.join(dist_out, 'external')
+
+        for path in [int_out, ext_out]:
+            du.create_folder(path, verbose=False)
+
+        # Distribute the internal trips, write to disk
+        # self._distribute_internal_demand(
+        #     p_vector=model_p_vector,
+        #     nhb_p_vector=model_nhb_p_vector,
+        #     a_vector=model_a_vector,
+        #     nhb_a_vector=model_nhb_a_vector,
+        #     years_needed=year_list,
+        #     hb_p_needed=hb_purposes_needed,
+        #     nhb_p_needed=nhb_purposes_needed,
+        #     m_needed=modes_needed,
+        #     soc_needed=soc_needed,
+        #     ns_needed=ns_needed,
+        #     ca_needed=car_availabilities_needed,
+        #     zone_col=model_zone_col,
+        #     internal_zones_path=self.imports['internal_zones'],
+        #     seed_dist_dir=self.imports['decomp_post_me'],
+        #     dist_out=int_out,
+        #     audit_out=self.exports['dist_audits'],
+        #     csv_out=False,
+        #     compress_out=True,
+        #     verbose=echo_distribution
+        # )
+
+        # Distribute the external trips, write to disk
+        # DO NOT INCLUDE EG in external
+        self._distribute_external_demand(
+            p_vector=p_vector,
+            nhb_p_vector=nhb_p_vector,
+            a_vector=a_vector,
+            nhb_a_vector=nhb_a_vector,
+            zone_col=model_zone_col,
+            years_needed=year_list,
+            hb_p_needed=hb_purposes_needed,
+            nhb_p_needed=nhb_purposes_needed,
+            m_needed=modes_needed,
+            soc_needed=soc_needed,
+            ns_needed=ns_needed,
+            ca_needed=car_availabilities_needed,
+            external_zones_path=self.imports['external_zones'],
+            post_me_dir=self.imports['decomp_post_me'],
+            dist_out=int_out,
+            audit_out=self.exports['dist_audits'],
+            csv_out=True,
+            compress_out=True,
+            verbose=echo_distribution
         )
 
-        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
-        fname = fname.replace("_attractions", "_exc_attractions")
-        model_a_vector.to_csv(
-            os.path.join(self.exports['attractions'], fname),
-            index=False
-        )
+        # Combine the internal and external trips
 
-        # # ## ATTRACTION WEIGHT GENERATION ## #
-        print("Generating attraction weights...")
-        attraction_weights = du.convert_to_weights(
-            a_vector,
-            year_list
-        )
-
-        nhb_a_weights = du.convert_to_weights(
-            nhb_a_vector,
-            year_list
-        )
-
-        print("Attraction weights generated!")
         last_time = current_time
         current_time = time.time()
-        print("Attraction weight generation took: %.2f seconds" %
+        print("Distribution generation took: %.2f seconds" %
               (current_time - last_time))
 
-        # ## DISTRIBUTION ## #
-        if distribution_method == "furness":
-            print("Generating HB distributions...")
-            furness.distribute_pa(
-                productions=model_p_vector,
-                attraction_weights=attraction_weights,
-                trip_origin='hb',
-                years_needed=year_list,
-                p_needed=hb_purposes_needed,
-                m_needed=modes_needed,
-                soc_needed=soc_needed,
-                ns_needed=ns_needed,
-                ca_needed=car_availabilities_needed,
-                zone_col=model_zone_col,
-                seed_dist_dir=self.imports['decomp_post_me'],
-                dist_out=self.exports['pa_24'],
-                audit_out=self.exports['dist_audits'],
-                echo=echo_distribution
-            )
-
-            print("Generating NHB distributions...")
-            furness.distribute_pa(
-                productions=model_nhb_p_vector,
-                attraction_weights=nhb_a_weights,
-                trip_origin='nhb',
-                years_needed=year_list,
-                p_needed=nhb_purposes_needed,
-                m_needed=modes_needed,
-                soc_needed=soc_needed,
-                ns_needed=ns_needed,
-                ca_needed=car_availabilities_needed,
-                zone_col=model_zone_col,
-                seed_dist_dir=self.imports['decomp_post_me'],
-                dist_out=self.exports['pa_24'],
-                audit_out=self.exports['dist_audits'],
-                echo=echo_distribution
-            )
-
-            last_time = current_time
-            current_time = time.time()
-            print("Distribution generation took: %.2f seconds" %
-                  (current_time - last_time))
-        else:
-            raise ValueError("'%s' is not a valid distribution method!" %
-                             (str(distribution_method)))
 
         # ## SECTOR TOTALS ## #
         sector_grouping_file = os.path.join(self.imports['zone_translation']['home'],
@@ -948,6 +939,108 @@ class ExternalForecastSystem:
                   + "future usage.")
             self.sector_totals = sector_totals
             # TODO: Store output files into local storage (class storage)
+
+    def _distribute_internal_demand(self,
+                                    p_vector: pd.DataFrame,
+                                    nhb_p_vector: pd.DataFrame,
+                                    a_vector: pd.DataFrame,
+                                    nhb_a_vector: pd.DataFrame,
+                                    internal_zones_path: nd.PathLike,
+                                    zone_col: str,
+                                    years_needed: List[str],
+                                    hb_p_needed: List[int],
+                                    nhb_p_needed: List[int],
+                                    verbose: bool = False,
+                                    **kwargs,
+                                    ) -> None:
+        """
+        Distributes the internal demand only Using a furness process.
+
+        Essentially a wrapper around furness.distribute_pa() to make sure
+        only the internal proportion of each vector is furnessed
+
+        """
+        # Init
+        hb_vals = [p_vector, a_vector, 'hb', hb_p_needed]
+        nhb_vals = [nhb_p_vector, nhb_a_vector, 'nhb', nhb_p_needed]
+
+        # Read in the internal zones
+        dtype = {zone_col: p_vector[zone_col].dtype}
+        internal_zones = pd.read_csv(internal_zones_path, dtype=dtype).squeeze().tolist()
+
+        # Do for the HB and then NHB trips
+        for p, a, to, p_needed in [hb_vals, nhb_vals]:
+            # Convert into just the internal zones
+            p = p[p[zone_col].isin(internal_zones)].copy()
+            a = a[a[zone_col].isin(internal_zones)].copy()
+
+            # Get the weights
+            a_weights = du.convert_to_weights(a, years_needed)
+
+            # Distribute the trips and write to disk
+            print("Generating %s distributions..." % to.upper())
+            furness.distribute_pa(
+                productions=p,
+                attraction_weights=a_weights,
+                trip_origin=to,
+                years_needed=years_needed,
+                zone_col=zone_col,
+                p_needed=p_needed,
+                fname_suffix='_int',
+                echo=verbose,
+                **kwargs,
+            )
+
+    def _distribute_external_demand(self,
+                                    p_vector: pd.DataFrame,
+                                    nhb_p_vector: pd.DataFrame,
+                                    a_vector: pd.DataFrame,
+                                    nhb_a_vector: pd.DataFrame,
+                                    external_zones_path: nd.PathLike,
+                                    post_me_dir: nd.PathLike,
+                                    dist_out: nd.PathLike,
+                                    audit_out: nd.PathLike,
+                                    zone_col: str,
+                                    years_needed: List[str],
+                                    hb_p_needed: List[int],
+                                    nhb_p_needed: List[int],
+                                    m_needed: List[int],
+                                    soc_needed: List[int] = None,
+                                    ns_needed: List[int] = None,
+                                    ca_needed: List[int] = None,
+                                    csv_out: bool = True,
+                                    compress_out: bool = True,
+                                    verbose: bool = False
+                                    ) -> None:
+        """
+        Distributes the external demand only by growing post-me matrices.
+        """
+        # Init
+
+        # Load in the external zones
+        dtype = {zone_col: p_vector[zone_col].dtype}
+        external_zones = pd.read_csv(external_zones_path, dtype=dtype).squeeze().tolist()
+
+        ext_growth.grow_external_pa(
+            productions=p_vector,
+            zone_col=zone_col,
+            years_needed=years_needed,
+            p_needed=hb_p_needed,
+            m_needed=m_needed,
+            soc_needed=soc_needed,
+            ns_needed=ns_needed,
+            ca_needed=ca_needed,
+            external_zones=external_zones,
+            seed_dist_dir=self.imports['decomp_post_me'],
+            dist_out=dist_out,
+            audit_out=self.exports['dist_audits'],
+            csv_out=False,
+            compress_out=True,
+            verbose=verbose,
+        )
+
+
+        raise NotImplementedError
 
     def _handle_growth_criteria(self,
                                 synth_productions: pd.DataFrame,
@@ -1170,7 +1263,7 @@ class ExternalForecastSystem:
 
         round_dp:
             The number of decimal places to round the output values to.
-            Uses consts.DEFAULT_ROUNDING by default.
+            Uses efs_consts.DEFAULT_ROUNDING by default.
 
         # TODO: Update docs once correct functionality exists
         overwrite_hb_tp_pa:
@@ -1310,7 +1403,7 @@ class ExternalForecastSystem:
 
         round_dp:
             The number of decimal places to round the output values to.
-            Uses consts.DEFAULT_ROUNDING by default.
+            Uses efs_consts.DEFAULT_ROUNDING by default.
 
         # TODO: Update docs once correct functionality exists
         overwrite_aggregated_od:
@@ -1684,7 +1777,6 @@ def write_input_info(output_path: str,
                      alt_households_growth_assumption_file: str,
                      alt_worker_growth_assumption_file: str,
                      alt_pop_split_file: str,
-                     distribution_method: str,
                      seed_dist_location: str,
                      hb_purposes_needed: List[int],
                      modes_needed: List[int],
@@ -1711,7 +1803,6 @@ def write_input_info(output_path: str,
         "Alternate Households Growth File: " + str(alt_households_growth_assumption_file),
         "Alternate Workers Growth File: " + str(alt_worker_growth_assumption_file),
         "Alternate Population Split File: " + str(alt_pop_split_file),
-        "Distribution Method: " + distribution_method,
         "Seed Distribution Location: " + seed_dist_location,
         "Purposes Used: " + str(hb_purposes_needed),
         "Modes Used: " + str(modes_needed),

@@ -119,7 +119,7 @@ def _recursive_aggregate(candidates: List[str],
 
     round_dp:
         The number of decimal places to round the output values to.
-        Uses consts.DEFAULT_ROUNDING by default.
+        Uses efs_consts.DEFAULT_ROUNDING by default.
     """
 
     # ## EXIT CONDITION ## #
@@ -233,7 +233,7 @@ def aggregate_matrices(import_dir: str,
 
     round_dp:
         The number of decimal places to round the output values to.
-        Uses consts.DEFAULT_ROUNDING by default.
+        Uses efs_consts.DEFAULT_ROUNDING by default.
 
     Returns
     -------
@@ -1997,7 +1997,7 @@ def compile_matrices(mat_import: str,
 
     round_dp:
             The number of decimal places to round the output values to.
-            Uses consts.DEFAULT_ROUNDING by default.
+            Uses efs_consts.DEFAULT_ROUNDING by default.
 
     build_factor_pickle:
         If True, a dictionary of factors that can be used to decompile the
@@ -2421,7 +2421,7 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
 
     matrix_format:
         The format of the matrices being produced. Should be one of the
-        valid values from consts.MATRIX_FORMATS
+        valid values from efs_consts.MATRIX_FORMATS
 
     overwrite_cache:
         If True, the vectors are remade and overwrite any cache that may
@@ -2528,7 +2528,7 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
 
     matrix_format:
         The format of of the matrices to compile. Needs to be one of
-        consts.MATRIX_FORMATS
+        efs_consts.MATRIX_FORMATS
 
     Returns
     -------
@@ -2599,7 +2599,7 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
 
     matrix_format:
         The format of of the matrices to compile. Needs to be one of
-        consts.MATRIX_FORMATS
+        efs_consts.MATRIX_FORMATS
 
     Returns
     -------

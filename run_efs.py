@@ -36,7 +36,7 @@ def main():
     run_bespoke_zones = False
     run_hb_pa_to_od = False
     run_compile_od = False
-    run_decompile_post_me = True
+    run_decompile_post_me = False
     run_future_year_compile_od = False
 
     # Controls I/O
@@ -67,6 +67,8 @@ def main():
             recreate_attractions=recreate_attractions,
             recreate_nhb_productions=recreate_nhb_productions,
             echo_distribution=verbose,
+
+            apply_growth_criteria=False,
         )
 
     if run_bespoke_zones:

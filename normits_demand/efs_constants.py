@@ -38,8 +38,8 @@ _trip_origin_purposes = [
 TRIP_ORIGINS = [x[0] for x in _trip_origin_purposes]
 TRIP_ORIGIN_TO_PURPOSE = {to: p for to, p in _trip_origin_purposes}
 
-PROCESS_COUNT = -2
-DEFAULT_ROUNDING = 10
+PROCESS_COUNT = -3
+DEFAULT_ROUNDING = 8
 
 # ## VDM/ME2 constants ## #
 VDM_TRIP_ORIGINS = ['hb', 'nhb']
@@ -269,13 +269,13 @@ TFN_MSOA_SECTOR_LOOKUPS = {
 #  labels: EFS, demand merge
 
 # RUNNING CONSTANTS
-MODEL_NAME = 'norms'
+MODEL_NAME = 'noham'
 
 # YEARS
 BASE_YEAR = 2018
 FUTURE_YEARS = [2033, 2035, 2050]
 
-# HB consts
+# HB efs_consts
 HB_PURPOSES_NEEDED = ALL_HB_P
 MODES_NEEDED = MODEL_MODES[MODEL_NAME]
 SOC_NEEDED = [0, 1, 2, 3]
@@ -283,7 +283,7 @@ NS_NEEDED = [1, 2, 3, 4, 5]
 CA_NEEDED = [1, 2]
 TP_NEEDED = [1, 2, 3, 4]
 
-# NHB consts
+# NHB efs_consts
 NHB_PURPOSES_NEEDED = ALL_NHB_P
 
 ALL_PURPOSES_NEEDED = HB_PURPOSES_NEEDED + NHB_PURPOSES_NEEDED
