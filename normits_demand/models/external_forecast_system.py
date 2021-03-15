@@ -779,12 +779,8 @@ class ExternalForecastSystem:
         model_nhb_a_vector.to_csv(out_path, index=False)
 
         # Save a copy of the vectors to deal with int/ext trips later
-        pre_eg_vectors = (
-            model_p_vector,
-            model_nhb_p_vector,
-            model_a_vector,
-            model_nhb_a_vector,
-        )
+        pre_eg_model_p_vector = model_p_vector.copy()
+        pre_eg_model_nhb_p_vector = model_nhb_p_vector.copy()
 
         if apply_growth_criteria:
             # Apply the growth criteria using the post-ME P/A vectors
@@ -842,10 +838,8 @@ class ExternalForecastSystem:
         # Distribute the external trips, write to disk
         # DO NOT INCLUDE EG in external
         self._distribute_external_demand(
-            p_vector=p_vector,
-            nhb_p_vector=nhb_p_vector,
-            a_vector=a_vector,
-            nhb_a_vector=nhb_a_vector,
+            p_vector=pre_eg_model_p_vector,
+            nhb_p_vector=pre_eg_model_nhb_p_vector,
             zone_col=model_zone_col,
             years_needed=year_list,
             hb_p_needed=hb_purposes_needed,
@@ -856,9 +850,9 @@ class ExternalForecastSystem:
             ca_needed=car_availabilities_needed,
             external_zones_path=self.imports['external_zones'],
             post_me_dir=self.imports['decomp_post_me'],
-            dist_out=int_out,
+            dist_out=ext_out,
             audit_out=self.exports['dist_audits'],
-            csv_out=True,
+            csv_out=False,
             compress_out=True,
             verbose=echo_distribution
         )
@@ -963,6 +957,7 @@ class ExternalForecastSystem:
         # Init
         hb_vals = [p_vector, a_vector, 'hb', hb_p_needed]
         nhb_vals = [nhb_p_vector, nhb_a_vector, 'nhb', nhb_p_needed]
+        seed_year, _ = du.split_base_future_years_str(years_needed)
 
         # Read in the internal zones
         dtype = {zone_col: p_vector[zone_col].dtype}
@@ -983,6 +978,7 @@ class ExternalForecastSystem:
                 productions=p,
                 attraction_weights=a_weights,
                 trip_origin=to,
+                seed_year=seed_year,
                 years_needed=years_needed,
                 zone_col=zone_col,
                 p_needed=p_needed,
@@ -994,8 +990,6 @@ class ExternalForecastSystem:
     def _distribute_external_demand(self,
                                     p_vector: pd.DataFrame,
                                     nhb_p_vector: pd.DataFrame,
-                                    a_vector: pd.DataFrame,
-                                    nhb_a_vector: pd.DataFrame,
                                     external_zones_path: nd.PathLike,
                                     post_me_dir: nd.PathLike,
                                     dist_out: nd.PathLike,
@@ -1016,31 +1010,51 @@ class ExternalForecastSystem:
         Distributes the external demand only by growing post-me matrices.
         """
         # Init
+        hb_vals = [p_vector, 'hb', hb_p_needed]
+        nhb_vals = [nhb_p_vector, 'nhb', nhb_p_needed]
+        base_year, future_years = du.split_base_future_years_str(years_needed)
 
         # Load in the external zones
         dtype = {zone_col: p_vector[zone_col].dtype}
         external_zones = pd.read_csv(external_zones_path, dtype=dtype).squeeze().tolist()
 
-        ext_growth.grow_external_pa(
-            productions=p_vector,
-            zone_col=zone_col,
-            years_needed=years_needed,
-            p_needed=hb_p_needed,
-            m_needed=m_needed,
-            soc_needed=soc_needed,
-            ns_needed=ns_needed,
-            ca_needed=ca_needed,
+        # ## COPY OVER SEED EXTERNAL FOR BASE YEAR ## #
+        mat_p.split_internal_external(
+            mat_import=post_me_dir,
+            year=base_year,
             external_zones=external_zones,
-            seed_dist_dir=self.imports['decomp_post_me'],
-            dist_out=dist_out,
-            audit_out=self.exports['dist_audits'],
-            csv_out=False,
-            compress_out=True,
-            verbose=verbose,
+            external_export=dist_out,
         )
 
+        # ## GROW THE FUTURE YEARS ## #
+        # Do for the HB and then NHB trips
+        for vector, to, p_needed in [hb_vals, nhb_vals]:
 
-        raise NotImplementedError
+            # Calculate the growth factors
+            growth_factors = vector.copy()
+            for year in future_years:
+                growth_factors[year] /= growth_factors[base_year]
+            growth_factors.drop(columns=[base_year], inplace=True)
+
+            print("Generating %s distributions..." % to.upper())
+            ext_growth.grow_external_pa(
+                import_dir=dist_out,
+                export_dir=dist_out,
+                growth_factors=growth_factors,
+                zone_col=zone_col,
+                base_year=base_year,
+                future_years=future_years,
+                p_needed=p_needed,
+                m_needed=m_needed,
+                soc_needed=soc_needed,
+                ns_needed=ns_needed,
+                ca_needed=ca_needed,
+                audit_out=audit_out,
+                fname_suffix='_ext',
+                csv_out=csv_out,
+                compress_out=compress_out,
+                verbose=verbose,
+            )
 
     def _handle_growth_criteria(self,
                                 synth_productions: pd.DataFrame,

@@ -204,6 +204,6 @@ def summarise_audit_furness(audit_furness_output_path: str,
     out_df = pd.DataFrame(summary_ph).reindex(columns=index_cols)
 
     # Write to disk
-    fname = "%s_furness_summary.csv" % year
+    fname = "%s_%s_furness_summary.csv" % (trip_origin, year)
     out_path = os.path.join(audit_furness_output_path, fname)
     out_df.to_csv(out_path, index=False)

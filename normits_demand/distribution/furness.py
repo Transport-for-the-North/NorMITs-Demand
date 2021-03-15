@@ -122,6 +122,7 @@ def doubly_constrained_furness(seed_vals: np.array,
 
 def _distribute_pa_internal(productions,
                             attraction_weights,
+                            seed_year,
                             seed_dist_dir,
                             trip_origin,
                             calib_params,
@@ -161,9 +162,9 @@ def _distribute_pa_internal(productions,
     )
     print("Furnessing %s ..." % out_dist_name)
 
-    # Don't need year in calib params for much of this
-    year = calib_params['yr']
-    del calib_params['yr']
+    # Build seg_params for the seed values
+    seed_seg_params = calib_params.copy()
+    seed_seg_params['yr'] = seed_year
 
     # Read in the seed distribution - ignoring year
     seed_fname = du.calib_params_to_dist_name(
@@ -213,6 +214,7 @@ def _distribute_pa_internal(productions,
         a_weights = du.filter_by_segmentation(a_weights, base_filter, fit=True)
 
     # Rename columns for furness
+    year = calib_params['yr']
     productions = productions.rename(columns={str(year): unique_col})
     a_weights = a_weights.rename(columns={str(year): unique_col})
 
@@ -306,10 +308,11 @@ def distribute_pa(productions: pd.DataFrame,
                   ca_col: str = 'ca',
                   tp_col: str = 'tp',
                   trip_origin: str = 'hb',
+                  seed_year: str = None,
                   max_iters: int = 5000,
                   seed_infill: float = 1e-5,
                   furness_tol: float = 1e-2,
-                  seed_mat_format: str = 'enhpa',
+                  seed_mat_format: str = 'pa',
                   fname_suffix: str = None,
                   csv_out: bool = True,
                   compress_out: bool = True,
@@ -412,6 +415,10 @@ def distribute_pa(productions: pd.DataFrame,
     trip_origin:
         The origin of the trips being distributed. This will be used to
         generate the seed and output filenames. Will accept 'hb' or 'nhb'.
+
+    seed_year:
+        The base year of the seed matrices. If None, then no year is looked
+        for in the filenames of the seed matrices.
 
     max_iters
         The maximum number of iterations to complete within the furness process
@@ -542,6 +549,7 @@ def distribute_pa(productions: pd.DataFrame,
         unchanging_kwargs = {
             'productions': yr_productions,
             'attraction_weights': yr_a_weights,
+            'seed_year': seed_year,
             'seed_dist_dir': seed_dist_dir,
             'trip_origin': trip_origin,
             'zone_col': zone_col,

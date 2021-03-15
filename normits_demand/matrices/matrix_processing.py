@@ -2649,6 +2649,8 @@ def _split_int_ext(mat_import,
                    external_export,
                    internal_zones,
                    external_zones,
+                   csv_out,
+                   compress_out,
                    ):
     """
     Internal loop function for split_internal_external()
@@ -2673,6 +2675,10 @@ def _split_int_ext(mat_import,
 
     # Extract and write to disk
     for name, out_dir, zones, join_fn in iterator:
+        # Skip over the internal or external if we're not writing out
+        if out_dir is None:
+            continue
+
         # Get the mask and extract the data
         mask = mat_utils.get_wide_mask(full_mat, zones, join_fn=join_fn)
         sub_mat = full_mat.where(mask, 0)
@@ -2682,24 +2688,42 @@ def _split_int_ext(mat_import,
             matrix_format=seg_vals['matrix_format'],
             calib_params=seg_vals,
             suffix='_%s' % name,
-            compressed=True,
+            csv=csv_out,
+            compressed=compress_out,
         )
         out_path = os.path.join(out_dir, fname)
         compress.write_out(sub_mat, out_path)
 
 
 def split_internal_external(mat_import: nd.PathLike,
-                            internal_export: nd.PathLike,
-                            external_export: nd.PathLike,
                             year: Union[int, str],
-                            internal_zones: List[int],
-                            external_zones: List[int],
+                            internal_zones: List[int] = None,
+                            external_zones: List[int] = None,
+                            internal_export: nd.PathLike = None,
+                            external_export: nd.PathLike = None,
+                            csv_out: bool = False,
+                            compress_out: bool = True,
                             ) -> None:
+    # TODO(BT): Write split_internal_external() docs
     # Init
     if not isinstance(year, int):
         year = int(year)
+    ftypes = ['.csv', consts.COMPRESSION_SUFFIX]
+    mat_paths = file_ops.list_files(mat_import, ftypes=ftypes)
 
-    mat_paths = file_ops.list_files(mat_import)
+    # Validate input values
+    base_msg = (
+        "Both  %s_zones and %s_export need to be either set or not set. "
+        "If only one is set, both are ignored."
+    )
+    msg = base_msg % ('internal', 'internal')
+    checks.all_values_set([internal_zones, internal_export], msg, warn=True)
+
+    msg = base_msg % ('external', 'external')
+    checks.all_values_set([external_zones, external_export], msg, warn=True)
+
+    internal_export = None if internal_zones is None else internal_export
+    external_export = None if external_zones is None else external_export
 
     # Filter down to just the year we want
     mat_seg_vals = list()
@@ -2724,6 +2748,8 @@ def split_internal_external(mat_import: nd.PathLike,
         'external_export': external_export,
         'internal_zones': internal_zones,
         'external_zones': external_zones,
+        'csv_out': csv_out,
+        'compress_out': compress_out,
     }
 
     # Build a list of the kwargs

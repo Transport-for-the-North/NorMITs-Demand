@@ -41,6 +41,7 @@ from itertools import product
 from collections import defaultdict
 
 # Local imports
+import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
 
@@ -1988,7 +1989,8 @@ def build_full_paths(base_path: str,
     return [os.path.join(base_path, x) for x in fnames]
 
 
-def list_files(path: str,
+def list_files(path: nd.PathLike,
+               ftypes: List[str] = None,
                include_path: bool = False
                ) -> List[str]:
     """
@@ -1998,6 +2000,9 @@ def list_files(path: str,
     ----------
     path:
         Where to search for the files
+
+    ftypes:
+        A list of filetypes to accept.
 
     include_path:
         Whether to include the path with the returned filenames
@@ -2010,10 +2015,21 @@ def list_files(path: str,
     """
     if include_path:
         file_paths = build_full_paths(path, os.listdir(path))
-        return [x for x in file_paths if os.path.isfile(x)]
+        paths = [x for x in file_paths if os.path.isfile(x)]
     else:
         fnames = os.listdir(path)
-        return [x for x in fnames if os.path.isfile(os.path.join(path, x))]
+        paths = [x for x in fnames if os.path.isfile(os.path.join(path, x))]
+
+    if ftypes is None:
+        return paths
+
+    # Filter down to only the filetypes asked for
+    keep_paths = list()
+    for file_type in ftypes:
+        temp = [x for x in paths if file_type in x]
+        keep_paths = list(set(temp + keep_paths))
+
+    return keep_paths
 
 
 def is_in_string(vals: Iterable[str],
