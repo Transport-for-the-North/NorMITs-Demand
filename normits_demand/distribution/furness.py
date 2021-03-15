@@ -170,7 +170,7 @@ def _distribute_pa_internal(productions,
     seed_fname = du.calib_params_to_dist_name(
         trip_origin=trip_origin,
         matrix_format=seed_mat_format,
-        calib_params=calib_params,
+        calib_params=seed_seg_params,
         csv=True
     )
     seed_dist = pd.read_csv(os.path.join(seed_dist_dir, seed_fname), index_col=0)

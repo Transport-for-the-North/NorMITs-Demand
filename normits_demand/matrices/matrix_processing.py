@@ -2827,3 +2827,105 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
     # split external from/to
 
 
+def _recombine_internal_external_internal(in_paths, output_path):
+    # Read in the matrices and compile
+    partial_mats = [file_ops.read_df(x, index_col=0) for x in in_paths]
+    full_mat = functools.reduce(lambda x, y: x.values + y.values, partial_mats)
+
+    # Store back in a df
+    full_mat = pd.DataFrame(
+        full_mat,
+        index=partial_mats[0].index,
+        columns=partial_mats[0].columns,
+    )
+
+    # Write the complete matrix to disk
+    file_ops.write_df(full_mat, output_path)
+
+
+def recombine_internal_external(internal_import: nd.PathLike,
+                                external_import: nd.PathLike,
+                                full_export: nd.PathLike,
+                                process_count: int = consts.PROCESS_COUNT,
+                                ) -> None:
+    """
+    Combines the internal and external split matrices and write out to full_export
+
+    Will warn the user if all matrices from both folders are not used
+
+    Parameters
+    ----------
+    internal_import:
+        Path to the directory containing the segmented internal matrices
+
+    external_import:
+        Path to the directory containing the segmented external matrices
+
+    full_export:
+        Path to the directory to write out the combined matrices.
+
+    Returns
+    -------
+    None
+
+    """
+    # Init
+    all_internal_fnames = file_ops.list_files(internal_import)
+    all_external_fnames = file_ops.list_files(external_import)
+
+    # ## BUILD DICTIONARY OF MATRICES TO COMBINE ## #
+    comp_dict = dict()
+    used_external_fnames = list()
+    for int_fname in all_internal_fnames:
+        # Determine the related filenames
+        full_fname = file_ops.remove_internal_suffix(int_fname)
+        ext_fname = file_ops.add_external_suffix(full_fname)
+
+        # Check the external file actually exists
+        if not os.path.exists(os.path.join(external_import, ext_fname)):
+            raise FileNotFoundError(
+                "No external file exists to match the internal file.\n"
+                "Internal file location: %s\n"
+                "Expected external file location: %s"
+                % (os.path.join(internal_import, int_fname),
+                   os.path.join(external_import, ext_fname))
+            )
+
+        # Make a note of the external files we've used
+        used_external_fnames.append(str(ext_fname))
+
+        # Add an entry to the dictionary
+        output_path = os.path.join(full_export, full_fname)
+        comp_dict[output_path] = [
+            os.path.join(internal_import, int_fname),
+            os.path.join(external_import, ext_fname),
+        ]
+
+    # Make sure we've used all the external matrices
+    for ext_fname in all_external_fnames:
+        if ext_fname not in used_external_fnames:
+            int_fname = ext_fname.replace(consts.EXTERNAL_SUFFIX, consts.INTERNAL_SUFFIX)
+            raise FileNotFoundError(
+                "No internal file exists to match the external file.\n"
+                "External file location: %s\n"
+                "Expected internal file location: %s"
+                % (os.path.join(external_import, ext_fname),
+                   os.path.join(internal_import, int_fname))
+            )
+
+    # ## COMPILE THE MATRICES ## #
+
+
+    kwarg_list = list()
+    for output_path, in_paths in comp_dict.items():
+        kwarg_list.append({
+            'output_path': output_path,
+            'in_paths': in_paths,
+        })
+        
+    multiprocessing.multiprocess(
+        fn=_recombine_internal_external_internal,
+        kwargs=kwarg_list,
+        process_count=process_count,
+    )
+

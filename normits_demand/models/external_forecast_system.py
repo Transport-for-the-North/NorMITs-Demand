@@ -806,34 +806,34 @@ class ExternalForecastSystem:
         # ## DISTRIBUTE THE INTERNAL AND EXTERNAL DEMAND ## #
         # Create the temporary output folders
         dist_out = self.exports['pa_24']
-        int_out = os.path.join(dist_out, 'internal')
-        ext_out = os.path.join(dist_out, 'external')
+        int_dir = os.path.join(dist_out, 'internal')
+        ext_dir = os.path.join(dist_out, 'external')
 
-        for path in [int_out, ext_out]:
+        for path in [int_dir, ext_dir]:
             du.create_folder(path, verbose=False)
 
         # Distribute the internal trips, write to disk
-        # self._distribute_internal_demand(
-        #     p_vector=model_p_vector,
-        #     nhb_p_vector=model_nhb_p_vector,
-        #     a_vector=model_a_vector,
-        #     nhb_a_vector=model_nhb_a_vector,
-        #     years_needed=year_list,
-        #     hb_p_needed=hb_purposes_needed,
-        #     nhb_p_needed=nhb_purposes_needed,
-        #     m_needed=modes_needed,
-        #     soc_needed=soc_needed,
-        #     ns_needed=ns_needed,
-        #     ca_needed=car_availabilities_needed,
-        #     zone_col=model_zone_col,
-        #     internal_zones_path=self.imports['internal_zones'],
-        #     seed_dist_dir=self.imports['decomp_post_me'],
-        #     dist_out=int_out,
-        #     audit_out=self.exports['dist_audits'],
-        #     csv_out=False,
-        #     compress_out=True,
-        #     verbose=echo_distribution
-        # )
+        self._distribute_internal_demand(
+            p_vector=model_p_vector,
+            nhb_p_vector=model_nhb_p_vector,
+            a_vector=model_a_vector,
+            nhb_a_vector=model_nhb_a_vector,
+            years_needed=year_list,
+            hb_p_needed=hb_purposes_needed,
+            nhb_p_needed=nhb_purposes_needed,
+            m_needed=modes_needed,
+            soc_needed=soc_needed,
+            ns_needed=ns_needed,
+            ca_needed=car_availabilities_needed,
+            zone_col=model_zone_col,
+            internal_zones_path=self.imports['internal_zones'],
+            seed_dist_dir=self.imports['decomp_post_me'],
+            dist_out=int_dir,
+            audit_out=self.exports['dist_audits'],
+            csv_out=False,
+            compress_out=True,
+            verbose=echo_distribution
+        )
 
         # Distribute the external trips, write to disk
         # DO NOT INCLUDE EG in external
@@ -850,20 +850,24 @@ class ExternalForecastSystem:
             ca_needed=car_availabilities_needed,
             external_zones_path=self.imports['external_zones'],
             post_me_dir=self.imports['decomp_post_me'],
-            dist_out=ext_out,
+            dist_out=ext_dir,
             audit_out=self.exports['dist_audits'],
             csv_out=False,
             compress_out=True,
-            verbose=echo_distribution
+            verbose=True,
         )
 
         # Combine the internal and external trips
+        mat_p.recombine_internal_external(
+            internal_import=int_dir,
+            external_import=ext_dir,
+            full_export=dist_out,
+        )
 
         last_time = current_time
         current_time = time.time()
         print("Distribution generation took: %.2f seconds" %
               (current_time - last_time))
-
 
         # ## SECTOR TOTALS ## #
         sector_grouping_file = os.path.join(self.imports['zone_translation']['home'],
@@ -973,7 +977,7 @@ class ExternalForecastSystem:
             a_weights = du.convert_to_weights(a, years_needed)
 
             # Distribute the trips and write to disk
-            print("Generating %s distributions..." % to.upper())
+            print("Generating %s internal distributions..." % to.upper())
             furness.distribute_pa(
                 productions=p,
                 attraction_weights=a_weights,
@@ -1004,7 +1008,7 @@ class ExternalForecastSystem:
                                     ca_needed: List[int] = None,
                                     csv_out: bool = True,
                                     compress_out: bool = True,
-                                    verbose: bool = False
+                                    verbose: bool = False,
                                     ) -> None:
         """
         Distributes the external demand only by growing post-me matrices.
@@ -1019,6 +1023,7 @@ class ExternalForecastSystem:
         external_zones = pd.read_csv(external_zones_path, dtype=dtype).squeeze().tolist()
 
         # ## COPY OVER SEED EXTERNAL FOR BASE YEAR ## #
+        print("Getting base year external distributions...")
         mat_p.split_internal_external(
             mat_import=post_me_dir,
             year=base_year,
@@ -1036,7 +1041,7 @@ class ExternalForecastSystem:
                 growth_factors[year] /= growth_factors[base_year]
             growth_factors.drop(columns=[base_year], inplace=True)
 
-            print("Generating %s distributions..." % to.upper())
+            print("Generating %s external distributions..." % to.upper())
             ext_growth.grow_external_pa(
                 import_dir=dist_out,
                 export_dir=dist_out,
@@ -1044,6 +1049,7 @@ class ExternalForecastSystem:
                 zone_col=zone_col,
                 base_year=base_year,
                 future_years=future_years,
+                trip_origin=to,
                 p_needed=p_needed,
                 m_needed=m_needed,
                 soc_needed=soc_needed,
@@ -1335,6 +1341,7 @@ class ExternalForecastSystem:
                     pa_export=self.exports['pa'],
                     tp_splits=tp_splits,
                     model_zone_col=output_zone_col,
+                    model_name=self.model_name,
                     years_needed=years_needed,
                     p_needed=to_p_needed,
                     m_needed=m_needed,

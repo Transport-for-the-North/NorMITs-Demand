@@ -27,6 +27,7 @@ from tqdm import tqdm
 # self imports
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
+from normits_demand.utils import file_ops
 from normits_demand.concurrency import multiprocessing
 
 # Can call tms pa_to_od.py functions from here
@@ -178,6 +179,7 @@ def _build_tp_pa_internal(pa_import,
                           pa_export,
                           tp_splits,
                           model_zone_col,
+                          model_name,
                           matrix_format,
                           year,
                           purpose,
@@ -221,8 +223,15 @@ def _build_tp_pa_internal(pa_import,
         str(car_availability),
         csv=True
     )
-    pa_24hr = pd.read_csv(os.path.join(pa_import, dist_fname))
-    zoning_system = pa_24hr.columns[0]
+    path = os.path.join(pa_import, dist_fname)
+    path = file_ops.find_filename(path)
+    pa_24hr = file_ops.read_df(path)
+
+    # Pull the zoning system out of the index if we need to
+    zoning_system = "%s_zone_id" % model_name
+    if pa_24hr.columns[0] != zoning_system:
+        pa_24hr.index.name = zoning_system
+        pa_24hr = pa_24hr.reset_index()
 
     print("Working on splitting %s..." % dist_fname)
 
@@ -339,6 +348,7 @@ def efs_build_tp_pa(pa_import: str,
                     pa_export: str,
                     tp_splits: pd.DataFrame,
                     model_zone_col: str,
+                    model_name: str,
                     years_needed: List[int],
                     p_needed: List[int],
                     m_needed: List[int],
@@ -419,6 +429,7 @@ def efs_build_tp_pa(pa_import: str,
         'pa_import': pa_import,
         'pa_export': pa_export,
         'matrix_format': matrix_format,
+        'model_name': model_name,
         'tp_splits': tp_splits,
         'model_zone_col': model_zone_col,
         'round_dp': round_dp,

@@ -47,6 +47,7 @@ def _grow_external_pa_internal(growth_factors,
                                fname_suffix,
                                csv_out,
                                compress_out,
+                               verbose,
                                ):
     """
     The internal function of grow_external_pa, used for multiprocessing
@@ -64,7 +65,7 @@ def _grow_external_pa_internal(growth_factors,
         csv=csv_out,
         compressed=compress_out,
     )
-    print("Furnessing %s ..." % out_dist_name)
+    du.print_w_toggle("Growing %s ..." % out_dist_name, echo=verbose)
 
     # ## READ IN THE BASE YEAR EXTERNAL DEMAND ## #
     # Build seg_params for the seed values
@@ -164,10 +165,10 @@ def grow_external_pa(growth_factors: pd.DataFrame,
                      fname_suffix: str = None,
                      csv_out: bool = True,
                      compress_out: bool = True,
-                     verbose: bool = False,
                      audit_out: str = None,
                      round_dp: int = efs_consts.DEFAULT_ROUNDING,
-                     process_count: int = efs_consts.PROCESS_COUNT
+                     process_count: int = efs_consts.PROCESS_COUNT,
+                     verbose: bool = False,
                      ) -> None:
     # TODO: Write grow_external_pa() docs
     # Init
@@ -235,6 +236,7 @@ def grow_external_pa(growth_factors: pd.DataFrame,
             'fname_suffix': fname_suffix,
             'csv_out': csv_out,
             'compress_out': compress_out,
+            'verbose': verbose,
         }
 
         # Build a list of all kw arguments

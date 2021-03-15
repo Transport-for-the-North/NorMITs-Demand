@@ -188,6 +188,13 @@ def read_df(path: nd.PathLike, index_col=None, **kwargs) -> pd.DataFrame:
         # Optionally try and set the index
         if index_col is not None and df.index.name is None:
             df = df.set_index(list(df)[index_col])
+
+        # Unset the index col if it is set
+        if index_col is None and df.index.name is not None:
+            df = df.reset_index()
+
+        # Make sure no column name is set - this is how pd.read_csv() works
+        df.columns.name = None
         return df
 
     elif pathlib.Path(path).suffix == '.csv':
