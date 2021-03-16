@@ -2827,7 +2827,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
     # split external from/to
 
 
-def _recombine_internal_external_internal(in_paths, output_path):
+def _recombine_internal_external_internal(in_paths, output_path, force_csv_out):
     # Read in the matrices and compile
     partial_mats = [file_ops.read_df(x, index_col=0) for x in in_paths]
     full_mat = functools.reduce(lambda x, y: x.values + y.values, partial_mats)
@@ -2839,6 +2839,10 @@ def _recombine_internal_external_internal(in_paths, output_path):
         columns=partial_mats[0].columns,
     )
 
+    if force_csv_out:
+        output_path = file_ops.cast_to_pathlib_path(output_path)
+        output_path = output_path.parent / (output_path.stem + '.csv')
+
     # Write the complete matrix to disk
     file_ops.write_df(full_mat, output_path)
 
@@ -2846,6 +2850,7 @@ def _recombine_internal_external_internal(in_paths, output_path):
 def recombine_internal_external(internal_import: nd.PathLike,
                                 external_import: nd.PathLike,
                                 full_export: nd.PathLike,
+                                force_csv_out: bool = False,
                                 process_count: int = consts.PROCESS_COUNT,
                                 ) -> None:
     """
@@ -2914,13 +2919,12 @@ def recombine_internal_external(internal_import: nd.PathLike,
             )
 
     # ## COMPILE THE MATRICES ## #
-
-
     kwarg_list = list()
     for output_path, in_paths in comp_dict.items():
         kwarg_list.append({
             'output_path': output_path,
             'in_paths': in_paths,
+            'force_csv_out': force_csv_out,
         })
         
     multiprocessing.multiprocess(

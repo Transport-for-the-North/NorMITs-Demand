@@ -104,7 +104,7 @@ def main():
         # Compiles base year OD matrices
         efs.pre_me_compile_od_matrices(
             year=2050,
-            overwrite_aggregated_od=False,
+            overwrite_aggregated_od=True,
             overwrite_compiled_od=True,
         )
 

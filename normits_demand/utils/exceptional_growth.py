@@ -19,6 +19,7 @@ from tqdm import tqdm
 # Local imports
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
+from normits_demand.utils import file_ops
 
 from normits_demand.models import efs_attraction_model as am
 from normits_demand.models import efs_zone_translator as zt
@@ -1099,8 +1100,11 @@ def extract_donor_totals(matrix_path: str,
     ValueError
         If the tour proportions shape does not match the matrix shape.
     """
+    # Init
+    matrix_path = file_ops.find_filename(matrix_path)
 
-    df = pd.read_csv(matrix_path, index_col=0)
+    df = file_ops.read_df(matrix_path, index_col=0)
+    print(df.shape)
     agg_tour_props = pd.DataFrame()
 
     # Convert to OD if tour proportions are supplied
@@ -2013,7 +2017,7 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
 
     # Copy the existing matrices to the bespoke folder - some will be
     # overwritten by the new bespoke versions
-    for file_name in os.listdir(export_dict["pa_24"]):
+    for file_name in file_ops.list_files(export_dict["pa_24"]):
         old_file_path = os.path.join(export_dict["pa_24"], file_name)
         dest_file_path = os.path.join(export_dict["pa_24_bespoke"], file_name)
         shutil.copy(old_file_path, dest_file_path)

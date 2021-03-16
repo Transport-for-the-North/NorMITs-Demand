@@ -225,7 +225,7 @@ def _build_tp_pa_internal(pa_import,
     )
     path = os.path.join(pa_import, dist_fname)
     path = file_ops.find_filename(path)
-    pa_24hr = file_ops.read_df(path)
+    pa_24hr = file_ops.read_df(path, index_col=0)
 
     # Pull the zoning system out of the index if we need to
     zoning_system = "%s_zone_id" % model_name
