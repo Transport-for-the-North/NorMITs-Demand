@@ -103,6 +103,7 @@ class ExternalForecastSystem:
         if self.model_name == 'noham':
             self.is_ca_needed = False
             self.uses_pcu = True
+        self.ca_needed = consts.CA_NEEDED if self.is_ca_needed else None
 
         self.input_zone_system = "MSOA"
         self.output_zone_system = self.model_name
@@ -1580,21 +1581,25 @@ class ExternalForecastSystem:
         _input_checks(m_needed=m_needed)
 
         if self.model_name == 'noham':
-            decompile_factors_path = os.path.join(
-                self.params['compile'],
-                'od_compilation_factors.pickle'
-            )
-
+            # Build the segmentation parameters for OD2PA
+            # TODO(BT): Convert to use class arguments once implemented
+            seg_params = {
+                'p_needed': consts.ALL_P,
+                'm_needed': m_needed,
+                'ca_needed': self.ca_needed,
+            }
             decompilation.decompile_noham(
                 year=year,
+                seg_level='tms',
+                seg_params=seg_params,
                 post_me_import=self.imports['post_me_matrices'],
                 post_me_renamed_export=self.exports['post_me']['compiled_od'],
-                od_24hr_export=self.exports['post_me']['od'],
-                pa_24hr_export=self.exports['post_me']['pa'],
-                zone_translate_dir=self.imports['zone_translation'],
+                od_export=self.exports['post_me']['od'],
+                pa_export=self.exports['post_me']['pa'],
+                zone_translate_dir=self.imports['zone_translation']['one_to_one'],
                 tour_proportions_export=self.params['tours'],
+                decompile_factors_path=self.imports['post_me_factors'],
                 vehicle_occupancy_import=self.imports['home'],
-                decompile_factors_path=decompile_factors_path,
                 overwrite_decompiled_od=overwrite_decompiled_matrices,
                 overwrite_tour_proportions=overwrite_tour_proportions,
             )

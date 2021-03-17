@@ -357,9 +357,9 @@ def get_tour_proportion_seed_values(m: int,
     # Init
     # TODO: Hardcoding this is bad!
     if phi_lookup_folder is None:
-        phi_lookup_folder = 'Y:/NorMITs Demand/import/phi_factors'
+        phi_lookup_folder = 'I:/NorMITs Demand/import/phi_factors'
 
-    tp_split_path = r"Y:\NorMITs Demand\import\tfn_segment_production_params\hb_ave_time_split.csv"
+    tp_split_path = r"I:\NorMITs Demand\import\tfn_segment_production_params\hb_ave_time_split.csv"
 
     # Get appropriate phis and filter to purpose
     phi_factors = pa2od.get_time_period_splits(
@@ -812,7 +812,7 @@ def _tms_seg_tour_props(od_import: str,
                         phi_type: str = 'fhp',
                         aggregate_to_wday: bool = True,
                         generate_tour_props: bool = True,
-                        process_count: int = -2
+                        process_count: int = consts.PROCESS_COUNT,
                         ) -> None:
     """
     TODO: Write _tms_seg_tour_props() docs
@@ -822,16 +822,24 @@ def _tms_seg_tour_props(od_import: str,
     ns_needed = [None] if ns_needed is None else ns_needed
     ca_needed = [None] if ca_needed is None else ca_needed
 
-    # Make sure all purposes are home based
+    # Split into HB and NHB purposes
+    hb_p_needed = list()
+    nhb_p_needed = list()
     for p in p_needed:
-        if p not in efs_consts.ALL_HB_P:
-            raise ValueError("Got purpose '%s' which is not a home based "
-                             "purpose. generate_tour_proportions() cannot "
-                             "handle nhb purposes." % str(p))
-    trip_origin = 'hb'
+        if p in consts.ALL_HB_P:
+            hb_p_needed.append(p)
+        elif p in consts.ALL_NHB_P:
+            nhb_p_needed.append(p)
+        else:
+            raise ValueError(
+                "Got purpose '%s' which is not a valid purpose."
+                % str(p)
+            )
 
+    # Build our loop generator
+    trip_origin = 'hb'
     loop_generator = du.segmentation_loop_generator(
-        p_list=p_needed,
+        p_list=hb_p_needed,
         m_list=m_needed,
         soc_list=soc_needed,
         ns_list=ns_needed,
@@ -884,8 +892,13 @@ def _tms_seg_tour_props(od_import: str,
 
     # ## COPY OVER NHB MATRICES ## #
     if pa_export is not None:
-        nhb_mats = [x for x in du.list_files(od_import) if
-                    du.starts_with(x, 'nhb')]
+        mat_list = du.list_files(od_import)
+        nhb_mats = [x for x in mat_list if du.starts_with(x, 'nhb')]
+
+        # Filter down to nhb purposes
+        ps = ['_p%s_' % x for x in nhb_p_needed]
+        nhb_mats = [x for x in nhb_mats if du.is_in_string(ps, x)]
+
         for fname in nhb_mats:
             pa_name = fname.replace('od', 'pa')
             du.copy_and_rename(
@@ -1184,7 +1197,7 @@ def generate_tour_proportions(od_import: str,
                               phi_type: str = 'fhp',
                               aggregate_to_wday: bool = True,
                               generate_tour_props: bool = True,
-                              process_count: int = -2
+                              process_count: int = consts.PROCESS_COUNT,
                               ) -> None:
     """
     Generates the 4x4 matrix of tour proportions for every OD pair for all

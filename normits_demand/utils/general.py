@@ -440,6 +440,7 @@ def build_efs_io_paths(import_location: str,
     #  labels: demand merge, EFS
 
     model_schema_home = os.path.join(import_home, model_name, 'model schema')
+    model_param_home = os.path.join(import_home, model_name, 'params')
 
     imports = {
         'home': import_home,
@@ -457,6 +458,7 @@ def build_efs_io_paths(import_location: str,
         'internal_zones': os.path.join(model_schema_home, consts.INTERNAL_AREA % model_name),
         'external_zones': os.path.join(model_schema_home, consts.EXTERNAL_AREA % model_name),
         'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
+        'post_me_factors': os.path.join(model_param_home, 'post_me_decompile_factors.pkl'),
         'decomp_post_me': os.path.join(import_home, model_name, 'decompiled_post_me'),
 
     }

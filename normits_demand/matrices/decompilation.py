@@ -15,6 +15,9 @@ import os
 import functools
 import operator
 
+from typing import Any
+from typing import Dict
+
 # 3rd Party
 import numpy as np
 import pandas as pd
@@ -34,14 +37,17 @@ from normits_demand.matrices import od_to_pa as od2pa
 
 
 def decompile_noham(year: int,
+                    seg_level: str,
+                    seg_params: Dict[str, Any],
                     post_me_import: nd.PathLike,
                     post_me_renamed_export: nd.PathLike,
-                    od_24hr_export: nd.PathLike,
-                    pa_24hr_export: nd.PathLike,
+                    od_export: nd.PathLike,
+                    pa_export: nd.PathLike,
                     zone_translate_dir: nd.PathLike,
                     tour_proportions_export: nd.PathLike,
                     decompile_factors_path: nd.PathLike,
                     vehicle_occupancy_import: nd.PathLike,
+                    process_count: int = consts.PROCESS_COUNT,
                     overwrite_decompiled_od: bool = True,
                     overwrite_tour_proportions: bool = True,
                     ) -> None:
@@ -63,8 +69,8 @@ def decompile_noham(year: int,
     year
     post_me_import
     post_me_renamed_export
-    od_24hr_export
-    pa_24hr_export
+    od_export
+    pa_export
     zone_translate_dir
     tour_proportions_export
     decompile_factors_path
@@ -78,6 +84,7 @@ def decompile_noham(year: int,
     """
     # TODO: Document and test NOHAM decompile
     model_name = 'noham'
+    seg_level = checks.validate_seg_level(seg_level)
 
     if overwrite_decompiled_od:
         print("Decompiling OD Matrices into purposes...")
@@ -99,12 +106,9 @@ def decompile_noham(year: int,
                 vehicle_occupancy_import=vehicle_occupancy_import
             )
 
-        exit()
-
-        # TODO: Stop the filename being hardcoded after integration with TMS
         od2pa.decompile_od(
             od_import=post_me_renamed_export,
-            od_export=od_24hr_export,
+            od_export=od_export,
             decompile_factors_path=decompile_factors_path,
             year=year
         )
@@ -113,11 +117,15 @@ def decompile_noham(year: int,
         print("Converting OD matrices to PA and generating tour "
               "proportions...")
         mat_p.generate_tour_proportions(
-            od_import=od_24hr_export,
-            zone_translate_dir=zone_translate_dir,
-            pa_export=pa_24hr_export,
+            od_import=od_export,
+            pa_export=pa_export,
             tour_proportions_export=tour_proportions_export,
+            zone_translate_dir=zone_translate_dir,
+            model_name=model_name,
             year=year,
+            seg_level=seg_level,
+            seg_params=seg_params,
+            process_count=process_count
         )
 
 

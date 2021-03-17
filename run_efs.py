@@ -108,11 +108,10 @@ def main():
             overwrite_compiled_od=True,
         )
 
-    # TODO: Check Post ME process works for NOHAM
     if run_decompile_post_me:
         # Decompiles post-me base year matrices
         efs.decompile_post_me(
-            overwrite_decompiled_matrices=True,
+            overwrite_decompiled_matrices=False,
             overwrite_tour_proportions=True,
         )
 
