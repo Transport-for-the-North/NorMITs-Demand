@@ -31,10 +31,15 @@ from normits_demand import constants as consts
 
 from normits_demand.validation import checks
 from normits_demand.constraints import ntem_control
+
 from normits_demand.matrices import matrix_processing as mat_p
+from normits_demand.matrices import utils as mat_utils
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
+from normits_demand.utils import utils as tms_utils
+
+from normits_demand.reports import reports_audits as tms_reports
 
 
 class EfsReporter:
@@ -51,6 +56,10 @@ class EfsReporter:
     _trip_origins = consts.TRIP_ORIGINS
     _zone_col_base = '%s_zone_id'
 
+    # trip origin, year, purpose
+    _band_distances_fname = '%s_yr%s_p%s_band_distances.csv'
+    _band_shares_fname = '%s_yr%s_p%s_band_shares.csv'
+
     _ntem_report_cols = [
         'Vector Type',
         'Trip Origin',
@@ -65,7 +74,7 @@ class EfsReporter:
                  import_home: Union[pathlib.Path, str],
                  export_home: Union[pathlib.Path, str],
                  model_name: str,
-                 iter_num: int,
+                 iter_num: str,
                  scenario_name: str,
                  years_needed: List[str],
                  demand_version: str = nd.ExternalForecastSystem.__version__,
@@ -86,6 +95,7 @@ class EfsReporter:
 
         self.iter_name = du.create_iter_name(iter_num)
         self.years_needed = years_needed
+        self.base_year, self.future_years = du.split_base_future_years_str(years_needed)
         
         # build IO paths
         self.efs_imports, self.efs_exports, _ = du.build_efs_io_paths(
@@ -125,6 +135,10 @@ class EfsReporter:
 
         if zone_conversion_path is None:
             zone_conversion_path = self.efs_imports['zone_translation']['no_overlap']
+
+        # BACKLOG: Make tlb paths relative in efs reporter
+        #  labels: EFS, demand merge
+        tlb_atl_path = r'I:\NorMITs Synthesiser\import\trip_length_bands\north\standard_segments'
 
         # ## BUILD THE IMPORTS ## #
         # Raw vectors
@@ -193,6 +207,8 @@ class EfsReporter:
 
         # Finally, build the outer imports dict!
         imports = {
+            'post_me_pa': self.efs_imports['decomp_post_me'],
+            'tlb': tlb_atl_path,
             'raw_vectors': raw_vectors,
             'base_vectors': base_vectors,
             'translated_base_vectors': translated_base_vectors,
@@ -211,14 +227,26 @@ class EfsReporter:
             'pa_24_bespoke': os.path.join(cache_home, 'bespoke_pa_24'),
             'pa': os.path.join(cache_home, 'pa'),
             'od': os.path.join(cache_home, 'od'),
+            'post_me_tlb': os.path.join(cache_home, 'post_me_tlb'),
+            'pa_24_tlb': os.path.join(cache_home, 'pa_24_tlb'),
         }
         for _, path in cache_paths.items():
-            du.create_folder(path, chDir=False)
+            du.create_folder(path, chDir=False, verbose=False)
+
+        # Build the tlb paths
+        tlb_home = os.path.join(export_home, 'tlb_mats')
+        tlb_paths = {
+            'post_me': os.path.join(tlb_home, 'post_me'),
+            'pa_24': os.path.join(tlb_home, 'pa_24'),
+        }
+        for _, path in tlb_paths.items():
+            du.create_folder(path, chDir=False, verbose=False)
 
         # Finally, build the outer exports dict!
         exports = {
             'home': export_home,
             'modal': os.path.join(export_home, 'modal'),
+            'tlb': tlb_paths,
             'cache': cache_paths,
         }
 
@@ -226,7 +254,7 @@ class EfsReporter:
         for _, path in exports.items():
             if isinstance(path, dict):
                 continue
-            du.create_folder(path, chDir=False)
+            du.create_folder(path, chDir=False, verbose=False)
 
         return imports, exports
 
@@ -377,6 +405,32 @@ class EfsReporter:
 
         return report
 
+    def _get_distance(self, p: int) -> pd.DataFrame:
+        # TODO(BT): Horrible function call. Tidy up
+        distance, _ = tms_utils.get_costs(
+            self.efs_imports['model_home'],
+            {'p': p},
+            tp='24hr'
+        )
+
+        return pd.pivot(
+            data=distance,
+            index='p_zone',
+            columns='a_zone',
+            values='cost',
+        )
+
+    def _get_hb_trip_length_bands(self, p: int) -> pd.DataFrame:
+        tlb = tms_utils.get_trip_length_bands(
+            import_folder=self.imports['tlb'],
+            calib_params={'p': p, 'm': consts.MODEL_MODES[self.model_name][0]},
+            trip_origin='hb',
+            segmentation=None,  # Not used!
+            echo=False,
+        )
+
+        return tlb
+
     def run(self, run_raw_vector_report: bool = True) -> None:
         """
         Runs all the report generation functions.
@@ -402,15 +456,182 @@ class EfsReporter:
             self.compare_raw_pa_vectors_to_ntem_by_mode()
 
         print("Generating %s specific reports..." % self.model_name)
-        self.compare_base_pa_vectors_to_ntem()
-        self.compare_translated_base_pa_vectors_to_ntem()
-        self.compare_eg_pa_vectors_to_ntem()
+        # self.compare_base_pa_vectors_to_ntem()
+        # self.compare_translated_base_pa_vectors_to_ntem()
+        # self.compare_eg_pa_vectors_to_ntem()
+
+        # Trip lengths
+        self.compare_trip_lengths()
+
+        exit()
+        # Matrix compare to NTEM
         self.compare_pa_matrices_to_ntem()
         self.compare_bespoke_pa_matrices_to_ntem()
         self.compare_tp_pa_matrices_to_ntem()
         self.compare_od_matrices_to_ntem()
 
         # Compare furnessed PA matrices to P/A vectors?
+
+    def _generate_trip_band_report_by_purpose(self,
+                                              distance_dict: Dict[int, pd.DataFrame],
+                                              raw_mat_import: nd.PathLike,
+                                              cache_export: nd.PathLike,
+                                              report_export: nd.PathLike,
+                                              years_needed: List[str],
+                                              trip_origin: str,
+                                              matrix_format: str,
+                                              mode: int,
+                                              ) -> List[Dict[str, Any]]:
+        # TODO(BT): Write generate_trip_band_report_by_purpose docs
+        # Set up the progress bar
+        pbar = tqdm(
+            total=len(years_needed) * len(distance_dict.keys()),
+            desc="Generating TLB reports"
+        )
+        avg_trip_lengths = list()
+        for year in years_needed:
+            for p, distance in distance_dict.items():
+                # Aggregate and read in the matrix
+                mat_p.aggregate_matrices(
+                    import_dir=raw_mat_import,
+                    export_dir=cache_export,
+                    trip_origin=trip_origin,
+                    matrix_format=matrix_format,
+                    years_needed=[int(year)],
+                    p_needed=[p],
+                    m_needed=[mode],
+                    compress_out=True,
+                )
+
+                # Read the matrix back in
+                fname = du.get_dist_name(
+                    trip_origin=trip_origin,
+                    matrix_format=matrix_format,
+                    year=year,
+                    purpose=str(p),
+                    mode=str(mode),
+                    compressed=True,
+                )
+                path = os.path.join(cache_export, fname)
+                df = file_ops.read_df(path, index_col=0)
+
+                # filter to just the internal area
+                int_mask = mat_utils.get_internal_mask(df, self.model_internal_zones)
+                internal_pa = int_mask * df
+
+                # Read in the trip length bands
+                trip_len_bands = self._get_hb_trip_length_bands(p)
+
+                # Generate trip length data
+                reports = tms_reports.get_trip_length_by_band(
+                    trip_len_bands,
+                    distance.values,
+                    internal_pa.values,
+                )
+                band_dist, band_share, avg_trip_len = reports
+
+                # Write files to disk
+                fnames = [
+                    self._band_distances_fname % (trip_origin, year, p),
+                    self._band_shares_fname % (trip_origin, year, p),
+                ]
+                for report, fname in zip([band_dist, band_share], fnames):
+                    path = os.path.join(report_export, fname)
+                    report.to_csv(path, index=False)
+
+                # Store a report to return
+                avg_trip_lengths.append({
+                    'name': '%s_yr%s_p%s' % (trip_origin, year, p),
+                    'avg_trip_length': avg_trip_len,
+                })
+                pbar.update(1)
+
+        pbar.close()
+
+        return avg_trip_lengths
+
+    def compare_trip_lengths(self) -> None:
+        """
+        Generates a report comparing post-me trip lengths to the
+        trip lengths being returned in the furness (24hr PA)
+
+        Returns
+        -------
+        report:
+            A copy of the generated report comparing trip lengths
+        """
+        # Init
+        atl_name = "average_trip_lengths.csv"
+
+        # Make sure the files we need exist
+        path_dict = self.imports['post_me_pa']
+        file_ops.check_path_exists(path_dict)
+
+        # Build a dictionary of distances
+        print("Reading distances...")
+        # distances = {p: self._get_distance(p) for p in consts.ALL_HB_P}
+
+        # # Generate post-me reports
+        # avg_trip_lengths = self._generate_trip_band_report_by_purpose(
+        #     distance_dict=distances,
+        #     raw_mat_import=self.imports['post_me_pa'],
+        #     cache_export=self.exports['cache']['post_me_tlb'],
+        #     report_export=self.exports['tlb']['post_me'],
+        #     years_needed=[self.base_year],
+        #     trip_origin='hb',
+        #     matrix_format='pa',
+        #     mode=consts.MODEL_MODES[self.model_name][0],
+        # )
+        # atl_path = os.path.join(self.exports['tlb']['post_me'], atl_name)
+        # pd.DataFrame(avg_trip_lengths).to_csv(atl_path, index=False)
+        #
+        # # Generate post-furness reports
+        # avg_trip_lengths = self._generate_trip_band_report_by_purpose(
+        #     distance_dict=distances,
+        #     raw_mat_import=self.imports['matrices']['pa_24'],
+        #     cache_export=self.exports['cache']['pa_24_tlb'],
+        #     report_export=self.exports['tlb']['pa_24'],
+        #     years_needed=self.years_needed,
+        #     trip_origin='hb',
+        #     matrix_format='pa',
+        #     mode=consts.MODEL_MODES[self.model_name][0],
+        # )
+        # atl_path = os.path.join(self.exports['tlb']['post_me'], atl_name)
+        # pd.DataFrame(avg_trip_lengths).to_csv(atl_path, index=False)
+
+        # ## GENERATE SUMMARY REPORTS ## #
+
+        # Make the base report
+        band_share_reports = dict()
+        for purpose in consts.ALL_HB_P:
+            fname = self._band_shares_fname % ('hb', self.base_year, purpose)
+            rep = pd.read_csv(os.path.join(self.exports['tlb']['post_me'], fname))
+            rep = rep.rename(columns={'bs': 'post_me'})
+            band_share_reports[purpose] = rep
+
+        # Make the progress bar
+        pbar = tqdm(
+            total=len(self.years_needed) * len(consts.ALL_HB_P),
+            desc="Generating summary reports"
+        )
+        # Tack on the other years
+        for year in self.years_needed:
+            for purpose in band_share_reports.keys():
+                # Read in the report
+                fname = self._band_shares_fname % ('hb', year, purpose)
+                rep = pd.read_csv(os.path.join(self.exports['tlb']['pa_24'], fname))
+
+                # Add to report
+                band_share_reports[purpose][year] = rep['bs']
+
+                pbar.update(1)
+        pbar.close()
+
+        # Write out the reports
+        for purpose, report in band_share_reports.items():
+            fname = self._band_shares_fname % ('hb', 'all', purpose)
+            path = os.path.join(self.exports['home'], fname)
+            report.to_csv(path, index=False)
 
     def compare_raw_pa_vectors_to_ntem(self) -> pd.DataFrame:
         """

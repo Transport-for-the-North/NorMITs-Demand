@@ -97,6 +97,25 @@ def check_file_exists(file_path: nd.PathLike) -> None:
         )
 
 
+def check_path_exists(path: nd.PathLike) -> None:
+    """
+    Checks if a path exists. Throws an error if not.
+
+    Parameters
+    ----------
+    path:
+        path to the file to check.
+
+    Returns
+    -------
+    None
+    """
+    if not os.path.exists(path):
+        raise IOError(
+            "Cannot find a path: %s" % str(path)
+        )
+
+
 def is_csv(file_path: nd.PathLike) -> bool:
     """
     Returns True if given file path points to a csv, else False
@@ -162,6 +181,33 @@ def maybe_add_suffix(path: nd.PathLike,
     return path
 
 
+def is_index_set(df: pd.DataFrame):
+    """
+    Tries to check if the index of df has been set.
+
+    Parameters
+    ----------
+    df:
+        The df to check
+
+    Returns
+    -------
+    is_index_set:
+        True if index is set
+    """
+    # If name is set, index is probably set
+    if df.index.name is not None:
+        return True
+
+    # If resetting the index changes it, it was probably set
+    pre_index = df.index
+    post_index = df.reset_index().index
+    if not (pre_index == post_index).all():
+        return True
+
+    return False
+
+
 def read_df(path: nd.PathLike, index_col=None, **kwargs) -> pd.DataFrame:
     """
     Reads in the dataframe at path. Decompresses the df if needed.
@@ -186,7 +232,7 @@ def read_df(path: nd.PathLike, index_col=None, **kwargs) -> pd.DataFrame:
         df = compress.read_in(path)
 
         # Optionally try and set the index
-        if index_col is not None and df.index.name is None:
+        if index_col is not None and not is_index_set(df):
             df = df.set_index(list(df)[index_col])
 
         # Unset the index col if it is set

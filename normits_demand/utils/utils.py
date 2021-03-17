@@ -1709,7 +1709,7 @@ def get_trip_length_bands(import_folder,
     if echo:
         print(import_files)
         print(import_files[0])
-    tlb = pd.read_csv(import_folder + '/' + import_files[0])
+    tlb = pd.read_csv(os.path.join(import_folder, import_files[0]))
 
     if replace_nan:
         for col_name in list(tlb):

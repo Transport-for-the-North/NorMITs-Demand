@@ -99,6 +99,8 @@ def decompile_noham(year: int,
                 vehicle_occupancy_import=vehicle_occupancy_import
             )
 
+        exit()
+
         # TODO: Stop the filename being hardcoded after integration with TMS
         od2pa.decompile_od(
             od_import=post_me_renamed_export,

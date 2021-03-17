@@ -67,6 +67,12 @@ def _aggregate(import_dir: str,
     # Load in files and aggregate
     aggregated_mat = None
 
+    if in_fnames == list():
+        raise nd.NormitsDemandError(
+            "Couldn't find any matrices to aggregate up to create %s!"
+            % os.path.basename(export_path)
+        )
+
     for fname in in_fnames:
         mat = pd.read_csv(os.path.join(import_dir, fname), index_col=0)
 
@@ -79,7 +85,7 @@ def _aggregate(import_dir: str,
         aggregated_mat += mat
 
     # Write new matrix out
-    aggregated_mat.round(decimals=round_dp).to_csv(export_path)
+    file_ops.write_df(aggregated_mat.round(decimals=round_dp), export_path)
     print("Aggregated matrix written: %s" % os.path.basename(export_path))
 
 
@@ -88,6 +94,7 @@ def _recursive_aggregate(candidates: List[str],
                          segmentation_strs: List[List[str]],
                          import_dir: str,
                          export_path: str,
+                         compress_out: bool = False,
                          round_dp: int = efs_consts.DEFAULT_ROUNDING,
                          ) -> None:
     """
@@ -117,6 +124,9 @@ def _recursive_aggregate(candidates: List[str],
     export_path:
         Directory to output the aggregated matrices.
 
+    compress_out:
+        Whether to compress the write to disk or not.
+
     round_dp:
         The number of decimal places to round the output values to.
         Uses efs_consts.DEFAULT_ROUNDING by default.
@@ -128,12 +138,17 @@ def _recursive_aggregate(candidates: List[str],
         segmentations = segmentations[0]
         segmentation_strs = segmentation_strs[0]
 
+        # Determine the ftype
+        ftype = '.csv'
+        if compress_out:
+            ftype = consts.COMPRESSION_SUFFIX
+
         if du.is_none_like(segmentations):
             # Aggregate remaining candidates
             _aggregate(
                 import_dir=import_dir,
                 in_fnames=candidates,
-                export_path=export_path + '.csv',
+                export_path=export_path + ftype,
                 round_dp=round_dp,
             )
         else:
@@ -142,7 +157,7 @@ def _recursive_aggregate(candidates: List[str],
                 _aggregate(
                     import_dir=import_dir,
                     in_fnames=[x for x in candidates.copy() if seg_str in x],
-                    export_path=export_path + seg_str + '.csv',
+                    export_path=export_path + seg_str + ftype,
                     round_dp=round_dp,
                 )
         # Exit condition done, leave recursion
@@ -160,6 +175,7 @@ def _recursive_aggregate(candidates: List[str],
             segmentation_strs=other_strs,
             import_dir=import_dir,
             export_path=export_path,
+            compress_out=compress_out,
             round_dp=round_dp,
         )
     else:
@@ -171,6 +187,7 @@ def _recursive_aggregate(candidates: List[str],
                 segmentation_strs=other_strs,
                 import_dir=import_dir,
                 export_path=export_path + seg_str,
+                compress_out=compress_out,
                 round_dp=round_dp,
             )
 
@@ -186,6 +203,7 @@ def aggregate_matrices(import_dir: str,
                        ns_needed: List[int] = None,
                        ca_needed: List[int] = None,
                        tp_needed: List[int] = None,
+                       compress_out: bool = False,
                        round_dp: int = efs_consts.DEFAULT_ROUNDING,
                        ) -> List[str]:
     """
@@ -230,6 +248,9 @@ def aggregate_matrices(import_dir: str,
     tp_needed:
         If None, time periods will be aggregated. If set, chosen time periods
         will be retained.
+
+    compress_out:
+        Whether to compress the output to disk or not.
 
     round_dp:
         The number of decimal places to round the output values to.
@@ -303,6 +324,7 @@ def aggregate_matrices(import_dir: str,
             segmentation_strs=[segment_str, ca_strs, tp_strs],
             import_dir=import_dir,
             export_path=out_path,
+            compress_out=compress_out,
             round_dp=round_dp,
         )
 

@@ -1131,7 +1131,6 @@ def get_trip_length_by_band(band_atl,
     """
     Take ttl by band, return atl by band.
     """
-
     # TODO: Drop averages of nothing in trip length band
     # reset index, needed or not
     band_atl = band_atl.reset_index(drop=True)

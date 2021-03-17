@@ -1580,13 +1580,11 @@ class ExternalForecastSystem:
         _input_checks(m_needed=m_needed)
 
         if self.model_name == 'noham':
-            # TODO: Stop the filename being hardcoded after integration with TMS
             decompile_factors_path = os.path.join(
                 self.params['compile'],
                 'od_compilation_factors.pickle'
             )
 
-            # TODO: NEED TO TEST NOHAM DECOMPILE
             decompilation.decompile_noham(
                 year=year,
                 post_me_import=self.imports['post_me_matrices'],

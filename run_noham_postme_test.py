@@ -14,9 +14,14 @@ EFS runs are not working.
 
 import os
 
-import od_to_pa as od2pa
-import pa_to_od as pa2od
-import matrix_processing as mat_p
+
+# Local imports
+from normits_demand import efs_constants
+
+from normits_demand.matrices import od_to_pa as od2pa
+from normits_demand.matrices import pa_to_od as pa2od
+from normits_demand.matrices import matrix_processing as mat_p
+
 
 import efs_constants as consts
 import demand_utilities.utils as du
