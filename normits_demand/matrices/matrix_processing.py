@@ -1816,13 +1816,14 @@ def build_24hr_vdm_mats(import_dir: str,
 def build_24hr_mats(import_dir: str,
                     export_dir: str,
                     matrix_format: str,
-                    years_needed: List[str],
+                    year_needed: List[str],
                     p_needed: List[int] = efs_consts.ALL_HB_P,
                     m_needed: List[int] = efs_consts.MODES_NEEDED,
                     soc_needed: List[int] = None,
                     ns_needed: List[int] = None,
                     ca_needed: List[int] = None,
-                    tp_needed: List[int] = efs_consts.TIME_PERIODS
+                    tp_needed: List[int] = efs_consts.TIME_PERIODS,
+                    splitting_factors_export: nd.PathLike = None,
                     ) -> None:
     """
     Compiles time period split matrices int import_dir into 24hr Matrices,
@@ -1839,8 +1840,8 @@ def build_24hr_mats(import_dir: str,
     matrix_format:
         Format of the matrices to convert. Usually either 'pa' or 'od'.
 
-    years_needed:
-        Which years of matrices in import_dir to convert.
+    year_needed:
+        Which year of matrices in import_dir to convert.
 
     p_needed:
         Which purposes of matrices in import_dir to convert.
@@ -1864,6 +1865,11 @@ def build_24hr_mats(import_dir: str,
         Which time period matrices in import_dir to combine to get to
         24hr matrices.
 
+    splitting_factors_export:
+        A path to a file to write the time period splitting factors to get
+        back to the tp matrices produced here. If left as None, no spltting
+        factors are generated.
+
     Returns
     -------
     None
@@ -1873,72 +1879,110 @@ def build_24hr_mats(import_dir: str,
     ns_needed = [None] if ns_needed is None else ns_needed
     ca_needed = [None] if ca_needed is None else ca_needed
 
-    for year in years_needed:
-        loop_generator = du.segmentation_loop_generator(
-            p_list=p_needed,
-            m_list=m_needed,
-            soc_list=soc_needed,
-            ns_list=ns_needed,
-            ca_list=ca_needed
+    # Need to get the size of the output matrices
+    check_mat_name = du.get_dist_name(
+        trip_origin='hb',
+        matrix_format=matrix_format,
+        year=str(year_needed),
+        purpose=str(p_needed[0]),
+        mode=str(m_needed[0]),
+        segment=str(soc_needed[0]),
+        car_availability=str(ca_needed[0]),
+        csv=True
+    )
+    check_mat = file_ops.read_df(os.path.join(import_dir, check_mat_name), index_col=0)
+    n_rows = len(check_mat.index)
+    n_cols = len(check_mat.columns)
+
+    # Define the default value for the nested defaultdict
+    def empty_factors():
+        return np.zeros(n_rows, n_cols)
+
+    # Use function to initialise defaultdict
+    decompile_factors = defaultdict(lambda: defaultdict(empty_factors))
+
+    loop_generator = du.segmentation_loop_generator(
+        p_list=p_needed,
+        m_list=m_needed,
+        soc_list=soc_needed,
+        ns_list=ns_needed,
+        ca_list=ca_needed
+    )
+
+    for p, m, seg, ca in loop_generator:
+        # Figure out trip origin
+        if p in efs_consts.ALL_HB_P:
+            trip_origin = 'hb'
+        elif p in efs_consts.ALL_NHB_P:
+            trip_origin = 'nhb'
+        else:
+            raise ValueError("'%s' is not a valid purpose. Don't know if it "
+                             "is home based or non-home based.")
+
+        # Figure out output name to tell user
+        output_dist_name = du.get_dist_name(
+            trip_origin=trip_origin,
+            matrix_format=matrix_format,
+            year=str(year_needed),
+            purpose=str(p),
+            mode=str(m),
+            segment=str(seg),
+            car_availability=str(ca),
+            csv=True
         )
+        print("Generating output matrix %s..." % output_dist_name)
 
-        for p, m, seg, ca in loop_generator:
-            # Figure out trip origin
-            if p in efs_consts.ALL_HB_P:
-                trip_origin = 'hb'
-            elif p in efs_consts.ALL_NHB_P:
-                trip_origin = 'nhb'
-            else:
-                raise ValueError("'%s' is not a valid purpose. Don't know if it "
-                                 "is home based or non-home based.")
-
-            # Figure out output name to tell user
-            output_dist_name = du.get_dist_name(
+        # Read in all time period matrices
+        tp_mats = list()
+        tp_mat_names = list()
+        for tp in tp_needed:
+            dist_name = du.get_dist_name(
                 trip_origin=trip_origin,
                 matrix_format=matrix_format,
-                year=str(year),
+                year=str(year_needed),
                 purpose=str(p),
                 mode=str(m),
                 segment=str(seg),
                 car_availability=str(ca),
+                tp=str(tp),
                 csv=True
             )
-            print("Generating output matrix %s..." % output_dist_name)
+            dist_path = os.path.join(import_dir, dist_name)
+            tp_mats.append(pd.read_csv(dist_path, index_col=0))
+            tp_mat_names.append(dist_name)
 
-            # Read in all time period matrices
-            tp_mats = list()
-            for tp in tp_needed:
-                dist_name = du.get_dist_name(
-                    trip_origin=trip_origin,
-                    matrix_format=matrix_format,
-                    year=str(year),
-                    purpose=str(p),
-                    mode=str(m),
-                    segment=str(seg),
-                    car_availability=str(ca),
-                    tp=str(tp),
-                    csv=True
-                )
-                dist_path = os.path.join(import_dir, dist_name)
-                tp_mats.append(pd.read_csv(dist_path, index_col=0))
+        # Check all the input matrices have the same columns and index
+        col_ref = tp_mats[0].columns
+        idx_ref = tp_mats[0].index
+        for i, mat in enumerate(tp_mats):
+            if len(mat.columns.difference(col_ref)) > 0:
+                raise ValueError("tp matrix %s columns do not match the "
+                                 "others." % str(tp_needed[i]))
 
-            # Check all the input matrices have the same columns and index
-            col_ref = tp_mats[0].columns
-            idx_ref = tp_mats[0].index
-            for i, mat in enumerate(tp_mats):
-                if len(mat.columns.difference(col_ref)) > 0:
-                    raise ValueError("tp matrix %s columns do not match the "
-                                     "others." % str(tp_needed[i]))
+            if len(mat.index.difference(idx_ref)) > 0:
+                raise ValueError("tp matrix %s index does not match the "
+                                 "others." % str(tp_needed[i]))
 
-                if len(mat.index.difference(idx_ref)) > 0:
-                    raise ValueError("tp matrix %s index does not match the "
-                                     "others." % str(tp_needed[i]))
+        # Combine all matrices together
+        full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
 
-            # Combine all matrices together
-            full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
+        # Output to file
+        full_mat.to_csv(os.path.join(export_dir, output_dist_name))
 
-            # Output to file
-            full_mat.to_csv(os.path.join(export_dir, output_dist_name))
+        if not splitting_factors_export:
+            continue
+
+        # ## CALCULATE THE DECOMPILE FACTORS ## #
+        for part_mat, mat_name in zip(tp_mats, tp_mat_names):
+            # Avoid divide by zero
+            full_mat = np.where(full_mat == 0, 0.0001, full_mat)
+            decompile_factors[output_dist_name][mat_name] = part_mat / full_mat
+
+    # Write factors to disk if we made them
+    if splitting_factors_export:
+        print('Writing tp splitting factors to disk - might take a while...')
+        decompile_factors = du.defaultdict_to_regular(decompile_factors)
+        return compress.write_out(decompile_factors, splitting_factors_export)
 
 
 def copy_nhb_matrices(import_dir: str,

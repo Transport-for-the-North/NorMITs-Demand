@@ -1692,6 +1692,7 @@ class ExternalForecastSystem:
                 post_me_renamed_export=self.exports['post_me']['compiled_od'],
                 od_export=self.exports['post_me']['od'],
                 pa_export=self.exports['post_me']['pa'],
+                pa_24_export=self.exports['post_me']['pa_24'],
                 zone_translate_dir=self.imports['zone_translation']['one_to_one'],
                 tour_proportions_export=self.params['tours'],
                 decompile_factors_path=self.imports['post_me_factors'],

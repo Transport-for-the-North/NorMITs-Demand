@@ -43,6 +43,7 @@ def decompile_noham(year: int,
                     post_me_renamed_export: nd.PathLike,
                     od_export: nd.PathLike,
                     pa_export: nd.PathLike,
+                    pa_24_export: nd.PathLike,
                     zone_translate_dir: nd.PathLike,
                     tour_proportions_export: nd.PathLike,
                     decompile_factors_path: nd.PathLike,
@@ -116,6 +117,7 @@ def decompile_noham(year: int,
     if overwrite_tour_proportions:
         print("Converting OD matrices to PA and generating tour "
               "proportions...")
+        # Convert the HB matrices to PA
         mat_p.generate_tour_proportions(
             od_import=od_export,
             pa_export=pa_export,
@@ -126,6 +128,25 @@ def decompile_noham(year: int,
             seg_level=seg_level,
             seg_params=seg_params,
             process_count=process_count
+        )
+
+        # ## GENERATE NHB TP SPLITTING FACTORS ## #
+        # Need just the nhb purposes
+        nhb_seg_params = seg_params.copy()
+        _, nhb_purposes = du.split_hb_nhb_purposes(nhb_seg_params['p_needed'])
+        nhb_seg_params['p_needed'] = nhb_purposes
+
+        # Generate the splitting factors export path
+        splitting_factors_export = os.path.join(tour_proportions_export)
+
+        # Generate the NHB tp splitting factors
+        mat_p.build_24hr_mats(
+            import_dir=pa_export,
+            export_dir=pa_24_export,
+            splitting_factors_export=splitting_factors_export,
+            matrix_format='pa',
+            years_needed=[year],
+            **nhb_seg_params,
         )
 
 
