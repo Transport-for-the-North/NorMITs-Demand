@@ -3175,3 +3175,36 @@ def get_default_kwargs(func):
         for k, v in signature.parameters.items()
         if v.default is not inspect.Parameter.empty
     }
+
+
+def split_hb_nhb_purposes(purposes: List[int]) -> Tuple[List[int], List[int]]:
+    """
+    Splits purposes into two lists of HB and NHB purposes
+
+    Parameters
+    ----------
+    purposes:
+        A list of the purposes to split
+
+    Returns
+    -------
+    hb_purposes:
+        A list of the hb purposes from purposes
+
+    nhb_purposes:
+        A list of the nhb purposes from purposes
+    """
+    # Init
+    hb_p = list()
+    nhb_p = list()
+
+    for p in purposes:
+        if p in consts.ALL_HB_P:
+            hb_p.append(p)
+        elif p in consts.ALL_NHB_P:
+            nhb_p.append(p)
+        else:
+            raise nd.NormitsDemandError(
+                "%s is not a valid HB or NHB purpose" % str(p)
+            )
+    return hb_p, nhb_p

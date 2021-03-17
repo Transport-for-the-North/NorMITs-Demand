@@ -34,9 +34,9 @@ def main():
     recreate_nhb_productions = False
 
     run_bespoke_zones = False
-    run_hb_pa_to_od = False
+    run_hb_pa_to_od = True
     run_compile_od = False
-    run_decompile_post_me = True
+    run_decompile_post_me = False
     run_future_year_compile_od = False
 
     # Controls I/O
@@ -73,7 +73,7 @@ def main():
 
     if run_bespoke_zones:
         # Convert to HB to OD
-        efs.pa_to_od(
+        efs.old_pa_to_od(
             years_needed=[2018],
             p_needed=consts.ALL_HB_P,
             use_bespoke_pa=False,

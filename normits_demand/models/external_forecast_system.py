@@ -1249,13 +1249,109 @@ class ExternalForecastSystem:
                  p_needed: List[int] = consts.ALL_P,
                  soc_needed: List[int] = consts.SOC_NEEDED,
                  ns_needed: List[int] = consts.NS_NEEDED,
-                 ca_needed: List[int] = consts.CA_NEEDED,
                  round_dp: int = consts.DEFAULT_ROUNDING,
                  use_bespoke_pa: bool= True,
-                 overwrite_hb_tp_pa: bool = True,
-                 overwrite_hb_tp_od: bool = True,
                  verbose: bool = True
                  ) -> None:
+        """
+        Converts home based PA matrices into time periods split OD matrices.
+
+        Generates to_home, from_home, and full OD for HB trips. Conversion is
+        based on the tour proportions derived from decompiling the post-ME
+        matrices.
+
+        NHB matrices are split using a set of time period splitting factors
+        derivied from decompiling the post-ME matrices.
+
+        Parameters
+        ----------
+        years_needed:
+            The years of PA matrices to convert to OD
+
+        m_needed:
+            The modes of PA matrices to convert to OD
+
+        p_needed:
+            The purposes of PA matrices to convert to OD
+
+        soc_needed:
+            The skill levels of PA matrices to convert to OD
+
+        ns_needed:
+            The income levels of PA matrices to convert to OD
+
+        ca_needed:
+            The the car availability of PA matrices to convert to OD
+
+        round_dp:
+            The number of decimal places to round the output values to.
+            Uses efs_consts.DEFAULT_ROUNDING by default.
+
+        # TODO: Update docs once correct functionality exists
+        overwrite_hb_tp_pa:
+            Whether to split home based PA matrices into time periods.
+
+        overwrite_hb_tp_od:
+            Whether to convert time period split PA matrices into OD matrices.
+
+        verbose:
+            If True, suppresses some of the non-essential terminal outputs.
+
+        Returns
+        -------
+        None
+        """
+        # Init
+        _input_checks(m_needed=m_needed)
+        base_zone_col = "%s_zone_id"
+        output_zone_col = base_zone_col % self.output_zone_system
+        pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24'
+        hb_p_needed, nhb_p_needed = du.split_hb_nhb_purposes(p_needed)
+
+        # Set up the segmentation params
+        seg_level = 'tms'
+        seg_params = {
+            'p_needed': hb_p_needed,
+            'm_needed': m_needed,
+            'soc_needed': soc_needed,
+            'ns_needed': ns_needed,
+            'ca_needed': self.ca_needed,
+        }
+
+        # Convert HB to OD via tour proportions
+        pa2od.build_od_from_tour_proportions(
+            pa_import=self.exports[pa_import],
+            od_export=self.exports['od'],
+            tour_proportions_dir=self.params['tours'],
+            zone_translate_dir=self.imports['zone_translation']['one_to_one'],
+            model_name=self.model_name,
+            years_needed=years_needed,
+            seg_level=seg_level,
+            seg_params=seg_params
+        )
+
+        # Convert NHB to tp split via factors
+
+
+
+
+    def old_pa_to_od(self,
+                     years_needed: List[int] = consts.ALL_YEARS,
+                     m_needed: List[int] = consts.MODES_NEEDED,
+                     p_needed: List[int] = consts.ALL_P,
+                     soc_needed: List[int] = consts.SOC_NEEDED,
+                     ns_needed: List[int] = consts.NS_NEEDED,
+                     ca_needed: List[int] = consts.CA_NEEDED,
+                     round_dp: int = consts.DEFAULT_ROUNDING,
+                     use_bespoke_pa: bool= True,
+                     overwrite_hb_tp_pa: bool = True,
+                     overwrite_hb_tp_od: bool = True,
+                     verbose: bool = True
+                     ) -> None:
+        # BACKLOG: Need Tour proportions from NoRMS in order to properly
+        #  integrate bespoke zones. Currently using TMS tp_splits and
+        #  phi_factors to convert PA to OD
+        #  labels: NoRMS, EFS
         """
         Converts home based PA matrices into time periods split PA matrices,
         then OD matrices (to_home, from_home, and full OD).
