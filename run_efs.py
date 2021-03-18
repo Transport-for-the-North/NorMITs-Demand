@@ -34,9 +34,9 @@ def main():
     recreate_nhb_productions = False
 
     run_bespoke_zones = False
-    run_hb_pa_to_od = True
+    run_hb_pa_to_od = False
     run_compile_od = False
-    run_decompile_post_me = False
+    run_decompile_post_me = True
     run_future_year_compile_od = False
 
     # Controls I/O
@@ -95,8 +95,6 @@ def main():
         efs.pa_to_od(
             years_needed=[2050],
             use_bespoke_pa=True,
-            overwrite_hb_tp_pa=True,
-            overwrite_hb_tp_od=True,
             verbose=verbose
         )
 

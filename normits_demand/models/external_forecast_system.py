@@ -1322,7 +1322,7 @@ class ExternalForecastSystem:
         pa2od.build_od_from_tour_proportions(
             pa_import=self.exports[pa_import],
             od_export=self.exports['od'],
-            tour_proportions_dir=self.params['tours'],
+            tour_proportions_dir=self.imports['post_me_tours'],
             zone_translate_dir=self.imports['zone_translation']['one_to_one'],
             model_name=self.model_name,
             years_needed=years_needed,
@@ -1331,9 +1331,16 @@ class ExternalForecastSystem:
         )
 
         # Convert NHB to tp split via factors
-
-
-
+        mat_p.nhb_tp_split_via_factors(
+            pa_import=self.exports[pa_import],
+            od_export=self.exports['od'],
+            import_matrix_format='pa',
+            export_matrix_format='od',
+            tour_proportions_dir=self.imports['post_me_tours'],
+            model_name=self.model_name,
+            years_needed=years_needed,
+            **seg_params,
+        )
 
     def old_pa_to_od(self,
                      years_needed: List[int] = consts.ALL_YEARS,
@@ -1623,7 +1630,7 @@ class ExternalForecastSystem:
     def decompile_post_me(self,
                           year: int = consts.BASE_YEAR,
                           m_needed: List[int] = consts.MODES_NEEDED,
-                          make_new_observed: bool = True,
+                          make_new_observed: bool = False,
                           overwrite_decompiled_matrices: bool = True,
                           overwrite_tour_proportions: bool = True,
                           ) -> None:

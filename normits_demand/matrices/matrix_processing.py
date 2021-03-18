@@ -1985,6 +1985,118 @@ def build_24hr_mats(import_dir: str,
         return compress.write_out(decompile_factors, splitting_factors_export)
 
 
+def nhb_tp_split_via_factors(pa_import: nd.PathLike,
+                             od_export: nd.PathLike,
+                             import_matrix_format: str,
+                             export_matrix_format: str,
+                             tour_proportions_dir: nd.PathLike,
+                             model_name: str,
+                             years_needed: List[str],
+                             p_needed: List[int],
+                             m_needed: List[int],
+                             soc_needed: List[int] = None,
+                             ns_needed: List[int] = None,
+                             ca_needed: List[int] = None,
+                             tp_needed: List[int] = efs_consts.TIME_PERIODS,
+                             ) -> None:
+    # TODO(BT): Write nhb_tp_split_via_factors() docs
+    # Init
+    ftypes = ['.csv', consts.COMPRESSION_SUFFIX]
+    trip_origin = 'nhb'
+
+    # Make sure we only have NHB purposes
+    for p in p_needed:
+        if p not in consts.ALL_NHB_P:
+            raise ValueError(
+                "Can only run nhb_tp_split_via_factors() on non-home based "
+                "purposes only. Got purpose %s" % p
+            )
+
+    # Get a list of all the nhb matrices
+    all_nhb_matrices = du.list_files(pa_import, ftypes=ftypes)
+    all_nhb_matrices = [x for x in all_nhb_matrices if du.starts_with(x, 'nhb')]
+
+    # Read in the splitting factors
+    fname = consts.POSTME_TP_SPLIT_FACTORS_FNAME
+    factor_path = os.path.join(tour_proportions_dir, fname)
+    splitting_factors = compress.read_in(factor_path)
+
+    # Figure out the level of segmentation we are working at
+    check_key = list(splitting_factors.keys()[0])
+    split_factor_seg_keys = list(du.fname_to_calib_params(check_key).keys())
+
+    # Break the splitting factors down into distribution params
+    factor_params = dict()
+    for key in splitting_factors.keys():
+        dist_params = du.fname_to_calib_params(key)
+
+        # Make sure it's the same segmentation
+        if list(dist_params.keys()) != split_factor_seg_keys:
+            raise nd.NormitsDemandError(
+                "The segmentation of all the read in splitting factors does "
+                "not match. Expected '%s'\nGot '%s' from %s"
+                % (split_factor_seg_keys, list(dist_params.keys()), key)
+            )
+
+        factor_params[key] = dist_params
+
+    # Split year by year
+    for year in years_needed:
+        matrix_to_split_factors = dict()
+
+        # Get the matrices for this year
+        yr_str = '_yr%s_' % year
+        yr_mats = [x for x in all_nhb_matrices if yr_str in x]
+
+        # ## BUILD DICTIONARY OF MATRICES TO TP SPLITTING FACTORS ## #
+        # Build the loop generator
+        loop_generator = du.cp_segmentation_loop_generator(
+            p_list=p_needed,
+            m_list=m_needed,
+            soc_list=soc_needed,
+            ns_list=ns_needed,
+            ca_list=ca_needed
+        )
+
+        # Find the splitting factors that are best for each matrix
+        for in_dist_params in loop_generator:
+            # Figure out input matrix name
+            input_dist_name = du.calib_params_to_dist_name(
+                trip_origin=trip_origin,
+                matrix_format=import_matrix_format,
+                calib_params=in_dist_params,
+                csv=True,
+            )
+
+            # Find the best match from the splitting factors
+            candidate_factor_keys = list()
+            for factor_key, dist_params in factor_params:
+                matching_keys = True
+                for seg_key in split_factor_seg_keys:
+                    if dist_params[seg_key] != in_dist_params[seg_key]:
+                        matching_keys = False
+                        break
+                if matching_keys:
+                    candidate_factor_keys.append(factor_key)
+                    break
+
+            # If we have more than 1 candidate, we have a problem
+            if len(candidate_factor_keys) > 1:
+                raise nd.NormitsDemandError(
+                    "More than one candidate splitting factor found when "
+                    "trying to split %s. Found candidate splitting factors "
+                    "from: %s"
+                    % (input_dist_name, candidate_factor_keys)
+                )
+
+            # Assign the splitting factors!!
+
+
+        # ## APPLY SPLITTING FACTORS, WRITE TO DISK ## #
+        # loop through dictionary apply factors
+    raise NotImplementedError
+
+
 def copy_nhb_matrices(import_dir: str,
                       export_dir: str,
                       replace_pa_with_od: bool = False,

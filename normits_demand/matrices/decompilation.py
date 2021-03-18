@@ -118,17 +118,17 @@ def decompile_noham(year: int,
         print("Converting OD matrices to PA and generating tour "
               "proportions...")
         # Convert the HB matrices to PA
-        mat_p.generate_tour_proportions(
-            od_import=od_export,
-            pa_export=pa_export,
-            tour_proportions_export=tour_proportions_export,
-            zone_translate_dir=zone_translate_dir,
-            model_name=model_name,
-            year=year,
-            seg_level=seg_level,
-            seg_params=seg_params,
-            process_count=process_count
-        )
+        # mat_p.generate_tour_proportions(
+        #     od_import=od_export,
+        #     pa_export=pa_export,
+        #     tour_proportions_export=tour_proportions_export,
+        #     zone_translate_dir=zone_translate_dir,
+        #     model_name=model_name,
+        #     year=year,
+        #     seg_level=seg_level,
+        #     seg_params=seg_params,
+        #     process_count=process_count
+        # )
 
         # ## GENERATE NHB TP SPLITTING FACTORS ## #
         # Need just the nhb purposes
@@ -145,7 +145,7 @@ def decompile_noham(year: int,
             export_dir=pa_24_export,
             splitting_factors_export=splitting_factors_export,
             matrix_format='pa',
-            years_needed=[year],
+            year_needed=year,
             **nhb_seg_params,
         )
 
