@@ -1308,19 +1308,36 @@ class ExternalForecastSystem:
         pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24'
         hb_p_needed, nhb_p_needed = du.split_hb_nhb_purposes(p_needed)
 
+        # Set up the iterator
+        iterator = zip(
+            [hb_p_needed, nhb_p_needed],
+            ['hb', 'nhb'],
+        )
+
+        # Aggregate to TMS level?
+        # for sub_p_needed, to in iterator:
+        #     mat_p.aggregate_matrices(
+        #         import_dir=self.exports[pa_import],
+        #         export_dir=self.exports['aggregated_pa'],
+        #         trip_origin=to,
+        #         matrix_format='pa',
+        #         years_needed=years_needed,
+        #         p_needed=sub_p_needed,
+        #         m_needed=m_needed,
+        #         round_dp=round_dp,
+        #     )
+
         # Set up the segmentation params
         seg_level = 'tms'
         seg_params = {
             'p_needed': hb_p_needed,
             'm_needed': m_needed,
-            'soc_needed': soc_needed,
-            'ns_needed': ns_needed,
             'ca_needed': self.ca_needed,
         }
 
         # Convert HB to OD via tour proportions
         pa2od.build_od_from_tour_proportions(
-            pa_import=self.exports[pa_import],
+            pa_import=self.exports['aggregated_pa'],
             od_export=self.exports['od'],
             tour_proportions_dir=self.imports['post_me_tours'],
             zone_translate_dir=self.imports['zone_translation']['one_to_one'],
@@ -1330,9 +1347,11 @@ class ExternalForecastSystem:
             seg_params=seg_params
         )
 
+        exit()
+
         # Convert NHB to tp split via factors
         mat_p.nhb_tp_split_via_factors(
-            pa_import=self.exports[pa_import],
+            pa_import=self.exports['aggregated_pa'],
             od_export=self.exports['od'],
             import_matrix_format='pa',
             export_matrix_format='od',

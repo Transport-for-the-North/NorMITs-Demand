@@ -1817,8 +1817,8 @@ def build_24hr_mats(import_dir: str,
                     export_dir: str,
                     matrix_format: str,
                     year_needed: List[str],
-                    p_needed: List[int] = efs_consts.ALL_HB_P,
-                    m_needed: List[int] = efs_consts.MODES_NEEDED,
+                    p_needed: List[int],
+                    m_needed: List[int],
                     soc_needed: List[int] = None,
                     ns_needed: List[int] = None,
                     ca_needed: List[int] = None,
@@ -1880,14 +1880,16 @@ def build_24hr_mats(import_dir: str,
     ca_needed = [None] if ca_needed is None else ca_needed
 
     # Need to get the size of the output matrices
+    check_to = 'hb' if p_needed[0] in consts.ALL_HB_P else 'nhb'
     check_mat_name = du.get_dist_name(
-        trip_origin='hb',
+        trip_origin=check_to,
         matrix_format=matrix_format,
         year=str(year_needed),
         purpose=str(p_needed[0]),
         mode=str(m_needed[0]),
         segment=str(soc_needed[0]),
         car_availability=str(ca_needed[0]),
+        tp=str(tp_needed[0]),
         csv=True
     )
     check_mat = file_ops.read_df(os.path.join(import_dir, check_mat_name), index_col=0)

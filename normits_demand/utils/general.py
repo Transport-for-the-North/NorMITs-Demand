@@ -442,7 +442,7 @@ def build_efs_io_paths(import_location: str,
     # Build model specific paths
     model_schema_home = os.path.join(import_home, model_name, 'model schema')
     model_param_home = os.path.join(import_home, model_name, 'params')
-    model_tour_prop_home = os.path.join(import_home, model_name, 'params')
+    model_tour_prop_home = os.path.join(import_home, model_name, 'post_me_tour_proportions')
 
     imports = {
         'home': import_home,
@@ -526,6 +526,7 @@ def build_efs_io_paths(import_location: str,
 
         'aggregated_pa_24': os.path.join(matrices_home, ' '.join([aggregated, pa_24])),
         'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
+        'aggregated_pa': os.path.join(matrices_home, ' '.join([aggregated, pa])),
 
         'pa_24_bespoke': os.path.join(matrices_home, pa_24_bespoke)
     }

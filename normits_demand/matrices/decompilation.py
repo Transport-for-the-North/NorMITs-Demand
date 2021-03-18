@@ -68,14 +68,18 @@ def decompile_noham(year: int,
     Parameters
     ----------
     year
+    seg_level
+    seg_params
     post_me_import
     post_me_renamed_export
     od_export
     pa_export
+    pa_24_export
     zone_translate_dir
     tour_proportions_export
     decompile_factors_path
     vehicle_occupancy_import
+    process_count
     overwrite_decompiled_od
     overwrite_tour_proportions
 
@@ -83,7 +87,7 @@ def decompile_noham(year: int,
     -------
 
     """
-    # TODO: Document and test NOHAM decompile
+    # TODO: Document decompile_noham()
     model_name = 'noham'
     seg_level = checks.validate_seg_level(seg_level)
 
@@ -118,17 +122,17 @@ def decompile_noham(year: int,
         print("Converting OD matrices to PA and generating tour "
               "proportions...")
         # Convert the HB matrices to PA
-        # mat_p.generate_tour_proportions(
-        #     od_import=od_export,
-        #     pa_export=pa_export,
-        #     tour_proportions_export=tour_proportions_export,
-        #     zone_translate_dir=zone_translate_dir,
-        #     model_name=model_name,
-        #     year=year,
-        #     seg_level=seg_level,
-        #     seg_params=seg_params,
-        #     process_count=process_count
-        # )
+        mat_p.generate_tour_proportions(
+            od_import=od_export,
+            pa_export=pa_export,
+            tour_proportions_export=tour_proportions_export,
+            zone_translate_dir=zone_translate_dir,
+            model_name=model_name,
+            year=year,
+            seg_level=seg_level,
+            seg_params=seg_params,
+            process_count=process_count
+        )
 
         # ## GENERATE NHB TP SPLITTING FACTORS ## #
         # Need just the nhb purposes
@@ -137,7 +141,8 @@ def decompile_noham(year: int,
         nhb_seg_params['p_needed'] = nhb_purposes
 
         # Generate the splitting factors export path
-        splitting_factors_export = os.path.join(tour_proportions_export)
+        fname = consts.POSTME_TP_SPLIT_FACTORS_FNAME
+        splitting_factors_export = os.path.join(tour_proportions_export, fname)
 
         # Generate the NHB tp splitting factors
         mat_p.build_24hr_mats(

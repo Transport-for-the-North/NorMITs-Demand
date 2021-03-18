@@ -32,16 +32,17 @@ def main():
     recreate_productions = False
     recreate_attractions = False
     recreate_nhb_productions = False
+    rerun_growth_criteria = False
 
-    run_bespoke_zones = False
+    run_bespoke_zones = True
     run_hb_pa_to_od = False
     run_compile_od = False
-    run_decompile_post_me = True
+    run_decompile_post_me = False
     run_future_year_compile_od = False
 
     # Controls I/O
     scenario = consts.SC00_NTEM
-    iter_num = '3b'
+    iter_num = '3c'
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
@@ -68,19 +69,28 @@ def main():
             recreate_nhb_productions=recreate_nhb_productions,
             echo_distribution=verbose,
 
-            apply_growth_criteria=False,
+            apply_growth_criteria=rerun_growth_criteria,
         )
 
     if run_bespoke_zones:
         # Convert to HB to OD
-        efs.old_pa_to_od(
-            years_needed=[2018],
-            p_needed=consts.ALL_HB_P,
-            use_bespoke_pa=False,
-            overwrite_hb_tp_pa=True,
-            overwrite_hb_tp_od=True,
-            verbose=verbose
-        )
+        if model_name == 'norms':
+            efs.old_pa_to_od(
+                years_needed=[2018],
+                p_needed=consts.ALL_HB_P,
+                use_bespoke_pa=False,
+                overwrite_hb_tp_pa=True,
+                overwrite_hb_tp_od=True,
+                verbose=verbose
+            )
+        else:
+            efs.pa_to_od(
+                years_needed=[2018],
+                use_bespoke_pa=False,
+                verbose=verbose
+            )
+
+        exit()
 
         eg.adjust_bespoke_zones(
             consts.BESPOKE_ZONES_INPUT_FILE,
@@ -109,7 +119,7 @@ def main():
     if run_decompile_post_me:
         # Decompiles post-me base year matrices
         efs.decompile_post_me(
-            overwrite_decompiled_matrices=False,
+            overwrite_decompiled_matrices=True,
             overwrite_tour_proportions=True,
         )
 
