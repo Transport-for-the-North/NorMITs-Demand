@@ -34,8 +34,10 @@ def main():
     recreate_nhb_productions = False
     rerun_growth_criteria = False
 
-    run_bespoke_zones = True
-    run_hb_pa_to_od = False
+    run_bespoke_zones = False
+    ignore_bespoke_zones = True
+
+    run_pa_to_od = True
     run_compile_od = False
     run_decompile_post_me = False
     run_future_year_compile_od = False
@@ -74,23 +76,14 @@ def main():
 
     if run_bespoke_zones:
         # Convert to HB to OD
-        if model_name == 'norms':
-            efs.old_pa_to_od(
-                years_needed=[2018],
-                p_needed=consts.ALL_HB_P,
-                use_bespoke_pa=False,
-                overwrite_hb_tp_pa=True,
-                overwrite_hb_tp_od=True,
-                verbose=verbose
-            )
-        else:
-            efs.pa_to_od(
-                years_needed=[2018],
-                use_bespoke_pa=False,
-                verbose=verbose
-            )
-
-        exit()
+        efs.old_pa_to_od(
+            years_needed=[2018],
+            p_needed=consts.ALL_HB_P,
+            use_bespoke_pa=False,
+            overwrite_hb_tp_pa=True,
+            overwrite_hb_tp_od=True,
+            verbose=verbose
+        )
 
         eg.adjust_bespoke_zones(
             consts.BESPOKE_ZONES_INPUT_FILE,
@@ -101,10 +94,10 @@ def main():
             audit_path=efs.exports["audits"],
         )
 
-    if run_hb_pa_to_od:
+    if run_pa_to_od:
         efs.pa_to_od(
             years_needed=[2050],
-            use_bespoke_pa=True,
+            use_bespoke_pa=(not ignore_bespoke_zones),
             verbose=verbose
         )
 

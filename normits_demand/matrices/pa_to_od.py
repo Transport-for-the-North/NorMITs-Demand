@@ -1235,7 +1235,7 @@ def build_od_from_tour_proportions(pa_import: str,
                                    seg_params: Dict[str, Any],
                                    base_year: str = consts.BASE_YEAR,
                                    years_needed: List[int] = consts.FUTURE_YEARS,
-                                   process_count: int = os.cpu_count() - 2
+                                   process_count: int = consts.PROCESS_COUNT,
                                    ) -> None:
     """
     Builds future year OD matrices based on the base year tour proportions

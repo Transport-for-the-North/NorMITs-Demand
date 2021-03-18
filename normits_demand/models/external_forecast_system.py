@@ -1247,8 +1247,6 @@ class ExternalForecastSystem:
                  years_needed: List[int] = consts.ALL_YEARS,
                  m_needed: List[int] = consts.MODES_NEEDED,
                  p_needed: List[int] = consts.ALL_P,
-                 soc_needed: List[int] = consts.SOC_NEEDED,
-                 ns_needed: List[int] = consts.NS_NEEDED,
                  round_dp: int = consts.DEFAULT_ROUNDING,
                  use_bespoke_pa: bool= True,
                  verbose: bool = True
@@ -1304,7 +1302,6 @@ class ExternalForecastSystem:
         # Init
         _input_checks(m_needed=m_needed)
         base_zone_col = "%s_zone_id"
-        output_zone_col = base_zone_col % self.output_zone_system
         pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24'
         hb_p_needed, nhb_p_needed = du.split_hb_nhb_purposes(p_needed)
 
@@ -1315,17 +1312,17 @@ class ExternalForecastSystem:
         )
 
         # Aggregate to TMS level?
-        # for sub_p_needed, to in iterator:
-        #     mat_p.aggregate_matrices(
-        #         import_dir=self.exports[pa_import],
-        #         export_dir=self.exports['aggregated_pa'],
-        #         trip_origin=to,
-        #         matrix_format='pa',
-        #         years_needed=years_needed,
-        #         p_needed=sub_p_needed,
-        #         m_needed=m_needed,
-        #         round_dp=round_dp,
-        #     )
+        for sub_p_needed, to in iterator:
+            mat_p.aggregate_matrices(
+                import_dir=self.exports[pa_import],
+                export_dir=self.exports['aggregated_pa'],
+                trip_origin=to,
+                matrix_format='pa',
+                years_needed=years_needed,
+                p_needed=sub_p_needed,
+                m_needed=m_needed,
+                round_dp=round_dp,
+            )
 
         # Set up the segmentation params
         seg_level = 'tms'
@@ -1347,18 +1344,20 @@ class ExternalForecastSystem:
             seg_params=seg_params
         )
 
-        exit()
 
         # Convert NHB to tp split via factors
+        nhb_seg_params = seg_params.copy()
+        nhb_seg_params['p_needed'] = nhb_p_needed
+
         mat_p.nhb_tp_split_via_factors(
-            pa_import=self.exports['aggregated_pa'],
-            od_export=self.exports['od'],
+            import_dir=self.exports['aggregated_pa'],
+            export_dir=self.exports['od'],
             import_matrix_format='pa',
             export_matrix_format='od',
             tour_proportions_dir=self.imports['post_me_tours'],
             model_name=self.model_name,
             years_needed=years_needed,
-            **seg_params,
+            **nhb_seg_params,
         )
 
     def old_pa_to_od(self,

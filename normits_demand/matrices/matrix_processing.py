@@ -1987,8 +1987,86 @@ def build_24hr_mats(import_dir: str,
         return compress.write_out(decompile_factors, splitting_factors_export)
 
 
-def nhb_tp_split_via_factors(pa_import: nd.PathLike,
-                             od_export: nd.PathLike,
+def match_distribution_params(candidate_dist_params: Dict[Any, Dict[str, int]],
+                              in_dist_params: Dict[str, int],
+                              match_seg_params: List[str],
+                              ) -> List[Any]:
+    """
+    Tries to match the distribution parameters of dict_a and dict_b.
+
+    Parameters
+    ----------
+    candidate_dist_params:
+        A dictionary of candidates to match to dist_params. The keys should 
+        be the values to return if the value matches dist_params.
+    
+    in_dist_params:
+        A dictionary of distribution parameters to try and match to.
+        THe keys are segmentation names, the values thier values.
+    
+    match_seg_params:
+        The segmentation parameters (keys of in_dist_params) that need to match
+        in the candidate_dist_params to be called a match
+
+    Returns
+    -------
+    matching_keys:
+        Returns a list of the keys in candidate_dist_params where the 
+        distribution parameters match to dist_params on match_seg_params.
+
+    """
+    # Init
+    candidate_factor_keys = list()
+
+    # Check each candidate
+    for factor_key, dist_params in candidate_dist_params.items():
+        matching_keys = True
+
+        # Check the keys that need to match
+        for seg_key in match_seg_params:
+            # If no match, we can exit early
+            if dist_params[seg_key] != in_dist_params[seg_key]:
+                matching_keys = False
+                break
+        if matching_keys:
+            candidate_factor_keys.append(factor_key)
+            
+    return candidate_factor_keys
+
+
+def _nhb_tp_split_via_factors_internal(import_dir,
+                                       export_dir,
+                                       mat_24hr_fname,
+                                       tp_dict,
+                                       trip_origin,
+                                       export_matrix_format,
+                                       compress_out,
+                                       ):
+    print("Splitting %s..." % mat_24hr_fname)
+    # Read in the matrix
+    mat_path = os.path.join(import_dir, mat_24hr_fname)
+    mat_24hr = file_ops.read_df(mat_path, find_similar=True)
+
+    # Apply the splitting factors and write out
+    for tp, factors in tp_dict.items():
+        tp_mat = mat_24hr * factors
+
+        # Figure out the output_fname
+        in_params = du.fname_to_calib_params(mat_24hr_fname)
+        in_params['tp'] = tp
+        tp_mat_fname = du.calib_params_to_dist_name(
+            trip_origin=trip_origin,
+            matrix_format=export_matrix_format,
+            calib_params=in_params,
+            csv=(not compress_out),
+            compressed=compress_out,
+        )
+        out_path = os.path.join(export_dir, tp_mat_fname)
+        file_ops.write_df(tp_mat, out_path)
+
+
+def nhb_tp_split_via_factors(import_dir: nd.PathLike,
+                             export_dir: nd.PathLike,
                              import_matrix_format: str,
                              export_matrix_format: str,
                              tour_proportions_dir: nd.PathLike,
@@ -1999,11 +2077,12 @@ def nhb_tp_split_via_factors(pa_import: nd.PathLike,
                              soc_needed: List[int] = None,
                              ns_needed: List[int] = None,
                              ca_needed: List[int] = None,
-                             tp_needed: List[int] = efs_consts.TIME_PERIODS,
+                             process_count: int = consts.PROCESS_COUNT,
+                             compress_out: bool = False,
+                             verbose: bool = True,
                              ) -> None:
     # TODO(BT): Write nhb_tp_split_via_factors() docs
     # Init
-    ftypes = ['.csv', consts.COMPRESSION_SUFFIX]
     trip_origin = 'nhb'
 
     # Make sure we only have NHB purposes
@@ -2014,20 +2093,18 @@ def nhb_tp_split_via_factors(pa_import: nd.PathLike,
                 "purposes only. Got purpose %s" % p
             )
 
-    # Get a list of all the nhb matrices
-    all_nhb_matrices = du.list_files(pa_import, ftypes=ftypes)
-    all_nhb_matrices = [x for x in all_nhb_matrices if du.starts_with(x, 'nhb')]
-
     # Read in the splitting factors
+    du.print_w_toggle("Reading in the splitting factors...", echo=verbose)
     fname = consts.POSTME_TP_SPLIT_FACTORS_FNAME
     factor_path = os.path.join(tour_proportions_dir, fname)
-    splitting_factors = compress.read_in(factor_path)
+    splitting_factors = file_ops.read_pickle(factor_path, find_similar=True)
 
     # Figure out the level of segmentation we are working at
-    check_key = list(splitting_factors.keys()[0])
+    check_key = list(splitting_factors.keys())[0]
     split_factor_seg_keys = list(du.fname_to_calib_params(check_key).keys())
 
     # Break the splitting factors down into distribution params
+    du.print_w_toggle("Checking the splitting factors...", echo=verbose)
     factor_params = dict()
     for key in splitting_factors.keys():
         dist_params = du.fname_to_calib_params(key)
@@ -2042,13 +2119,12 @@ def nhb_tp_split_via_factors(pa_import: nd.PathLike,
 
         factor_params[key] = dist_params
 
+    # Remove the year key, as we are year independent
+    split_factor_seg_keys = du.list_safe_remove(split_factor_seg_keys, ['yr'])
+
     # Split year by year
     for year in years_needed:
         matrix_to_split_factors = dict()
-
-        # Get the matrices for this year
-        yr_str = '_yr%s_' % year
-        yr_mats = [x for x in all_nhb_matrices if yr_str in x]
 
         # ## BUILD DICTIONARY OF MATRICES TO TP SPLITTING FACTORS ## #
         # Build the loop generator
@@ -2062,6 +2138,8 @@ def nhb_tp_split_via_factors(pa_import: nd.PathLike,
 
         # Find the splitting factors that are best for each matrix
         for in_dist_params in loop_generator:
+            in_dist_params['yr'] = year
+
             # Figure out input matrix name
             input_dist_name = du.calib_params_to_dist_name(
                 trip_origin=trip_origin,
@@ -2071,16 +2149,11 @@ def nhb_tp_split_via_factors(pa_import: nd.PathLike,
             )
 
             # Find the best match from the splitting factors
-            candidate_factor_keys = list()
-            for factor_key, dist_params in factor_params:
-                matching_keys = True
-                for seg_key in split_factor_seg_keys:
-                    if dist_params[seg_key] != in_dist_params[seg_key]:
-                        matching_keys = False
-                        break
-                if matching_keys:
-                    candidate_factor_keys.append(factor_key)
-                    break
+            candidate_factor_keys = match_distribution_params(
+                candidate_dist_params=factor_params,
+                in_dist_params=in_dist_params,
+                match_seg_params=split_factor_seg_keys,
+            )
 
             # If we have more than 1 candidate, we have a problem
             if len(candidate_factor_keys) > 1:
@@ -2090,13 +2163,38 @@ def nhb_tp_split_via_factors(pa_import: nd.PathLike,
                     "from: %s"
                     % (input_dist_name, candidate_factor_keys)
                 )
+            factor_key = candidate_factor_keys[0]
 
-            # Assign the splitting factors!!
+            # Build a dictionary of time periods to splitting factors
+            tp_dict = dict()
+            for tp_mat_name, tp_factors in splitting_factors[factor_key].items():
+                tp = du.fname_to_calib_params(tp_mat_name)['tp']
+                tp_dict[tp] = tp_factors
 
+            # Finally, assign splitting factors to matrix
+            matrix_to_split_factors[input_dist_name] = tp_dict
 
         # ## APPLY SPLITTING FACTORS, WRITE TO DISK ## #
-        # loop through dictionary apply factors
-    raise NotImplementedError
+        unchanging_kwargs = {
+            'import_dir': import_dir,
+            'export_dir': export_dir,
+            'trip_origin': trip_origin,
+            'export_matrix_format': export_matrix_format,
+            'compress_out': compress_out,
+        }
+
+        kwarg_list = list()
+        for mat_24hr_fname, tp_dict in matrix_to_split_factors.items():
+            kwargs = unchanging_kwargs.copy()
+            kwargs['mat_24hr_fname'] = mat_24hr_fname
+            kwargs['tp_dict'] = tp_dict
+            kwarg_list.append(kwargs)
+
+        multiprocessing.multiprocess(
+            fn=_nhb_tp_split_via_factors_internal,
+            kwargs=kwarg_list,
+            process_count=process_count,
+        )
 
 
 def copy_nhb_matrices(import_dir: str,
