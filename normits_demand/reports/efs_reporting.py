@@ -457,15 +457,14 @@ class EfsReporter:
             self.compare_raw_pa_vectors_to_ntem_by_mode()
 
         print("Generating %s specific reports..." % self.model_name)
-        # self.compare_base_pa_vectors_to_ntem()
-        # self.compare_translated_base_pa_vectors_to_ntem()
-        # self.compare_eg_pa_vectors_to_ntem()
+        self.compare_base_pa_vectors_to_ntem()
+        self.compare_translated_base_pa_vectors_to_ntem()
+        self.compare_eg_pa_vectors_to_ntem()
 
         # Trip lengths
-        # self.compare_trip_lengths()
+        self.compare_trip_lengths()
         self.analyse_compiled_matrices()
 
-        exit()
         # Matrix compare to NTEM
         self.compare_pa_matrices_to_ntem()
         self.compare_bespoke_pa_matrices_to_ntem()

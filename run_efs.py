@@ -28,23 +28,23 @@ def main():
     integrate_dlog = False
     run_pop_emp_comparison = False
 
-    run_base_efs = False
-    recreate_productions = False
-    recreate_attractions = False
-    recreate_nhb_productions = False
-    rerun_growth_criteria = False
+    run_base_efs = True
+    recreate_productions = True
+    recreate_attractions = True
+    recreate_nhb_productions = True
+    rerun_growth_criteria = True
 
     run_bespoke_zones = False
     ignore_bespoke_zones = True
 
-    run_pa_to_od = False
+    run_pa_to_od = True
     run_compile_od = True
     run_decompile_post_me = False
     run_future_year_compile_od = False
 
     # Controls I/O
     scenario = consts.SC00_NTEM
-    iter_num = '3c'
+    iter_num = '3d'
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
