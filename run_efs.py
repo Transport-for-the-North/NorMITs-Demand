@@ -37,8 +37,8 @@ def main():
     run_bespoke_zones = False
     ignore_bespoke_zones = True
 
-    run_pa_to_od = True
-    run_compile_od = False
+    run_pa_to_od = False
+    run_compile_od = True
     run_decompile_post_me = False
     run_future_year_compile_od = False
 
@@ -103,7 +103,7 @@ def main():
 
     if run_compile_od:
         # Compiles base year OD matrices
-        efs.pre_me_compile_od_matrices(
+        efs.compile_od_matrices(
             year=2050,
             overwrite_aggregated_od=True,
             overwrite_compiled_od=True,

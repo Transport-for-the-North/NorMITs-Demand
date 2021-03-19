@@ -2045,7 +2045,7 @@ def _nhb_tp_split_via_factors_internal(import_dir,
     print("Splitting %s..." % mat_24hr_fname)
     # Read in the matrix
     mat_path = os.path.join(import_dir, mat_24hr_fname)
-    mat_24hr = file_ops.read_df(mat_path, find_similar=True)
+    mat_24hr = file_ops.read_df(mat_path, index_col=0, find_similar=True)
 
     # Apply the splitting factors and write out
     for tp, factors in tp_dict.items():
@@ -2267,9 +2267,8 @@ def copy_nhb_matrices(import_dir: str,
 def compile_matrices(mat_import: str,
                      mat_export: str,
                      compile_params_path: str,
-                     factor_pickle_path: str,
+                     factor_pickle_path: str = None,
                      round_dp: int = efs_consts.DEFAULT_ROUNDING,
-                     build_factor_pickle: bool = False,
                      factors_fname: str = 'od_compilation_factors.pickle',
                      ) -> nd.PathLike:
     """
@@ -2315,13 +2314,14 @@ def compile_matrices(mat_import: str,
     if not os.path.isdir(mat_export):
         raise IOError("Matrix export path '%s' does not exist." % mat_export)
 
-    if pathlib.Path(factor_pickle_path).suffix == '':
-        print(
-            "WARNING: No filename was given for the pickle factors. "
-            "Defaulting to od_compilation_factors.pickle, but this is "
-            "deprecated and will be removed in future!"
-        )
-        factor_pickle_path = os.path.join(factor_pickle_path, factors_fname)
+    if factor_pickle_path is not None:
+        if pathlib.Path(factor_pickle_path).suffix == '':
+            print(
+                "WARNING: No filename was given for the pickle factors. "
+                "Defaulting to od_compilation_factors.pickle, but this is "
+                "deprecated and will be removed in future!"
+            )
+            factor_pickle_path = os.path.join(factor_pickle_path, factors_fname)
 
     # Init
     compile_params = pd.read_csv(compile_params_path)
@@ -2352,6 +2352,7 @@ def compile_matrices(mat_import: str,
         in_mats = list()
         for mat_name in input_mat_names:
             in_path = os.path.join(mat_import, mat_name)
+            df = file_ops.read_df(in_path, index_col=0)
             in_mats.append(file_ops.read_df(in_path, index_col=0))
 
         # Combine all matrices together
@@ -2362,7 +2363,7 @@ def compile_matrices(mat_import: str,
         full_mat.round(decimals=round_dp).to_csv(output_path)
 
         # Go to the next iteration if we don't need the factors
-        if not build_factor_pickle:
+        if factor_pickle_path is None:
             continue
 
         # ## CALCULATE THE DECOMPILE FACTORS ## #
@@ -2372,7 +2373,7 @@ def compile_matrices(mat_import: str,
             decompile_factors[comp_name][mat_name] = part_mat / full_mat
 
     # Write factors to disk if we made them
-    if build_factor_pickle:
+    if factor_pickle_path is not None:
         print('Writing decompile factors to disk - might take a while...')
         decompile_factors = du.defaultdict_to_regular(decompile_factors)
         return compress.write_out(decompile_factors, factor_pickle_path)
@@ -2856,7 +2857,6 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
             mat_import=mat_import,
             mat_export=mat_export,
             compile_params_path=compile_params_path,
-            build_factor_pickle=True,
             factor_pickle_path=split_factors_path,
         )
 
@@ -2927,7 +2927,6 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
             mat_import=mat_import,
             mat_export=mat_export,
             compile_params_path=compile_params_path,
-            build_factor_pickle=True,
             factor_pickle_path=split_factors_path,
         )
 

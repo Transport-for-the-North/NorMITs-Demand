@@ -1344,7 +1344,6 @@ class ExternalForecastSystem:
             seg_params=seg_params
         )
 
-
         # Convert NHB to tp split via factors
         nhb_seg_params = seg_params.copy()
         nhb_seg_params['p_needed'] = nhb_p_needed
@@ -1504,16 +1503,16 @@ class ExternalForecastSystem:
             print('HB OD matrices compiled!\n')
             # TODO: Create 24hr OD for HB
 
-    def pre_me_compile_od_matrices(self,
-                                   year: int = consts.BASE_YEAR,
-                                   hb_p_needed: List[int] = consts.HB_PURPOSES_NEEDED,
-                                   nhb_p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
-                                   m_needed: List[int] = consts.MODES_NEEDED,
-                                   tp_needed: List[int] = consts.TIME_PERIODS,
-                                   round_dp: int = consts.DEFAULT_ROUNDING,
-                                   overwrite_aggregated_od: bool = True,
-                                   overwrite_compiled_od: bool = True,
-                                   ) -> None:
+    def compile_od_matrices(self,
+                            year: int = consts.BASE_YEAR,
+                            hb_p_needed: List[int] = consts.HB_PURPOSES_NEEDED,
+                            nhb_p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
+                            m_needed: List[int] = consts.MODES_NEEDED,
+                            tp_needed: List[int] = consts.TIME_PERIODS,
+                            round_dp: int = consts.DEFAULT_ROUNDING,
+                            overwrite_aggregated_od: bool = True,
+                            overwrite_compiled_od: bool = True,
+                            ) -> None:
         """
         Compiles pre-ME OD matrices produced by EFS into User Class format
         i.e. business, commute, other
@@ -1568,39 +1567,40 @@ class ExternalForecastSystem:
             ca_needed = consts.CA_NEEDED
         else:
             ca_needed = [None]
-            
-        if overwrite_aggregated_od:
-            for matrix_format in ['od_from', 'od_to']:
-                mat_p.aggregate_matrices(
-                    import_dir=self.exports['od'],
-                    export_dir=self.exports['aggregated_od'],
-                    trip_origin='hb',
-                    matrix_format=matrix_format,
-                    years_needed=[year],
-                    p_needed=hb_p_needed,
-                    m_needed=m_needed,
-                    ca_needed=ca_needed,
-                    tp_needed=tp_needed,
-                    round_dp=round_dp,
-                )
-            mat_p.aggregate_matrices(
-                import_dir=self.exports['od'],
-                export_dir=self.exports['aggregated_od'],
-                trip_origin='nhb',
-                matrix_format='od',
-                years_needed=[year],
-                p_needed=nhb_p_needed,
-                m_needed=m_needed,
-                ca_needed=ca_needed,
-                tp_needed=tp_needed,
-                round_dp=round_dp,
-            )
+
+        # TODO: No longer need to aggregate matrices!
+        # if overwrite_aggregated_od:
+        #     for matrix_format in ['od_from', 'od_to']:
+        #         mat_p.aggregate_matrices(
+        #             import_dir=self.exports['od'],
+        #             export_dir=self.exports['aggregated_od'],
+        #             trip_origin='hb',
+        #             matrix_format=matrix_format,
+        #             years_needed=[year],
+        #             p_needed=hb_p_needed,
+        #             m_needed=m_needed,
+        #             ca_needed=ca_needed,
+        #             tp_needed=tp_needed,
+        #             round_dp=round_dp,
+        #         )
+        #     mat_p.aggregate_matrices(
+        #         import_dir=self.exports['od'],
+        #         export_dir=self.exports['aggregated_od'],
+        #         trip_origin='nhb',
+        #         matrix_format='od',
+        #         years_needed=[year],
+        #         p_needed=nhb_p_needed,
+        #         m_needed=m_needed,
+        #         ca_needed=ca_needed,
+        #         tp_needed=tp_needed,
+        #         round_dp=round_dp,
+        #     )
 
         if overwrite_compiled_od:
             # Build the compile params for this model
             if self.model_name == 'noham':
                 compile_params_paths = mat_p.build_compile_params(
-                    import_dir=self.exports['aggregated_od'],
+                    import_dir=self.exports['od'],
                     export_dir=self.params['compile'],
                     matrix_format='od',
                     years_needed=[year],
@@ -1610,7 +1610,7 @@ class ExternalForecastSystem:
                 )
             elif self.model_name == 'norms':
                 compile_params_paths = mat_p.build_norms_compile_params(
-                    import_dir=self.exports['aggregated_od'],
+                    import_dir=self.exports['od'],
                     export_dir=self.params['compile'],
                     matrix_format='od',
                     years_needed=[year],
@@ -1624,12 +1624,10 @@ class ExternalForecastSystem:
                 )
 
             mat_p.compile_matrices(
-                mat_import=self.exports['aggregated_od'],
+                mat_import=self.exports['od'],
                 mat_export=self.exports['compiled_od'],
                 compile_params_path=compile_params_paths[0],
                 round_dp=round_dp,
-                build_factor_pickle=True,
-                factor_pickle_path=self.params['compile'],
             )
 
             # Need to convert into hourly average PCU for noham

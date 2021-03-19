@@ -21,25 +21,21 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-# Compare compiled matrices
-# ORIGINAL_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_pcu'
-# COMPARE_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test PCU Compiled OD Matrices'
-# TRIP_ORIGIN = None
-# REPORT_FNAME = 'comparison_report_compiled.csv'
+base_path = r'E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3b\Matrices\Post-ME Matrices'
 
-# # Compare time period split OD matrices
-# ORIGINAL_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices'
-# COMPARE_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Test OD Matrices'
+# Compare compiled matrices
+ORIGINAL_DIR = os.path.join(base_path, r'Compiled OD Matrices\from_pcu')
+COMPARE_DIR = os.path.join(base_path, 'Test PCU Compiled OD Matrices')
+TRIP_ORIGIN = None
+REPORT_FNAME = 'comparison_report_compiled.csv'
+
+# Compare time period split OD matrices
+# ORIGINAL_DIR = os.path.join(base_path, 'OD Matrices')
+# COMPARE_DIR = os.path.join(base_path, 'Test OD Matrices')
 # TRIP_ORIGIN = 'hb'
 # REPORT_FNAME = 'comparison_report_tp_od.csv'
 
-# Compare VDM time period split OD matrices
-ORIGINAL_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM OD Matrices'
-COMPARE_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM Test OD Matrices'
-TRIP_ORIGIN = 'hb'
-REPORT_FNAME = 'comparison_report_vdm_tp_od.csv'
-
-OUTPUT_DIR = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices'
+OUTPUT_DIR = base_path
 
 
 def list_files(path):

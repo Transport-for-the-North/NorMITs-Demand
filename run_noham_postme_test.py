@@ -117,27 +117,27 @@ def tms_segmentation_tests(model_name,
             import_dir=os.path.join(base_path, 'PA Matrices'),
             export_dir=os.path.join(base_path, '24hr PA Matrices'),
             matrix_format='pa',
-            p_needed=consts.ALL_NHB_P,
+            p_needed=consts.ALL_HB_P,
             year_needed=consts.BASE_YEAR,
             m_needed=m_needed,
             ca_needed=ca_needed,
         )
 
-        # mat_p.build_24hr_mats(
-        #     import_dir=os.path.join(base_path, 'PA Matrices'),
-        #     export_dir=os.path.join(base_path, '24hr PA Matrices'),
-        #     matrix_format='pa',
-        #     year_needed=consts.BASE_YEAR,
-        #     m_needed=m_needed,
-        #     p_needed=consts.ALL_NHB_P,
-        #     ca_needed=ca_needed,
-        # )
+        mat_p.build_24hr_mats(
+            import_dir=os.path.join(base_path, 'PA Matrices'),
+            export_dir=os.path.join(base_path, '24hr PA Matrices'),
+            matrix_format='pa',
+            year_needed=consts.BASE_YEAR,
+            m_needed=m_needed,
+            p_needed=consts.ALL_NHB_P,
+            ca_needed=ca_needed,
+        )
 
         pa2od.build_od_from_tour_proportions(
             pa_import=os.path.join(base_path, '24hr PA Matrices'),
             od_export=os.path.join(base_path, 'Test OD Matrices'),
             tour_proportions_dir=r'I:\NorMITs Demand\import\noham\post_me_tour_proportions',
-            zone_translate_dir=r'Y:\NorMITs Demand\import\one_to_one',
+            zone_translate_dir=r'I:\NorMITs Demand\import\zone_translation\one_to_one',
             model_name=model_name,
             years_needed=[consts.BASE_YEAR],
             seg_level=seg_level,
@@ -163,7 +163,7 @@ def tms_segmentation_tests(model_name,
         )
 
         compile_params_fname = du.get_compile_params_name('od', str(consts.BASE_YEAR))
-        compile_param_path = os.path.join(base_path, 'Test Compile Params', compile_params_fname),
+        compile_param_path = os.path.join(base_path, 'Test Compile Params', compile_params_fname)
 
         du.compile_od(
             od_folder=os.path.join(base_path, 'Test OD Matrices'),
@@ -176,7 +176,7 @@ def tms_segmentation_tests(model_name,
         vo.people_vehicle_conversion(
             mat_import=os.path.join(base_path, 'Test Compiled OD Matrices'),
             mat_export=os.path.join(base_path, 'Test PCU Compiled OD Matrices'),
-            import_folder=r'Y:\NorMITs Demand\import',
+            import_folder=r'I:\NorMITs Demand\import',
             mode=str(m_needed[0]),
             method='to_vehicles',
             out_format='wide',
@@ -268,7 +268,6 @@ def vdm_segmentation_tests(model_name,
             mat_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
             mat_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM OD Matrices',
             compile_params_path=compile_param_path,
-            build_factor_pickle=True,
             factors_fname='test.pkl'
         )
 

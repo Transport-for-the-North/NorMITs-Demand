@@ -545,7 +545,6 @@ def compile_od(od_folder,
     """
     Function to compile model format od matrices to a given specification
     """
-
     import_params = pd.read_csv(compile_param_path)
 
     # Define cols
@@ -557,13 +556,11 @@ def compile_od(od_folder,
     files = os.listdir(od_folder)
     # Filter pickles or anything else odd in there
     files = [x for x in files if '.csv' in x]
-    print(files)
 
     comp_ph = []
     od_pickle = {}
     for index,row in compilations.iterrows():
         compilation_name = row['compilation']
-        print(compilation_name)
 
         if row['format'] == 'long':
             target_format = 'long'
