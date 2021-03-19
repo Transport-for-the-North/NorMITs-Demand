@@ -239,11 +239,12 @@ def control_to_ntem(control_df: pd.DataFrame,
     lad_index = lad_groups.copy()
     lad_index.append(base_value_name)
 
-    lad_totals = adj_control_df.reindex(lad_index, axis=1)
-    lad_totals = lad_totals.groupby(lad_groups).sum().reset_index()
+    # lad_totals = adj_control_df.reindex(lad_index, axis=1)
+    # lad_totals = lad_totals.groupby(lad_groups).sum().reset_index()
 
     # Reindex outputs
-    adj_control_df = adj_control_df.drop(['lad_zone_id', 'adj_fac'], axis=1)
+    # adj_control_df = adj_control_df.drop(['lad_zone_id', 'adj_fac'], axis=1)
+    adj_control_df = adj_control_df.drop(['lad_zone_id', 'adj_fac'], axis=1, inplace=True)
 
     after = adj_control_df[base_value_name].sum()
     du.print_w_toggle('After: ' + str(after), echo=verbose)
@@ -278,4 +279,4 @@ def control_to_ntem(control_df: pd.DataFrame,
                 % (len(index_df), len(adj_control_df))
             )
 
-    return adj_control_df, audit, adjustments, lad_totals
+    return adj_control_df, audit, adjustments# , lad_totals

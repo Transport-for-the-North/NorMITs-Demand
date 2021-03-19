@@ -1620,8 +1620,8 @@ def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
         if soc_col in segmentation_cols and soc_col not in list(year_emp):
             # We'll catch the error lower down, so don't need to here
             if ignore_missing_soc:
-                segmentation_cols.pop(soc_col)
-                group_cols.pop(soc_col)
+                segmentation_cols.remove(soc_col)
+                group_cols.remove(soc_col)
 
         # ## FILTER TO JUST THE DATA WE NEED ## #
         # Set up the columns to keep

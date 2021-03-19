@@ -1148,6 +1148,12 @@ class NhbProductionModel:
                       % (year, nhb_prods[year].sum()))
             print('\n')
 
+        if output_raw:
+            print("Writing raw NHB Productions to disk...")
+            fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_nhb')
+            path = os.path.join(self.exports['productions'], fname)
+            nhb_prods.to_csv(path, index=False)
+
         # ## OPTIONALLY CONSTRAIN TO NTEM ## #
         lad_lookup_path = os.path.join(self.imports['lad_lookup'],
                                        consts.DEFAULT_LAD_LOOKUP)
