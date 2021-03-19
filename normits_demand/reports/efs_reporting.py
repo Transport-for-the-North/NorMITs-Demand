@@ -22,6 +22,7 @@ from typing import Union
 from typing import Tuple
 
 # 3rd party
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -461,7 +462,8 @@ class EfsReporter:
         # self.compare_eg_pa_vectors_to_ntem()
 
         # Trip lengths
-        self.compare_trip_lengths()
+        # self.compare_trip_lengths()
+        self.analyse_compiled_matrices()
 
         exit()
         # Matrix compare to NTEM
@@ -550,15 +552,56 @@ class EfsReporter:
 
         return avg_trip_lengths
 
+    def analyse_compiled_matrices(self) -> None:
+        """
+        Generates a report analysing the trips in the compiled
+        matrices
+
+        Returns
+        -------
+        None
+        """
+        # Init
+        report_name = "compiled_matrices_trips.csv"
+        import_dir = self.efs_exports['compiled_od_pcu']
+        mat_fnames = file_ops.list_files(import_dir)
+
+        # Generate the report
+        report = list()
+        for fname in mat_fnames:
+            # Read in the matrix
+            path = os.path.join(import_dir, fname)
+            mat = file_ops.read_df(path, index_col=0, find_similar=True)
+
+            if mat.shape[0] != mat.shape[1]:
+                raise nd.NormitsDemandError(
+                    "The read in matrix isn't square! Read in %s and got "
+                    "shape %s" % (fname, mat.shape)
+                )
+
+            # Generate a mask for inter and intra
+            intra_mask = np.diag([1] * mat.shape[0])
+            inter_mask = 1 - intra_mask
+
+            # Calculate totals
+            intra_trips = (mat.values * intra_mask).sum()
+            inter_trips = (mat.values * inter_mask).sum()
+
+            # Add to report
+            report.append({
+                'File Name': fname,
+                'inter_zonal': inter_trips,
+                'intra_zonal': intra_trips,
+            })
+
+        # Write out the report
+        path = os.path.join(self.exports['home'], report_name)
+        pd.DataFrame(report).to_csv(path, index=False)
+
     def compare_trip_lengths(self) -> None:
         """
         Generates a report comparing post-me trip lengths to the
         trip lengths being returned in the furness (24hr PA)
-
-        Returns
-        -------
-        report:
-            A copy of the generated report comparing trip lengths
         """
         # Init
         atl_name = "average_trip_lengths.csv"
@@ -569,35 +612,35 @@ class EfsReporter:
 
         # Build a dictionary of distances
         print("Reading distances...")
-        # distances = {p: self._get_distance(p) for p in consts.ALL_HB_P}
+        distances = {p: self._get_distance(p) for p in consts.ALL_HB_P}
 
-        # # Generate post-me reports
-        # avg_trip_lengths = self._generate_trip_band_report_by_purpose(
-        #     distance_dict=distances,
-        #     raw_mat_import=self.imports['post_me_pa'],
-        #     cache_export=self.exports['cache']['post_me_tlb'],
-        #     report_export=self.exports['tlb']['post_me'],
-        #     years_needed=[self.base_year],
-        #     trip_origin='hb',
-        #     matrix_format='pa',
-        #     mode=consts.MODEL_MODES[self.model_name][0],
-        # )
-        # atl_path = os.path.join(self.exports['tlb']['post_me'], atl_name)
-        # pd.DataFrame(avg_trip_lengths).to_csv(atl_path, index=False)
-        #
-        # # Generate post-furness reports
-        # avg_trip_lengths = self._generate_trip_band_report_by_purpose(
-        #     distance_dict=distances,
-        #     raw_mat_import=self.imports['matrices']['pa_24'],
-        #     cache_export=self.exports['cache']['pa_24_tlb'],
-        #     report_export=self.exports['tlb']['pa_24'],
-        #     years_needed=self.years_needed,
-        #     trip_origin='hb',
-        #     matrix_format='pa',
-        #     mode=consts.MODEL_MODES[self.model_name][0],
-        # )
-        # atl_path = os.path.join(self.exports['tlb']['post_me'], atl_name)
-        # pd.DataFrame(avg_trip_lengths).to_csv(atl_path, index=False)
+        # Generate post-me reports
+        avg_trip_lengths = self._generate_trip_band_report_by_purpose(
+            distance_dict=distances,
+            raw_mat_import=self.imports['post_me_pa'],
+            cache_export=self.exports['cache']['post_me_tlb'],
+            report_export=self.exports['tlb']['post_me'],
+            years_needed=[self.base_year],
+            trip_origin='hb',
+            matrix_format='pa',
+            mode=consts.MODEL_MODES[self.model_name][0],
+        )
+        atl_path = os.path.join(self.exports['tlb']['post_me'], atl_name)
+        pd.DataFrame(avg_trip_lengths).to_csv(atl_path, index=False)
+
+        # Generate post-furness reports
+        avg_trip_lengths = self._generate_trip_band_report_by_purpose(
+            distance_dict=distances,
+            raw_mat_import=self.imports['matrices']['pa_24'],
+            cache_export=self.exports['cache']['pa_24_tlb'],
+            report_export=self.exports['tlb']['pa_24'],
+            years_needed=self.years_needed,
+            trip_origin='hb',
+            matrix_format='pa',
+            mode=consts.MODEL_MODES[self.model_name][0],
+        )
+        atl_path = os.path.join(self.exports['tlb']['post_me'], atl_name)
+        pd.DataFrame(avg_trip_lengths).to_csv(atl_path, index=False)
 
         # ## GENERATE SUMMARY REPORTS ## #
 

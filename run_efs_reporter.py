@@ -21,7 +21,7 @@ def main():
     # ## SETUP ## #
     # Controls I/O
     scenario = consts.SC00_NTEM
-    iter_num = '3b'
+    iter_num = '3c'
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
