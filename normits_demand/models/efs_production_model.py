@@ -1148,12 +1148,6 @@ class NhbProductionModel:
                       % (year, nhb_prods[year].sum()))
             print('\n')
 
-        if output_raw:
-            print("Writing raw NHB Productions to disk...")
-            fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_nhb')
-            path = os.path.join(self.exports['productions'], fname)
-            nhb_prods.to_csv(path, index=False)
-
         # ## OPTIONALLY CONSTRAIN TO NTEM ## #
         lad_lookup_path = os.path.join(self.imports['lad_lookup'],
                                        consts.DEFAULT_LAD_LOOKUP)
@@ -1879,6 +1873,7 @@ def control_productions_to_ntem(productions: pd.DataFrame,
     all_years = [base_year] + future_years
     init_index_cols = list(productions)
     init_group_cols = du.list_safe_remove(list(productions), all_years)
+    constraint_dtypes = {k: v for k, v in zip(ntem_control_cols, ntem_control_dtypes)}
 
     # Use sorting to avoid merge. Productions is a BIG DF
     all_years = [base_year] + future_years
@@ -1923,11 +1918,12 @@ def control_productions_to_ntem(productions: pd.DataFrame,
         ntem_lad_lookup = pd.read_csv(lad_lookup_path)
 
         print("\nPerforming NTEM constraint for %s..." % year)
-        productions, audit, *_, = ntem.control_to_ntem(
+        productions, audit, *_, = ntem.new_control_to_ntem(
             control_df=productions,
             ntem_totals=ntem_totals,
             zone_to_lad=ntem_lad_lookup,
             constraint_cols=ntem_control_cols,
+            constraint_dtypes=constraint_dtypes,
             base_value_name=year,
             ntem_value_name='productions',
             trip_origin=trip_origin

@@ -23,6 +23,250 @@ from normits_demand.validation import checks
 #  labels: optimisation
 
 # TODO: Allow control_to_ntem() to take flexible col names
+def new_control_to_ntem(control_df: pd.DataFrame,
+                        ntem_totals: pd.DataFrame,
+                        zone_to_lad: pd.DataFrame,
+                        constraint_cols: List[str] = None,
+                        base_value_name: str = 'attractions',
+                        ntem_value_name: str = 'attractions',
+                        base_zone_name: str = 'msoa_zone_id',
+                        trip_origin: str = 'hb',
+                        input_group_cols: List[str] = None,
+                        constraint_dtypes: Dict[str, Any] = None,
+                        replace_drops: bool = False,
+                        verbose: bool = True,
+                        ) -> pd.DataFrame:
+    """
+    Control to a vector of NTEM constraints using single factor.
+    Return productions controlled to NTEM.
+
+    Parameters:
+    ----------
+    control_df:
+        DF of productions, flexible segments.
+
+    ntem_totals:
+        DF of NTEM totals to control to. Needs to be in LADs.
+
+    zone_to_lad:
+        DF of translation between control_df zone system and LAD
+
+    constraint_cols = ['p', 'm']:
+        Segments to include in control. Will usually be ['p','m'], or
+        ['p','m','ca'] for rail
+
+    base_value_name = 'attractions':
+        Name of the value column in control_df - ie. productions or
+        attractions. Might also be trips or dt, origin, destination
+
+    ntem_value_name = 'attractions':
+        Name of the value column in the NTEM dataset. ie. productions or
+        attractions. Might also be trips or dt, origin, destination
+    
+    base_zone_name = 'msoa_zone_id':
+        name of zoning column used in control_df. Same column name should be
+        used in zone_to_lad for translation.
+
+    trip_origin = 'hb':
+        trip_origin set to aggregate on. Can be 'hb' or 'nhb'
+
+    group_cols:
+        A list of column names in control_df that contain segmentation data,
+        and can be used in a group_by call, incase the final dataframe is
+        not in the correct shape (due to zone_to_lad splits).
+        If left as None, all columns other than base_value_name are assumed
+        to be group_cols.
+
+    constraint_dtypes:
+        A dictionary of constraint col_names to constraint col dtypes.
+        If left as None, defaults to all dtypes being str.
+        e.g. {'p': str, 'm': str}.
+
+    Returns:
+    ----------
+    adjusted_control_df:
+        control_df with same zoning as input but controlled to NTEM.
+    """
+    # set defaults
+    if constraint_cols is None:
+        constraint_cols = ['p', 'm']
+
+    if constraint_dtypes is None:
+        constraint_dtypes = {c: str for c in constraint_cols}
+
+    if not all([c in constraint_dtypes.keys() for c in constraint_cols]):
+        raise ValueError(
+            "I haven't been given a datatype for all of the constraint_cols "
+            "given."
+        )
+
+    if input_group_cols is None:
+        input_group_cols = du.list_safe_remove(list(control_df), [base_value_name])
+
+    input_index_cols = input_group_cols.copy() + [base_value_name]
+
+    # ## VALIDATE INPUTS ## #
+    for col in constraint_cols:
+        for df, df_name in zip([control_df, ntem_totals], ['control_df', 'NTEM']):
+            if col not in list(df):
+                raise ValueError(
+                    'Column %s not in %s dataframe' % (str(col), df_name)
+                )
+
+    # Make sure value columns exist
+    if base_value_name not in list(control_df):
+        raise ValueError(
+            'Column %s not in control_df dataframe' % str(base_value_name)
+        )
+
+    if ntem_value_name not in list(ntem_totals):
+        raise ValueError(
+            'Column %s not in ntem_totals dataframe' % str(ntem_value_name)
+        )
+
+    trip_origin = checks.validate_trip_origin(trip_origin)
+
+    # Init
+    control_df = control_df.copy()
+    zone_to_lad = zone_to_lad.copy()
+    ntem_value_name = ntem_value_name.strip().lower()
+
+    index_df = control_df.reindex(columns=input_group_cols)
+    purposes = du.trip_origin_to_purposes(trip_origin)
+
+    # See if our control_df is a subset
+    constraint_subset = dict()
+    for col in constraint_cols:
+        constraint_subset[col] = control_df[col].unique()
+
+    # TODO: Not necessarily True for EFS
+    # Establish all non trip segments
+    segments = list()
+    for col in list(control_df):
+        if col not in [base_zone_name, base_value_name]:
+            segments.append(col)
+
+    # ## BEGIN CONTROLLING ## #
+    # Print starting value
+    before = control_df[base_value_name].sum()
+    du.print_w_toggle('Before: ' + str(before), echo=verbose)
+
+    # Build Control DF
+    group_cols = ['lad_zone_id'] + constraint_cols
+    index_cols = group_cols.copy() + [ntem_value_name]
+
+    ntem_control = ntem_totals[ntem_totals['p'].isin(purposes)].copy()
+    ntem_control = ntem_control.reindex(columns=index_cols)
+    ntem_control = ntem_control.groupby(group_cols).sum().reset_index()
+
+    # Calculate the total we are aiming for
+    ntem_subset = ntem_control.copy()
+    for col, vals in constraint_subset.items():
+        subset_mask = ntem_subset[col].isin(vals)
+        ntem_subset = ntem_subset[subset_mask]
+
+    target = ntem_subset[ntem_value_name].sum()
+    du.print_w_toggle('NTEM: ' + str(target), echo=verbose)
+
+    # Match the dtypes to the given ones
+    for col in constraint_cols:
+        ntem_control[col] = ntem_control[col].astype(constraint_dtypes[col])
+    ntem_control['lad_zone_id'] = ntem_control['lad_zone_id'].astype(float).astype(int)
+
+    # ## ADD LAD INTO CONTROL ## #
+    zone_to_lad = zone_to_lad.reindex(columns=['lad_zone_id', base_zone_name])
+    control_df = pd.merge(
+        control_df,
+        zone_to_lad,
+        how='left',
+        on=base_zone_name
+    )
+
+    # No lad match == likely an island - have to drop
+    control_df = control_df[~control_df['lad_zone_id'].isna()]
+
+    # Seed zero infill
+    control_df[base_value_name] = control_df[base_value_name].replace(0, 0.001)
+
+    # ## CALCULATE ADJUSTMENT FACTORS ## #
+    # Keep just the needed stuff
+    group_cols = ['lad_zone_id'] + constraint_cols
+    index_cols = group_cols.copy() + [base_value_name]
+
+    adj_factors = control_df.reindex(columns=index_cols)
+    adj_factors = adj_factors.groupby(group_cols).sum().reset_index()
+
+    # Match the adj factor zones
+    for col in constraint_cols:
+        adj_factors[col] = adj_factors[col].astype(constraint_dtypes[col])
+    adj_factors['lad_zone_id'] = adj_factors['lad_zone_id'].astype(float).astype(int)
+
+    # Stick the current to the control
+    merge_cols = ['lad_zone_id'] + constraint_cols
+    adj_factors = pd.merge(
+        adj_factors,
+        ntem_control,
+        how='left',
+        on=merge_cols,
+    )
+
+    # Get adjustment factors
+    adj_factors['adj_fac'] = adj_factors[ntem_value_name]/adj_factors[base_value_name]
+    adj_factors['adj_fac'] = adj_factors['adj_fac'].replace(np.nan, 1)
+
+    # TODO(BT): Does this still need returning?
+    index_cols = ['lad_zone_id'] + constraint_cols + ['adj_fac']
+    adj_factors = adj_factors.reindex(columns=index_cols)
+    adjustments = adj_factors['adj_fac']
+
+    # TODO: Report adj factors here
+    merge_cols = ['lad_zone_id'] + constraint_cols
+    adj_control_df = pd.merge(
+        control_df,
+        adj_factors,
+        how='left',
+        on=merge_cols,
+    )
+    adj_control_df[base_value_name] *= adj_control_df['adj_fac']
+
+    after = adj_control_df[base_value_name].sum()
+    du.print_w_toggle('After: ' + str(after), echo=verbose)
+
+    audit = {
+        'before': before,
+        'target': target,
+        'after': after
+    }
+
+    # Output segmented lad totals
+    lad_totals = adj_control_df.drop(columns=['msoa_zone_id', 'adj_fac'])
+
+    # Tidy up the return
+    adj_control_df = adj_control_df.drop(columns=['lad_zone_id', 'adj_fac'])
+
+    if replace_drops:
+        # If we have dropped zones, we need to add them back in
+        if len(adj_control_df) != len(index_df):
+            adj_control_df = pd.merge(
+                index_df,
+                adj_control_df,
+                on=group_cols,
+                how='left'
+            ).fillna(0)
+
+        # return and starting df aren't the same still, something really bad
+        # has happened
+        if len(adj_control_df) != len(index_df):
+            raise nd.NormitsDemandError(
+                "Tried to correct the missing zones after doing the translation, "
+                "but something has gone wrong.\nLength of the starting df: %d\n"
+                "Length of the ending df: %d"
+                % (len(index_df), len(adj_control_df))
+            )
+
+    return adj_control_df, audit, adjustments, lad_totals
+
+
 def control_to_ntem(control_df: pd.DataFrame,
                     ntem_totals: pd.DataFrame,
                     zone_to_lad: pd.DataFrame,
@@ -62,7 +306,7 @@ def control_to_ntem(control_df: pd.DataFrame,
     ntem_value_name = 'attractions':
         Name of the value column in the NTEM dataset. ie. productions or
         attractions. Might also be trips or dt, origin, destination
-    
+
     base_zone_name = 'msoa_zone_id':
         name of zoning column used in control_df. Same column name should be
         used in zone_to_lad for translation.
@@ -178,7 +422,7 @@ def control_to_ntem(control_df: pd.DataFrame,
     for col in constraint_cols:
         ntem_k_factors.loc[:, col] = ntem_k_factors[col].astype(constraint_dtypes[col])
     ntem_k_factors['lad_zone_id'] = ntem_k_factors[
-            'lad_zone_id'].astype(float).astype(int)
+        'lad_zone_id'].astype(float).astype(int)
 
     zone_to_lad = zone_to_lad.reindex(['lad_zone_id', base_zone_name], axis=1)
 
@@ -205,7 +449,7 @@ def control_to_ntem(control_df: pd.DataFrame,
     af_sums.append(base_value_name)
 
     adj_fac = control_df.reindex(af_sums, axis=1).groupby(
-            af_groups).sum().reset_index().copy()
+        af_groups).sum().reset_index().copy()
     # Just have to do this manually
     adj_fac['lad_zone_id'] = adj_fac['lad_zone_id'].astype(float).astype(int)
 
@@ -214,7 +458,7 @@ def control_to_ntem(control_df: pd.DataFrame,
                             how='left',
                             on=af_groups)
     # Get adjustment factors
-    adj_fac['adj_fac'] = adj_fac[ntem_value_name]/adj_fac[base_value_name]
+    adj_fac['adj_fac'] = adj_fac[ntem_value_name] / adj_fac[base_value_name]
     af_only = af_groups.copy()
     af_only.append('adj_fac')
     adj_fac = adj_fac.reindex(af_only, axis=1)
@@ -227,8 +471,8 @@ def control_to_ntem(control_df: pd.DataFrame,
 
     # TODO: Report adj factors here
     adj_control_df = control_df.merge(adj_fac,
-                                  how='left',
-                                  on=kf_groups)
+                                      how='left',
+                                      on=kf_groups)
 
     adj_control_df[base_value_name] *= adj_control_df['adj_fac']
 
@@ -239,12 +483,11 @@ def control_to_ntem(control_df: pd.DataFrame,
     lad_index = lad_groups.copy()
     lad_index.append(base_value_name)
 
-    # lad_totals = adj_control_df.reindex(lad_index, axis=1)
-    # lad_totals = lad_totals.groupby(lad_groups).sum().reset_index()
+    lad_totals = adj_control_df.reindex(lad_index, axis=1)
+    lad_totals = lad_totals.groupby(lad_groups).sum().reset_index()
 
     # Reindex outputs
-    # adj_control_df = adj_control_df.drop(['lad_zone_id', 'adj_fac'], axis=1)
-    adj_control_df = adj_control_df.drop(['lad_zone_id', 'adj_fac'], axis=1, inplace=True)
+    adj_control_df = adj_control_df.drop(['lad_zone_id', 'adj_fac'], axis=1)
 
     after = adj_control_df[base_value_name].sum()
     du.print_w_toggle('After: ' + str(after), echo=verbose)
@@ -279,4 +522,4 @@ def control_to_ntem(control_df: pd.DataFrame,
                 % (len(index_df), len(adj_control_df))
             )
 
-    return adj_control_df, audit, adjustments# , lad_totals
+    return adj_control_df, audit, adjustments, lad_totals
