@@ -861,7 +861,6 @@ class TemproParser:
         future_year_cols = [str(x) for x in future_years]
 
         # Do future year growth calc
-        # TODO: Build fy_growth calc here
         nca_growth = nca.copy()
         ca_growth = ca.copy()
         # Work out growth factors
@@ -873,6 +872,7 @@ class TemproParser:
         ca_growth['ca'] = '2'
 
         fy_ca_growth = pd.concat([nca_growth, ca_growth])
+        fy_ca_growth[base_year_col] = 1
         fy_ca_growth = fy_ca_growth.reindex(
             ['msoa_zone_id', 'ca', base_year_col] + future_year_cols, axis=1)
 
