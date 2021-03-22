@@ -1,6 +1,6 @@
 from packaging import version
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 v = version.parse(__version__)
 MAJOR = v.major
