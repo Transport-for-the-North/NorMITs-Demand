@@ -26,6 +26,7 @@ import normits_demand.trip_end_constants as tec
 
 from normits_demand.utils import utils as nup
 from normits_demand.utils import compress as com
+from normits_demand.utils import general as gnu
 from normits_demand.constraints import ntem_control as ntem
 from normits_demand.utils.general import safe_dataframe_to_csv
 
@@ -966,10 +967,18 @@ class ProductionModel(demand.Pathing):
 
         # Import HB attraction vector - should be balanced
         attractions = com.read_in(attraction_vector)
+        # This should be optimised but maybe it's not
+        i_cols = list(attractions)
+        g_cols = i_cols.copy()
+        g_cols.remove('2018')
+        attractions = attractions.reindex(
+            i_cols, axis=1).groupby(g_cols).sum().reset_index()
+        attractions = attractions.sort_values(g_cols)
 
         # Get unique production segments
         # Unique segments are what we can get against what we have
         input_segments = ['area_type', 'p', 'm', 'ca']
+        # TODO: MODE IS STILL IN THE ATTRACTIONS
 
         if verbose:
             print('Returned:')
@@ -978,26 +987,46 @@ class ProductionModel(demand.Pathing):
             print(self.params[
                 'nhb_trip_end_segmentation'])
 
+        # Build rate, mode, time frame
+        single_rate = trip_rates.merge(
+            nhb_mode_split,
+            how='left',
+            on=['area_type', 'ca', 'p', 'nhb_p']
+        ).merge(nhb_time_split,
+                how='left',
+                on=['area_type', 'ca', 'nhb_p', 'm'])
+        single_rate['trip_rate'] *= single_rate['mode_share'] * single_rate['time_share']
+        single_rate = single_rate.drop(['mode_share', 'time_share'], axis=1)
+        correct_order = [
+            'area_type', 'ca', 'p', 'nhb_p', 'm', 'tp', 'trip_rate']
+        single_rate = single_rate.reindex(
+            correct_order, axis=1).reset_index(drop=True)
+
         # Get cols for iteration
-        tr_cols = list(trip_rates)
-        ignore_cols = ['nhb_p', 'trip_rate']
+        tr_cols = list(single_rate)
+        ignore_cols = ['nhb_p', 'm', 'tp', 'trip_rate']
         tr_filters = [x for x in tr_cols if x not in ignore_cols]
 
         # Apply trip rates
         tr_ph = []
-        for i, r in trip_rates.iterrows():
+        for i, r in single_rate.iterrows():
             # Build subset
-            print(r)
+            print('%d of %d' % (i+1, len(single_rate)))
 
             sub_a = attractions.copy()
             for tr in tr_filters:
                 print(tr)
                 sub_a = sub_a[sub_a[tr] == r[tr]]
+
+
+
                 print(len(sub_a))
             print(list(sub_a))
 
             sub_a['productions'] = sub_a['2018'] * r['trip_rate']
-            sub_a['nhb_p'] = r['nhb_p']
+            sub_a['p'] = r['nhb_p']
+            sub_a['m'] = r['m']
+            sub_a['tp'] = r['tp']
             sub_a = sub_a.drop(['2018'], axis=1)
 
             tr_ph.append(sub_a)

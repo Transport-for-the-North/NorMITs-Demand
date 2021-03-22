@@ -26,7 +26,7 @@ from normits_demand.models import efs_zone_translator as zt
 
 from normits_demand.utils import general as du
 
-# TODO(BT/CS): Functionalist query by DB and interpolate (separately)
+# TODO(BT/CS): Functionalise query by DB and interpolate (separately)
 
 
 class TemproParser:
@@ -67,7 +67,7 @@ class TemproParser:
         '2_cars': [3],
         '3+_cars': [4],
         'nca': [1],
-        'ca': [2,3,4]}
+        'ca': [2, 3, 4]}
 
     def __init__(self,
                  access_driver: str = None,
@@ -98,12 +98,15 @@ class TemproParser:
         self.out_folder = out_folder
 
         # Set up paths
-        # TODO(BT): Update these paths to build more dynamically
-        home_path = os.path.join(os.getcwd(), 'config', 'tempro')
+        # TODO: Update these paths to build more dynamically
+        # This is probably being run out of scripts not home.
+        # Repath home
+        home_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)
+        config_path = os.path.join(home_path, 'config', 'tempro')
 
-        self.ntem_trans_path = os.path.join(home_path, 'tblLookupGeo76.csv')
-        self.ntem_code_zone_trans_path = os.path.join(home_path, 'ntem_code_to_zone.csv')
-        self.ntem_lad_trans_path = os.path.join(home_path, 'ntem_lad_pop_weighted_lookup.csv')
+        self.ntem_trans_path = os.path.join(config_path, 'tblLookupGeo76.csv')
+        self.ntem_code_zone_trans_path = os.path.join(config_path, 'ntem_code_to_zone.csv')
+        self.ntem_lad_trans_path = os.path.join(config_path, 'ntem_lad_pop_weighted_lookup.csv')
         self.ntem_to_msoa_path = r"I:\NorMITs Demand\import\zone_translation\weighted\ntem_msoa_pop_weighted_lookup.csv"
 
     def _get_co_data(self,
@@ -812,10 +815,15 @@ class TemproParser:
 
         return prods_gf, attrs_gf, prods, attrs
 
-    def get_co_future_share(self,
-                            verbose = True):
+    def get_co_future_data(self,
+                           verbose: bool = True):
         """
-        Get car ownership growth factors
+        Get car ownership future year shares
+        Calculates share of ca/nca in a given fy
+
+        returns:
+        fy_ca_share, fy_ca_growth, nca, ca
+
         """
         
         # Init
@@ -846,16 +854,33 @@ class TemproParser:
         nca = nca.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
         ca = ca.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
 
-        # ## CALCULATE GROWTH FACTORS ## #
-        # Need to know which is the base year
+        # Build factor and share outputs
+        # Get headings for base and future year cols
         base_year, future_years = du.split_base_future_years(self._output_years)
         base_year_col = str(base_year)
         future_year_cols = [str(x) for x in future_years]
 
+        # Do future year growth calc
+        # TODO: Build fy_growth calc here
+        nca_growth = nca.copy()
+        ca_growth = ca.copy()
+        # Work out growth factors
+        for col in future_year_cols:
+            nca_growth[col] /= nca_growth[base_year_col]
+            ca_growth[col] /= ca_growth[base_year_col]
+
+        nca_growth['ca'] = '1'
+        ca_growth['ca'] = '2'
+
+        fy_ca_growth = pd.concat([nca_growth, ca_growth])
+        fy_ca_growth = fy_ca_growth.reindex(
+            ['msoa_zone_id', 'ca', base_year_col] + future_year_cols, axis=1)
+
+        # Do future year share calc
         nca_share = nca.copy()
         ca_share = ca.copy()
         
-        total = pd.concat([nca_share,ca_share])
+        total = pd.concat([nca_share, ca_share])
         total = total.groupby('msoa_zone_id').sum().reset_index()
         
         nca_share[[base_year_col]+future_year_cols] /= total[[base_year_col]+future_year_cols]
@@ -865,13 +890,14 @@ class TemproParser:
         
         nca_share['ca'] = '1'
         ca_share['ca'] = '2'
-        
-        fy_ca = pd.concat(
+
+        # Compile and reindex
+        fy_ca_share = pd.concat(
             [nca_share, ca_share])
+        fy_ca_share = fy_ca_share.reindex(
+            ['msoa_zone_id', 'ca', base_year_col] + future_year_cols, axis=1)
         
-        fy_ca = fy_ca.reindex(['msoa_zone_id', 'ca', base_year_col] + future_year_cols, axis=1)
-        
-        return fy_ca, nca, ca
+        return fy_ca_share, fy_ca_growth, nca, ca
 
     def get_trip_ends(self,
                      trip_type: str = 'pa',
