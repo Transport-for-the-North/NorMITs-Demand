@@ -184,11 +184,15 @@ class EfsReporter:
         # TODO: Add in NHB exceptional growth when we have the files
         # post exceptional growth imports
         hb_p_fname = consts.PRODS_FNAME % (self.model_zone_name, 'hb_exc')
+        nhb_p_fname = consts.PRODS_FNAME % (self.model_zone_name, 'nhb_exc')
         hb_a_fname = consts.ATTRS_FNAME % (self.model_zone_name, 'hb_exc')
+        nhb_a_fname = consts.ATTRS_FNAME % (self.model_zone_name, 'nhb_exc')
 
         eg_vectors = {
             'hb_productions': os.path.join(self.efs_exports['productions'], hb_p_fname),
+            'nhb_productions': os.path.join(self.efs_exports['productions'], nhb_p_fname),
             'hb_attractions': os.path.join(self.efs_exports['attractions'], hb_a_fname),
+            'nhb_attractions': os.path.join(self.efs_exports['attractions'], nhb_a_fname),
         }
 
         # matrix imports
@@ -942,7 +946,7 @@ class EfsReporter:
 
         # Perform a high level comparison
         report = list()
-        for to, vec_type in itertools.product(['hb'], ['productions', 'attractions']):
+        for to, vec_type in itertools.product(['hb', 'nhb'], ['productions', 'attractions']):
             vec_name = '%s_%s' % (to, vec_type)
 
             post_me_vec = post_me_dict[vec_name]

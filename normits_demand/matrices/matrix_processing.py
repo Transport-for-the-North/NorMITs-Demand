@@ -2652,7 +2652,9 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
         # Tidy up soc/ns columns
         for col_name in ['soc', 'ns']:
             if col_name in list(year_pa):
-                year_pa[col_name] = year_pa[col_name].fillna('none').astype(str)
+                # Need to make sure soc/ns are int and not float
+                year_pa[col_name] = year_pa[col_name].fillna(-1).astype(int)
+                year_pa[col_name] = year_pa[col_name].replace(-1, 'none').astype(str)
 
         # ## STORE DATAFRAMES FOR CONCAT LATER ## #
         # Remove the other column from each

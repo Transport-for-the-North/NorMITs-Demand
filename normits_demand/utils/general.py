@@ -537,6 +537,7 @@ def build_efs_io_paths(import_location: str,
     # Post-ME
     compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
     post_me_exports = {
+        'cache': os.path.join(post_me_home, 'cache'),
         'pa': os.path.join(post_me_home, pa),
         'pa_24': os.path.join(post_me_home, pa_24),
         'vdm_pa_24': os.path.join(post_me_home, vdm_pa_24),

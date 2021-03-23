@@ -786,23 +786,35 @@ class ExternalForecastSystem:
         if apply_growth_criteria:
             # Apply the growth criteria using the post-ME P/A vectors
             # (normal and exceptional zones)
-            pa_dfs = self._handle_growth_criteria(
+            vectors = self._handle_growth_criteria(
                 synth_productions=model_p_vector,
+                synth_nhb_productions=model_nhb_p_vector,
                 synth_attractions=model_a_vector,
+                synth_nhb_attractions=model_nhb_a_vector,
                 base_year=str(base_year),
                 future_years=[str(x) for x in future_years],
                 integrate_dlog=self.integrate_dlog
             )
-            model_p_vector, model_a_vector = pa_dfs
+            model_p_vector, model_nhb_p_vector, model_a_vector, model_nhb_a_vector = vectors
 
         # Write grown productions and attractions to file
         fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb_exc')
         out_path = os.path.join(self.exports['productions'], fname)
         model_p_vector.to_csv(out_path, index=False)
 
+        fname = consts.PRODS_FNAME % (self.output_zone_system, 'nhb_exc')
+        out_path = os.path.join(self.exports['productions'], fname)
+        model_nhb_p_vector.to_csv(out_path, index=False)
+
         fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb_exc')
         out_path = os.path.join(self.exports['attractions'], fname)
         model_a_vector.to_csv(out_path, index=False)
+
+        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'nhb_exc')
+        out_path = os.path.join(self.exports['attractions'], fname)
+        model_nhb_a_vector.to_csv(out_path, index=False)
+
+        exit()
 
         # ## DISTRIBUTE THE INTERNAL AND EXTERNAL DEMAND ## #
         # Create the temporary output folders
@@ -1066,11 +1078,13 @@ class ExternalForecastSystem:
 
     def _handle_growth_criteria(self,
                                 synth_productions: pd.DataFrame,
+                                synth_nhb_productions: pd.DataFrame,
                                 synth_attractions: pd.DataFrame,
+                                synth_nhb_attractions: pd.DataFrame,
                                 base_year: str,
                                 future_years: List[str],
                                 integrate_dlog: bool
-                                ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+                                ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         # Init
         all_years = [base_year] + future_years
 
@@ -1095,10 +1109,8 @@ class ExternalForecastSystem:
         fname = consts.EMP_FNAME % self.input_zone_system
         grown_emp_path = os.path.join(self.exports["attractions"], fname)
 
-        observed_pa_path = self.imports["decomp_post_me"]
 
         # ## APPLY GROWTH CRITERIA ## #
-
         # TODO: Need norms_to_tfn sector lookups.
         #  Should these be pop/emp weighted too?
         sector_system = "tfn_sectors"
@@ -1124,10 +1136,13 @@ class ExternalForecastSystem:
         # TODO: How to deal with NHB productions/attractions??
         #  Run this after the P/A models, then base the NHB off this?
         # Apply growth criteria to "normal" and "exceptional" zones
-        productions, attractions = eg.growth_criteria(
+        hb_p, nhb_p, hb_a, nhb_a = eg.growth_criteria(
             synth_productions=synth_productions,
+            synth_nhb_productions=synth_nhb_productions,
             synth_attractions=synth_attractions,
-            observed_pa_path=observed_pa_path,
+            synth_nhb_attractions=synth_nhb_attractions,
+            observed_pa_path=self.imports["decomp_post_me"],
+            observed_cache=self.exports['post_me']['cache'],
             prod_exceptional_zones=p_ez,
             attr_exceptional_zones=a_ez,
             population_path=grown_pop_path,
@@ -1142,10 +1157,10 @@ class ExternalForecastSystem:
             trip_rate_sectors=sector_lookup,
             soc_weights_path=self.imports['soc_weights'],
             prod_audits=self.exports["productions"],
-            attr_audits=self.exports["attractions"]
+            attr_audits=self.exports["attractions"],
         )
 
-        return productions, attractions
+        return hb_p, nhb_p, hb_a, nhb_a
 
     def get_translation_dfs(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
