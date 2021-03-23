@@ -29,9 +29,9 @@ def main():
     run_pop_emp_comparison = False
 
     run_base_efs = True
-    recreate_productions = False
-    recreate_attractions = False
-    recreate_nhb_productions = False
+    recreate_productions = True
+    recreate_attractions = True
+    recreate_nhb_productions = True
     rerun_growth_criteria = True
 
     run_bespoke_zones = False
@@ -43,8 +43,8 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC00_NTEM
-    iter_num = '3d'
+    scenario = consts.SC04_UZC
+    iter_num = '3e'
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
