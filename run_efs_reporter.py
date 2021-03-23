@@ -21,7 +21,7 @@ def main():
     # ## SETUP ## #
     # Controls I/O
     scenario = consts.SC00_NTEM
-    iter_num = '3c'
+    iter_num = '3f'
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
@@ -38,6 +38,7 @@ def main():
 
     auditor.run(
         run_raw_vector_report=False,
+        compare_trip_lengths=False,
     )
 
 

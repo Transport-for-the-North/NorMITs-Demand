@@ -197,6 +197,7 @@ class EfsReporter:
             'pa_24_bespoke': self.efs_exports['pa_24_bespoke'],
             'pa': self.efs_exports['pa'],
             'od': self.efs_exports['od'],
+            'post_me': self.efs_imports['decomp_post_me'],
         }
 
         # ntem control imports
@@ -226,6 +227,7 @@ class EfsReporter:
         cache_paths = {
             'pa_24': os.path.join(cache_home, 'pa_24'),
             'pa_24_bespoke': os.path.join(cache_home, 'bespoke_pa_24'),
+            'post_me': os.path.join(cache_home, 'post_me'),
             'pa': os.path.join(cache_home, 'pa'),
             'od': os.path.join(cache_home, 'od'),
             'post_me_tlb': os.path.join(cache_home, 'post_me_tlb'),
@@ -325,6 +327,8 @@ class EfsReporter:
                                 output_path: pathlib.Path,
                                 vector_types: List[str] = None,
                                 trip_origins: List[str] = None,
+                                comparison_vector_dict: Dict[str, pd.DataFrame] = None,
+                                comparison_vector_name: str = 'comparison',
                                 report_subsets: Dict[str, Any] = None,
                                 subset_col_name: str = 'Subset',
                                 ) -> pd.DataFrame:
@@ -362,6 +366,15 @@ class EfsReporter:
             The trip origins to look for in vector_dict. If left as None,
             defaults to self._trip_origins
 
+        comparison_vector_dict:
+            A dictionary of vectors to compare vector_dict vectors to instead
+            of NTEM. If left as None, a comparison to NTEM is created.
+
+        comparison_vector_name:
+            If comparison_vector_dict is not None, this name will be used
+            in the report to determine which column contains the data
+            for comparison_vector_dict vectors.
+
         report_subsets:
             A dictionary of subset names to zonal subsets to generate reports for.
             The subset names will be placed in subset_col_name of the report.
@@ -380,6 +393,15 @@ class EfsReporter:
         vector_types = self._pa_vector_types if vector_types is None else vector_types
         trip_origins = self._trip_origins if trip_origins is None else trip_origins
 
+        # Validate the comparison dict
+        if comparison_vector_dict is not None:
+            for k in vector_dict.keys():
+                if k not in comparison_vector_dict.keys():
+                    raise ValueError(
+                        "Cannot find key '%s' in the comparison dict to "
+                        "compare the vector to." % k
+                    )
+
         # Compare every base year vector to NTEM and create a report
         report_ph = list()
         base_vector_iterator = itertools.product(vector_types, trip_origins)
@@ -387,16 +409,19 @@ class EfsReporter:
             # Read in the correct vector
             vector_name = '%s_%s' % (trip_origin, vector_type)
 
-            report_ph.append(self._compare_vector_to_ntem(
-                vector=vector_dict[vector_name],
-                zone_to_lad=zone_to_lad,
-                vector_type=vector_type,
-                matrix_format=matrix_format,
-                trip_origin=trip_origin,
-                base_zone_name=vector_zone_col,
-                report_subsets=report_subsets,
-                subset_col_name=subset_col_name,
-            ))
+            if comparison_vector_dict is None:
+                report_ph.append(self._compare_vector_to_ntem(
+                    vector=vector_dict[vector_name],
+                    zone_to_lad=zone_to_lad,
+                    vector_type=vector_type,
+                    matrix_format=matrix_format,
+                    trip_origin=trip_origin,
+                    base_zone_name=vector_zone_col,
+                    report_subsets=report_subsets,
+                    subset_col_name=subset_col_name,
+                ))
+            else:
+                raise NotImplementedError
 
         # Convert to a dataframe for output
         report = pd.concat(report_ph)
@@ -432,7 +457,10 @@ class EfsReporter:
 
         return tlb
 
-    def run(self, run_raw_vector_report: bool = True) -> None:
+    def run(self,
+            run_raw_vector_report: bool = True,
+            compare_trip_lengths: bool = True,
+            ) -> None:
         """
         Runs all the report generation functions.
 
@@ -457,13 +485,17 @@ class EfsReporter:
             self.compare_raw_pa_vectors_to_ntem_by_mode()
 
         print("Generating %s specific reports..." % self.model_name)
-        self.compare_base_pa_vectors_to_ntem()
-        self.compare_translated_base_pa_vectors_to_ntem()
-        self.compare_eg_pa_vectors_to_ntem()
+        # self.compare_base_pa_vectors_to_ntem()
+        # self.compare_translated_base_pa_vectors_to_ntem()
+        # self.compare_eg_pa_vectors_to_ntem()
+        # self.analyse_compiled_matrices()
 
-        # Trip lengths
-        self.compare_trip_lengths()
-        self.analyse_compiled_matrices()
+        if compare_trip_lengths:
+            print("Generating trip length reports...")
+            self.compare_trip_lengths()
+
+        # Compare pre-furness vectors to post-ME
+        self.compare_eg_pa_vectors_to_post_me()
 
         # Matrix compare to NTEM
         self.compare_pa_matrices_to_ntem()
@@ -471,7 +503,6 @@ class EfsReporter:
         self.compare_tp_pa_matrices_to_ntem()
         self.compare_od_matrices_to_ntem()
 
-        # Compare furnessed PA matrices to P/A vectors?
 
     def _generate_trip_band_report_by_purpose(self,
                                               distance_dict: Dict[int, pd.DataFrame],
@@ -878,6 +909,63 @@ class EfsReporter:
             trip_origins=['hb'],
             report_subsets=self.reporting_subsets,
         )
+
+    def compare_eg_pa_vectors_to_post_me(self) -> pd.DataFrame:
+        # Init
+        matrix_format = 'pa'
+        output_fname = "eg_pa_vectors_to_postme_report.csv"
+        out_path = os.path.join(self.exports['home'], output_fname)
+        vector_order = [
+            'hb_productions',
+            'nhb_productions',
+            'hb_attractions',
+            'nhb_attractions',
+        ]
+
+        # Make sure the EG PA vectors exist
+        path_dict = self.imports['eg_vectors']
+        for _, path in path_dict.items():
+            file_ops.check_file_exists(path)
+
+        # Read in the EG PA vectors
+        eg_pa_dict = {k: pd.read_csv(v) for k, v in path_dict.items()}
+
+        # Convert post-me matrices into vector
+        vectors = mat_p.maybe_convert_matrices_to_vector(
+            mat_import_dir=self.imports['matrices']['post_me'],
+            years_needed=[self.base_year],
+            cache_path=self.exports['cache']['post_me'],
+            matrix_format=matrix_format,
+        )
+        # Assign to a dictionary for accessing
+        post_me_dict = {name: vec for name, vec in zip(vector_order, vectors)}
+
+        # Perform a high level comparison
+        report = list()
+        for to, vec_type in itertools.product(['hb'], ['productions', 'attractions']):
+            vec_name = '%s_%s' % (to, vec_type)
+
+            post_me_vec = post_me_dict[vec_name]
+            eg_pa_vec = eg_pa_dict[vec_name]
+
+            post_me_total = post_me_vec[self.base_year].sum()
+            eg_pa_total = eg_pa_vec[self.base_year].sum()
+            diff = eg_pa_total - post_me_total
+
+            report.append({
+                'Name': vec_name,
+                'eg_pa_vec': eg_pa_total,
+                'post_me': post_me_total,
+                'diff': diff,
+                '% diff': diff / post_me_total * 100,
+            })
+
+        # Write out report
+        report = pd.DataFrame(report)
+
+        report.to_csv(out_path, index=False)
+
+        exit()
 
     def compare_pa_matrices_to_ntem(self) -> pd.DataFrame:
         """

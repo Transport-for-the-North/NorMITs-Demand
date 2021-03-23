@@ -993,18 +993,25 @@ def growth_criteria(synth_productions: pd.DataFrame,
 
     # ## Apply Growth Criteria ## #
 
+    # Grab just the observed base year P/A
+    index_cols = prod_group_cols + [base_year]
+    prod_base = observed_prod_base.reindex(columns=index_cols)
+
+    index_cols = attr_group_cols + [base_year]
+    attr_base = observed_attractions.reindex(columns=index_cols)
+
+    # Initialise loop output
+    grown_productions = list()
+    grown_attractions = list()
+    grown_productions.append(prod_base)
+    grown_attractions.append(attr_base)
+
     # Grab just the base year P/A
     index_cols = prod_group_cols + [base_year]
     synth_prod_base = synth_productions.reindex(columns=index_cols)
 
     index_cols = attr_group_cols + [base_year]
     synth_attr_base = synth_attractions.reindex(columns=index_cols)
-
-    # Initialise loop output
-    grown_productions = list()
-    grown_attractions = list()
-    grown_productions.append(synth_prod_base)
-    grown_attractions.append(synth_attr_base)
 
     # Calculate separately for each year and combine at the end
     for year in future_years:
