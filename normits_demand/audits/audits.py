@@ -24,6 +24,11 @@ from collections import defaultdict
 from normits_demand.utils import general as du
 
 
+# BACKLOG: furness audits are not audits. They should be moved over to
+#  reporting.
+#  labels: EFS, QoL Updates
+
+
 class AuditError(du.NormitsDemandError):
     """
     Exception raised for errors when auditing values

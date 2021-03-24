@@ -150,6 +150,7 @@ def _distribute_pa_internal(productions,
                             tp_col,
                             max_iters,
                             seed_infill,
+                            normalise_seeds,
                             furness_tol,
                             seed_mat_format,
                             echo,
@@ -274,8 +275,7 @@ def _distribute_pa_internal(productions,
     # ## BALANCE P/A FORECASTS ## #
     # TODO: Avoid divide by zero! Happens for Furnessing hb_pa_yr2050_p7_m3_ns2.csv ...
     if productions[unique_col].sum() != a_weights[unique_col].sum():
-        du.print_w_toggle("Row and Column targets do not match. Balancing...",
-                          echo=echo)
+        du.print_w_toggle("Row and Column targets do not match. Balancing...", echo=echo)
         a_weights[unique_col] /= (
             a_weights[unique_col].sum() / productions[unique_col].sum()
         )
@@ -286,6 +286,7 @@ def _distribute_pa_internal(productions,
         seed_values=seed_dist,
         max_iters=max_iters,
         seed_infill=seed_infill,
+        normalise_seeds=normalise_seeds,
         idx_col=zone_col,
         unique_col=unique_col,
         tol=furness_tol,
@@ -352,6 +353,7 @@ def distribute_pa(productions: pd.DataFrame,
                   seed_year: str = None,
                   max_iters: int = 5000,
                   seed_infill: float = 1e-5,
+                  normalise_seeds: bool = True,
                   furness_tol: float = 1e-2,
                   seed_mat_format: str = 'pa',
                   fname_suffix: str = None,
@@ -479,13 +481,17 @@ def distribute_pa(productions: pd.DataFrame,
     seed_infill:
         The value to infill any seed values that are 0.
 
+    normalise_seeds:
+        Whether to normalise the seeds so they total to one before
+        sending them to the furness.
+
     furness_tol:
         The maximum difference between the achieved and the target values
         to tolerate before exiting the furness early. R^2 is used to calculate
         the difference.
 
     seed_mat_format:
-        The format of the seed matrices. Usually 'enhpa' from TMS disaggregator
+        The format of the seed matrices.
 
     fname_suffix:
         Any additional suffix to add to the filename when writing out to disk.
@@ -612,6 +618,7 @@ def distribute_pa(productions: pd.DataFrame,
             'tp_col': tp_col,
             'max_iters': max_iters,
             'seed_infill': seed_infill,
+            'normalise_seeds': normalise_seeds,
             'furness_tol': furness_tol,
             'seed_mat_format': seed_mat_format,
             'echo': echo,
@@ -678,6 +685,7 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
                            col_targets: pd.DataFrame,
                            max_iters: int = 2000,
                            seed_infill: float = 1e-3,
+                           normalise_seeds: bool = True,
                            tol: float = 1e-9,
                            idx_col: str = 'model_zone_id',
                            unique_col: str = 'trips',
@@ -718,6 +726,10 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
 
     seed_infill:
         The value to infill any seed values that are 0.
+
+    normalise_seeds:
+        Whether to normalise the seeds so they total to one before
+        sending them to the furness.
 
     idx_col:
         Name of the columns in row_targets and col_targets that contain the
@@ -784,7 +796,8 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     # ## TIDY AND INFILL SEED ## #
     # Infill the 0 zones
     seed_values = seed_values.where(seed_values > 0, seed_infill)
-    seed_values /= seed_values.sum()
+    if normalise_seeds:
+        seed_values /= seed_values.sum()
 
     # If we were given certain zones, make sure everything else is 0
     if unique_zones is not None:

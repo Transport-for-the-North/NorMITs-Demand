@@ -841,6 +841,8 @@ class ExternalForecastSystem:
             zone_col=model_zone_col,
             internal_zones_path=self.imports['internal_zones'],
             seed_dist_dir=self.imports['decomp_post_me'],
+            seed_infill=0,
+            normalise_seeds=False,
             dist_out=int_dir,
             report_out=self.exports['dist_reports'],
             csv_out=False,
@@ -1004,7 +1006,6 @@ class ExternalForecastSystem:
                 p_needed=p_needed,
                 fname_suffix='_int',
                 echo=verbose,
-                # process_count=0,
                 **kwargs,
             )
 
