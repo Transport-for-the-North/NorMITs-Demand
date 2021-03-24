@@ -16,7 +16,10 @@ import pandas as pd
 import numpy as np
 from numpy.testing import assert_approx_equal
 
+from typing import Any
+from typing import Dict
 from typing import List
+from typing import Tuple
 from typing import Callable
 
 # self imports
@@ -37,7 +40,7 @@ def doubly_constrained_furness(seed_vals: np.array,
                                col_targets: np.array,
                                tol: float = 1e-9,
                                max_iters: int = 5000
-                               ) -> np.array:
+                               ) -> Tuple[np.array, int, float]:
     """
     Performs a doubly constrained furness for max_iters or until tol is met
 
@@ -67,6 +70,12 @@ def doubly_constrained_furness(seed_vals: np.array,
     -------
     furnessed_matrix:
         The final furnessed matrix
+
+    completed_iters:
+        The number of completed iterations before exiting
+
+    achieved_r2:
+        The R-squared difference achieved before exiting
     """
     # Error check
     if seed_vals.shape != (len(row_targets), len(col_targets)):
@@ -83,8 +92,9 @@ def doubly_constrained_furness(seed_vals: np.array,
     furnessed_mat = seed_vals.copy()
     early_exit = False
     cur_diff = tol + 10
+    iter_num = 0
 
-    for _ in range(max_iters):
+    for iter_num in range(max_iters):
         # ## ROW CONSTRAIN ## #
         # Calculate difference factor
         row_ach = np.sum(furnessed_mat, axis=1)
@@ -121,7 +131,7 @@ def doubly_constrained_furness(seed_vals: np.array,
               "%f. The values returned may not be accurate."
               % (max_iters, cur_diff))
 
-    return furnessed_mat
+    return furnessed_mat, iter_num + 1, cur_diff
 
 
 def _distribute_pa_internal(productions,
@@ -149,7 +159,7 @@ def _distribute_pa_internal(productions,
                             fname_suffix,
                             csv_out,
                             compress_out,
-                            ):
+                            ) -> Dict[str, Any]:
     """
     Internal function of distribute_pa(). See that for full documentation.
     """
@@ -200,7 +210,7 @@ def _distribute_pa_internal(productions,
         )
 
     # Assume seed contains all the zones numbers
-    unique_zones = list(seed_dist.index)
+    seed_zones = list(seed_dist.index)
 
     # ## FILTER P/A TO SEGMENTATION ## #
     if calib_params.get('soc') is not None:
@@ -258,7 +268,7 @@ def _distribute_pa_internal(productions,
         productions=productions,
         attractions=a_weights,
         zone_col=zone_col,
-        unique_zones=unique_zones
+        unique_zones=seed_zones
     )
 
     # ## BALANCE P/A FORECASTS ## #
@@ -270,7 +280,7 @@ def _distribute_pa_internal(productions,
             a_weights[unique_col].sum() / productions[unique_col].sum()
         )
 
-    pa_dist = furness_pandas_wrapper(
+    pa_dist, n_iters, achieved_r2 = furness_pandas_wrapper(
         row_targets=productions,
         col_targets=a_weights,
         seed_values=seed_dist,
@@ -283,6 +293,14 @@ def _distribute_pa_internal(productions,
         unique_zones=unique_zones,
         unique_zones_join_fn=unique_zones_join_fn,
     )
+
+    # Build a report of the furness
+    report = {
+        'name': out_dist_name,
+        'iterations': n_iters,
+        'convergence_gap': achieved_r2,
+        'tolerance': furness_tol,
+    }
 
     if audit_out is not None:
         # Create output filename
@@ -306,6 +324,8 @@ def _distribute_pa_internal(productions,
     # MODEL ZONE!
     output_path = os.path.join(dist_out, out_dist_name)
     file_ops.write_df(pa_dist, output_path)
+
+    return report
 
 
 def distribute_pa(productions: pd.DataFrame,
@@ -625,7 +645,7 @@ def distribute_pa(productions: pd.DataFrame,
             })
             kwargs_list.append(kwargs)
 
-        multiprocessing.multiprocess(
+        reports = multiprocessing.multiprocess(
             fn=_distribute_pa_internal,
             kwargs=kwargs_list,
             process_count=process_count
@@ -647,6 +667,11 @@ def distribute_pa(productions: pd.DataFrame,
                 fname_suffix=fname_suffix,
             )
 
+            # Write out the furness stats for the year
+            fname = '%s_%s_furness_stats.csv' % (trip_origin, year)
+            out_path = os.path.join(audit_out, fname)
+            pd.DataFrame(reports).to_csv(out_path, index=False)
+
 
 def furness_pandas_wrapper(seed_values: pd.DataFrame,
                            row_targets: pd.DataFrame,
@@ -659,7 +684,7 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
                            round_dp: int = efs_consts.DEFAULT_ROUNDING,
                            unique_zones: List[int] = None,
                            unique_zones_join_fn: Callable = operator.and_,
-                           ) -> pd.DataFrame:
+                           ) -> Tuple[pd.DataFrame, int, float]:
     """
     Wrapper around doubly_constrained_furness() to handle pandas in/out
 
@@ -720,6 +745,12 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     -------
     furnessed_matrix:
         The final furnessed matrix, in the same format as seed_values
+
+    completed_iters:
+        The number of completed iterations before exiting
+
+    achieved_r2:
+        The R-squared difference achieved before exiting
     """
     # Init
     row_targets = row_targets.copy()
@@ -750,18 +781,10 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         err_msg="Row and Column target totals do not match. Cannot Furness."
     )
 
-    # Generate the mask of the zones we are actually dealing with
-    mask = None
-    if unique_zones is not None:
-        mask = mat_utils.get_wide_mask(
-            seed_values,
-            unique_zones,
-            join_fn=unique_zones_join_fn
-        )
-
     # ## TIDY AND INFILL SEED ## #
     # Infill the 0 zones
     seed_values = seed_values.where(seed_values > 0, seed_infill)
+    seed_values /= seed_values.sum()
 
     # If we were given certain zones, make sure everything else is 0
     if unique_zones is not None:
@@ -773,15 +796,12 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         )
         seed_values = seed_values.where(mask, 0)
 
-    # Finally, make sum of seeds = 1
-    seed_values /= seed_values.sum()
-
     # ## CONVERT TO NUMPY AND FURNESS ## #
     row_targets = row_targets.values.flatten()
     col_targets = col_targets.values.flatten()
     seed_values = seed_values.values
 
-    furnessed_mat = doubly_constrained_furness(
+    furnessed_mat, n_iters, achieved_r2 = doubly_constrained_furness(
         seed_vals=seed_values,
         row_targets=row_targets,
         col_targets=col_targets,
@@ -798,4 +818,4 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         data=furnessed_mat
     ).round(round_dp)
 
-    return furnessed_mat
+    return furnessed_mat, n_iters, achieved_r2

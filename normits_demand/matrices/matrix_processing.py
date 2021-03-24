@@ -576,7 +576,7 @@ def furness_tour_proportions(orig_vals,
             furnessed_mat = np.zeros((len(tp_needed), len(tp_needed)))
 
         else:
-            furnessed_mat = furness.doubly_constrained_furness(
+            furnessed_mat, *_ = furness.doubly_constrained_furness(
                 seed_vals=seed_values,
                 row_targets=fh_target,
                 col_targets=th_target,
