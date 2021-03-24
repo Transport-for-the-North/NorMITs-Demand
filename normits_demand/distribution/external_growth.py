@@ -165,7 +165,7 @@ def grow_external_pa(growth_factors: pd.DataFrame,
                      fname_suffix: str = None,
                      csv_out: bool = True,
                      compress_out: bool = True,
-                     audit_out: str = None,
+                     report_out: str = None,
                      round_dp: int = efs_consts.DEFAULT_ROUNDING,
                      process_count: int = efs_consts.PROCESS_COUNT,
                      verbose: bool = False,
@@ -269,5 +269,5 @@ def grow_external_pa(growth_factors: pd.DataFrame,
 
         # ## WRITE OUT THE AUDITS ## #
         fname = "%s_%s_external_growth_summary.csv" % (trip_origin, year)
-        audit_path = os.path.join(audit_out, fname)
+        audit_path = os.path.join(report_out, fname)
         pd.DataFrame(audits).to_csv(audit_path, index=False)

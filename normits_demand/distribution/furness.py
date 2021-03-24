@@ -153,7 +153,7 @@ def _distribute_pa_internal(productions,
                             furness_tol,
                             seed_mat_format,
                             echo,
-                            audit_out,
+                            report_out,
                             dist_out,
                             round_dp,
                             fname_suffix,
@@ -302,11 +302,11 @@ def _distribute_pa_internal(productions,
         'tolerance': furness_tol,
     }
 
-    if audit_out is not None:
+    if report_out is not None:
         # Create output filename
         audit_fname = out_dist_name.replace('_pa_', '_dist_audit_')
         audit_fname = audit_fname.replace(consts.COMPRESSION_SUFFIX, '.csv')
-        audit_path = os.path.join(audit_out, audit_fname)
+        audit_path = os.path.join(report_out, audit_fname)
 
         audits.audit_furness(
             row_targets=productions,
@@ -358,7 +358,7 @@ def distribute_pa(productions: pd.DataFrame,
                   csv_out: bool = True,
                   compress_out: bool = True,
                   echo: bool = False,
-                  audit_out: str = None,
+                  report_out: str = None,
                   round_dp: int = efs_consts.DEFAULT_ROUNDING,
                   process_count: int = efs_consts.PROCESS_COUNT
                   ) -> None:
@@ -503,8 +503,8 @@ def distribute_pa(productions: pd.DataFrame,
         Controls the amount of printing to the terminal. If False, most of the
         print outs will be ignored.
 
-    audit_out:
-        Path to a directory to output all audit checks.
+    report_out:
+        Path to a directory to output all reports.
         
     round_dp:
         The number of decimal places to round the output values of the
@@ -615,7 +615,7 @@ def distribute_pa(productions: pd.DataFrame,
             'furness_tol': furness_tol,
             'seed_mat_format': seed_mat_format,
             'echo': echo,
-            'audit_out': audit_out,
+            'report_out': report_out,
             'dist_out': dist_out,
             'round_dp': round_dp,
             'fname_suffix': fname_suffix,
@@ -652,9 +652,9 @@ def distribute_pa(productions: pd.DataFrame,
         )
 
         # Finally - create aan audit summary
-        if audit_out is not None:
+        if report_out is not None:
             audits.summarise_audit_furness(
-                audit_out,
+                report_out,
                 trip_origin=trip_origin,
                 format_name='dist_audit',
                 year=year,
@@ -669,7 +669,7 @@ def distribute_pa(productions: pd.DataFrame,
 
             # Write out the furness stats for the year
             fname = '%s_%s_furness_stats.csv' % (trip_origin, year)
-            out_path = os.path.join(audit_out, fname)
+            out_path = os.path.join(report_out, fname)
             pd.DataFrame(reports).to_csv(out_path, index=False)
 
 

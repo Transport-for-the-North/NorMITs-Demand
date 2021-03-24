@@ -511,8 +511,8 @@ def build_efs_io_paths(import_location: str,
         'attractions': os.path.join(export_home, 'Attractions'),
         'sectors': os.path.join(export_home, 'Sectors'),
         'audits': os.path.join(export_home, 'Audits'),
-        'dist_audits': os.path.join(export_home, 'Audits', 'Matrices'),
         'reports': os.path.join(export_home, 'Reports'),
+        'dist_reports': os.path.join(export_home, 'Reports', 'Matrices'),
 
         # Pre-ME
         'pa': os.path.join(matrices_home, pa),
