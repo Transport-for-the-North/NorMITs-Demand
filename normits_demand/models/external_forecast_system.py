@@ -12,6 +12,7 @@ File purpose:
 # Built-ins
 import os
 import time
+import operator
 
 from typing import List
 from typing import Dict
@@ -786,6 +787,7 @@ class ExternalForecastSystem:
         if apply_growth_criteria:
             # Apply the growth criteria using the post-ME P/A vectors
             # (normal and exceptional zones)
+            print("Applying growth criteria...")
             vectors = self._handle_growth_criteria(
                 synth_productions=model_p_vector,
                 synth_nhb_productions=model_nhb_p_vector,
@@ -813,8 +815,6 @@ class ExternalForecastSystem:
         fname = consts.ATTRS_FNAME % (self.output_zone_system, 'nhb_exc')
         out_path = os.path.join(self.exports['attractions'], fname)
         model_nhb_a_vector.to_csv(out_path, index=False)
-
-        exit()
 
         # ## DISTRIBUTE THE INTERNAL AND EXTERNAL DEMAND ## #
         # Create the temporary output folders
@@ -999,6 +999,8 @@ class ExternalForecastSystem:
                 seed_year=seed_year,
                 years_needed=years_needed,
                 zone_col=zone_col,
+                unique_zones=internal_zones,
+                unique_zones_join_fn=operator.and_,
                 p_needed=p_needed,
                 fname_suffix='_int',
                 echo=verbose,

@@ -10,16 +10,20 @@ File Purpose:
 Module of all distribution functions for EFS
 """
 import os
+import operator
 
 import pandas as pd
 import numpy as np
 from numpy.testing import assert_approx_equal
 
 from typing import List
+from typing import Callable
 
 # self imports
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
+
+from normits_demand.matrices import utils as mat_utils
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
@@ -126,6 +130,8 @@ def _distribute_pa_internal(productions,
                             seed_dist_dir,
                             trip_origin,
                             calib_params,
+                            unique_zones,
+                            unique_zones_join_fn,
                             zone_col,
                             p_col,
                             m_col,
@@ -176,11 +182,22 @@ def _distribute_pa_internal(productions,
     seed_dist = pd.read_csv(os.path.join(seed_dist_dir, seed_fname), index_col=0)
     seed_dist.columns = seed_dist.columns.astype(int)
 
+    # Pull the seed matrix into line with unique zones
+    if unique_zones is not None:
+        # Get the mask and extract the data
+        mask = mat_utils.get_wide_mask(
+            df=seed_dist,
+            zones=unique_zones,
+            join_fn=unique_zones_join_fn,
+        )
+        seed_dist = seed_dist.where(mask, 0)
+
     # Quick check that seed is valid
     if len(seed_dist.columns.difference(seed_dist.index)) > 0:
-        raise ValueError("The index and columns of the seed distribution"
-                         "'%s' do not match."
-                         % seed_fname)
+        raise ValueError(
+            "The index and columns of the seed distribution"
+            "'%s' do not match." % seed_fname
+        )
 
     # Assume seed contains all the zones numbers
     unique_zones = list(seed_dist.index)
@@ -263,6 +280,8 @@ def _distribute_pa_internal(productions,
         unique_col=unique_col,
         tol=furness_tol,
         round_dp=round_dp,
+        unique_zones=unique_zones,
+        unique_zones_join_fn=unique_zones_join_fn,
     )
 
     if audit_out is not None:
@@ -300,6 +319,8 @@ def distribute_pa(productions: pd.DataFrame,
                   ns_needed: List[int] = None,
                   ca_needed: List[int] = None,
                   tp_needed: List[int] = None,
+                  unique_zones: List[int] = None,
+                  unique_zones_join_fn: Callable = operator.and_,
                   zone_col: str = 'model_zone_id',
                   p_col: str = 'p',
                   m_col: str = 'm',
@@ -383,6 +404,16 @@ def distribute_pa(productions: pd.DataFrame,
         A list of time periods that should be distributed. Any time periods
         that are not in this list, but do exist in the productions/
         attraction_weights will be ignored.
+
+    unique_zones:
+        A list of unique zones to keep in the seed matrix when starting the
+        furness. The given productions and attractions will also be limited
+        to these zones as well.
+
+    unique_zones_join_fn:
+        The function to call on the column and index masks to join them for
+        the seed matrices. By default, a bitwise and is used. See pythons
+        builtin operator library for more options.
 
     zone_col:
         Name of the column in productions/attraction_weights that contains
@@ -552,6 +583,8 @@ def distribute_pa(productions: pd.DataFrame,
             'seed_year': seed_year,
             'seed_dist_dir': seed_dist_dir,
             'trip_origin': trip_origin,
+            'unique_zones': unique_zones,
+            'unique_zones_join_fn': unique_zones_join_fn,
             'zone_col': zone_col,
             'p_col': p_col,
             'm_col': m_col,
@@ -624,7 +657,9 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
                            idx_col: str = 'model_zone_id',
                            unique_col: str = 'trips',
                            round_dp: int = efs_consts.DEFAULT_ROUNDING,
-                           ):
+                           unique_zones: List[int] = None,
+                           unique_zones_join_fn: Callable = operator.and_,
+                           ) -> pd.DataFrame:
     """
     Wrapper around doubly_constrained_furness() to handle pandas in/out
 
@@ -671,6 +706,16 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         The number of decimal places to round the output values of the
         furness to. Uses 4 by default.
 
+    unique_zones:
+        A list of unique zones to keep in the seed matrix when starting the
+        furness. The given productions and attractions will also be limited
+        to these zones as well.
+
+    unique_zones_join_fn:
+        The function to call on the column and index masks to join them for
+        the seed matrices. By default, a bitwise and is used. See pythons
+        builtin operator library for more options.
+
     Returns
     -------
     furnessed_matrix:
@@ -705,14 +750,36 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         err_msg="Row and Column target totals do not match. Cannot Furness."
     )
 
-    # Now we know everything matches, we can convert to numpy
+    # Generate the mask of the zones we are actually dealing with
+    mask = None
+    if unique_zones is not None:
+        mask = mat_utils.get_wide_mask(
+            seed_values,
+            unique_zones,
+            join_fn=unique_zones_join_fn
+        )
+
+    # ## TIDY AND INFILL SEED ## #
+    # Infill the 0 zones
+    seed_values = seed_values.where(seed_values > 0, seed_infill)
+
+    # If we were given certain zones, make sure everything else is 0
+    if unique_zones is not None:
+        # Get the mask and extract the data
+        mask = mat_utils.get_wide_mask(
+            df=seed_values,
+            zones=unique_zones,
+            join_fn=unique_zones_join_fn,
+        )
+        seed_values = seed_values.where(mask, 0)
+
+    # Finally, make sum of seeds = 1
+    seed_values /= seed_values.sum()
+
+    # ## CONVERT TO NUMPY AND FURNESS ## #
     row_targets = row_targets.values.flatten()
     col_targets = col_targets.values.flatten()
     seed_values = seed_values.values
-
-    # ## TIDY AND INFILL SEED ## #
-    seed_values = np.where(seed_values <= 0, seed_infill, seed_values)
-    seed_values /= seed_values.sum()
 
     furnessed_mat = doubly_constrained_furness(
         seed_vals=seed_values,

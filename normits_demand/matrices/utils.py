@@ -78,8 +78,10 @@ def get_wide_mask(df: pd.DataFrame,
 
     # Try and cast to the correct types for rows/cols
     try:
-        # Assume columns are strings
-        col_zones = np.array(col_zones, str)
+        # Assume columns are strings if they are an object
+        col_dtype = df.columns.dtype
+        col_dtype = str if col_dtype == object else col_dtype
+        col_zones = np.array(col_zones, col_dtype)
     except ValueError:
         raise ValueError(
             "Cannot cast the col_zones to the required dtype to match the "

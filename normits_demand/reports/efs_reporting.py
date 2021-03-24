@@ -489,10 +489,10 @@ class EfsReporter:
             self.compare_raw_pa_vectors_to_ntem_by_mode()
 
         print("Generating %s specific reports..." % self.model_name)
-        # self.compare_base_pa_vectors_to_ntem()
-        # self.compare_translated_base_pa_vectors_to_ntem()
-        # self.compare_eg_pa_vectors_to_ntem()
-        # self.analyse_compiled_matrices()
+        self.compare_base_pa_vectors_to_ntem()
+        self.compare_translated_base_pa_vectors_to_ntem()
+        self.compare_eg_pa_vectors_to_ntem()
+        self.analyse_compiled_matrices()
 
         if compare_trip_lengths:
             print("Generating trip length reports...")
@@ -506,7 +506,6 @@ class EfsReporter:
         self.compare_bespoke_pa_matrices_to_ntem()
         self.compare_tp_pa_matrices_to_ntem()
         self.compare_od_matrices_to_ntem()
-
 
     def _generate_trip_band_report_by_purpose(self,
                                               distance_dict: Dict[int, pd.DataFrame],
@@ -910,7 +909,7 @@ class EfsReporter:
             matrix_format=matrix_format,
             output_path=os.path.join(self.exports['home'], output_fname),
             vector_types=self._pa_vector_types,
-            trip_origins=['hb'],
+            trip_origins=['hb', 'nhb'],
             report_subsets=self.reporting_subsets,
         )
 
@@ -934,6 +933,14 @@ class EfsReporter:
         # Read in the EG PA vectors
         eg_pa_dict = {k: pd.read_csv(v) for k, v in path_dict.items()}
 
+        # Make sure the files we need exist
+        path_dict = self.imports['translated_base_vectors']
+        for _, path in path_dict.items():
+            file_ops.check_file_exists(path)
+
+        # Load in the vectors
+        pa_dict = {k: pd.read_csv(v) for k, v in path_dict.items()}
+
         # Convert post-me matrices into vector
         vectors = mat_p.maybe_convert_matrices_to_vector(
             mat_import_dir=self.imports['matrices']['post_me'],
@@ -951,13 +958,16 @@ class EfsReporter:
 
             post_me_vec = post_me_dict[vec_name]
             eg_pa_vec = eg_pa_dict[vec_name]
+            pa_vec = pa_dict[vec_name]
 
             post_me_total = post_me_vec[self.base_year].sum()
             eg_pa_total = eg_pa_vec[self.base_year].sum()
+            pa_total = pa_vec[self.base_year].sum()
             diff = eg_pa_total - post_me_total
 
             report.append({
                 'Name': vec_name,
+                'pa_vec': pa_total,
                 'eg_pa_vec': eg_pa_total,
                 'post_me': post_me_total,
                 'diff': diff,
