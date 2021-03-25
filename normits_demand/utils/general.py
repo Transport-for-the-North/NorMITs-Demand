@@ -68,6 +68,15 @@ class ExternalForecastSystemError(NormitsDemandError):
         super().__init__(self.message)
 
 
+class InitialisationError(NormitsDemandError):
+    """
+    Exception for all errors that occur during normits_demand initialisation
+    """
+    def __init__(self, message=None):
+        self.message = message
+        super().__init__(self.message)
+
+
 def get_seg_level_cols(seg_level: str,
                        keep_ca: bool = True,
                        keep_tp: bool = True,
@@ -434,13 +443,14 @@ def build_efs_io_paths(import_location: str,
         'tp_splits': os.path.join(import_home, 'tp_splits'),
         'zone_translation': zone_translation,
         'lookups': os.path.join(model_home, 'lookup'),
-        'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
+        # 'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
         'scenarios': os.path.join(import_home, 'scenarios'),
         'a_weights': os.path.join(import_home, 'attractions', 'hb_attraction_weights.csv'),
         'soc_weights': soc_weights_path,
         'ntem_control': os.path.join(import_home, 'ntem_constraints'),
         'model_schema': os.path.join(import_home, model_name, 'model schema'),
         'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
+        'decomp_post_me': os.path.join(import_home, model_name, 'decompiled_post_me'),
     }
 
     # Add Land use import if we have an iteration
@@ -474,6 +484,7 @@ def build_efs_io_paths(import_location: str,
     # Create consistent filenames
     pa = 'PA Matrices'
     pa_24 = '24hr PA Matrices'
+    vdm_pa_24 = '24hr VDM PA Matrices'
     od = 'OD Matrices'
     od_24 = '24hr OD Matrices'
     compiled = 'Compiled'
@@ -493,6 +504,7 @@ def build_efs_io_paths(import_location: str,
         # Pre-ME
         'pa': os.path.join(matrices_home, pa),
         'pa_24': os.path.join(matrices_home, pa_24),
+        'vdm_pa_24': os.path.join(matrices_home, vdm_pa_24),
         'od': os.path.join(matrices_home, od),
         'od_24': os.path.join(matrices_home, od_24),
 
@@ -513,6 +525,7 @@ def build_efs_io_paths(import_location: str,
     post_me_exports = {
         'pa': os.path.join(post_me_home, pa),
         'pa_24': os.path.join(post_me_home, pa_24),
+        'vdm_pa_24': os.path.join(post_me_home, vdm_pa_24),
         'od': os.path.join(post_me_home, od),
         'od_24': os.path.join(post_me_home, od_24),
         'compiled_od': compiled_od_path,
@@ -1953,10 +1966,11 @@ def get_split_factors_fname(matrix_format: str,
     """
     Generates the splitting factors filename
     """
+    ftype = consts.COMPRESSION_SUFFIX
     if suffix is None:
-        return "%s_yr%s_splitting_factors.pkl" % (matrix_format, year)
+        return "%s_yr%s_splitting_factors.%s" % (matrix_format, year, ftype)
 
-    return "%s_yr%s_%s_splitting_factors.pkl" % (matrix_format, year, suffix)
+    return "%s_yr%s_%s_splitting_factors.%s" % (matrix_format, year, suffix, ftype)
 
 
 def build_full_paths(base_path: str,
@@ -3074,3 +3088,30 @@ def split_base_future_years(years: List[int],
     years.sort()
 
     return base_year, years
+
+
+def get_norms_vdm_segment_aggregation_dict(norms_vdm_seg_name: str
+                                           ) -> Dict[str, List[Any]]:
+    """
+    Returns a dictionary of valid segments for the given name
+
+    Parameters
+    ----------
+    norms_vdm_seg_name:
+        The name of the norms_vdm_matrix to get a dictionary for.
+        Should be one of the values in consts.NORMS_VDM_MATRIX_NAMES
+
+    Returns
+    -------
+    segment_aggregation_dictionary:
+        A dictionary of valid segments for norms_vdm_seg_name
+    """
+    if norms_vdm_seg_name in list(consts.NORMS_VDM_SEG_INTERNAL.keys()):
+        return consts.NORMS_VDM_SEG_INTERNAL[norms_vdm_seg_name]
+    elif norms_vdm_seg_name in list(consts.NORMS_VDM_SEG_EXTERNAL.keys()):
+        return consts.NORMS_VDM_SEG_EXTERNAL[norms_vdm_seg_name]
+
+    raise ValueError(
+        "norms_vdm_seg_name does not seem to be a valid name. Expecting "
+        "one of the values from consts.NORMS_VDM_MATRIX_NAMES"
+    )

@@ -273,37 +273,3 @@ def convert_to_efs_matrices(import_path: str,
         method='to_people',
         out_format='wide'
     )
-
-
-def need_to_convert_to_efs_matrices(post_me_import: str,
-                                    converted_export: str
-                                    ) -> bool:
-    """
-    Checks if the matrices stored in model_import need converting into
-    efs format.
-
-    At the moment this is just a simple check that matrices exist in
-    model_import and not od_import.
-    TODO: Update with better checks on NoRMS and NoHAM post-ME matrices
-      are more clear
-
-    Parameters
-    ----------
-    post_me_import:
-        Path to the dir containing the post-me matrices.
-
-    converted_export:
-        Path to the dir that the converted post-ME matrices should be output
-        to
-
-    Returns
-    -------
-    bool:
-        Returns True if the matrices need converting. Otherwise False.
-    """
-    return (len(os.listdir(converted_export)) == 0 and
-            len(os.listdir(post_me_import)) > 0)
-
-
-def convert_to_pa():
-    pass

@@ -1980,7 +1980,7 @@ def compile_matrices(mat_import: str,
                      round_dp: int = efs_consts.DEFAULT_ROUNDING,
                      build_factor_pickle: bool = False,
                      factors_fname: str = 'od_compilation_factors.pickle',
-                     ) -> None:
+                     ) -> nd.PathLike:
     """
     Compiles the matrices in mat_import, writes to mat_export
 
@@ -2077,16 +2077,14 @@ def compile_matrices(mat_import: str,
         # ## CALCULATE THE DECOMPILE FACTORS ## #
         for part_mat, mat_name in zip(in_mats, input_mat_names):
             # Avoid divide by zero
-            part_mat = np.where(part_mat == 0, 0.0001, part_mat)
+            full_mat = np.where(full_mat == 0, 0.0001, full_mat)
             decompile_factors[comp_name][mat_name] = part_mat / full_mat
 
     # Write factors to disk if we made them
     if build_factor_pickle:
         print('Writing decompile factors to disk - might take a while...')
         decompile_factors = du.defaultdict_to_regular(decompile_factors)
-
-        with open(factor_pickle_path, 'wb') as f:
-            pickle.dump(decompile_factors, f, protocol=pickle.HIGHEST_PROTOCOL)
+        return compress.write_out(decompile_factors, factor_pickle_path)
 
 
 def load_matrix_from_disk(mat_import_dir: pathlib.Path,

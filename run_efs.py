@@ -28,19 +28,19 @@ def main():
     integrate_dlog = False
     run_pop_emp_comparison = False
 
-    run_base_efs = True
-    recreate_productions = False
+    run_base_efs = False
+    recreate_productions = True
     recreate_attractions = True
     recreate_nhb_productions = True
 
     run_bespoke_zones = False
     run_hb_pa_to_od = False
     run_compile_od = False
-    run_decompile_od = False
+    run_decompile_post_me = True
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC04_UZC
+    scenario = consts.SC00_NTEM
     iter_num = 0
     import_home = "I:/"
     export_home = "E:/"
@@ -107,12 +107,10 @@ def main():
         )
 
     # TODO: Check Post ME process works for NOHAM
-    if run_decompile_od:
-        # Decompiles post-me base year OD matrices - generates tour
-        # proportions in the process
-        efs.generate_post_me_tour_proportions(
-            model_name=model_name,
-            overwrite_decompiled_od=True,
+    if run_decompile_post_me:
+        # Decompiles post-me base year matrices
+        efs.decompile_post_me(
+            overwrite_decompiled_matrices=True,
             overwrite_tour_proportions=True,
         )
 
