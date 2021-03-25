@@ -862,6 +862,8 @@ def growth_criteria(synth_productions: pd.DataFrame,
     )
     observed_hb_p, observed_nhb_p, observed_hb_a, observed_nhb_a = vectors
 
+    print(observed_hb_p)
+
     # Get the vectors into the correct formats
     p_cols = [model_zone_col] + segments["prod"] + [base_year]
     a_group_cols = [model_zone_col] + segments["attr"]

@@ -30,7 +30,7 @@ def main():
 
     run_base_efs = True
     recreate_productions = False
-    recreate_attractions = False
+    recreate_attractions = True
     recreate_nhb_productions = False
     rerun_growth_criteria = True
 

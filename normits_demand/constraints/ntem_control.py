@@ -5,9 +5,12 @@ Created on Tue Feb  9 17:36:43 2021
 @author: genie
 """
 # builtins
+import os
+
 from typing import Any
 from typing import List
 from typing import Dict
+from typing import Callable
 
 # Third party
 import numpy as np
@@ -15,6 +18,7 @@ import pandas as pd
 
 # Local imports
 import normits_demand as nd
+from normits_demand import constants as consts
 from normits_demand.utils import general as du
 
 from normits_demand.validation import checks
@@ -523,3 +527,199 @@ def control_to_ntem(control_df: pd.DataFrame,
             )
 
     return adj_control_df, audit, adjustments, lad_totals
+
+
+def control_vector_to_ntem(vector: pd.DataFrame,
+                           vector_type: str,
+                           trip_origin: str,
+                           ntem_dir: str,
+                           lad_lookup_path: str,
+                           base_year: str,
+                           future_years: List[str] = None,
+                           control_base_year: bool = True,
+                           control_future_years: bool = False,
+                           ntem_control_cols: List[str] = None,
+                           ntem_control_dtypes: List[Callable] = None,
+                           vector_zone_sys: str = 'msoa',
+                           reports_dir: str = None
+                           ) -> pd.DataFrame:
+    """
+    Controls the given vector to NTEM in base and/or future years
+
+    Parameters
+    ----------
+    vector:
+        A dataframe of the vector to control
+
+    vector_type:
+        The type of the vector to control, either 'productions' or 'attractions'
+
+    trip_origin:
+        THe trip origin of the vector to control. Either 'hb' or 'nhb'
+
+    ntem_dir:
+        The path to the directory containing the NTEM control files
+
+    lad_lookup_path:
+        The path to the file containing the lookup from vector_zone_sys to
+        lad.
+
+    base_year:
+        The column in vector relating to the base year values.
+
+    future_years:
+        The columns in vector relating to the future year values.
+
+    control_base_year:
+        Whether to control the base year production to NTEM or not.
+
+    control_future_years:
+        Whether to control the future year vector to NTEM or not. If this is
+        False, and control_base_year is True, multiplicative growth is applied
+        to the future years to bring it into line with the controlled base
+        year.
+
+    ntem_control_cols:
+        The name of the columns in vector to control to NTEM at LAD level.
+
+    ntem_control_dtypes:
+        THe datatypes of ntem_control_cols. Should be a list of same length
+        of ntem_control_cols.
+
+    vector_zone_sys:
+        The name of the zoning system being used by vector
+
+    reports_dir:
+        Path to a directory to output reports from the control to. If
+        growth factors are generated, they will also be output here.
+
+    Returns
+    -------
+    controlled_vector:
+        Vector controlled to ntem in the base and/or future years
+    """
+    # Set up default args
+    if ntem_control_cols is None:
+        ntem_control_cols = ['p', 'm']
+
+    if ntem_control_dtypes is None:
+        ntem_control_dtypes = [int, int]
+
+    valid_vector_types = ['productions', 'attractions']
+    vector_type = vector_type.strip().lower()
+    if vector_type not in valid_vector_types:
+        raise ValueError(
+            "Unexpected vector type given. Got %s\nExpected "
+            "one of: %s" % (vector_type, valid_vector_types)
+        )
+
+    # Init
+    future_years = list() if future_years is None else future_years
+    all_years = [base_year] + future_years
+    init_index_cols = list(vector)
+    init_group_cols = du.list_safe_remove(list(vector), all_years)
+    constraint_dtypes = {k: v for k, v in zip(ntem_control_cols, ntem_control_dtypes)}
+
+    # Determine report filenames
+    if vector_type == 'productions':
+        gf_report_fname = consts.PRODS_MG_FNAME % (vector_zone_sys, trip_origin)
+        control_report_fname = consts.PRODS_FNAME % (vector_zone_sys, trip_origin)
+    elif vector_type == 'attractions':
+        gf_report_fname = consts.ATTRS_MG_FNAME % (vector_zone_sys, trip_origin)
+        control_report_fname = consts.ATTRS_FNAME % (vector_zone_sys, trip_origin)
+    else:
+        raise ValueError(
+            "Somehow my vector type is valid, but I don't know how to "
+            "deal with it!"
+        )
+
+    # Use sorting to avoid merge.
+    all_years = [base_year] + future_years
+    sort_cols = du.list_safe_remove(list(vector), all_years)
+    vector = vector.sort_values(sort_cols)
+
+    # Do we need to grow on top of a controlled base year? (multiplicative)
+    grow_over_base = control_base_year and not control_future_years
+
+    # Get growth values over base
+    growth_factors = None
+    if grow_over_base:
+        growth_factors = vector.copy()
+        for year in future_years:
+            growth_factors[year] /= growth_factors[base_year]
+        growth_factors.drop(columns=[base_year], inplace=True)
+
+        # Output an audit of the growth factors calculated
+        if reports_dir is not None:
+            path = os.path.join(reports_dir, gf_report_fname)
+            pd.DataFrame(growth_factors).to_csv(path, index=False)
+
+    # ## NTEM CONTROL YEARS ## #
+    # Figure out which years to control
+    control_years = list()
+    if control_base_year:
+        control_years.append(base_year)
+    if control_future_years:
+        control_years += future_years
+
+    audits = list()
+    for year in control_years:
+        # Init audit
+        year_audit = {'year': year}
+
+        # Setup paths
+        ntem_fname = consts.NTEM_CONTROL_FNAME % ('pa', year)
+        ntem_path = os.path.join(ntem_dir, ntem_fname)
+
+        # Read in control files
+        ntem_totals = pd.read_csv(ntem_path)
+        ntem_lad_lookup = pd.read_csv(lad_lookup_path)
+
+        print("\nPerforming NTEM constraint for %s..." % year)
+        vector, audit, *_, = new_control_to_ntem(
+            control_df=vector,
+            ntem_totals=ntem_totals,
+            zone_to_lad=ntem_lad_lookup,
+            constraint_cols=ntem_control_cols,
+            constraint_dtypes=constraint_dtypes,
+            base_value_name=year,
+            ntem_value_name=vector_type,
+            trip_origin=trip_origin
+        )
+
+        # Update Audits for output
+        year_audit.update(audit)
+        audits.append(year_audit)
+
+    # Controlling to NTEM seems to change some of the column dtypes
+    dtypes = {c: d for c, d in zip(ntem_control_cols, ntem_control_dtypes)}
+    vector = vector.astype(dtypes)
+
+    # Write the audit to disk
+    if len(audits) > 0 and reports_dir is not None:
+        path = os.path.join(reports_dir, control_report_fname)
+        pd.DataFrame(audits).to_csv(path, index=False)
+
+    if growth_factors is None:
+        return vector
+
+    # ## ADD PRE CONTROL GROWTH BACK ON ## #
+    # Merge on all possible columns
+    merge_cols = du.list_safe_remove(list(growth_factors), all_years)
+    vector = pd.merge(
+        vector,
+        growth_factors,
+        how='left',
+        on=merge_cols,
+        suffixes=['_orig', '_gf'],
+    ).fillna(1)
+
+    # Add growth back on
+    for year in future_years:
+        vector[year] = vector[base_year] * vector["%s_gf" % year].values
+
+    # make sure we only have the columns we started with
+    vector = vector.reindex(columns=init_index_cols)
+    vector = vector.groupby(init_group_cols).sum().reset_index()
+
+    return vector

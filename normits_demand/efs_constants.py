@@ -172,6 +172,7 @@ LU_EMP_FNAME = 'land_use_%s_emp.csv'
 
 # Additive growth audit
 PRODS_MG_FNAME = '%s_%s_productions_multiplicative_growth.csv'
+ATTRS_MG_FNAME = '%s_%s_attractions_multiplicative_growth.csv'
 
 # zone_system
 POP_FNAME = '%s_population.csv'

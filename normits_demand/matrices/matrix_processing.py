@@ -2885,8 +2885,6 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
         verbose=verbose
     )
 
-    print(vectors[0])
-
     # Save to disk, and return copies
     vectors = [v for v in vectors if not v.empty]
     for vector, path in zip(vectors, cache_paths):

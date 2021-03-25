@@ -273,12 +273,18 @@ def _distribute_pa_internal(productions,
     )
 
     # ## BALANCE P/A FORECASTS ## #
-    # TODO: Avoid divide by zero! Happens for Furnessing hb_pa_yr2050_p7_m3_ns2.csv ...
+    print(productions[unique_col].sum())
+    print(a_weights[unique_col].sum())
     if productions[unique_col].sum() != a_weights[unique_col].sum():
+        echo = True
         du.print_w_toggle("Row and Column targets do not match. Balancing...", echo=echo)
-        a_weights[unique_col] /= (
-            a_weights[unique_col].sum() / productions[unique_col].sum()
-        )
+        bal_fac = productions[unique_col].sum() / a_weights[unique_col].sum()
+        a_weights[unique_col] *= bal_fac
+
+    print()
+    print(productions[unique_col].sum())
+    print(a_weights[unique_col].sum())
+    print()
 
     pa_dist, n_iters, achieved_r2 = furness_pandas_wrapper(
         row_targets=productions,
@@ -814,6 +820,19 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     col_targets = col_targets.values.flatten()
     seed_values = seed_values.values
 
+    row_seeds = np.sum(seed_values, axis=1)
+    col_seeds = np.sum(seed_values, axis=0)
+    print()
+    print(row_seeds)
+    print(row_targets)
+    print(np.sum(np.absolute(row_targets - row_seeds)))
+    print()
+    print(col_seeds)
+    print(col_targets)
+    print(np.sum(np.absolute(col_targets - col_seeds)))
+    print()
+    exit()
+
     furnessed_mat, n_iters, achieved_r2 = doubly_constrained_furness(
         seed_vals=seed_values,
         row_targets=row_targets,
@@ -821,6 +840,10 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         tol=tol,
         max_iters=max_iters
     )
+
+    print("Iters: %s" % n_iters)
+    print("R2: %s" % achieved_r2)
+    print()
 
     furnessed_mat = np.round(furnessed_mat, round_dp)
 

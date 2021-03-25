@@ -634,10 +634,12 @@ class ExternalForecastSystem:
             recreate_attractions=recreate_attractions
         )
 
+
         last_time = current_time
         current_time = time.time()
         print("Attraction generation took: %.2f seconds" %
               (current_time - last_time))
+        exit()
 
         # ## Audit the pop/emp inputs/outputs ## #
         print("Auditing population/employment numbers...")
@@ -980,6 +982,8 @@ class ExternalForecastSystem:
         Essentially a wrapper around furness.distribute_pa() to make sure
         only the internal proportion of each vector is furnessed
 
+        Given p and a vectors should contain internal demand only!
+
         """
         # Init
         hb_vals = [p_vector, a_vector, 'hb', hb_p_needed]
@@ -992,18 +996,15 @@ class ExternalForecastSystem:
 
         # Do for the HB and then NHB trips
         for p, a, to, p_needed in [hb_vals, nhb_vals]:
-            # Convert into just the internal zones
-            p = p[p[zone_col].isin(internal_zones)].copy()
-            a = a[a[zone_col].isin(internal_zones)].copy()
 
             # Get the weights
-            a_weights = du.convert_to_weights(a, years_needed)
+            # a_weights = du.convert_to_weights(a, years_needed)
 
             # Distribute the trips and write to disk
             print("Generating %s internal distributions..." % to.upper())
             furness.distribute_pa(
                 productions=p,
-                attraction_weights=a_weights,
+                attraction_weights=a,
                 trip_origin=to,
                 seed_year=seed_year,
                 years_needed=years_needed,
