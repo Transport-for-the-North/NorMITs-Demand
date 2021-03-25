@@ -634,12 +634,10 @@ class ExternalForecastSystem:
             recreate_attractions=recreate_attractions
         )
 
-
         last_time = current_time
         current_time = time.time()
         print("Attraction generation took: %.2f seconds" %
               (current_time - last_time))
-        exit()
 
         # ## Audit the pop/emp inputs/outputs ## #
         print("Auditing population/employment numbers...")
@@ -998,13 +996,13 @@ class ExternalForecastSystem:
         for p, a, to, p_needed in [hb_vals, nhb_vals]:
 
             # Get the weights
-            # a_weights = du.convert_to_weights(a, years_needed)
+            a_weights = du.convert_to_weights(a, years_needed)
 
             # Distribute the trips and write to disk
             print("Generating %s internal distributions..." % to.upper())
             furness.distribute_pa(
                 productions=p,
-                attraction_weights=a,
+                attraction_weights=a_weights,
                 trip_origin=to,
                 seed_year=seed_year,
                 years_needed=years_needed,
@@ -1014,7 +1012,7 @@ class ExternalForecastSystem:
                 p_needed=p_needed,
                 fname_suffix='_int',
                 echo=verbose,
-                process_count=0,
+                # process_count=0,
                 **kwargs,
             )
 

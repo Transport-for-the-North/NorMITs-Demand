@@ -231,15 +231,9 @@ def _distribute_pa_internal(productions,
                                             df_filter=base_filter,
                                             fit=True)
 
-    # Soc0 is always special - do this to avoid dropping demand
-    # This is saying: If soc is 0, ignore soc segmentation!
-    # Can we fo this for productions too?
-    if base_filter.get('soc', -1) == '0':
-        base_filter_t = base_filter.copy()
-        base_filter_t.pop('soc')
-        a_weights = du.filter_by_segmentation(a_weights, base_filter_t, fit=True)
-    else:
-        a_weights = du.filter_by_segmentation(a_weights, base_filter, fit=True)
+    a_weights = du.filter_by_segmentation(a_weights,
+                                          df_filter=base_filter,
+                                          fit=True)
 
     # Rename columns for furness
     year = calib_params['yr']
@@ -273,18 +267,10 @@ def _distribute_pa_internal(productions,
     )
 
     # ## BALANCE P/A FORECASTS ## #
-    print(productions[unique_col].sum())
-    print(a_weights[unique_col].sum())
     if productions[unique_col].sum() != a_weights[unique_col].sum():
-        echo = True
         du.print_w_toggle("Row and Column targets do not match. Balancing...", echo=echo)
         bal_fac = productions[unique_col].sum() / a_weights[unique_col].sum()
         a_weights[unique_col] *= bal_fac
-
-    print()
-    print(productions[unique_col].sum())
-    print(a_weights[unique_col].sum())
-    print()
 
     pa_dist, n_iters, achieved_r2 = furness_pandas_wrapper(
         row_targets=productions,
@@ -569,10 +555,7 @@ def distribute_pa(productions: pd.DataFrame,
 
     # Check the productions and attractions
     productions = du.ensure_segmentation(productions, **kwargs)
-    attraction_weights = du.ensure_segmentation(attraction_weights,
-                                                ignore_ns=True,
-                                                ignore_ca=True,
-                                                **kwargs)
+    attraction_weights = du.ensure_segmentation(attraction_weights, **kwargs)
 
     # Get P/A columns
     p_cols = list(productions.columns)
@@ -582,12 +565,6 @@ def distribute_pa(productions: pd.DataFrame,
     a_cols = list(attraction_weights.columns)
     for year in years_needed:
         a_cols.remove(year)
-
-    # TODO: Fix area_type in production model
-    if 'area_type' in p_cols:
-        p_cols.remove('area_type')
-        productions = productions.drop('area_type', axis='columns')
-        productions = productions.groupby(p_cols).sum().reset_index()
 
     # Distribute P/A per segmentation required
     for year in years_needed:
@@ -820,19 +797,6 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     col_targets = col_targets.values.flatten()
     seed_values = seed_values.values
 
-    row_seeds = np.sum(seed_values, axis=1)
-    col_seeds = np.sum(seed_values, axis=0)
-    print()
-    print(row_seeds)
-    print(row_targets)
-    print(np.sum(np.absolute(row_targets - row_seeds)))
-    print()
-    print(col_seeds)
-    print(col_targets)
-    print(np.sum(np.absolute(col_targets - col_seeds)))
-    print()
-    exit()
-
     furnessed_mat, n_iters, achieved_r2 = doubly_constrained_furness(
         seed_vals=seed_values,
         row_targets=row_targets,
@@ -840,10 +804,6 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         tol=tol,
         max_iters=max_iters
     )
-
-    print("Iters: %s" % n_iters)
-    print("R2: %s" % achieved_r2)
-    print()
 
     furnessed_mat = np.round(furnessed_mat, round_dp)
 

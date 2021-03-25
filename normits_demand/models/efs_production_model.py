@@ -1233,6 +1233,7 @@ def _gen_base_productions_internal(area_type,
     # init
     nhb_trip_rates = pd.read_csv(trip_rates_path)
 
+    # Build a progress bar
     total = du.seg_level_loop_length(seg_level, seg_params)
     desc = "Calculating NHB Productions at %s" % str(area_type)
     p_bar = tqdm(total=total, desc=desc, disable=not verbose)

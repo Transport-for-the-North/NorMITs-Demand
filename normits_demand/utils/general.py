@@ -2822,7 +2822,7 @@ def balance_a_to_p(productions: pd.DataFrame,
         if productions[col].sum() == 0:
             attractions[col] = 0
         else:
-            attractions[col] /= attractions[col].sum() / productions[col].sum()
+            attractions[col] *= productions[col].sum() / attractions[col].sum()
 
         # Throw an error if we somehow don't match
         np.testing.assert_approx_equal(
