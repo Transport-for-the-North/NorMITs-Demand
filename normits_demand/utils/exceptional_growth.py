@@ -759,7 +759,9 @@ def growth_criteria(synth_productions: pd.DataFrame,
                     soc_weights_path: str = None,
                     purpose_col: str = 'p',
                     prod_audits: str = None,
-                    attr_audits: str = None
+                    attr_audits: str = None,
+                    internal_zones: List[int] = None,
+                    external_zones: List[int] = None,
                     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Processes the PA vectors and other data from the main EFS and returns 
     the forecast vectors.
@@ -818,6 +820,15 @@ def growth_criteria(synth_productions: pd.DataFrame,
     zt_from_zone_col = zt_from_zone.lower() + '_zone_id'
     model_zone_col = model_name.lower() + '_zone_id'
 
+    # TODO(BT): Rewrite to be able to handle internal and external
+    #  at the same time. Code was quickly chucked together and only
+    #  internal is needed for now
+    if internal_zones is not None and external_zones is not None:
+        raise ValueError(
+            "Cannot handle both internal and external zones at the same"
+            "time just yet!!!"
+        )
+
     # Validate attraction input
     if synth_attractions['soc'].dtype == object:
         try:
@@ -846,6 +857,8 @@ def growth_criteria(synth_productions: pd.DataFrame,
         years_needed=[base_year],
         cache_path=observed_cache,
         matrix_format='pa',
+        internal_zones=internal_zones,
+        external_zones=external_zones,
     )
     observed_hb_p, observed_nhb_p, observed_hb_a, observed_nhb_a = vectors
 

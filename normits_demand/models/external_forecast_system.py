@@ -787,6 +787,11 @@ class ExternalForecastSystem:
         if apply_growth_criteria:
             # Apply the growth criteria using the post-ME P/A vectors
             # (normal and exceptional zones)
+
+            # APPLY TO INTERNAL ONLY
+            dtype = {model_zone_col: int}
+            internal_zones = pd.read_csv(self.imports['internal_zones'], dtype=dtype).squeeze().tolist()
+
             print("Applying growth criteria...")
             vectors = self._handle_growth_criteria(
                 synth_productions=model_p_vector,
@@ -795,7 +800,9 @@ class ExternalForecastSystem:
                 synth_nhb_attractions=model_nhb_a_vector,
                 base_year=str(base_year),
                 future_years=[str(x) for x in future_years],
-                integrate_dlog=self.integrate_dlog
+                integrate_dlog=self.integrate_dlog,
+                internal_zones=internal_zones,
+                external_zones=None,
             )
             model_p_vector, model_nhb_p_vector, model_a_vector, model_nhb_a_vector = vectors
 
@@ -1006,6 +1013,7 @@ class ExternalForecastSystem:
                 p_needed=p_needed,
                 fname_suffix='_int',
                 echo=verbose,
+                process_count=0,
                 **kwargs,
             )
 
@@ -1087,7 +1095,9 @@ class ExternalForecastSystem:
                                 synth_nhb_attractions: pd.DataFrame,
                                 base_year: str,
                                 future_years: List[str],
-                                integrate_dlog: bool
+                                integrate_dlog: bool,
+                                internal_zones: List[int] = None,
+                                external_zones: List[int] = None,
                                 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         # Init
         all_years = [base_year] + future_years
@@ -1112,7 +1122,6 @@ class ExternalForecastSystem:
 
         fname = consts.EMP_FNAME % self.input_zone_system
         grown_emp_path = os.path.join(self.exports["attractions"], fname)
-
 
         # ## APPLY GROWTH CRITERIA ## #
         # TODO: Need norms_to_tfn sector lookups.
@@ -1162,6 +1171,8 @@ class ExternalForecastSystem:
             soc_weights_path=self.imports['soc_weights'],
             prod_audits=self.exports["productions"],
             attr_audits=self.exports["attractions"],
+            internal_zones=internal_zones,
+            external_zones=external_zones,
         )
 
         return hb_p, nhb_p, hb_a, nhb_a

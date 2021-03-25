@@ -111,6 +111,7 @@ class EfsReporter:
 
         self.synth_zone_name = self.synth_zoning_system
         self.model_zone_name = self.model_name
+        self.model_zone_col = "%s_zone_id" % model_name
 
         self.imports, self.exports = self._build_io_paths()
 
@@ -489,10 +490,10 @@ class EfsReporter:
             self.compare_raw_pa_vectors_to_ntem_by_mode()
 
         print("Generating %s specific reports..." % self.model_name)
-        self.compare_base_pa_vectors_to_ntem()
-        self.compare_translated_base_pa_vectors_to_ntem()
-        self.compare_eg_pa_vectors_to_ntem()
-        self.analyse_compiled_matrices()
+        # self.compare_base_pa_vectors_to_ntem()
+        # self.compare_translated_base_pa_vectors_to_ntem()
+        # self.compare_eg_pa_vectors_to_ntem()
+        # self.analyse_compiled_matrices()
 
         if compare_trip_lengths:
             print("Generating trip length reports...")
@@ -917,7 +918,9 @@ class EfsReporter:
         # Init
         matrix_format = 'pa'
         output_fname = "eg_pa_vectors_to_postme_report.csv"
+        zonal_output_fname = "eg_pa_vectors_to_postme_zonal_report.csv"
         out_path = os.path.join(self.exports['home'], output_fname)
+        zonal_out_path = os.path.join(self.exports['home'], zonal_output_fname)
         vector_order = [
             'hb_productions',
             'nhb_productions',
@@ -953,6 +956,7 @@ class EfsReporter:
 
         # Perform a high level comparison
         report = list()
+        zonal_report = list()
         for to, vec_type in itertools.product(['hb', 'nhb'], ['productions', 'attractions']):
             vec_name = '%s_%s' % (to, vec_type)
 
@@ -960,6 +964,7 @@ class EfsReporter:
             eg_pa_vec = eg_pa_dict[vec_name]
             pa_vec = pa_dict[vec_name]
 
+            # Generate all zones report
             post_me_total = post_me_vec[self.base_year].sum()
             eg_pa_total = eg_pa_vec[self.base_year].sum()
             pa_total = pa_vec[self.base_year].sum()
@@ -974,10 +979,40 @@ class EfsReporter:
                 '% diff': diff / post_me_total * 100,
             })
 
-        # Write out report
+            # ## ZONE SPECIFIC REPORT ## #
+            post_me_vec = post_me_vec.rename(columns={self.base_year: 'post_me'})
+            eg_pa_vec = eg_pa_vec.rename(columns={self.base_year: 'pa_vec'})
+
+            # Grab just the data we need
+            merge_cols = [self.model_zone_col, 'p']
+            post_me_vec = post_me_vec.reindex(columns=merge_cols + ['post_me'])
+            post_me_vec = post_me_vec.groupby(merge_cols).sum().reset_index()
+
+            eg_pa_vec = eg_pa_vec.reindex(columns=merge_cols + ['pa_vec'])
+            eg_pa_vec = eg_pa_vec.groupby(merge_cols).sum().reset_index()
+
+            # Stick together
+            vec = pd.merge(
+                post_me_vec,
+                eg_pa_vec,
+                how='outer',
+                on=merge_cols
+            ).fillna(0)
+
+            # Calculate differences
+            diff = vec['pa_vec'] - vec['post_me']
+            vec[vec_name + '_diff'] = diff
+            vec[vec_name + '_%diff'] = diff / vec['post_me'] * 100
+
+            vec = vec.drop(columns=['post_me', 'pa_vec'])
+            vec = vec.set_index(merge_cols)
+            zonal_report.append(vec)
+
+        # Write out reports
         report = pd.DataFrame(report)
 
         report.to_csv(out_path, index=False)
+        pd.concat(zonal_report, axis=1).to_csv(zonal_out_path)
 
         exit()
 

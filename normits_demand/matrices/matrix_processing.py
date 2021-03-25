@@ -2477,11 +2477,22 @@ def load_matrix_from_disk(mat_import_dir: pathlib.Path,
 
 def matrices_to_vector(mat_import_dir: pathlib.Path,
                        years_needed: List[str],
+                       internal_zones: List[int] = None,
+                       external_zones: List[int] = None,
                        verbose: bool = True,
                        ) -> Tuple[pd.DataFrame, pd.DataFrame,
+                                  pd.DataFrame, pd.DataFrame,
+                                  pd.DataFrame, pd.DataFrame,
                                   pd.DataFrame, pd.DataFrame]:
     """
     Returns either P/A or O/D vectors based on the matrices in mat_import_dir
+
+    8 return values in total. Internal matrices being the first 4, external
+    matrices being the second 4.
+    If neither internal or external matrices is set, the first 4 returns are
+    the full matrices, and the second 4 will be empty.
+    If only the external zones is set the first 4 returns will be empty, and
+    the second 4 will be the external matrices.
 
     Parameters
     ----------
@@ -2494,27 +2505,35 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
     years_needed:
         A list of years to look for and build vectors for.
 
+    internal_zones:
+        A list of internal zones. If set then only these zones are used
+        to extract the internal demand from the matrices.
+
+    external_zones:
+        A list of internal zones. If set then only these zones are used
+        to extract the internal demand from the matrices.
+
     verbose:
         Whether to write progress info to the terminal or not.
 
     Returns
     -------
-    hb_p_or_o:
+    internal_hb_p_or_o:
         A segmentation vector of home based productions or origins
         (depending on the format of the matrices in mat_import_dir) for all
         the years asked for in years_needed.
 
-    nhb_p_or_o:
+    internal_nhb_p_or_o:
         A segmentation vector of non home based productions or origins
         (depending on the format of the matrices in mat_import_dir) for all
         the years asked for in years_needed.
 
-    hb_a_or_d:
+    internal_hb_a_or_d:
         A segmentation vector of home based attractions or destinations
         (depending on the format of the matrices in mat_import_dir) for all
         the years asked for in years_needed.
 
-    nhb_a_or_d:
+    internal_nhb_a_or_d:
         A segmentation vector of non home based attractions or destinations
         (depending on the format of the matrices in mat_import_dir) for all
         the years asked for in years_needed.
@@ -2524,6 +2543,15 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
     # Init
     du.print_w_toggle("Generating vectors from %s..." % mat_import_dir, echo=verbose)
     mat_names = [x for x in du.list_files(mat_import_dir) if file_ops.is_csv(x)]
+
+    # Try to figure out what all the zones are
+    check_path = os.path.join(mat_import_dir, mat_names[0])
+    check_mat = file_ops.read_df(check_path, index_col=0)
+    all_zones = list(check_mat.index)    # Assume square
+
+    # If no internal or external zones are given, use internal for everything
+    if internal_zones is None and external_zones is None:
+        internal_zones = all_zones
 
     # Split the matrices into years
     year_to_segment_dicts = defaultdict(list)
@@ -2553,8 +2581,10 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
     p_bar = tqdm(total=total, desc=desc, disable=(not verbose))
 
     # Build a vector for each year
-    yearly_p_or_o = list()
-    yearly_a_or_d = list()
+    int_yearly_p_or_o = list()
+    int_yearly_a_or_d = list()
+    ext_yearly_p_or_o = list()
+    ext_yearly_a_or_d = list()
     segment_col_names = list()
     for year in years_needed:
 
@@ -2578,8 +2608,10 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
 
         # Build an efficient_df for each matrix
         segment_col_names = set()
-        year_eff_dfs = list()
+        int_year_eff_dfs = list()
+        ext_year_eff_dfs = list()
         completed_segments = list()
+        df_lists = [int_year_eff_dfs, ext_year_eff_dfs]
         for segment_dict in year_to_segment_dicts[year]:
 
             # ## LOAD THE MATRIX IN ## #
@@ -2593,46 +2625,62 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
             if matrix.empty:
                 continue
 
-            # ## GET THE ROW AND COLUMN TOTALS AND NAMES ## #
-            # Convert into p/a or o/d
-            p_or_o = matrix.sum(axis=1)
-            a_or_d = matrix.sum(axis=0)
+            # Extract just the internal/external data
+            zones = [internal_zones, external_zones]
+            join_fns = [operator.and_, operator.or_]
+            for zone_nums, year_eff_dfs, join_fn in zip(zones, df_lists, join_fns):
+                # If we don't have any zone numbers, we can skip
+                if zone_nums is None:
+                    continue
 
-            # Sort out the column naming
-            zone_col_name = matrix.index.name
-            p_or_o.index.name = zone_col_name
-            a_or_d.index.name = zone_col_name
+                # Extract just the zones we need
+                zone_mask = mat_utils.get_wide_mask(
+                    df=matrix,
+                    zones=zone_nums,
+                    join_fn=join_fn,
+                )
+                matrix = matrix.where(zone_mask, 0)
 
-            p_or_o = p_or_o.reset_index()
-            a_or_d = a_or_d.reset_index()
+                # ## GET THE ROW AND COLUMN TOTALS AND NAMES ## #
+                # Convert into p/a or o/d
+                p_or_o = matrix.sum(axis=1)
+                a_or_d = matrix.sum(axis=0)
 
-            p_or_o[zone_col_name] = p_or_o[zone_col_name].astype(int)
-            a_or_d[zone_col_name] = a_or_d[zone_col_name].astype(int)
+                # Sort out the column naming
+                zone_col_name = matrix.index.name
+                p_or_o.index.name = zone_col_name
+                a_or_d.index.name = zone_col_name
 
-            p_or_o = p_or_o.rename(columns={0: p_or_o_val_name})
-            a_or_d = a_or_d.rename(columns={0: a_or_d_val_name})
+                p_or_o = p_or_o.reset_index()
+                a_or_d = a_or_d.reset_index()
 
-            # ## COMPILE INTO AN EFFICIENT DF ## #
-            # Remove the info we no longer need
-            eff_df = segment_dict.copy()
-            del eff_df['yr']
-            del eff_df['trip_origin']
-            del eff_df['matrix_format']
+                p_or_o[zone_col_name] = p_or_o[zone_col_name].astype(int)
+                a_or_d[zone_col_name] = a_or_d[zone_col_name].astype(int)
 
-            # Keep track of the column names we're keeping
-            vector_columns = [zone_col_name] + list(eff_df.keys())
-            segment_col_names = set(list(segment_col_names) + vector_columns)
+                p_or_o = p_or_o.rename(columns={0: p_or_o_val_name})
+                a_or_d = a_or_d.rename(columns={0: a_or_d_val_name})
 
-            # Add the dataframe and we're done!
-            # After this the df value is a df of either cols:
-            # zone_col, productions, attractions
-            # zone_col, origin, destination
-            eff_df['df'] = pd.merge(
-                p_or_o,
-                a_or_d,
-                on=zone_col_name
-            )
-            year_eff_dfs.append(eff_df)
+                # ## COMPILE INTO AN EFFICIENT DF ## #
+                # Remove the info we no longer need
+                eff_df = segment_dict.copy()
+                del eff_df['yr']
+                del eff_df['trip_origin']
+                del eff_df['matrix_format']
+
+                # Keep track of the column names we're keeping
+                vector_columns = [zone_col_name] + list(eff_df.keys())
+                segment_col_names = set(list(segment_col_names) + vector_columns)
+
+                # Add the dataframe and we're done!
+                # After this the df value is a df of either cols:
+                # zone_col, productions, attractions
+                # zone_col, origin, destination
+                eff_df['df'] = pd.merge(
+                    p_or_o,
+                    a_or_d,
+                    on=zone_col_name
+                )
+                year_eff_dfs.append(eff_df)
 
             # Update the progress bar
             p_bar.update(1)
@@ -2641,52 +2689,69 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
         segment_col_names = list(segment_col_names)
         value_cols = [p_or_o_val_name, a_or_d_val_name]
         final_col_names = segment_col_names + value_cols
-        # TODO: How to split HB/NHB. Two different lists per year? Split at end?!
-        #  pass in matrix format?
 
         # Compile into a vector for this year
-        year_pa = du.compile_efficient_df(year_eff_dfs, col_names=final_col_names)
-        year_pa = du.sort_vector_cols(year_pa)
-        year_pa = year_pa.sort_values(by=segment_col_names)
+        po_vecs = [int_yearly_p_or_o, ext_yearly_p_or_o]
+        ad_vecs = [int_yearly_a_or_d, ext_yearly_a_or_d]
+        for year_eff_dfs, yearly_p_or_o, yearly_a_or_d in zip(df_lists, po_vecs, ad_vecs):
+            # If no vectors were created, just make an empty df
+            if year_eff_dfs == list():
+                year_pa = pd.DataFrame()
+                continue
 
-        # Tidy up soc/ns columns
-        for col_name in ['soc', 'ns']:
-            if col_name in list(year_pa):
-                # Need to make sure soc/ns are int and not float
-                year_pa[col_name] = year_pa[col_name].fillna(-1).astype(int)
-                year_pa[col_name] = year_pa[col_name].replace(-1, 'none').astype(str)
+            year_pa = du.compile_efficient_df(year_eff_dfs, col_names=final_col_names)
+            year_pa = du.sort_vector_cols(year_pa)
+            year_pa = year_pa.sort_values(by=segment_col_names)
 
-        # ## STORE DATAFRAMES FOR CONCAT LATER ## #
-        # Remove the other column from each
-        p_or_o_vec = year_pa.drop(columns=[a_or_d_val_name])
-        a_or_d_vec = year_pa.drop(columns=[p_or_o_val_name])
+            # Tidy up soc/ns columns
+            for col_name in ['soc', 'ns']:
+                if col_name in list(year_pa):
+                    # Need to make sure soc/ns are int and not float
+                    year_pa[col_name] = year_pa[col_name].fillna(-1).astype(int)
+                    year_pa[col_name] = year_pa[col_name].replace(-1, 'none').astype(str)
 
-        # Rename for the year we've just done and store for later
-        yearly_p_or_o.append(p_or_o_vec.rename(columns={p_or_o_val_name: year}))
-        yearly_a_or_d.append(a_or_d_vec.rename(columns={a_or_d_val_name: year}))
+            # ## STORE DATAFRAMES FOR CONCAT LATER ## #
+            # Remove the other column from each
+            p_or_o_vec = year_pa.drop(columns=[a_or_d_val_name])
+            a_or_d_vec = year_pa.drop(columns=[p_or_o_val_name])
+
+            # Rename for the year we've just done and store for later
+            yearly_p_or_o.append(p_or_o_vec.rename(columns={p_or_o_val_name: year}))
+            yearly_a_or_d.append(a_or_d_vec.rename(columns={a_or_d_val_name: year}))
 
     # At this point we have a list of vectors for different years
 
-    # Merge the years together
-    p_or_o = du.merge_df_list(yearly_p_or_o, on=segment_col_names)
-    a_or_d = du.merge_df_list(yearly_a_or_d, on=segment_col_names)
+    # ## BUILD THE LIST OF RETURN VALUES ## #
+    yearly_vectors = [
+        int_yearly_p_or_o,
+        int_yearly_a_or_d,
+        ext_yearly_p_or_o,
+        ext_yearly_a_or_d
+    ]
+    return_values = list()
+    for yearly_vec in yearly_vectors:
+        # If no matrices, return an empty df
+        if yearly_vec == list():
+            return_values += [pd.DataFrame, pd.DataFrame]
+            continue
 
-    # Split out the HB and NHB and return
-    p_or_o_mask = p_or_o['p'].isin(efs_consts.ALL_HB_P)
-    hb_p_or_o = p_or_o[p_or_o_mask].copy()
-    nhb_p_or_o = p_or_o[~p_or_o_mask].copy()
+        # Merge the years together
+        vector = du.merge_df_list(yearly_vec, on=segment_col_names)
 
-    a_or_d_mask = a_or_d['p'].isin(efs_consts.ALL_HB_P)
-    hb_a_or_d = a_or_d[a_or_d_mask].copy()
-    nhb_a_or_d = a_or_d[~a_or_d_mask].copy()
+        # Split out the HB and NHB, add to return
+        hb_mask = vector['p'].isin(efs_consts.ALL_HB_P)
+        return_values.append(vector[hb_mask].copy())
+        return_values.append(vector[~hb_mask].copy())
 
-    return hb_p_or_o, nhb_p_or_o, hb_a_or_d, nhb_a_or_d
+    return return_values
 
 
 def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
                                      years_needed: List[str],
                                      cache_path: pathlib.Path,
                                      matrix_format: str,
+                                     internal_zones: List[int] = None,
+                                     external_zones: List[int] = None,
                                      overwrite_cache: bool = False,
                                      verbose: bool = True,
                                      ) -> pd.DataFrame:
@@ -2716,6 +2781,14 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
     matrix_format:
         The format of the matrices being produced. Should be one of the
         valid values from efs_consts.MATRIX_FORMATS
+
+    internal_zones:
+        A list of internal zones. If set then only these zones are used
+        to extract the internal demand from the matrices.
+
+    external_zones:
+        A list of internal zones. If set then only these zones are used
+        to extract the internal demand from the matrices.
 
     overwrite_cache:
         If True, the vectors are remade and overwrite any cache that may
@@ -2766,13 +2839,35 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
             "do with it!" % matrix_format
         )
 
+    # ## BUILD THE PATHS THAT THE CACHE WOULD BE IN ## #
     cache_fnames = [
         hb_p_or_o_fname,
         nhb_p_or_o_fname,
         hb_a_or_o_fname,
         nhb_a_or_o_fname,
     ]
-    cache_paths = [os.path.join(cache_path, f) for f in cache_fnames]
+    if internal_zones is not None or external_zones is not None:
+        # Build different lists for internal and externals
+        cache_paths = list()
+        if internal_zones is not None:
+            # Make sure the dir exists
+            int_dir = os.path.join(cache_path, 'internal')
+            du.create_folder(int_dir, verbose=False)
+
+            # Add all files to the cache paths
+            cache_paths += [os.path.join(int_dir, f) for f in cache_fnames]
+
+        if external_zones is not None:
+            # Make sure the dir exists
+            ext_dir = os.path.join(cache_path, 'internal')
+            du.create_folder(ext_dir, verbose=False)
+
+            # Add all files to the cache paths
+            cache_paths += [os.path.join(ext_dir, f) for f in cache_fnames]
+
+    else:
+        # No subsets, just look at the top level
+        cache_paths = [os.path.join(cache_path, f) for f in cache_fnames]
 
     # Read from disk if files already exist
     if all([file_ops.file_exists(f) for f in cache_paths]) and not overwrite_cache:
@@ -2785,10 +2880,15 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
     vectors = matrices_to_vector(
         mat_import_dir=mat_import_dir,
         years_needed=years_needed,
+        internal_zones=internal_zones,
+        external_zones=external_zones,
         verbose=verbose
     )
 
+    print(vectors[0])
+
     # Save to disk, and return copies
+    vectors = [v for v in vectors if not v.empty]
     for vector, path in zip(vectors, cache_paths):
         vector.to_csv(path, index=False)
 
