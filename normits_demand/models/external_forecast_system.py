@@ -12,10 +12,12 @@ File purpose:
 # Built-ins
 import os
 import time
+import operator
 
 from typing import List
 from typing import Dict
 from typing import Tuple
+from typing import Union
 
 # External libs
 import pandas as pd
@@ -26,17 +28,20 @@ from normits_demand import version
 from normits_demand import efs_constants as consts
 from normits_demand.models import efs_production_model as pm
 
+from normits_demand.matrices import decompilation
 from normits_demand.matrices import pa_to_od as pa2od
-from normits_demand.matrices import od_to_pa as od2pa
 from normits_demand.matrices import matrix_processing as mat_p
 
 from normits_demand.distribution import furness
+from normits_demand.distribution import external_growth as ext_growth
 
 from normits_demand.reports import pop_emp_comparator
 
-from normits_demand.utils import general as du, sector_reporter_v2 as sr_v2
+from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
 from normits_demand.utils import vehicle_occupancy as vo
 from normits_demand.utils import exceptional_growth as eg
+from normits_demand.utils import sector_reporter_v2 as sr_v2
 
 
 # TODO: Output a run log instead of printing everything to the terminal.
@@ -56,7 +61,7 @@ class ExternalForecastSystem:
 
     def __init__(self,
                  model_name: str,
-                 iter_num: int,
+                 iter_num: Union[int, str],
                  scenario_name: str,
 
                  integrate_dlog: bool = False,
@@ -99,6 +104,7 @@ class ExternalForecastSystem:
         if self.model_name == 'noham':
             self.is_ca_needed = False
             self.uses_pcu = True
+        self.ca_needed = consts.CA_NEEDED if self.is_ca_needed else None
 
         self.input_zone_system = "MSOA"
         self.output_zone_system = self.model_name
@@ -268,7 +274,6 @@ class ExternalForecastSystem:
             alt_households_growth_assumption_file: str = None,
             alt_worker_growth_assumption_file: str = None,
             alt_pop_split_file: str = None,  # THIS ISN'T USED ANYWHERE
-            distribution_method: str = "Furness",
             hb_purposes_needed: List[int] = consts.HB_PURPOSES_NEEDED,
             nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
             modes_needed: List[int] = consts.MODES_NEEDED,
@@ -532,7 +537,6 @@ class ExternalForecastSystem:
 
         # Format inputs
         constraint_source = constraint_source.lower()
-        distribution_method = distribution_method.lower()
         minimum_development_certainty = minimum_development_certainty.upper()
 
         year_list = [str(x) for x in [base_year] + future_years]
@@ -545,7 +549,7 @@ class ExternalForecastSystem:
         print("Initialising outputs...")
         write_input_info(
             os.path.join(self.exports['home'], "input_parameters.txt"),
-            self.__version__,
+            version.__version__,
             base_year,
             future_years,
             self.output_zone_system,
@@ -556,8 +560,7 @@ class ExternalForecastSystem:
             alt_households_growth_assumption_file,
             alt_worker_growth_assumption_file,
             alt_pop_split_file,
-            distribution_method,
-            self.imports['seed_dists'],
+            self.imports['decomp_post_me'],
             hb_purposes_needed,
             modes_needed,
             soc_needed,
@@ -586,7 +589,7 @@ class ExternalForecastSystem:
 
         # ## PRODUCTION GENERATION ## #
         print("Generating productions...")
-        production_trips = self.production_generator.run(
+        p_vector = self.production_generator.run(
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
             by_pop_import_path=self.imports['pop_by'],
@@ -611,7 +614,7 @@ class ExternalForecastSystem:
 
         # ## ATTRACTION GENERATION ###
         print("Generating attractions...")
-        attraction_dataframe, nhb_att = self.attraction_generator.run(
+        a_vector, nhb_a_vector = self.attraction_generator.run(
             out_path=self.exports['attractions'],
             base_year=str(base_year),
             future_years=[str(x) for x in future_years],
@@ -682,7 +685,7 @@ class ExternalForecastSystem:
             control_productions=True,
             control_fy_productions=self.ntem_control_future_years
         )
-        nhb_productions = nhb_pm.run(
+        nhb_p_vector = nhb_pm.run(
             recreate_productions=recreate_nhb_productions
         )
 
@@ -691,31 +694,12 @@ class ExternalForecastSystem:
         elapsed_time = current_time - last_time
         print("NHB Production generation took: %.2f seconds" % elapsed_time)
 
-        # # ## ATTRACTION WEIGHT GENERATION ## #
-        print("Generating attraction weights...")
-        attraction_weights = du.convert_to_weights(
-            attraction_dataframe,
-            year_list
-        )
-
-        nhb_a_weights = du.convert_to_weights(
-            nhb_att,
-            year_list
-        )
-
-        print("Attraction weights generated!")
-        last_time = current_time
-        current_time = time.time()
-        print("Attraction weight generation took: %.2f seconds" %
-              (current_time - last_time))
-
         # To avoid errors lets make sure all columns have the same datatype
-        production_trips.columns = production_trips.columns.astype(str)
-        nhb_productions.columns = nhb_productions.columns.astype(str)
+        p_vector.columns = p_vector.columns.astype(str)
+        nhb_p_vector.columns = nhb_p_vector.columns.astype(str)
 
-        attraction_dataframe.columns = attraction_dataframe.columns.astype(str)
-        attraction_weights.columns = attraction_weights.columns.astype(str)
-        nhb_a_weights.columns = nhb_a_weights.columns.astype(str)
+        a_vector.columns = a_vector.columns.astype(str)
+        nhb_a_vector.columns = nhb_a_vector.columns.astype(str)
 
         # ## ZONE TRANSLATION ## #
         model_zone_col = '%s_zone_id' % self.model_name
@@ -727,51 +711,45 @@ class ExternalForecastSystem:
             pop_translation, emp_translation = self.get_translation_dfs()
 
             # Figure out which columns are the segmentation
-            non_split_columns = list(production_trips.columns)
+            non_split_columns = list(p_vector.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_productions = self.zone_translator.run(
-                production_trips,
+            model_p_vector = self.zone_translator.run(
+                p_vector,
                 pop_translation,
                 self.input_zone_system,
                 self.output_zone_system,
                 non_split_cols=non_split_columns
             )
 
-            non_split_columns = list(nhb_productions.columns)
+            non_split_columns = list(nhb_p_vector.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_nhb_productions = self.zone_translator.run(nhb_productions, pop_translation,
-                                                                 self.input_zone_system,
-                                                                 self.output_zone_system,
-                                                                 non_split_cols=non_split_columns)
+            model_nhb_p_vector = self.zone_translator.run(
+                nhb_p_vector,
+                pop_translation,
+                self.input_zone_system,
+                self.output_zone_system,
+                non_split_cols=non_split_columns
+            )
 
-            non_split_columns = list(attraction_dataframe.columns)
+            non_split_columns = list(a_vector.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_pure_attractions = self.zone_translator.run(attraction_dataframe,
-                                                                  emp_translation,
-                                                                  self.input_zone_system,
-                                                                  self.output_zone_system,
-                                                                  non_split_cols=non_split_columns)
+            model_a_vector = self.zone_translator.run(
+                a_vector,
+                emp_translation,
+                self.input_zone_system,
+                self.output_zone_system,
+                non_split_cols=non_split_columns
+            )
 
-            non_split_columns = list(nhb_att.columns)
+            non_split_columns = list(nhb_a_vector.columns)
             non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_nhb_att = self.zone_translator.run(nhb_att, emp_translation,
-                                                         self.input_zone_system,
-                                                         self.output_zone_system,
-                                                         non_split_cols=non_split_columns)
-
-            non_split_columns = list(attraction_weights.columns)
-            non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_attractions = self.zone_translator.run(attraction_weights, emp_translation,
-                                                             self.input_zone_system,
-                                                             self.output_zone_system,
-                                                             non_split_cols=non_split_columns)
-
-            non_split_columns = list(nhb_a_weights.columns)
-            non_split_columns = du.list_safe_remove(non_split_columns, year_list)
-            converted_nhb_attractions = self.zone_translator.run(nhb_a_weights, emp_translation,
-                                                                 self.input_zone_system,
-                                                                 self.output_zone_system,
-                                                                 non_split_cols=non_split_columns)
+            model_nhb_a_vector = self.zone_translator.run(
+                nhb_a_vector,
+                emp_translation,
+                self.input_zone_system,
+                self.output_zone_system,
+                non_split_cols=non_split_columns
+            )
 
             print("Zone translation completed!")
             last_time = current_time
@@ -779,128 +757,147 @@ class ExternalForecastSystem:
             print("Zone translation took: %.2f seconds" %
                   (current_time - last_time))
         else:
-            converted_productions = production_trips.copy()
-            converted_nhb_productions = nhb_productions.copy()
+            model_p_vector = p_vector.copy()
+            model_nhb_p_vector = nhb_p_vector.copy()
 
-            converted_attractions = attraction_weights.copy()
-            converted_pure_attractions = attraction_dataframe.copy()
+            model_a_vector = a_vector.copy()
+            model_nhb_a_vector = nhb_a_vector.copy()
 
-            converted_nhb_att = nhb_att.copy()
-            converted_nhb_attractions = nhb_a_weights.copy()
-
-        # Write Translated p/a to file
+        # ## WRITE TRANSLATED VECTORS TO DISK ## #
         fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
-        converted_productions.to_csv(
-            os.path.join(self.exports['productions'], fname),
-            index=False
-        )
+        out_path = os.path.join(self.exports['productions'], fname)
+        model_p_vector.to_csv(out_path, index=False)
 
         fname = consts.PRODS_FNAME % (self.output_zone_system, 'nhb')
-        converted_nhb_productions.to_csv(
-            os.path.join(self.exports['productions'], fname),
-            index=False
-        )
+        out_path = os.path.join(self.exports['productions'], fname)
+        model_nhb_p_vector.to_csv(out_path, index=False)
 
         fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
-        converted_pure_attractions.to_csv(
-            os.path.join(self.exports['attractions'], fname),
-            index=False
-        )
+        out_path = os.path.join(self.exports['attractions'], fname)
+        model_a_vector.to_csv(out_path, index=False)
 
         fname = consts.ATTRS_FNAME % (self.output_zone_system, 'nhb')
-        converted_nhb_att.to_csv(
-            os.path.join(self.exports['attractions'], fname),
-            index=False
-        )
+        out_path = os.path.join(self.exports['attractions'], fname)
+        model_nhb_a_vector.to_csv(out_path, index=False)
+
+        # Save a copy of the vectors to deal with int/ext trips later
+        pre_eg_model_p_vector = model_p_vector.copy()
+        pre_eg_model_nhb_p_vector = model_nhb_p_vector.copy()
 
         if apply_growth_criteria:
             # Apply the growth criteria using the post-ME P/A vectors
             # (normal and exceptional zones)
-            pa_dfs = self._handle_growth_criteria(
-                synth_productions=converted_productions,
-                synth_attractions=converted_pure_attractions,
+
+            # APPLY TO INTERNAL ONLY
+            dtype = {model_zone_col: int}
+            internal_zones = pd.read_csv(self.imports['internal_zones'], dtype=dtype).squeeze().tolist()
+
+            print("Applying growth criteria...")
+            vectors = self._handle_growth_criteria(
+                synth_productions=model_p_vector,
+                synth_nhb_productions=model_nhb_p_vector,
+                synth_attractions=model_a_vector,
+                synth_nhb_attractions=model_nhb_a_vector,
                 base_year=str(base_year),
                 future_years=[str(x) for x in future_years],
-                integrate_dlog=self.integrate_dlog
+                integrate_dlog=self.integrate_dlog,
+                internal_zones=internal_zones,
+                external_zones=None,
             )
-            converted_productions, converted_pure_attractions = pa_dfs
-
-        # Convert the new attractions to weights
-        converted_attractions = du.convert_to_weights(
-            converted_pure_attractions,
-            year_list
-        )
+            model_p_vector, model_nhb_p_vector, model_a_vector, model_nhb_a_vector = vectors
 
         # Write grown productions and attractions to file
-        # Save as exceptional - e.g. "exc_productions"
-        fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
-        fname = fname.replace("_productions", "_exc_productions")
-        converted_productions.to_csv(
-            os.path.join(self.exports['productions'], fname),
-            index=False
+        fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb_exc')
+        out_path = os.path.join(self.exports['productions'], fname)
+        model_p_vector.to_csv(out_path, index=False)
+
+        fname = consts.PRODS_FNAME % (self.output_zone_system, 'nhb_exc')
+        out_path = os.path.join(self.exports['productions'], fname)
+        model_nhb_p_vector.to_csv(out_path, index=False)
+
+        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb_exc')
+        out_path = os.path.join(self.exports['attractions'], fname)
+        model_a_vector.to_csv(out_path, index=False)
+
+        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'nhb_exc')
+        out_path = os.path.join(self.exports['attractions'], fname)
+        model_nhb_a_vector.to_csv(out_path, index=False)
+
+        # ## DISTRIBUTE THE INTERNAL AND EXTERNAL DEMAND ## #
+        # Create the temporary output folders
+        dist_out = self.exports['pa_24']
+        int_dir = os.path.join(dist_out, 'internal')
+        ext_dir = os.path.join(dist_out, 'external')
+
+        for path in [int_dir, ext_dir]:
+            du.create_folder(path, verbose=False)
+
+        # Distribute the internal trips, write to disk
+        self._distribute_internal_demand(
+            p_vector=model_p_vector,
+            nhb_p_vector=model_nhb_p_vector,
+            a_vector=model_a_vector,
+            nhb_a_vector=model_nhb_a_vector,
+            years_needed=year_list,
+            hb_p_needed=hb_purposes_needed,
+            nhb_p_needed=nhb_purposes_needed,
+            m_needed=modes_needed,
+            soc_needed=soc_needed,
+            ns_needed=ns_needed,
+            ca_needed=car_availabilities_needed,
+            zone_col=model_zone_col,
+            internal_zones_path=self.imports['internal_zones'],
+            seed_dist_dir=self.imports['decomp_post_me'],
+            seed_infill=0,
+            normalise_seeds=False,
+            dist_out=int_dir,
+            report_out=self.exports['dist_reports'],
+            csv_out=False,
+            compress_out=True,
+            verbose=echo_distribution
         )
 
-        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
-        fname = fname.replace("_attractions", "_exc_attractions")
-        converted_pure_attractions.to_csv(
-            os.path.join(self.exports['attractions'], fname),
-            index=False
+        # Distribute the external trips, write to disk
+        # DO NOT INCLUDE EG in external
+        self._distribute_external_demand(
+            p_vector=pre_eg_model_p_vector,
+            nhb_p_vector=pre_eg_model_nhb_p_vector,
+            zone_col=model_zone_col,
+            years_needed=year_list,
+            hb_p_needed=hb_purposes_needed,
+            nhb_p_needed=nhb_purposes_needed,
+            m_needed=modes_needed,
+            soc_needed=soc_needed,
+            ns_needed=ns_needed,
+            ca_needed=car_availabilities_needed,
+            external_zones_path=self.imports['external_zones'],
+            post_me_dir=self.imports['decomp_post_me'],
+            dist_out=ext_dir,
+            report_out=self.exports['dist_reports'],
+            csv_out=False,
+            compress_out=True,
+            verbose=True,
         )
 
-        # TODO: Move conversion to attraction weights down here
+        # Combine the internal and external trips
+        mat_p.recombine_internal_external(
+            internal_import=int_dir,
+            external_import=ext_dir,
+            full_export=dist_out,
+            force_csv_out=True,
+        )
 
-        # ## DISTRIBUTION ## #
-        if distribution_method == "furness":
-            print("Generating HB distributions...")
-            furness.distribute_pa(
-                productions=converted_productions,
-                attraction_weights=converted_attractions,
-                trip_origin='hb',
-                years_needed=year_list,
-                p_needed=hb_purposes_needed,
-                m_needed=modes_needed,
-                soc_needed=soc_needed,
-                ns_needed=ns_needed,
-                ca_needed=car_availabilities_needed,
-                zone_col=model_zone_col,
-                seed_dist_dir=self.imports['seed_dists'],
-                dist_out=self.exports['pa_24'],
-                audit_out=self.exports['dist_audits'],
-                echo=echo_distribution
-            )
-
-            print("Generating NHB distributions...")
-            furness.distribute_pa(
-                productions=converted_nhb_productions,
-                attraction_weights=converted_nhb_attractions,
-                trip_origin='nhb',
-                years_needed=year_list,
-                p_needed=nhb_purposes_needed,
-                m_needed=modes_needed,
-                soc_needed=soc_needed,
-                ns_needed=ns_needed,
-                ca_needed=car_availabilities_needed,
-                zone_col=model_zone_col,
-                seed_dist_dir=self.imports['seed_dists'],
-                dist_out=self.exports['pa_24'],
-                audit_out=self.exports['dist_audits'],
-                echo=echo_distribution
-            )
-
-            last_time = current_time
-            current_time = time.time()
-            print("Distribution generation took: %.2f seconds" %
-                  (current_time - last_time))
-        else:
-            raise ValueError("'%s' is not a valid distribution method!" %
-                             (str(distribution_method)))
+        last_time = current_time
+        current_time = time.time()
+        print("Distribution generation took: %.2f seconds" %
+              (current_time - last_time))
 
         # ## SECTOR TOTALS ## #
         sector_grouping_file = os.path.join(self.imports['zone_translation']['home'],
                                             "tfn_level_one_sectors_norms_grouping.csv")
 
         sector_totals = self.sector_reporter.calculate_sector_totals(
-                converted_productions,
+                model_p_vector,
                 grouping_metric_columns=year_list,
                 sector_grouping_file=sector_grouping_file,
                 zone_col=model_zone_col
@@ -912,7 +909,7 @@ class ExternalForecastSystem:
             # TODO: Update sector reporter.
             #  Sector totals don't currently allow per purpose reporting
 
-            pm_productions = converted_productions.copy()
+            pm_productions = model_p_vector.copy()
 
             pm_sector_totals = self.sector_reporter.calculate_sector_totals(
                 pm_productions,
@@ -964,13 +961,143 @@ class ExternalForecastSystem:
             self.sector_totals = sector_totals
             # TODO: Store output files into local storage (class storage)
 
+    def _distribute_internal_demand(self,
+                                    p_vector: pd.DataFrame,
+                                    nhb_p_vector: pd.DataFrame,
+                                    a_vector: pd.DataFrame,
+                                    nhb_a_vector: pd.DataFrame,
+                                    internal_zones_path: nd.PathLike,
+                                    zone_col: str,
+                                    years_needed: List[str],
+                                    hb_p_needed: List[int],
+                                    nhb_p_needed: List[int],
+                                    verbose: bool = False,
+                                    **kwargs,
+                                    ) -> None:
+        """
+        Distributes the internal demand only Using a furness process.
+
+        Essentially a wrapper around furness.distribute_pa() to make sure
+        only the internal proportion of each vector is furnessed
+
+        Given p and a vectors should contain internal demand only!
+
+        """
+        # Init
+        hb_vals = [p_vector, a_vector, 'hb', hb_p_needed]
+        nhb_vals = [nhb_p_vector, nhb_a_vector, 'nhb', nhb_p_needed]
+        seed_year, _ = du.split_base_future_years_str(years_needed)
+
+        # Read in the internal zones
+        dtype = {zone_col: p_vector[zone_col].dtype}
+        internal_zones = pd.read_csv(internal_zones_path, dtype=dtype).squeeze().tolist()
+
+        # Do for the HB and then NHB trips
+        for p, a, to, p_needed in [hb_vals, nhb_vals]:
+
+            # Get the weights
+            a_weights = du.convert_to_weights(a, years_needed)
+
+            # Distribute the trips and write to disk
+            print("Generating %s internal distributions..." % to.upper())
+            furness.distribute_pa(
+                productions=p,
+                attraction_weights=a_weights,
+                trip_origin=to,
+                seed_year=seed_year,
+                years_needed=years_needed,
+                zone_col=zone_col,
+                unique_zones=internal_zones,
+                unique_zones_join_fn=operator.and_,
+                p_needed=p_needed,
+                fname_suffix='_int',
+                echo=verbose,
+                # process_count=0,
+                **kwargs,
+            )
+
+    def _distribute_external_demand(self,
+                                    p_vector: pd.DataFrame,
+                                    nhb_p_vector: pd.DataFrame,
+                                    external_zones_path: nd.PathLike,
+                                    post_me_dir: nd.PathLike,
+                                    dist_out: nd.PathLike,
+                                    report_out: nd.PathLike,
+                                    zone_col: str,
+                                    years_needed: List[str],
+                                    hb_p_needed: List[int],
+                                    nhb_p_needed: List[int],
+                                    m_needed: List[int],
+                                    soc_needed: List[int] = None,
+                                    ns_needed: List[int] = None,
+                                    ca_needed: List[int] = None,
+                                    csv_out: bool = True,
+                                    compress_out: bool = True,
+                                    verbose: bool = False,
+                                    ) -> None:
+        """
+        Distributes the external demand only by growing post-me matrices.
+        """
+        # Init
+        hb_vals = [p_vector, 'hb', hb_p_needed]
+        nhb_vals = [nhb_p_vector, 'nhb', nhb_p_needed]
+        base_year, future_years = du.split_base_future_years_str(years_needed)
+
+        # Load in the external zones
+        dtype = {zone_col: p_vector[zone_col].dtype}
+        external_zones = pd.read_csv(external_zones_path, dtype=dtype).squeeze().tolist()
+
+        # ## COPY OVER SEED EXTERNAL FOR BASE YEAR ## #
+        print("Getting base year external distributions...")
+        mat_p.split_internal_external(
+            mat_import=post_me_dir,
+            year=base_year,
+            external_zones=external_zones,
+            external_export=dist_out,
+        )
+
+        # ## GROW THE FUTURE YEARS ## #
+        # Do for the HB and then NHB trips
+        for vector, to, p_needed in [hb_vals, nhb_vals]:
+
+            # Calculate the growth factors
+            growth_factors = vector.copy()
+            for year in future_years:
+                growth_factors[year] /= growth_factors[base_year]
+            growth_factors.drop(columns=[base_year], inplace=True)
+
+            print("Generating %s external distributions..." % to.upper())
+            ext_growth.grow_external_pa(
+                import_dir=dist_out,
+                export_dir=dist_out,
+                growth_factors=growth_factors,
+                zone_col=zone_col,
+                base_year=base_year,
+                future_years=future_years,
+                trip_origin=to,
+                p_needed=p_needed,
+                m_needed=m_needed,
+                soc_needed=soc_needed,
+                ns_needed=ns_needed,
+                ca_needed=ca_needed,
+                report_out=report_out,
+                fname_suffix='_ext',
+                csv_out=csv_out,
+                compress_out=compress_out,
+                verbose=verbose,
+            )
+
     def _handle_growth_criteria(self,
                                 synth_productions: pd.DataFrame,
+                                synth_nhb_productions: pd.DataFrame,
                                 synth_attractions: pd.DataFrame,
+                                synth_nhb_attractions: pd.DataFrame,
                                 base_year: str,
                                 future_years: List[str],
-                                integrate_dlog: bool
-                                ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+                                integrate_dlog: bool,
+                                internal_zones: List[int] = None,
+                                external_zones: List[int] = None,
+                                ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         # Init
         all_years = [base_year] + future_years
 
@@ -995,11 +1122,7 @@ class ExternalForecastSystem:
         fname = consts.EMP_FNAME % self.input_zone_system
         grown_emp_path = os.path.join(self.exports["attractions"], fname)
 
-        # Us the matrices in seed distribution as the base observed
-        observed_pa_path = self.imports["seed_dists"]
-
         # ## APPLY GROWTH CRITERIA ## #
-
         # TODO: Need norms_to_tfn sector lookups.
         #  Should these be pop/emp weighted too?
         sector_system = "tfn_sectors"
@@ -1025,10 +1148,13 @@ class ExternalForecastSystem:
         # TODO: How to deal with NHB productions/attractions??
         #  Run this after the P/A models, then base the NHB off this?
         # Apply growth criteria to "normal" and "exceptional" zones
-        productions, attractions = eg.growth_criteria(
+        hb_p, nhb_p, hb_a, nhb_a = eg.growth_criteria(
             synth_productions=synth_productions,
+            synth_nhb_productions=synth_nhb_productions,
             synth_attractions=synth_attractions,
-            observed_pa_path=observed_pa_path,
+            synth_nhb_attractions=synth_nhb_attractions,
+            observed_pa_path=self.imports["decomp_post_me"],
+            observed_cache=self.exports['post_me']['cache'],
             prod_exceptional_zones=p_ez,
             attr_exceptional_zones=a_ez,
             population_path=grown_pop_path,
@@ -1043,10 +1169,12 @@ class ExternalForecastSystem:
             trip_rate_sectors=sector_lookup,
             soc_weights_path=self.imports['soc_weights'],
             prod_audits=self.exports["productions"],
-            attr_audits=self.exports["attractions"]
+            attr_audits=self.exports["attractions"],
+            internal_zones=internal_zones,
+            external_zones=external_zones,
         )
 
-        return productions, attractions
+        return hb_p, nhb_p, hb_a, nhb_a
 
     def get_translation_dfs(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -1148,15 +1276,135 @@ class ExternalForecastSystem:
                  years_needed: List[int] = consts.ALL_YEARS,
                  m_needed: List[int] = consts.MODES_NEEDED,
                  p_needed: List[int] = consts.ALL_P,
-                 soc_needed: List[int] = consts.SOC_NEEDED,
-                 ns_needed: List[int] = consts.NS_NEEDED,
-                 ca_needed: List[int] = consts.CA_NEEDED,
                  round_dp: int = consts.DEFAULT_ROUNDING,
                  use_bespoke_pa: bool= True,
-                 overwrite_hb_tp_pa: bool = True,
-                 overwrite_hb_tp_od: bool = True,
                  verbose: bool = True
                  ) -> None:
+        """
+        Converts home based PA matrices into time periods split OD matrices.
+
+        Generates to_home, from_home, and full OD for HB trips. Conversion is
+        based on the tour proportions derived from decompiling the post-ME
+        matrices.
+
+        NHB matrices are split using a set of time period splitting factors
+        derivied from decompiling the post-ME matrices.
+
+        Parameters
+        ----------
+        years_needed:
+            The years of PA matrices to convert to OD
+
+        m_needed:
+            The modes of PA matrices to convert to OD
+
+        p_needed:
+            The purposes of PA matrices to convert to OD
+
+        soc_needed:
+            The skill levels of PA matrices to convert to OD
+
+        ns_needed:
+            The income levels of PA matrices to convert to OD
+
+        ca_needed:
+            The the car availability of PA matrices to convert to OD
+
+        round_dp:
+            The number of decimal places to round the output values to.
+            Uses efs_consts.DEFAULT_ROUNDING by default.
+
+        # TODO: Update docs once correct functionality exists
+        overwrite_hb_tp_pa:
+            Whether to split home based PA matrices into time periods.
+
+        overwrite_hb_tp_od:
+            Whether to convert time period split PA matrices into OD matrices.
+
+        verbose:
+            If True, suppresses some of the non-essential terminal outputs.
+
+        Returns
+        -------
+        None
+        """
+        # Init
+        _input_checks(m_needed=m_needed)
+        base_zone_col = "%s_zone_id"
+        pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24'
+        hb_p_needed, nhb_p_needed = du.split_hb_nhb_purposes(p_needed)
+
+        # Set up the iterator
+        iterator = zip(
+            [hb_p_needed, nhb_p_needed],
+            ['hb', 'nhb'],
+        )
+
+        # Aggregate to TMS level?
+        for sub_p_needed, to in iterator:
+            mat_p.aggregate_matrices(
+                import_dir=self.exports[pa_import],
+                export_dir=self.exports['aggregated_pa'],
+                trip_origin=to,
+                matrix_format='pa',
+                years_needed=years_needed,
+                p_needed=sub_p_needed,
+                m_needed=m_needed,
+                round_dp=round_dp,
+            )
+
+        # Set up the segmentation params
+        seg_level = 'tms'
+        seg_params = {
+            'p_needed': hb_p_needed,
+            'm_needed': m_needed,
+            'ca_needed': self.ca_needed,
+        }
+
+        # Convert HB to OD via tour proportions
+        pa2od.build_od_from_tour_proportions(
+            pa_import=self.exports['aggregated_pa'],
+            od_export=self.exports['od'],
+            tour_proportions_dir=self.imports['post_me_tours'],
+            zone_translate_dir=self.imports['zone_translation']['one_to_one'],
+            model_name=self.model_name,
+            years_needed=years_needed,
+            seg_level=seg_level,
+            seg_params=seg_params
+        )
+
+        # Convert NHB to tp split via factors
+        nhb_seg_params = seg_params.copy()
+        nhb_seg_params['p_needed'] = nhb_p_needed
+
+        mat_p.nhb_tp_split_via_factors(
+            import_dir=self.exports['aggregated_pa'],
+            export_dir=self.exports['od'],
+            import_matrix_format='pa',
+            export_matrix_format='od',
+            tour_proportions_dir=self.imports['post_me_tours'],
+            model_name=self.model_name,
+            years_needed=years_needed,
+            **nhb_seg_params,
+        )
+
+    def old_pa_to_od(self,
+                     years_needed: List[int] = consts.ALL_YEARS,
+                     m_needed: List[int] = consts.MODES_NEEDED,
+                     p_needed: List[int] = consts.ALL_P,
+                     soc_needed: List[int] = consts.SOC_NEEDED,
+                     ns_needed: List[int] = consts.NS_NEEDED,
+                     ca_needed: List[int] = consts.CA_NEEDED,
+                     round_dp: int = consts.DEFAULT_ROUNDING,
+                     use_bespoke_pa: bool= True,
+                     overwrite_hb_tp_pa: bool = True,
+                     overwrite_hb_tp_od: bool = True,
+                     verbose: bool = True
+                     ) -> None:
+        # BACKLOG: Need Tour proportions from NoRMS in order to properly
+        #  integrate bespoke zones. Currently using TMS tp_splits and
+        #  phi_factors to convert PA to OD
+        #  labels: NoRMS, EFS
         """
         Converts home based PA matrices into time periods split PA matrices,
         then OD matrices (to_home, from_home, and full OD).
@@ -1186,7 +1434,7 @@ class ExternalForecastSystem:
 
         round_dp:
             The number of decimal places to round the output values to.
-            Uses consts.DEFAULT_ROUNDING by default.
+            Uses efs_consts.DEFAULT_ROUNDING by default.
 
         # TODO: Update docs once correct functionality exists
         overwrite_hb_tp_pa:
@@ -1244,6 +1492,7 @@ class ExternalForecastSystem:
                     pa_export=self.exports['pa'],
                     tp_splits=tp_splits,
                     model_zone_col=output_zone_col,
+                    model_name=self.model_name,
                     years_needed=years_needed,
                     p_needed=to_p_needed,
                     m_needed=m_needed,
@@ -1283,16 +1532,16 @@ class ExternalForecastSystem:
             print('HB OD matrices compiled!\n')
             # TODO: Create 24hr OD for HB
 
-    def pre_me_compile_od_matrices(self,
-                                   year: int = consts.BASE_YEAR,
-                                   hb_p_needed: List[int] = consts.HB_PURPOSES_NEEDED,
-                                   nhb_p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
-                                   m_needed: List[int] = consts.MODES_NEEDED,
-                                   tp_needed: List[int] = consts.TIME_PERIODS,
-                                   round_dp: int = consts.DEFAULT_ROUNDING,
-                                   overwrite_aggregated_od: bool = True,
-                                   overwrite_compiled_od: bool = True,
-                                   ) -> None:
+    def compile_od_matrices(self,
+                            year: int = consts.BASE_YEAR,
+                            hb_p_needed: List[int] = consts.HB_PURPOSES_NEEDED,
+                            nhb_p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
+                            m_needed: List[int] = consts.MODES_NEEDED,
+                            tp_needed: List[int] = consts.TIME_PERIODS,
+                            round_dp: int = consts.DEFAULT_ROUNDING,
+                            overwrite_aggregated_od: bool = True,
+                            overwrite_compiled_od: bool = True,
+                            ) -> None:
         """
         Compiles pre-ME OD matrices produced by EFS into User Class format
         i.e. business, commute, other
@@ -1326,7 +1575,7 @@ class ExternalForecastSystem:
 
         round_dp:
             The number of decimal places to round the output values to.
-            Uses consts.DEFAULT_ROUNDING by default.
+            Uses efs_consts.DEFAULT_ROUNDING by default.
 
         # TODO: Update docs once correct functionality exists
         overwrite_aggregated_od:
@@ -1347,39 +1596,40 @@ class ExternalForecastSystem:
             ca_needed = consts.CA_NEEDED
         else:
             ca_needed = [None]
-            
-        if overwrite_aggregated_od:
-            for matrix_format in ['od_from', 'od_to']:
-                mat_p.aggregate_matrices(
-                    import_dir=self.exports['od'],
-                    export_dir=self.exports['aggregated_od'],
-                    trip_origin='hb',
-                    matrix_format=matrix_format,
-                    years_needed=[year],
-                    p_needed=hb_p_needed,
-                    m_needed=m_needed,
-                    ca_needed=ca_needed,
-                    tp_needed=tp_needed,
-                    round_dp=round_dp,
-                )
-            mat_p.aggregate_matrices(
-                import_dir=self.exports['od'],
-                export_dir=self.exports['aggregated_od'],
-                trip_origin='nhb',
-                matrix_format='od',
-                years_needed=[year],
-                p_needed=nhb_p_needed,
-                m_needed=m_needed,
-                ca_needed=ca_needed,
-                tp_needed=tp_needed,
-                round_dp=round_dp,
-            )
+
+        # TODO: No longer need to aggregate matrices!
+        # if overwrite_aggregated_od:
+        #     for matrix_format in ['od_from', 'od_to']:
+        #         mat_p.aggregate_matrices(
+        #             import_dir=self.exports['od'],
+        #             export_dir=self.exports['aggregated_od'],
+        #             trip_origin='hb',
+        #             matrix_format=matrix_format,
+        #             years_needed=[year],
+        #             p_needed=hb_p_needed,
+        #             m_needed=m_needed,
+        #             ca_needed=ca_needed,
+        #             tp_needed=tp_needed,
+        #             round_dp=round_dp,
+        #         )
+        #     mat_p.aggregate_matrices(
+        #         import_dir=self.exports['od'],
+        #         export_dir=self.exports['aggregated_od'],
+        #         trip_origin='nhb',
+        #         matrix_format='od',
+        #         years_needed=[year],
+        #         p_needed=nhb_p_needed,
+        #         m_needed=m_needed,
+        #         ca_needed=ca_needed,
+        #         tp_needed=tp_needed,
+        #         round_dp=round_dp,
+        #     )
 
         if overwrite_compiled_od:
             # Build the compile params for this model
             if self.model_name == 'noham':
                 compile_params_paths = mat_p.build_compile_params(
-                    import_dir=self.exports['aggregated_od'],
+                    import_dir=self.exports['od'],
                     export_dir=self.params['compile'],
                     matrix_format='od',
                     years_needed=[year],
@@ -1389,7 +1639,7 @@ class ExternalForecastSystem:
                 )
             elif self.model_name == 'norms':
                 compile_params_paths = mat_p.build_norms_compile_params(
-                    import_dir=self.exports['aggregated_od'],
+                    import_dir=self.exports['od'],
                     export_dir=self.params['compile'],
                     matrix_format='od',
                     years_needed=[year],
@@ -1403,12 +1653,10 @@ class ExternalForecastSystem:
                 )
 
             mat_p.compile_matrices(
-                mat_import=self.exports['aggregated_od'],
+                mat_import=self.exports['od'],
                 mat_export=self.exports['compiled_od'],
                 compile_params_path=compile_params_paths[0],
                 round_dp=round_dp,
-                build_factor_pickle=True,
-                factor_pickle_path=self.params['compile'],
             )
 
             # Need to convert into hourly average PCU for noham
@@ -1424,34 +1672,35 @@ class ExternalForecastSystem:
                     round_dp=round_dp,
                 )
 
-    def generate_post_me_tour_proportions(self,
-                                          model_name: str,
-                                          year: int = consts.BASE_YEAR,
-                                          m_needed: List[int] = consts.MODES_NEEDED,
-                                          overwrite_decompiled_od=True,
-                                          overwrite_tour_proportions=True
-                                          ) -> None:
+    def decompile_post_me(self,
+                          year: int = consts.BASE_YEAR,
+                          m_needed: List[int] = consts.MODES_NEEDED,
+                          make_new_observed: bool = False,
+                          overwrite_decompiled_matrices: bool = True,
+                          overwrite_tour_proportions: bool = True,
+                          ) -> None:
         """
-        Uses post-ME OD matrices from the TfN model (NoRMS/NoHAM) to generate
-        tour proportions for each OD pair, for each purpose (and ca as
-        needed). Also converts OD matrices to PA.
+        Decompiles post-me matrices ready to be used in an EFS future years run.
 
-        Performs the following actions:
-            - Converts post-ME files into and EFS format as needed. (file name
-              changes, converting long to wide as needed.)
-            - Decompiles the converted post-ME matrices into purposes (and ca
-              when needed) using the split factors produced during pre-me
-              OD compilation
-            - Generates tour proportions for each OD pair, for each purpose
-              (and ca as needed), saving for future year post-ME compilation
-              later.
-            - Converts OD matrices to PA.
+        Reads in the post-me matrices from the TfN model defined in
+        self.model_name and decompiles them into TfN segmented 24hr PA
+        matrices. These matrices are needed by EFS to generate future year
+        travel matrices.
+
+        In the case of NoHAM post-me matrices, they need converting from
+        OD to PA matrices, and therefore produce a set of tour proportions
+        alongside the decompiled matrices.
+
+        This process CANNOT run unless TMS has already completed a base year
+        run and compiled a set of matrices for the TfN model, therefore
+        producing a set of decompilation factors that EFS will need.
+
+        This function acts as a front end for calling model specific
+        decompilation functions. See model decompilation functions for more
+        information.
 
         Parameters
         ----------
-        model_name:
-            The name of the model this is being run for.
-
         year:
              The year to decompile OD matrices for. (Usually the base year)
 
@@ -1459,20 +1708,18 @@ class ExternalForecastSystem:
             The mode to use when decompiling OD matrices. This will be used
             to determine if car availability needs to be included or not.
 
-        output_location:
-            The directory to create the new output directory in - a dir named
-            self.out_dir (NorMITs Demand) should exist here. Usually
-            a drive name e.g. Y:/
-
-        iter_num:
-            The number of the iteration being run.
+        make_new_observed:
+            Whether to copy the decompiled matarices back into the EFS
+            imports ready for a new run of EFS, using these values as the
+            observed data.
 
         # TODO: Update docs once correct functionality exists
-        overwrite_decompiled_od:
-            Whether to decompile the post-me od matrices or not
+        overwrite_decompiled_matrices:
+            Whether to decompile the post-me matrices or not
 
         overwrite_tour_proportions:
             Whether to generate tour proportions or not.
+
 
         Returns
         -------
@@ -1481,48 +1728,57 @@ class ExternalForecastSystem:
         # Init
         _input_checks(m_needed=m_needed)
 
-        if overwrite_decompiled_od:
-            print("Decompiling OD Matrices into purposes...")
-            need_convert = od2pa.need_to_convert_to_efs_matrices(
+        if self.model_name == 'noham':
+            # Build the segmentation parameters for OD2PA
+            # TODO(BT): Convert to use class arguments once implemented
+            seg_params = {
+                'p_needed': consts.ALL_P,
+                'm_needed': m_needed,
+                'ca_needed': self.ca_needed,
+            }
+            decompilation.decompile_noham(
+                year=year,
+                seg_level='tms',
+                seg_params=seg_params,
                 post_me_import=self.imports['post_me_matrices'],
-                converted_export=self.exports['post_me']['compiled_od']
+                post_me_renamed_export=self.exports['post_me']['compiled_od'],
+                od_export=self.exports['post_me']['od'],
+                pa_export=self.exports['post_me']['pa'],
+                pa_24_export=self.exports['post_me']['pa_24'],
+                zone_translate_dir=self.imports['zone_translation']['one_to_one'],
+                tour_proportions_export=self.params['tours'],
+                decompile_factors_path=self.imports['post_me_factors'],
+                vehicle_occupancy_import=self.imports['home'],
+                overwrite_decompiled_od=overwrite_decompiled_matrices,
+                overwrite_tour_proportions=overwrite_tour_proportions,
             )
 
-            if need_convert:
-                od2pa.convert_to_efs_matrices(
-                    import_path=self.imports['post_me_matrices'],
-                    export_path=self.exports['post_me']['compiled_od'],
-                    matrix_format='od',
-                    year=year,
-                    user_class=True,
-                    to_wide=True,
-                    wide_col_name='%s_zone_id' % model_name,
-                    from_pcu=self.uses_pcu,
-                    vehicle_occupancy_import=self.imports['home']
+        elif self.model_name == 'norms':
+            if not overwrite_decompiled_matrices:
+                print("WARNING: Not decompiling Norms matrices!!!")
+                return
+
+            decompilation.decompile_norms(
+                year=year,
+                post_me_import=self.imports['post_me_matrices'],
+                post_me_renamed_export=self.exports['post_me']['vdm_pa_24'],
+                post_me_decompiled_export=self.exports['post_me']['pa_24'],
+                decompile_factors_dir=self.params['compile'],
+            )
+
+            # Copy all of our outputs into the observed import location
+            if make_new_observed:
+                file_ops.copy_all_files(
+                    import_dir=self.exports['post_me']['pa_24'],
+                    export_dir=self.imports['decomp_post_me'],
+                    force_csv_out=True,
                 )
 
-            # TODO: Stop the filename being hardcoded after integration with TMS
-            decompile_factors_path = os.path.join(
-                self.params['compile'],
-                'od_compilation_factors.pickle'
-            )
-            od2pa.decompile_od(
-                od_import=self.exports['post_me']['compiled_od'],
-                od_export=self.exports['post_me']['od'],
-                decompile_factors_path=decompile_factors_path,
-                year=year
-            )
-
-        if overwrite_tour_proportions:
-            print("Converting OD matrices to PA and generating tour "
-                  "proportions...")
-            mat_p.generate_tour_proportions(
-                od_import=self.exports['post_me']['od'],
-                zone_translate_dir=self.imports['zone_translation'],
-                pa_export=self.exports['post_me']['pa'],
-                tour_proportions_export=self.params['tours'],
-                year=year,
-                ca_needed=ca_needed
+        else:
+            raise nd.NormitsDemandError(
+                "Cannot decompile post-me matrices for %s. No function "
+                "exists for this model to decompile matrices."
+                % self.model_name
             )
 
     def compile_future_year_od_matrices(self,
@@ -1695,7 +1951,6 @@ def write_input_info(output_path: str,
                      alt_households_growth_assumption_file: str,
                      alt_worker_growth_assumption_file: str,
                      alt_pop_split_file: str,
-                     distribution_method: str,
                      seed_dist_location: str,
                      hb_purposes_needed: List[int],
                      modes_needed: List[int],
@@ -1722,7 +1977,6 @@ def write_input_info(output_path: str,
         "Alternate Households Growth File: " + str(alt_households_growth_assumption_file),
         "Alternate Workers Growth File: " + str(alt_worker_growth_assumption_file),
         "Alternate Population Split File: " + str(alt_pop_split_file),
-        "Distribution Method: " + distribution_method,
         "Seed Distribution Location: " + seed_dist_location,
         "Purposes Used: " + str(hb_purposes_needed),
         "Modes Used: " + str(modes_needed),

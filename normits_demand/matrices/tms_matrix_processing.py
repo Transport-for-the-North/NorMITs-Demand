@@ -11,7 +11,7 @@ import numpy as np
 
 # Get local modules
 from normits_demand.utils import utils as nup # Folder management, reindexing, optimisation
-# from normits_demand.models import distribution_model as dm # For OD Outputs
+from normits_demand.models import distribution_model as dm # For OD Outputs
 
 _iter1_norms_folder = ('Y:/NorMITs Synthesiser/Norms/iter1/' +
                        'Distribution Outputs/Model PA')

@@ -78,8 +78,10 @@ def get_wide_mask(df: pd.DataFrame,
 
     # Try and cast to the correct types for rows/cols
     try:
-        # Assume columns are strings
-        col_zones = np.array(col_zones, str)
+        # Assume columns are strings if they are an object
+        col_dtype = df.columns.dtype
+        col_dtype = str if col_dtype == object else col_dtype
+        col_zones = np.array(col_zones, col_dtype)
     except ValueError:
         raise ValueError(
             "Cannot cast the col_zones to the required dtype to match the "
@@ -102,3 +104,47 @@ def get_wide_mask(df: pd.DataFrame,
 
     # Combine together to get the full mask
     return join_fn(col_mask, index_mask)
+
+
+def get_internal_mask(df: pd.DataFrame,
+                      zones: List[Any] = None,
+                      ) -> np.ndarray:
+    """
+    Generates a mask for a wide matrix. Returned mask will be same shape as df
+
+    Parameters
+    ----------
+    df:
+        The dataframe to generate the mask for
+
+    zones:
+        A list of zone numbers that make up the internal zones
+
+    Returns
+    -------
+    mask:
+        A mask of true and false values. Will be the same shape as df.
+    """
+    return get_wide_mask(df, zones, operator.and_)
+
+
+def get_external_mask(df: pd.DataFrame,
+                      zones: List[Any] = None,
+                      ) -> np.ndarray:
+    """
+    Generates a mask for a wide matrix. Returned mask will be same shape as df
+
+    Parameters
+    ----------
+    df:
+        The dataframe to generate the mask for
+
+    zones:
+        A list of zone numbers that make up the external zones
+
+    Returns
+    -------
+    mask:
+        A mask of true and false values. Will be the same shape as df.
+    """
+    return get_wide_mask(df, zones, operator.or_)

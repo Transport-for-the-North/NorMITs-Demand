@@ -68,4 +68,13 @@ Only constrained in base year, and multiplicative growth on top.
 ### v0.3.3
 - Removed pop/emp growth from EFS. Future year population and employment
 is now read in straight from NorMITs Land Use.
+- Integration of NoRMS IO to and from PA NoRMS VDM compilation
+- Fixes to bring NoHAM outputs closer to NTEM
+    - Splitting out internal and external distribution
+        * Internal distribution follows the furness
+        *  External distribution is a grown post-ME PA matrix. Grown by synth FY / synth BY productions
+    - Furness uses post-me matrices as is for seed matrices
+    - post-me vector is now used for the base year P/A vectors (Internal demand only)
+    - multiplicative growth added into the attractions
+    - Attractions now take segmentation from the post-me matrices, Grows them using synth fy/by
 

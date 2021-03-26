@@ -23,7 +23,7 @@ from collections import defaultdict
 
 from tqdm import tqdm
 
-import demand_utilities.utils as du
+from normits_demand.utils import general as du
 
 
 def noham_vdm_tour_proportions_out(input_path: str,
