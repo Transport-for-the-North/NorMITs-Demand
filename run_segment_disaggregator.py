@@ -4,15 +4,15 @@ from normits_demand.distribution import segment_disaggregator as sd
 
 if __name__ == '__main__':
 
-    import_folder = 'Y:/NorMITs Synthesiser/Noham/iter8c/Distribution Outputs/PA Matrices'
-    target_tld_folder = 'Y:/NorMITs Synthesiser/import/trip_length_bands/north/enhanced_segments'
+    import_folder = 'I:/NorMITs Demand/import/noham/post_me/tms_seg_pa'
+    target_tld_folder = 'I:/NorMITs Synthesiser/import/trip_length_bands/north/enhanced_segments'
     # Using single tld for whole country - run North and GB and compare
-    base_hb_productions = 'Y:/NorMITs Synthesiser/Noham/iter8c/Production Outputs/hb_productions_noham.csv'
-    base_nhb_productions = 'Y:/NorMITs Synthesiser/Noham/iter8c/Production Outputs/nhb_productions_noham.csv'
-    base_hb_attractions = 'Y:/NorMITs Synthesiser/Noham/iter8c/Attraction Outputs/noham_hb_attractions.csv'
-    base_nhb_attractions = 'Y:/NorMITs Synthesiser/Noham/iter8c/Attraction Outputs/noham_nhb_attractions.csv'
-    export_folder = 'Y:/NorMITs Synthesiser/Noham/iter8c/Distribution Outputs/Segmented Distributions'
-    lookup_folder = 'Y:/NorMITs Synthesiser/Noham/Model Zone Lookups'
+    base_hb_productions = 'I:/NorMITs Synthesiser/Noham/iter8c/Production Outputs/hb_productions_noham.csv'
+    base_nhb_productions = 'I:/NorMITs Synthesiser/Noham/iter8c/Production Outputs/nhb_productions_noham.csv'
+    base_hb_attractions = 'I:/NorMITs Synthesiser/Noham/iter8c/Attraction Outputs/noham_hb_attractions.csv'
+    base_nhb_attractions = 'I:/NorMITs Synthesiser/Noham/iter8c/Attraction Outputs/noham_nhb_attractions.csv'
+    export_folder = 'I:/NorMITs Demand/import/noham\post_me/tfn_seg_pa'
+    lookup_folder = 'I:/NorMITs Synthesiser/Noham/Model Zone Lookups'
 
     base_productions_path = base_hb_productions
     base_attractions_path = base_hb_attractions
