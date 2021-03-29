@@ -490,10 +490,10 @@ class EfsReporter:
             self.compare_raw_pa_vectors_to_ntem_by_mode()
 
         print("Generating %s specific reports..." % self.model_name)
-        # self.compare_base_pa_vectors_to_ntem()
-        # self.compare_translated_base_pa_vectors_to_ntem()
-        # self.compare_eg_pa_vectors_to_ntem()
-        # self.analyse_compiled_matrices()
+        self.compare_base_pa_vectors_to_ntem()
+        self.compare_translated_base_pa_vectors_to_ntem()
+        self.compare_eg_pa_vectors_to_ntem()
+        self.analyse_compiled_matrices()
 
         if compare_trip_lengths:
             print("Generating trip length reports...")
@@ -950,6 +950,7 @@ class EfsReporter:
             years_needed=[self.base_year],
             cache_path=self.exports['cache']['post_me'],
             matrix_format=matrix_format,
+            internal_zones=self.model_internal_zones,
         )
         # Assign to a dictionary for accessing
         post_me_dict = {name: vec for name, vec in zip(vector_order, vectors)}
@@ -962,17 +963,14 @@ class EfsReporter:
 
             post_me_vec = post_me_dict[vec_name]
             eg_pa_vec = eg_pa_dict[vec_name]
-            pa_vec = pa_dict[vec_name]
 
             # Generate all zones report
             post_me_total = post_me_vec[self.base_year].sum()
             eg_pa_total = eg_pa_vec[self.base_year].sum()
-            pa_total = pa_vec[self.base_year].sum()
             diff = eg_pa_total - post_me_total
 
             report.append({
                 'Name': vec_name,
-                'pa_vec': pa_total,
                 'eg_pa_vec': eg_pa_total,
                 'post_me': post_me_total,
                 'diff': diff,
@@ -1013,8 +1011,6 @@ class EfsReporter:
 
         report.to_csv(out_path, index=False)
         pd.concat(zonal_report, axis=1).to_csv(zonal_out_path)
-
-        exit()
 
     def compare_pa_matrices_to_ntem(self) -> pd.DataFrame:
         """

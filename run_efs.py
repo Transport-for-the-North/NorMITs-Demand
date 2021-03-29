@@ -28,16 +28,16 @@ def main():
     integrate_dlog = False
     run_pop_emp_comparison = False
 
-    run_base_efs = False
-    recreate_productions = True
-    recreate_attractions = True
-    recreate_nhb_productions = True
+    run_base_efs = True
+    recreate_productions = False
+    recreate_attractions = False
+    recreate_nhb_productions = False
     rerun_growth_criteria = True
 
     run_bespoke_zones = False
     ignore_bespoke_zones = True
 
-    run_pa_to_od = False
+    run_pa_to_od = True
     run_compile_od = True
     run_decompile_post_me = False
     run_future_year_compile_od = False
@@ -95,20 +95,20 @@ def main():
         )
 
     if run_pa_to_od:
-        # efs.pa_to_od(
-        #     years_needed=[2018],
-        #     use_bespoke_pa=(not ignore_bespoke_zones),
-        #     verbose=verbose
-        # )
-
         efs.pa_to_od(
-            years_needed=[2050],
+            years_needed=[2018, 2050],
             use_bespoke_pa=(not ignore_bespoke_zones),
             verbose=verbose
         )
 
     if run_compile_od:
         # Compiles base year OD matrices
+        efs.compile_od_matrices(
+            year=2018,
+            overwrite_aggregated_od=True,
+            overwrite_compiled_od=True,
+        )
+
         efs.compile_od_matrices(
             year=2050,
             overwrite_aggregated_od=True,

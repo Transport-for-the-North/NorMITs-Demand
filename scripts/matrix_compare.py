@@ -46,15 +46,15 @@ OUTPUT_DIR = r'E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3f\Reports\EFS R
 # COMPARE_DIR = r'E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3f\Matrices\24hr PA Matrices'
 # REPORT_FNAME = 'output_to_post_me_pa_report.csv'
 
+# Compare EFS output to post-ME OD
+ORIGINAL_DIR = r'I:\NorMITs Demand\import\noham\post_me\tms_seg_od'
+COMPARE_DIR = r'E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3f\Matrices\OD Matrices'
+REPORT_FNAME = 'output_to_post_me_od_report.csv'
+
 # Compare EFS output to post-ME compiled OD
 # ORIGINAL_DIR = r'I:\NorMITs Demand\import\noham\post_me\renamed'
 # COMPARE_DIR = r'E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3f\Matrices\Compiled OD Matrices PCU'
 # REPORT_FNAME = 'output_to_post_me_compiled_od_report.csv'
-
-# Compare EFS output to post-ME OD
-ORIGINAL_DIR = r'I:\NorMITs Demand\import\noham\post_me\tms_seg'
-COMPARE_DIR = r'E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3f\Matrices\OD Matrices'
-REPORT_FNAME = 'output_to_post_me_compiled_od_report.csv'
 
 
 def list_files(path):
