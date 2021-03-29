@@ -2477,6 +2477,7 @@ def load_matrix_from_disk(mat_import_dir: pathlib.Path,
 
 def matrices_to_vector(mat_import_dir: pathlib.Path,
                        years_needed: List[str],
+                       model_zone_col: str,
                        internal_zones: List[int] = None,
                        external_zones: List[int] = None,
                        verbose: bool = True,
@@ -2504,6 +2505,10 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
 
     years_needed:
         A list of years to look for and build vectors for.
+
+    model_zone_col:
+        The name to give to the zone columns if it can't be inferred from the
+        matrices.
 
     internal_zones:
         A list of internal zones. If set then only these zones are used
@@ -2648,6 +2653,8 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
 
                 # Sort out the column naming
                 zone_col_name = matrix.index.name
+                if zone_col_name is None:
+                    zone_col_name = model_zone_col
                 p_or_o.index.name = zone_col_name
                 a_or_d.index.name = zone_col_name
 
@@ -2750,6 +2757,7 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
                                      years_needed: List[str],
                                      cache_path: pathlib.Path,
                                      matrix_format: str,
+                                     model_zone_col: str,
                                      internal_zones: List[int] = None,
                                      external_zones: List[int] = None,
                                      overwrite_cache: bool = False,
@@ -2781,6 +2789,10 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
     matrix_format:
         The format of the matrices being produced. Should be one of the
         valid values from efs_consts.MATRIX_FORMATS
+
+    model_zone_col:
+        The name to give to the zone columns if it can't be inferred from the
+        matrices.
 
     internal_zones:
         A list of internal zones. If set then only these zones are used
@@ -2880,6 +2892,7 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
     vectors = matrices_to_vector(
         mat_import_dir=mat_import_dir,
         years_needed=years_needed,
+        model_zone_col=model_zone_col,
         internal_zones=internal_zones,
         external_zones=external_zones,
         verbose=verbose

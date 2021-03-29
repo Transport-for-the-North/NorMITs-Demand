@@ -490,17 +490,17 @@ class EfsReporter:
             self.compare_raw_pa_vectors_to_ntem_by_mode()
 
         print("Generating %s specific reports..." % self.model_name)
-        self.compare_base_pa_vectors_to_ntem()
-        self.compare_translated_base_pa_vectors_to_ntem()
-        self.compare_eg_pa_vectors_to_ntem()
-        self.analyse_compiled_matrices()
+        # self.compare_base_pa_vectors_to_ntem()
+        # self.compare_translated_base_pa_vectors_to_ntem()
+        # self.compare_eg_pa_vectors_to_ntem()
+        # self.analyse_compiled_matrices()
 
         if compare_trip_lengths:
             print("Generating trip length reports...")
             self.compare_trip_lengths()
 
         # Compare pre-furness vectors to post-ME
-        self.compare_eg_pa_vectors_to_post_me()
+        # self.compare_eg_pa_vectors_to_post_me()
 
         # Matrix compare to NTEM
         self.compare_pa_matrices_to_ntem()
@@ -941,15 +941,13 @@ class EfsReporter:
         for _, path in path_dict.items():
             file_ops.check_file_exists(path)
 
-        # Load in the vectors
-        pa_dict = {k: pd.read_csv(v) for k, v in path_dict.items()}
-
         # Convert post-me matrices into vector
         vectors = mat_p.maybe_convert_matrices_to_vector(
             mat_import_dir=self.imports['matrices']['post_me'],
             years_needed=[self.base_year],
             cache_path=self.exports['cache']['post_me'],
             matrix_format=matrix_format,
+            model_zone_col=self.model_zone_col,
             internal_zones=self.model_internal_zones,
         )
         # Assign to a dictionary for accessing
@@ -1037,6 +1035,7 @@ class EfsReporter:
             years_needed=self.years_needed,
             cache_path=self.exports['cache']['pa_24'],
             matrix_format=matrix_format,
+            model_zone_col=self.model_zone_col,
         )
 
         # Assign to a dictionary for accessing
@@ -1080,6 +1079,7 @@ class EfsReporter:
             years_needed=self.years_needed,
             cache_path=self.exports['cache']['pa_24_bespoke'],
             matrix_format=matrix_format,
+            model_zone_col=self.model_zone_col,
         )
 
         # Assign to a dictionary for accessing
@@ -1124,6 +1124,7 @@ class EfsReporter:
             years_needed=self.years_needed,
             cache_path=self.exports['cache']['pa'],
             matrix_format=matrix_format,
+            model_zone_col=self.model_zone_col,
         )
 
         # Assign to a dictionary for accessing
@@ -1166,6 +1167,7 @@ class EfsReporter:
             years_needed=self.years_needed,
             cache_path=self.exports['cache']['od'],
             matrix_format=matrix_format,
+            model_zone_col=self.model_zone_col,
         )
 
         # Assign to a dictionary for accessing
