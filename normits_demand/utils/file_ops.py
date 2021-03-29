@@ -97,6 +97,25 @@ def check_file_exists(file_path: nd.PathLike) -> None:
         )
 
 
+def check_path_exists(path: nd.PathLike) -> None:
+    """
+    Checks if a path exists. Throws an error if not.
+
+    Parameters
+    ----------
+    path:
+        path to the file to check.
+
+    Returns
+    -------
+    None
+    """
+    if not os.path.exists(path):
+        raise IOError(
+            "Cannot find a path: %s" % str(path)
+        )
+
+
 def is_csv(file_path: nd.PathLike) -> bool:
     """
     Returns True if given file path points to a csv, else False
@@ -162,7 +181,38 @@ def maybe_add_suffix(path: nd.PathLike,
     return path
 
 
-def read_df(path: nd.PathLike, index_col=None, **kwargs) -> pd.DataFrame:
+def is_index_set(df: pd.DataFrame):
+    """
+    Tries to check if the index of df has been set.
+
+    Parameters
+    ----------
+    df:
+        The df to check
+
+    Returns
+    -------
+    is_index_set:
+        True if index is set
+    """
+    # If name is set, index is probably set
+    if df.index.name is not None:
+        return True
+
+    # If resetting the index changes it, it was probably set
+    pre_index = df.index
+    post_index = df.reset_index().index
+    if not (pre_index == post_index).all():
+        return True
+
+    return False
+
+
+def read_df(path: nd.PathLike,
+            index_col: int = None,
+            find_similar: bool = False,
+            **kwargs,
+            ) -> pd.DataFrame:
     """
     Reads in the dataframe at path. Decompresses the df if needed.
     
@@ -176,18 +226,40 @@ def read_df(path: nd.PathLike, index_col=None, **kwargs) -> pd.DataFrame:
         file, and the index is not already set.
         If reading from a csv, this is passed straight to pd.read_csv()
 
+    find_similar:
+        If True and the given file at path cannot be found, files with the
+        same name but different extensions will be looked for and read in
+        instead. Will check for: '.csv', '.pbz2'
+
     Returns
     -------
     df:
         The read in df at path.
     """
+
+    # Try and find similar files if we are allowed
+    if not os.path.exists(path):
+        if not find_similar:
+            raise FileNotFoundError(
+                "No such file or directory: '%s'" % path
+            )
+        alt_types = ['.csv', consts.COMPRESSION_SUFFIX]
+        path = find_filename(path, alt_types=alt_types)
+
     # Determine how to read in df
     if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
         df = compress.read_in(path)
 
         # Optionally try and set the index
-        if index_col is not None and df.index.name is None:
+        if index_col is not None and not is_index_set(df):
             df = df.set_index(list(df)[index_col])
+
+        # Unset the index col if it is set
+        if index_col is None and df.index.name is not None:
+            df = df.reset_index()
+
+        # Make sure no column name is set - this is how pd.read_csv() works
+        df.columns.name = None
         return df
 
     elif pathlib.Path(path).suffix == '.csv':
@@ -234,6 +306,91 @@ def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
         raise ValueError(
             "Cannot determine the filetype of the given path. Expected "
             "either '.csv' or '%s'" % consts.COMPRESSION_SUFFIX
+        )
+
+
+def read_pickle(path: nd.PathLike,
+                find_similar: bool = False,
+                **kwargs,
+                ) -> pd.DataFrame:
+    """
+    Reads in the pickle at path. Decompresses the pickle if needed.
+
+    Parameters
+    ----------
+    path:
+        The full path to the dataframe to read in
+
+    find_similar:
+        If True and the given file at path cannot be found, files with the
+        same name but different extensions will be looked for and read in
+        instead. Will check for: '.pkl', '.pbz2', '.pickle', '.p'
+
+    Returns
+    -------
+    unpickled_data:
+        The read in pickle at path.
+    """
+    # Init
+    pickle_extensions = ['.pkl', '.p', '.pickle']
+
+    # Try and find similar files if we are allowed
+    if not os.path.exists(path):
+        if not find_similar:
+            raise FileNotFoundError(
+                "No such file or directory: '%s'" % path
+            )
+        alt_types = pickle_extensions + [consts.COMPRESSION_SUFFIX]
+        path = find_filename(path, alt_types=alt_types)
+
+    # Determine how to read in df
+    if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
+        return compress.read_in(path)
+
+    elif pathlib.Path(path).suffix in pickle_extensions:
+        return pd.read_pickle(path, **kwargs)
+
+    else:
+        raise ValueError(
+            "Cannot determine the filetype of the given path. Expected "
+            "either '.pkl' or '%s'" % consts.COMPRESSION_SUFFIX
+        )
+
+
+def write_pickle(obj: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
+    """
+    Reads in the dataframe at path. Decompresses the df if needed.
+
+    Parameters
+    ----------
+    obj:
+        The object to write to disk
+
+    path:
+        The full path to the dataframe to read in
+
+    **kwargs:
+        Any arguments to pass to the underlying write function.
+
+    Returns
+    -------
+    df:
+        The read in df at path.
+    """
+    # Init
+    path = cast_to_pathlib_path(path)
+
+    # Determine how to read in df
+    if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
+        compress.write_out(obj, path)
+
+    elif pathlib.Path(path).suffix == '.pkl':
+        pd.to_pickle(path, **kwargs)
+
+    else:
+        raise ValueError(
+            "Cannot determine the filetype of the given path. Expected "
+            "either '.pkl' or '%s'" % consts.COMPRESSION_SUFFIX
         )
 
 
@@ -450,7 +607,7 @@ def remove_internal_suffix(path: nd.PathLike) -> pathlib.Path:
     """
     Returns path without the internal suffix in it.
 
-    The internal suffix comes from consts.INTERNAL_SUFFIX
+    The internal suffix comes from efs_consts.INTERNAL_SUFFIX
 
     Parameters
     ----------
@@ -469,7 +626,7 @@ def add_external_suffix(path: nd.PathLike) -> pathlib.Path:
     """
     Returns path with the external suffix added to it
 
-    The external suffix comes from consts.EXTERNAL_SUFFIX
+    The external suffix comes from efs_consts.EXTERNAL_SUFFIX
 
     Parameters
     ----------

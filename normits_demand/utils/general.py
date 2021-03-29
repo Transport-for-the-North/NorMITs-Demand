@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import random
+import inspect
 
 
 import pandas as pd
@@ -40,6 +41,7 @@ from itertools import product
 from collections import defaultdict
 
 # Local imports
+import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
 
@@ -383,7 +385,7 @@ def build_efs_io_paths(import_location: str,
 
     scenario_name:
         The name of the scenario use to produce outputs. This should be one
-        of consts.SCENARIOS
+        of efs_consts.SCENARIOS
 
     demand_version:
         Version number of NorMITs Demand being run - this is used to generate
@@ -437,20 +439,31 @@ def build_efs_io_paths(import_location: str,
     #  attraction weights. Currently only uses HB for both.
     #  labels: demand merge, EFS
 
+    # Build model specific paths
+    model_schema_home = os.path.join(import_home, model_name, 'model schema')
+    model_param_home = os.path.join(import_home, model_name, 'params')
+    model_tour_prop_home = os.path.join(import_home, model_name, 'post_me_tour_proportions')
+
     imports = {
         'home': import_home,
         'default_inputs': input_home,
-        'tp_splits': os.path.join(import_home, 'tp_splits'),
         'zone_translation': zone_translation,
+        'tp_splits': os.path.join(import_home, 'tp_splits'),
         'lookups': os.path.join(model_home, 'lookup'),
         # 'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
         'scenarios': os.path.join(import_home, 'scenarios'),
         'a_weights': os.path.join(import_home, 'attractions', 'hb_attraction_weights.csv'),
         'soc_weights': soc_weights_path,
         'ntem_control': os.path.join(import_home, 'ntem_constraints'),
-        'model_schema': os.path.join(import_home, model_name, 'model schema'),
+        'model_schema': model_schema_home,
+        'model_home': os.path.join(import_home, model_name),
+        'internal_zones': os.path.join(model_schema_home, consts.INTERNAL_AREA % model_name),
+        'external_zones': os.path.join(model_schema_home, consts.EXTERNAL_AREA % model_name),
         'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
+        'post_me_factors': os.path.join(model_param_home, 'post_me_decompile_factors.pkl'),
+        'post_me_tours': model_tour_prop_home,
         'decomp_post_me': os.path.join(import_home, model_name, 'decompiled_post_me'),
+
     }
 
     # Add Land use import if we have an iteration
@@ -498,8 +511,8 @@ def build_efs_io_paths(import_location: str,
         'attractions': os.path.join(export_home, 'Attractions'),
         'sectors': os.path.join(export_home, 'Sectors'),
         'audits': os.path.join(export_home, 'Audits'),
-        'dist_audits': os.path.join(export_home, 'Audits', 'Matrices'),
         'reports': os.path.join(export_home, 'Reports'),
+        'dist_reports': os.path.join(export_home, 'Reports', 'Matrices'),
 
         # Pre-ME
         'pa': os.path.join(matrices_home, pa),
@@ -513,6 +526,7 @@ def build_efs_io_paths(import_location: str,
 
         'aggregated_pa_24': os.path.join(matrices_home, ' '.join([aggregated, pa_24])),
         'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
+        'aggregated_pa': os.path.join(matrices_home, ' '.join([aggregated, pa])),
 
         'pa_24_bespoke': os.path.join(matrices_home, pa_24_bespoke)
     }
@@ -523,6 +537,7 @@ def build_efs_io_paths(import_location: str,
     # Post-ME
     compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
     post_me_exports = {
+        'cache': os.path.join(post_me_home, 'cache'),
         'pa': os.path.join(post_me_home, pa),
         'pa_24': os.path.join(post_me_home, pa_24),
         'vdm_pa_24': os.path.join(post_me_home, vdm_pa_24),
@@ -1769,7 +1784,7 @@ def segmentation_order(segmentation_lst: List[str]) -> List[str]:
     Parameters
     ----------
     segmentation_lst:
-        A list of segmentation keys. See consts.SEGMENTATION_ORDER for a list
+        A list of segmentation keys. See efs_consts.SEGMENTATION_ORDER for a list
         of valid values
 
     Returns
@@ -1814,7 +1829,7 @@ def sort_vector_cols(vector: pd.DataFrame,
     -------
     reindexed_vector:
         The given vector re-indexed to to be in the correct segmentation order,
-        as defined by consts.SEGMENTATION_ORDER.
+        as defined by efs_consts.SEGMENTATION_ORDER.
     """
     # init
     columns = list(vector)
@@ -1982,7 +1997,8 @@ def build_full_paths(base_path: str,
     return [os.path.join(base_path, x) for x in fnames]
 
 
-def list_files(path: str,
+def list_files(path: nd.PathLike,
+               ftypes: List[str] = None,
                include_path: bool = False
                ) -> List[str]:
     """
@@ -1992,6 +2008,9 @@ def list_files(path: str,
     ----------
     path:
         Where to search for the files
+
+    ftypes:
+        A list of filetypes to accept.
 
     include_path:
         Whether to include the path with the returned filenames
@@ -2004,10 +2023,21 @@ def list_files(path: str,
     """
     if include_path:
         file_paths = build_full_paths(path, os.listdir(path))
-        return [x for x in file_paths if os.path.isfile(x)]
+        paths = [x for x in file_paths if os.path.isfile(x)]
     else:
         fnames = os.listdir(path)
-        return [x for x in fnames if os.path.isfile(os.path.join(path, x))]
+        paths = [x for x in fnames if os.path.isfile(os.path.join(path, x))]
+
+    if ftypes is None:
+        return paths
+
+    # Filter down to only the filetypes asked for
+    keep_paths = list()
+    for file_type in ftypes:
+        temp = [x for x in paths if file_type in x]
+        keep_paths = list(set(temp + keep_paths))
+
+    return keep_paths
 
 
 def is_in_string(vals: Iterable[str],
@@ -2792,7 +2822,7 @@ def balance_a_to_p(productions: pd.DataFrame,
         if productions[col].sum() == 0:
             attractions[col] = 0
         else:
-            attractions[col] /= attractions[col].sum() / productions[col].sum()
+            attractions[col] *= productions[col].sum() / attractions[col].sum()
 
         # Throw an error if we somehow don't match
         np.testing.assert_approx_equal(
@@ -2985,7 +3015,7 @@ def add_all_commute_cat(df: pd.DataFrame,
     return df.reset_index(drop=True)
 
 
-def create_iter_name(iter_num: int) -> str:
+def create_iter_name(iter_num: Union[int, str]) -> str:
     return 'iter' + str(iter_num)
 
 
@@ -3090,6 +3120,32 @@ def split_base_future_years(years: List[int],
     return base_year, years
 
 
+def split_base_future_years_str(years: List[str],
+                                ) -> Tuple[str, List[str]]:
+    """
+    Splits years into base and future years.
+
+    The smallest year in the list is assumed to be the base.
+    A wrapper around split_base_future_years() to handle strings
+
+    Parameters
+    ----------
+    years:
+        A list of years to split
+
+    Returns
+    -------
+    base_year:
+        The base year from years
+
+    future_years:
+        A list of all other years than base_year in years.
+        This will be returned in order, from lowest to highest.
+    """
+    base_year, future_years = split_base_future_years([int(x) for x in years])
+    return str(base_year), [str(x) for x in future_years]
+
+
 def get_norms_vdm_segment_aggregation_dict(norms_vdm_seg_name: str
                                            ) -> Dict[str, List[Any]]:
     """
@@ -3099,7 +3155,7 @@ def get_norms_vdm_segment_aggregation_dict(norms_vdm_seg_name: str
     ----------
     norms_vdm_seg_name:
         The name of the norms_vdm_matrix to get a dictionary for.
-        Should be one of the values in consts.NORMS_VDM_MATRIX_NAMES
+        Should be one of the values in efs_consts.NORMS_VDM_MATRIX_NAMES
 
     Returns
     -------
@@ -3113,5 +3169,47 @@ def get_norms_vdm_segment_aggregation_dict(norms_vdm_seg_name: str
 
     raise ValueError(
         "norms_vdm_seg_name does not seem to be a valid name. Expecting "
-        "one of the values from consts.NORMS_VDM_MATRIX_NAMES"
+        "one of the values from efs_consts.NORMS_VDM_MATRIX_NAMES"
     )
+
+
+def get_default_kwargs(func):
+    signature = inspect.signature(func)
+    return {
+        k: v.default
+        for k, v in signature.parameters.items()
+        if v.default is not inspect.Parameter.empty
+    }
+
+
+def split_hb_nhb_purposes(purposes: List[int]) -> Tuple[List[int], List[int]]:
+    """
+    Splits purposes into two lists of HB and NHB purposes
+
+    Parameters
+    ----------
+    purposes:
+        A list of the purposes to split
+
+    Returns
+    -------
+    hb_purposes:
+        A list of the hb purposes from purposes
+
+    nhb_purposes:
+        A list of the nhb purposes from purposes
+    """
+    # Init
+    hb_p = list()
+    nhb_p = list()
+
+    for p in purposes:
+        if p in consts.ALL_HB_P:
+            hb_p.append(p)
+        elif p in consts.ALL_NHB_P:
+            nhb_p.append(p)
+        else:
+            raise nd.NormitsDemandError(
+                "%s is not a valid HB or NHB purpose" % str(p)
+            )
+    return hb_p, nhb_p

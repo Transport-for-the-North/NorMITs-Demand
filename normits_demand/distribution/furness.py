@@ -10,16 +10,27 @@ File Purpose:
 Module of all distribution functions for EFS
 """
 import os
+import operator
 
 import pandas as pd
 import numpy as np
 from numpy.testing import assert_approx_equal
 
+from typing import Any
+from typing import Dict
 from typing import List
+from typing import Tuple
+from typing import Callable
 
 # self imports
-from normits_demand import efs_constants as consts
+from normits_demand import constants as consts
+from normits_demand import efs_constants as efs_consts
+
+from normits_demand.matrices import utils as mat_utils
+
+from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
+
 from normits_demand.concurrency import multiprocessing
 from normits_demand.audits import audits
 
@@ -29,7 +40,7 @@ def doubly_constrained_furness(seed_vals: np.array,
                                col_targets: np.array,
                                tol: float = 1e-9,
                                max_iters: int = 5000
-                               ) -> np.array:
+                               ) -> Tuple[np.array, int, float]:
     """
     Performs a doubly constrained furness for max_iters or until tol is met
 
@@ -59,6 +70,12 @@ def doubly_constrained_furness(seed_vals: np.array,
     -------
     furnessed_matrix:
         The final furnessed matrix
+
+    completed_iters:
+        The number of completed iterations before exiting
+
+    achieved_r2:
+        The R-squared difference achieved before exiting
     """
     # Error check
     if seed_vals.shape != (len(row_targets), len(col_targets)):
@@ -75,8 +92,9 @@ def doubly_constrained_furness(seed_vals: np.array,
     furnessed_mat = seed_vals.copy()
     early_exit = False
     cur_diff = tol + 10
+    iter_num = 0
 
-    for _ in range(max_iters):
+    for iter_num in range(max_iters):
         # ## ROW CONSTRAIN ## #
         # Calculate difference factor
         row_ach = np.sum(furnessed_mat, axis=1)
@@ -113,14 +131,17 @@ def doubly_constrained_furness(seed_vals: np.array,
               "%f. The values returned may not be accurate."
               % (max_iters, cur_diff))
 
-    return furnessed_mat
+    return furnessed_mat, iter_num + 1, cur_diff
 
 
 def _distribute_pa_internal(productions,
                             attraction_weights,
+                            seed_year,
                             seed_dist_dir,
                             trip_origin,
                             calib_params,
+                            unique_zones,
+                            unique_zones_join_fn,
                             zone_col,
                             p_col,
                             m_col,
@@ -129,13 +150,17 @@ def _distribute_pa_internal(productions,
                             tp_col,
                             max_iters,
                             seed_infill,
+                            normalise_seeds,
                             furness_tol,
                             seed_mat_format,
                             echo,
-                            audit_out,
+                            report_out,
                             dist_out,
-                            round_dp=4
-                            ):
+                            round_dp,
+                            fname_suffix,
+                            csv_out,
+                            compress_out,
+                            ) -> Dict[str, Any]:
     """
     Internal function of distribute_pa(). See that for full documentation.
     """
@@ -148,32 +173,45 @@ def _distribute_pa_internal(productions,
         trip_origin=trip_origin,
         matrix_format='pa',
         calib_params=calib_params,
-        csv=True
+        suffix=fname_suffix,
+        csv=csv_out,
+        compressed=compress_out,
     )
     print("Furnessing %s ..." % out_dist_name)
 
-    # Don't need year in calib params for much of this
-    year = calib_params['yr']
-    del calib_params['yr']
+    # Build seg_params for the seed values
+    seed_seg_params = calib_params.copy()
+    seed_seg_params['yr'] = seed_year
 
     # Read in the seed distribution - ignoring year
     seed_fname = du.calib_params_to_dist_name(
         trip_origin=trip_origin,
         matrix_format=seed_mat_format,
-        calib_params=calib_params,
+        calib_params=seed_seg_params,
         csv=True
     )
     seed_dist = pd.read_csv(os.path.join(seed_dist_dir, seed_fname), index_col=0)
     seed_dist.columns = seed_dist.columns.astype(int)
 
+    # Pull the seed matrix into line with unique zones
+    if unique_zones is not None:
+        # Get the mask and extract the data
+        mask = mat_utils.get_wide_mask(
+            df=seed_dist,
+            zones=unique_zones,
+            join_fn=unique_zones_join_fn,
+        )
+        seed_dist = seed_dist.where(mask, 0)
+
     # Quick check that seed is valid
     if len(seed_dist.columns.difference(seed_dist.index)) > 0:
-        raise ValueError("The index and columns of the seed distribution"
-                         "'%s' do not match."
-                         % seed_fname)
+        raise ValueError(
+            "The index and columns of the seed distribution"
+            "'%s' do not match." % seed_fname
+        )
 
     # Assume seed contains all the zones numbers
-    unique_zones = list(seed_dist.index)
+    seed_zones = list(seed_dist.index)
 
     # ## FILTER P/A TO SEGMENTATION ## #
     if calib_params.get('soc') is not None:
@@ -193,17 +231,12 @@ def _distribute_pa_internal(productions,
                                             df_filter=base_filter,
                                             fit=True)
 
-    # Soc0 is always special - do this to avoid dropping demand
-    # This is saying: If soc is 0, ignore soc segmentation!
-    # Can we fo this for productions too?
-    if base_filter.get('soc', -1) == '0':
-        base_filter_t = base_filter.copy()
-        base_filter_t.pop('soc')
-        a_weights = du.filter_by_segmentation(a_weights, base_filter_t, fit=True)
-    else:
-        a_weights = du.filter_by_segmentation(a_weights, base_filter, fit=True)
+    a_weights = du.filter_by_segmentation(a_weights,
+                                          df_filter=base_filter,
+                                          fit=True)
 
     # Rename columns for furness
+    year = calib_params['yr']
     productions = productions.rename(columns={str(year): unique_col})
     a_weights = a_weights.rename(columns={str(year): unique_col})
 
@@ -230,34 +263,43 @@ def _distribute_pa_internal(productions,
         productions=productions,
         attractions=a_weights,
         zone_col=zone_col,
-        unique_zones=unique_zones
+        unique_zones=seed_zones
     )
 
     # ## BALANCE P/A FORECASTS ## #
-    # TODO: Avoid divide by zero! Happens for Furnessing hb_pa_yr2050_p7_m3_ns2.csv ...
     if productions[unique_col].sum() != a_weights[unique_col].sum():
-        du.print_w_toggle("Row and Column targets do not match. Balancing...",
-                          echo=echo)
-        a_weights[unique_col] /= (
-            a_weights[unique_col].sum() / productions[unique_col].sum()
-        )
+        du.print_w_toggle("Row and Column targets do not match. Balancing...", echo=echo)
+        bal_fac = productions[unique_col].sum() / a_weights[unique_col].sum()
+        a_weights[unique_col] *= bal_fac
 
-    pa_dist = furness_pandas_wrapper(
+    pa_dist, n_iters, achieved_r2 = furness_pandas_wrapper(
         row_targets=productions,
         col_targets=a_weights,
         seed_values=seed_dist,
         max_iters=max_iters,
         seed_infill=seed_infill,
+        normalise_seeds=normalise_seeds,
         idx_col=zone_col,
         unique_col=unique_col,
         tol=furness_tol,
         round_dp=round_dp,
+        unique_zones=unique_zones,
+        unique_zones_join_fn=unique_zones_join_fn,
     )
 
-    if audit_out is not None:
+    # Build a report of the furness
+    report = {
+        'name': out_dist_name,
+        'iterations': n_iters,
+        'convergence_gap': achieved_r2,
+        'tolerance': furness_tol,
+    }
+
+    if report_out is not None:
         # Create output filename
         audit_fname = out_dist_name.replace('_pa_', '_dist_audit_')
-        audit_path = os.path.join(audit_out, audit_fname)
+        audit_fname = audit_fname.replace(consts.COMPRESSION_SUFFIX, '.csv')
+        audit_path = os.path.join(report_out, audit_fname)
 
         audits.audit_furness(
             row_targets=productions,
@@ -274,7 +316,9 @@ def _distribute_pa_internal(productions,
     # ## OUTPUT TO DISK ## #
     # MODEL ZONE!
     output_path = os.path.join(dist_out, out_dist_name)
-    pa_dist.to_csv(output_path)
+    file_ops.write_df(pa_dist, output_path)
+
+    return report
 
 
 def distribute_pa(productions: pd.DataFrame,
@@ -288,6 +332,8 @@ def distribute_pa(productions: pd.DataFrame,
                   ns_needed: List[int] = None,
                   ca_needed: List[int] = None,
                   tp_needed: List[int] = None,
+                  unique_zones: List[int] = None,
+                  unique_zones_join_fn: Callable = operator.and_,
                   zone_col: str = 'model_zone_id',
                   p_col: str = 'p',
                   m_col: str = 'm',
@@ -296,14 +342,19 @@ def distribute_pa(productions: pd.DataFrame,
                   ca_col: str = 'ca',
                   tp_col: str = 'tp',
                   trip_origin: str = 'hb',
+                  seed_year: str = None,
                   max_iters: int = 5000,
                   seed_infill: float = 1e-5,
+                  normalise_seeds: bool = True,
                   furness_tol: float = 1e-2,
-                  seed_mat_format: str = 'enhpa',
+                  seed_mat_format: str = 'pa',
+                  fname_suffix: str = None,
+                  csv_out: bool = True,
+                  compress_out: bool = True,
                   echo: bool = False,
-                  audit_out: str = None,
-                  round_dp: int = consts.DEFAULT_ROUNDING,
-                  process_count: int = consts.PROCESS_COUNT
+                  report_out: str = None,
+                  round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                  process_count: int = efs_consts.PROCESS_COUNT
                   ) -> None:
     """
     Furnesses the given productions and attractions
@@ -368,6 +419,16 @@ def distribute_pa(productions: pd.DataFrame,
         that are not in this list, but do exist in the productions/
         attraction_weights will be ignored.
 
+    unique_zones:
+        A list of unique zones to keep in the seed matrix when starting the
+        furness. The given productions and attractions will also be limited
+        to these zones as well.
+
+    unique_zones_join_fn:
+        The function to call on the column and index masks to join them for
+        the seed matrices. By default, a bitwise and is used. See pythons
+        builtin operator library for more options.
+
     zone_col:
         Name of the column in productions/attraction_weights that contains
         the zone data.
@@ -400,6 +461,10 @@ def distribute_pa(productions: pd.DataFrame,
         The origin of the trips being distributed. This will be used to
         generate the seed and output filenames. Will accept 'hb' or 'nhb'.
 
+    seed_year:
+        The base year of the seed matrices. If None, then no year is looked
+        for in the filenames of the seed matrices.
+
     max_iters
         The maximum number of iterations to complete within the furness process
         before exiting, if a solution has not been found a message will be
@@ -408,20 +473,36 @@ def distribute_pa(productions: pd.DataFrame,
     seed_infill:
         The value to infill any seed values that are 0.
 
+    normalise_seeds:
+        Whether to normalise the seeds so they total to one before
+        sending them to the furness.
+
     furness_tol:
         The maximum difference between the achieved and the target values
         to tolerate before exiting the furness early. R^2 is used to calculate
         the difference.
 
     seed_mat_format:
-        The format of the seed matrices. Usually 'enhpa' from TMS disaggregator
+        The format of the seed matrices.
+
+    fname_suffix:
+        Any additional suffix to add to the filename when writing out to disk.
+        Will be added at the end of the filename, before the ftype suffix.
+
+    csv_out:
+        Whether to write the matrices out as csv or not. IF both this and
+        compress_out are True, compress_out is ignored.
+
+    compress_out:
+        Whether to write the matrices out as a compressed file or not.
+        If both this and csv_out are True, this argument is ignored.
 
     echo:
         Controls the amount of printing to the terminal. If False, most of the
         print outs will be ignored.
 
-    audit_out:
-        Path to a directory to output all audit checks.
+    report_out:
+        Path to a directory to output all reports.
         
     round_dp:
         The number of decimal places to round the output values of the
@@ -470,15 +551,11 @@ def distribute_pa(productions: pd.DataFrame,
         'ns_col': ns_col,
         'ca_col': ca_col,
         'tp_col': tp_col,
-
     }
 
     # Check the productions and attractions
     productions = du.ensure_segmentation(productions, **kwargs)
-    attraction_weights = du.ensure_segmentation(attraction_weights,
-                                                ignore_ns=True,
-                                                ignore_ca=True,
-                                                **kwargs)
+    attraction_weights = du.ensure_segmentation(attraction_weights, **kwargs)
 
     # Get P/A columns
     p_cols = list(productions.columns)
@@ -488,12 +565,6 @@ def distribute_pa(productions: pd.DataFrame,
     a_cols = list(attraction_weights.columns)
     for year in years_needed:
         a_cols.remove(year)
-
-    # TODO: Fix area_type in production model
-    if 'area_type' in p_cols:
-        p_cols.remove('area_type')
-        productions = productions.drop('area_type', axis='columns')
-        productions = productions.groupby(p_cols).sum().reset_index()
 
     # Distribute P/A per segmentation required
     for year in years_needed:
@@ -518,8 +589,11 @@ def distribute_pa(productions: pd.DataFrame,
         unchanging_kwargs = {
             'productions': yr_productions,
             'attraction_weights': yr_a_weights,
+            'seed_year': seed_year,
             'seed_dist_dir': seed_dist_dir,
             'trip_origin': trip_origin,
+            'unique_zones': unique_zones,
+            'unique_zones_join_fn': unique_zones_join_fn,
             'zone_col': zone_col,
             'p_col': p_col,
             'm_col': m_col,
@@ -527,21 +601,25 @@ def distribute_pa(productions: pd.DataFrame,
             'tp_col': tp_col,
             'max_iters': max_iters,
             'seed_infill': seed_infill,
+            'normalise_seeds': normalise_seeds,
             'furness_tol': furness_tol,
             'seed_mat_format': seed_mat_format,
             'echo': echo,
-            'audit_out': audit_out,
+            'report_out': report_out,
             'dist_out': dist_out,
             'round_dp': round_dp,
+            'fname_suffix': fname_suffix,
+            'csv_out': csv_out,
+            'compress_out': compress_out,
         }
 
         # Build a list of all kw arguments
         kwargs_list = list()
         for calib_params in loop_generator:
             # Set the column name of the ns/soc column
-            if calib_params['p'] in consts.SOC_P:
+            if calib_params['p'] in efs_consts.SOC_P:
                 seg_col = soc_col
-            elif calib_params['p'] in consts.NS_P:
+            elif calib_params['p'] in efs_consts.NS_P:
                 seg_col = ns_col
             else:
                 raise ValueError("'%s' does not seem to be a valid soc or ns "
@@ -557,16 +635,16 @@ def distribute_pa(productions: pd.DataFrame,
             })
             kwargs_list.append(kwargs)
 
-        multiprocessing.multiprocess(
+        reports = multiprocessing.multiprocess(
             fn=_distribute_pa_internal,
             kwargs=kwargs_list,
             process_count=process_count
         )
 
         # Finally - create aan audit summary
-        if audit_out is not None:
+        if report_out is not None:
             audits.summarise_audit_furness(
-                audit_out,
+                report_out,
                 trip_origin=trip_origin,
                 format_name='dist_audit',
                 year=year,
@@ -576,7 +654,13 @@ def distribute_pa(productions: pd.DataFrame,
                 ns_needed=ns_needed,
                 ca_needed=ca_needed,
                 tp_needed=tp_needed,
+                fname_suffix=fname_suffix,
             )
+
+            # Write out the furness stats for the year
+            fname = '%s_%s_furness_stats.csv' % (trip_origin, year)
+            out_path = os.path.join(report_out, fname)
+            pd.DataFrame(reports).to_csv(out_path, index=False)
 
 
 def furness_pandas_wrapper(seed_values: pd.DataFrame,
@@ -584,11 +668,14 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
                            col_targets: pd.DataFrame,
                            max_iters: int = 2000,
                            seed_infill: float = 1e-3,
+                           normalise_seeds: bool = True,
                            tol: float = 1e-9,
                            idx_col: str = 'model_zone_id',
                            unique_col: str = 'trips',
-                           round_dp: int = 4,
-                           ):
+                           round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                           unique_zones: List[int] = None,
+                           unique_zones_join_fn: Callable = operator.and_,
+                           ) -> Tuple[pd.DataFrame, int, float]:
     """
     Wrapper around doubly_constrained_furness() to handle pandas in/out
 
@@ -623,6 +710,10 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     seed_infill:
         The value to infill any seed values that are 0.
 
+    normalise_seeds:
+        Whether to normalise the seeds so they total to one before
+        sending them to the furness.
+
     idx_col:
         Name of the columns in row_targets and col_targets that contain the
         index data that matches seed_values index/columns
@@ -635,10 +726,26 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         The number of decimal places to round the output values of the
         furness to. Uses 4 by default.
 
+    unique_zones:
+        A list of unique zones to keep in the seed matrix when starting the
+        furness. The given productions and attractions will also be limited
+        to these zones as well.
+
+    unique_zones_join_fn:
+        The function to call on the column and index masks to join them for
+        the seed matrices. By default, a bitwise and is used. See pythons
+        builtin operator library for more options.
+
     Returns
     -------
     furnessed_matrix:
         The final furnessed matrix, in the same format as seed_values
+
+    completed_iters:
+        The number of completed iterations before exiting
+
+    achieved_r2:
+        The R-squared difference achieved before exiting
     """
     # Init
     row_targets = row_targets.copy()
@@ -669,16 +776,28 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         err_msg="Row and Column target totals do not match. Cannot Furness."
     )
 
-    # Now we know everything matches, we can convert to numpy
+    # ## TIDY AND INFILL SEED ## #
+    # Infill the 0 zones
+    seed_values = seed_values.where(seed_values > 0, seed_infill)
+    if normalise_seeds:
+        seed_values /= seed_values.sum()
+
+    # If we were given certain zones, make sure everything else is 0
+    if unique_zones is not None:
+        # Get the mask and extract the data
+        mask = mat_utils.get_wide_mask(
+            df=seed_values,
+            zones=unique_zones,
+            join_fn=unique_zones_join_fn,
+        )
+        seed_values = seed_values.where(mask, 0)
+
+    # ## CONVERT TO NUMPY AND FURNESS ## #
     row_targets = row_targets.values.flatten()
     col_targets = col_targets.values.flatten()
     seed_values = seed_values.values
 
-    # ## TIDY AND INFILL SEED ## #
-    seed_values = np.where(seed_values <= 0, seed_infill, seed_values)
-    seed_values /= seed_values.sum()
-
-    furnessed_mat = doubly_constrained_furness(
+    furnessed_mat, n_iters, achieved_r2 = doubly_constrained_furness(
         seed_vals=seed_values,
         row_targets=row_targets,
         col_targets=col_targets,
@@ -693,6 +812,6 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         index=ref_index,
         columns=ref_index,
         data=furnessed_mat
-    )
+    ).round(round_dp)
 
-    return furnessed_mat
+    return furnessed_mat, n_iters, achieved_r2

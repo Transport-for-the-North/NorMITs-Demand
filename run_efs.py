@@ -28,20 +28,23 @@ def main():
     integrate_dlog = False
     run_pop_emp_comparison = False
 
-    run_base_efs = False
+    run_base_efs = True
     recreate_productions = True
     recreate_attractions = True
     recreate_nhb_productions = True
+    rerun_growth_criteria = True
 
     run_bespoke_zones = False
-    run_hb_pa_to_od = False
-    run_compile_od = False
-    run_decompile_post_me = True
+    ignore_bespoke_zones = True
+
+    run_pa_to_od = True
+    run_compile_od = True
+    run_decompile_post_me = False
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC00_NTEM
-    iter_num = 0
+    scenario = consts.SC04_UZC
+    iter_num = '3f'
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
@@ -67,11 +70,13 @@ def main():
             recreate_attractions=recreate_attractions,
             recreate_nhb_productions=recreate_nhb_productions,
             echo_distribution=verbose,
+
+            apply_growth_criteria=rerun_growth_criteria,
         )
 
     if run_bespoke_zones:
         # Convert to HB to OD
-        efs.pa_to_od(
+        efs.old_pa_to_od(
             years_needed=[2018],
             p_needed=consts.ALL_HB_P,
             use_bespoke_pa=False,
@@ -89,24 +94,33 @@ def main():
             audit_path=efs.exports["audits"],
         )
 
-    if run_hb_pa_to_od:
+    if run_pa_to_od:
         efs.pa_to_od(
-            years_needed=[2050],
-            use_bespoke_pa=True,
-            overwrite_hb_tp_pa=True,
-            overwrite_hb_tp_od=True,
+            years_needed=[2033, 2035, 2050],
+            use_bespoke_pa=(not ignore_bespoke_zones),
             verbose=verbose
         )
 
     if run_compile_od:
         # Compiles base year OD matrices
-        efs.pre_me_compile_od_matrices(
-            year=2050,
-            overwrite_aggregated_od=False,
+        efs.compile_od_matrices(
+            year=2033,
+            overwrite_aggregated_od=True,
             overwrite_compiled_od=True,
         )
 
-    # TODO: Check Post ME process works for NOHAM
+        efs.compile_od_matrices(
+            year=2035,
+            overwrite_aggregated_od=True,
+            overwrite_compiled_od=True,
+        )
+
+        efs.compile_od_matrices(
+            year=2050,
+            overwrite_aggregated_od=True,
+            overwrite_compiled_od=True,
+        )
+
     if run_decompile_post_me:
         # Decompiles post-me base year matrices
         efs.decompile_post_me(

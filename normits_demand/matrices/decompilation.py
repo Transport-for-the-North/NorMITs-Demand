@@ -15,6 +15,9 @@ import os
 import functools
 import operator
 
+from typing import Any
+from typing import Dict
+
 # 3rd Party
 import numpy as np
 import pandas as pd
@@ -34,14 +37,18 @@ from normits_demand.matrices import od_to_pa as od2pa
 
 
 def decompile_noham(year: int,
+                    seg_level: str,
+                    seg_params: Dict[str, Any],
                     post_me_import: nd.PathLike,
                     post_me_renamed_export: nd.PathLike,
-                    od_24hr_export: nd.PathLike,
-                    pa_24hr_export: nd.PathLike,
+                    od_export: nd.PathLike,
+                    pa_export: nd.PathLike,
+                    pa_24_export: nd.PathLike,
                     zone_translate_dir: nd.PathLike,
                     tour_proportions_export: nd.PathLike,
                     decompile_factors_path: nd.PathLike,
                     vehicle_occupancy_import: nd.PathLike,
+                    process_count: int = consts.PROCESS_COUNT,
                     overwrite_decompiled_od: bool = True,
                     overwrite_tour_proportions: bool = True,
                     ) -> None:
@@ -61,14 +68,18 @@ def decompile_noham(year: int,
     Parameters
     ----------
     year
+    seg_level
+    seg_params
     post_me_import
     post_me_renamed_export
-    od_24hr_export
-    pa_24hr_export
+    od_export
+    pa_export
+    pa_24_export
     zone_translate_dir
     tour_proportions_export
     decompile_factors_path
     vehicle_occupancy_import
+    process_count
     overwrite_decompiled_od
     overwrite_tour_proportions
 
@@ -76,8 +87,9 @@ def decompile_noham(year: int,
     -------
 
     """
-    # TODO: Document and test NOHAM decompile
+    # TODO: Document decompile_noham()
     model_name = 'noham'
+    seg_level = checks.validate_seg_level(seg_level)
 
     if overwrite_decompiled_od:
         print("Decompiling OD Matrices into purposes...")
@@ -99,10 +111,9 @@ def decompile_noham(year: int,
                 vehicle_occupancy_import=vehicle_occupancy_import
             )
 
-        # TODO: Stop the filename being hardcoded after integration with TMS
         od2pa.decompile_od(
             od_import=post_me_renamed_export,
-            od_export=od_24hr_export,
+            od_export=od_export,
             decompile_factors_path=decompile_factors_path,
             year=year
         )
@@ -110,12 +121,37 @@ def decompile_noham(year: int,
     if overwrite_tour_proportions:
         print("Converting OD matrices to PA and generating tour "
               "proportions...")
+        # Convert the HB matrices to PA
         mat_p.generate_tour_proportions(
-            od_import=od_24hr_export,
-            zone_translate_dir=zone_translate_dir,
-            pa_export=pa_24hr_export,
+            od_import=od_export,
+            pa_export=pa_export,
             tour_proportions_export=tour_proportions_export,
+            zone_translate_dir=zone_translate_dir,
+            model_name=model_name,
             year=year,
+            seg_level=seg_level,
+            seg_params=seg_params,
+            process_count=process_count
+        )
+
+        # ## GENERATE NHB TP SPLITTING FACTORS ## #
+        # Need just the nhb purposes
+        nhb_seg_params = seg_params.copy()
+        _, nhb_purposes = du.split_hb_nhb_purposes(nhb_seg_params['p_needed'])
+        nhb_seg_params['p_needed'] = nhb_purposes
+
+        # Generate the splitting factors export path
+        fname = consts.POSTME_TP_SPLIT_FACTORS_FNAME
+        splitting_factors_export = os.path.join(tour_proportions_export, fname)
+
+        # Generate the NHB tp splitting factors
+        mat_p.build_24hr_mats(
+            import_dir=pa_export,
+            export_dir=pa_24_export,
+            splitting_factors_export=splitting_factors_export,
+            matrix_format='pa',
+            year_needed=year,
+            **nhb_seg_params,
         )
 
 
@@ -320,85 +356,6 @@ def decompile_matrices(matrix_import: nd.PathLike,
                     % (in_mat_name, str(audit_tol), perc_diff, abs_diff))
 
 
-def recombine_internal_external(internal_import: nd.PathLike,
-                                external_import: nd.PathLike,
-                                full_export: nd.PathLike,
-                                ) -> None:
-    """
-    Combines the internal and external split matrices and write out to full_export
-
-    Will warn the user if all matrices from both folders are not used
-
-    Parameters
-    ----------
-    internal_import:
-        Path to the directory containing the segmented internal matrices
-
-    external_import:
-        Path to the directory containing the segmented external matrices
-
-    full_export:
-        Path to the directory to write out the combined matrices.
-
-    Returns
-    -------
-    None
-
-    """
-    # Init
-    all_internal_fnames = file_ops.list_files(internal_import)
-    all_external_fnames = file_ops.list_files(external_import)
-
-    # ## BUILD DICTIONARY OF MATRICES TO COMBINE ## #
-    comp_dict = dict()
-    used_external_fnames = list()
-    for int_fname in all_internal_fnames:
-        # Determine the related filenames
-        full_fname = file_ops.remove_internal_suffix(int_fname)
-        ext_fname = file_ops.add_external_suffix(full_fname)
-
-        # Check the external file actually exists
-        if not os.path.exists(os.path.join(external_import, ext_fname)):
-            raise FileNotFoundError(
-                "No external file exists to match the internal file.\n"
-                "Internal file location: %s\n"
-                "Expected external file location: %s"
-                % (os.path.join(internal_import, int_fname),
-                   os.path.join(external_import, ext_fname))
-            )
-
-        # Make a note of the external files we've used
-        used_external_fnames.append(str(ext_fname))
-
-        # Add an entry to the dictionary
-        output_path = os.path.join(full_export, full_fname)
-        comp_dict[output_path] = [
-            os.path.join(internal_import, int_fname),
-            os.path.join(external_import, ext_fname),
-        ]
-
-    # Make sure we've used all the external matrices
-    for ext_fname in all_external_fnames:
-        if ext_fname not in used_external_fnames:
-            int_fname = ext_fname.replace(consts.EXTERNAL_SUFFIX, consts.INTERNAL_SUFFIX)
-            raise FileNotFoundError(
-                "No internal file exists to match the external file.\n"
-                "External file location: %s\n"
-                "Expected internal file location: %s"
-                % (os.path.join(external_import, ext_fname),
-                   os.path.join(internal_import, int_fname))
-            )
-
-    # ## COMPILE THE MATRICES ## #
-    for output_path, in_paths in comp_dict.items():
-        # Read in the matrices and compile
-        partial_mats = [file_ops.read_df(x, index_col=0) for x in in_paths]
-        full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), partial_mats)
-
-        # Write the complete matrix to disk
-        file_ops.write_df(full_mat, output_path)
-
-
 def decompile_norms(year: int,
                     post_me_import: nd.PathLike,
                     post_me_renamed_export: nd.PathLike,
@@ -454,7 +411,7 @@ def decompile_norms(year: int,
         )
 
     # ## RECOMBINE INTERNAL AND EXTERNAL DEMAND ## #
-    recombine_internal_external(
+    mat_p.recombine_internal_external(
         internal_import=int_dir,
         external_import=ext_dir,
         full_export=post_me_decompiled_export,
