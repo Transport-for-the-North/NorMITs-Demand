@@ -29,9 +29,9 @@ def main():
     run_pop_emp_comparison = False
 
     run_base_efs = True
-    recreate_productions = False
-    recreate_attractions = False
-    recreate_nhb_productions = False
+    recreate_productions = True
+    recreate_attractions = True
+    recreate_nhb_productions = True
     rerun_growth_criteria = True
 
     run_bespoke_zones = False
@@ -43,7 +43,7 @@ def main():
     run_future_year_compile_od = False
 
     # Controls I/O
-    scenario = consts.SC00_NTEM
+    scenario = consts.SC04_UZC
     iter_num = '3f'
     import_home = "I:/"
     export_home = "E:/"
@@ -96,7 +96,7 @@ def main():
 
     if run_pa_to_od:
         efs.pa_to_od(
-            years_needed=[2018, 2050],
+            years_needed=[2033, 2035, 2050],
             use_bespoke_pa=(not ignore_bespoke_zones),
             verbose=verbose
         )
@@ -104,7 +104,13 @@ def main():
     if run_compile_od:
         # Compiles base year OD matrices
         efs.compile_od_matrices(
-            year=2018,
+            year=2033,
+            overwrite_aggregated_od=True,
+            overwrite_compiled_od=True,
+        )
+
+        efs.compile_od_matrices(
+            year=2035,
             overwrite_aggregated_od=True,
             overwrite_compiled_od=True,
         )
