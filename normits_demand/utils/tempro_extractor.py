@@ -78,7 +78,7 @@ class TemproParser:
                  ):
         """
         """
-        print('Initialising tempro extractor...')
+        print('Building a TEMPRO extractor...')
 
         # Set to default values if not passed in
         access_driver = self._access_driver if access_driver is None else access_driver
@@ -98,9 +98,7 @@ class TemproParser:
         self.out_folder = out_folder
 
         # Set up paths
-        # TODO: Update these paths to build more dynamically
-        # This is probably being run out of scripts not home.
-        # Repath home
+        # TODO(CS/BT): Update these paths to search a bit
         home_path = os.path.normpath(os.getcwd())
         config_path = os.path.join(home_path, 'config', 'tempro')
 
@@ -127,7 +125,7 @@ class TemproParser:
         """
         Function to get planning data from TEMPRO
         """
-        # TODO: Specify what sort of planning data you want
+        # TODO: Rewrite everything in this style
         
         #Init
         available_dbs = self.get_available_dbs()
@@ -142,11 +140,15 @@ class TemproParser:
         )
 
         for db_fname in available_dbs:
+            if verbose:
+                print(db_fname)
             
             plan_dat = self._get_segmented_planning_data(db_fname,
                                                          pbar)
 
             plan_ph.append(plan_dat)
+
+        return(plan_ph)
                     
 
     def get_pop_emp_growth_factors(self, verbose=True):
@@ -998,131 +1000,41 @@ class TemproParser:
 
         """
         # Init
-        db_path = os.path.join(self.data_source, db_fname)
-        conn_string = (
-            'Driver=' + self.access_driver + ';'
-            'DBQ=' + db_path + ';'
-        )
-        conn = None
         
-        try:
-            # Connect
-            conn = pyodbc.connect(conn_string)
-            cursor = conn.cursor()
-
-            # Grab and unpack the planning data
-            cursor.execute('select * from Planning')
-
-            co_ph = list()
-            for row in cursor.fetchall():
-                co_ph.append([x for x in row])
-
-            co_data = pd.DataFrame(
-                data=co_ph,
-                columns=[column[0] for column in cursor.description]
-            )
-
-            print(list(co_data))
-
-            # Grab and unpack local db zone translations
-            cursor.execute('select * from Zones')
-
-            zonal_ph = list()
-            for row in cursor.fetchall():
-                zonal_ph.append([x for x in row])
-
-            zones = pd.DataFrame(
-                data=zonal_ph,
-                columns=[column[0] for column in cursor.description]
-            )
-        except BaseException as e:
-            if conn is not None:
-                conn.close()
-            raise e
-        finally:
-            if conn is not None:
-                conn.close()
-
+        query = 'select * from Planning'
+        target_table_attr = 'PlanningDataType'
+        
+        query_dat, zones = self._hit_ntem_db(
+            db_fname,
+            query)
+        
         # Get years
-        av_years = [int(x) for x in list(co_data) if x.isdigit()]
-        year_index = list()
-        year_dicts = list()
-        for year in self.output_years:
-
-            if year > 2051:
-                print('Impossible to interpolate past 2051')
-                break
-            else:
-                year_index.append(str(year))
-                if year in av_years:
-                    year_dicts.append({'t_year': year,
-                                       'start_year': year,
-                                       'end_year': year})
-                else:
-                    year_diff = np.array([year - x for x in av_years])
-                    # Get lower than
-                    ly = np.argmin(np.where(year_diff > 0, year_diff, 100))
-                    ly = av_years[ly]
-                    # Get greater than
-                    hy = np.argmax(np.where(year_diff < 0, year_diff, -100))
-                    hy = av_years[hy]
-
-                    year_dicts.append({'t_year': year,
-                                       'start_year': ly,
-                                       'end_year': hy})
-
-        # Interpolate mid point years if needed
-        for year in year_dicts:
-            period_diff = year['end_year'] - year['start_year']
-            target_diff = year['t_year'] - year['start_year']
-            if target_diff > 0:
-                co_data['annual_growth'] = (
-                    (
-                        co_data[str(year['end_year'])]
-                        - co_data[str(year['start_year'])]
-                    )
-                    / period_diff
-                )
-
-                co_data[str(year['t_year'])] = (
-                    co_data[str(year['start_year'])]
-                    + (target_diff * co_data['annual_growth'])
-                )
-                co_data = co_data.drop('annual_growth', axis=1)
+        query_dat = self._select_years_and_interpolate(query_dat)
 
         # Split off data into nice usable pots
         # segmented population
-        needed_types = [self.planning_data_types['under_16'],
-                        self.planning_data_types['16-74'],
-                        self.planning_data_types['75+']]
-        mask = co_data['CarOwnershipType'].isin(needed_types)
-        nca = co_data[mask].copy()
-
-        # jobs
-        needed_types = self.co_data_types['ca']
-        mask = co_data['CarOwnershipType'].isin(needed_types)
-        ca = co_data[mask].copy()
-
-        # ## ATTACH ZONE NAMES ## #
-        nca = pd.merge(
-            nca,
-            zones,
-            how='left',
-            on='ZoneID'
-        )
-
-        ca = pd.merge(
-            ca,
-            zones,
-            how='left',
-            on='ZoneID'
-        )
         
-        
+        segmented_population = {
+            'under16': self.planning_data_types['under16'],
+            '16-74': self.planning_data_types['16-74'],
+            '75+': self.planning_data_types['75+'],
+            'HHs': self.planning_data_types['HHs']
+            }
+        for segment, indices in segmented_population.items():
+            mask = query_dat[target_table_attr].isin(indices)
+            query_out = query_dat[mask]
+            query_out = pd.merge(
+                query_out,
+                zones,
+                how='left',
+                on='ZoneID'
+                )
+            segmented_population.update({segment: query_out})
+                
         if pbar is not None:
             pbar.update(1)
         
-        return 0
+        return segmented_population
 
     def _get_co_growth_factors_internal(self,
                                         db_fname,
@@ -1183,5 +1095,140 @@ class TemproParser:
             pbar.update(1)
         
         return nca, ca
+    
+    def _hit_ntem_db(self,
+                     db_fname: str,
+                     query: str,
+                     zone_query = 'select * from Zones'):
+        """
+        db_fname:
+            Name of database
+        query:
+            Query to target table as Access SQL string
+        zone_query:
+            Query to zones table, mess about at your peril
+        
+        Returns
+        ####
+        query_dat: pd.Dataframe
+            Query as df
+        zones:
+            Zones returned from same DB
+        """
+            
+        db_path = os.path.join(self.data_source, db_fname)
+        conn_string = (
+            'Driver=' + self.access_driver + ';'
+            'DBQ=' + db_path + ';'
+        )
+        conn = None
+        
+        try:
+            # Connect
+            conn = pyodbc.connect(conn_string)
+            cursor = conn.cursor()
+
+            # Grab and unpack the planning data
+            cursor.execute(query)
+
+            co_ph = list()
+            for row in cursor.fetchall():
+                co_ph.append([x for x in row])
+
+            query_dat = pd.DataFrame(
+                data=co_ph,
+                columns=[column[0] for column in cursor.description]
+            )
+
+            print(list(query_dat))
+
+            # Grab and unpack local db zone translations
+            cursor.execute(zone_query)
+
+            zonal_ph = list()
+            for row in cursor.fetchall():
+                zonal_ph.append([x for x in row])
+
+            zones = pd.DataFrame(
+                data=zonal_ph,
+                columns=[column[0] for column in cursor.description]
+            )
+        except BaseException as e:
+            if conn is not None:
+                conn.close()
+            raise e
+        finally:
+            if conn is not None:
+                conn.close()
+        
+        return query_dat, zones
+    
+    
+    def _select_years_and_interpolate(self,
+                                      query_dat,
+                                      verbose = False):
+        """
+        Pick years from the run defined years
+        Interpolate from them if you have to.
+        
+        Parameters
+        ----------
+        query_dat : pd.DataFrame
+            Raw query from DB in df
+
+        Returns
+        -------
+        query_dat: pd.Dataframe
+            Same but with years added and/or taken away
+
+        """
+
+        av_years = [int(x) for x in list(query_dat) if x.isdigit()]
+        year_index = list()
+        year_dicts = list()
+        for year in self.output_years:
+
+            if year > 2051:
+                print('Impossible to interpolate past 2051')
+                break
+            else:
+                year_index.append(str(year))
+                if year in av_years:
+                    year_dicts.append({'t_year': year,
+                                       'start_year': year,
+                                       'end_year': year})
+                else:
+                    year_diff = np.array([year - x for x in av_years])
+                    # Get lower than
+                    ly = np.argmin(np.where(year_diff > 0, year_diff, 100))
+                    ly = av_years[ly]
+                    # Get greater than
+                    hy = np.argmax(np.where(year_diff < 0, year_diff, -100))
+                    hy = av_years[hy]
+    
+                    year_dicts.append({'t_year': year,
+                                       'start_year': ly,
+                                       'end_year': hy})
+    
+        # Interpolate mid point years if needed
+        for year in year_dicts:
+            period_diff = year['end_year'] - year['start_year']
+            target_diff = year['t_year'] - year['start_year']
+            if target_diff > 0:
+                query_dat['annual_growth'] = (
+                    (
+                        query_dat[str(year['end_year'])]
+                        - query_dat[str(year['start_year'])]
+                    )
+                    / period_diff
+                )
+    
+                query_dat[str(year['t_year'])] = (
+                    query_dat[str(year['start_year'])]
+                    + (target_diff * query_dat['annual_growth'])
+                )
+                query_dat = query_dat.drop('annual_growth', axis=1)
+                
+        return query_dat
 
 
