@@ -1106,8 +1106,8 @@ def get_costs(model_lookup_path,
     elif purpose in other:
         str_purpose = 'other'
     else:
-        raise ValueError("Cannot convert purpose to string." +
-                         "Got %s" % str(purpose))
+        raise ValueError("Cannot convert purpose to string. " +
+                         "Got %s." % str(purpose))
 
     # Filter down on purpose
     cost_cols = [x for x in cols if str_purpose in x]
@@ -1154,133 +1154,6 @@ def get_costs(model_lookup_path,
         dat = pd.concat([iz, non_iz],axis=0,sort=True).reset_index(drop=True)
 
     return(dat, cost_return_name)
-
-def get_distance_and_costs(model_lookup_path,
-                           request_type='cost',
-                           journey_purpose=None,
-                           direction=None,
-                           car_available=None,
-                           seed_intrazonal = True):
-
-    # units takes different parameters
-    # TODO: Needs a config guide for the costs somewhere
-    # DEPRECATED CAN REMOVE
-    """
-    This function imports distances or costs from a given path.
-
-    Parameters
-    ----------
-    model_lookup_path:
-        Model folder to look in for distances/costs. Should be in call or global.
-
-    request_type:
-        Takes 'cost' or 'distance'
-
-    journey_purpose = None:
-        Takes None, 'commute', 'business' or 'other'. Costs differ.
-
-    direction = None:
-        Takes None, 'To', 'From'
-
-    car_available = None:
-        Takes None, True, False
-
-    seed_intrazonal = True:
-        Takes True or False - whether to add a value half the minimum
-        interzonal value to the intrazonal cells. Currently needed for distance
-        but not cost.
-
-    Returns:
-    ----------
-    dat:
-        DataFrame containing required cost or distance values.
-    """
-    # TODO: Adapt model input costs to take time periods
-    # TODO: The name cost_cols is misleading
-    file_sys = os.listdir(model_lookup_path)
-    cost_path = [x for x in file_sys if request_type in x][0]
-    dat = pd.read_csv(model_lookup_path + '/' + cost_path)
-    cols = list(dat)
-
-    # Parse function parameters to get the right cost column
-    # TODO: Works with distance but could be tidier
-    if request_type == 'distance':
-        if journey_purpose is not None:
-            cost_cols = [x for x in cols if journey_purpose in x]
-        else:
-            cost_cols = cols[2:]
-        if direction is not None:
-            cost_cols = [x for x in cost_cols if direction in x]
-        else:
-            cost_cols = cost_cols.copy()
-        if car_available is not None:
-            if car_available==True:
-                car_available='_ca'
-            elif car_available==False:
-                car_available='nca'
-            cost_cols = [x for x in cost_cols if car_available in x]
-        else:
-            cost_cols = cost_cols.copy()
-        cols = [cols[0], cols[1]]
-        # Append segments to the reindex list
-        for col in cost_cols:
-            cols.append(col)
-        # If there's nothing in there just append the distance col (Noham)
-        if len(cost_cols) == 0:
-            cols.append('distance')
-        dat = dat.reindex(cols,axis=1)
-        # Consolidate name, if there was a cost col
-        if len(cost_cols) != 0:
-            dat = dat.rename(columns={cost_cols[0]:request_type})
-        # TODO: Does this come back okay?
-        else:
-            # This is just naming distance to distance - remove
-            dat = dat.rename(columns={cols[2]:request_type})
-
-    # Handle cost request
-    elif request_type == 'cost':
-        if journey_purpose is not None:
-            cost_cols = [x for x in cols if journey_purpose in x]
-        else:
-            cost_cols = cols[2:]
-        if direction is not None:
-            cost_cols = [x for x in cost_cols if direction in x]
-        else:
-            cost_cols = cost_cols.copy()
-        if car_available is not None:
-            if car_available==True:
-                car_available='ca'
-            elif car_available==False:
-                car_available='nca'
-            cost_cols = [x for x in cost_cols if car_available in x]
-        else:
-            cost_cols = cost_cols.copy()
-        cols = [cols[0], cols[1]]
-        for col in cost_cols:
-            cols.append(col)
-        dat = dat.reindex(cols,axis=1)
-        dat = dat.rename(columns={cost_cols[0]:request_type})
-
-    # Redefine cols
-    cols = list(dat)
-
-    # TODO: Seed intrazonal currently duplicates on multiple cols.
-    if seed_intrazonal:
-        dat = dat.copy()
-        min_inter_dat = dat[dat[cols[2]]>0]
-        # Derive minimum intrazonal
-        min_inter_dat = min_inter_dat.groupby(
-                cols[0]).min().reset_index().drop(cols[1],axis=1)
-        intra_dat = min_inter_dat.copy()
-        intra_dat[cols[2]] = intra_dat[cols[2]]/2
-        iz = dat[dat[cols[0]] == dat[cols[1]]]
-        non_iz = dat[dat[cols[0]] != dat[cols[1]]]
-        iz = iz.drop(cols[2],axis=1)
-        # Rejoin
-        iz = iz.merge(intra_dat, how='inner', on=cols[0])
-        dat = pd.concat([iz, non_iz],axis=0,sort=True).reset_index(drop=True)
-
-    return(dat)
 
 def get_distance(model_lookup_path,
                  journey_purpose=None,

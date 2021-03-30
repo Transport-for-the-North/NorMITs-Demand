@@ -101,13 +101,344 @@ class TemproParser:
         # TODO: Update these paths to build more dynamically
         # This is probably being run out of scripts not home.
         # Repath home
-        home_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)
+        home_path = os.path.normpath(os.getcwd())
         config_path = os.path.join(home_path, 'config', 'tempro')
 
         self.ntem_trans_path = os.path.join(config_path, 'tblLookupGeo76.csv')
         self.ntem_code_zone_trans_path = os.path.join(config_path, 'ntem_code_to_zone.csv')
         self.ntem_lad_trans_path = os.path.join(config_path, 'ntem_lad_pop_weighted_lookup.csv')
         self.ntem_to_msoa_path = r"I:\NorMITs Demand\import\zone_translation\weighted\ntem_msoa_pop_weighted_lookup.csv"
+
+    def get_available_dbs(self):
+        available_dbs = []
+        db_list = [x for x in os.listdir(self.data_source) if '.mdb' in x]
+        for db_fname in db_list:
+            for region in self.region_list:
+                if region in db_fname:
+                    available_dbs.append(db_fname)
+                    break
+
+        if available_dbs == list():
+            raise IOError("Couldn't find any dbs to load from.")
+
+        return available_dbs
+
+    def get_planning_data(self, verbose=True):
+        """
+        Function to get planning data from TEMPRO
+        """
+        # TODO: Specify what sort of planning data you want
+        
+        #Init
+        available_dbs = self.get_available_dbs()
+        
+        # Loop setup
+        plan_ph = list()
+        
+        pbar = tqdm(
+            total=len(available_dbs),
+            desc="Extracting trip ends from DBs",
+            disable=(not verbose),
+        )
+
+        for db_fname in available_dbs:
+            
+            plan_dat = self._get_segmented_planning_data(db_fname,
+                                                         pbar)
+
+            plan_ph.append(plan_dat)
+                    
+
+    def get_pop_emp_growth_factors(self, verbose=True):
+        # Init
+        available_dbs = self.get_available_dbs()
+
+        # Loop setup
+        pop_ph = list()
+        emp_ph = list()
+        pbar = tqdm(
+            total=len(available_dbs),
+            desc="Extracting trip ends from DBs",
+            disable=(not verbose),
+        )
+
+        for db_fname in available_dbs:
+            pop, emp = self._get_pop_emp_factors_internal(
+                db_fname,
+                pbar,
+            )
+            pop_ph.append(pop)
+            emp_ph.append(emp)
+
+        # Stick all the partials together
+        pop = pd.concat(pop_ph)
+        emp = pd.concat(emp_ph)
+
+        # Sort by zone_col
+        pop = pop.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+        emp = emp.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+
+        # ## CALCULATE GROWTH FACTORS ## #
+        # Need to know which is the base year
+        base_year, future_years = du.split_base_future_years(self._output_years)
+        base_year_col = str(base_year)
+        future_year_cols = [str(x) for x in future_years]
+
+        pop_df = pop.copy()
+        emp_gf = emp.copy()
+
+        for vector in [pop_df, emp_gf]:
+            # Calculate growth factors
+            for col in future_year_cols:
+                vector[col] /= vector[base_year_col]
+            vector[base_year_col] = 1
+
+        return pop_df, emp_gf, pop, emp
+
+    def get_growth_factors(self, verbose=True):
+        # Init
+        col_indices = '(1,2)'
+
+        available_dbs = self.get_available_dbs()
+
+        # Loop setup
+        prod_ph = list()
+        attr_ph = list()
+        pbar = tqdm(
+            total=len(available_dbs),
+            desc="Extracting trip ends from DBs",
+            disable=(not verbose),
+        )
+
+        for db_fname in available_dbs:
+            prods, attrs = self._get_growth_factors_internal(
+                db_fname,
+                col_indices,
+                pbar=pbar,
+            )
+            prod_ph.append(prods)
+            attr_ph.append(attrs)
+
+        # Stick all the partials together
+        prods = pd.concat(prod_ph)
+        attrs = pd.concat(attr_ph)
+
+        # Sort by zone_col
+        prods = prods.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+        attrs = attrs.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+
+        # ## CALCULATE GROWTH FACTORS ## #
+        # Need to know which is the base year
+        base_year, future_years = du.split_base_future_years(self._output_years)
+        base_year_col = str(base_year)
+        future_year_cols = [str(x) for x in future_years]
+
+        prods_gf = prods.copy()
+        attrs_gf = attrs.copy()
+
+        for vector in [prods_gf, attrs_gf]:
+            # Calculate growth factors
+            for col in future_year_cols:
+                vector[col] /= vector[base_year_col]
+            vector[base_year_col] = 1
+
+        return prods_gf, attrs_gf, prods, attrs
+
+    def get_co_future_data(self,
+                           verbose: bool = True):
+        """
+        Get car ownership future year shares
+        Calculates share of ca/nca in a given fy
+
+        returns:
+        fy_ca_share, fy_ca_growth, nca, ca
+
+        """
+        
+        # Init
+        available_dbs = self.get_available_dbs()
+
+        # Loop setup
+        nca_ph = list()
+        ca_ph = list()
+        pbar = tqdm(
+            total=len(available_dbs),
+            desc="Extracting trip ends from DBs",
+            disable=(not verbose),
+        )
+
+        for db_fname in available_dbs:
+            nca, ca = self._get_co_growth_factors_internal(
+                db_fname,
+                pbar,
+            )
+            nca_ph.append(nca)
+            ca_ph.append(ca)
+
+        # Stick all the partials together
+        nca = pd.concat(nca_ph)
+        ca = pd.concat(ca_ph)
+
+        # Sort by zone_col
+        nca = nca.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+        ca = ca.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+
+        # Build factor and share outputs
+        # Get headings for base and future year cols
+        base_year, future_years = du.split_base_future_years(self._output_years)
+        base_year_col = str(base_year)
+        future_year_cols = [str(x) for x in future_years]
+
+        # Do future year growth calc
+        nca_growth = nca.copy()
+        ca_growth = ca.copy()
+        # Work out growth factors
+        for col in future_year_cols:
+            nca_growth[col] /= nca_growth[base_year_col]
+            ca_growth[col] /= ca_growth[base_year_col]
+
+        nca_growth['ca'] = '1'
+        ca_growth['ca'] = '2'
+
+        fy_ca_growth = pd.concat([nca_growth, ca_growth])
+        fy_ca_growth[base_year_col] = 1
+        fy_ca_growth = fy_ca_growth.reindex(
+            ['msoa_zone_id', 'ca', base_year_col] + future_year_cols, axis=1)
+
+        # Do future year share calc
+        nca_share = nca.copy()
+        ca_share = ca.copy()
+        
+        total = pd.concat([nca_share, ca_share])
+        total = total.groupby('msoa_zone_id').sum().reset_index()
+        
+        nca_share[[base_year_col]+future_year_cols] /= total[[base_year_col]+future_year_cols]
+        print(nca_share)
+        ca_share[[base_year_col]+future_year_cols] /= total[[base_year_col]+future_year_cols]
+        print(ca_share)
+        
+        nca_share['ca'] = '1'
+        ca_share['ca'] = '2'
+
+        # Compile and reindex
+        fy_ca_share = pd.concat(
+            [nca_share, ca_share])
+        fy_ca_share = fy_ca_share.reindex(
+            ['msoa_zone_id', 'ca', base_year_col] + future_year_cols, axis=1)
+        
+        return fy_ca_share, fy_ca_growth, nca, ca
+
+    def get_trip_ends(self,
+                     trip_type: str = 'pa',
+                     aggregate_car: bool = True):
+
+        """
+        trip_type = 'pa' or 'od'
+        
+        aggregate_car: Takes True or False
+            Very important for car demand. If aggregate = False will take Tempro
+            mode 3 only - ie. growth in car drivers.
+            If False, will add Modes 3 & 4, so car driver and passenger.
+        """
+        if trip_type == 'pa':
+            col_indices = '(1,2)'
+            col_a = 'Productions'
+            col_b = 'Attractions'
+        else:
+            col_indices = '(3,4)'
+            col_a = 'Origin'
+            col_b = 'Destination'
+
+        ntem_trans = pd.read_csv(self.ntem_trans_path)
+        ntem_code_trans = pd.read_csv(self.ntem_code_zone_trans_path)
+        ntem_lad_trans = pd.read_csv(self.ntem_lad_trans_path)
+
+        available_dbs = self.get_available_dbs()
+
+        # TODO: Check there's the full whack of regions here - say which aren't - error if any North missing
+
+        # Iterate over all databases
+        # TODO: multithread wrapper
+
+        db_ph = []
+        for db_fname in tqdm(available_dbs, desc="Extracting from DBs..."):
+            
+            trip_ends, years = self._get_pa_trip_ends(db_fname, col_indices)
+
+
+            # TODO: Join LA (as NTEM) to new LA (lookup)
+            # Nightmare because NTEM zone id != NTEM_zone_id - have to go round the houses
+            trip_ends = trip_ends.merge(ntem_trans,
+                                        how='inner',
+                                        on='ZoneName')
+
+            trip_ends = trip_ends.merge(ntem_code_trans,
+                                        how='inner',
+                                        on='ntem_id')
+
+            trip_ends = trip_ends.merge(ntem_lad_trans,
+                                        how='inner',
+                                        left_on='Zone_ID',
+                                        right_on='ntem_zone_id')
+
+            # Reindex
+            group_cols = ['lad_zone_id', 'Purpose', 'Mode', 'TimePeriod', 'TripType']
+            target_cols = group_cols.copy()
+            for year in years:
+                target_cols.append(year)
+
+            # Compile segments (mode 3&4 == 3, purpose 11 & 12 == 12)
+            # Weekdays only - ave weekday = weekday / 5 - see below
+            trip_ends['Purpose'] = trip_ends['Purpose'].replace([11], 12)
+        
+            if aggregate_car:
+                trip_ends['Mode'] = trip_ends['Mode'].replace(4, 3)
+
+            trip_ends = trip_ends[
+                    trip_ends['TimePeriod'].isin([1, 2, 3, 4])].reset_index(drop=True)
+
+            # Aggregate @ LA
+            trip_ends = trip_ends.reindex(target_cols, axis=1).groupby(
+                    group_cols).sum().reset_index()
+
+            # output constraint data.
+            db_ph.append(trip_ends)
+
+            # Subset by year & chunk out
+            out_dat = pd.concat(db_ph)
+
+        # Iterate over years, pivot out P/A - needs segments lookup like NTS script
+        out_years = [int(x) for x in list(trip_ends) if x.isdigit()]
+
+        # Test for unq zones
+        for year in out_years:
+            # Get year cols
+            target_cols = group_cols.copy()
+            target_cols.append(str(year))
+            pivot_cols = group_cols.copy()
+            pivot_cols.remove('TripType')
+
+            # Reindex
+            single_year = out_dat.reindex(target_cols, axis=1).groupby(
+                    group_cols).sum().reset_index()
+        
+            # / 5 to get wday
+            single_year[str(year)] = single_year[str(year)]/5
+
+            # Pivot to PA
+            single_year = single_year.pivot_table(
+                    index=pivot_cols,
+                    columns=['TripType'],
+                    values=str(year)).reset_index()
+            # Rename
+            single_year = single_year.rename(
+                    columns={1: col_a, 2: col_b,
+                             3: col_a, 4: col_b})
+
+            # Write to disk
+            out_fname = "ntem_%s_ave_wday_%s.csv" % (trip_type, str(year))
+            out_path = os.path.join(self.out_folder, out_fname)
+            single_year.to_csv(out_path, index=False)
 
     def _get_co_data(self,
                      db_fname
@@ -645,6 +976,153 @@ class TemproParser:
             pbar.update(1)
 
         return pop, emp
+    
+    def _get_segmented_planning_data(
+            self,
+            db_fname,
+            pbar=None) -> pd.DataFrame:
+        """
+        Get segmented planning data from Tempro DB.
+        
+        Parameters
+        ----------
+        db_fname : str
+            Name of DB.
+        pbar : std.tqdm
+            Progress bar
+
+        Returns
+        -------
+        pld : pd.Dataframe = None
+            Table of planning data
+
+        """
+        # Init
+        db_path = os.path.join(self.data_source, db_fname)
+        conn_string = (
+            'Driver=' + self.access_driver + ';'
+            'DBQ=' + db_path + ';'
+        )
+        conn = None
+        
+        try:
+            # Connect
+            conn = pyodbc.connect(conn_string)
+            cursor = conn.cursor()
+
+            # Grab and unpack the planning data
+            cursor.execute('select * from Planning')
+
+            co_ph = list()
+            for row in cursor.fetchall():
+                co_ph.append([x for x in row])
+
+            co_data = pd.DataFrame(
+                data=co_ph,
+                columns=[column[0] for column in cursor.description]
+            )
+
+            print(list(co_data))
+
+            # Grab and unpack local db zone translations
+            cursor.execute('select * from Zones')
+
+            zonal_ph = list()
+            for row in cursor.fetchall():
+                zonal_ph.append([x for x in row])
+
+            zones = pd.DataFrame(
+                data=zonal_ph,
+                columns=[column[0] for column in cursor.description]
+            )
+        except BaseException as e:
+            if conn is not None:
+                conn.close()
+            raise e
+        finally:
+            if conn is not None:
+                conn.close()
+
+        # Get years
+        av_years = [int(x) for x in list(co_data) if x.isdigit()]
+        year_index = list()
+        year_dicts = list()
+        for year in self.output_years:
+
+            if year > 2051:
+                print('Impossible to interpolate past 2051')
+                break
+            else:
+                year_index.append(str(year))
+                if year in av_years:
+                    year_dicts.append({'t_year': year,
+                                       'start_year': year,
+                                       'end_year': year})
+                else:
+                    year_diff = np.array([year - x for x in av_years])
+                    # Get lower than
+                    ly = np.argmin(np.where(year_diff > 0, year_diff, 100))
+                    ly = av_years[ly]
+                    # Get greater than
+                    hy = np.argmax(np.where(year_diff < 0, year_diff, -100))
+                    hy = av_years[hy]
+
+                    year_dicts.append({'t_year': year,
+                                       'start_year': ly,
+                                       'end_year': hy})
+
+        # Interpolate mid point years if needed
+        for year in year_dicts:
+            period_diff = year['end_year'] - year['start_year']
+            target_diff = year['t_year'] - year['start_year']
+            if target_diff > 0:
+                co_data['annual_growth'] = (
+                    (
+                        co_data[str(year['end_year'])]
+                        - co_data[str(year['start_year'])]
+                    )
+                    / period_diff
+                )
+
+                co_data[str(year['t_year'])] = (
+                    co_data[str(year['start_year'])]
+                    + (target_diff * co_data['annual_growth'])
+                )
+                co_data = co_data.drop('annual_growth', axis=1)
+
+        # Split off data into nice usable pots
+        # segmented population
+        needed_types = [self.planning_data_types['under_16'],
+                        self.planning_data_types['16-74'],
+                        self.planning_data_types['75+']]
+        mask = co_data['CarOwnershipType'].isin(needed_types)
+        nca = co_data[mask].copy()
+
+        # jobs
+        needed_types = self.co_data_types['ca']
+        mask = co_data['CarOwnershipType'].isin(needed_types)
+        ca = co_data[mask].copy()
+
+        # ## ATTACH ZONE NAMES ## #
+        nca = pd.merge(
+            nca,
+            zones,
+            how='left',
+            on='ZoneID'
+        )
+
+        ca = pd.merge(
+            ca,
+            zones,
+            how='left',
+            on='ZoneID'
+        )
+        
+        
+        if pbar is not None:
+            pbar.update(1)
+        
+        return 0
 
     def _get_co_growth_factors_internal(self,
                                         db_fname,
@@ -706,307 +1184,4 @@ class TemproParser:
         
         return nca, ca
 
-    def get_available_dbs(self):
-        available_dbs = []
-        db_list = [x for x in os.listdir(self.data_source) if '.mdb' in x]
-        for db_fname in db_list:
-            for region in self.region_list:
-                if region in db_fname:
-                    available_dbs.append(db_fname)
-                    break
 
-        if available_dbs == list():
-            raise IOError("Couldn't find any dbs to load from.")
-
-        return available_dbs
-
-    def get_pop_emp_growth_factors(self, verbose=True):
-        # Init
-        available_dbs = self.get_available_dbs()
-
-        # Loop setup
-        pop_ph = list()
-        emp_ph = list()
-        pbar = tqdm(
-            total=len(available_dbs),
-            desc="Extracting trip ends from DBs",
-            disable=(not verbose),
-        )
-
-        for db_fname in available_dbs:
-            pop, emp = self._get_pop_emp_factors_internal(
-                db_fname,
-                pbar,
-            )
-            pop_ph.append(pop)
-            emp_ph.append(emp)
-
-        # Stick all the partials together
-        pop = pd.concat(pop_ph)
-        emp = pd.concat(emp_ph)
-
-        # Sort by zone_col
-        pop = pop.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
-        emp = emp.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
-
-        # ## CALCULATE GROWTH FACTORS ## #
-        # Need to know which is the base year
-        base_year, future_years = du.split_base_future_years(self._output_years)
-        base_year_col = str(base_year)
-        future_year_cols = [str(x) for x in future_years]
-
-        pop_df = pop.copy()
-        emp_gf = emp.copy()
-
-        for vector in [pop_df, emp_gf]:
-            # Calculate growth factors
-            for col in future_year_cols:
-                vector[col] /= vector[base_year_col]
-            vector[base_year_col] = 1
-
-        return pop_df, emp_gf, pop, emp
-
-    def get_growth_factors(self, verbose=True):
-        # Init
-        col_indices = '(1,2)'
-
-        available_dbs = self.get_available_dbs()
-
-        # Loop setup
-        prod_ph = list()
-        attr_ph = list()
-        pbar = tqdm(
-            total=len(available_dbs),
-            desc="Extracting trip ends from DBs",
-            disable=(not verbose),
-        )
-
-        for db_fname in available_dbs:
-            prods, attrs = self._get_growth_factors_internal(
-                db_fname,
-                col_indices,
-                pbar=pbar,
-            )
-            prod_ph.append(prods)
-            attr_ph.append(attrs)
-
-        # Stick all the partials together
-        prods = pd.concat(prod_ph)
-        attrs = pd.concat(attr_ph)
-
-        # Sort by zone_col
-        prods = prods.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
-        attrs = attrs.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
-
-        # ## CALCULATE GROWTH FACTORS ## #
-        # Need to know which is the base year
-        base_year, future_years = du.split_base_future_years(self._output_years)
-        base_year_col = str(base_year)
-        future_year_cols = [str(x) for x in future_years]
-
-        prods_gf = prods.copy()
-        attrs_gf = attrs.copy()
-
-        for vector in [prods_gf, attrs_gf]:
-            # Calculate growth factors
-            for col in future_year_cols:
-                vector[col] /= vector[base_year_col]
-            vector[base_year_col] = 1
-
-        return prods_gf, attrs_gf, prods, attrs
-
-    def get_co_future_data(self,
-                           verbose: bool = True):
-        """
-        Get car ownership future year shares
-        Calculates share of ca/nca in a given fy
-
-        returns:
-        fy_ca_share, fy_ca_growth, nca, ca
-
-        """
-        
-        # Init
-        available_dbs = self.get_available_dbs()
-
-        # Loop setup
-        nca_ph = list()
-        ca_ph = list()
-        pbar = tqdm(
-            total=len(available_dbs),
-            desc="Extracting trip ends from DBs",
-            disable=(not verbose),
-        )
-
-        for db_fname in available_dbs:
-            nca, ca = self._get_co_growth_factors_internal(
-                db_fname,
-                pbar,
-            )
-            nca_ph.append(nca)
-            ca_ph.append(ca)
-
-        # Stick all the partials together
-        nca = pd.concat(nca_ph)
-        ca = pd.concat(ca_ph)
-
-        # Sort by zone_col
-        nca = nca.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
-        ca = ca.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
-
-        # Build factor and share outputs
-        # Get headings for base and future year cols
-        base_year, future_years = du.split_base_future_years(self._output_years)
-        base_year_col = str(base_year)
-        future_year_cols = [str(x) for x in future_years]
-
-        # Do future year growth calc
-        nca_growth = nca.copy()
-        ca_growth = ca.copy()
-        # Work out growth factors
-        for col in future_year_cols:
-            nca_growth[col] /= nca_growth[base_year_col]
-            ca_growth[col] /= ca_growth[base_year_col]
-
-        nca_growth['ca'] = '1'
-        ca_growth['ca'] = '2'
-
-        fy_ca_growth = pd.concat([nca_growth, ca_growth])
-        fy_ca_growth[base_year_col] = 1
-        fy_ca_growth = fy_ca_growth.reindex(
-            ['msoa_zone_id', 'ca', base_year_col] + future_year_cols, axis=1)
-
-        # Do future year share calc
-        nca_share = nca.copy()
-        ca_share = ca.copy()
-        
-        total = pd.concat([nca_share, ca_share])
-        total = total.groupby('msoa_zone_id').sum().reset_index()
-        
-        nca_share[[base_year_col]+future_year_cols] /= total[[base_year_col]+future_year_cols]
-        print(nca_share)
-        ca_share[[base_year_col]+future_year_cols] /= total[[base_year_col]+future_year_cols]
-        print(ca_share)
-        
-        nca_share['ca'] = '1'
-        ca_share['ca'] = '2'
-
-        # Compile and reindex
-        fy_ca_share = pd.concat(
-            [nca_share, ca_share])
-        fy_ca_share = fy_ca_share.reindex(
-            ['msoa_zone_id', 'ca', base_year_col] + future_year_cols, axis=1)
-        
-        return fy_ca_share, fy_ca_growth, nca, ca
-
-    def get_trip_ends(self,
-                     trip_type: str = 'pa',
-                     aggregate_car: bool = True):
-
-        """
-        trip_type = 'pa' or 'od'
-        
-        aggregate_car: Takes True or False
-            Very important for car demand. If aggregate = False will take Tempro
-            mode 3 only - ie. growth in car drivers.
-            If False, will add Modes 3 & 4, so car driver and passenger.
-        """
-        if trip_type == 'pa':
-            col_indices = '(1,2)'
-            col_a = 'Productions'
-            col_b = 'Attractions'
-        else:
-            col_indices = '(3,4)'
-            col_a = 'Origin'
-            col_b = 'Destination'
-
-        ntem_trans = pd.read_csv(self.ntem_trans_path)
-        ntem_code_trans = pd.read_csv(self.ntem_code_zone_trans_path)
-        ntem_lad_trans = pd.read_csv(self.ntem_lad_trans_path)
-
-        available_dbs = self.get_available_dbs()
-
-        # TODO: Check there's the full whack of regions here - say which aren't - error if any North missing
-
-        # Iterate over all databases
-        # TODO: multithread wrapper
-
-        db_ph = []
-        for db_fname in tqdm(available_dbs, desc="Extracting from DBs..."):
-            
-            trip_ends, years = self._get_pa_trip_ends(db_fname, col_indices)
-
-
-            # TODO: Join LA (as NTEM) to new LA (lookup)
-            # Nightmare because NTEM zone id != NTEM_zone_id - have to go round the houses
-            trip_ends = trip_ends.merge(ntem_trans,
-                                        how='inner',
-                                        on='ZoneName')
-
-            trip_ends = trip_ends.merge(ntem_code_trans,
-                                        how='inner',
-                                        on='ntem_id')
-
-            trip_ends = trip_ends.merge(ntem_lad_trans,
-                                        how='inner',
-                                        left_on='Zone_ID',
-                                        right_on='ntem_zone_id')
-
-            # Reindex
-            group_cols = ['lad_zone_id', 'Purpose', 'Mode', 'TimePeriod', 'TripType']
-            target_cols = group_cols.copy()
-            for year in years:
-                target_cols.append(year)
-
-            # Compile segments (mode 3&4 == 3, purpose 11 & 12 == 12)
-            # Weekdays only - ave weekday = weekday / 5 - see below
-            trip_ends['Purpose'] = trip_ends['Purpose'].replace([11], 12)
-        
-            if aggregate_car:
-                trip_ends['Mode'] = trip_ends['Mode'].replace(4, 3)
-
-            trip_ends = trip_ends[
-                    trip_ends['TimePeriod'].isin([1, 2, 3, 4])].reset_index(drop=True)
-
-            # Aggregate @ LA
-            trip_ends = trip_ends.reindex(target_cols, axis=1).groupby(
-                    group_cols).sum().reset_index()
-
-            # output constraint data.
-            db_ph.append(trip_ends)
-
-            # Subset by year & chunk out
-            out_dat = pd.concat(db_ph)
-
-        # Iterate over years, pivot out P/A - needs segments lookup like NTS script
-        out_years = [int(x) for x in list(trip_ends) if x.isdigit()]
-
-        # Test for unq zones
-        for year in out_years:
-            # Get year cols
-            target_cols = group_cols.copy()
-            target_cols.append(str(year))
-            pivot_cols = group_cols.copy()
-            pivot_cols.remove('TripType')
-
-            # Reindex
-            single_year = out_dat.reindex(target_cols, axis=1).groupby(
-                    group_cols).sum().reset_index()
-        
-            # / 5 to get wday
-            single_year[str(year)] = single_year[str(year)]/5
-
-            # Pivot to PA
-            single_year = single_year.pivot_table(
-                    index=pivot_cols,
-                    columns=['TripType'],
-                    values=str(year)).reset_index()
-            # Rename
-            single_year = single_year.rename(
-                    columns={1: col_a, 2: col_b,
-                             3: col_a, 4: col_b})
-
-            # Write to disk
-            out_fname = "ntem_%s_ave_wday_%s.csv" % (trip_type, str(year))
-            out_path = os.path.join(self.out_folder, out_fname)
-            single_year.to_csv(out_path, index=False)
