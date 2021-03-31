@@ -512,7 +512,7 @@ def furness_tour_proportions(orig_vals,
     tour_proportions = defaultdict(dict)
 
     total = len(orig_vals) * len(dest_vals)
-    desc = "Generating tour proportions for %s..." % tour_prop_name
+    desc = "Generating tour props for %s..." % tour_prop_name
     for orig, dest in tqdm(product(orig_vals, dest_vals), total=total, desc=desc):
         # Build the from_home vector
         fh_target = list()
@@ -637,7 +637,7 @@ def _tms_seg_tour_props_internal(od_import: str,
     # TODO: Write _tms_seg_tour_props_internal() docs
     out_fname = du.get_dist_name(
         trip_origin=trip_origin,
-        matrix_format='tour_proportions',
+        matrix_format='tms_tour_proportions',
         year=str(year),
         purpose=str(p),
         mode=str(m),
@@ -886,7 +886,7 @@ def _tms_seg_tour_props(od_import: str,
 
     # Output a log of the zero counts found
     header = ['tour_file', 'zero_count', 'percentage']
-    out_name = "yr%d_tour_proportions_log.csv" % year
+    out_name = "yr%d_tms_tour_proportions_log.csv" % year
     out_path = os.path.join(tour_proportions_export, out_name)
     du.write_csv(header, zero_counts, out_path)
 
@@ -945,7 +945,7 @@ def _vdm_seg_tour_props_internal(od_import: str,
     # Figure out the output filename
     out_fname = du.get_vdm_dist_name(
         trip_origin=trip_origin,
-        matrix_format='tour_proportions',
+        matrix_format='vdm_tour_proportions',
         year=str(year),
         user_class=str(uc),
         mode=str(m),
@@ -1117,7 +1117,7 @@ def _vdm_seg_tour_props(od_import: str,
                         phi_type: str = 'fhp',
                         aggregate_to_wday: bool = True,
                         generate_tour_props: bool = True,
-                        process_count: int = -2
+                        process_count: int = consts.PROCESS_COUNT,
                         ) -> None:
     """
     TODO: Write _vdm_seg_tour_props() docs
@@ -1164,7 +1164,7 @@ def _vdm_seg_tour_props(od_import: str,
 
     # Output a log of the zero counts found
     header = ['tour_file', 'zero_count', 'percentage']
-    out_name = "yr%d_vdm_tour_proportions_log.csv" % year
+    out_name = "yr%s_vdm_tour_proportions_log.csv" % year
     out_path = os.path.join(tour_proportions_export, out_name)
     du.write_csv(header, zero_counts, out_path)
 

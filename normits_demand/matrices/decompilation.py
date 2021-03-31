@@ -118,6 +118,32 @@ def decompile_noham(year: int,
             year=year
         )
 
+        # Re-aggregate back up to VDM seg, but hb/nhb separated
+        if seg_level == 'vdm':
+            # Get compile params path
+            output_fname = du.get_compile_params_name('vdm_od', consts.BASE_YEAR)
+            compile_params_path = os.path.join(tour_proportions_export, output_fname)
+
+            # Compile the matrices
+            mat_p.build_compile_params(
+                import_dir=od_export,
+                export_dir=tour_proportions_export,
+                matrix_format='od',
+                years_needed=[consts.BASE_YEAR],
+                m_needed=seg_params['m_needed'],
+                ca_needed=seg_params['ca_needed'],
+                tp_needed=consts.TIME_PERIODS,
+                split_hb_nhb=True,
+                split_od_from_to=True,
+                output_fname=output_fname
+            )
+
+            mat_p.compile_matrices(
+                mat_import=od_export,
+                mat_export=od_export,
+                compile_params_path=compile_params_path,
+            )
+
     if overwrite_tour_proportions:
         print("Converting OD matrices to PA and generating tour "
               "proportions...")
@@ -135,24 +161,25 @@ def decompile_noham(year: int,
         )
 
         # ## GENERATE NHB TP SPLITTING FACTORS ## #
-        # Need just the nhb purposes
-        nhb_seg_params = seg_params.copy()
-        _, nhb_purposes = du.split_hb_nhb_purposes(nhb_seg_params['p_needed'])
-        nhb_seg_params['p_needed'] = nhb_purposes
+        if seg_params.get('p_needed') is not None:
+            # Need just the nhb purposes
+            nhb_seg_params = seg_params.copy()
+            _, nhb_purposes = du.split_hb_nhb_purposes(nhb_seg_params['p_needed'])
+            nhb_seg_params['p_needed'] = nhb_purposes
 
-        # Generate the splitting factors export path
-        fname = consts.POSTME_TP_SPLIT_FACTORS_FNAME
-        splitting_factors_export = os.path.join(tour_proportions_export, fname)
+            # Generate the splitting factors export path
+            fname = consts.POSTME_TP_SPLIT_FACTORS_FNAME
+            splitting_factors_export = os.path.join(tour_proportions_export, fname)
 
-        # Generate the NHB tp splitting factors
-        mat_p.build_24hr_mats(
-            import_dir=pa_export,
-            export_dir=pa_24_export,
-            splitting_factors_export=splitting_factors_export,
-            matrix_format='pa',
-            year_needed=year,
-            **nhb_seg_params,
-        )
+            # Generate the NHB tp splitting factors
+            mat_p.build_24hr_mats(
+                import_dir=pa_export,
+                export_dir=pa_24_export,
+                splitting_factors_export=splitting_factors_export,
+                matrix_format='pa',
+                year_needed=year,
+                **nhb_seg_params,
+            )
 
 
 def need_to_convert_to_efs_matrices(post_me_import: str,

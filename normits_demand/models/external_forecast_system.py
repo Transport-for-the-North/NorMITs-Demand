@@ -75,7 +75,7 @@ class ExternalForecastSystem:
 
                  land_use_drive: str = "Y:/",
                  land_use_iteration: str = 'iter3b',
-                 verbose: str = True,
+                 verbose: bool = True,
                  ):
         # TODO: Write EFS constructor docs
         # Initialise the timer
@@ -1596,34 +1596,6 @@ class ExternalForecastSystem:
             ca_needed = consts.CA_NEEDED
         else:
             ca_needed = [None]
-
-        # TODO: No longer need to aggregate matrices!
-        # if overwrite_aggregated_od:
-        #     for matrix_format in ['od_from', 'od_to']:
-        #         mat_p.aggregate_matrices(
-        #             import_dir=self.exports['od'],
-        #             export_dir=self.exports['aggregated_od'],
-        #             trip_origin='hb',
-        #             matrix_format=matrix_format,
-        #             years_needed=[year],
-        #             p_needed=hb_p_needed,
-        #             m_needed=m_needed,
-        #             ca_needed=ca_needed,
-        #             tp_needed=tp_needed,
-        #             round_dp=round_dp,
-        #         )
-        #     mat_p.aggregate_matrices(
-        #         import_dir=self.exports['od'],
-        #         export_dir=self.exports['aggregated_od'],
-        #         trip_origin='nhb',
-        #         matrix_format='od',
-        #         years_needed=[year],
-        #         p_needed=nhb_p_needed,
-        #         m_needed=m_needed,
-        #         ca_needed=ca_needed,
-        #         tp_needed=tp_needed,
-        #         round_dp=round_dp,
-        #     )
 
         if overwrite_compiled_od:
             # Build the compile params for this model
