@@ -24,6 +24,7 @@ from normits_demand.utils import output_converter as oc
 from normits_demand.utils import general as du
 
 from normits_demand.matrices import decompilation
+from normits_demand.matrices import matrix_processing as mat_p
 
 
 def main():
@@ -52,20 +53,22 @@ def main():
 
     # Set up segmentation vals
     seg_level = 'vdm'
-    seg_params = {
+    hb_seg_params = {
         'to_needed': ['hb'],
         'uc_needed': consts.USER_CLASSES,
         'm_needed': consts.MODEL_MODES[model_name],
         'ca_needed': efs.ca_needed,
         'tp_needed': consts.TIME_PERIODS
     }
+    nhb_seg_params = hb_seg_params.copy()
+    nhb_seg_params['to_needed'] = ['nhb']
 
     # Generate VDM Tour Props
     if run_vdm_od2pa:
         decompilation.decompile_noham(
             year='2018',
             seg_level=seg_level,
-            seg_params=seg_params,
+            seg_params=hb_seg_params,
             post_me_import=efs.imports['post_me_matrices'],
             post_me_renamed_export=efs.exports['post_me']['compiled_od'],
             od_export=efs.exports['post_me']['od'],
@@ -78,6 +81,26 @@ def main():
             overwrite_decompiled_od=False,
             overwrite_tour_proportions=True,
         )
+
+        mat_p.build_24hr_vdm_mats(
+            import_dir=efs.exports['post_me']['pa'],
+            export_dir=efs.exports['post_me']['vdm_pa_24'],
+            matrix_format='pa',
+            years_needed=[consts.BASE_YEAR],
+            **hb_seg_params
+        )
+
+    if run_nhb_splitting_factors:
+        mat_p.build_24hr_vdm_mats(
+            import_dir=efs.exports['post_me']['od'],
+            export_dir=efs.exports['post_me']['od_24'],
+            matrix_format='od',
+            split_factors_path=efs.params['tours'],
+            years_needed=[consts.BASE_YEAR],
+            **nhb_seg_params
+        )
+
+    exit()
 
     # Convert tour props
     if convert_tour_props:

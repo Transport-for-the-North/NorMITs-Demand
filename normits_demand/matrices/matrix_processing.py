@@ -1711,7 +1711,7 @@ def build_24hr_vdm_mats(import_dir: str,
                         m_needed: List[int] = efs_consts.MODES_NEEDED,
                         ca_needed: List[int] = None,
                         tp_needed: List[int] = efs_consts.TIME_PERIODS,
-                        split_factors_path: str = None
+                        split_factors_path: str = None,
                         ) -> None:
     # TODO: Write build_24hr_vdm_mats() docs
     # Init
