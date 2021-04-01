@@ -7,30 +7,23 @@ import pandas as pd
 import importlib as ri
 
 import normits_demand.build.tms_pathing as tms
+import normits_demand.build.project as prj
 import normits_demand.models.production_model as pm
 import normits_demand.models.attraction_model as am
 import normits_demand.models.external_model as em
 import normits_demand.models.distribution_model as dm
 
+
 # params_file = 'norms_params_sheet_i6.xlsx'
 
-def main(config_path = 'I:/NorMITs Synthesiser/config/'):
+def main(config_path = 'I:/NorMITs Synthesiser/config/') :
 
     """
     Wrapper function to run TMS start to finish based on specified params.
     """
 
     # Ask user which config file to use
-    params = [x for x in os.listdir(config_path) if 'config' in x]
-    if len(params) == 0:
-        raise ValueError('no trip length bands in folder')
-    for (i, option) in enumerate(params, 0):
-        print(i, option)
-        selection_c = input('Choose a config file (index): ')
-        params_file = pd.read_csv(
-            os.path.join(config_path,
-                         params[int(selection_c)])
-        )
+    params_file = prj.select_params_file(config_path)
 
     tms_run = tms.TMSPathing(config_path,
                              params_file)

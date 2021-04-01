@@ -1021,6 +1021,7 @@ class TemproParser:
             'HHs': self.planning_data_types['HHs']
             }
         for segment, indices in segmented_population.items():
+            # Filter to target
             mask = query_dat[target_table_attr].isin(indices)
             query_out = query_dat[mask]
             query_out = pd.merge(
@@ -1029,8 +1030,25 @@ class TemproParser:
                 how='left',
                 on='ZoneID'
                 )
+            # Aggregate to required data only
+            group_cols = ['ntem_zone_id']
+            needed_cols = group_cols.copy(
+                ) + [str(x) for x in self._output_years]
+            query_out = query_out.reindex(
+                columns=needed_cols).groupby(group_cols).sum().reset_index()
+
+            # Translate to MSOA
+            translator = zt.ZoneTranslator()
+            query_out = translator.run(
+                query_out,
+                pd.read_csv(self.ntem_to_msoa_path),
+                'ntem',
+                'msoa',
+                non_split_cols=group_cols)
+            
             segmented_population.update({segment: query_out})
-                
+            
+            
         if pbar is not None:
             pbar.update(1)
         
