@@ -148,7 +148,7 @@ class TemproParser:
 
             plan_ph.append(plan_dat)
 
-        return(plan_ph)
+        return plan_ph
                     
 
     def get_pop_emp_growth_factors(self, verbose=True):
@@ -1030,13 +1030,10 @@ class TemproParser:
                 how='left',
                 on='ZoneID'
                 )
-            # Aggregate to required data only
-            group_cols = ['ntem_zone_id']
-            needed_cols = group_cols.copy(
-                ) + [str(x) for x in self._output_years]
-            query_out = query_out.reindex(
-                columns=needed_cols).groupby(group_cols).sum().reset_index()
-
+            query_out = self._tempro_ntem_to_normits_ntem(
+                query_out,
+                return_zone_col='ntem_zone_id')
+            
             # Translate to MSOA
             translator = zt.ZoneTranslator()
             query_out = translator.run(
@@ -1044,7 +1041,16 @@ class TemproParser:
                 pd.read_csv(self.ntem_to_msoa_path),
                 'ntem',
                 'msoa',
-                non_split_cols=group_cols)
+                non_split_cols=['ntem_zone_id'])
+            
+            # Aggregate to required data only
+            group_cols = ['msoa_zone_id']
+            needed_cols = group_cols.copy(
+                ) + [str(x) for x in self._output_years]
+            query_out = query_out.reindex(
+                columns=needed_cols).groupby(group_cols).sum().reset_index()
+
+            
             
             segmented_population.update({segment: query_out})
             
