@@ -127,7 +127,7 @@ class TemproParser:
         """
         # TODO: Rewrite everything in this style
         
-        #Init
+        # Init
         available_dbs = self.get_available_dbs()
         
         # Loop setup
@@ -979,10 +979,10 @@ class TemproParser:
 
         return pop, emp
     
-    def _get_segmented_planning_data(
-            self,
-            db_fname,
-            pbar=None) -> pd.DataFrame:
+    def _get_segmented_planning_data(self,
+                                     db_fname,
+                                     pbar=None,
+                                     ) -> pd.DataFrame:
         """
         Get segmented planning data from Tempro DB.
         
@@ -1025,16 +1025,27 @@ class TemproParser:
             mask = query_dat[target_table_attr].isin(indices)
             query_out = query_dat[mask]
 
-            # Append zones
+            # ## GET INTO NORMITS NTEM ## #
+            # Attach the zones
             query_out = pd.merge(
                 query_out,
                 zones,
                 how='left',
                 on='ZoneID'
-                )
+            )
+
+            # Drop this GB zone thats repeated across DBs
+            odd_zone = query_out['ZoneID'] == 9999
+            gb_zone = query_out[odd_zone]
+            query_out = query_out[~odd_zone]
+
+            # Convert
             query_out = self._tempro_ntem_to_normits_ntem(
                 query_out,
-                return_zone_col='ntem_zone_id')
+                return_zone_col='ntem_zone_id'
+            )
+
+            # ## FILTER DOWN TO NEEDED DATA ONLY ## #
             ri_list = ['ntem_zone_id', target_table_attr]
             for oy in self.output_years:
                 ri_list.append(str(oy))
@@ -1057,8 +1068,7 @@ class TemproParser:
                 columns=needed_cols).groupby(group_cols).sum().reset_index()
 
             segmented_population.update({segment: query_out})
-            
-            
+
         if pbar is not None:
             pbar.update(1)
         
