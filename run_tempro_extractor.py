@@ -3,9 +3,7 @@ import os
 import normits_demand.utils.tempro_extractor as te
 
 if __name__ == '__main__':
-    """
-    """
-    
+
     # Config
     # TODO: some tying up params to funcs here
     get_planning_data = True

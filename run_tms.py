@@ -39,8 +39,8 @@ if __name__ == '__main__':
 
     a = am.AttractionModel(config_path, params_file)
     hb_a_out = a.run(trip_origin='hb',
-                  control_to_productions = True,
-                  productions_path = p.export['in_hb'])
+                     control_to_productions=True,
+                     productions_path=p.export['in_hb'])
     a.ping_outpath()
 
     nhb_p_out = p.run_nhb(

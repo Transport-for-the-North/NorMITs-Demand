@@ -1024,6 +1024,8 @@ class TemproParser:
             # Filter to target
             mask = query_dat[target_table_attr].isin(indices)
             query_out = query_dat[mask]
+
+            # Append zones
             query_out = pd.merge(
                 query_out,
                 zones,
@@ -1033,7 +1035,11 @@ class TemproParser:
             query_out = self._tempro_ntem_to_normits_ntem(
                 query_out,
                 return_zone_col='ntem_zone_id')
-            
+            ri_list = ['ntem_zone_id', target_table_attr]
+            for oy in self.output_years:
+                ri_list.append(str(oy))
+            query_out = query_out.reindex(ri_list, axis=1)
+
             # Translate to MSOA
             translator = zt.ZoneTranslator()
             query_out = translator.run(
@@ -1050,8 +1056,6 @@ class TemproParser:
             query_out = query_out.reindex(
                 columns=needed_cols).groupby(group_cols).sum().reset_index()
 
-            
-            
             segmented_population.update({segment: query_out})
             
             
@@ -1190,7 +1194,7 @@ class TemproParser:
     
     def _select_years_and_interpolate(self,
                                       query_dat,
-                                      verbose = False):
+                                      verbose=False):
         """
         Pick years from the run defined years
         Interpolate from them if you have to.
