@@ -68,12 +68,12 @@ class TMSPathing(pathing.Pathing):
         external_export = os.path.join(
             distribution_path,
             '/External Distributions')
-        nup.create_folder(external_export)
+        nup.create_folder(external_export, chDir=False)
 
         non_dist_out = os.path.join(
             distribution_path,
             '/24hr Non Dist Matrices')
-        nup.create_folder(non_dist_out)
+        nup.create_folder(non_dist_out, chDir=False)
 
         # Compile into import and export
         self.tms_in = {
