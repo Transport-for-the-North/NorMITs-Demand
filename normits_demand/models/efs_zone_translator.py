@@ -199,7 +199,7 @@ def translate_matrix(
     split_column: str = None,
     aggregation_method: str = "sum",
     weights: pd.DataFrame = None,
-    check_total: bool = True
+    check_total: bool = True,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Convert a matrix to a new zone system using given lookup.
 

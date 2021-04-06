@@ -450,7 +450,6 @@ def build_efs_io_paths(import_location: str,
         'zone_translation': zone_translation,
         'tp_splits': os.path.join(import_home, 'tp_splits'),
         'lookups': os.path.join(model_home, 'lookup'),
-        # 'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
         'scenarios': os.path.join(import_home, 'scenarios'),
         'a_weights': os.path.join(import_home, 'attractions', 'hb_attraction_weights.csv'),
         'soc_weights': soc_weights_path,
@@ -537,6 +536,7 @@ def build_efs_io_paths(import_location: str,
     # Post-ME
     compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
     post_me_exports = {
+        'home': post_me_home,
         'cache': os.path.join(post_me_home, 'cache'),
         'pa': os.path.join(post_me_home, pa),
         'pa_24': os.path.join(post_me_home, pa_24),

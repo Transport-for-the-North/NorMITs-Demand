@@ -42,6 +42,9 @@ def main():
     run_decompile_post_me = False
     run_future_year_compile_od = False
 
+    # Controls matrix conversion
+    future_years = consts.FUTURE_YEARS
+
     # Controls I/O
     scenario = consts.SC04_UZC
     iter_num = '3f'
@@ -96,30 +99,18 @@ def main():
 
     if run_pa_to_od:
         efs.pa_to_od(
-            years_needed=[2033, 2035, 2050],
+            years_needed=future_years,
             use_bespoke_pa=(not ignore_bespoke_zones),
             verbose=verbose
         )
 
     if run_compile_od:
-        # Compiles base year OD matrices
-        efs.compile_od_matrices(
-            year=2033,
-            overwrite_aggregated_od=True,
-            overwrite_compiled_od=True,
-        )
-
-        efs.compile_od_matrices(
-            year=2035,
-            overwrite_aggregated_od=True,
-            overwrite_compiled_od=True,
-        )
-
-        efs.compile_od_matrices(
-            year=2050,
-            overwrite_aggregated_od=True,
-            overwrite_compiled_od=True,
-        )
+        for year in future_years:
+            efs.compile_od_matrices(
+                year=year,
+                overwrite_aggregated_od=True,
+                overwrite_compiled_od=True,
+            )
 
     if run_decompile_post_me:
         # Decompiles post-me base year matrices

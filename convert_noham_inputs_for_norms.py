@@ -31,9 +31,8 @@ def main():
 
     # Running params
     run_vdm_od2pa = False
-    run_nhb_splitting_factors = True
-    convert_tour_props = True
-    convert_splitting_factors = True
+    run_nhb_splitting_factors = False
+    convert_tour_props = False
     convert_matrices = True
 
     # Build and EFS instance for the paths
@@ -100,8 +99,6 @@ def main():
             **nhb_seg_params
         )
 
-    exit()
-
     # Convert tour props
     if convert_tour_props:
         # Create the output path
@@ -114,14 +111,22 @@ def main():
             output_path=noham_tp_path,
             year=consts.BASE_YEAR,
             seg_level=seg_level,
-            seg_params=seg_params,
+            seg_params=hb_seg_params,
         )
 
-    # Convert splitting factors
+    # Convert matrices to long format
+    if convert_matrices:
+        out_path = os.path.join(efs.exports['post_me']['home'], 'Long Format')
+        du.create_folder(out_path)
 
-    # Convert matrices (which years)?
-    ## Long format
-    ## Norms Zones
+        hb = efs.exports['post_me']['vdm_pa_24']
+        nhb = efs.exports['post_me']['od_24']
+
+        for dir_name in [hb, nhb]:
+            oc.convert_wide_to_long(
+                import_dir=dir_name,
+                export_dir=out_path,
+            )
 
 
 if __name__ == '__main__':
