@@ -47,7 +47,7 @@ def main():
 
     # Controls I/O
     scenario = consts.SC04_UZC
-    iter_num = '3f'
+    iter_num = '3g'
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME

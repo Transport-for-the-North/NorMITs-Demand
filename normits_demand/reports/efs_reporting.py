@@ -78,7 +78,6 @@ class EfsReporter:
                  iter_num: str,
                  scenario_name: str,
                  years_needed: List[str],
-                 demand_version: str = nd.ExternalForecastSystem.__version__,
                  demand_dir_name: str = nd.ExternalForecastSystem.out_dir,
                  synth_zoning_system: str = 'msoa',
                  ):
@@ -105,7 +104,6 @@ class EfsReporter:
             model_name=model_name,
             iter_name=self.iter_name,
             scenario_name=scenario_name,
-            demand_version=demand_version,
             demand_dir_name=demand_dir_name
         )
 

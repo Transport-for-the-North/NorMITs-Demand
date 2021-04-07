@@ -53,7 +53,7 @@ from normits_demand.utils import sector_reporter_v2 as sr_v2
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
-    __version__ = '%s.%s' % (version.MAJOR, version.MINOR)
+    __version__ = version.__version__
     out_dir = "NorMITs Demand"
 
     # defines all non-year columns
@@ -267,22 +267,13 @@ class ExternalForecastSystem:
     def run(self,
             base_year: int = 2018,
             future_years: List[int] = consts.FUTURE_YEARS,
-            alt_pop_base_year_file: str = None,
-            alt_households_base_year_file: str = None,
-            alt_worker_base_year_file: str = None,
-            alt_pop_growth_assumption_file: str = None,
-            alt_households_growth_assumption_file: str = None,
-            alt_worker_growth_assumption_file: str = None,
-            alt_pop_split_file: str = None,  # THIS ISN'T USED ANYWHERE
             hb_purposes_needed: List[int] = consts.HB_PURPOSES_NEEDED,
             nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
             modes_needed: List[int] = consts.MODES_NEEDED,
             soc_needed: List[int] = consts.SOC_NEEDED,
             ns_needed: List[int] = consts.NS_NEEDED,
             car_availabilities_needed: List[int] = consts.CA_NEEDED,
-            minimum_development_certainty: str = "MTL",
             constraint_required: Dict[str, bool] = consts.CONSTRAINT_REQUIRED_DEFAULT,
-            constraint_source: str = "Grown Base",  # Default, Grown Base, Model Grown Base
             recreate_productions: bool = True,
             recreate_attractions: bool = True,
             recreate_nhb_productions: bool = True,
@@ -312,85 +303,6 @@ class ExternalForecastSystem:
             Default input is: [2033, 2035, 2050]
             Possible input is a list containing any number of integers between
             2011 to 2051.
-
-        desired_zoning:
-            The desired output zoning for this data set.
-            Default input is: "MSOA".
-            Possible input is any string, preferably one that matches to a
-            zoning system with a corresponding translation.
-
-        alt_pop_base_year_file:
-            A file location (including file suffix) containing an alternate
-            population for the base year. This file does not need full
-            alternate population metrics, just needs it for the appropriate
-            zones.
-            Default input is: None.
-            Possible input is any string which refers to a file location.
-
-        alt_households_base_year_file:
-            A file location (including file suffix) containing an alternate
-            number of households for the base year. This file does not need full
-            alternate households metrics, just needs it for the appropriate
-            zones.
-            Default input is: None.
-            Possible input is any string which refers to a file location.
-
-        alt_worker_base_year_file:
-            A file location (including file suffix) containing an alternate
-            number of workers for the base year. This file does not need full
-            alternate worker metrics, just needs it for the appropriate
-            zones.
-            Default input is: None.
-            Possible input is any string which refers to a file location.
-
-        alt_pop_growth_assumption_file:
-            A file location (including file suffix) containing an alternate
-            population growth for some future years. This file does not need full
-            alternate population growth metrics, just needs it for the appropriate
-            zones and years.
-            Default input is: None.
-            Possible input is any string which refers to a file location.
-
-        alt_households_growth_assumption_file:
-            A file location (including file suffix) containing an alternate
-            households growth for some future years. This file does not need full
-            alternate households growth metrics, just needs it for the appropriate
-            zones and years.
-            Default input is: None.
-            Possible input is any string which refers to a file location.
-
-        alt_worker_growth_assumption_file:
-            A file location (including file suffix) containing an alternate
-            workers growth for some future years. This file does not need full
-            alternate worker growth metrics, just needs it for the appropriate
-            zones and years.
-            Default input is: None.
-            Possible input is any string which refers to a file location.
-
-        alt_pop_split_file:
-            A file location (including file suffix) containing an alternate
-            population split file. This *does* require it for every zone as it
-            will be used to generate full new segmentation (i.e. NPR segments).
-            Default input is: None.
-            Possible input is any string which refers to a file location.
-
-        distribution_method:
-            The method to be used for distributing the trips.
-            Default input is: "Furness".
-            Possible inputs are: "Furness".
-
-        distributions:
-            A series of nested dictionary containing all the distributions
-            and their appropriate purpose / car availiability / mode / time
-            period splits.
-            For example, to access purpose 1, car availability 1, mode 3, time
-            period 1, distributions[1][1][3][1] is the correct input. Note that
-            Synthesiser does not split time periods into separate files so
-            currently time period is a series of copied files which have time
-            periods split out by a dataframe call.
-            Default input is a series of nested dictionaries.
-            Possible input is any dictionary corresponding to the correct
-            order.
 
         hb_purposes_needed:
             What purposes are needed on distribution.
@@ -423,38 +335,6 @@ class ExternalForecastSystem:
             Possible input is a list containing integers corresponding to the
             mode IDs.
 
-        times_needed:
-            What time periods are needed on distribution.
-            Default input is: [1, 2, 3, 4]
-            Possible input is a list containing integers corresponding to the
-            time period IDs.
-
-        dlog_file:
-            A file location for the development log.
-            Default input is: None
-            Possible input is any file location folder.
-
-        dlog_split_file:
-            A file location for the housing stock split for the development log.
-            Default input is: None
-            Possible input is any file location folder.
-
-        minimum_development_certainty:
-            A string for the minimum development certainty required from the
-            development log.
-            Default input is: "MTL" # More than likely
-            Possible inputs are: "NC", "MTL", "RF", "H"
-
-        integrate_dlog:
-            Whether the development log is going to be used.
-            Default input is: False
-            Possible inputs are: True, False
-
-        population_metric:
-            What metric to use for population generation.
-            Default input is: "Households"
-            Possible inputs are: "Households", "Population"
-
         constraint_required:
             What constraints are required and where. The list position
             correlates to:
@@ -467,43 +347,8 @@ class ExternalForecastSystem:
             Default input is: [True, True, True, False, False, False]
             Possible inputs are any list of six booleans.
 
-        constraint_method:
-            What constraint method is to be used.
-                - "Percentage": Reduce the non-constraint values by a percentage.
-                - "Average": Reduce the non-constraint values by an average overflow.
-            Default input is: "Percentage"
-            Possible inputs are: "Percentage", "Average"
-
-        constraint_area:
-            What constraint area is to be used for balancing.
-                - "Zone": Each zone is its own balancing area. Functionally matches perfectly to constraint.
-                - "Designated": Each 'designated' grouping is a balancing area.
-                - "All": All areas are combined as a balancing area.
-            Default input is: "Designated"
-            Possible inputs are: "Zone", "Designated", "All"
-
-        constraint_on:
-            Where the constraint is to be applied.
-                - "Growth": Only constraint growth, not full amount.
-                - "All": Constrain on all.
-            Default input is: "Growth"
-            Possible inputs are: "Growth", "All"
-
-        constraint_source:
-            Where to source the constraint from.
-                - "Default": 'Default' constraint values, i.e. raw values from NTEM currently.
-                - "Grown Base": New model base including default (NTEM) growth values to be used as constraint.
-                - "Model Grown Base": Model base and model growth to be used as a constraint to restrict developments.
-            Default input is: "Default"
-            Possible inputs are: "Default", "Grown Base", "Model Grown Base"
-
         outputting_files:
             Whether files are being output.
-            Default input is: True
-            Possible inputs are: False, True
-
-        performing_sector_totals:
-            Whether sector totals are being output.
             Default input is: True
             Possible inputs are: False, True
 
@@ -524,6 +369,7 @@ class ExternalForecastSystem:
             - Use purposes needed / car availabilities needed / modes needed /
             times needed to reduce the amount of calculations to be done.
         """
+        # TODO (BT): Update EFS.run() docs
         # Init
         if output_location is None:
             output_location = self.output_location
@@ -534,10 +380,6 @@ class ExternalForecastSystem:
         # Set up timing
         begin_time = time.time()
         current_time = begin_time
-
-        # Format inputs
-        constraint_source = constraint_source.lower()
-        minimum_development_certainty = minimum_development_certainty.upper()
 
         year_list = [str(x) for x in [base_year] + future_years]
 
@@ -550,26 +392,18 @@ class ExternalForecastSystem:
         write_input_info(
             os.path.join(self.exports['home'], "input_parameters.txt"),
             version.__version__,
+            self.land_use_iteration,
             base_year,
             future_years,
             self.output_zone_system,
-            alt_pop_base_year_file,
-            alt_households_base_year_file,
-            alt_worker_base_year_file,
-            alt_pop_growth_assumption_file,
-            alt_households_growth_assumption_file,
-            alt_worker_growth_assumption_file,
-            alt_pop_split_file,
             self.imports['decomp_post_me'],
-            hb_purposes_needed,
+            hb_purposes_needed + nhb_purposes_needed,
             modes_needed,
             soc_needed,
             ns_needed,
             car_availabilities_needed,
             self.integrate_dlog,
-            minimum_development_certainty,
             constraint_required,
-            constraint_source,
         )
 
         # ## GET DATA ## #
@@ -1874,7 +1708,6 @@ class ExternalForecastSystem:
             base_year=base_year,
             iter_name=self.iter_name,
             scenario_name=self.scenario_name,
-            demand_version=self.__version__,
             demand_dir_name=self.out_dir,
             land_use_iteration=self.land_use_iteration,
             land_use_drive=self.land_use_drive,
@@ -1913,50 +1746,35 @@ def _input_checks(iter_num: int = None,
 
 def write_input_info(output_path: str,
                      efs_version: str,
+                     land_use_iter: str,
                      base_year: int,
                      future_years: List[int],
-                     desired_zoning: str,
-                     alt_pop_base_year_file: str,
-                     alt_households_base_year_file: str,
-                     alt_worker_base_year_file: str,
-                     alt_pop_growth_assumption_file: str,
-                     alt_households_growth_assumption_file: str,
-                     alt_worker_growth_assumption_file: str,
-                     alt_pop_split_file: str,
-                     seed_dist_location: str,
-                     hb_purposes_needed: List[int],
+                     output_zone_system: str,
+                     post_me_location: str,
+                     p_needed: List[int],
                      modes_needed: List[int],
                      soc_needed: List[int],
                      ns_needed: List[int],
                      car_availabilities_needed: List[int],
                      integrate_dlog: bool,
-                     minimum_development_certainty: str,
                      constraint_required: List[bool],
-                     constraint_source: str,
                      ) -> None:
 
     out_lines = [
         'EFS version: ' + str(efs_version),
+        'Land Use Iter: ' + str(land_use_iter),
         'Run Date: ' + str(time.strftime('%D').replace('/', '_')),
         'Start Time: ' + str(time.strftime('%T').replace('/', '_')),
         "Base Year: " + str(base_year),
         "Future Years: " + str(future_years),
-        "Zoning System: " + desired_zoning,
-        "Alternate Population Base Year File: " + str(alt_pop_base_year_file),
-        "Alternate Households Base Year File: " + str(alt_households_base_year_file),
-        "Alternate Workers Base Year File: " + str(alt_worker_base_year_file),
-        "Alternate Population Growth File: " + str(alt_pop_growth_assumption_file),
-        "Alternate Households Growth File: " + str(alt_households_growth_assumption_file),
-        "Alternate Workers Growth File: " + str(alt_worker_growth_assumption_file),
-        "Alternate Population Split File: " + str(alt_pop_split_file),
-        "Seed Distribution Location: " + seed_dist_location,
-        "Purposes Used: " + str(hb_purposes_needed),
+        "Output Zoning System: " + output_zone_system,
+        "Post-ME Matrices Location: " + post_me_location,
+        "Purposes Used: " + str(p_needed),
         "Modes Used: " + str(modes_needed),
         "Soc Used: " + str(soc_needed),
         "Ns Used: " + str(ns_needed),
         "Car Availabilities Used: " + str(car_availabilities_needed),
         "Development Log Integrated: " + str(integrate_dlog),
-        "Minimum Development Certainty: " + str(minimum_development_certainty),
         "Constraints Used On: " + str(constraint_required),
         "Constraint Source: " + constraint_source
     ]

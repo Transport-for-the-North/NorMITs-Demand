@@ -217,7 +217,6 @@ class PopEmpComparator:
             model_name=consts.MODEL_NAME,
             iter_name="iter0",
             scenario_name=consts.SC00_NTEM,
-            demand_version=nd.ExternalForecastSystem.__version__,
             land_use_drive='Y:/',
             land_use_iteration='iter3b',
         )
