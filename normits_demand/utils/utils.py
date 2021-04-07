@@ -1686,7 +1686,7 @@ def get_trip_length_bands(import_folder,
 
     for key, value in calib_params.items():
         # Don't want empty segments, don't want ca
-        if value != 'none':
+        if value != 'none' and key != 'mat_type':
             # print_w_toggle(key + str(value), echo=echo)
             import_files = [x for x in import_files if
                             ('_' + key + str(value)) in x]
@@ -2541,6 +2541,7 @@ def parse_mat_output(list_dir,
     segments = segments.replace({np.nan:'none'})
 
     return segments
+
 
 def unpack_tlb(tlb,
                km_constant = _M_KM):

@@ -223,7 +223,11 @@ def matrix_reporting(matrix_directory: str,
         if sectors_files is not None:
             sr = sr_v2.SectorReporter()
             valid_files = output_files.copy()
-            output_files = []
+            output_files = list()
+            pbar = tqdm(
+                desc="Aggregating sectors",
+                total=len(valid_files) * len(sectors_files)
+            )
             for sectors_name, sectors_file in sectors_files.items():
                 for matrix_file in valid_files:
                     if matrix_file in sectored_output_files:
@@ -241,6 +245,8 @@ def matrix_reporting(matrix_directory: str,
                     new_file = matrix_file.replace(".csv", suffix)
                     sectored_output_files.append(new_file)
                     os.replace(matrix_file, new_file)
+
+                    pbar.update(1)
 
     # Collate the sectored files into one for easier use in Power BI etc.
     concat_matrix_folder(output_dir, matrix_format)
@@ -428,7 +434,7 @@ def _tld_reporting_internal(mat_dict,
         "ntem",
         trip_origin,
         replace_nan=False,
-        echo=True
+        echo=False,
     )
 
     # Set the string sent to the costs function
@@ -562,7 +568,8 @@ def tld_reporting(matrix_dir: str,
     multiprocessing.multiprocess(
         fn=_tld_reporting_internal,
         kwargs=kwarg_list,
-        process_count=consts.PROCESS_COUNT
+        process_count=consts.PROCESS_COUNT,
+        # process_count=0,
     )
 
     # Concatenate all files into a single stacked csv
@@ -773,13 +780,13 @@ def check_params(parameters: dict,
         "segments_needed": ["keys", segments,
                             "values", ["Keep", "Agg"]],
         "output_dir": ["str", []],
-        "zones_file": ["path", imports["zoning"]],
+        "zones_file": ["path", imports["zone_translation"]['home']],
         "tld_path": ["path", imports["home"]],
         "cost_path": ["path", imports["home"]],
         "overwrite_outputs": ["bool", []],
         "collate_years": ["bool", []],
         "sectors_names": ["str", []],
-        "sectors_files": ["path", imports["zone_translation"]]
+        "sectors_files": ["path", imports["zone_translation"]['one_to_one']]
     }
 
     for param, check in required_keys.items():
@@ -836,10 +843,10 @@ def main(param_file: str,
     overwrite = True
 
     output_dir = os.path.join(exports["reports"], params["output_dir"])
-    zones_file = os.path.join(imports["zoning"], params["zones_file"])
+    zones_file = os.path.join(imports["zone_translation"]['home'], params["zones_file"])
     # TODO: Comprehension should not be longer than one line
     sectors_files = {
-        name: os.path.join(imports["zone_translation"], x)
+        name: os.path.join(imports["zone_translation"]['one_to_one'], x)
         for name, x in zip(params["sectors_names"], params["sectors_files"])
     }
     tld_path = os.path.join(imports["home"], params["tld_path"])
@@ -885,10 +892,10 @@ if __name__ == "__main__":
     # Power BI
 
     # Controls I/O
-    scenario = consts.SC04_UZC
-    iter_num = 1
+    scenario = consts.SC00_NTEM
+    iter_num = '3f'
     import_home = "I:/"
-    export_home = "I:/"
+    export_home = "E:/"
     model_name = consts.MODEL_NAME
 
     efs_main = ExternalForecastSystem(

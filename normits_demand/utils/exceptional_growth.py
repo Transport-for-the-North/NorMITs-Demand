@@ -872,6 +872,7 @@ def growth_criteria(synth_productions: pd.DataFrame,
         years_needed=[base_year],
         cache_path=observed_cache,
         matrix_format='pa',
+        model_zone_col=model_zone_col,
         internal_zones=internal_zones,
         external_zones=external_zones,
     )

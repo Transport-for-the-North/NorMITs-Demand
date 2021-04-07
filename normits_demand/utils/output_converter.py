@@ -71,7 +71,7 @@ def noham_vdm_tour_proportions_out(input_path: str,
         tour_props_name = du.get_seg_level_dist_name(
             seg_level=seg_level,
             seg_values=seg_values,
-            matrix_format='tour_proportions',
+            matrix_format='%s_tour_proportions' % seg_level,
             year=year,
             suffix='.pkl'
         )

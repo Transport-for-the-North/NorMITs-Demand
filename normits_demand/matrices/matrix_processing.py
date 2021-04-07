@@ -512,7 +512,7 @@ def furness_tour_proportions(orig_vals,
     tour_proportions = defaultdict(dict)
 
     total = len(orig_vals) * len(dest_vals)
-    desc = "Generating tour proportions for %s..." % tour_prop_name
+    desc = "Generating tour props for %s..." % tour_prop_name
     for orig, dest in tqdm(product(orig_vals, dest_vals), total=total, desc=desc):
         # Build the from_home vector
         fh_target = list()
@@ -637,7 +637,7 @@ def _tms_seg_tour_props_internal(od_import: str,
     # TODO: Write _tms_seg_tour_props_internal() docs
     out_fname = du.get_dist_name(
         trip_origin=trip_origin,
-        matrix_format='tour_proportions',
+        matrix_format='tms_tour_proportions',
         year=str(year),
         purpose=str(p),
         mode=str(m),
@@ -886,7 +886,7 @@ def _tms_seg_tour_props(od_import: str,
 
     # Output a log of the zero counts found
     header = ['tour_file', 'zero_count', 'percentage']
-    out_name = "yr%d_tour_proportions_log.csv" % year
+    out_name = "yr%d_tms_tour_proportions_log.csv" % year
     out_path = os.path.join(tour_proportions_export, out_name)
     du.write_csv(header, zero_counts, out_path)
 
@@ -945,7 +945,7 @@ def _vdm_seg_tour_props_internal(od_import: str,
     # Figure out the output filename
     out_fname = du.get_vdm_dist_name(
         trip_origin=trip_origin,
-        matrix_format='tour_proportions',
+        matrix_format='vdm_tour_proportions',
         year=str(year),
         user_class=str(uc),
         mode=str(m),
@@ -1117,7 +1117,7 @@ def _vdm_seg_tour_props(od_import: str,
                         phi_type: str = 'fhp',
                         aggregate_to_wday: bool = True,
                         generate_tour_props: bool = True,
-                        process_count: int = -2
+                        process_count: int = consts.PROCESS_COUNT,
                         ) -> None:
     """
     TODO: Write _vdm_seg_tour_props() docs
@@ -1164,7 +1164,7 @@ def _vdm_seg_tour_props(od_import: str,
 
     # Output a log of the zero counts found
     header = ['tour_file', 'zero_count', 'percentage']
-    out_name = "yr%d_vdm_tour_proportions_log.csv" % year
+    out_name = "yr%s_vdm_tour_proportions_log.csv" % year
     out_path = os.path.join(tour_proportions_export, out_name)
     du.write_csv(header, zero_counts, out_path)
 
@@ -1711,7 +1711,7 @@ def build_24hr_vdm_mats(import_dir: str,
                         m_needed: List[int] = efs_consts.MODES_NEEDED,
                         ca_needed: List[int] = None,
                         tp_needed: List[int] = efs_consts.TIME_PERIODS,
-                        split_factors_path: str = None
+                        split_factors_path: str = None,
                         ) -> None:
     # TODO: Write build_24hr_vdm_mats() docs
     # Init
@@ -2477,6 +2477,7 @@ def load_matrix_from_disk(mat_import_dir: pathlib.Path,
 
 def matrices_to_vector(mat_import_dir: pathlib.Path,
                        years_needed: List[str],
+                       model_zone_col: str,
                        internal_zones: List[int] = None,
                        external_zones: List[int] = None,
                        verbose: bool = True,
@@ -2504,6 +2505,10 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
 
     years_needed:
         A list of years to look for and build vectors for.
+
+    model_zone_col:
+        The name to give to the zone columns if it can't be inferred from the
+        matrices.
 
     internal_zones:
         A list of internal zones. If set then only these zones are used
@@ -2648,6 +2653,8 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
 
                 # Sort out the column naming
                 zone_col_name = matrix.index.name
+                if zone_col_name is None:
+                    zone_col_name = model_zone_col
                 p_or_o.index.name = zone_col_name
                 a_or_d.index.name = zone_col_name
 
@@ -2750,6 +2757,7 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
                                      years_needed: List[str],
                                      cache_path: pathlib.Path,
                                      matrix_format: str,
+                                     model_zone_col: str,
                                      internal_zones: List[int] = None,
                                      external_zones: List[int] = None,
                                      overwrite_cache: bool = False,
@@ -2781,6 +2789,10 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
     matrix_format:
         The format of the matrices being produced. Should be one of the
         valid values from efs_consts.MATRIX_FORMATS
+
+    model_zone_col:
+        The name to give to the zone columns if it can't be inferred from the
+        matrices.
 
     internal_zones:
         A list of internal zones. If set then only these zones are used
@@ -2880,6 +2892,7 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
     vectors = matrices_to_vector(
         mat_import_dir=mat_import_dir,
         years_needed=years_needed,
+        model_zone_col=model_zone_col,
         internal_zones=internal_zones,
         external_zones=external_zones,
         verbose=verbose
