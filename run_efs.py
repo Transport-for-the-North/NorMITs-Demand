@@ -29,9 +29,9 @@ def main():
     run_pop_emp_comparison = False
 
     run_base_efs = True
-    recreate_productions = False
-    recreate_attractions = False
-    recreate_nhb_productions = False
+    recreate_productions = True
+    recreate_attractions = True
+    recreate_nhb_productions = True
 
     run_bespoke_zones = False
     ignore_bespoke_zones = True
