@@ -217,7 +217,8 @@ class ExternalForecastSystem:
 
         # Build the pop paths
         pop_paths = {
-            "import_home": self.imports["home"],
+            "by_pop_path": self.imports["pop_by"],
+            "by_emp_path": self.imports["emp_by"],
             "growth_csv": self.pop_growth_path,
             "constraint_csv": self.pop_constraint_path,
             "sector_grouping_file": os.path.join(self.imports['zone_translation']['weighted'],
@@ -226,7 +227,8 @@ class ExternalForecastSystem:
 
         # Build the emp paths
         emp_paths = {
-            "import_home": self.imports["home"],
+            "by_pop_path": self.imports["pop_by"],
+            "by_emp_path": self.imports["emp_by"],
             "growth_csv": self.emp_growth_path,
             "constraint_csv": self.emp_constraint_path,
             "sector_grouping_file": os.path.join(self.imports['zone_translation']['weighted'],
@@ -277,7 +279,6 @@ class ExternalForecastSystem:
             recreate_productions: bool = True,
             recreate_attractions: bool = True,
             recreate_nhb_productions: bool = True,
-            apply_growth_criteria: bool = True,
             outputting_files: bool = True,
             output_location: str = None,
             echo_distribution: bool = True
@@ -618,27 +619,26 @@ class ExternalForecastSystem:
         pre_eg_model_p_vector = model_p_vector.copy()
         pre_eg_model_nhb_p_vector = model_nhb_p_vector.copy()
 
-        if apply_growth_criteria:
-            # Apply the growth criteria using the post-ME P/A vectors
-            # (normal and exceptional zones)
+        # Apply the growth criteria using the post-ME P/A vectors
+        # (normal and exceptional zones)
 
-            # APPLY TO INTERNAL ONLY
-            dtype = {model_zone_col: int}
-            internal_zones = pd.read_csv(self.imports['internal_zones'], dtype=dtype).squeeze().tolist()
+        # APPLY TO INTERNAL ONLY
+        dtype = {model_zone_col: int}
+        internal_zones = pd.read_csv(self.imports['internal_zones'], dtype=dtype).squeeze().tolist()
 
-            print("Applying growth criteria...")
-            vectors = self._handle_growth_criteria(
-                synth_productions=model_p_vector,
-                synth_nhb_productions=model_nhb_p_vector,
-                synth_attractions=model_a_vector,
-                synth_nhb_attractions=model_nhb_a_vector,
-                base_year=str(base_year),
-                future_years=[str(x) for x in future_years],
-                integrate_dlog=self.integrate_dlog,
-                internal_zones=internal_zones,
-                external_zones=None,
-            )
-            model_p_vector, model_nhb_p_vector, model_a_vector, model_nhb_a_vector = vectors
+        print("Applying growth criteria...")
+        vectors = self._handle_growth_criteria(
+            synth_productions=model_p_vector,
+            synth_nhb_productions=model_nhb_p_vector,
+            synth_attractions=model_a_vector,
+            synth_nhb_attractions=model_nhb_a_vector,
+            base_year=str(base_year),
+            future_years=[str(x) for x in future_years],
+            integrate_dlog=self.integrate_dlog,
+            internal_zones=internal_zones,
+            external_zones=None,
+        )
+        model_p_vector, model_nhb_p_vector, model_a_vector, model_nhb_a_vector = vectors
 
         # Write grown productions and attractions to file
         fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb_exc')

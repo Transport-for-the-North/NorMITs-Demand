@@ -29,10 +29,9 @@ def main():
     run_pop_emp_comparison = False
 
     run_base_efs = True
-    recreate_productions = True
-    recreate_attractions = True
-    recreate_nhb_productions = True
-    rerun_growth_criteria = True
+    recreate_productions = False
+    recreate_attractions = False
+    recreate_nhb_productions = False
 
     run_bespoke_zones = False
     ignore_bespoke_zones = True
@@ -73,8 +72,6 @@ def main():
             recreate_attractions=recreate_attractions,
             recreate_nhb_productions=recreate_nhb_productions,
             echo_distribution=verbose,
-
-            apply_growth_criteria=rerun_growth_criteria,
         )
 
     if run_bespoke_zones:
