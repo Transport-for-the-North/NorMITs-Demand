@@ -130,7 +130,6 @@ def test_real_data():
         EXPORT_LOC,
         MODEL_NAME,
         f"iter{ITER_NUM}",
-        ExternalForecastSystem.__version__,
         ExternalForecastSystem.out_dir
     )
     # Population csv files, locations from ExternalForecastSysten.__init__ parameters

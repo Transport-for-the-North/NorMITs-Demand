@@ -2289,11 +2289,6 @@ def compile_matrices(mat_import: str,
             The number of decimal places to round the output values to.
             Uses efs_consts.DEFAULT_ROUNDING by default.
 
-    build_factor_pickle:
-        If True, a dictionary of factors that can be used to decompile the
-        compiled matrices will be created. This will be in the format of:
-        factors[compiled_matrix][import_matrix] = np.array(factors)
-
     factor_pickle_path:
         Where to export the decompile factors. This should be a path to a
         directory, not including the filename. If left as None, mat_export
@@ -2352,13 +2347,13 @@ def compile_matrices(mat_import: str,
         in_mats = list()
         for mat_name in input_mat_names:
             in_path = os.path.join(mat_import, mat_name)
-            df = file_ops.read_df(in_path, index_col=0)
             in_mats.append(file_ops.read_df(in_path, index_col=0))
 
         # Combine all matrices together
         full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), in_mats)
 
         # Output to file
+        # TODO(BT): Output as compressed if filename says so
         output_path = os.path.join(mat_export, comp_name)
         full_mat.round(decimals=round_dp).to_csv(output_path)
 

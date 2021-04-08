@@ -659,7 +659,7 @@ def concat_matrix_folder(data_dir: str,
     """
 
     # Override default file name
-    output_name = output_name or "concatenated_data.csv"
+    output_name = output_name or "tfn_sectors_combined.csv"
 
     # Fetch a list of all .csv files in the directory
     files = os.listdir(data_dir)

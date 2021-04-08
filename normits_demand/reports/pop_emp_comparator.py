@@ -25,7 +25,11 @@ from normits_demand.models import efs_attraction_model as am
 
 
 ##### CONSTANTS #####
-EXCEL_MAX = (10000, 1000) # Maximum size of dataframe to be written to excel
+EXCEL_MAX = (10000, 1000)  # Maximum size of dataframe to be written to excel
+
+# BACKLOG: Re-write the PopEmpComparator to handle pop and emp at the same
+#  time - we shouldn't have to create two different objects given the name!
+#  labels: EFS, QoL Updates
 
 ##### CLASSES #####
 # TODO: Split into two classes inheriting from a common base
@@ -41,7 +45,8 @@ class PopEmpComparator:
     ZONE_COL = "msoa_zone_id"
 
     def __init__(self,
-                 import_home: str,
+                 by_pop_path: str,
+                 by_emp_path: str,
                  growth_csv: str,
                  constraint_csv: str,
                  output_csv: str,
@@ -55,9 +60,11 @@ class PopEmpComparator:
 
         Parameters
         ----------
-        import_home : str
-            Base path for the input location, used for finding the base population
-            and employment data.
+        by_pop_path : str
+            Path to the base year population data to compare to
+
+        by_emp_path : str
+            Path to the base year employment data to compare to
 
         growth_csv : str
             Path to the csv containing the input growth values for population (or employment)
@@ -115,7 +122,10 @@ class PopEmpComparator:
 
         # Read the required columns for input csv files
         self.input_data, self.constraint_data, self.growth_data = self._read_inputs(
-            import_home, constraint_csv, growth_csv
+            by_pop_path,
+            by_emp_path,
+            constraint_csv,
+            growth_csv,
         )
 
         # Create dictionary of sector reporter parameters
@@ -176,7 +186,8 @@ class PopEmpComparator:
         return output, years
 
     def _read_inputs(self,
-                     import_home: str,
+                     by_pop_path: str,
+                     by_emp_path: str,
                      constraint_csv: str,
                      growth_csv: str,
                      base_year: str = '2018',
@@ -187,9 +198,11 @@ class PopEmpComparator:
 
         Parameters
         ----------
-        import_home : str
-            Base path for the input location, used for finding the base population
-            and employment data.
+        by_pop_path : str
+            Path to the base year population data to compare to.
+
+        by_emp_path : str
+            Path to the base year employment data to compare to.
 
         constraint_csv : str
             Path to the constraint CSV file.
@@ -205,47 +218,33 @@ class PopEmpComparator:
         """
         # Init
         start = time.perf_counter()
-
-        # BACKLOG: Update pop_emp_comparator path building
-        #  labels: EFS, demand merge
-
-        # Big old cludge!
-        # Half of these don't matter. We just want the imports!!
-        imports, *_ = du.build_efs_io_paths(
-            import_location=import_home,
-            export_location=import_home,
-            model_name=consts.MODEL_NAME,
-            iter_name="iter0",
-            scenario_name=consts.SC00_NTEM,
-            demand_version=nd.ExternalForecastSystem.__version__,
-            land_use_drive='Y:/',
-            land_use_iteration='iter3b',
-        )
+        base_yr_col = base_year
+        group_cols = [self.ZONE_COL]
+        index_cols = group_cols.copy() + [base_yr_col]
 
         # Read input data
         if self.data_type == "population":
             # Set up args
             base_yr_col = base_year
             index_cols = [self.ZONE_COL, base_yr_col]
-            path = imports["pop_by"]
+            path = by_pop_path
 
             # Read base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
 
             input_data = pm.get_pop_data_from_land_use(path, base_year=base_year)
             input_data = input_data.reindex(columns=index_cols)
-            input_data = input_data.groupby(self.ZONE_COL, as_index=False).sum()
+            input_data = input_data.groupby(group_cols, as_index=False).sum()
 
         elif self.data_type == "employment":
             # Set up args
-            base_yr_col = base_year
-            index_cols = [self.ZONE_COL, base_yr_col]
-            path = os.path.join(imports["emp_by"])
+            path = by_emp_path
 
             # Read in base year data
             du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
             input_data = am.get_emp_data_from_land_use(path, base_year=base_year)
             input_data = input_data.reindex(columns=index_cols)
+            input_data = input_data.groupby(group_cols, as_index=False).sum()
 
         else:
             # We shouldn't be able to get here

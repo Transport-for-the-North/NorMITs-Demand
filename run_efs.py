@@ -32,7 +32,6 @@ def main():
     recreate_productions = True
     recreate_attractions = True
     recreate_nhb_productions = True
-    rerun_growth_criteria = True
 
     run_bespoke_zones = False
     ignore_bespoke_zones = True
@@ -47,7 +46,7 @@ def main():
 
     # Controls I/O
     scenario = consts.SC04_UZC
-    iter_num = '3f'
+    iter_num = '3g'
     import_home = "I:/"
     export_home = "E:/"
     model_name = consts.MODEL_NAME
@@ -73,8 +72,6 @@ def main():
             recreate_attractions=recreate_attractions,
             recreate_nhb_productions=recreate_nhb_productions,
             echo_distribution=verbose,
-
-            apply_growth_criteria=rerun_growth_criteria,
         )
 
     if run_bespoke_zones:

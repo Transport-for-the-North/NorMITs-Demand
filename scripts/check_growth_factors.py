@@ -36,7 +36,6 @@ IMPORTS, EXPORTS, _ = du.build_efs_io_paths(
     model_name=MODEL_NAME,
     iter_name=ITER_NAME,
     scenario_name=SCENARIO,
-    demand_version=nd.ExternalForecastSystem.__version__,
 )
 
 YEARS = ['2018', '2033', '2035', '2050']
