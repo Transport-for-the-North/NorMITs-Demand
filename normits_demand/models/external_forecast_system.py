@@ -1776,7 +1776,6 @@ def write_input_info(output_path: str,
         "Car Availabilities Used: " + str(car_availabilities_needed),
         "Development Log Integrated: " + str(integrate_dlog),
         "Constraints Used On: " + str(constraint_required),
-        "Constraint Source: " + constraint_source
     ]
     with open(output_path, 'w') as out:
         out.write('\n'.join(out_lines))
