@@ -1327,7 +1327,7 @@ def build_norms_vdm_compile_params(import_dir: str,
                                    matrix_format: str,
                                    segmentation_aggregation: nd.SegmentAggregationDict,
                                    years_needed: Iterable[int],
-                                   m_needed: List[int] = efs_consts.MODES_NEEDED,
+                                   m_needed: List[int],
                                    tp_needed: Iterable[int] = None,
                                    output_headers: List[str] = None,
                                    output_format: str = 'wide',
@@ -2905,6 +2905,7 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
                                   mat_export: nd.PathLike,
                                   params_export: nd.PathLike,
                                   years_needed: List[str],
+                                  m_needed: List[int],
                                   matrix_format: str,
                                   ) -> List[str]:
     """
@@ -2926,6 +2927,10 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
         A list of years to compile matrices for. Each year is dealt with
         individually. I.e. you cannot compile matrices across multiple years.
 
+    m_needed:
+        A list of the modes to compile matrices for. Each mode is dealt with
+        individually. I.e. you cannot compile matrices across multiple modes.
+
     matrix_format:
         The format of of the matrices to compile. Needs to be one of
         efs_consts.MATRIX_FORMATS
@@ -2945,6 +2950,7 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
         matrix_format=matrix_format,
         segmentation_aggregation=consts.NORMS_VDM_SEG_INTERNAL,
         years_needed=years_needed,
+        m_needed=m_needed,
         params_suffix=fname_suffix,
     )
 
@@ -2975,6 +2981,7 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
                                   mat_export: nd.PathLike,
                                   params_export: nd.PathLike,
                                   years_needed: List[str],
+                                  m_needed: List[int],
                                   matrix_format: str,
                                   ) -> List[str]:
     """
@@ -2996,6 +3003,10 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
         A list of years to compile matrices for. Each year is dealt with
         individually. I.e. you cannot compile matrices across multiple years.
 
+    m_needed:
+        A list of the modes to compile matrices for. Each mode is dealt with
+        individually. I.e. you cannot compile matrices across multiple modes.
+
     matrix_format:
         The format of of the matrices to compile. Needs to be one of
         efs_consts.MATRIX_FORMATS
@@ -3015,6 +3026,7 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
         matrix_format=matrix_format,
         segmentation_aggregation=consts.NORMS_VDM_SEG_EXTERNAL,
         years_needed=years_needed,
+        m_needed=m_needed,
         params_suffix=fname_suffix,
     )
 
@@ -3169,6 +3181,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
                          mat_export: nd.PathLike,
                          params_export: nd.PathLike,
                          year: str,
+                         m_needed: List[int],
                          matrix_format: str,
                          internal_zones: List[int],
                          external_zones: List[int],
@@ -3194,19 +3207,23 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
     )
 
     # Compile and get the splitting factors for internal mats
+    print("Generating internal splitting factors...")
     int_split_factors = compile_norms_to_vdm_internal(
         mat_import=int_dir,
         mat_export=mat_export,
         params_export=params_export,
         years_needed=[year],
+        m_needed=m_needed,
         matrix_format=matrix_format,
     )
 
+    print("Generating external splitting factors...")
     ext_split_factors = compile_norms_to_vdm_external(
         mat_import=ext_dir,
         mat_export=mat_export,
         params_export=params_export,
         years_needed=[year],
+        m_needed=m_needed,
         matrix_format=matrix_format,
     )
 

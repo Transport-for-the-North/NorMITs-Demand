@@ -1980,7 +1980,7 @@ def get_split_factors_fname(matrix_format: str,
     """
     Generates the splitting factors filename
     """
-    ftype = consts.COMPRESSION_SUFFIX
+    ftype = consts.COMPRESSION_SUFFIX.strip('.')
     if suffix is None:
         return "%s_yr%s_splitting_factors.%s" % (matrix_format, year, ftype)
 
