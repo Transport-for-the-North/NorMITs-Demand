@@ -39,22 +39,22 @@ from tqdm import tqdm
 
 # ## COMPARE POST_ME INPUT TO 2018 OUTPUT ## #
 TRIP_ORIGIN = None
-OUTPUT_DIR = r'E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3f\Reports\EFS Reporter'
+OUTPUT_DIR = r'I:\NorMITs Demand\noham\EFS\iter3g\NTEM\Reports\EFS Reporter'
 
 # Compare EFS output to post-ME PA
 # ORIGINAL_DIR = r'I:\NorMITs Demand\import\noham\decompiled_post_me'
-# COMPARE_DIR = r'E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3f\Matrices\24hr PA Matrices'
+# COMPARE_DIR = r'I:\NorMITs Demand\noham\EFS\iter3g\NTEM\Matrices\24hr PA Matrices'
 # REPORT_FNAME = 'output_to_post_me_pa_report.csv'
 
 # Compare EFS output to post-ME OD
-ORIGINAL_DIR = r'I:\NorMITs Demand\import\noham\post_me\tms_seg_od'
-COMPARE_DIR = r'E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3f\Matrices\OD Matrices'
-REPORT_FNAME = 'output_to_post_me_od_report.csv'
+# ORIGINAL_DIR = r'I:\NorMITs Demand\import\noham\post_me\tms_seg_od'
+# COMPARE_DIR = r'E:\NorMITs Demand\noham\EFS\NTEM\iter3g\Matrices\OD Matrices'
+# REPORT_FNAME = 'output_to_post_me_od_report.csv'
 
 # Compare EFS output to post-ME compiled OD
-# ORIGINAL_DIR = r'I:\NorMITs Demand\import\noham\post_me\renamed'
-# COMPARE_DIR = r'E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3f\Matrices\Compiled OD Matrices PCU'
-# REPORT_FNAME = 'output_to_post_me_compiled_od_report.csv'
+ORIGINAL_DIR = r'I:\NorMITs Demand\import\noham\post_me\renamed'
+COMPARE_DIR = r'I:\NorMITs Demand\noham\EFS\iter3g\NTEM\Matrices\Compiled OD Matrices PCU'
+REPORT_FNAME = 'output_to_post_me_compiled_od_report.csv'
 
 
 def list_files(path):
