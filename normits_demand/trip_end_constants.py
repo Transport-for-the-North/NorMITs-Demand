@@ -19,3 +19,8 @@ MSOA_LAD = 'I:/NorMITs Synthesiser/import/lad_to_msoa.csv'
 HB_PURPOSE = [1, 2, 3, 4, 5, 6, 7, 8]
 
 NHB_PURPOSE = [12, 13, 14, 15, 16, 18]
+
+# From Sex_B01ID use in CTripEnd
+# 3 = Children, 1 = Male, 2 = Female
+TT_GENDER = {'traveller_type': list(range(1, 89)),
+             'g': [3]*8 + [1]*40 + [2]*40}
