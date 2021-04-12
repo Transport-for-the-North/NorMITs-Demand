@@ -392,8 +392,10 @@ def decompile_norms(year: int,
                     overwrite_converted_matrices: bool = True,
                     csv_out: bool = False,
                     compress_out: bool = True,
+                    final_export_csv: bool = True,
                     ) -> None:
     # TODO: Write decompile_norms() docs
+    # final_export_csv = True for seg disagg
     # Init
     model_name = 'norms'
     matrix_format = checks.validate_matrix_format(matrix_format)
@@ -431,6 +433,7 @@ def decompile_norms(year: int,
         )
         decompile_factors_path = os.path.join(decompile_factors_dir, factors_fname)
 
+        print(out_dir)
         decompile_matrices(
             matrix_import=post_me_renamed_export,
             matrix_export=out_dir,
@@ -438,8 +441,10 @@ def decompile_norms(year: int,
         )
 
     # ## RECOMBINE INTERNAL AND EXTERNAL DEMAND ## #
+    print(post_me_decompiled_export)
     mat_p.recombine_internal_external(
         internal_import=int_dir,
         external_import=ext_dir,
         full_export=post_me_decompiled_export,
+        force_csv_out=final_export_csv,
     )

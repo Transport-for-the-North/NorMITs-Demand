@@ -458,6 +458,7 @@ def build_efs_io_paths(import_location: str,
         'model_home': os.path.join(import_home, model_name),
         'internal_zones': os.path.join(model_schema_home, consts.INTERNAL_AREA % model_name),
         'external_zones': os.path.join(model_schema_home, consts.EXTERNAL_AREA % model_name),
+        'param_home': model_param_home,
         'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
         'post_me_factors': os.path.join(model_param_home, 'post_me_tms_decompile_factors.pkl'),
         'post_me_tours': model_tour_prop_home,
@@ -1981,7 +1982,10 @@ def get_split_factors_fname(matrix_format: str,
     """
     Generates the splitting factors filename
     """
+    # Init
     ftype = consts.COMPRESSION_SUFFIX
+    ftype = ftype.strip('.')
+
     if suffix is None:
         return "%s_yr%s_splitting_factors.%s" % (matrix_format, year, ftype)
 
