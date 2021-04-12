@@ -525,18 +525,18 @@ class EfsReporter:
 
         if compare_to_ntem:
             print("Generating %s specific NTEM reports..." % self.model_name)
-            self.compare_base_pa_vectors_to_ntem()
-            self.compare_translated_base_pa_vectors_to_ntem()
-            self.compare_eg_pa_vectors_to_ntem()
-            self.analyse_compiled_matrices()
-
-            # Compare pre-furness vectors to post-ME
-            self.compare_eg_pa_vectors_to_post_me()
-
-            # Matrix compare to NTEM
-            self.compare_pa_matrices_to_ntem()
-            # self.compare_bespoke_pa_matrices_to_ntem()
-            # self.compare_tp_pa_matrices_to_ntem()
+            # self.compare_base_pa_vectors_to_ntem()
+            # self.compare_translated_base_pa_vectors_to_ntem()
+            # self.compare_eg_pa_vectors_to_ntem()
+            # self.analyse_compiled_matrices()
+            #
+            # # Compare pre-furness vectors to post-ME
+            # self.compare_eg_pa_vectors_to_post_me()
+            #
+            # # Matrix compare to NTEM
+            # self.compare_pa_matrices_to_ntem()
+            # # self.compare_bespoke_pa_matrices_to_ntem()
+            # # self.compare_tp_pa_matrices_to_ntem()
             self.compare_od_matrices_to_ntem()
 
         if compare_to_scenario and self.scenario_name != consts.SC00_NTEM:

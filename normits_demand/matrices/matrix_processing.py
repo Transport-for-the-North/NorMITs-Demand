@@ -192,6 +192,59 @@ def _recursive_aggregate(candidates: List[str],
             )
 
 
+def _aggregate_matrices_internal(year,
+                                 p,
+                                 m,
+                                 all_matrices,
+                                 import_dir,
+                                 export_dir,
+                                 trip_origin,
+                                 matrix_format,
+                                 segment_needed,
+                                 ca_needed,
+                                 tp_needed,
+                                 segment_str,
+                                 ca_strs,
+                                 tp_strs,
+                                 compress_out,
+                                 round_dp,
+                                 ):
+    """
+    The internal function of aggregate_matrices(). Used for multiprocessing.
+    """
+    # ## NARROW DOWN TO RELEVANT MATRICES ## #
+    # Create segmentation strings
+    compile_mats = all_matrices.copy()
+    p_str = '_p' + str(p) + '_'
+    m_str = '_m' + str(m) + '_'
+    year_str = '_yr' + str(year) + '_'
+
+    # Narrow down to matrices in this category
+    compile_mats = [x for x in compile_mats if p_str in x]
+    compile_mats = [x for x in compile_mats if m_str in x]
+    compile_mats = [x for x in compile_mats if year_str in x]
+
+    # Recursively narrow down further if needed
+    base_fname = du.get_dist_name(
+        trip_origin=trip_origin,
+        matrix_format=matrix_format,
+        year=str(year),
+        purpose=str(p),
+        mode=str(m)
+    )
+    out_path = os.path.join(export_dir, base_fname)
+
+    _recursive_aggregate(
+        candidates=compile_mats,
+        segmentations=[segment_needed, ca_needed, tp_needed],
+        segmentation_strs=[segment_str, ca_strs, tp_strs],
+        import_dir=import_dir,
+        export_path=out_path,
+        compress_out=compress_out,
+        round_dp=round_dp,
+    )
+
+
 def aggregate_matrices(import_dir: str,
                        export_dir: str,
                        trip_origin: str,
@@ -205,7 +258,8 @@ def aggregate_matrices(import_dir: str,
                        tp_needed: List[int] = None,
                        compress_out: bool = False,
                        round_dp: int = efs_consts.DEFAULT_ROUNDING,
-                       ) -> List[str]:
+                       process_count: int = consts.PROCESS_COUNT,
+                       ):
     """
     Aggregates the matrices in import_dir up to the given level and writes
     the new matrices out to export_dir
@@ -256,9 +310,13 @@ def aggregate_matrices(import_dir: str,
         The number of decimal places to round the output values to.
         Uses efs_consts.DEFAULT_ROUNDING by default.
 
+    process_count:
+        The number of processes to use when multiprocessing. See
+        concurrency.multiprocess() to see what the vales mean.
+        Set to 0 to not use multiprocessing.
+
     Returns
     -------
-    List of all aggregated matrix paths (optional)
     """
     # Init
     if((ns_needed is not None and soc_needed is None)
@@ -280,7 +338,23 @@ def aggregate_matrices(import_dir: str,
 
     # for year, purpose, mode, time_period
     print("Writing files to: %s" % export_dir)
-    mat_export_paths = []
+    # ## MULTIPROCESS ## #
+    unchanging_kwargs = {
+        'all_matrices': all_matrices,
+        'import_dir': import_dir,
+        'export_dir': export_dir,
+        'trip_origin': trip_origin,
+        'matrix_format': matrix_format,
+        'ca_needed': ca_needed,
+        'tp_needed': tp_needed,
+        'ca_strs': ca_strs,
+        'tp_strs': tp_strs,
+        'compress_out': compress_out,
+        'round_dp': round_dp,
+    }
+
+    # Build the kwarg list
+    kwarg_list = list()
     for year, m, p in product(years_needed, m_needed, p_needed):
         # Init
         if p in efs_consts.SOC_P:
@@ -296,37 +370,22 @@ def aggregate_matrices(import_dir: str,
             raise ValueError("Purpose '%s' is neither a soc, ns or nhb "
                              "segmentation somehow?" % str(p))
 
-        # ## NARROW DOWN TO RELEVANT MATRICES ## #
-        # Create segmentation strings
-        compile_mats = all_matrices.copy()
-        p_str = '_p' + str(p) + '_'
-        m_str = '_m' + str(m) + '_'
-        year_str = '_yr' + str(year) + '_'
+        kwargs = unchanging_kwargs.copy()
+        kwargs.update({
+            'year': year,
+            'p': p,
+            'm': m,
+            'segment_needed': segment_needed,
+            'segment_str': segment_str,
+        })
+        kwarg_list.append(kwargs)
 
-        # Narrow down to matrices in this category
-        compile_mats = [x for x in compile_mats if p_str in x]
-        compile_mats = [x for x in compile_mats if m_str in x]
-        compile_mats = [x for x in compile_mats if year_str in x]
-
-        # Recursively narrow down further if needed
-        base_fname = du.get_dist_name(
-            trip_origin=trip_origin,
-            matrix_format=matrix_format,
-            year=str(year),
-            purpose=str(p),
-            mode=str(m)
-        )
-        out_path = os.path.join(export_dir, base_fname)
-
-        _recursive_aggregate(
-            candidates=compile_mats,
-            segmentations=[segment_needed, ca_needed, tp_needed],
-            segmentation_strs=[segment_str, ca_strs, tp_strs],
-            import_dir=import_dir,
-            export_path=out_path,
-            compress_out=compress_out,
-            round_dp=round_dp,
-        )
+    # Run
+    multiprocessing.multiprocess(
+        fn=_aggregate_matrices_internal,
+        kwargs=kwarg_list,
+        process_count=process_count
+    )
 
 
 def get_tour_proportion_seed_values(m: int,
