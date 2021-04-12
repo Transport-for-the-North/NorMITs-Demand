@@ -2623,6 +2623,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
 
             # If empty, its od_from or od_to and we've already done it
             if matrix.empty:
+                p_bar.update(1)
                 continue
 
             # Extract just the internal/external data
