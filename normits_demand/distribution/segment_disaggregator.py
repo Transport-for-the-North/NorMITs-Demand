@@ -274,7 +274,8 @@ def disaggregate_segments(import_folder,
     unq_zone_list = nup.get_zone_range(base_p[ia_name])
 
     # Look at segmentation in base a
-    base_a = pd.read_csv(base_attractions_path)
+    dtype = {'soc': str}
+    base_a = pd.read_csv(base_attractions_path, dtype=dtype)
 
     # Get p_seg
     p_seg = read_pa_seg(base_p,

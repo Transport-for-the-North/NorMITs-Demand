@@ -5,7 +5,7 @@ from normits_demand.distribution import segment_disaggregator as sd
 
 IMPORT_DRIVE = "I:/"
 MODEL_NAME = 'norms'
-ITER_NAME = 'iter5b'
+ITER_NAME = 'iter4'
 
 # Noham == iter8c
 # Norms == iter5b
@@ -31,10 +31,10 @@ def main():
         base_hb_attractions = os.path.join(a_home, 'noham_hb_attractions.csv')
         base_nhb_attractions = os.path.join(a_home, 'noham_nhb_attractions.csv')
     elif MODEL_NAME.strip().lower() == 'norms':
-        base_hb_productions = os.path.join(p_home, 'hb_productions_norms.csv')
-        base_nhb_productions = os.path.join(p_home, 'nhb_productions_norms.csv')
-        base_hb_attractions = os.path.join(a_home, 'norms_hb_attractions.csv')
-        base_nhb_attractions = os.path.join(a_home, 'norms_nhb_attractions.csv')
+        base_hb_productions = os.path.join(p_home, 'fake out/hb_productions_norms.csv')
+        base_nhb_productions = os.path.join(p_home, 'fake out/nhb_productions_norms.csv')
+        base_hb_attractions = os.path.join(a_home, 'fake out/norms_hb_attractions.csv')
+        base_nhb_attractions = os.path.join(a_home, 'fake out/norms_nhb_attractions.csv')
     else:
         raise ValueError(
             "I don't know what the model name '%s' is!" % MODEL_NAME
@@ -56,7 +56,7 @@ def main():
         furness_loops=1999,
         min_pa_diff=.1,
         bs_con_crit=.975,
-        mp_threads=-1,
+        mp_threads=0,
         export_original=True,
         export_furness=False)
 
