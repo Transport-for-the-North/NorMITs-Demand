@@ -2366,6 +2366,8 @@ def parse_mat_output(list_dir,
                      file_name = 'file'):
     """
     """
+    list_dir = os.listdir(list_dir)
+
     # Define UC format
     uc = ['commute','business','other',
           'Commute', 'Business', 'Other']
