@@ -10,14 +10,11 @@ import pandas as pd
 
 import normits_demand.constants as con
 
-_TLB_FOLDER = 'I:/NorMITs Synthesiser/import/trip_length_bands'
-_NTS_IMPORT = 'Y:/NTS/import/classified_nts_pre-weighting.csv'
-
 
 class NTSTripLengthBuilder:
     def __init__(self,
-                 tlb_folder=_TLB_FOLDER,
-                 nts_import=_NTS_IMPORT):
+                 tlb_folder=None,
+                 nts_import=None):
 
         self.tlb_folder = tlb_folder
         self.nts_import = nts_import
@@ -68,7 +65,7 @@ class NTSTripLengthBuilder:
         print('Loading processed NTS data from:')
         print(nts_import)
         self.nts_import = pd.read_csv(nts_import)
-        self.nts_import['weighted_trip'] = self.nts_import['W1'] * self.nts_import['W5xHh'] * self.nts_import['W2']
+        self.nts_import['weighted_trip'] = self.nts_import['W1'] * self.nts_import['W5xHH'] * self.nts_import['W2']
 
     def run_tlb_lookups(self,
                         weekdays=[1, 2, 3, 4, 5],
@@ -80,7 +77,7 @@ class NTSTripLengthBuilder:
         north_la = con.NORTH_LA
 
         # TODO: Traveller gender
-        target_cols = ['SurveyYear', 'TravDay', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc_cat',
+        target_cols = ['SurveyYear', 'TravelWeekDay_B01ID', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc_cat',
                        'ns_sec', 'main_mode', 'hb_purpose', 'nhb_purpose', 'Sex_B01ID',
                        'trip_origin', 'start_time', 'TripDisIncSW', 'TripOrigGOR_B02ID',
                        'TripDestGOR_B02ID', 'tfn_area_type', 'weighted_trip']
@@ -113,7 +110,7 @@ class NTSTripLengthBuilder:
                                       on='tfn_area_type')
 
         output_dat = output_dat[
-            output_dat['TravDay'].isin(weekdays)].reset_index(drop=True)
+            output_dat['TravelWeekDay_B01ID'].isin(weekdays)].reset_index(drop=True)
 
         # Geo filter
         if self.geo_area == 'north':
