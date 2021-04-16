@@ -13,7 +13,7 @@ ITER_NAME = 'iter4'
 
 def main():
     import_folder = 'I:/NorMITs Demand/import/norms/post_me/tms_seg_pa'
-    export_folder = 'I:/NorMITs Demand/import/norms/post_me/tfn_seg_pa2'
+    export_folder = 'I:/NorMITs Demand/import/norms/post_me/tfn_seg_pa'
 
     synth_home = os.path.join(IMPORT_DRIVE, 'NorMITs Synthesiser')
 

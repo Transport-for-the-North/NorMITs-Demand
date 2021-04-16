@@ -728,6 +728,12 @@ def _dissag_seg(prod_list,
         # TLB balance/furness
         tlb_loop = 1
         conv_fail = False
+        audit_dict.update({'estimated_p': None,
+                           'estimated_a': None,
+                           'pa_diff': None,
+                           'bs_con': bs_con,
+                           'tlb_con': tlb_con,
+                           'conv_fail': conv_fail})
         while bs_con < bs_con_crit:
 
             # Seed convergence critical values for each band
@@ -860,7 +866,6 @@ def _dissag_seg(prod_list,
 
             if tlb_loop >= 300:
                 conv_fail = True
-                break
 
             # Add to audit dict
             audit_dict.update({'estimated_p':mat_o.sum(),
@@ -869,6 +874,9 @@ def _dissag_seg(prod_list,
                                'bs_con':bs_con,
                                'tlb_con':tlb_con,
                                'conv_fail': conv_fail})
+
+            if conv_fail:
+                break
 
         # Append dict
         seg_audit.append(audit_dict)
@@ -929,4 +937,4 @@ def _dissag_seg(prod_list,
                                     out_sd.sum(axis=0),
                                     sd.sum(axis=0))
 
-    return(out_mats, seg_audit, final_pa_diff)
+    return out_mats, seg_audit, final_pa_diff
