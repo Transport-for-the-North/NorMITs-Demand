@@ -8,7 +8,7 @@ MODEL_NAME = 'norms'
 ITER_NAME = 'iter4'
 
 # Noham == iter8c
-# Norms == iter5b
+# Norms == iter4
 
 
 def main():
@@ -18,7 +18,6 @@ def main():
     synth_home = os.path.join(IMPORT_DRIVE, 'NorMITs Synthesiser')
 
     # Using single tld for whole country - run North and GB and compare
-    target_tld_folder = os.path.join(synth_home, 'import/trip_length_bands/north/enhanced_segments')
     lookup_folder = os.path.join(synth_home, MODEL_NAME, 'Model Zone Lookups')
 
     # Get the productions and attractions
@@ -30,11 +29,13 @@ def main():
         base_nhb_productions = os.path.join(p_home, 'nhb_productions_noham.csv')
         base_hb_attractions = os.path.join(a_home, 'noham_hb_attractions.csv')
         base_nhb_attractions = os.path.join(a_home, 'noham_nhb_attractions.csv')
+        target_tld_folder = os.path.join(synth_home, 'import/trip_length_bands/north/enhanced_segments')
     elif MODEL_NAME.strip().lower() == 'norms':
         base_hb_productions = os.path.join(p_home, 'fake out/hb_productions_norms.csv')
         base_nhb_productions = os.path.join(p_home, 'fake out/nhb_productions_norms.csv')
         base_hb_attractions = os.path.join(a_home, 'fake out/norms_hb_attractions.csv')
         base_nhb_attractions = os.path.join(a_home, 'fake out/norms_nhb_attractions.csv')
+        target_tld_folder = os.path.join(synth_home, 'import/trip_length_bands/gb/enhanced_ca_segments')
     else:
         raise ValueError(
             "I don't know what the model name '%s' is!" % MODEL_NAME
@@ -56,7 +57,7 @@ def main():
         furness_loops=1999,
         min_pa_diff=.1,
         bs_con_crit=.975,
-        mp_threads=0,
+        mp_threads=-1,
         export_original=True,
         export_furness=False)
 
