@@ -42,38 +42,17 @@ def main():
         )
 
     # HB conversion
-    # sd_out = sd.disaggregate_segments(
-    #     import_folder,
-    #     target_tld_folder,
-    #     MODEL_NAME,
-    #     base_hb_productions,
-    #     base_hb_attractions,
-    #     export_folder,
-    #     lookup_folder,
-    #     aggregate_surplus_segments=True,
-    #     rounding=5,
-    #     trip_origin='hb',
-    #     tp='24hr',
-    #     iz_infill=0.5,
-    #     furness_loops=1999,
-    #     min_pa_diff=.1,
-    #     bs_con_crit=.975,
-    #     mp_threads=-1,
-    #     export_original=True,
-    #     export_furness=False)
-
-    nhb_sd_out = sd.disaggregate_segments(
+    sd_out = sd.disaggregate_segments(
         import_folder,
         target_tld_folder,
         MODEL_NAME,
-        base_nhb_productions,
-        base_nhb_attractions,
+        base_hb_productions,
+        base_hb_attractions,
         export_folder,
         lookup_folder,
         aggregate_surplus_segments=True,
         rounding=5,
-        trip_origin='nhb',
-        # tp='tp',
+        trip_origin='hb',
         tp='24hr',
         iz_infill=0.5,
         furness_loops=1999,
@@ -82,6 +61,27 @@ def main():
         mp_threads=-1,
         export_original=True,
         export_furness=False)
+
+    # nhb_sd_out = sd.disaggregate_segments(
+    #     import_folder,
+    #     target_tld_folder,
+    #     MODEL_NAME,
+    #     base_nhb_productions,
+    #     base_nhb_attractions,
+    #     export_folder,
+    #     lookup_folder,
+    #     aggregate_surplus_segments=True,
+    #     rounding=5,
+    #     trip_origin='nhb',
+    #     # tp='tp',
+    #     tp='24hr',
+    #     iz_infill=0.5,
+    #     furness_loops=1999,
+    #     min_pa_diff=.1,
+    #     bs_con_crit=.975,
+    #     mp_threads=-1,
+    #     export_original=True,
+    #     export_furness=False)
 
 
 if __name__ == '__main__':

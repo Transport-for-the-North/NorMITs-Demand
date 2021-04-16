@@ -424,10 +424,6 @@ def _segment_build_worker(agg_split_index,
         if dat.isnumeric():
             calib_params.update({item:int(dat)})
 
-    # TODO: REMOVE ME
-    if calib_params['p'] == 5 or calib_params['p'] == 15:
-        return None, None, None
-
     # Mat list
     mat_list = list()
     seed_name = ''
