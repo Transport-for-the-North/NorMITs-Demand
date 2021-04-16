@@ -156,12 +156,12 @@ class NTSTripLengthBuilder:
                         op_sub = op_sub[
                             op_sub['start_time'].isin(
                                 time_vec)].reset_index(drop=True)
-                if subset == 'soc':
+                if subset == 'soc_cat':
                     soc = value
                     if value != 0:
                         op_sub = op_sub[
                             op_sub['soc_cat'] == value].reset_index(drop=True)
-                if subset == 'ns':
+                if subset == 'ns_sec':
                     ns = value
                     if value != 0:
                         op_sub = op_sub[
@@ -200,11 +200,11 @@ class NTSTripLengthBuilder:
                 tlb_sub = tlb_sub[
                     tlb_sub['TripDisIncSW'] < upper].reset_index(drop=True)
 
-                mean_val = tlb_sub['TripDisIncSW'].mean() * 1.61
-                total_trips = tlb_sub['weighted_trip'].sum()
+                mean_val = (tlb_sub['TripDisIncSW'].mean() * 1.61)
+                total_trips = (tlb_sub['weighted_trip'].sum())
 
-                out['ave_km'].loc[line] = mean_val
-                out['trips'].loc[line] = total_trips
+                out.loc[line, 'ave_km'] = mean_val
+                out.loc[line, 'trips'] = total_trips
 
                 del mean_val
                 del total_trips
@@ -221,15 +221,13 @@ class NTSTripLengthBuilder:
                 name = name + '_aat' + str(agg_at)
             if tp != 0:
                 name = name + '_tp' + str(tp)
-            if soc != 0 or (purpose in [1,2,12] and
-                            'soc' in list(self.target_segmentation)):
+            if soc != 0 or (purpose in [1,2,12] and 'soc_cat' in list(self.target_segmentation)):
                 name = name + '_soc' + str(soc)
-            if ns != 0 and 'ns' in list(self.target_segmentation):
+            if ns != 0 and 'ns_sec' in list(self.target_segmentation):
                 name = name + '_ns' + str(ns)
             if g != 0:
                 name = name + '_g' + str(g)
             name += '.csv'
-            print(name)
 
             ex_name = os.path.join(self.export, name)
 
