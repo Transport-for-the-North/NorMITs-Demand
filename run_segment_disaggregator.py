@@ -13,7 +13,7 @@ ITER_NAME = 'iter4'
 
 def main():
     import_folder = 'I:/NorMITs Demand/import/norms/post_me/tms_seg_pa'
-    export_folder = 'I:/NorMITs Demand/import/norms/post_me/tfn_seg_pa'
+    export_folder = 'I:/NorMITs Demand/import/norms/post_me/tfn_seg_pa2'
 
     synth_home = os.path.join(IMPORT_DRIVE, 'NorMITs Synthesiser')
 
@@ -33,8 +33,8 @@ def main():
     elif MODEL_NAME.strip().lower() == 'norms':
         base_hb_productions = os.path.join(p_home, 'fake out/hb_productions_norms.csv')
         base_nhb_productions = os.path.join(p_home, 'fake out/nhb_productions_norms.csv')
-        base_hb_attractions = os.path.join(a_home, 'fake out/norms_hb_attractions.csv')
-        base_nhb_attractions = os.path.join(a_home, 'fake out/norms_nhb_attractions.csv')
+        base_hb_attractions = os.path.join(a_home, 'fake out/ca/norms_hb_attractions.csv')
+        base_nhb_attractions = os.path.join(a_home, 'fake out/ca/norms_nhb_attractions.csv')
         target_tld_folder = os.path.join(synth_home, 'import/trip_length_bands/gb/enhanced_ca_segments')
     else:
         raise ValueError(
@@ -42,28 +42,30 @@ def main():
         )
 
     # HB conversion
-    sd_out = sd.disaggregate_segments(
-        import_folder,
-        target_tld_folder,
-        base_hb_productions,
-        base_hb_attractions,
-        export_folder,
-        lookup_folder,
-        aggregate_surplus_segments=True,
-        rounding=5,
-        trip_origin='hb',
-        tp='24hr',
-        iz_infill=0.5,
-        furness_loops=1999,
-        min_pa_diff=.1,
-        bs_con_crit=.975,
-        mp_threads=-1,
-        export_original=True,
-        export_furness=False)
+    # sd_out = sd.disaggregate_segments(
+    #     import_folder,
+    #     target_tld_folder,
+    #     MODEL_NAME,
+    #     base_hb_productions,
+    #     base_hb_attractions,
+    #     export_folder,
+    #     lookup_folder,
+    #     aggregate_surplus_segments=True,
+    #     rounding=5,
+    #     trip_origin='hb',
+    #     tp='24hr',
+    #     iz_infill=0.5,
+    #     furness_loops=1999,
+    #     min_pa_diff=.1,
+    #     bs_con_crit=.975,
+    #     mp_threads=-1,
+    #     export_original=True,
+    #     export_furness=False)
 
     nhb_sd_out = sd.disaggregate_segments(
         import_folder,
         target_tld_folder,
+        MODEL_NAME,
         base_nhb_productions,
         base_nhb_attractions,
         export_folder,
@@ -71,7 +73,8 @@ def main():
         aggregate_surplus_segments=True,
         rounding=5,
         trip_origin='nhb',
-        tp='tp',
+        # tp='tp',
+        tp='24hr',
         iz_infill=0.5,
         furness_loops=1999,
         min_pa_diff=.1,

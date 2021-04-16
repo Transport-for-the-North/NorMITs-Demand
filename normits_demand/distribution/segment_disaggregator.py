@@ -79,7 +79,8 @@ def _build_enhanced_pa(tld_mat,
         calib_params.update({'trips':te})
         out_list.append(calib_params)
 
-    return(out_list)
+    return out_list
+
 
 def _control_a_to_seed_matrix(sd,
                               attr_list):
@@ -111,7 +112,7 @@ def _control_a_to_seed_matrix(sd,
 
     new_attr = attr_list.copy()
 
-    for ait,dat in enumerate(new_attr,0):
+    for ait, dat in enumerate(new_attr, 0):
         new_attr[ait]['trips'] = mat_attr * cell_splits[ait]
 
     audit_sum =  []
@@ -218,6 +219,7 @@ base_attractions_path = base_hb_attractions
 
 def disaggregate_segments(import_folder,
                           target_tld_folder,
+                          model_name,
                           base_productions_path,
                           base_attractions_path,
                           export_folder,
@@ -259,7 +261,8 @@ def disaggregate_segments(import_folder,
                                                 'mat_type', axis=1)
 
     # Look at segmentation in base p
-    base_p = pd.read_csv(base_productions_path)
+    dtype = {'soc': str, 'ns': str}
+    base_p = pd.read_csv(base_productions_path, dtype=dtype)
     # Get unq zones
     ia_name = list(base_p)[0]
     min_zone = min(base_p[ia_name])
@@ -273,7 +276,6 @@ def disaggregate_segments(import_folder,
     unq_zone_list = nup.get_zone_range(base_p[ia_name])
 
     # Look at segmentation in base a
-    dtype = {'soc': str}
     base_a = pd.read_csv(base_attractions_path, dtype=dtype)
 
     # Get p_seg
@@ -295,6 +297,8 @@ def disaggregate_segments(import_folder,
     agg_cols = [x for x in list(
             base_mat_seg) if x not in list(tld_seg)]
     agg_cols.remove('base_seg')
+    if model_name.lower() == 'norms' and 'ca' in agg_cols:
+        agg_cols.remove('ca')
 
     # Get cols in tld that form the added segments
     add_cols = [x for x in list(tld_seg) if x not in list(base_mat_seg)]
@@ -474,6 +478,7 @@ def _segment_build_worker(agg_split_index,
                                    p_cols,
                                    unq_zone_list=unq_zone_list)
 
+
     # Get best possible attraction subset
     attr_list = _build_enhanced_pa(tld_mat,
                                    base_a,
@@ -501,10 +506,18 @@ def _segment_build_worker(agg_split_index,
 
     # Get distance/cost
     # Costs should be same for each segment, so get here
+    cost_cp = calib_params.copy()
+    if 'ca' in calib_params and tp == 'tp':
+        cost_cp.pop('ca')
+
+    print(cost_cp)
+
     costs, c_name = nup.get_costs(lookup_folder,
-                                  calib_params,
+                                  cost_cp,
                                   tp=tp,
-                                  iz_infill = iz_infill)
+                                  iz_infill = iz_infill,
+                                  replace_nhb_with_hb=True
+                                  )
 
     print('Cost lookup returned ' + c_name)
     costs = nup.df_to_np(costs,
