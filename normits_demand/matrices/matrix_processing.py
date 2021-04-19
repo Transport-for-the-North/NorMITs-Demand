@@ -3294,7 +3294,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
     if post_me_import is None:
         return int_split_factors, ext_split_factors
 
-    # Get splitting factors from norms
+    # Get splitting factors from NoRMS post-ME
     raise NotImplementedError(
         "Cannot split Norms into From and To yet!"
     )

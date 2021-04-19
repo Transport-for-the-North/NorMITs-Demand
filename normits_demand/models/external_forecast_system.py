@@ -1569,7 +1569,7 @@ class ExternalForecastSystem:
                 post_me_import=self.imports['post_me_matrices'],
                 post_me_renamed_export=self.exports['post_me']['vdm_pa_24'],
                 post_me_decompiled_export=self.exports['post_me']['pa_24'],
-                decompile_factors_dir=self.params['compile'],
+                decompile_factors_dir=self.imports['params'],
             )
 
             # Copy all of our outputs into the observed import location

@@ -28,7 +28,7 @@ def main():
     integrate_dlog = False
     run_pop_emp_comparison = False
 
-    run_base_efs = False
+    run_base_efs = True
     recreate_productions = True
     recreate_attractions = True
     recreate_nhb_productions = True
@@ -37,18 +37,18 @@ def main():
     ignore_bespoke_zones = True
 
     run_pa_to_od = False
-    run_compile_od = True
-    run_decompile_post_me = False
+    run_compile_od = False
+    run_decompile_post_me = True
     run_future_year_compile_od = False
 
     # Controls matrix conversion
     output_years = consts.ALL_YEARS
 
     # Controls I/O
-    scenario = consts.SC00_NTEM
-    iter_num = '3g'
+    scenario = consts.SC04_UZC
+    iter_num = '3a'
     import_home = "I:/"
-    export_home = "I:/"
+    export_home = "F:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
