@@ -358,20 +358,18 @@ def disaggregate_segments(import_folder,
                          'export_folder':export_folder,
                          'trip_origin':trip_origin} # unchanging
 
-    out_dat = []
+    out_dat = list()
+    kwargs_list = list()
     for i in unq_splits.index:
-        # Build a list of kwargs for each function call
-        kwargs_list = list()
-        for i in unq_splits.index:
-            kwargs = unchanging_kwargs.copy()
-            kwargs['agg_split_index'] = i
-            kwargs_list.append(kwargs)
+        kwargs = unchanging_kwargs.copy()
+        kwargs['agg_split_index'] = i
+        kwargs_list.append(kwargs)
 
-        # Call using multiple threads
-        mp.multiprocess(
-            _segment_build_worker,
-            kwargs=kwargs_list,
-            process_count=mp_threads)
+    # Call using multiple threads
+    mp.multiprocess(
+        _segment_build_worker,
+        kwargs=kwargs_list,
+        process_count=mp_threads)
 
     return out_dat
 
