@@ -28,7 +28,7 @@ def main():
     integrate_dlog = False
     run_pop_emp_comparison = False
 
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = True
     recreate_attractions = True
     recreate_nhb_productions = True
@@ -37,7 +37,7 @@ def main():
     ignore_bespoke_zones = True
 
     run_pa_to_od = False
-    run_compile_od = False
+    run_compile_mats = False
     run_decompile_post_me = True
     run_future_year_compile_od = False
 
@@ -45,10 +45,10 @@ def main():
     output_years = consts.ALL_YEARS
 
     # Controls I/O
-    scenario = consts.SC04_UZC
+    scenario = consts.SC02_PP
     iter_num = '3a'
     import_home = "I:/"
-    export_home = "F:/"
+    export_home = "E:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
@@ -101,13 +101,9 @@ def main():
             verbose=verbose
         )
 
-    if run_compile_od:
+    if run_compile_mats:
         for year in output_years:
-            efs.compile_od_matrices(
-                year=year,
-                overwrite_aggregated_od=True,
-                overwrite_compiled_od=True,
-            )
+            efs.compile_matrices(year=year)
 
     if run_decompile_post_me:
         # Decompiles post-me base year matrices

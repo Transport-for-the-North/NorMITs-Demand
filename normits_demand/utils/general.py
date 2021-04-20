@@ -520,6 +520,7 @@ def build_efs_io_paths(import_location: str,
         'od': os.path.join(matrices_home, od),
         'od_24': os.path.join(matrices_home, od_24),
 
+        'compiled_pa': os.path.join(matrices_home, ' '.join([compiled, pa])),
         'compiled_od': os.path.join(matrices_home, ' '.join([compiled, od])),
         'compiled_od_pcu': os.path.join(matrices_home, ' '.join([compiled, od, pcu])),
 

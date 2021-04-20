@@ -219,8 +219,9 @@ def convert_norms_to_efs_matrices(import_dir: nd.PathLike,
                                   wide_col_name: str = None,
                                   csv_out: bool = False,
                                   compress_out: bool = True,
+                                  splitting_factors_out: nd.PathLike = None,
                                   ) -> None:
-    # TODO: Write convert_norms_to_efs_matrices() docs
+    # TODO(BT): Write convert_norms_to_efs_matrices() docs
     # Init
     conversion_dict = consts.NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING
 
@@ -246,6 +247,7 @@ def convert_norms_to_efs_matrices(import_dir: nd.PathLike,
             )
 
     # ## CONVERT TO EFS FORMAT ## #
+    splitting_factors = dict()
     for efs_mat_name, post_me_mat_names in conversion_dict.items():
         # Read in and combine matrices if needed
         if len(post_me_mat_names) == 1:
@@ -264,6 +266,21 @@ def convert_norms_to_efs_matrices(import_dir: nd.PathLike,
         if wide_col_name is not None:
             mat.index.name = wide_col_name
 
+        # Optionally generate a dictionary of the splitting factors
+        if splitting_factors_out is not None:
+            sub_split_factors = dict()
+            for fname in post_me_mat_names:
+                # Read in the original matrix
+                fname = '%s.csv' % fname
+                path = os.path.join(import_dir, fname)
+                df = pd.read_csv(path, index_col=0)
+
+                # Calculate the splitting factors
+                sub_split_factors[fname] = (df / mat).fillna(0).values
+
+            # Add to the outer dictionary
+            splitting_factors[efs_mat_name] = sub_split_factors
+
         # Generate the output fname
         seg_agg_dict = du.get_norms_vdm_segment_aggregation_dict(efs_mat_name)
         full_efs_mat_name = du.get_compiled_matrix_name(
@@ -280,6 +297,10 @@ def convert_norms_to_efs_matrices(import_dir: nd.PathLike,
         # Write the new matrix to disk
         output_path = os.path.join(export_dir, full_efs_mat_name)
         file_ops.write_df(mat, output_path)
+
+    # Write the splitting factors to disk if we generated them
+    if splitting_factors != dict():
+        pd.to_pickle(splitting_factors, splitting_factors_out)
 
 
 def decompile_matrices(matrix_import: nd.PathLike,
@@ -389,6 +410,7 @@ def decompile_norms(year: int,
                     post_me_decompiled_export: nd.PathLike,
                     decompile_factors_dir: nd.PathLike,
                     matrix_format: str = 'pa',
+                    from_to_factors_out: nd.PathLike = None,
                     overwrite_converted_matrices: bool = True,
                     csv_out: bool = False,
                     compress_out: bool = True,
@@ -420,6 +442,7 @@ def decompile_norms(year: int,
             wide_col_name='%s_zone_id' % model_name,
             csv_out=csv_out,
             compress_out=compress_out,
+            splitting_factors_out=from_to_factors_out,
         )
 
     # ## DECOMPILE THE NORMS MATRICES ## #

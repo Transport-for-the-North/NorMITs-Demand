@@ -25,7 +25,8 @@ import pandas as pd
 # self imports
 import normits_demand as nd
 from normits_demand import version
-from normits_demand import efs_constants as consts
+from normits_demand import constants as consts
+from normits_demand import efs_constants as efs_consts
 from normits_demand.models import efs_production_model as pm
 
 from normits_demand.matrices import decompilation
@@ -57,7 +58,7 @@ class ExternalForecastSystem:
     out_dir = "NorMITs Demand"
 
     # defines all non-year columns
-    column_dictionary = consts.EFS_COLUMN_DICTIONARY
+    column_dictionary = efs_consts.EFS_COLUMN_DICTIONARY
 
     def __init__(self,
                  model_name: str,
@@ -84,7 +85,7 @@ class ExternalForecastSystem:
         print("Initiating External Forecast System...")
 
         # Initialise
-        du.validate_model_name_and_mode(model_name, consts.MODES_NEEDED)
+        du.validate_model_name_and_mode(model_name, efs_consts.MODES_NEEDED)
         self.model_name = du.validate_model_name(model_name)
         self.iter_name = du.create_iter_name(iter_num)
         self.scenario_name = du.validate_scenario_name(scenario_name)
@@ -104,7 +105,7 @@ class ExternalForecastSystem:
         if self.model_name == 'noham':
             self.is_ca_needed = False
             self.uses_pcu = True
-        self.ca_needed = consts.CA_NEEDED if self.is_ca_needed else None
+        self.ca_needed = efs_consts.CA_NEEDED if self.is_ca_needed else None
 
         self.input_zone_system = "MSOA"
         self.output_zone_system = self.model_name
@@ -113,12 +114,15 @@ class ExternalForecastSystem:
         self.ntem_control_future_years = False
 
         # Setup up import/export paths
-        path_dicts = self._generate_paths(consts.BASE_YEAR_STR)
+        path_dicts = self._generate_paths(efs_consts.BASE_YEAR_STR)
         self.imports, self.exports, self.params = path_dicts
         self._setup_scenario_paths()
         self._build_pop_emp_paths()
         self._read_in_default_inputs()
         self._set_up_dlog(dlog_pop_path, dlog_emp_path)
+
+        # Load in the internal and external zones
+        self._load_ie_zonal_info()
 
         # sub-classes
         self.production_generator = nd.EFSProductionGenerator(model_name=model_name)
@@ -172,7 +176,7 @@ class ExternalForecastSystem:
         None
         """
         # Path building is slightly different for default NTEM
-        if self.scenario_name == consts.SC00_NTEM:
+        if self.scenario_name == efs_consts.SC00_NTEM:
             # Setup directory paths
             home = self.imports['default_inputs']
             pop_home = os.path.join(home, 'population')
@@ -184,7 +188,7 @@ class ExternalForecastSystem:
             emp_growth_path = os.path.join(emp_home, 'future_workers_growth.csv')
             emp_constraint_path = os.path.join(emp_home, 'future_workers_growth_values.csv')
 
-        elif self.scenario_name in consts.TFN_SCENARIOS:
+        elif self.scenario_name in efs_consts.TFN_SCENARIOS:
             # Setup directory paths
             scenario_home = os.path.join(self.imports['scenarios'],
                                          self.scenario_name)
@@ -211,9 +215,24 @@ class ExternalForecastSystem:
         self.emp_constraint_path = emp_constraint_path
         self.emp_growth_path = emp_growth_path
 
+    def _load_ie_zonal_info(self):
+        """
+        Populates self.model_internal_zones and self.model_external_zones
+        """
+        # Init
+        zone_col = '%s_zone_id' % self.model_name
+
+        int_fname = consts.INTERNAL_AREA % self.model_name
+        int_path = os.path.join(self.imports['model_schema'], int_fname)
+        self.model_internal_zones = pd.read_csv(int_path)[zone_col].tolist()
+
+        ext_fname = consts.EXTERNAL_AREA % self.model_name
+        ext_path = os.path.join(self.imports['model_schema'], ext_fname)
+        self.model_external_zones = pd.read_csv(ext_path)[zone_col].tolist()
+
     def _build_pop_emp_paths(self):
         # Init
-        zone_lookups = consts.TFN_MSOA_SECTOR_LOOKUPS
+        zone_lookups = efs_consts.TFN_MSOA_SECTOR_LOOKUPS
 
         # Build the pop paths
         pop_paths = {
@@ -268,14 +287,14 @@ class ExternalForecastSystem:
 
     def run(self,
             base_year: int = 2018,
-            future_years: List[int] = consts.FUTURE_YEARS,
-            hb_purposes_needed: List[int] = consts.HB_PURPOSES_NEEDED,
-            nhb_purposes_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
-            modes_needed: List[int] = consts.MODES_NEEDED,
-            soc_needed: List[int] = consts.SOC_NEEDED,
-            ns_needed: List[int] = consts.NS_NEEDED,
-            car_availabilities_needed: List[int] = consts.CA_NEEDED,
-            constraint_required: Dict[str, bool] = consts.CONSTRAINT_REQUIRED_DEFAULT,
+            future_years: List[int] = efs_consts.FUTURE_YEARS,
+            hb_purposes_needed: List[int] = efs_consts.HB_PURPOSES_NEEDED,
+            nhb_purposes_needed: List[int] = efs_consts.NHB_PURPOSES_NEEDED,
+            modes_needed: List[int] = efs_consts.MODES_NEEDED,
+            soc_needed: List[int] = efs_consts.SOC_NEEDED,
+            ns_needed: List[int] = efs_consts.NS_NEEDED,
+            car_availabilities_needed: List[int] = efs_consts.CA_NEEDED,
+            constraint_required: Dict[str, bool] = efs_consts.CONSTRAINT_REQUIRED_DEFAULT,
             recreate_productions: bool = True,
             recreate_attractions: bool = True,
             recreate_nhb_productions: bool = True,
@@ -599,19 +618,19 @@ class ExternalForecastSystem:
             model_nhb_a_vector = nhb_a_vector.copy()
 
         # ## WRITE TRANSLATED VECTORS TO DISK ## #
-        fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb')
+        fname = efs_consts.PRODS_FNAME % (self.output_zone_system, 'hb')
         out_path = os.path.join(self.exports['productions'], fname)
         model_p_vector.to_csv(out_path, index=False)
 
-        fname = consts.PRODS_FNAME % (self.output_zone_system, 'nhb')
+        fname = efs_consts.PRODS_FNAME % (self.output_zone_system, 'nhb')
         out_path = os.path.join(self.exports['productions'], fname)
         model_nhb_p_vector.to_csv(out_path, index=False)
 
-        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
+        fname = efs_consts.ATTRS_FNAME % (self.output_zone_system, 'hb')
         out_path = os.path.join(self.exports['attractions'], fname)
         model_a_vector.to_csv(out_path, index=False)
 
-        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'nhb')
+        fname = efs_consts.ATTRS_FNAME % (self.output_zone_system, 'nhb')
         out_path = os.path.join(self.exports['attractions'], fname)
         model_nhb_a_vector.to_csv(out_path, index=False)
 
@@ -641,19 +660,19 @@ class ExternalForecastSystem:
         model_p_vector, model_nhb_p_vector, model_a_vector, model_nhb_a_vector = vectors
 
         # Write grown productions and attractions to file
-        fname = consts.PRODS_FNAME % (self.output_zone_system, 'hb_exc')
+        fname = efs_consts.PRODS_FNAME % (self.output_zone_system, 'hb_exc')
         out_path = os.path.join(self.exports['productions'], fname)
         model_p_vector.to_csv(out_path, index=False)
 
-        fname = consts.PRODS_FNAME % (self.output_zone_system, 'nhb_exc')
+        fname = efs_consts.PRODS_FNAME % (self.output_zone_system, 'nhb_exc')
         out_path = os.path.join(self.exports['productions'], fname)
         model_nhb_p_vector.to_csv(out_path, index=False)
 
-        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'hb_exc')
+        fname = efs_consts.ATTRS_FNAME % (self.output_zone_system, 'hb_exc')
         out_path = os.path.join(self.exports['attractions'], fname)
         model_a_vector.to_csv(out_path, index=False)
 
-        fname = consts.ATTRS_FNAME % (self.output_zone_system, 'nhb_exc')
+        fname = efs_consts.ATTRS_FNAME % (self.output_zone_system, 'nhb_exc')
         out_path = os.path.join(self.exports['attractions'], fname)
         model_nhb_a_vector.to_csv(out_path, index=False)
 
@@ -950,10 +969,10 @@ class ExternalForecastSystem:
             p_ez, a_ez = (None, None)
         # Reload aggregated population and employment data to calculate
         # sector level trip rates
-        fname = consts.POP_FNAME % self.input_zone_system
+        fname = efs_consts.POP_FNAME % self.input_zone_system
         grown_pop_path = os.path.join(self.exports["productions"], fname)
 
-        fname = consts.EMP_FNAME % self.input_zone_system
+        fname = efs_consts.EMP_FNAME % self.input_zone_system
         grown_emp_path = os.path.join(self.exports["attractions"], fname)
 
         # ## APPLY GROWTH CRITERIA ## #
@@ -1032,12 +1051,12 @@ class ExternalForecastSystem:
         fname_args = (self.input_zone_system, self.output_zone_system)
 
         # Read in pop translation
-        fname = consts.POP_TRANSLATION_FNAME % fname_args
+        fname = efs_consts.POP_TRANSLATION_FNAME % fname_args
         path = os.path.join(self.imports['zone_translation']['weighted'], fname)
         pop_translation = pd.read_csv(path)
 
         # Read in emp translation
-        fname = consts.EMP_TRANSLATION_FNAME % fname_args
+        fname = efs_consts.EMP_TRANSLATION_FNAME % fname_args
         path = os.path.join(self.imports['zone_translation']['weighted'], fname)
         emp_translation = pd.read_csv(path)
 
@@ -1045,14 +1064,14 @@ class ExternalForecastSystem:
 
     def _get_time_splits_from_p_vector(self,
                                        trip_origin: str,
-                                       years_needed: List[int] = consts.ALL_YEARS,
+                                       years_needed: List[int] = efs_consts.ALL_YEARS,
                                        ignore_cache: bool = False,
                                        ) -> pd.DataFrame:
         # TODO: cache!
         # TODO: check trip_origin is valid
         # If the file already exists, just return that
         file_type = '%s_tp_splits' % trip_origin
-        fname = consts.PRODS_FNAME % (self.output_zone_system, file_type)
+        fname = efs_consts.PRODS_FNAME % (self.output_zone_system, file_type)
         output_path = os.path.join(self.exports['productions'], fname)
         if not ignore_cache and os.path.exists(output_path):
             return pd.read_csv(output_path)
@@ -1071,7 +1090,7 @@ class ExternalForecastSystem:
 
         # Read in raw production to get time period splits from
         file_type = 'raw_%s' % trip_origin
-        fname = consts.PRODS_FNAME % (self.input_zone_system, file_type)
+        fname = efs_consts.PRODS_FNAME % (self.input_zone_system, file_type)
         raw_prods_path = os.path.join(self.exports['productions'], fname)
         productions = pd.read_csv(raw_prods_path)
 
@@ -1107,10 +1126,10 @@ class ExternalForecastSystem:
         return tp_splits
 
     def pa_to_od(self,
-                 years_needed: List[int] = consts.ALL_YEARS,
-                 m_needed: List[int] = consts.MODES_NEEDED,
-                 p_needed: List[int] = consts.ALL_P,
-                 round_dp: int = consts.DEFAULT_ROUNDING,
+                 years_needed: List[int] = efs_consts.ALL_YEARS,
+                 m_needed: List[int] = efs_consts.MODES_NEEDED,
+                 p_needed: List[int] = efs_consts.ALL_P,
+                 round_dp: int = efs_consts.DEFAULT_ROUNDING,
                  use_bespoke_pa: bool= True,
                  verbose: bool = True
                  ) -> None:
@@ -1122,7 +1141,7 @@ class ExternalForecastSystem:
         matrices.
 
         NHB matrices are split using a set of time period splitting factors
-        derivied from decompiling the post-ME matrices.
+        derived from decompiling the post-ME matrices.
 
         Parameters
         ----------
@@ -1135,25 +1154,9 @@ class ExternalForecastSystem:
         p_needed:
             The purposes of PA matrices to convert to OD
 
-        soc_needed:
-            The skill levels of PA matrices to convert to OD
-
-        ns_needed:
-            The income levels of PA matrices to convert to OD
-
-        ca_needed:
-            The the car availability of PA matrices to convert to OD
-
         round_dp:
             The number of decimal places to round the output values to.
             Uses efs_consts.DEFAULT_ROUNDING by default.
-
-        # TODO: Update docs once correct functionality exists
-        overwrite_hb_tp_pa:
-            Whether to split home based PA matrices into time periods.
-
-        overwrite_hb_tp_od:
-            Whether to convert time period split PA matrices into OD matrices.
 
         verbose:
             If True, suppresses some of the non-essential terminal outputs.
@@ -1223,13 +1226,13 @@ class ExternalForecastSystem:
         )
 
     def old_pa_to_od(self,
-                     years_needed: List[int] = consts.ALL_YEARS,
-                     m_needed: List[int] = consts.MODES_NEEDED,
-                     p_needed: List[int] = consts.ALL_P,
-                     soc_needed: List[int] = consts.SOC_NEEDED,
-                     ns_needed: List[int] = consts.NS_NEEDED,
-                     ca_needed: List[int] = consts.CA_NEEDED,
-                     round_dp: int = consts.DEFAULT_ROUNDING,
+                     years_needed: List[int] = efs_consts.ALL_YEARS,
+                     m_needed: List[int] = efs_consts.MODES_NEEDED,
+                     p_needed: List[int] = efs_consts.ALL_P,
+                     soc_needed: List[int] = efs_consts.SOC_NEEDED,
+                     ns_needed: List[int] = efs_consts.NS_NEEDED,
+                     ca_needed: List[int] = efs_consts.CA_NEEDED,
+                     round_dp: int = efs_consts.DEFAULT_ROUNDING,
                      use_bespoke_pa: bool= True,
                      overwrite_hb_tp_pa: bool = True,
                      overwrite_hb_tp_od: bool = True,
@@ -1296,9 +1299,9 @@ class ExternalForecastSystem:
         hb_p_needed = list()
         nhb_p_needed = list()
         for p in p_needed:
-            if p in consts.ALL_HB_P:
+            if p in efs_consts.ALL_HB_P:
                 hb_p_needed.append(p)
-            elif p in consts.ALL_NHB_P:
+            elif p in efs_consts.ALL_NHB_P:
                 nhb_p_needed.append(p)
             else:
                 raise ValueError(
@@ -1366,16 +1369,12 @@ class ExternalForecastSystem:
             print('HB OD matrices compiled!\n')
             # TODO: Create 24hr OD for HB
 
-    def compile_od_matrices(self,
-                            year: int = consts.BASE_YEAR,
-                            hb_p_needed: List[int] = consts.HB_PURPOSES_NEEDED,
-                            nhb_p_needed: List[int] = consts.NHB_PURPOSES_NEEDED,
-                            m_needed: List[int] = consts.MODES_NEEDED,
-                            tp_needed: List[int] = consts.TIME_PERIODS,
-                            round_dp: int = consts.DEFAULT_ROUNDING,
-                            overwrite_aggregated_od: bool = True,
-                            overwrite_compiled_od: bool = True,
-                            ) -> None:
+    def compile_matrices(self,
+                         year: int,
+                         m_needed: List[int] = efs_consts.MODES_NEEDED,
+                         tp_needed: List[int] = efs_consts.TIME_PERIODS,
+                         round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                         ) -> None:
         """
         Compiles pre-ME OD matrices produced by EFS into User Class format
         i.e. business, commute, other
@@ -1391,14 +1390,6 @@ class ExternalForecastSystem:
         year:
             The year to produce compiled OD matrices for.
 
-        hb_p_needed:
-            The home based purposes to use when compiling and aggregating
-            OD matrices.
-
-        nhb_p_needed:
-            The non home based purposes to use when compiling and aggregating
-            OD matrices.
-
         m_needed:
             The mode to use when compiling and aggregating OD matrices. This
             will be used to determine if car availability needs to be included
@@ -1411,14 +1402,6 @@ class ExternalForecastSystem:
             The number of decimal places to round the output values to.
             Uses efs_consts.DEFAULT_ROUNDING by default.
 
-        # TODO: Update docs once correct functionality exists
-        overwrite_aggregated_od:
-            Whether to generate aggregated od matrices or not.
-
-        overwrite_compiled_od
-            Whether to generate compiled OD matrices or not.
-
-
         Returns
         -------
         None
@@ -1427,36 +1410,20 @@ class ExternalForecastSystem:
         _input_checks(m_needed=m_needed)
 
         if self.is_ca_needed:
-            ca_needed = consts.CA_NEEDED
+            ca_needed = efs_consts.CA_NEEDED
         else:
             ca_needed = [None]
 
-        if overwrite_compiled_od:
-            # Build the compile params for this model
-            if self.model_name == 'noham':
-                compile_params_paths = mat_p.build_compile_params(
-                    import_dir=self.exports['od'],
-                    export_dir=self.params['compile'],
-                    matrix_format='od',
-                    years_needed=[year],
-                    m_needed=m_needed,
-                    ca_needed=ca_needed,
-                    tp_needed=tp_needed,
-                )
-            elif self.model_name == 'norms':
-                compile_params_paths = mat_p.build_norms_compile_params(
-                    import_dir=self.exports['od'],
-                    export_dir=self.params['compile'],
-                    matrix_format='od',
-                    years_needed=[year],
-                    m_needed=m_needed,
-                    tp_needed=tp_needed,
-                )
-            else:
-                raise ValueError(
-                    "Not sure how to compile matrices for model %s"
-                    % self.model_name
-                )
+        if self.model_name == 'noham':
+            compile_params_paths = mat_p.build_compile_params(
+                import_dir=self.exports['od'],
+                export_dir=self.params['compile'],
+                matrix_format='od',
+                years_needed=[year],
+                m_needed=m_needed,
+                ca_needed=ca_needed,
+                tp_needed=tp_needed,
+            )
 
             mat_p.compile_matrices(
                 mat_import=self.exports['od'],
@@ -1466,21 +1433,38 @@ class ExternalForecastSystem:
             )
 
             # Need to convert into hourly average PCU for noham
-            if self.model_name == 'noham':
-                vo.people_vehicle_conversion(
-                    mat_import=self.exports['compiled_od'],
-                    mat_export=self.exports['compiled_od_pcu'],
-                    import_folder=self.imports['home'],
-                    mode=m_needed[0],
-                    method='to_vehicles',
-                    out_format='wide',
-                    hourly_average=True,
-                    round_dp=round_dp,
-                )
+            vo.people_vehicle_conversion(
+                mat_import=self.exports['compiled_od'],
+                mat_export=self.exports['compiled_od_pcu'],
+                import_folder=self.imports['home'],
+                mode=m_needed[0],
+                method='to_vehicles',
+                out_format='wide',
+                hourly_average=True,
+                round_dp=round_dp,
+            )
+
+        elif self.model_name == 'norms':
+            mat_p.compile_norms_to_vdm(
+                mat_import=self.exports['pa_24'],
+                mat_export=self.exports['compiled_pa'],
+                params_export=self.params['compile'],
+                year=year,
+                m_needed=m_needed,
+                internal_zones=self.model_internal_zones,
+                external_zones=self.model_external_zones,
+                post_me_import=self.imports['decomp_post_me'],
+                matrix_format='pa',
+            )
+        else:
+            raise ValueError(
+                "Not sure how to compile matrices for model %s"
+                % self.model_name
+            )
 
     def decompile_post_me(self,
-                          year: int = consts.BASE_YEAR,
-                          m_needed: List[int] = consts.MODES_NEEDED,
+                          year: int = efs_consts.BASE_YEAR,
+                          m_needed: List[int] = efs_consts.MODES_NEEDED,
                           make_new_observed: bool = False,
                           overwrite_decompiled_matrices: bool = True,
                           overwrite_tour_proportions: bool = True,
@@ -1538,7 +1522,7 @@ class ExternalForecastSystem:
             # Build the segmentation parameters for OD2PA
             # TODO(BT): Convert to use class arguments once implemented
             seg_params = {
-                'p_needed': consts.ALL_P,
+                'p_needed': efs_consts.ALL_P,
                 'm_needed': m_needed,
                 'ca_needed': self.ca_needed,
             }
@@ -1564,12 +1548,16 @@ class ExternalForecastSystem:
                 print("WARNING: Not decompiling Norms matrices!!!")
                 return
 
+            fname = consts.POSTME_FROM_TO_FACTORS_FNAME
+            from_to_factors_out = os.path.join(self.params['home'], fname)
+
             decompilation.decompile_norms(
                 year=year,
                 post_me_import=self.imports['post_me_matrices'],
                 post_me_renamed_export=self.exports['post_me']['vdm_pa_24'],
                 post_me_decompiled_export=self.exports['post_me']['pa_24'],
                 decompile_factors_dir=self.imports['params'],
+                from_to_factors_out=from_to_factors_out
             )
 
             # Copy all of our outputs into the observed import location
@@ -1588,9 +1576,9 @@ class ExternalForecastSystem:
             )
 
     def compile_future_year_od_matrices(self,
-                                        years_needed: List[int] = consts.FUTURE_YEARS,
-                                        hb_p_needed: List[int] = consts.ALL_HB_P,
-                                        m_needed: List[int] = consts.MODES_NEEDED,
+                                        years_needed: List[int] = efs_consts.FUTURE_YEARS,
+                                        hb_p_needed: List[int] = efs_consts.ALL_HB_P,
+                                        m_needed: List[int] = efs_consts.MODES_NEEDED,
                                         overwrite_aggregated_pa: bool = True,
                                         overwrite_future_year_od: bool = True
                                         ) -> None:
@@ -1619,14 +1607,6 @@ class ExternalForecastSystem:
             The mode to use during the conversion. This will be used to
             determine if car availability needs to be included or not.
 
-        output_location:
-            The directory to create the new output directory in - a dir named
-            self.out_dir (NorMITs Demand) should exist here. Usually
-            a drive name e.g. Y:/
-
-        iter_num:
-            The number of the iteration being run.
-
         # TODO: Update docs once correct functionality exists
         overwrite_aggregated_pa:
             Whether to generate the aggregated pa matrices or not
@@ -1642,7 +1622,7 @@ class ExternalForecastSystem:
         _input_checks(m_needed=m_needed)
 
         if self.model_name == 'norms' or self.model_name == 'norms_2015':
-            ca_needed = consts.CA_NEEDED
+            ca_needed = efs_consts.CA_NEEDED
         elif self.model_name == 'noham':
             ca_needed = [None]
         else:
@@ -1734,7 +1714,7 @@ def _input_checks(iter_num: int = None,
 
     # Make sure all the expected keys exist
     if constraint_required is not None:
-        expected_keys = consts.CONSTRAINT_REQUIRED_DEFAULT.keys()
+        expected_keys = efs_consts.CONSTRAINT_REQUIRED_DEFAULT.keys()
         for key in expected_keys:
             if key not in constraint_required:
                 raise du.ExternalForecastSystemError(

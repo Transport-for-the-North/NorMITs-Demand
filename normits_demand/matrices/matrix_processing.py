@@ -3237,6 +3237,11 @@ def split_internal_external(mat_import: nd.PathLike,
     )
 
 
+def get_norms_from_to_factors(post_me_dir: nd.PathLike
+                              ) -> Tuple[np.array, np.array]:
+    pass
+
+
 def compile_norms_to_vdm(mat_import: nd.PathLike,
                          mat_export: nd.PathLike,
                          params_export: nd.PathLike,
@@ -3247,13 +3252,22 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
                          external_zones: List[int],
                          post_me_import: nd.PathLike = None,
                          ) -> str:
+    # TODO(BT) Write compile_norms_to_vdm() docs
     # Init
-    int_dir = os.path.join(mat_import, 'internal')
-    ext_dir = os.path.join(mat_import, 'external')
     matrix_format = checks.validate_matrix_format(matrix_format)
+
+    # Build temporary paths
+    int_dir = os.path.join(mat_export, 'internal')
+    ext_dir = os.path.join(mat_export, 'external')
 
     for path in [int_dir, ext_dir]:
         file_ops.create_folder(path, verbose=False)
+
+    # Temporary output if we need to split from/to
+    compiled_dir = mat_export
+    if post_me_import is not None:
+        compiled_dir = os.path.join(mat_export, 'compiled_non_split')
+        file_ops.create_folder(compiled_dir, verbose=False)
 
     # Split internal and external
     print("Splitting into internal and external matrices...")
@@ -3270,7 +3284,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
     print("Generating internal splitting factors...")
     int_split_factors = compile_norms_to_vdm_internal(
         mat_import=int_dir,
-        mat_export=mat_export,
+        mat_export=compiled_dir,
         params_export=params_export,
         years_needed=[year],
         m_needed=m_needed,
@@ -3280,7 +3294,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
     print("Generating external splitting factors...")
     ext_split_factors = compile_norms_to_vdm_external(
         mat_import=ext_dir,
-        mat_export=mat_export,
+        mat_export=compiled_dir,
         params_export=params_export,
         years_needed=[year],
         m_needed=m_needed,
@@ -3291,12 +3305,18 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
     int_split_factors = int_split_factors[0]
     ext_split_factors = ext_split_factors[0]
 
+    # If we don't have the post_me path, exit now. Can't do any more
     if post_me_import is None:
         return int_split_factors, ext_split_factors
+
+    # ##
 
     # Get splitting factors from NoRMS post-ME
     raise NotImplementedError(
         "Cannot split Norms into From and To yet!"
+    )
+    from_split_factors, to_split_factors = get_norms_from_to_factors(
+        post_me_import
     )
 
     # split external from/to
