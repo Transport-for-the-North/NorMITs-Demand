@@ -1445,6 +1445,12 @@ class ExternalForecastSystem:
             )
 
         elif self.model_name == 'norms':
+            # Load in the splitting factors
+            fname = consts.POSTME_FROM_TO_FACTORS_FNAME
+            path = os.path.join(self.params['home'], fname)
+            from_to_split_factors = pd.read_pickle(path)
+
+            # Compile
             mat_p.compile_norms_to_vdm(
                 mat_import=self.exports['pa_24'],
                 mat_export=self.exports['compiled_pa'],
@@ -1453,8 +1459,8 @@ class ExternalForecastSystem:
                 m_needed=m_needed,
                 internal_zones=self.model_internal_zones,
                 external_zones=self.model_external_zones,
-                post_me_import=self.imports['decomp_post_me'],
                 matrix_format='pa',
+                from_to_split_factors=from_to_split_factors,
             )
         else:
             raise ValueError(

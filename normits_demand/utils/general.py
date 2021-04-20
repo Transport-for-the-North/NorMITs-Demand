@@ -2011,7 +2011,7 @@ def list_files(path: nd.PathLike,
         Where to search for the files
 
     ftypes:
-        A list of filetypes to accept.
+        A list of filetypes to accept. If None, all are accepted.
 
     include_path:
         Whether to include the path with the returned filenames

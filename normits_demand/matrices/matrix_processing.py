@@ -44,6 +44,7 @@ from normits_demand.utils import compress
 
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.matrices import utils as mat_utils
+from normits_demand.matrices import compilation as mat_comp
 from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
 from normits_demand.validation import checks
@@ -3237,11 +3238,6 @@ def split_internal_external(mat_import: nd.PathLike,
     )
 
 
-def get_norms_from_to_factors(post_me_dir: nd.PathLike
-                              ) -> Tuple[np.array, np.array]:
-    pass
-
-
 def compile_norms_to_vdm(mat_import: nd.PathLike,
                          mat_export: nd.PathLike,
                          params_export: nd.PathLike,
@@ -3250,7 +3246,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
                          matrix_format: str,
                          internal_zones: List[int],
                          external_zones: List[int],
-                         post_me_import: nd.PathLike = None,
+                         from_to_split_factors: nd.FactorsDict = None,
                          ) -> str:
     # TODO(BT) Write compile_norms_to_vdm() docs
     # Init
@@ -3265,61 +3261,59 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
 
     # Temporary output if we need to split from/to
     compiled_dir = mat_export
-    if post_me_import is not None:
+    if from_to_split_factors is not None:
         compiled_dir = os.path.join(mat_export, 'compiled_non_split')
         file_ops.create_folder(compiled_dir, verbose=False)
 
     # Split internal and external
-    print("Splitting into internal and external matrices...")
-    split_internal_external(
-        mat_import=mat_import,
-        internal_export=int_dir,
-        external_export=ext_dir,
-        year=year,
-        internal_zones=internal_zones,
-        external_zones=external_zones,
-    )
-
-    # Compile and get the splitting factors for internal mats
-    print("Generating internal splitting factors...")
-    int_split_factors = compile_norms_to_vdm_internal(
-        mat_import=int_dir,
-        mat_export=compiled_dir,
-        params_export=params_export,
-        years_needed=[year],
-        m_needed=m_needed,
-        matrix_format=matrix_format,
-    )
-
-    print("Generating external splitting factors...")
-    ext_split_factors = compile_norms_to_vdm_external(
-        mat_import=ext_dir,
-        mat_export=compiled_dir,
-        params_export=params_export,
-        years_needed=[year],
-        m_needed=m_needed,
-        matrix_format=matrix_format,
-    )
-
-    # We know we're only doing a single year here
-    int_split_factors = int_split_factors[0]
-    ext_split_factors = ext_split_factors[0]
+    # print("Splitting into internal and external matrices...")
+    # split_internal_external(
+    #     mat_import=mat_import,
+    #     internal_export=int_dir,
+    #     external_export=ext_dir,
+    #     year=year,
+    #     internal_zones=internal_zones,
+    #     external_zones=external_zones,
+    # )
+    #
+    # # Compile and get the splitting factors for internal mats
+    # print("Generating internal splitting factors...")
+    # int_split_factors = compile_norms_to_vdm_internal(
+    #     mat_import=int_dir,
+    #     mat_export=compiled_dir,
+    #     params_export=params_export,
+    #     years_needed=[year],
+    #     m_needed=m_needed,
+    #     matrix_format=matrix_format,
+    # )
+    #
+    # print("Generating external splitting factors...")
+    # ext_split_factors = compile_norms_to_vdm_external(
+    #     mat_import=ext_dir,
+    #     mat_export=compiled_dir,
+    #     params_export=params_export,
+    #     years_needed=[year],
+    #     m_needed=m_needed,
+    #     matrix_format=matrix_format,
+    # )
+    #
+    # # We know we're only doing a single year here
+    # int_split_factors = int_split_factors[0]
+    # ext_split_factors = ext_split_factors[0]
 
     # If we don't have the post_me path, exit now. Can't do any more
-    if post_me_import is None:
+    if from_to_split_factors is None:
         return int_split_factors, ext_split_factors
 
-    # ##
-
-    # Get splitting factors from NoRMS post-ME
-    raise NotImplementedError(
-        "Cannot split Norms into From and To yet!"
-    )
-    from_split_factors, to_split_factors = get_norms_from_to_factors(
-        post_me_import
+    # ## CONVERT TO THE NORMS POST-ME FORMAT ## #
+    mat_comp.convert_efs_to_norms_matrices(
+        mat_import=compiled_dir,
+        mat_export=mat_export,
+        year=year,
+        from_to_split_factors=from_to_split_factors
     )
 
-    # split external from/to
+    return int_split_factors, ext_split_factors
 
 
 def _recombine_internal_external_internal(in_paths, output_path, force_csv_out):
