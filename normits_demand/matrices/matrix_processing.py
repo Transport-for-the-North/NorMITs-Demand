@@ -2270,6 +2270,7 @@ def compile_matrices(mat_import: str,
                      factor_pickle_path: str = None,
                      round_dp: int = efs_consts.DEFAULT_ROUNDING,
                      factors_fname: str = 'od_compilation_factors.pickle',
+                     avoid_zero_splits: bool = False,
                      ) -> nd.PathLike:
     """
     Compiles the matrices in mat_import, writes to mat_export
@@ -2297,6 +2298,11 @@ def compile_matrices(mat_import: str,
     factors_fname:
         The filename to give to the exported decompile factors when writing to
         disk
+
+    avoid_zero_splits:
+        If set to True, then no zero splits will appear in the splitting
+        factors. Where there would have been zero splits, this will be
+        replaced with even splits across inputs.
 
     Returns
     -------
@@ -2350,18 +2356,23 @@ def compile_matrices(mat_import: str,
             in_mats.append(file_ops.read_df(in_path, index_col=0))
 
         # Combine all matrices together
-        full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), in_mats)
+        full_mat = functools.reduce(operator.add, in_mats)
 
         # Output to file
-        # TODO(BT): Output as compressed if filename says so
         output_path = os.path.join(mat_export, comp_name)
-        full_mat.round(decimals=round_dp).to_csv(output_path)
+        full_mat = full_mat.round(decimals=round_dp)
+        file_ops.write_df(full_mat, output_path)
 
         # Go to the next iteration if we don't need the factors
         if factor_pickle_path is None:
             continue
 
         # ## CALCULATE THE DECOMPILE FACTORS ## #
+        # Infill all zeroes with a small number - ensures no 0 splits
+        if avoid_zero_splits:
+            in_mats = [x.where(x != 0, 1e-8) for x in in_mats]
+            full_mat = functools.reduce(operator.add, in_mats)
+
         for part_mat, mat_name in zip(in_mats, input_mat_names):
             # Avoid divide by zero
             full_mat = np.where(full_mat == 0, 0.0001, full_mat)
@@ -2906,6 +2917,7 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
                                   params_export: nd.PathLike,
                                   years_needed: List[str],
                                   matrix_format: str,
+                                  avoid_zero_splits: bool = False,
                                   ) -> List[str]:
     """
     Generates the compile params and compiles norms internal matrices.
@@ -2929,6 +2941,11 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
     matrix_format:
         The format of of the matrices to compile. Needs to be one of
         efs_consts.MATRIX_FORMATS
+
+    avoid_zero_splits:
+        If set to True, then no zero splits will appear in the splitting
+        factors. Where there would have been zero splits, this will be
+        replaced with even splits across inputs.
 
     Returns
     -------
@@ -2966,6 +2983,7 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
             mat_export=mat_export,
             compile_params_path=compile_params_path,
             factor_pickle_path=split_factors_path,
+            avoid_zero_splits=avoid_zero_splits,
         )
 
     return sf_paths
@@ -2976,6 +2994,7 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
                                   params_export: nd.PathLike,
                                   years_needed: List[str],
                                   matrix_format: str,
+                                  avoid_zero_splits: bool = False,
                                   ) -> List[str]:
     """
     Generates the compile params and compiles norms external matrices.
@@ -2999,6 +3018,11 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
     matrix_format:
         The format of of the matrices to compile. Needs to be one of
         efs_consts.MATRIX_FORMATS
+
+    avoid_zero_splits:
+        If set to True, then no zero splits will appear in the splitting
+        factors. Where there would have been zero splits, this will be
+        replaced with even splits across inputs.
 
     Returns
     -------
@@ -3036,6 +3060,7 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
             mat_export=mat_export,
             compile_params_path=compile_params_path,
             factor_pickle_path=split_factors_path,
+            avoid_zero_splits=avoid_zero_splits,
         )
 
     return sf_paths
@@ -3173,6 +3198,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
                          internal_zones: List[int],
                          external_zones: List[int],
                          post_me_import: nd.PathLike = None,
+                         avoid_zero_splits: bool = False,
                          ) -> str:
     # Init
     int_dir = os.path.join(mat_import, 'internal')
@@ -3200,6 +3226,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
         params_export=params_export,
         years_needed=[year],
         matrix_format=matrix_format,
+        avoid_zero_splits=avoid_zero_splits,
     )
 
     ext_split_factors = compile_norms_to_vdm_external(
@@ -3208,6 +3235,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
         params_export=params_export,
         years_needed=[year],
         matrix_format=matrix_format,
+        avoid_zero_splits=avoid_zero_splits,
     )
 
     # We know we're only doing a single year here

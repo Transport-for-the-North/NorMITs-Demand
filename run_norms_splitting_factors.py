@@ -17,12 +17,14 @@ import pandas as pd
 import normits_demand.constants as consts
 from normits_demand.matrices import matrix_processing as mat_p
 
-PA_MATRICES_DIR = r'E:\NorMITs Demand\norms\v0.3-EFS_Output\NTEM\iter0\Matrices\24hr PA Matrices'
-PA_VDM_MATRICES_DIR = r'E:\NorMITs Demand\norms\v0.3-EFS_Output\NTEM\iter0\Matrices\24hr VDM PA Matrices'
-PARAMS_EXPORT = r'E:\NorMITs Demand\norms\v0.3-EFS_Output\NTEM\iter0\Params\Compile Params'
+PA_MATRICES_DIR = r'I:\NorMITs Synthesiser\Norms\iter4\24hr PA Matrices'
+PA_VDM_MATRICES_DIR = r'I:\NorMITs Synthesiser\Norms\iter4\24hr VDM PA Matrices'
+PARAMS_EXPORT = r'I:\NorMITs Synthesiser\Norms\iter4\params'
 
 MODEL_SCHEMA_DIR = r'I:\NorMITs Demand\import\norms\model schema'
 BASE_YEAR = '2018'
+
+AVOID_ZERO_SPLITS = True
 
 
 def main():
@@ -44,6 +46,7 @@ def main():
         external_zones=external_zones,
         post_me_import=None,
         matrix_format='pa',
+        avoid_zero_splits=AVOID_ZERO_SPLITS
     )
 
 
