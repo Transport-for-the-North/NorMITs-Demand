@@ -465,6 +465,7 @@ def find_filename(path: nd.PathLike,
 def _copy_all_files_internal(import_dir: nd.PathLike,
                              export_dir: nd.PathLike,
                              force_csv_out: bool,
+                             index_col_out: bool,
                              in_fname: nd.PathLike,
                              ) -> None:
     """
@@ -472,14 +473,14 @@ def _copy_all_files_internal(import_dir: nd.PathLike,
     """
     in_fname = cast_to_pathlib_path(in_fname)
 
-    # Do we need to convert the file?
-    if not(force_csv_out and in_fname.suffix != '.csv'):
-        # If not, we can just copy over as is
-        du.copy_and_rename(
-            src=import_dir / in_fname,
-            dst=export_dir / in_fname,
-        )
-        return
+    # Do we need to convert the file? We do with
+    # if not(force_csv_out and in_fname.suffix != '.csv'):
+    #     # If not, we can just copy over as is
+    #     du.copy_and_rename(
+    #         src=import_dir / in_fname,
+    #         dst=export_dir / in_fname,
+    #     )
+    #     return
 
     # Only get here if we do need to convert the file type
     in_path = import_dir / in_fname
@@ -487,12 +488,13 @@ def _copy_all_files_internal(import_dir: nd.PathLike,
 
     # Read in, then write out as csv
     df = read_df(in_path)
-    write_df(df, out_path)
+    write_df(df, out_path, index=index_col_out)
 
 
 def copy_all_files(import_dir: nd.PathLike,
                    export_dir: nd.PathLike,
                    force_csv_out: bool = False,
+                   index_col_out: bool = True,
                    process_count: int = consts.PROCESS_COUNT,
                    ) -> None:
     """
@@ -511,6 +513,10 @@ def copy_all_files(import_dir: nd.PathLike,
 
     force_csv_out:
         If True, the copied files will be translated into .csv files.
+
+
+    index_col_out:
+        If True, will write the index column out as well.
 
     process_count:
         THe number of processes to use when copying the data over.
@@ -531,6 +537,7 @@ def copy_all_files(import_dir: nd.PathLike,
     unchanging_kwargs = {
         'import_dir': import_dir,
         'export_dir': export_dir,
+        'index_col_out': index_col_out,
         'force_csv_out': force_csv_out,
     }
 

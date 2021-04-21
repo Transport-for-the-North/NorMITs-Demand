@@ -3163,7 +3163,7 @@ def _split_int_ext(mat_import,
             compressed=compress_out,
         )
         out_path = os.path.join(out_dir, fname)
-        compress.write_out(sub_mat, out_path)
+        file_ops.write_df(sub_mat, out_path)
 
 
 def split_internal_external(mat_import: nd.PathLike,
@@ -3266,40 +3266,40 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
         file_ops.create_folder(compiled_dir, verbose=False)
 
     # Split internal and external
-    # print("Splitting into internal and external matrices...")
-    # split_internal_external(
-    #     mat_import=mat_import,
-    #     internal_export=int_dir,
-    #     external_export=ext_dir,
-    #     year=year,
-    #     internal_zones=internal_zones,
-    #     external_zones=external_zones,
-    # )
-    #
-    # # Compile and get the splitting factors for internal mats
-    # print("Generating internal splitting factors...")
-    # int_split_factors = compile_norms_to_vdm_internal(
-    #     mat_import=int_dir,
-    #     mat_export=compiled_dir,
-    #     params_export=params_export,
-    #     years_needed=[year],
-    #     m_needed=m_needed,
-    #     matrix_format=matrix_format,
-    # )
-    #
-    # print("Generating external splitting factors...")
-    # ext_split_factors = compile_norms_to_vdm_external(
-    #     mat_import=ext_dir,
-    #     mat_export=compiled_dir,
-    #     params_export=params_export,
-    #     years_needed=[year],
-    #     m_needed=m_needed,
-    #     matrix_format=matrix_format,
-    # )
-    #
-    # # We know we're only doing a single year here
-    # int_split_factors = int_split_factors[0]
-    # ext_split_factors = ext_split_factors[0]
+    print("Splitting into internal and external matrices...")
+    split_internal_external(
+        mat_import=mat_import,
+        internal_export=int_dir,
+        external_export=ext_dir,
+        year=year,
+        internal_zones=internal_zones,
+        external_zones=external_zones,
+    )
+
+    # Compile and get the splitting factors for internal mats
+    print("Generating internal splitting factors...")
+    int_split_factors = compile_norms_to_vdm_internal(
+        mat_import=int_dir,
+        mat_export=compiled_dir,
+        params_export=params_export,
+        years_needed=[year],
+        m_needed=m_needed,
+        matrix_format=matrix_format,
+    )
+
+    print("Generating external splitting factors...")
+    ext_split_factors = compile_norms_to_vdm_external(
+        mat_import=ext_dir,
+        mat_export=compiled_dir,
+        params_export=params_export,
+        years_needed=[year],
+        m_needed=m_needed,
+        matrix_format=matrix_format,
+    )
+
+    # We know we're only doing a single year here
+    int_split_factors = int_split_factors[0]
+    ext_split_factors = ext_split_factors[0]
 
     # If we don't have the post_me path, exit now. Can't do any more
     if from_to_split_factors is None:

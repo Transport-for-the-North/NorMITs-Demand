@@ -52,9 +52,24 @@ OUTPUT_DIR = r'I:\NorMITs Demand\noham\EFS\iter3g\NTEM\Reports\EFS Reporter'
 # REPORT_FNAME = 'output_to_post_me_od_report.csv'
 
 # Compare EFS output to post-ME compiled OD
-ORIGINAL_DIR = r'I:\NorMITs Demand\import\noham\post_me\renamed'
-COMPARE_DIR = r'I:\NorMITs Demand\noham\EFS\iter3g\NTEM\Matrices\Compiled OD Matrices PCU'
-REPORT_FNAME = 'output_to_post_me_compiled_od_report.csv'
+# ORIGINAL_DIR = r'I:\NorMITs Demand\import\noham\post_me\renamed'
+# COMPARE_DIR = r'I:\NorMITs Demand\noham\EFS\iter3g\NTEM\Matrices\Compiled OD Matrices PCU'
+# REPORT_FNAME = 'output_to_post_me_compiled_od_report.csv'
+
+# Compare NoRMS compiled to post-ME
+ORIGINAL_DIR = r'I:\NorMITs Demand\import\norms\post_me\renamed'
+COMPARE_DIR = r'E:\NorMITs Demand\norms\EFS\iter3a\SC02_PP\Matrices\Compiled PA Matrices'
+
+# Compare TMS PA to PA
+# ORIGINAL_DIR = r'I:\NorMITs Demand\import\norms\decompiled_post_me'
+# COMPARE_DIR = r'E:\NorMITs Demand\norms\EFS\iter3a\SC02_PP\Matrices\24hr PA Matrices'
+
+# Compare EFS named PA
+# ORIGINAL_DIR = r'I:\NorMITs Demand\import\norms\post_me\efs named'
+# COMPARE_DIR = r'E:\NorMITs Demand\norms\EFS\iter3a\SC02_PP\Matrices\Compiled PA Matrices\compiled_non_split'
+
+OUTPUT_DIR = r'E:/'
+REPORT_FNAME = 'report.csv'
 
 
 def list_files(path):
@@ -147,6 +162,7 @@ def main():
         report['max_diff'].append(diff.max())
         report['absolute_diff'].append(diff.sum())
         report['actual_diff'].append(comp.sum() - orig.sum())
+        report['% actual_diff'].append((comp.sum() - orig.sum()) / orig.sum() * 100)
 
         # # ## ERROR CHECKING ## #
         # max_idx = np.where(diff == diff.max())
