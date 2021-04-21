@@ -628,7 +628,8 @@ def _dissag_seg(prod_list,
                 costs,
                 furness_loops = 1500,
                 min_pa_diff = .1,
-                bs_con_crit = .975):
+                bs_con_crit = .975,
+                ):
     """
     prod_list:
         List of production vector dictionaries
@@ -890,16 +891,24 @@ def _dissag_seg(prod_list,
         test = sum(test)
    """
 
-    # Get total through calc matrix
+    # TODO(BT): Replace with LAD aggregation method
+    # Replaces all zeros with tiny value - prevents zero splits
+    for i in range(len(prod_list)):
+        val = seg_cube[:, :, i]
+        val = np.where(val == 0, _TINY_INFILL, val)
+        seg_cube[:, :, i] = val
+
+    # Calculate the total of all the matrices
     cube_sd = seg_cube.sum(axis=2)
 
+    # calculate the splitting factors
     for seg_x in enumerate(prod_list,0):
         # Get share of cell values from original matrix
-        factor_cube[:,:,seg_x[0]] = seg_cube[:,:,seg_x[0]]/np.where(
-            cube_sd==0,_TINY_INFILL,cube_sd)
+        factor_cube[:,:,seg_x[0]] = seg_cube[:,:,seg_x[0]] / cube_sd
+
         # Multiply original matrix by share to get cell balanced out matrix
         out_cube[:,:,seg_x[0]] = sd * factor_cube[:,:,seg_x[0]]
-        print(out_cube[:,:,seg_x[0]].sum())
+        print(out_cube[:, :, seg_x[0]].sum())
 
         # Get trip length by band
         tlb_con = ra.get_trip_length_by_band(tld_list[seg_x[0]]['enh_tld'],
