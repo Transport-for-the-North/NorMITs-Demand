@@ -48,7 +48,7 @@ def main():
     scenario = consts.SC00_NTEM
     iter_num = '3g'
     import_home = "I:/"
-    export_home = "I:/"
+    export_home = "E:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
