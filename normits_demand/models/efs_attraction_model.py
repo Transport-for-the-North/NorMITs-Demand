@@ -392,16 +392,6 @@ class EFSAttractionGenerator:
             unique_data_cols=all_years
         )
 
-        # Write the produced employment to file
-        # Earlier than previously to also save the soc segmentation
-        if out_path is None:
-            print("WARNING! No output path given. "
-                  "Not writing employment to file.")
-        else:
-            print("Writing employment to file...")
-            path = os.path.join(out_path, consts.EMP_FNAME % self.zone_col)
-            employment.to_csv(path, index=False)
-
         if 'soc' not in list(employment):
             self.emp_segments = du.list_safe_remove(self.emp_segments, ['soc'])
 
@@ -411,7 +401,7 @@ class EFSAttractionGenerator:
         employment = employment.reindex(index_cols, axis='columns')
         employment = employment.groupby(group_cols).sum().reset_index()
 
-        # Population Audit
+        # Employment Audit
         if audits:
             print('\n', '-'*15, 'Employment Audit', '-'*15)
             mask = (employment[self.emp_cat_col] == 'E01')
@@ -1538,4 +1528,4 @@ def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
     if len(all_emp_ph) == 1:
         return all_emp_ph[0]
 
-    return du.merge_df_list(all_emp_ph, on=group_cols)
+    return du.merge_df_list(all_emp_ph, on=group_cols, how='outer').fillna(0)

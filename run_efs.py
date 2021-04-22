@@ -28,15 +28,15 @@ def main():
     integrate_dlog = False
     run_pop_emp_comparison = False
 
-    run_base_efs = False
-    recreate_productions = True
+    run_base_efs = True
+    recreate_productions = False
     recreate_attractions = True
     recreate_nhb_productions = True
 
     run_bespoke_zones = False
     ignore_bespoke_zones = True
 
-    run_pa_to_od = False
+    run_pa_to_od = True
     run_compile_mats = True
     run_decompile_post_me = False
     run_future_year_compile_od = False
@@ -45,10 +45,10 @@ def main():
     output_years = consts.ALL_YEARS
 
     # Controls I/O
-    scenario = consts.SC02_PP
-    iter_num = '3a'
+    scenario = consts.SC00_NTEM
+    iter_num = '3g'
     import_home = "I:/"
-    export_home = "E:/"
+    export_home = "I:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
@@ -64,6 +64,8 @@ def main():
         land_use_iteration=land_use_iteration,
         verbose=verbose
     )
+
+    print("-" * 40, "Running for %s" % model_name, "-" * 40)
 
     if run_base_efs:
         # Generates HB PA matrices
