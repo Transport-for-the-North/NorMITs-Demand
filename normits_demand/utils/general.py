@@ -18,6 +18,7 @@ import re
 import shutil
 import random
 import inspect
+import operator
 
 
 import pandas as pd
@@ -3214,3 +3215,104 @@ def split_hb_nhb_purposes(purposes: List[int]) -> Tuple[List[int], List[int]]:
                 "%s is not a valid HB or NHB purpose" % str(p)
             )
     return hb_p, nhb_p
+
+
+def sum_df_dict(dict_list: List[Dict[Any, pd.DataFrame]],
+                non_sum_cols: List[str],
+                sum_keys: List[Any] = None,
+                ) -> Dict[Any, pd.DataFrame]:
+    """
+    Sums the dataframes in dict_list on matching keys
+
+    Parameters
+    ----------
+    dict_list:
+        A list of the dictionaries to sum
+
+    non_sum_cols:
+        A list of the column names that should not be summed
+
+    sum_keys:
+        A list of the keys to sum on. If left as None, will infer the keys
+        to use based on those existing in dict_list[0].
+
+    Returns
+    -------
+    summed_df_dict:
+        A dictionary with sum_keys, containing the sum all vales at
+        that key in dict_list.
+    """
+    # Infer sum keys
+    sum_keys = list(dict_list[0].keys()) if sum_keys is None else sum_keys
+
+    # Check all keys exist
+    for sub_dict in dict_list:
+        if not all([k in sub_dict for k in sum_keys]):
+            raise KeyError(
+                "Cannot find all the sum_keys in all the dictionaries."
+            )
+
+    # Sub across keys
+    ret_dict = dict()
+    for k in sum_keys:
+        print(k)
+        dfs = [d[k] for d in dict_list]
+        dfs = [df.set_index(non_sum_cols) for df in dfs]
+
+        sum_df = functools.reduce(operator.add, dfs)
+        ret_dict[k] = sum_df.reset_index()
+
+    return ret_dict
+
+
+def concat_df_dict(dict_list: List[Dict[Any, pd.DataFrame]],
+                   non_sum_cols: List[str],
+                   concat_keys: List[Any] = None,
+                   sort: bool = False
+                ) -> Dict[Any, pd.DataFrame]:
+    """
+    Sums the dataframes in dict_list on matching keys
+
+    Parameters
+    ----------
+    dict_list:
+        A list of the dictionaries to sum
+
+    non_sum_cols:
+        A list of the column names that should not be summed
+
+    concat_keys:
+        A list of the keys to sum on. If left as None, will infer the keys
+        to use based on those existing in dict_list[0].
+
+    Returns
+    -------
+    summed_df_dict:
+        A dictionary with sum_keys, containing the sum all vales at
+        that key in dict_list.
+    """
+    # Infer sum keys
+    concat_keys = list(
+        dict_list[0].keys()) if concat_keys is None else concat_keys
+
+    # Check all keys exist
+    for sub_dict in dict_list:
+        if not all([k in sub_dict for k in concat_keys]):
+            raise KeyError(
+                "Cannot find all the sum_keys in all the dictionaries."
+            )
+
+    # Sub across keys
+    ret_dict = dict()
+    for k in concat_keys:
+        print(k)
+        dfs = [d[k] for d in dict_list]
+        dfs = [df.set_index(non_sum_cols) for df in dfs]
+
+        concat_df = pd.concat(dfs).reset_index()
+
+        if sort:
+            concat_df = concat_df.sort_values(non_sum_cols)
+        ret_dict[k] = concat_df
+
+    return ret_dict
