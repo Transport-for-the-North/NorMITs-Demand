@@ -13,7 +13,7 @@ ITER_NAME = 'iter4'
 
 def main():
     import_folder = 'I:/NorMITs Demand/import/norms/post_me/tms_seg_pa'
-    export_folder = 'I:/NorMITs Demand/import/norms/post_me/tfn_seg_pa'
+    export_folder = 'I:/NorMITs Demand/import/norms/post_me/tfn_seg_pa2'
 
     synth_home = os.path.join(IMPORT_DRIVE, 'NorMITs Synthesiser')
 
@@ -58,6 +58,7 @@ def main():
         furness_loops=1999,
         min_pa_diff=.1,
         bs_con_crit=.975,
+        max_bs_loops=50,
         mp_threads=-1,
         export_original=True,
         export_furness=False)
@@ -79,6 +80,7 @@ def main():
         furness_loops=1999,
         min_pa_diff=.1,
         bs_con_crit=.975,
+        max_bs_loops=50,
         mp_threads=-1,
         export_original=True,
         export_furness=False)

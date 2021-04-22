@@ -232,6 +232,7 @@ def disaggregate_segments(import_folder,
                           furness_loops = 1999,
                           min_pa_diff = .1,
                           bs_con_crit = .975,
+                          max_bs_loops: int = 300,
                           mp_threads = -1,
                           export_original = True,
                           export_furness = False):
@@ -352,6 +353,7 @@ def disaggregate_segments(import_folder,
                          'furness_loops':furness_loops, # unchanging
                          'min_pa_diff':min_pa_diff, # unchanging
                          'bs_con_crit':bs_con_crit,
+                         'max_bs_loops':max_bs_loops,
                          'export_original':export_original,
                          'export_furness':export_furness,
                          'ia_name':ia_name,
@@ -391,11 +393,12 @@ def _segment_build_worker(agg_split_index,
                           furness_loops,
                           min_pa_diff,
                           bs_con_crit,
+                          max_bs_loops,
                           export_original,
                           export_furness,
                           ia_name,
                           export_folder,
-                          trip_origin
+                          trip_origin,
                           ):
     
     """
@@ -529,7 +532,9 @@ def _segment_build_worker(agg_split_index,
                                          costs,
                                          furness_loops = furness_loops,
                                          min_pa_diff = min_pa_diff,
-                                         bs_con_crit = bs_con_crit)
+                                         bs_con_crit = bs_con_crit,
+                                         max_bs_loops=max_bs_loops
+                                         )
 
     # Unpack list of lists
     # Read, convert, build path and write out
@@ -629,6 +634,7 @@ def _dissag_seg(prod_list,
                 furness_loops = 1500,
                 min_pa_diff = .1,
                 bs_con_crit = .975,
+                max_bs_loops: int = 300,
                 ):
     """
     prod_list:
@@ -650,26 +656,6 @@ def _dissag_seg(prod_list,
     seg_cube = np.ndarray((len(sd),len(sd),len(prod_list)))
     factor_cube = np.ndarray((len(sd),len(sd),len(prod_list)))
     out_cube = np.ndarray((len(sd),len(sd),len(prod_list)))
-
-    # # Checksing
-    # print(seed_name)
-    # seed_mat = sd
-    # tlb_con = ra.get_trip_length_by_band(tld_list[0]['enh_tld'], costs, sd)
-    # dist_mat, band_shares, global_atl = tlb_con
-    # achieved_bs = band_shares['bs']
-    # target_bs = band_shares['tbs']
-    #
-    # print(achieved_bs)
-    # for i, seg in enumerate(prod_list, 0):
-    #     new_mat = sd / sd.sum()
-    #     new_mat = new_mat * seg['trips'].sum()
-    #     target_tld = tld_list[i]['enh_tld']
-    #
-    #     tlb_con = ra.get_trip_length_by_band(target_tld, costs, new_mat)
-    #     dist_mat, band_shares, global_atl = tlb_con
-    #     print(seg)
-    #     print(band_shares)
-    #     print()
 
     # seg_x = 0,prod_list[0]
     seg_audit = list()
@@ -711,14 +697,6 @@ def _dissag_seg(prod_list,
         # Unpack tld
         min_dist, max_dist, obs_trip, obs_dist = nup.unpack_tlb(target_tld)
         num_band = len(min_dist)
-
-        # print("Matching productions and attractions")
-        # for p_dict in prod_list:
-        #     for a_dict in attr_list:
-        #         if p_dict['soc'] == a_dict['soc']:
-        #             print(p_dict['trips'].sum())
-        #             print(a_dict['trips'].sum())
-        #             print()
 
         # TLB balance/furness
         tlb_loop = 1
@@ -831,11 +809,6 @@ def _dissag_seg(prod_list,
             achieved_bs = band_shares['bs']
             target_bs = band_shares['tbs']
 
-            # print(achieved_bs)
-            # print(target_bs)
-            # print(np.sum((achieved_bs - target_bs) ** 2))
-            # print(np.sum((target_bs - np.sum(target_bs) / len(target_bs)) ** 2))
-
             # Calculate the band share convergence
             bs_con = (
                     1
@@ -846,12 +819,6 @@ def _dissag_seg(prod_list,
             print('Loop ' + str(tlb_loop))
             print('Band share convergence: ' + str(bs_con))
 
-            # if bs_con == 0:
-            #     print(
-            #         "WARNING: Something has gone wrong, getting a band share "
-            #         "convergence of 0!"
-            #     )
-
             # If tiny improvement, exit loop
             if np.absolute(bs_con - prior_bs_con) < .001:
                 if bs_con != 0:
@@ -859,7 +826,7 @@ def _dissag_seg(prod_list,
 
             tlb_loop += 1
 
-            if tlb_loop >= 300:
+            if tlb_loop >= max_bs_loops:
                 conv_fail = True
 
             # Add to audit dict
