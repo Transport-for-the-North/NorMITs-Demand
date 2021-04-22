@@ -3,6 +3,7 @@ from .version import __version__
 # Custom types
 from normits_demand.types import PathLike
 from normits_demand.types import SegmentAggregationDict
+from normits_demand.types import FactorsDict
 
 # NorMITs Demand Errors
 from normits_demand.utils.general import NormitsDemandError
