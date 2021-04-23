@@ -105,13 +105,10 @@ class ZoneTranslator:
         zone_cols = [from_zone_col, to_zone_col]
         non_split_cols = du.list_safe_remove(non_split_cols, zone_cols)
         split_cols = du.list_safe_remove(split_cols, zone_cols)
-        # TODO: Remove echo
-        print(split_cols)
 
         # Get total for the splitting columns
         split_totals = dict()
         for col in split_cols:
-            print(col)
             split_totals[col] = dataframe[col].sum()
 
         if needs_zone_id_rename:

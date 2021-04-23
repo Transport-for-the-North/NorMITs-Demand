@@ -56,20 +56,24 @@ OUTPUT_DIR = r'I:\NorMITs Demand\noham\EFS\iter3g\NTEM\Reports\EFS Reporter'
 # COMPARE_DIR = r'I:\NorMITs Demand\noham\EFS\iter3g\NTEM\Matrices\Compiled OD Matrices PCU'
 # REPORT_FNAME = 'output_to_post_me_compiled_od_report.csv'
 
-# Compare NoRMS compiled to post-ME
-ORIGINAL_DIR = r'I:\NorMITs Demand\import\norms\post_me\renamed'
-COMPARE_DIR = r'E:\NorMITs Demand\norms\EFS\iter3a\SC02_PP\Matrices\Compiled PA Matrices'
-
 # Compare TMS PA to PA
 # ORIGINAL_DIR = r'I:\NorMITs Demand\import\norms\decompiled_post_me'
-# COMPARE_DIR = r'E:\NorMITs Demand\norms\EFS\iter3a\SC02_PP\Matrices\24hr PA Matrices'
+# COMPARE_DIR = r'F:\NorMITs Demand\norms\EFS\iter3g\NTEM\Matrices\24hr PA Matrices'
+# OUTPUT_DIR = r'F:/'
+# REPORT_FNAME = 'tfn_report.csv'
 
 # Compare EFS named PA
 # ORIGINAL_DIR = r'I:\NorMITs Demand\import\norms\post_me\efs named'
-# COMPARE_DIR = r'E:\NorMITs Demand\norms\EFS\iter3a\SC02_PP\Matrices\Compiled PA Matrices\compiled_non_split'
+# COMPARE_DIR = r'F:\NorMITs Demand\norms\EFS\iter3g\NTEM\Matrices\Compiled PA Matrices\compiled_non_split'
+# OUTPUT_DIR = r'F:/'
+# REPORT_FNAME = 'efs_named_report.csv'
 
-OUTPUT_DIR = r'E:/'
-REPORT_FNAME = 'report.csv'
+# Compare NoRMS compiled to post-ME
+ORIGINAL_DIR = r'I:\NorMITs Demand\import\norms\post_me\renamed'
+COMPARE_DIR = r'F:\NorMITs Demand\norms\EFS\iter3g\NTEM\Matrices\Compiled PA Matrices'
+OUTPUT_DIR = r'F:/'
+REPORT_FNAME = 'compiled_report.csv'
+
 
 
 def list_files(path):

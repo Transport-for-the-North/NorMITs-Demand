@@ -1447,7 +1447,7 @@ class ExternalForecastSystem:
         elif self.model_name == 'norms':
             # Load in the splitting factors
             fname = consts.POSTME_FROM_TO_FACTORS_FNAME
-            path = os.path.join(self.params['home'], fname)
+            path = os.path.join(self.imports['params'], fname)
             from_to_split_factors = pd.read_pickle(path)
 
             # Compile
