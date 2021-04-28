@@ -17,6 +17,8 @@ import os
 import re
 import shutil
 import random
+import inspect
+import operator
 
 
 import pandas as pd
@@ -40,6 +42,7 @@ from itertools import product
 from collections import defaultdict
 
 # Local imports
+import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
 
@@ -62,6 +65,15 @@ class NormitsDemandError(Exception):
 class ExternalForecastSystemError(NormitsDemandError):
     """
     Base Exception for all custom EFS errors
+    """
+    def __init__(self, message=None):
+        self.message = message
+        super().__init__(self.message)
+
+
+class InitialisationError(NormitsDemandError):
+    """
+    Exception for all errors that occur during normits_demand initialisation
     """
     def __init__(self, message=None):
         self.message = message
@@ -343,9 +355,10 @@ def build_efs_io_paths(import_location: str,
                        model_name: str,
                        iter_name: str,
                        scenario_name: str,
-                       demand_version: str,
                        demand_dir_name: str = 'NorMITs Demand',
                        base_year: str = efs_consts.BASE_YEAR_STR,
+                       land_use_iteration: str = None,
+                       land_use_drive: str = None,
                        ) -> Tuple[dict, dict, dict]:
     """
     Builds three dictionaries of paths to the locations of all inputs and
@@ -372,7 +385,7 @@ def build_efs_io_paths(import_location: str,
 
     scenario_name:
         The name of the scenario use to produce outputs. This should be one
-        of consts.SCENARIOS
+        of efs_consts.SCENARIOS
 
     demand_version:
         Version number of NorMITs Demand being run - this is used to generate
@@ -403,19 +416,7 @@ def build_efs_io_paths(import_location: str,
     model_name = validate_model_name(model_name)
 
     # ## IMPORT PATHS ## #
-    # Attraction weights are a bit special, we get these directly from
-    # TMS to ensure they are the same - update this on integration
-    temp_model_name = 'norms' if model_name == 'norms_2015' else model_name
-    tms_path_parts = [
-        import_location,
-        "NorMITs Synthesiser",
-        temp_model_name,
-        "Model Zone Lookups",
-        "attraction_weights.csv"
-    ]
-    a_weights_path = os.path.join(*tms_path_parts)
-
-    # Generate import and export paths
+    # Generate general import paths
     model_home = os.path.join(import_location, demand_dir_name)
     import_home = os.path.join(model_home, 'import')
     input_home = os.path.join(import_home, 'default')
@@ -434,30 +435,60 @@ def build_efs_io_paths(import_location: str,
         'msoa_str_int': os.path.join(zt_home, 'msoa_zones.csv'),
     }
 
+    # BACKLOG: EFS Attraction model needs to make use of HB and NHB
+    #  attraction weights. Currently only uses HB for both.
+    #  labels: demand merge, EFS
+
+    # Build model specific paths
+    model_schema_home = os.path.join(import_home, model_name, 'model schema')
+    model_param_home = os.path.join(import_home, model_name, 'params')
+    model_tour_prop_home = os.path.join(import_home, model_name, 'post_me_tour_proportions')
+
     imports = {
         'home': import_home,
         'default_inputs': input_home,
-        'tp_splits': os.path.join(import_home, 'tp_splits'),
         'zone_translation': zone_translation,
+        'tp_splits': os.path.join(import_home, 'tp_splits'),
         'lookups': os.path.join(model_home, 'lookup'),
-        'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
         'scenarios': os.path.join(import_home, 'scenarios'),
-        'a_weights': a_weights_path,
+        'a_weights': os.path.join(import_home, 'attractions', 'hb_attraction_weights.csv'),
         'soc_weights': soc_weights_path,
         'ntem_control': os.path.join(import_home, 'ntem_constraints'),
-        'model_schema': os.path.join(import_home, model_name, 'model schema'),
+        'model_schema': model_schema_home,
+        'model_home': os.path.join(import_home, model_name),
+        'internal_zones': os.path.join(model_schema_home, consts.INTERNAL_AREA % model_name),
+        'external_zones': os.path.join(model_schema_home, consts.EXTERNAL_AREA % model_name),
         'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
+        'params': model_param_home,
+        'post_me_factors': os.path.join(model_param_home, 'post_me_tms_decompile_factors.pkl'),
+        'post_me_tours': model_tour_prop_home,
+        'decomp_post_me': os.path.join(import_home, model_name, 'decompiled_post_me'),
+
     }
 
-    #  ## EXPORT PATHS ## #
+    # Add Land use import if we have an iteration
+    if land_use_drive is not None and land_use_iteration is not None:
+        land_use_home = os.path.join(
+            land_use_drive,
+            'NorMITs Land Use',
+            land_use_iteration,
+            'outputs',
+        )
+        land_use_fy = os.path.join(land_use_home, 'scenarios', scenario_name)
+
+        imports['pop_by'] = os.path.join(land_use_home, consts.BASE_YEAR_POP_FNAME)
+        imports['emp_by'] = os.path.join(land_use_home, consts.BASE_YEAR_EMP_FNAME)
+        imports['land_use_fy_dir'] = land_use_fy
+
+    # ## EXPORT PATHS ## #
     # Create home paths
     fname_parts = [
         export_location,
         demand_dir_name,
         model_name,
-        "v%s-EFS_Output" % demand_version,
-        scenario_name,
+        "EFS",
         iter_name,
+        scenario_name,
     ]
     export_home = os.path.join(*fname_parts)
     matrices_home = os.path.join(export_home, 'Matrices')
@@ -466,6 +497,7 @@ def build_efs_io_paths(import_location: str,
     # Create consistent filenames
     pa = 'PA Matrices'
     pa_24 = '24hr PA Matrices'
+    vdm_pa_24 = '24hr VDM PA Matrices'
     od = 'OD Matrices'
     od_24 = '24hr OD Matrices'
     compiled = 'Compiled'
@@ -479,20 +511,23 @@ def build_efs_io_paths(import_location: str,
         'attractions': os.path.join(export_home, 'Attractions'),
         'sectors': os.path.join(export_home, 'Sectors'),
         'audits': os.path.join(export_home, 'Audits'),
-        'dist_audits': os.path.join(export_home, 'Audits', 'Matrices'),
         'reports': os.path.join(export_home, 'Reports'),
+        'dist_reports': os.path.join(export_home, 'Reports', 'Matrices'),
 
         # Pre-ME
         'pa': os.path.join(matrices_home, pa),
         'pa_24': os.path.join(matrices_home, pa_24),
+        'vdm_pa_24': os.path.join(matrices_home, vdm_pa_24),
         'od': os.path.join(matrices_home, od),
         'od_24': os.path.join(matrices_home, od_24),
 
+        'compiled_pa': os.path.join(matrices_home, ' '.join([compiled, pa])),
         'compiled_od': os.path.join(matrices_home, ' '.join([compiled, od])),
         'compiled_od_pcu': os.path.join(matrices_home, ' '.join([compiled, od, pcu])),
 
         'aggregated_pa_24': os.path.join(matrices_home, ' '.join([aggregated, pa_24])),
         'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
+        'aggregated_pa': os.path.join(matrices_home, ' '.join([aggregated, pa])),
 
         'pa_24_bespoke': os.path.join(matrices_home, pa_24_bespoke)
     }
@@ -503,8 +538,11 @@ def build_efs_io_paths(import_location: str,
     # Post-ME
     compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
     post_me_exports = {
+        'home': post_me_home,
+        'cache': os.path.join(post_me_home, 'cache'),
         'pa': os.path.join(post_me_home, pa),
         'pa_24': os.path.join(post_me_home, pa_24),
+        'vdm_pa_24': os.path.join(post_me_home, vdm_pa_24),
         'od': os.path.join(post_me_home, od),
         'od_24': os.path.join(post_me_home, od_24),
         'compiled_od': compiled_od_path,
@@ -529,94 +567,6 @@ def build_efs_io_paths(import_location: str,
         create_folder(path, chDir=False)
 
     return imports, exports, params
-
-
-def grow_to_future_years(base_year_df: pd.DataFrame,
-                         growth_df: pd.DataFrame,
-                         base_year: str,
-                         future_years: List[str],
-                         growth_merge_cols: Union[str, List[str]] = 'msoa_zone_id',
-                         no_neg_growth: bool = True,
-                         infill: float = 0.001,
-                         ) -> pd.DataFrame:
-    """
-    Grows the base_year dataframe using the growth_dataframe to produce future
-    year values.
-
-    Can ensure there is no negative growth through an infill if requested.
-
-    Parameters
-    ----------
-    base_year_df:
-        Dataframe containing the base year values. The column named with
-        base_year value will be grown.
-
-    growth_df:
-        Dataframe containing the growth factors for future_years. The base year
-        population will be multiplied by these factors to produce future year
-        growth.
-
-    base_year:
-        The column name containing the base year data in base_year_df and
-        growth_df.
-
-    future_years:
-        The columns names containing the future year data in growth_df.
-
-    growth_merge_cols:
-        The name of the column(s) to merge the base_year_df and growth_df
-        dataframes. This is usually the model_zone column plus any further
-        segmentation
-
-    no_neg_growth:
-        Whether to ensure there is no negative growth. If True, any growth
-        values below 0 will be replaced with infill.
-
-    infill:
-        If no_neg_growth is True, this value will be used to replace all values
-        that are less than 0.
-
-    Returns
-    -------
-    grown_df:
-        base_year_df extended to include future_years, which will contain the
-        base year data grown by the factors provided in growth_df.
-    """
-    # Init
-    all_years = [base_year] + future_years
-
-    # Get the growth factors based from base year
-    growth_df = convert_growth_off_base_year(
-        growth_df,
-        base_year,
-        future_years
-    )
-
-    # Convert growth factors to growth values
-    grown_df = get_growth_values(
-        base_year_df,
-        growth_df,
-        base_year,
-        future_years,
-        merge_cols=growth_merge_cols
-    )
-
-    # TODO: Maybe allow negative growth at MSOA but not LAD
-    # Ensure there is no minus growth
-    # if no_neg_growth:
-    #     for year in all_years:
-    #         mask = (grown_df[year] < 0)
-    #         grown_df.loc[mask, year] = infill
-
-    # Add base year back in to get full grown values
-    grown_df = growth_recombination(
-        grown_df,
-        base_year_col=base_year,
-        future_year_cols=future_years,
-        drop_base_year=False
-    )
-
-    return grown_df
 
 
 def convert_msoa_naming(df: pd.DataFrame,
@@ -700,227 +650,6 @@ def convert_msoa_naming(df: pd.DataFrame,
 
     return df.reindex(column_order, axis='columns')
 
-
-def growth_recombination(df: pd.DataFrame,
-                         base_year_col: str,
-                         future_year_cols: List[str],
-                         in_place: bool = False,
-                         drop_base_year: bool = True
-                         ) -> pd.DataFrame:
-    """
-    Combines the future year and base year column values to give full
-    future year values
-
-     e.g. base year will get 0 + base_year_population
-
-    Parameters
-    ----------
-    df:
-        The dataframe containing the data to be combined
-
-    base_year_col:
-        Which column in df contains the base year data
-
-    future_year_cols:
-        A list of all the growth columns in df to convert
-
-    in_place:
-        Whether to do the combination in_place, or make a copy of
-        df to return
-
-    drop_base_year:
-        Whether to drop the base year column or not before returning.
-
-    Returns
-    -------
-    growth_df:
-        Dataframe with full growth values for all_year_cols.
-    """
-    if not in_place:
-        df = df.copy()
-
-    for year in future_year_cols:
-        df[year] += df[base_year_col]
-
-    if drop_base_year:
-        df = df.drop(labels=base_year_col, axis=1)
-
-    return df
-
-
-def get_grown_values(base_year_df: pd.DataFrame,
-                     growth_df: pd.DataFrame,
-                     base_year_col: str,
-                     future_years: List[str],
-                     merge_col: str = "model_zone_id"
-                     ) -> pd.DataFrame:
-    """
-    Returns base_year_df extended to include the grown values in
-    future_year_cols
-
-    Parameters
-    ----------
-    base_year_df:
-        Dataframe containing the base year data. Must have at least 2 columns
-        of merge_col, and base_year_col
-
-    growth_df:
-        Dataframe containing the growth factors over base year for all future
-        years i.e. The base year column would be 1 as it cannot grow over
-        itself. Must have at least the following cols: merge_col and all
-        future_year_cols.
-
-    base_year_col:
-        The column name that the base year data is in
-
-    future_years:
-        The columns names that contain the growth factor data for base and
-        future years.
-
-    merge_col:
-        Name of the column to merge base_year_df and growth_df on.
-
-    Returns
-    -------
-    Grown_values_df:
-        base_year_df extended and populated with the future_year_cols
-        columns.
-    """
-    # Init
-    base_year_df = base_year_df.copy()
-    growth_df = growth_df.copy()
-
-    # CREATE GROWN DATAFRAME
-    grown_df = pd.merge(
-        base_year_df,
-        growth_df,
-        on=merge_col
-    )
-
-    for year in future_years:
-        grown_df[year] *= grown_df.loc[base_year_col]
-    return grown_df
-
-
-def get_growth_values(base_year_df: pd.DataFrame,
-                      growth_df: pd.DataFrame,
-                      base_year_col: str,
-                      future_year_cols: List[str],
-                      merge_cols: Union[str, List[str]] = 'model_zone_id'
-                      ) -> pd.DataFrame:
-    """
-    Returns base_year_df extended to include the growth values in
-    future_year_cols
-
-    Parameters
-    ----------
-    base_year_df:
-        Dataframe containing the base year data. Must have at least 2 columns
-        of merge_col, and base_year_col
-
-    growth_df:
-        Dataframe containing the growth factors over base year for all future
-        years i.e. The base year column would be 1 as it cannot grow over
-        itself. Must have at least the following cols: merge_col and all
-        future_year_cols.
-
-    base_year_col:
-        The column name that the base year data is in
-
-    future_year_cols:
-        The columns names that contain the future year growth factor data.
-
-    merge_cols:
-        Name of the column(s) to merge base_year_df and growth_df on.
-
-    Returns
-    -------
-    Growth_values_df:
-        base_year_df extended and populated with the future_year_cols
-        columns.
-    """
-    # Init
-    base_year_df = base_year_df.copy()
-    growth_df = growth_df.copy()
-    base_year_pop = base_year_df[base_year_col].sum()
-
-    base_year_df.columns = base_year_df.columns.astype(str)
-    growth_df.columns = growth_df.columns.astype(str)
-
-    # Avoid clashes in the base year
-    if base_year_col in growth_df:
-        growth_df = growth_df.drop(base_year_col, axis='columns')
-
-    # Avoid future year clashes
-    base_year_df = base_year_df.drop(future_year_cols,
-                                     axis='columns',
-                                     errors='ignore')
-
-    # Merge on merge col
-    growth_values = pd.merge(base_year_df,
-                             growth_df,
-                             on=merge_cols)
-
-    # Grow base year value by values given in growth_df - 1
-    # -1 so we get growth values. NOT growth values + base year
-    for year in future_year_cols:
-        growth_values[year] = (
-                (growth_values[year] - 1)
-                *
-                growth_values[base_year_col]
-        )
-
-    # If these don't match, something has gone wrong
-    new_by_pop = growth_values[base_year_col].sum()
-    if not is_almost_equal(base_year_pop, new_by_pop):
-        raise NormitsDemandError(
-            "Base year totals have changed before and after growing the "
-            "future years - something must have gone wrong. Perhaps the "
-            "merge columns are wrong and data is being replicated.\n"
-            "Total base year before growth:\t %.4f\n"
-            "Total base year after growth:\t %.4f\n"
-            % (base_year_pop, new_by_pop)
-        )
-
-    return growth_values
-
-
-def convert_growth_off_base_year(growth_df: pd.DataFrame,
-                                 base_year: str,
-                                 future_years: List[str]
-                                 ) -> pd.DataFrame:
-    """
-    Converts the multiplicative growth value of each future_years to be
-    based off of the base year.
-
-    Parameters
-    ----------
-    growth_df:
-        The starting dataframe containing the growth values of all_years
-        and base_year
-
-    base_year:
-        The new base year to base all the all_years growth off of.
-
-    future_years:
-        The years in growth_dataframe to convert to be based off of
-        base_year growth
-
-    Returns
-    -------
-    converted_growth_dataframe:
-        The original growth dataframe with all growth values converted
-
-    """
-    # Init
-    growth_df = growth_df.copy()
-    growth_df.columns = growth_df.columns.astype(str)
-
-    # Do base year last, otherwise conversion won't work
-    for year in future_years + [base_year]:
-        growth_df[year] /= growth_df[base_year]
-
-    return growth_df
 
 
 def copy_and_rename(src: str, dst: str) -> None:
@@ -2057,7 +1786,7 @@ def segmentation_order(segmentation_lst: List[str]) -> List[str]:
     Parameters
     ----------
     segmentation_lst:
-        A list of segmentation keys. See consts.SEGMENTATION_ORDER for a list
+        A list of segmentation keys. See efs_consts.SEGMENTATION_ORDER for a list
         of valid values
 
     Returns
@@ -2102,7 +1831,7 @@ def sort_vector_cols(vector: pd.DataFrame,
     -------
     reindexed_vector:
         The given vector re-indexed to to be in the correct segmentation order,
-        as defined by consts.SEGMENTATION_ORDER.
+        as defined by efs_consts.SEGMENTATION_ORDER.
     """
     # init
     columns = list(vector)
@@ -2254,10 +1983,11 @@ def get_split_factors_fname(matrix_format: str,
     """
     Generates the splitting factors filename
     """
+    ftype = consts.COMPRESSION_SUFFIX.strip('.')
     if suffix is None:
-        return "%s_yr%s_splitting_factors.pkl" % (matrix_format, year)
+        return "%s_yr%s_splitting_factors.%s" % (matrix_format, year, ftype)
 
-    return "%s_yr%s_%s_splitting_factors.pkl" % (matrix_format, year, suffix)
+    return "%s_yr%s_%s_splitting_factors.%s" % (matrix_format, year, suffix, ftype)
 
 
 def build_full_paths(base_path: str,
@@ -2269,7 +1999,8 @@ def build_full_paths(base_path: str,
     return [os.path.join(base_path, x) for x in fnames]
 
 
-def list_files(path: str,
+def list_files(path: nd.PathLike,
+               ftypes: List[str] = None,
                include_path: bool = False
                ) -> List[str]:
     """
@@ -2279,6 +2010,9 @@ def list_files(path: str,
     ----------
     path:
         Where to search for the files
+
+    ftypes:
+        A list of filetypes to accept. If None, all are accepted.
 
     include_path:
         Whether to include the path with the returned filenames
@@ -2291,10 +2025,21 @@ def list_files(path: str,
     """
     if include_path:
         file_paths = build_full_paths(path, os.listdir(path))
-        return [x for x in file_paths if os.path.isfile(x)]
+        paths = [x for x in file_paths if os.path.isfile(x)]
     else:
         fnames = os.listdir(path)
-        return [x for x in fnames if os.path.isfile(os.path.join(path, x))]
+        paths = [x for x in fnames if os.path.isfile(os.path.join(path, x))]
+
+    if ftypes is None:
+        return paths
+
+    # Filter down to only the filetypes asked for
+    keep_paths = list()
+    for file_type in ftypes:
+        temp = [x for x in paths if file_type in x]
+        keep_paths = list(set(temp + keep_paths))
+
+    return keep_paths
 
 
 def is_in_string(vals: Iterable[str],
@@ -3079,7 +2824,7 @@ def balance_a_to_p(productions: pd.DataFrame,
         if productions[col].sum() == 0:
             attractions[col] = 0
         else:
-            attractions[col] /= attractions[col].sum() / productions[col].sum()
+            attractions[col] *= productions[col].sum() / attractions[col].sum()
 
         # Throw an error if we somehow don't match
         np.testing.assert_approx_equal(
@@ -3272,7 +3017,7 @@ def add_all_commute_cat(df: pd.DataFrame,
     return df.reset_index(drop=True)
 
 
-def create_iter_name(iter_num: int) -> str:
+def create_iter_name(iter_num: Union[int, str]) -> str:
     return 'iter' + str(iter_num)
 
 
@@ -3375,3 +3120,199 @@ def split_base_future_years(years: List[int],
     years.sort()
 
     return base_year, years
+
+
+def split_base_future_years_str(years: List[str],
+                                ) -> Tuple[str, List[str]]:
+    """
+    Splits years into base and future years.
+
+    The smallest year in the list is assumed to be the base.
+    A wrapper around split_base_future_years() to handle strings
+
+    Parameters
+    ----------
+    years:
+        A list of years to split
+
+    Returns
+    -------
+    base_year:
+        The base year from years
+
+    future_years:
+        A list of all other years than base_year in years.
+        This will be returned in order, from lowest to highest.
+    """
+    base_year, future_years = split_base_future_years([int(x) for x in years])
+    return str(base_year), [str(x) for x in future_years]
+
+
+def get_norms_vdm_segment_aggregation_dict(norms_vdm_seg_name: str
+                                           ) -> Dict[str, List[Any]]:
+    """
+    Returns a dictionary of valid segments for the given name
+
+    Parameters
+    ----------
+    norms_vdm_seg_name:
+        The name of the norms_vdm_matrix to get a dictionary for.
+        Should be one of the values in efs_consts.NORMS_VDM_MATRIX_NAMES
+
+    Returns
+    -------
+    segment_aggregation_dictionary:
+        A dictionary of valid segments for norms_vdm_seg_name
+    """
+    if norms_vdm_seg_name in list(consts.NORMS_VDM_SEG_INTERNAL.keys()):
+        return consts.NORMS_VDM_SEG_INTERNAL[norms_vdm_seg_name]
+    elif norms_vdm_seg_name in list(consts.NORMS_VDM_SEG_EXTERNAL.keys()):
+        return consts.NORMS_VDM_SEG_EXTERNAL[norms_vdm_seg_name]
+
+    raise ValueError(
+        "norms_vdm_seg_name does not seem to be a valid name. Expecting "
+        "one of the values from efs_consts.NORMS_VDM_MATRIX_NAMES"
+    )
+
+
+def get_default_kwargs(func):
+    signature = inspect.signature(func)
+    return {
+        k: v.default
+        for k, v in signature.parameters.items()
+        if v.default is not inspect.Parameter.empty
+    }
+
+
+def split_hb_nhb_purposes(purposes: List[int]) -> Tuple[List[int], List[int]]:
+    """
+    Splits purposes into two lists of HB and NHB purposes
+
+    Parameters
+    ----------
+    purposes:
+        A list of the purposes to split
+
+    Returns
+    -------
+    hb_purposes:
+        A list of the hb purposes from purposes
+
+    nhb_purposes:
+        A list of the nhb purposes from purposes
+    """
+    # Init
+    hb_p = list()
+    nhb_p = list()
+
+    for p in purposes:
+        if p in consts.ALL_HB_P:
+            hb_p.append(p)
+        elif p in consts.ALL_NHB_P:
+            nhb_p.append(p)
+        else:
+            raise nd.NormitsDemandError(
+                "%s is not a valid HB or NHB purpose" % str(p)
+            )
+    return hb_p, nhb_p
+
+
+def sum_df_dict(dict_list: List[Dict[Any, pd.DataFrame]],
+                non_sum_cols: List[str],
+                sum_keys: List[Any] = None,
+                ) -> Dict[Any, pd.DataFrame]:
+    """
+    Sums the dataframes in dict_list on matching keys
+
+    Parameters
+    ----------
+    dict_list:
+        A list of the dictionaries to sum
+
+    non_sum_cols:
+        A list of the column names that should not be summed
+
+    sum_keys:
+        A list of the keys to sum on. If left as None, will infer the keys
+        to use based on those existing in dict_list[0].
+
+    Returns
+    -------
+    summed_df_dict:
+        A dictionary with sum_keys, containing the sum all vales at
+        that key in dict_list.
+    """
+    # Infer sum keys
+    sum_keys = list(dict_list[0].keys()) if sum_keys is None else sum_keys
+
+    # Check all keys exist
+    for sub_dict in dict_list:
+        if not all([k in sub_dict for k in sum_keys]):
+            raise KeyError(
+                "Cannot find all the sum_keys in all the dictionaries."
+            )
+
+    # Sub across keys
+    ret_dict = dict()
+    for k in sum_keys:
+        print(k)
+        dfs = [d[k] for d in dict_list]
+        dfs = [df.set_index(non_sum_cols) for df in dfs]
+
+        sum_df = functools.reduce(operator.add, dfs)
+        ret_dict[k] = sum_df.reset_index()
+
+    return ret_dict
+
+
+def concat_df_dict(dict_list: List[Dict[Any, pd.DataFrame]],
+                   non_sum_cols: List[str],
+                   concat_keys: List[Any] = None,
+                   sort: bool = False
+                ) -> Dict[Any, pd.DataFrame]:
+    """
+    Sums the dataframes in dict_list on matching keys
+
+    Parameters
+    ----------
+    dict_list:
+        A list of the dictionaries to sum
+
+    non_sum_cols:
+        A list of the column names that should not be summed
+
+    concat_keys:
+        A list of the keys to sum on. If left as None, will infer the keys
+        to use based on those existing in dict_list[0].
+
+    Returns
+    -------
+    summed_df_dict:
+        A dictionary with sum_keys, containing the sum all vales at
+        that key in dict_list.
+    """
+    # Infer sum keys
+    concat_keys = list(
+        dict_list[0].keys()) if concat_keys is None else concat_keys
+
+    # Check all keys exist
+    for sub_dict in dict_list:
+        if not all([k in sub_dict for k in concat_keys]):
+            raise KeyError(
+                "Cannot find all the sum_keys in all the dictionaries."
+            )
+
+    # Sub across keys
+    ret_dict = dict()
+    for k in concat_keys:
+        print(k)
+        dfs = [d[k] for d in dict_list]
+        dfs = [df.set_index(non_sum_cols) for df in dfs]
+
+        concat_df = pd.concat(dfs).reset_index()
+
+        if sort:
+            concat_df = concat_df.sort_values(non_sum_cols)
+        ret_dict[k] = concat_df
+
+    return ret_dict

@@ -45,7 +45,10 @@ Out as 56mb
 """
 
 
-def write_out(o: Any, path: nd.PathLike) -> pathlib.Path:
+def write_out(o: Any,
+              path: nd.PathLike,
+              overwrite_suffix: bool = True
+              ) -> pathlib.Path:
     """
     Write the given object o to disk at the given out_path
 
@@ -60,6 +63,10 @@ def write_out(o: Any, path: nd.PathLike) -> pathlib.Path:
         The path to write out to. If no filetype suffix is provided .pbz2
         is added.
 
+    overwrite_suffix:
+        Whether to overwrite the filetype suffix of the given path to the
+        default compression suffix or not.
+
     Returns
     -------
     out_path:
@@ -68,7 +75,7 @@ def write_out(o: Any, path: nd.PathLike) -> pathlib.Path:
     # Init
     if not isinstance(path, pathlib.Path):
         path = pathlib.Path(path)
-    path = file_ops.maybe_add_suffix(path, consts.COMPRESSION_SUFFIX)
+    path = file_ops.maybe_add_suffix(path, consts.COMPRESSION_SUFFIX, overwrite_suffix)
 
     with bz2.BZ2File(path, 'w') as f:
         cPickle.dump(o, f)

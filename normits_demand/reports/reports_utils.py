@@ -19,13 +19,12 @@ def get_trip_length(distance,
     demand = demand as 2d numpy ndarray
     """
 
-    # TODO: Just copy that bit below
     global_trips = demand.sum(axis=1).sum()
     global_distance = demand * distance
 
     global_atl = global_distance.sum(axis=1).sum() / global_trips
 
-    return(global_atl)
+    return global_atl
 
 def get_trip_length_by_band(band_atl,
                             distance,

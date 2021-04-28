@@ -12,13 +12,91 @@ from normits_demand.utils import general as du
 from normits_demand.utils import vehicle_occupancy as vo
 from normits_demand import AuditError
 
+from normits_demand.concurrency import multiprocessing
+
+
+def _decompile_od_internal(od_import,
+                           od_export,
+                           decompile_factors,
+                           comp_mat_name,
+                           year,
+                           round_dp,
+                           audit,
+                           audit_tol,
+                           ):
+    # We need to ignore the year, so break into component parts
+    comp_calib_params = du.fname_to_calib_params(comp_mat_name,
+                                                 get_user_class=True,
+                                                 get_matrix_format=True,
+                                                 force_ca_exists=True)
+
+    # Find the matching compiled matrix and load
+    in_mat_name = du.get_compiled_matrix_name(
+        matrix_format=comp_calib_params['matrix_format'],
+        user_class=comp_calib_params['user_class'],
+        year=str(year),
+        mode=str(comp_calib_params['m']),
+        ca=comp_calib_params['ca'],
+        tp=str(comp_calib_params['tp']),
+        csv=True
+    )
+    comp_mat = pd.read_csv(os.path.join(od_import, in_mat_name), index_col=0)
+    print("Decompiling matrix: %s" % in_mat_name)
+
+    # Loop through the factors and decompile the matrix
+    decompiled_mats = list()
+    for part_mat_name in decompile_factors.keys():
+        # Decompile the matrix using the factors
+        factors = decompile_factors[part_mat_name]
+        part_mat = comp_mat * factors
+
+        # Generate filename and save the decompiled matrix
+        part_calib_params = du.fname_to_calib_params(part_mat_name,
+                                                     get_trip_origin=True,
+                                                     get_matrix_format=True)
+
+        # If the year has not been found, add it in manually
+        if part_calib_params.get('yr') is None:
+            part_calib_params['yr'] = str(year)
+
+        mat_name = du.calib_params_to_dist_name(
+            trip_origin=part_calib_params['trip_origin'],
+            matrix_format=part_calib_params['matrix_format'],
+            calib_params=part_calib_params,
+            csv=True
+        )
+
+        part_mat.round(round_dp).to_csv(os.path.join(od_export, mat_name))
+
+        # Save for audit later
+        decompiled_mats.append(part_mat)
+
+    # Check that the output matrices total the input matrices
+    if audit:
+        # Sum the split matrices
+        mats_sum = reduce(lambda x, y: x.add(y, fill_value=0),
+                          decompiled_mats)
+
+        # Get the absolute difference between the compiled and decompiled
+        abs_diff = np.absolute((mats_sum - comp_mat).values).sum()
+
+        if abs_diff > audit_tol:
+            raise AuditError(
+                "While decompiling matrices from %s, the absolute "
+                "difference between the original and decompiled matrices "
+                "exceeded the tolerance. Tolerance: %s, Absolute "
+                "Difference: %s"
+                % (in_mat_name, str(audit_tol), str(abs_diff)))
+
 
 def decompile_od(od_import: str,
                  od_export: str,
                  year: int,
                  decompile_factors_path: str,
                  audit: bool = False,
-                 audit_tol: float = 0.001
+                 round_dp: int = consts.DEFAULT_ROUNDING,
+                 audit_tol: float = 0.001,
+                 process_count: int = consts.PROCESS_COUNT,
                  ) -> None:
     """
     Takes User Class compiled OD matrices and decompiles them down to their
@@ -55,72 +133,31 @@ def decompile_od(od_import: str,
     # Load the factors
     decompile_factors = pd.read_pickle(decompile_factors_path)
 
-    # Loop through the compiled matrices and decompile
-    # TODO: Multiprocess decompile_od()
+    # ## MULTIPROCESS ## #
+    unchanging_kwargs = {
+        'od_import': od_import,
+        'od_export': od_export,
+        'year': year,
+        'round_dp': round_dp,
+        'audit': audit,
+        'audit_tol': audit_tol,
+    }
+
+    kwarg_list = list()
     for comp_mat_name in decompile_factors.keys():
-        # We need to ignore the year, so break into component parts
-        comp_calib_params = du.fname_to_calib_params(comp_mat_name,
-                                                     get_user_class=True,
-                                                     get_matrix_format=True,
-                                                     force_ca_exists=True)
+        kwargs = unchanging_kwargs.copy()
+        kwargs.update({
+            'decompile_factors': decompile_factors[comp_mat_name],
+            'comp_mat_name': comp_mat_name,
+        })
+        kwarg_list.append(kwargs)
 
-        # Find the matching compiled matrix and load
-        in_mat_name = du.get_compiled_matrix_name(
-            matrix_format=comp_calib_params['matrix_format'],
-            user_class=comp_calib_params['user_class'],
-            year=str(year),
-            mode=str(comp_calib_params['m']),
-            ca=comp_calib_params['ca'],
-            tp=str(comp_calib_params['tp']),
-            csv=True
-        )
-        comp_mat = pd.read_csv(os.path.join(od_import, in_mat_name), index_col=0)
-        print("Decompiling matrix: %s" % in_mat_name)
-
-        # Loop through the factors and decompile the matrix
-        decompiled_mats = list()
-        for part_mat_name in decompile_factors[comp_mat_name].keys():
-            # Decompile the matrix using the factors
-            factors = decompile_factors[comp_mat_name][part_mat_name]
-            part_mat = comp_mat * factors
-
-            # Generate filename and save the decompiled matrix
-            part_calib_params = du.fname_to_calib_params(part_mat_name,
-                                                         get_trip_origin=True,
-                                                         get_matrix_format=True)
-
-            # If the year has not been found, add it in manually
-            if part_calib_params.get('yr') is None:
-                part_calib_params['yr'] = str(year)
-
-            mat_name = du.calib_params_to_dist_name(
-                trip_origin=part_calib_params['trip_origin'],
-                matrix_format=part_calib_params['matrix_format'],
-                calib_params=part_calib_params,
-                csv=True
-            )
-
-            part_mat.to_csv(os.path.join(od_export, mat_name))
-
-            # Save for audit later
-            decompiled_mats.append(part_mat)
-
-        # Check that the output matrices total the input matrices
-        if audit:
-            # Sum the split matrices
-            mats_sum = reduce(lambda x, y: x.add(y, fill_value=0),
-                              decompiled_mats)
-
-            # Get the absolute difference between the compiled and decompiled
-            abs_diff = np.absolute((mats_sum - comp_mat).values).sum()
-
-            if abs_diff > audit_tol:
-                raise AuditError(
-                    "While decompiling matrices from %s, the absolute "
-                    "difference between the original and decompiled matrices "
-                    "exceeded the tolerance. Tolerance: %s, Absolute "
-                    "Difference: %s"
-                    % (in_mat_name, str(audit_tol), str(abs_diff)))
+    # Loop through the compiled matrices and decompile
+    multiprocessing.multiprocess(
+        fn=_decompile_od_internal,
+        kwargs=kwarg_list,
+        process_count=process_count,
+    )
 
 
 def _convert_to_efs_matrices_user_class(import_path: str,
@@ -273,37 +310,3 @@ def convert_to_efs_matrices(import_path: str,
         method='to_people',
         out_format='wide'
     )
-
-
-def need_to_convert_to_efs_matrices(post_me_import: str,
-                                    converted_export: str
-                                    ) -> bool:
-    """
-    Checks if the matrices stored in model_import need converting into
-    efs format.
-
-    At the moment this is just a simple check that matrices exist in
-    model_import and not od_import.
-    TODO: Update with better checks on NoRMS and NoHAM post-ME matrices
-      are more clear
-
-    Parameters
-    ----------
-    post_me_import:
-        Path to the dir containing the post-me matrices.
-
-    converted_export:
-        Path to the dir that the converted post-ME matrices should be output
-        to
-
-    Returns
-    -------
-    bool:
-        Returns True if the matrices need converting. Otherwise False.
-    """
-    return (len(os.listdir(converted_export)) == 0 and
-            len(os.listdir(post_me_import)) > 0)
-
-
-def convert_to_pa():
-    pass

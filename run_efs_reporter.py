@@ -21,9 +21,9 @@ def main():
     # ## SETUP ## #
     # Controls I/O
     scenario = consts.SC00_NTEM
-    iter_num = 2
+    iter_num = '3a'
     import_home = "I:/"
-    export_home = "E:/"
+    export_home = "F:/"
     model_name = consts.MODEL_NAME
 
     auditor = nd.EfsReporter(
@@ -36,7 +36,10 @@ def main():
         export_home=export_home,
     )
 
-    auditor.run()
+    auditor.run(
+        run_raw_vector_report=False,
+        compare_trip_lengths=False,
+    )
 
 
 if __name__ == "__main__":

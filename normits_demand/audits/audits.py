@@ -24,6 +24,11 @@ from collections import defaultdict
 from normits_demand.utils import general as du
 
 
+# BACKLOG: furness audits are not audits. They should be moved over to
+#  reporting.
+#  labels: EFS, QoL Updates
+
+
 class AuditError(du.NormitsDemandError):
     """
     Exception raised for errors when auditing values
@@ -145,6 +150,7 @@ def summarise_audit_furness(audit_furness_output_path: str,
                             ns_needed: List[int] = None,
                             ca_needed: List[int] = None,
                             tp_needed: List[int] = None,
+                            fname_suffix: str = None,
                             p_diff_col_name: str = 'p_difference',
                             a_diff_col_name: str = 'a_difference',
                             ) -> None:
@@ -173,6 +179,7 @@ def summarise_audit_furness(audit_furness_output_path: str,
             trip_origin=trip_origin,
             matrix_format=format_name,
             calib_params=name_dict,
+            suffix=fname_suffix,
             csv=True
         )
         df = pd.read_csv(os.path.join(audit_furness_output_path, dist_name))
@@ -202,6 +209,6 @@ def summarise_audit_furness(audit_furness_output_path: str,
     out_df = pd.DataFrame(summary_ph).reindex(columns=index_cols)
 
     # Write to disk
-    fname = "%s_furness_summary.csv" % year
+    fname = "%s_%s_furness_summary.csv" % (trip_origin, year)
     out_path = os.path.join(audit_furness_output_path, fname)
     out_df.to_csv(out_path, index=False)

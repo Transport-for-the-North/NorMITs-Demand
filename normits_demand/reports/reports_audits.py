@@ -1102,11 +1102,9 @@ def lad_from_to_report(file_drive='Y:/',
             for export_name, data in report.items():
                 data.to_csv(w_d + '/' + export_name + '.csv', index=False)
 
-    return(segment_ph_from,
-           segment_ph_to)
+    return segment_ph_from, segment_ph_to
 
-def get_trip_length(distance,
-                    demand):
+def get_trip_length(distance, demand):
     """
     Take trip length as matrix
     Take pa as matrix
@@ -1124,7 +1122,7 @@ def get_trip_length(distance,
 
     global_atl = global_distance.sum(axis=1).sum() / global_trips
 
-    return(global_atl)
+    return global_atl
 
 
 def get_trip_length_by_band(band_atl,
@@ -1133,7 +1131,6 @@ def get_trip_length_by_band(band_atl,
     """
     Take ttl by band, return atl by band.
     """
-
     # TODO: Drop averages of nothing in trip length band
     # reset index, needed or not
     band_atl = band_atl.reset_index(drop=True)
