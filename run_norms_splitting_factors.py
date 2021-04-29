@@ -25,6 +25,8 @@ PARAMS_EXPORT = r'I:\NorMITs Synthesiser\Norms\iter4\params'
 MODEL_SCHEMA_DIR = r'I:\NorMITs Demand\import\norms\model schema'
 BASE_YEAR = '2018'
 
+AVOID_ZERO_SPLITS = True
+
 
 def main():
     int_path = os.path.join(MODEL_SCHEMA_DIR, consts.INTERNAL_AREA % 'norms')
@@ -60,6 +62,7 @@ def main():
         external_zones=external_zones,
         post_me_import=None,
         matrix_format='pa',
+        avoid_zero_splits=AVOID_ZERO_SPLITS
     )
 
 

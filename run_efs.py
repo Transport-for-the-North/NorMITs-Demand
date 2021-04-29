@@ -36,9 +36,9 @@ def main():
     run_bespoke_zones = False
     ignore_bespoke_zones = True
 
-    run_pa_to_od = True
-    run_compile_mats = True
-    run_decompile_post_me = False
+    run_pa_to_od = False
+    run_compile_mats = False
+    run_decompile_post_me = True
     run_future_year_compile_od = False
 
     # Controls matrix conversion
@@ -48,7 +48,7 @@ def main():
     scenario = consts.SC00_NTEM
     iter_num = '3g'
     import_home = "I:/"
-    export_home = "E:/"
+    export_home = "F:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
