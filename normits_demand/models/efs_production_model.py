@@ -1601,7 +1601,7 @@ def get_pop_data_from_land_use(by_pop_import_path: nd.PathLike,
     if len(all_pop_ph) == 1:
         return all_pop_ph[0]
 
-    return du.merge_df_list(all_pop_ph, on=group_cols)
+    return du.merge_df_list(all_pop_ph, on=group_cols, how='outer').fillna(0)
 
 
 def merge_pop_trip_rates(population: pd.DataFrame,

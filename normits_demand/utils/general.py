@@ -460,6 +460,7 @@ def build_efs_io_paths(import_location: str,
         'external_zones': os.path.join(model_schema_home, consts.EXTERNAL_AREA % model_name),
         'param_home': model_param_home,
         'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
+        'params': model_param_home,
         'post_me_factors': os.path.join(model_param_home, 'post_me_tms_decompile_factors.pkl'),
         'post_me_tours': model_tour_prop_home,
         'decomp_post_me': os.path.join(import_home, model_name, 'decompiled_post_me'),
@@ -521,6 +522,7 @@ def build_efs_io_paths(import_location: str,
         'od': os.path.join(matrices_home, od),
         'od_24': os.path.join(matrices_home, od_24),
 
+        'compiled_pa': os.path.join(matrices_home, ' '.join([compiled, pa])),
         'compiled_od': os.path.join(matrices_home, ' '.join([compiled, od])),
         'compiled_od_pcu': os.path.join(matrices_home, ' '.join([compiled, od, pcu])),
 
@@ -1982,10 +1984,7 @@ def get_split_factors_fname(matrix_format: str,
     """
     Generates the splitting factors filename
     """
-    # Init
-    ftype = consts.COMPRESSION_SUFFIX
-    ftype = ftype.strip('.')
-
+    ftype = consts.COMPRESSION_SUFFIX.strip('.')
     if suffix is None:
         return "%s_yr%s_splitting_factors.%s" % (matrix_format, year, ftype)
 
@@ -2014,7 +2013,7 @@ def list_files(path: nd.PathLike,
         Where to search for the files
 
     ftypes:
-        A list of filetypes to accept.
+        A list of filetypes to accept. If None, all are accepted.
 
     include_path:
         Whether to include the path with the returned filenames

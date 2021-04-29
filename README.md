@@ -84,5 +84,8 @@ better with TMS output paths.
     - Paths look more like `NorMITs Demand/nohmam/EFS/iter1/NTEM/...`
     - The Land Use iteration being used is now included in the inputs.txt
 - Updated the PopEmpComparator to use the new land use imports to compare to.
+- Fixed issue in Production/Attraction models dropping population and employment
+- Updated NoRMS I/O to decompile post-ME and compile outputs correctly for NoRMS
+
 - CS - Write updates to TMS since last merge
 

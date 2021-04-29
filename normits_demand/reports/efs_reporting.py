@@ -44,7 +44,7 @@ from normits_demand.reports import reports_audits as tms_reports
 
 
 class EfsReporter:
-    # TODO(Ben Taylor): Write EfsReporter docs
+    # TODO(BT): Write EfsReporter docs
 
     # BACKLOG: Generate reports for future year mode shares
     #  labels: EFS
@@ -536,7 +536,7 @@ class EfsReporter:
             # Matrix compare to NTEM
             self.compare_pa_matrices_to_ntem()
             # self.compare_bespoke_pa_matrices_to_ntem()
-            self.compare_tp_pa_matrices_to_ntem()
+            # self.compare_tp_pa_matrices_to_ntem()
             self.compare_od_matrices_to_ntem()
 
         if compare_to_scenario and self.scenario_name != consts.SC00_NTEM:

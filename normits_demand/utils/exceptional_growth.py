@@ -1379,11 +1379,13 @@ def get_donor_zone_data(sectors: pd.DataFrame,
 
     # Iterate through all segmentation available
     iter_hb = tqdm(list(product(hb_purps, m_needed, cas)), desc=desc)
+    # TODO: Should use built in iterator in utils
     for purp, mode, ca in iter_hb:
         if purp in consts.SOC_P:
             segments = soc_needed
         elif purp in consts.NS_P:
             segments = ns_needed
+
         for segment in segments:
             desc_string = f"p_{purp}, m_{mode}, ca_{ca}, seg_{segment}"
             iter_hb.set_description(
@@ -1424,6 +1426,7 @@ def get_donor_zone_data(sectors: pd.DataFrame,
                 for col in tour_props.columns:
                     tour_props[col].values[:] = 0.5
                 warnings.warn("Warning: Using default Tour Proportions of 0.5")
+
             # Extract the origin and destinations for each donor sector
             donor_totals, agg_tp = extract_donor_totals(
                 matrix_path,
@@ -1448,7 +1451,7 @@ def get_donor_zone_data(sectors: pd.DataFrame,
                 hb_donor_data = hb_donor_data.append(donor_totals)
                 agg_tour_props = agg_tour_props.append(agg_tp)
 
-    # ## Build HB totals ## #
+    # ## Build NHB totals ## #
     nhb_purps = du.intersection(p_needed, consts.ALL_NHB_P)
 
     nhb_donor_data = pd.DataFrame()

@@ -17,7 +17,8 @@ import pandas as pd
 import normits_demand.constants as consts
 from normits_demand.matrices import matrix_processing as mat_p
 
-PA_MATRICES_DIR = r'I:\NorMITs Synthesiser\Norms\iter4\24hr PA Matrices'
+PA_MATRICES_DIR = r'I:\NorMITs Synthesiser\Norms\iter4\Compilation Outputs'
+PA_24_MATRICES_DIR = r'I:\NorMITs Synthesiser\Norms\iter4\24hr PA Matrices'
 PA_VDM_MATRICES_DIR = r'I:\NorMITs Synthesiser\Norms\iter4\24hr VDM PA Matrices'
 PARAMS_EXPORT = r'I:\NorMITs Synthesiser\Norms\iter4\params'
 
@@ -37,11 +38,26 @@ def main():
     internal_zones = pd.read_csv(int_path, dtype=dtype).squeeze().tolist()
     external_zones = pd.read_csv(ext_path, dtype=dtype).squeeze().tolist()
 
+    # Make sure we're aggregated up to TMS segmentation
+    if PA_MATRICES_DIR is not None and PA_24_MATRICES_DIR != PA_MATRICES_DIR:
+        print("Compiling 24hr Matrices...")
+        mat_p.build_24hr_mats(
+            import_dir=PA_MATRICES_DIR,
+            export_dir=PA_24_MATRICES_DIR,
+            matrix_format='pa',
+            year_needed='2018',
+            p_needed=consts.ALL_P,
+            m_needed=consts.MODEL_MODES['norms'],
+            ca_needed=consts.CA_NEEDED,
+        )
+
+    # Build the splitting factors
     mat_p.compile_norms_to_vdm(
-        mat_import=PA_MATRICES_DIR,
+        mat_import=PA_24_MATRICES_DIR,
         mat_export=PA_VDM_MATRICES_DIR,
         params_export=PARAMS_EXPORT,
         year=BASE_YEAR,
+        m_needed=consts.MODEL_MODES['norms'],
         internal_zones=internal_zones,
         external_zones=external_zones,
         post_me_import=None,

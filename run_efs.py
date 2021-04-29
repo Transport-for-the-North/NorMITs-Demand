@@ -37,12 +37,12 @@ def main():
     ignore_bespoke_zones = True
 
     run_pa_to_od = False
-    run_compile_od = False
+    run_compile_mats = False
     run_decompile_post_me = True
     run_future_year_compile_od = False
 
     # Controls matrix conversion
-    future_years = consts.FUTURE_YEARS
+    output_years = consts.ALL_YEARS
 
     # Controls I/O
     scenario = consts.SC00_NTEM
@@ -64,6 +64,8 @@ def main():
         land_use_iteration=land_use_iteration,
         verbose=verbose
     )
+
+    print("-" * 40, "Running for %s" % model_name, "-" * 40)
 
     if run_base_efs:
         # Generates HB PA matrices
@@ -96,18 +98,14 @@ def main():
 
     if run_pa_to_od:
         efs.pa_to_od(
-            years_needed=future_years,
+            years_needed=output_years,
             use_bespoke_pa=(not ignore_bespoke_zones),
             verbose=verbose
         )
 
-    if run_compile_od:
-        for year in future_years:
-            efs.compile_od_matrices(
-                year=year,
-                overwrite_aggregated_od=True,
-                overwrite_compiled_od=True,
-            )
+    if run_compile_mats:
+        for year in output_years:
+            efs.compile_matrices(year=year)
 
     if run_decompile_post_me:
         # Decompiles post-me base year matrices
