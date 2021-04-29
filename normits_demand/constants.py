@@ -17,7 +17,35 @@ EXTERNAL_AREA = "%s_external_area.csv"
 BASE_YEAR_POP_FNAME = 'land_use_output_safe_msoa.csv'
 BASE_YEAR_EMP_FNAME = 'land_use_2018_emp.csv'
 
+POSTME_TP_SPLIT_FACTORS_FNAME = "post_me_nhb_tp_splitting_factors.pkl"
+POSTME_FROM_TO_FACTORS_FNAME = "post_me_from_to_factors.pkl"
+
 COMPRESSION_SUFFIX = '.pbz2'
+
+
+# TODO: Parse norms input names in a function to generate this!!!
+INTERNAL_SUFFIX = '_int'
+EXTERNAL_SUFFIX = '_ext'
+
+NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING = {
+    'HB_W_CA_int': ['HBWCA_Int'],
+    'HB_W_NCA_int': ['HBWNCA_Int'],
+    'HB_EB_CA_int': ['HBEBCA_Int'],
+    'HB_EB_NCA_int': ['HBEBNCA_Int'],
+    'NHB_EB_CA_int': ['NHBEBCA_Int'],
+    'NHB_EB_NCA_int': ['NHBEBNCA_Int'],
+    'HB_O_CA_int': ['HBOCA_Int'],
+    'HB_O_NCA_int': ['HBONCA_Int'],
+    'NHB_O_CA_int': ['NHBOCA_Int'],
+    'NHB_O_NCA_int': ['NHBONCA_Int'],
+
+    'W_CA_ext': ['HBWCA_Ext_FM', 'HBWCA_Ext_TO'],
+    'W_NCA_ext': ['HBWNCA_Ext'],
+    'EB_CA_ext': ['EBCA_Ext_FM', 'EBCA_Ext_TO'],
+    'EB_NCA_ext': ['EBNCA_Ext'],
+    'O_CA_ext': ['OCA_Ext_FM', 'OCA_Ext_TO'],
+    'O_NCA_ext': ['ONCA_Ext_TO'],
+}
 
 
 # SEGMENTATION AGGREGATION DICTIONARIES
@@ -36,7 +64,8 @@ NORMS_VDM_SEG_INTERNAL = {
     'NHB_O_NCA_int': {'to': ['nhb'], 'ca': [1], 'uc': 'other'},
 }
 
-# Note that NoRMS needs
+# Note that NoRMS needs CA splitting into to and from for the VDM
+# See NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING
 NORMS_VDM_SEG_EXTERNAL = {
     'W_CA_ext': {'to': ['hb', 'nhb'], 'ca': [2], 'uc': 'commute'},
     'W_NCA_ext': {'to': ['hb', 'nhb'], 'ca': [1], 'uc': 'commute'},
@@ -47,6 +76,8 @@ NORMS_VDM_SEG_EXTERNAL = {
     'O_CA_ext': {'to': ['hb', 'nhb'], 'ca': [2], 'uc': 'other'},
     'O_NCA_ext': {'to': ['hb', 'nhb'], 'ca': [1], 'uc': 'other'},
 }
+
+NORMS_VDM_MATRIX_NAMES = list(NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING.keys())
 
 # USEFUL GEO CONSTANTS
 # LAs in North area

@@ -168,7 +168,7 @@ class EFSProductionGenerator:
         fy_pop_import_dir:
             Path to the directory containing the NorMITs Land Use outputs
             for future year population estimates. The filenames will
-            be automatically generated based on consts.LU_POP_FNAME
+            be automatically generated based on efs_consts.LU_POP_FNAME
 
         pop_constraint:
             TODO: Need to clarify if population constrain is still needed,
@@ -431,8 +431,9 @@ class EFSProductionGenerator:
         lad_lookup_path = os.path.join(imports['lad_lookup'],
                                        consts.DEFAULT_LAD_LOOKUP)
 
-        productions = control_productions_to_ntem(
-            productions=productions,
+        productions = ntem.control_vector_to_ntem(
+            vector=productions,
+            vector_type='productions',
             trip_origin='hb',
             ntem_dir=imports['ntem_control'],
             lad_lookup_path=lad_lookup_path,
@@ -440,7 +441,9 @@ class EFSProductionGenerator:
             future_years=future_years,
             control_base_year=control_productions,
             control_future_years=control_fy_productions,
-            audit_dir=exports['audits']
+            ntem_control_cols=['p', 'm'],
+            ntem_control_dtypes=[int, int],
+            reports_dir=exports['audits'],
         )
 
         # Write productions to file
@@ -555,7 +558,7 @@ class NhbProductionModel:
         seg_level:
             The level of segmentation to run at. This is used to determine
             how to produce the NHB Productions. Should be one of the values
-            from consts.SEG_LEVELS
+            from efs_consts.SEG_LEVELS
 
         return_segments:
             Which segmentation to use when returning the NHB productions.
@@ -1150,8 +1153,9 @@ class NhbProductionModel:
         lad_lookup_path = os.path.join(self.imports['lad_lookup'],
                                        consts.DEFAULT_LAD_LOOKUP)
 
-        nhb_prods = control_productions_to_ntem(
-            productions=nhb_prods,
+        nhb_prods = ntem.control_vector_to_ntem(
+            vector=nhb_prods,
+            vector_type='productions',
             trip_origin='nhb',
             ntem_dir=self.imports['ntem_control'],
             lad_lookup_path=lad_lookup_path,
@@ -1161,7 +1165,7 @@ class NhbProductionModel:
             control_future_years=self.control_fy_productions,
             ntem_control_cols=['p', 'm', 'tp'],
             ntem_control_dtypes=[int, int, int],
-            audit_dir=self.exports['audits']
+            reports_dir=self.exports['audits']
         )
 
         # Output productions before any aggregation
@@ -1222,6 +1226,7 @@ def _gen_base_productions_internal(area_type,
     # init
     nhb_trip_rates = pd.read_csv(trip_rates_path)
 
+    # Build a progress bar
     total = du.seg_level_loop_length(seg_level, seg_params)
     desc = "Calculating NHB Productions at %s" % str(area_type)
     p_bar = tqdm(total=total, desc=desc, disable=not verbose)
@@ -1589,7 +1594,7 @@ def get_pop_data_from_land_use(by_pop_import_path: nd.PathLike,
     if len(all_pop_ph) == 1:
         return all_pop_ph[0]
 
-    return du.merge_df_list(all_pop_ph, on=group_cols)
+    return du.merge_df_list(all_pop_ph, on=group_cols, how='outer').fillna(0)
 
 
 def merge_pop_trip_rates(population: pd.DataFrame,
@@ -1839,124 +1844,6 @@ def merge_pop_trip_rates(population: pd.DataFrame,
     msoa_output['m'] = msoa_output['m'].astype(int)
 
     return msoa_output
-
-
-def control_productions_to_ntem(productions: pd.DataFrame,
-                                trip_origin: str,
-                                ntem_dir: str,
-                                lad_lookup_path: str,
-                                base_year: str,
-                                future_years: List[str] = None,
-                                control_base_year: bool = True,
-                                control_future_years: bool = False,
-                                ntem_control_cols: List[str] = None,
-                                ntem_control_dtypes: List[Callable] = None,
-                                audit_dir: str = None
-                                ) -> pd.DataFrame:
-    # TODO: Write control_productions_to_ntem() docs
-    # Set up default args
-    if ntem_control_cols is None:
-        ntem_control_cols = ['p', 'm']
-
-    if ntem_control_dtypes is None:
-        ntem_control_dtypes = [int, int]
-
-    # Init
-    future_years = list() if future_years is None else future_years
-    all_years = [base_year] + future_years
-    init_index_cols = list(productions)
-    init_group_cols = du.list_safe_remove(list(productions), all_years)
-
-    # Use sorting to avoid merge. Productions is a BIG DF
-    all_years = [base_year] + future_years
-    sort_cols = du.list_safe_remove(list(productions), all_years)
-    productions = productions.sort_values(sort_cols)
-
-    # Do we need to grow on top of a controlled base year? (multiplicative)
-    grow_over_base = control_base_year and not control_future_years
-
-    # Get growth values over base
-    if grow_over_base:
-        growth_factors = productions.copy()
-        for year in future_years:
-            growth_factors[year] /= growth_factors[base_year]
-        growth_factors.drop(columns=[base_year], inplace=True)
-
-        # Output an audit of the growth factors calculated
-        if audit_dir is not None:
-            fname = consts.PRODS_MG_FNAME % ('msoa', trip_origin)
-            path = os.path.join(audit_dir, fname)
-            pd.DataFrame(growth_factors).to_csv(path, index=False)
-
-    # ## NTEM CONTROL YEARS ## #
-    # Figure out which years to control
-    control_years = list()
-    if control_base_year:
-        control_years.append(base_year)
-    if control_future_years:
-        control_years += future_years
-
-    audits = list()
-    for year in control_years:
-        # Init audit
-        year_audit = {'year': year}
-
-        # Setup paths
-        ntem_fname = consts.NTEM_CONTROL_FNAME % ('pa', year)
-        ntem_path = os.path.join(ntem_dir, ntem_fname)
-
-        # Read in control files
-        ntem_totals = pd.read_csv(ntem_path)
-        ntem_lad_lookup = pd.read_csv(lad_lookup_path)
-
-        print("\nPerforming NTEM constraint for %s..." % year)
-        productions, audit, *_, = ntem.control_to_ntem(
-            control_df=productions,
-            ntem_totals=ntem_totals,
-            zone_to_lad=ntem_lad_lookup,
-            constraint_cols=ntem_control_cols,
-            base_value_name=year,
-            ntem_value_name='productions',
-            trip_origin=trip_origin
-        )
-
-        # Update Audits for output
-        year_audit.update(audit)
-        audits.append(year_audit)
-
-    # Controlling to NTEM seems to change some of the column dtypes
-    dtypes = {c: d for c, d in zip(ntem_control_cols, ntem_control_dtypes)}
-    productions = productions.astype(dtypes)
-
-    # Write the audit to disk
-    if len(audits) > 0 and audit_dir is not None:
-        fname = consts.PRODS_FNAME % ('msoa', trip_origin)
-        path = os.path.join(audit_dir, fname)
-        pd.DataFrame(audits).to_csv(path, index=False)
-
-    if not grow_over_base:
-        return productions
-
-    # ## ADD PRE CONTROL GROWTH BACK ON ## #
-    # Merge on all possible columns
-    merge_cols = du.list_safe_remove(list(growth_factors), all_years)
-    productions = pd.merge(
-        productions,
-        growth_factors,
-        how='left',
-        on=merge_cols,
-        suffixes=['_orig', '_gf'],
-    ).fillna(1)
-
-    # Add growth back on
-    for year in future_years:
-        productions[year] = productions[base_year] * productions["%s_gf" % year].values
-
-    # make sure we only have the columns we started with
-    productions = productions.reindex(columns=init_index_cols)
-    productions = productions.groupby(init_group_cols).sum().reset_index()
-
-    return productions
 
 
 def generate_productions(population: pd.DataFrame,

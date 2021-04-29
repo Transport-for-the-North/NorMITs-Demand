@@ -9,12 +9,15 @@ import os
 
 import pandas as pd
 
-import utils as nup
+import normits_demand.utils.utils as nup
 
-import_folder = (r'Y:\NorMITs Synthesiser\Nelum\Outputs\From Home Matrices')
-export_folder = (r'Y:\NorMITs Synthesiser\Nelum\Outputs\From Home Matrices NELUM')
+import_folder = (r'I:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3f\Matrices\OD Matrices')
+export_folder = (r'I:\NorMITs Synthesiser\Nelum\iter2\Outputs\From Home Matrices')
 
-translation_lookup_folder = ('Y:/NorMITs Synthesiser/Zone Translation/Export')
+translation_lookup_folder = ('I:/NorMITs Synthesiser/Zone Translation/Export')
+
+start_zone_model_folder = (r'I:\NorMITs Synthesiser\Noham\Model Zone Lookups')
+end_zone_model_folder = (r'I:\NorMITs Synthesiser\Nelum\Model Zone Lookups')
 
 start_zoning_system = 'Noham'
 end_zoning_system = 'Nelum'
@@ -101,19 +104,18 @@ def translate_matrices(start_zoning_system,
                        translation_lookup_folder,
                        import_folder,
                        export_folder,
-                       translation_type = 'pop', # default to pop
-                       mat_format = 'od',
-                       import_format = 'wide',
-                       import_headers = True,
-                       export_format = 'wide',
-                       export_headers = True,
-                       to_pcu = False,
-                       to_ave_hour = False,
-                       export = True):
+                       start_zone_model_folder=None,
+                       end_zone_model_folder=None,
+                       translation_type='pop',  # default to pop
+                       mat_format='od',
+                       before_tld=True,
+                       after_tld=False,
+                       export=True):
     """
     translation_type = 'pop', 'emp', 'pop_emp', 'spatial'
     
     """
+
     # TODO: make this work for a pop emp weight at PA
     # TODO: Multithread
 
@@ -128,11 +130,13 @@ def translate_matrices(start_zoning_system,
 
     # Get contents of input folder
     input_mats = nup.parse_mat_output(os.listdir(import_folder),
-                                      sep = '_',
-                                      mat_type = mat_format,
-                                      file_format = '.csv')
+                                      sep='_',
+                                      mat_type=mat_format,
+                                      file_format='.csv')
     
-    translation_report = []
+    translation_report = list()
+    before_tld_report = list()
+    after_tld_report = list()
 
     # TODO: Multiprocess
     # TODO: Unit test w/ generated output table
@@ -142,12 +146,74 @@ def translate_matrices(start_zoning_system,
         mat = pd.read_csv(os.path.join(
                 import_folder,
                 row['file']))
-        # TODO: smart reading of mats
+
+        if before_tld:
+            # TODO: Should be functions - at least 2
+            # TODO: Hacking for weird filenames here - should just get it
+            if row['p'] == 'commute':
+                p = 1
+            elif row['p'] == 'business':
+                p = 2
+            elif row['p'] == 'other':
+                p = 3
+            else:
+                p = row['p']
+
+            calib_params = {'p': p,
+                            'm': row['m']}
+
+            if row['trip_origin'] == 'hb' or 'nhb' not in row['file']:
+                target_tp = '24hr'
+            elif row['trip_origin'] == 'nhb' or 'nhb' in row['file']:
+                target_tp = 'tp'
+                calib_params.update({'tp': 1})  # Default to tp 1 if nhb
+
+            costs = nup.get_costs(
+                start_zone_model_folder,
+                calib_params,
+                tp=target_tp,
+                iz_infill=0.5)[0]
+
+            costs['cost'] = costs['cost'].round(0)
+            costs['p_zone'] = costs['p_zone'].astype(int)
+            costs['a_zone'] = costs['a_zone'].astype(int)
+
+            # Pivot mat to long
+            long_mat = pd.melt(
+                mat,
+                id_vars=list(mat)[0],
+                var_name='a_zone',
+                value_name='dt',
+                col_level=0)
+            long_mat = long_mat.rename(columns={list(mat)[0]: 'p_zone'})
+            long_mat['p_zone'] = long_mat['p_zone'].astype(int)
+            long_mat['a_zone'] = long_mat['a_zone'].astype(int)
+
+            tld = long_mat.merge(costs,
+                                 how='left',
+                                 on=['p_zone', 'a_zone'])
+            del long_mat
+
+            tld = tld.reindex(
+                ['cost', 'dt'], axis=1).groupby('cost').sum().reset_index()
+            tld['cost'] = tld['cost'].astype(int)
+
+            before_tld_report.append({row['file']: tld})
+            if export:
+                report_name = row['file'].replace(
+                    '.csv', '_tld_report.csv')
+                tld.to_csv(
+                    os.path.join(
+                        export_folder,
+                        report_name
+                    ), index=False
+                )
+
         mat = pd.melt(mat,
-                      id_vars = [left_col],
-                      var_name = right_col,
-                      value_name = 'dt',
-                      col_level = 0)
+                      id_vars=[left_col],
+                      var_name=right_col,
+                      value_name='dt',
+                      col_level=0)
 
         # Make int, wide or not
         mat[left_col] = mat[left_col].astype(int)
@@ -202,4 +268,12 @@ def translate_matrices(start_zoning_system,
 
     translation_report = pd.DataFrame(translation_report)
 
-    return translation_report
+    if export:
+        translation_report.to_csv(
+            os.path.join(
+                export_folder,
+                'translation_report.csv'
+            ), index=False
+        )
+
+    return translation_report, before_tld_report, after_tld_report

@@ -17,11 +17,15 @@ from tqdm import tqdm
 #  labels: EFS, QoL updates
 
 # Local imports
+import normits_demand as nd
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
+from normits_demand.utils import file_ops
 
 from normits_demand.models import efs_attraction_model as am
 from normits_demand.models import efs_zone_translator as zt
+
+from normits_demand.matrices import matrix_processing as mat_p
 
 
 def load_exceptional_zones(productions_export: str,
@@ -220,7 +224,7 @@ def calculate_attraction_weights(observed_base: pd.DataFrame,
 
     # Convert the observed data to the correct format for a merge
     observed["soc"] = observed["soc"].replace("none", 0)
-    observed["soc"] = observed["soc"].astype(int)
+    observed["soc"] = pd.to_numeric(observed["soc"], downcast='integer')
 
     # Add in soc0 if not in there
     if "soc" in emp.columns and 0 not in emp["soc"].unique():
@@ -450,10 +454,10 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
                               segment_columns: List[str],
                               value_column: str,
                               base_year: str,
-                              exceptional_zones: pd.DataFrame,
                               land_use: pd.DataFrame,
                               trip_rates: pd.DataFrame,
                               sector_lookup: pd.Series,
+                              exceptional_zones: pd.DataFrame = None,
                               force_soc_type: bool = False,
                               purpose_col: str = 'p',
                               audit_location: str = None
@@ -534,15 +538,7 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
         on=merge_cols
     )
 
-    # None is left in soc data for attractions as a residual from getting
-    # observed data from PA matrices. Set soc0 where soc==None to remove this
-    # and making it match synthetic attractions.
-    if forecast_vector['soc'].dtype != object:
-        # Cast observed data to match dtype
-        forecast_dtype = forecast_vector['soc'].dtype
-        observed_base["soc"] = observed_base["soc"].replace("none", 0)
-        observed_base["soc"] = observed_base["soc"].astype(forecast_dtype)
-
+    # Combine with the observed
     forecast_vector = pd.merge(
         forecast_vector,
         observed_base.rename({base_year: "b_c"}, axis=1),
@@ -550,9 +546,25 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
         on=merge_cols
     )
 
+    # Fill synthetic vectors with where 0 or Nan
+    for col in ['s_b', 's_f']:
+        forecast_vector[col] = forecast_vector[col].fillna(1)
+        zero_mask = forecast_vector[col] > 0
+        forecast_vector[col] = forecast_vector[col].where(zero_mask, 1)
+
     # Normal Zones Growth Calculation
     growth_factors = forecast_vector["s_f"] / forecast_vector["s_b"]
     forecast_vector[value_column] = forecast_vector["b_c"] * growth_factors
+
+    # If no expceptional zones, leave
+    if exceptional_zones is None:
+        # Tidy up the forecast vector
+        group_cols = [zone_column] + segment_columns
+        index_cols = group_cols.copy() + [value_column]
+
+        forecast_vector = forecast_vector.reindex(columns=index_cols)
+        return forecast_vector.groupby(group_cols).sum().reset_index()
+
 
     # Handle Exceptional Zones
     # Get the relevant land use data and save in e_land_use (exceptional)
@@ -657,76 +669,86 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
     return forecast_vector
 
 
-def load_seed_dists(mat_folder: str,
-                    segments_needed: List[str],
-                    base_year: str,
-                    zone_column: str,
-                    trip_type: str = "productions",
-                    ) -> pd.DataFrame:
+def _fake_increase_attractions_seg(attractions: pd.DataFrame,
+                                   years: List[str],
+                                   p_col: str = 'p',
+                                   soc_col: str = 'soc',
+                                   ns_col: str = 'ns',
+                                   ) -> pd.DataFrame:
+    """
+    Used to add soc0 into p1/2 and ns1-5 in p3-8
 
-    # Define the columns needed
-    group_cols = [zone_column] + segments_needed
-    required_cols = group_cols + [base_year]
+    Parameters
+    ----------
+    attractions:
+        Attractions to add segmentation to
 
-    # Get the list of available files in the seed dist folder
-    files = du.parse_mat_output(
-        os.listdir(mat_folder),
-        mat_type="pa"
-    )
-    # Filter to just HB matrices
-    hb_files = files.loc[files["trip_origin"] == "hb"]
-    # Define dataframe to store the observed trip ends
-    all_obs = pd.DataFrame()
+    Returns
+    -------
+    fake_seg_attractions:
+        attractions with new segmentation
+    """
+    # Init
+    init_index_cols = list(attractions)
+    init_group_cols = du.list_safe_remove(init_index_cols, years)
 
-    iterator = tqdm(
-        hb_files.to_dict(orient="records"),
-        desc=f"Loading Base Observed {trip_type}"
-    )
-    # Loop through each matrix in the path and add to the overall dataframe
-    for row in iterator:
-        file_name = row.pop("file")
-        file_path = os.path.join(mat_folder, file_name)
+    new_yearly_attrs = list()
+    for year in years:
+        year_attrs = attractions.reindex(columns=init_group_cols + [year])
 
-        obs = pd.read_csv(file_path, index_col=0)
-        # Sum along columns for productions and rows for attractions
-        if trip_type == "productions":
-            obs = obs.sum(axis=1)
-        elif trip_type == "attractions":
-            obs = obs.sum(axis=0)
-        else:
-            raise ValueError("Invalid Trip Type supplied")
+        # ## ADD SOC0 FOR P 1 AND 2 ## #
+        # Get just p1 and 2
+        soc_p_attrs = year_attrs[year_attrs[p_col].isin(consts.SOC_P)].copy()
 
-        # Set column names
-        obs = obs.reset_index()
-        obs.columns = [zone_column, base_year]
-        obs[zone_column] = obs[zone_column].astype("int")
+        # Pivot on soc
+        soc_p_attrs = soc_p_attrs.pivot(
+            index=du.list_safe_remove(init_group_cols, [soc_col]),
+            columns='soc',
+            values=year,
+        )
 
-        # Extract segments from the file names
-        for segment in segments_needed:
-            obs[segment] = row[segment]
+        # Add soc0 and melt back
+        soc_p_attrs['0'] = soc_p_attrs.sum(axis=1)
+        soc_p_attrs = soc_p_attrs.reset_index().melt(
+            id_vars=du.list_safe_remove(init_group_cols, [soc_col]),
+            value_vars=list(soc_p_attrs),
+            value_name=year,
+        )
+        soc_p_attrs[soc_col] = soc_p_attrs[soc_col].astype(int)
+        soc_p_attrs[ns_col] = 'none'
 
-        # Add to the overall dataframe
-        if all_obs.empty:
-            all_obs = obs
-        else:
-            all_obs = all_obs.append(obs)
+        # ## ADD NS1-5 FOR P 3-8 ## #
+        # Get just p3-8
+        ns_p_attrs = year_attrs[year_attrs[p_col].isin(consts.NS_P)].copy()
 
-    # Change data types for all integer columns
-    for col in ["p", "ca"]:
-        if col in all_obs.columns:
-            all_obs[col] = all_obs[col].astype("int")
+        # Add ns1-5, set soc to none,
+        ns_col_names = [1, 2, 3, 4, 5]
+        for ns_val in ns_col_names:
+            ns_p_attrs[ns_val] = ns_p_attrs[year]
+        ns_p_attrs[soc_col] = 'none'
 
-    # Finally group and sum the dataframe
-    all_obs = all_obs.groupby(
-        group_cols,
-        as_index=False
-    )[base_year].sum()
+        # Drop year, melt back into long matrix
+        ns_p_attrs = ns_p_attrs.drop(columns=[year])
+        ns_p_attrs = ns_p_attrs.melt(
+            id_vars=init_group_cols,
+            value_vars=ns_col_names,
+            var_name=ns_col,
+            value_name=year,
+        )
 
-    return all_obs[required_cols]
+        new_yearly_attrs.append(pd.concat([soc_p_attrs, ns_p_attrs]))
+
+    # Concat yearly attractions by index
+    group_cols = init_group_cols + [ns_col]
+    new_yearly_attrs = [a.set_index(group_cols) for a in new_yearly_attrs]
+
+    return pd.concat(new_yearly_attrs, axis=1).reset_index()
 
 
 def growth_criteria(synth_productions: pd.DataFrame,
+                    synth_nhb_productions: pd.DataFrame,
                     synth_attractions: pd.DataFrame,
+                    synth_nhb_attractions: pd.DataFrame,
                     observed_pa_path: str,
                     population_path: str,
                     employment_path: str,
@@ -739,12 +761,15 @@ def growth_criteria(synth_productions: pd.DataFrame,
                     zt_from_zone: str = None,
                     zt_pop_df: pd.DataFrame = None,
                     zt_emp_df: pd.DataFrame = None,
+                    observed_cache: str = None,
                     trip_rate_sectors: str = None,
                     soc_weights_path: str = None,
                     purpose_col: str = 'p',
                     prod_audits: str = None,
-                    attr_audits: str = None
-                    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+                    attr_audits: str = None,
+                    internal_zones: List[int] = None,
+                    external_zones: List[int] = None,
+                    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Processes the PA vectors and other data from the main EFS and returns 
     the forecast vectors.
 
@@ -793,7 +818,7 @@ def growth_criteria(synth_productions: pd.DataFrame,
 
     Returns
     -------
-    Tuple[pd.DataFrame, pd.DataFrame]
+    Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]
         Returns the grown productions and attractions data.
     """
     # Init
@@ -801,6 +826,15 @@ def growth_criteria(synth_productions: pd.DataFrame,
 
     zt_from_zone_col = zt_from_zone.lower() + '_zone_id'
     model_zone_col = model_name.lower() + '_zone_id'
+
+    # TODO(BT): Rewrite to be able to handle internal and external
+    #  at the same time. Code was quickly chucked together and only
+    #  internal is needed for now
+    if internal_zones is not None and external_zones is not None:
+        raise ValueError(
+            "Cannot handle both internal and external zones at the same"
+            "time just yet!!!"
+        )
 
     # Validate attraction input
     if synth_attractions['soc'].dtype == object:
@@ -817,46 +851,71 @@ def growth_criteria(synth_productions: pd.DataFrame,
     employment = du.safe_read_csv(employment_path)
 
     # Infer the P/A and pop/emp segmentation
+    # Productions and attractions should end this process with the same
+    # segmentation
     non_seg_cols = [zt_from_zone_col, model_zone_col] + all_years
     segments = {
         "pop": du.list_safe_remove(list(population), non_seg_cols),
         "emp": du.list_safe_remove(list(employment), non_seg_cols),
         "prod": du.list_safe_remove(list(synth_productions), non_seg_cols),
-        "attr": du.list_safe_remove(list(synth_attractions), non_seg_cols)
+        "attr": du.list_safe_remove(list(synth_productions), non_seg_cols)
     }
-    # Load the base observed Production/Attractions
-    observed_productions = load_seed_dists(
-        observed_pa_path,
-        segments_needed=segments["prod"],
-        base_year=base_year,
-        zone_column=model_zone_col,
-        trip_type="productions"
-    )
-    observed_attractions = load_seed_dists(
-        observed_pa_path,
-        segments_needed=segments["attr"],
-        base_year=base_year,
-        zone_column=model_zone_col,
-        trip_type="attractions"
-    )
-
-    # Make sure the synth and observed productions are all str in soc/ns
-    for col in ['soc', 'ns']:
-        try:
-            synth_productions[col] = synth_productions[col].astype(str)
-            observed_productions[col] = observed_productions[col].astype(str)
-        except KeyError:
-            print(
-                "WARNING: Tried to cast %s in productions to a string, but "
-                "couldn't find the column. If this is meant to happen, you "
-                "can ignore this warning."
-            )
 
     # Set up the grouping columns
     prod_group_cols = [model_zone_col] + segments["prod"]
     attr_group_cols = [model_zone_col] + segments["attr"]
     pop_group_cols = [model_zone_col] + segments["pop"]
     emp_group_cols = [model_zone_col] + segments["emp"]
+
+    vectors = mat_p.maybe_convert_matrices_to_vector(
+        mat_import_dir=observed_pa_path,
+        years_needed=[base_year],
+        cache_path=observed_cache,
+        matrix_format='pa',
+        model_zone_col=model_zone_col,
+        internal_zones=internal_zones,
+        external_zones=external_zones,
+    )
+    observed_hb_p, observed_nhb_p, observed_hb_a, observed_nhb_a = vectors
+
+    # Get the vectors into the correct formats
+    p_cols = prod_group_cols + [base_year]
+    a_cols = attr_group_cols + [base_year]
+
+    observed_hb_p = observed_hb_p.reindex(columns=p_cols)
+    observed_nhb_p = observed_nhb_p.reindex(columns=p_cols)
+    observed_hb_a = observed_hb_a.reindex(columns=a_cols)
+    observed_nhb_a = observed_nhb_a.reindex(columns=a_cols)
+
+    # ## BRING THE SYNTH ATTRACTIONS UP TO OBSERVED SEGMENTATION ## #
+    # As the attractions are going to be used to make growth factors, the
+    # actual numbers don't matter
+    synth_attractions = _fake_increase_attractions_seg(
+        synth_attractions,
+        years=all_years,
+    )
+    synth_nhb_attractions = _fake_increase_attractions_seg(
+        synth_nhb_attractions,
+        years=all_years,
+    )
+
+    # Make sure the synth and observed productions are all str in soc/ns
+    for col in ['soc', 'ns']:
+        try:
+            synth_productions[col] = synth_productions[col].astype(str)
+            synth_nhb_productions[col] = synth_nhb_productions[col].astype(str)
+            synth_attractions[col] = synth_attractions[col].astype(str)
+            synth_nhb_attractions[col] = synth_nhb_attractions[col].astype(str)
+
+            observed_hb_p[col] = observed_hb_p[col].astype(str)
+            observed_nhb_p[col] = observed_nhb_p[col].astype(str)
+            observed_hb_a[col] = observed_hb_a[col].astype(str)
+            observed_nhb_a[col] = observed_nhb_a[col].astype(str)
+        except KeyError:
+            raise KeyError(
+                "Tried to cast %s to a string, but "
+                "couldn't find the column."
+            )
 
     # Ensure correct column types
     population.columns = population.columns.astype(str)
@@ -921,8 +980,6 @@ def growth_criteria(synth_productions: pd.DataFrame,
                 to_zoning=model_name,
                 non_split_cols=non_split_columns
             )
-        else:
-            prod_exceptional_zones = pd.DataFrame(columns=[model_zone_col])
 
         if attr_exceptional_zones is not None:
             non_split_columns = list(attr_exceptional_zones)
@@ -935,49 +992,40 @@ def growth_criteria(synth_productions: pd.DataFrame,
                 to_zoning=model_name,
                 non_split_cols=non_split_columns
             )
-        else:
-            attr_exceptional_zones = pd.DataFrame(columns=[model_zone_col])
-
-    # Stick exceptional zones together now they've been translated
-    exceptional_zones = [prod_exceptional_zones, attr_exceptional_zones]
-    exceptional_zones = pd.concat(exceptional_zones, axis=0)
 
     # ## Calculate Trip Rates ## #
+    prod_trip_rates = None
+    if prod_exceptional_zones is not None:
+        prod_trip_rates = calculate_production_trip_rate(
+            observed_base=observed_hb_p,
+            population=population,
+            e_zones=pd.DataFrame,
+            base_year=base_year,
+            segment_cols=segments['prod'],
+            zone_column=model_zone_col,
+            purpose_column=purpose_col,
+            sector_lookup=trip_rate_sectors
+        )
 
-    # Extract just the base year data from observed data
-    index_cols = prod_group_cols + [base_year]
-    observed_prod_base = observed_productions.reindex(columns=index_cols)
+    attr_trip_rates = None
+    if attr_exceptional_zones is not None:
+        attr_trip_rates = calculate_attraction_weights(
+            observed_base=observed_hb_a,
+            employment=employment,
+            base_year=base_year,
+            emp_segment_cols=segments['emp'],
+            attr_segment_cols=segments['attr'],
+            zone_column=model_zone_col,
+            purpose_column=purpose_col,
+            sector_lookup=trip_rate_sectors
+        )
 
-    index_cols = attr_group_cols + [base_year]
-    observed_attr_base = observed_attractions.reindex(columns=index_cols)
-
-    prod_trip_rates = calculate_production_trip_rate(
-        observed_base=observed_prod_base,
-        population=population,
-        e_zones=pd.DataFrame,
-        base_year=base_year,
-        segment_cols=segments['prod'],
-        zone_column=model_zone_col,
-        purpose_column=purpose_col,
-        sector_lookup=trip_rate_sectors
-    )
-    attr_trip_rates = calculate_attraction_weights(
-        observed_base=observed_attr_base,
-        employment=employment,
-        base_year=base_year,
-        emp_segment_cols=segments['emp'],
-        attr_segment_cols=segments['attr'],
-        zone_column=model_zone_col,
-        purpose_column=purpose_col,
-        sector_lookup=trip_rate_sectors
-    )
-
-    if prod_audits:
+    if prod_audits and prod_trip_rates is not None:
         prod_trip_rates.to_csv(
             os.path.join(prod_audits, "exc_production_triprate.csv"),
             index=False
         )
-    if attr_audits:
+    if attr_audits and attr_trip_rates is not None:
         attr_trip_rates.to_csv(
             os.path.join(attr_audits, "exc_attraction_triprate.csv"),
             index=False
@@ -990,20 +1038,29 @@ def growth_criteria(synth_productions: pd.DataFrame,
         value_cols=future_years
     )
 
+    # TODO(BT): Needed to adapt code that needed rewriting anyway.
+    #  100% Made it worse. Re-write this! Probably needs a function
+    #  Probably needs to be re-written to separate out exceptional growth
+    #  and post-ME integration
     # ## Apply Growth Criteria ## #
+    # Initialise loop output
+    grown_productions = [observed_hb_p]
+    grown_nhb_productions = [observed_nhb_p]
+    grown_attractions = [observed_hb_a]
+    grown_nhb_attractions = [observed_nhb_a]
 
     # Grab just the base year P/A
     index_cols = prod_group_cols + [base_year]
     synth_prod_base = synth_productions.reindex(columns=index_cols)
 
+    index_cols = prod_group_cols + [base_year]
+    synth_nhb_prod_base = synth_nhb_productions.reindex(columns=index_cols)
+
     index_cols = attr_group_cols + [base_year]
     synth_attr_base = synth_attractions.reindex(columns=index_cols)
 
-    # Initialise loop output
-    grown_productions = list()
-    grown_attractions = list()
-    grown_productions.append(synth_prod_base)
-    grown_attractions.append(synth_attr_base)
+    index_cols = attr_group_cols + [base_year]
+    synth_nhb_attr_base = synth_nhb_attractions.reindex(columns=index_cols)
 
     # Calculate separately for each year and combine at the end
     for year in future_years:
@@ -1011,8 +1068,14 @@ def growth_criteria(synth_productions: pd.DataFrame,
         index_cols = prod_group_cols + [year]
         synth_prod_subset = synth_productions.reindex(columns=index_cols)
 
+        index_cols = prod_group_cols + [year]
+        synth_nhb_prod_year = synth_nhb_productions.reindex(columns=index_cols)
+
         index_cols = attr_group_cols + [year]
         synth_attr_subset = synth_attractions.reindex(columns=index_cols)
+
+        index_cols = attr_group_cols + [year]
+        synth_nhb_attr_year = synth_nhb_attractions.reindex(columns=index_cols)
 
         pop_subset = population.reindex(columns=pop_group_cols + [year])
         emp_subset = employment.reindex(columns=emp_group_cols + [year])
@@ -1021,10 +1084,10 @@ def growth_criteria(synth_productions: pd.DataFrame,
         emp_subset = emp_subset.loc[emp_subset["employment_cat"] == "E01"]
         emp_subset = emp_subset.drop("employment_cat", axis=1)
 
-        year_productions = handle_exceptional_growth(
+        grown_productions.append(handle_exceptional_growth(
             synth_future=synth_prod_subset,
             synth_base=synth_prod_base,
-            observed_base=observed_prod_base,
+            observed_base=observed_hb_p,
             zone_column=model_zone_col,
             segment_columns=segments['prod'],
             value_column=year,
@@ -1033,14 +1096,28 @@ def growth_criteria(synth_productions: pd.DataFrame,
             land_use=pop_subset,
             trip_rates=prod_trip_rates,
             sector_lookup=trip_rate_sectors,
-            audit_location=prod_audits
-        )
-        grown_productions.append(year_productions)
+            audit_location=prod_audits,
+        ))
 
-        year_attractions = handle_exceptional_growth(
+        grown_nhb_productions.append(handle_exceptional_growth(
+            synth_future=synth_nhb_prod_year,
+            synth_base=synth_nhb_prod_base,
+            observed_base=observed_nhb_p,
+            zone_column=model_zone_col,
+            segment_columns=segments['prod'],
+            value_column=year,
+            base_year=base_year,
+            exceptional_zones=None,
+            land_use=pop_subset,
+            trip_rates=prod_trip_rates,
+            sector_lookup=trip_rate_sectors,
+            audit_location=prod_audits,
+        ))
+
+        grown_attractions.append(handle_exceptional_growth(
             synth_future=synth_attr_subset,
             synth_base=synth_attr_base,
-            observed_base=observed_attractions,
+            observed_base=observed_hb_a,
             zone_column=model_zone_col,
             segment_columns=segments['attr'],
             value_column=year,
@@ -1050,23 +1127,46 @@ def growth_criteria(synth_productions: pd.DataFrame,
             trip_rates=attr_trip_rates,
             sector_lookup=trip_rate_sectors,
             force_soc_type="soc" in segments['emp'],
-            audit_location=attr_audits
-        )
-        grown_attractions.append(year_attractions)
+            audit_location=attr_audits,
+        ))
+
+        grown_nhb_attractions.append(handle_exceptional_growth(
+            synth_future=synth_nhb_attr_year,
+            synth_base=synth_nhb_attr_base,
+            observed_base=observed_nhb_a,
+            zone_column=model_zone_col,
+            segment_columns=segments['attr'],
+            value_column=year,
+            base_year=base_year,
+            exceptional_zones=None,
+            land_use=emp_subset,
+            trip_rates=attr_trip_rates,
+            sector_lookup=trip_rate_sectors,
+            force_soc_type="soc" in segments['emp'],
+            audit_location=attr_audits,
+        ))
 
     # Set indexes to make concat faster
     grown_productions = [x.set_index(prod_group_cols) for x in grown_productions]
+    grown_nhb_productions = [x.set_index(prod_group_cols) for x in grown_nhb_productions]
     grown_attractions = [x.set_index(attr_group_cols) for x in grown_attractions]
+    grown_nhb_attractions = [x.set_index(attr_group_cols) for x in grown_nhb_attractions]
 
     # Combine production forecast vectors for each year
     grown_productions = pd.concat(grown_productions, axis=1, sort=False)
     grown_productions = grown_productions.reset_index()
 
+    grown_nhb_productions = pd.concat(grown_nhb_productions, axis=1, sort=False)
+    grown_nhb_productions = grown_nhb_productions.reset_index()
+
     # Combine attraction forecast vectors for each year
     grown_attractions = pd.concat(grown_attractions, axis=1, sort=False)
     grown_attractions = grown_attractions.reset_index()
 
-    return grown_productions, grown_attractions
+    grown_nhb_attractions = pd.concat(grown_nhb_attractions, axis=1, sort=False)
+    grown_nhb_attractions = grown_nhb_attractions.reset_index()
+
+    return grown_productions, grown_nhb_productions, grown_attractions, grown_nhb_attractions
 
 
 def extract_donor_totals(matrix_path: str,
@@ -1099,8 +1199,11 @@ def extract_donor_totals(matrix_path: str,
     ValueError
         If the tour proportions shape does not match the matrix shape.
     """
+    # Init
+    matrix_path = file_ops.find_filename(matrix_path)
 
-    df = pd.read_csv(matrix_path, index_col=0)
+    df = file_ops.read_df(matrix_path, index_col=0)
+    print(df.shape)
     agg_tour_props = pd.DataFrame()
 
     # Convert to OD if tour proportions are supplied
@@ -1276,11 +1379,13 @@ def get_donor_zone_data(sectors: pd.DataFrame,
 
     # Iterate through all segmentation available
     iter_hb = tqdm(list(product(hb_purps, m_needed, cas)), desc=desc)
+    # TODO: Should use built in iterator in utils
     for purp, mode, ca in iter_hb:
         if purp in consts.SOC_P:
             segments = soc_needed
         elif purp in consts.NS_P:
             segments = ns_needed
+
         for segment in segments:
             desc_string = f"p_{purp}, m_{mode}, ca_{ca}, seg_{segment}"
             iter_hb.set_description(
@@ -1321,6 +1426,7 @@ def get_donor_zone_data(sectors: pd.DataFrame,
                 for col in tour_props.columns:
                     tour_props[col].values[:] = 0.5
                 warnings.warn("Warning: Using default Tour Proportions of 0.5")
+
             # Extract the origin and destinations for each donor sector
             donor_totals, agg_tp = extract_donor_totals(
                 matrix_path,
@@ -1345,7 +1451,7 @@ def get_donor_zone_data(sectors: pd.DataFrame,
                 hb_donor_data = hb_donor_data.append(donor_totals)
                 agg_tour_props = agg_tour_props.append(agg_tp)
 
-    # ## Build HB totals ## #
+    # ## Build NHB totals ## #
     nhb_purps = du.intersection(p_needed, consts.ALL_NHB_P)
 
     nhb_donor_data = pd.DataFrame()
@@ -2013,7 +2119,7 @@ def _apply_to_bespoke_zones(converted_trips: pd.DataFrame,
 
     # Copy the existing matrices to the bespoke folder - some will be
     # overwritten by the new bespoke versions
-    for file_name in os.listdir(export_dict["pa_24"]):
+    for file_name in file_ops.list_files(export_dict["pa_24"]):
         old_file_path = os.path.join(export_dict["pa_24"], file_name)
         dest_file_path = os.path.join(export_dict["pa_24_bespoke"], file_name)
         shutil.copy(old_file_path, dest_file_path)

@@ -11,9 +11,15 @@ File purpose:
 A collection of functions for validating function arguments are one of
 the possible selections.
 """
+# Builtins
+import warnings
 
-# BACKLOG: Re-organise EFS Constants. Make a generic constants module
-#  labels: EFS, demand merge
+from typing import Any
+from typing import List
+
+# Local imports
+import normits_demand as nd
+
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
 
@@ -118,3 +124,64 @@ def validate_matrix_format(matrix_format: str) -> str:
             % (matrix_format, str(efs_consts.VALID_MATRIX_FORMATS))
         )
     return matrix_format
+
+
+def all_values_set(values: List[Any],
+                   msg: str,
+                   default_values: List[Any] = None,
+                   error: bool = False,
+                   warn: bool = False,
+                   ) -> None:
+    """
+    Checks if all the values
+
+    Parameters
+    ----------
+    values:
+        A list of the values to validate.
+
+    msg:
+        The message to print/warn/error if all of the values are not set.
+
+    default_values:
+        A list if the default values for values. If left as None, all
+        default values are assumed to be None.
+
+    error:
+        Whether to throw an error if the check does not pass. If True, only
+        an error is thrown and no warning can be printed.
+
+    warn:
+        Whether to print a warning from warnings.warn if the check does
+        not pass. If error is also True, only error is thrown and
+        no warning can be printed.
+
+    Returns
+    -------
+        None
+    """
+    # Init
+    if default_values is None:
+        default_values = [None] * len(values)
+
+    # Check if any values are set
+    unset_count = 0
+    for val, default_val in zip(values, default_values):
+        if val == default_val:
+            unset_count += 1
+
+    # If all, or None, of the values are set we're good
+    if unset_count == 0 or unset_count == len(values):
+        return
+
+    # Let the user know if any were set
+    if error:
+        raise ValueError(msg)
+
+    if warn:
+        warnings.warn(msg)
+        return
+
+    # If we're still here, just print the message
+    if msg is not None:
+        print(msg)

@@ -150,7 +150,7 @@ class EFSAttractionGenerator:
         employment_import_path:
             Path to the directory containing the NorMITs Land Use outputs
             for future year employment estimates. The filenames will
-            be automatically generated based on consts.LU_EMP_FNAME
+            be automatically generated based on efs_consts.LU_EMP_FNAME
 
         emp_constraint:
             Values to constrain the employment numbers to.
@@ -392,16 +392,6 @@ class EFSAttractionGenerator:
             unique_data_cols=all_years
         )
 
-        # Write the produced employment to file
-        # Earlier than previously to also save the soc segmentation
-        if out_path is None:
-            print("WARNING! No output path given. "
-                  "Not writing employment to file.")
-        else:
-            print("Writing employment to file...")
-            path = os.path.join(out_path, consts.EMP_FNAME % self.zone_col)
-            employment.to_csv(path, index=False)
-
         if 'soc' not in list(employment):
             self.emp_segments = du.list_safe_remove(self.emp_segments, ['soc'])
 
@@ -411,7 +401,7 @@ class EFSAttractionGenerator:
         employment = employment.reindex(index_cols, axis='columns')
         employment = employment.groupby(group_cols).sum().reset_index()
 
-        # Population Audit
+        # Employment Audit
         if audits:
             print('\n', '-'*15, 'Employment Audit', '-'*15)
             mask = (employment[self.emp_cat_col] == 'E01')
@@ -440,13 +430,9 @@ class EFSAttractionGenerator:
             mode_splits_path=imports['mode_splits'],
             soc_weights_path=imports['soc_weights'],
             idx_cols=idx_cols,
-            audit_dir=exports['audits'],
             emp_cat_col=self.emp_cat_col,
             p_col=a_weights_p_col,
             m_col=mode_split_m_col,
-            ntem_control_dir=imports['ntem_control'],
-            lad_lookup_dir=imports['lad_lookup'],
-            control_fy_attractions=control_fy_attractions
         )
 
         # Aggregate nhb trips if needed
@@ -458,7 +444,7 @@ class EFSAttractionGenerator:
             nhb_att = nhb_att.reindex(reindex_cols, axis='columns')
             nhb_att = nhb_att.groupby(group_cols).sum().reset_index()
 
-        # Align purpose and mode columns to standards
+        # ## TIDY UP THE VECTORS ## #
         p_col = 'p'
         m_col = 'm'
         soc_col = 'soc'
@@ -466,8 +452,38 @@ class EFSAttractionGenerator:
         attractions = attractions.rename(columns=columns)
         nhb_att = nhb_att.rename(columns=columns)
 
+        # ## OPTIONALLY CONTROL TO NTEM ## #
+        lad_lookup_path = os.path.join(imports['lad_lookup'],
+                                       consts.DEFAULT_LAD_LOOKUP)
+
+        attractions = ntem.control_vector_to_ntem(
+            vector=attractions,
+            vector_type='attractions',
+            trip_origin='hb',
+            ntem_dir=imports['ntem_control'],
+            lad_lookup_path=lad_lookup_path,
+            base_year=base_year,
+            future_years=future_years,
+            control_base_year=control_attractions,
+            control_future_years=control_fy_attractions,
+            reports_dir=exports['audits'],
+        )
+
+        nhb_att = ntem.control_vector_to_ntem(
+            vector=nhb_att,
+            vector_type='attractions',
+            trip_origin='nhb',
+            ntem_dir=imports['ntem_control'],
+            lad_lookup_path=lad_lookup_path,
+            base_year=base_year,
+            future_years=future_years,
+            control_base_year=control_attractions,
+            control_future_years=control_fy_attractions,
+            reports_dir=exports['audits']
+        )
+
         # Write attractions to file
-        print("Writing attractions to file...")
+        print("Writing attractions to disk...")
         fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_hb')
         nhb_fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_nhb')
         attractions.to_csv(os.path.join(out_path, fname), index=False)
@@ -916,13 +932,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
                              m_col: str = 'mode',
                              m_split_col: str = 'mode_share',
                              unique_col: str = 'trips',
-                             control_path: str = None,
-                             lad_lookup_dir: str = None,
-                             lad_lookup_name: str = consts.DEFAULT_LAD_LOOKUP,
-                             ) -> Tuple[pd.DataFrame,
-                                        pd.DataFrame,
-                                        Dict[str, float],
-                                        Dict[str, float]]:
+                             ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Combines employment numbers with attractions weights to produce the
     attractions per purpose.
@@ -971,20 +981,6 @@ def merge_attraction_weights(employment: pd.DataFrame,
     unique_col:
         The name to give to the unique column for each year
 
-    control_path:
-        Path to the file containing the data to control the produced
-        attractions to. If left as None, no control will be carried out.
-
-
-    lad_lookup_dir:
-        Path to the file containing the conversion from msoa zoning to LAD
-        zoning, to be used for controlling the attractions. If left as None, no
-        control will be carried out.
-
-    lad_lookup_name:
-        The name of the file in lad_lookup_dir that contains the msoa zoning
-        to LAD zoning conversion.
-
     Returns
     -------
     hb_attractions:
@@ -996,18 +992,8 @@ def merge_attraction_weights(employment: pd.DataFrame,
         A wide dataframe containing the attraction numbers. The index will
         match the index from employment, the columns will be the purposes
         given in p_col of attractions_weight_path.
-
-    hb_audit:
-        A dictionary showing the values before and after an NTEM control
-        (if carried out) for the hb_attractions
-
-    nhb_audit:
-        A dictionary showing the values before and after an NTEM control
-        (if carried out) for the nhb_attractions
-
     """
     # Init
-    do_ntem_control = control_path is not None and lad_lookup_dir is not None
     idx_cols = ['msoa_zone_id'] if idx_cols is None else idx_cols.copy()
     emp_cats = list(employment.columns.unique())
 
@@ -1124,60 +1110,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
     ).drop('ph', axis='columns')
     del tp_infill
 
-    # Control if required
-    if do_ntem_control:
-        # Get ntem totals
-        ntem_totals = pd.read_csv(control_path)
-        ntem_lad_lookup = pd.read_csv(os.path.join(lad_lookup_dir,
-                                                   lad_lookup_name))
-
-        print("Performing HB NTEM constraint...")
-        attractions = attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        attractions, hb_audit, *_ = ntem.control_to_ntem(
-            control_df=attractions,
-            ntem_totals=ntem_totals,
-            zone_to_lad=ntem_lad_lookup,
-            constraint_cols=['p', 'm'],
-            base_value_name='trips',
-            ntem_value_name='attractions',
-            trip_origin='hb'
-        )
-        attractions = attractions.rename(columns={'p': p_col, 'm': m_col})
-
-        print("Performing NHB NTEM constraint...")
-        nhb_attractions = nhb_attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        nhb_attractions, nhb_audit, *_ = ntem.control_to_ntem(
-            control_df=nhb_attractions,
-            ntem_totals=ntem_totals,
-            zone_to_lad=ntem_lad_lookup,
-            constraint_cols=['p', 'm', 'tp'],
-            base_value_name='trips',
-            ntem_value_name='attractions',
-            trip_origin='nhb'
-        )
-        nhb_attractions = nhb_attractions.rename(columns={'p': p_col, 'm': m_col})
-
-        # Control to NTEM returns wrong type
-        attractions[p_col] = attractions[p_col].astype(int)
-        attractions[m_col] = attractions[m_col].astype(int)
-        nhb_attractions[p_col] = nhb_attractions[p_col].astype(int)
-        nhb_attractions[m_col] = nhb_attractions[m_col].astype(int)
-        nhb_attractions['tp'] = nhb_attractions['tp'].astype(int)
-
-    else:
-        # Create audit showing no NTEM control was used
-        hb_audit = {
-            'before': attractions['trips'].sum(),
-            'target': -1,
-            'after': attractions['trips'].sum()
-        }
-        nhb_audit = {
-            'before': nhb_attractions['trips'].sum(),
-            'target': -1,
-            'after': nhb_attractions['trips'].sum()
-        }
-
-    return attractions, nhb_attractions, hb_audit, nhb_audit
+    return attractions, nhb_attractions
 
 
 def generate_attractions(employment: pd.DataFrame,
@@ -1187,15 +1120,11 @@ def generate_attractions(employment: pd.DataFrame,
                          mode_splits_path: str,
                          soc_weights_path: str,
                          idx_cols: List[str],
-                         audit_dir: str,
                          emp_cat_col: str = 'employment_cat',
                          p_col: str = 'purpose',
                          m_col: str = 'mode',
                          m_split_col: str = 'mode_share',
-                         ntem_control_dir: str = None,
-                         lad_lookup_dir: str = None,
                          soc_split: bool = True,
-                         control_fy_attractions: bool = True
                          ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Converts employment to attractions using attraction_weights
@@ -1249,23 +1178,9 @@ def generate_attractions(employment: pd.DataFrame,
         The name of the column in mode_splits_path containing the mode share
         values.
 
-    ntem_control_dir:
-        Path to the file containing the data to control the produced
-        attractions to. If left as None, no control will be carried out.
-
-    lad_lookup_dir:
-        Path to the file containing the conversion from msoa zoning to LAD
-        zoning, to be used for controlling the attractions. If left as None, no
-        control will be carried out.
-
     soc_split:
         Whether to apply the soc splits from soc_weights_path to the
         attractions or not.
-
-    control_fy_attractions:
-        Whether to control the generated future year attractions to the
-        constraints given in ntem_control_dir or not. When running for
-        scenarios other than the base NTEM, this should be False.
 
     Returns
     -------
@@ -1289,19 +1204,8 @@ def generate_attractions(employment: pd.DataFrame,
     # Generate attractions per year
     yr_ph = dict()
     yr_ph_nhb = dict()
-    hb_audits = list()
-    nhb_audits = list()
     for year in all_years:
         print("\nConverting year %s to attractions..." % str(year))
-
-        # Only only set the control path if we need to constrain
-        if not control_fy_attractions and year != base_year:
-            ntem_control_path = None
-        elif ntem_control_dir is not None:
-            ntem_fname = ntem_base_fname % year
-            ntem_control_path = os.path.join(ntem_control_dir, ntem_fname)
-        else:
-            ntem_control_path = None
 
         # Convert to wide format, for this single year
         yr_emp = employment.pivot_table(
@@ -1311,7 +1215,7 @@ def generate_attractions(employment: pd.DataFrame,
         )
 
         # Convert employment to attractions for this year
-        yr_ph[year], yr_ph_nhb[year], hb_audit, nhb_audit = merge_attraction_weights(
+        yr_ph[year], yr_ph_nhb[year] = merge_attraction_weights(
             employment=yr_emp,
             attraction_weights_path=attraction_weights_path,
             mode_splits_path=mode_splits_path,
@@ -1321,19 +1225,7 @@ def generate_attractions(employment: pd.DataFrame,
             m_col=m_col,
             m_split_col=m_split_col,
             unique_col=unique_col,
-            control_path=ntem_control_path,
-            lad_lookup_dir=lad_lookup_dir
-
         )
-
-        # Update list of audits
-        year_hb_audit = {'year': year}
-        year_hb_audit.update(hb_audit)
-        hb_audits.append(year_hb_audit)
-
-        year_nhb_audit = {'year': year}
-        year_nhb_audit.update(nhb_audit)
-        nhb_audits.append(year_nhb_audit)
 
     # Get all the attractions into a single df, efficiently
     attractions = du.combine_yearly_dfs(
@@ -1346,18 +1238,6 @@ def generate_attractions(employment: pd.DataFrame,
         unique_col=unique_col,
         p_col=p_col
     )
-
-    # Write the production audits to disk
-    if len(hb_audits) > 0:
-        fname = consts.ATTRS_FNAME % ('msoa', 'hb')
-        path = os.path.join(audit_dir, fname)
-        pd.DataFrame(hb_audits).to_csv(path, index=False)
-
-    # Write the production audits to disk
-    if len(nhb_audits) > 0:
-        fname = consts.ATTRS_FNAME % ('msoa', 'nhb')
-        path = os.path.join(audit_dir, fname)
-        pd.DataFrame(nhb_audits).to_csv(path, index=False)
 
     return attractions, nhb_attractions
 
@@ -1620,8 +1500,8 @@ def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
         if soc_col in segmentation_cols and soc_col not in list(year_emp):
             # We'll catch the error lower down, so don't need to here
             if ignore_missing_soc:
-                segmentation_cols.pop(soc_col)
-                group_cols.pop(soc_col)
+                segmentation_cols.remove(soc_col)
+                group_cols.remove(soc_col)
 
         # ## FILTER TO JUST THE DATA WE NEED ## #
         # Set up the columns to keep
@@ -1648,4 +1528,4 @@ def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
     if len(all_emp_ph) == 1:
         return all_emp_ph[0]
 
-    return du.merge_df_list(all_emp_ph, on=group_cols)
+    return du.merge_df_list(all_emp_ph, on=group_cols, how='outer').fillna(0)
