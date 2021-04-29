@@ -893,9 +893,9 @@ if __name__ == "__main__":
 
     # Controls I/O
     scenario = consts.SC00_NTEM
-    iter_num = '3f'
+    iter_num = '3g'
     import_home = "I:/"
-    export_home = "E:/"
+    export_home = "F:/"
     model_name = consts.MODEL_NAME
 
     efs_main = ExternalForecastSystem(
