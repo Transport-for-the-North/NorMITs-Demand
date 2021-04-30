@@ -43,9 +43,10 @@ def main():
 
     # Controls matrix conversion
     output_years = consts.ALL_YEARS
+    output_years = consts.FUTURE_YEARS
 
     # Controls I/O
-    scenario = consts.SC00_NTEM
+    scenario = consts.SC04_UZC
     iter_num = '3g'
     import_home = "I:/"
     export_home = "F:/"
