@@ -36,16 +36,17 @@ def main():
     run_bespoke_zones = False
     ignore_bespoke_zones = True
 
-    run_pa_to_od = True
+    run_pa_to_od = False
     run_compile_mats = True
     run_decompile_post_me = False
     run_future_year_compile_od = False
 
     # Controls matrix conversion
     output_years = consts.ALL_YEARS
+    output_years = consts.FUTURE_YEARS
 
     # Controls I/O
-    scenario = consts.SC00_NTEM
+    scenario = consts.SC04_UZC
     iter_num = '3g'
     import_home = "I:/"
     export_home = "E:/"
