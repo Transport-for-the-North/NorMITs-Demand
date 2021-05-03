@@ -12,9 +12,16 @@ import normits_demand.models.production_model as pm
 import normits_demand.models.attraction_model as am
 import normits_demand.models.external_model as em
 import normits_demand.models.distribution_model as dm
+from normits_demand import version
+
 
 
 if __name__ == '__main__':
+    """ 
+    version control
+    """
+
+    __version__ = version.__version__
 
     config_path = 'I:/NorMITs Synthesiser/config/'
 
@@ -113,7 +120,7 @@ if __name__ == '__main__':
                       write=True)
 
     # *Compile tp pa @ 24hr
-    pa2od.build_tp_pa(file_drive=params['base_directory'],
+    f.build_tp_pa(file_drive=params['base_directory'],
                       model_name=params['model_name'],
                       iteration=params['iteration'],
                       distribution_segments=params['hb_output_segments'],
@@ -333,3 +340,28 @@ if __name__ == '__main__':
                                      header=False,
                                      write=True)
         # TODO: add 3 sectore report call
+    # ## PREPARE OUTPUTS ## #
+    print("Initialising outputs...")
+    write_input_info(
+        os.path.join(params['base_directory'], "input_parameters.txt"),
+        __version__,
+        params['iteration'],
+        params['model_name'],
+        params['land_use_zoning']
+    )
+    def write_input_info(output_path: str,
+                     tms_version: str,
+                     model_name: str,
+                     land_use_zoning: str,
+                     ) -> None:
+
+        out_lines = [
+            'TMS version: ' + str(tms_version),
+            'Model Name: ' + str(model_name),
+            'Run Date: ' + str(time.strftime('%D').replace('/', '_')),
+            'Start Time: ' + str(time.strftime('%T').replace('/', '_')),
+            "Land Use Zoning System: " + str(land_use_zoning),
+       
+        ]
+        with open(output_path, 'w') as out:
+            out.write('\n'.join(out_lines))

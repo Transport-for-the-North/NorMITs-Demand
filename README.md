@@ -89,3 +89,7 @@ better with TMS output paths.
 
 - CS - Write updates to TMS since last merge
 
+### v0.3.5
+- Updated run_tms.py to export a text file containing inputs
+- Added versioning to run_tms.py
+- Added versioning to reports_audits.py and updated code to include versioning as part of their file name in distribution reports

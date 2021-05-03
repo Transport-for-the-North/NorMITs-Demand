@@ -11,12 +11,19 @@ import numpy as np
 import geopandas as gpd
 
 from normits_demand.matrices import matrix_processing as mp
+from normits_demand import version
 
 # TODO: Delete duplicate functions in mp and dm
 
 # TODO: Should find a way to automate this. Put zone in model folder?
 _default_shp_path = 'Y:/Data Strategy/GIS Shapefiles/Norms zones/TfN_Zones_Combined.shp'
+""" 
+version control
+"""
 
+__version__ = version.__version__
+
+    
 def get_average_trip_length(model_lookup_path,
                             distribution,
                             internal_distance = None,
@@ -766,7 +773,7 @@ def distribution_report(file_drive='Y:/',
                 internal_segment_report.to_csv((w_d +
                                                 '/' +
                                                 export_name +
-                                                '_internal_segment_report.csv'),
+                                                '_internal_segment_report_' + __version__ + '.csv'),
                 index = False)
     else:
         zone_internal_segment_report = None
@@ -777,17 +784,17 @@ def distribution_report(file_drive='Y:/',
         summary_report.to_csv((w_d +
                                '/' +
                                export_name +
-                               '_summary_report.csv'), index=False)
+                               '_summary_report_' + __version__ + '.csv'), index=False)
 
         origin_report.to_csv((w_d +
                                '/' +
                                export_name +
-                               '_origin_report.csv'), index=False)
+                               '_origin_report_' + __version__ + '.csv'), index=False)
 
         segment_report.to_csv((w_d +
                                '/' +
                                export_name +
-                               '_segment_report.csv'), index = False)
+                               '_segment_report_' + __version__ + '.csv'), index = False)
 
     return(summary_report,
            origin_report,
