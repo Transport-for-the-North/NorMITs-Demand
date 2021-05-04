@@ -46,7 +46,7 @@ def main():
     output_years = consts.FUTURE_YEARS
 
     # Controls I/O
-    scenario = consts.SC04_UZC
+    scenario = consts.SC00_NTEM
     iter_num = '3g'
     import_home = "I:/"
     export_home = "E:/"
