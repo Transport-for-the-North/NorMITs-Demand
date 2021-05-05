@@ -67,8 +67,11 @@ class CjtwTranslator:
 
         # Do adjustment to target year
         if target_year is not None:
-            msoa_cjtw = self._adjust_to_target_year(msoa_cjtw,
-                                                    target_year)
+            msoa_cjtw = self._ntem_adjustments(msoa_cjtw,
+                                               target_year=target_year,
+                                               infill_tp=True,
+                                               take_ntem_totals=True
+                                               )
 
         # Translate to Model Zoning
         if self.model_name != 'msoa':
@@ -219,13 +222,28 @@ class CjtwTranslator:
 
         return normits_cjtw
 
-    def _adjust_to_target_year(self,
-                               msoa_cjtw,
-                               target_year,
-                               verbose=True):
+    def _ntem_adjustments(self,
+                          msoa_cjtw,
+                          target_year,
+                          take_ntem_totals=True,
+                          infill_tp=True,
+                          verbose=True):
         """
+        Function to adjust CJtW in line with NTEM.
+        Can adjust for future year production wise - P/A Furness on backlog.
+        Can apply NTEM production volumes to CjTW distribution.
+        Can infill TP spread to give temporality to CjTW.
+
         msoa_cjtw: pd.DataFrame:
             Dataframe of CJtW already translated to MSOA
+        target_year: int
+            Year to upgrade CjTW to. Has to be in tempro data or will fail.
+        take_ntem_totals: bool
+            Fit census journey to work distribution to NTEM totals, or not
+        infill_tp: bool
+            Bring PA zonal time period spread across from NTEM, or not.
+        verbose: bool
+            chatty toggle
         """
         # Init
         fy_cjtw = msoa_cjtw.copy()
@@ -234,11 +252,16 @@ class CjtwTranslator:
         tempro = pd.read_csv(self.tempro_path)
         # Filter to commute only
         tempro = tempro[tempro['Purpose'] == 1]
-        # Drop Time Period
-        tempro = tempro.drop('TimePeriod', axis=1)
-        # Sum remainder - makes assumptions about col names
+
+        # Set up cols for summary
         group_cols = ['msoa_zone_id', 'trip_end_type', 'Purpose',
                       'Mode']
+        # Retain or drop tp
+        if infill_tp:
+            group_cols.append('TimePeriod')
+        else:
+            tempro = tempro.drop('TimePeriod', axis=1)
+        # Sum remainder - makes assumptions about col names
         tempro = tempro.groupby(group_cols).sum().reset_index()
 
         # Seperate p/a
@@ -256,22 +279,61 @@ class CjtwTranslator:
 
         # Grow prod wise
         for key, dat in fy_cjtw.items():
+
             tempro_sub = productions[productions['Mode'] == key]
-            tempro_sub = tempro_sub.reindex(['msoa_zone_id', 'gf'], axis=1)
+            tempro_sub = tempro_sub.reindex(
+                ['msoa_zone_id', str(target_year), 'gf'],
+                axis=1)
             tempro_sub = tempro_sub.reset_index(drop=True)
 
             future_cjtw = dat.copy()
             demand_before = future_cjtw['demand'].sum()
 
-            future_cjtw = future_cjtw.merge(
-                tempro_sub,
-                how='left',
-                left_on='p_zone',
-                right_on='msoa_zone_id'
-            ).fillna(1)
-            future_cjtw['demand'] *= future_cjtw['gf']
-            future_cjtw = future_cjtw.drop(
-                ['msoa_zone_id', 'gf'], axis=1)
+            if take_ntem_totals:
+                # Reduce cjtw to a factor, using a 64 bit float
+                future_cjtw['demand'] = future_cjtw['demand'].astype('float64')
+                future_cjtw['demand'] /= future_cjtw['demand'].sum()
+                # Get NTEM total
+                tempro_total = tempro_sub['2018'].sum()
+                # Multiply factor by total
+                future_cjtw['demand'] *= tempro_total
+
+                if verbose:
+                    print('Infilling with NTEM totals')
+                    print('TEMPRO sub total: %d' % tempro_total)
+
+            else:
+                future_cjtw = future_cjtw.merge(
+                    tempro_sub,
+                    how='left',
+                    left_on='p_zone',
+                    right_on='msoa_zone_id'
+                ).fillna(1)
+                future_cjtw['demand'] *= future_cjtw['gf']
+                future_cjtw = future_cjtw.drop(
+                    ['msoa_zone_id', 'gf'], axis=1)
+
+            if infill_tp:
+                # Get MSOA time props from productions
+                time_sub = productions[productions['Mode'] == key]
+                time_sub = time_sub.reindex(
+                    ['msoa_zone_id', 'TimePeriod', str(target_year)],
+                    axis=1).reset_index(drop=True)
+                time_sub['tp_factor'] = time_sub[str(target_year)] / time_sub.groupby(
+                    'msoa_zone_id')[str(target_year)].transform('sum')
+                time_sub = time_sub.drop(str(target_year), axis=1)
+
+                # Merge on time sub & multiply out
+                future_cjtw = future_cjtw.merge(
+                    time_sub,
+                    how='left',
+                    left_on='p_zone',
+                    right_on='msoa_zone_id'
+                )
+                future_cjtw['demand'] *= future_cjtw['tp_factor']
+                future_cjtw = future_cjtw.drop(
+                    ['msoa_zone_id', 'tp_factor'], axis=1)
+
             demand_after = future_cjtw['demand'].sum()
 
             if verbose:

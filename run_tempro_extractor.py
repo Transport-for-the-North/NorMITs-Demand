@@ -8,7 +8,7 @@ if __name__ == '__main__':
     # Config
     # TODO: some tying up params to funcs here
 
-    output_years = [2011, 2018, 2033, 2035, 2040, 2050]
+    output_years = [2011, 2018, 2027, 2033, 2035, 2040, 2050]
 
     get_planning_data = True
     get_car_ownership = True

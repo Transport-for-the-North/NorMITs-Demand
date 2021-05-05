@@ -171,9 +171,9 @@ class TemproParser:
 
     def get_trip_ends(self,
                       trip_type=None,
-                      all_commute_hb: bool=True,
-                      aggregate_car: bool=True,
-                      average_weekday: bool=True,
+                      all_commute_hb: bool = True,
+                      aggregate_car: bool = True,
+                      average_weekday: bool = True,
                       verbose=True):
 
         """
@@ -249,53 +249,6 @@ class TemproParser:
         te_dat = te_dat.sort_values(final_groups).reset_index(drop=True)
 
         return te_dat
-
-    def get_pop_emp_growth_factors(self,
-                                   verbose=True):
-        # Init
-        available_dbs = self.get_available_dbs()
-
-        # Loop setup
-        pop_ph = list()
-        emp_ph = list()
-        pbar = tqdm(
-            total=len(available_dbs),
-            desc="Extracting trip ends from DBs",
-            disable=(not verbose),
-        )
-
-        for db_fname in available_dbs:
-            pop, emp = self._get_pop_emp_factors_internal(
-                db_fname,
-                pbar,
-            )
-            pop_ph.append(pop)
-            emp_ph.append(emp)
-
-        # Stick all the partials together
-        pop = pd.concat(pop_ph)
-        emp = pd.concat(emp_ph)
-
-        # Sort by zone_col
-        pop = pop.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
-        emp = emp.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
-
-        # ## CALCULATE GROWTH FACTORS ## #
-        # Need to know which is the base year
-        base_year, future_years = du.split_base_future_years(self.output_years)
-        base_year_col = str(base_year)
-        future_year_cols = [str(x) for x in future_years]
-
-        pop_df = pop.copy()
-        emp_gf = emp.copy()
-
-        for vector in [pop_df, emp_gf]:
-            # Calculate growth factors
-            for col in future_year_cols:
-                vector[col] /= vector[base_year_col]
-            vector[base_year_col] = 1
-
-        return pop_df, emp_gf, pop, emp
 
     def get_growth_factors(self, verbose=True):
         # Init
@@ -490,15 +443,7 @@ class TemproParser:
             Dictionary of trip ends
         """
         # Init
-        if trip_type is None:
-            te = '(1,2,3,4)'
-            segmented_trip_ends = {
-                'productions': self.trip_end_types['productions'],
-                'attractions': self.trip_end_types['attractions'],
-                'origins': self.trip_end_types['origins'],
-                'destinations': self.trip_end_types['destinations']
-            }
-        elif trip_type == 'pa':
+        if trip_type == 'pa':
             te = '(1,2)'
             segmented_trip_ends = {
                 'productions': self.trip_end_types['productions'],
@@ -507,6 +452,14 @@ class TemproParser:
         elif trip_type == 'od':
             te = '(3,4)'
             segmented_trip_ends = {
+                'origins': self.trip_end_types['origins'],
+                'destinations': self.trip_end_types['destinations']
+            }
+        else:
+            te = '(1,2,3,4)'
+            segmented_trip_ends = {
+                'productions': self.trip_end_types['productions'],
+                'attractions': self.trip_end_types['attractions'],
                 'origins': self.trip_end_types['origins'],
                 'destinations': self.trip_end_types['destinations']
             }
@@ -976,7 +929,9 @@ class TemproParser:
             'under16': self.planning_data_types['under16'],
             '16-74': self.planning_data_types['16-74'],
             '75+': self.planning_data_types['75+'],
-            'HHs': self.planning_data_types['HHs']
+            'HHs': self.planning_data_types['HHs'],
+            'jobs': self.planning_data_types['jobs'],
+            'workers': self.planning_data_types['workers']
             }
         for segment, indices in segmented_population.items():
             # Filter to target
@@ -1247,8 +1202,7 @@ class TemproParser:
                 conn.close()
         
         return query_dat, zones
-    
-    
+
     def _select_years_and_interpolate(self,
                                       query_dat,
                                       verbose=False):
@@ -1315,5 +1269,3 @@ class TemproParser:
                 query_dat = query_dat.drop('annual_growth', axis=1)
                 
         return query_dat
-
-
