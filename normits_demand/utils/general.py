@@ -355,7 +355,6 @@ def build_efs_io_paths(import_location: str,
                        model_name: str,
                        iter_name: str,
                        scenario_name: str,
-                       demand_version: str,
                        demand_dir_name: str = 'NorMITs Demand',
                        base_year: str = efs_consts.BASE_YEAR_STR,
                        land_use_iteration: str = None,
@@ -451,7 +450,6 @@ def build_efs_io_paths(import_location: str,
         'zone_translation': zone_translation,
         'tp_splits': os.path.join(import_home, 'tp_splits'),
         'lookups': os.path.join(model_home, 'lookup'),
-        # 'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
         'scenarios': os.path.join(import_home, 'scenarios'),
         'a_weights': os.path.join(import_home, 'attractions', 'hb_attraction_weights.csv'),
         'soc_weights': soc_weights_path,
@@ -460,8 +458,10 @@ def build_efs_io_paths(import_location: str,
         'model_home': os.path.join(import_home, model_name),
         'internal_zones': os.path.join(model_schema_home, consts.INTERNAL_AREA % model_name),
         'external_zones': os.path.join(model_schema_home, consts.EXTERNAL_AREA % model_name),
+        'param_home': model_param_home,
         'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
-        'post_me_factors': os.path.join(model_param_home, 'post_me_decompile_factors.pkl'),
+        'params': model_param_home,
+        'post_me_factors': os.path.join(model_param_home, 'post_me_tms_decompile_factors.pkl'),
         'post_me_tours': model_tour_prop_home,
         'decomp_post_me': os.path.join(import_home, model_name, 'decompiled_post_me'),
 
@@ -487,9 +487,9 @@ def build_efs_io_paths(import_location: str,
         export_location,
         demand_dir_name,
         model_name,
-        "v%s-EFS_Output" % demand_version,
-        scenario_name,
+        "EFS",
         iter_name,
+        scenario_name,
     ]
     export_home = os.path.join(*fname_parts)
     matrices_home = os.path.join(export_home, 'Matrices')
@@ -522,6 +522,7 @@ def build_efs_io_paths(import_location: str,
         'od': os.path.join(matrices_home, od),
         'od_24': os.path.join(matrices_home, od_24),
 
+        'compiled_pa': os.path.join(matrices_home, ' '.join([compiled, pa])),
         'compiled_od': os.path.join(matrices_home, ' '.join([compiled, od])),
         'compiled_od_pcu': os.path.join(matrices_home, ' '.join([compiled, od, pcu])),
 
@@ -538,6 +539,7 @@ def build_efs_io_paths(import_location: str,
     # Post-ME
     compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
     post_me_exports = {
+        'home': post_me_home,
         'cache': os.path.join(post_me_home, 'cache'),
         'pa': os.path.join(post_me_home, pa),
         'pa_24': os.path.join(post_me_home, pa_24),
@@ -1982,7 +1984,7 @@ def get_split_factors_fname(matrix_format: str,
     """
     Generates the splitting factors filename
     """
-    ftype = consts.COMPRESSION_SUFFIX
+    ftype = consts.COMPRESSION_SUFFIX.strip('.')
     if suffix is None:
         return "%s_yr%s_splitting_factors.%s" % (matrix_format, year, ftype)
 
@@ -2011,7 +2013,7 @@ def list_files(path: nd.PathLike,
         Where to search for the files
 
     ftypes:
-        A list of filetypes to accept.
+        A list of filetypes to accept. If None, all are accepted.
 
     include_path:
         Whether to include the path with the returned filenames

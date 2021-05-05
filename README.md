@@ -77,4 +77,15 @@ is now read in straight from NorMITs Land Use.
     - post-me vector is now used for the base year P/A vectors (Internal demand only)
     - multiplicative growth added into the attractions
     - Attractions now take segmentation from the post-me matrices, Grows them using synth fy/by
+    
+### v0.3.4
+- Updated the EFS output paths to no longer include the version number in the name, but align
+better with TMS output paths.
+    - Paths look more like `NorMITs Demand/nohmam/EFS/iter1/NTEM/...`
+    - The Land Use iteration being used is now included in the inputs.txt
+- Updated the PopEmpComparator to use the new land use imports to compare to.
+- Fixed issue in Production/Attraction models dropping population and employment
+- Updated NoRMS I/O to decompile post-ME and compile outputs correctly for NoRMS
+
+- CS - Write updates to TMS since last merge
 

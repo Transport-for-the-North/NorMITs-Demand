@@ -392,5 +392,30 @@ def main():
         )
 
 
+def rename():
+    m_needed = [3]
+    model_name = 'noham'
+
+    # od2pa.convert_to_efs_matrices(
+    #     import_path=r'I:\NorMITs Demand\import\noham\post_me',
+    #     export_path=r'I:\NorMITs Demand\import\noham\post_me\renamed',
+    #     matrix_format='od',
+    #     year=efs_consts.BASE_YEAR,
+    #     m_needed=m_needed,
+    #     user_class=True,
+    #     to_wide=True,
+    #     wide_col_name=model_name + '_zone_id',
+    #     from_pcu=False,
+    # )
+
+    od2pa.decompile_od(
+        od_import=r'I:\NorMITs Demand\import\noham\post_me\renamed',
+        od_export=r'I:\NorMITs Demand\import\noham\post_me\tms_seg',
+        decompile_factors_path=r"I:\NorMITs Demand\import\noham\params\post_me_tms_decompile_factors.pkl",
+        year=consts.BASE_YEAR,
+    )
+
+
 if __name__ == '__main__':
-    main()
+    # main()
+    rename()

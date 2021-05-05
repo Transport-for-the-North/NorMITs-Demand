@@ -28,25 +28,27 @@ def main():
     integrate_dlog = False
     run_pop_emp_comparison = False
 
-    run_base_efs = True
-    recreate_productions = False
-    recreate_attractions = False
-    recreate_nhb_productions = False
-    rerun_growth_criteria = True
+    run_base_efs = False
+    recreate_productions = True
+    recreate_attractions = True
+    recreate_nhb_productions = True
 
     run_bespoke_zones = False
     ignore_bespoke_zones = True
 
-    run_pa_to_od = True
-    run_compile_od = True
-    run_decompile_post_me = False
+    run_pa_to_od = False
+    run_compile_mats = False
+    run_decompile_post_me = True
     run_future_year_compile_od = False
+
+    # Controls matrix conversion
+    output_years = consts.ALL_YEARS
 
     # Controls I/O
     scenario = consts.SC00_NTEM
-    iter_num = '3f'
+    iter_num = '3g'
     import_home = "I:/"
-    export_home = "E:/"
+    export_home = "F:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
@@ -63,6 +65,8 @@ def main():
         verbose=verbose
     )
 
+    print("-" * 40, "Running for %s" % model_name, "-" * 40)
+
     if run_base_efs:
         # Generates HB PA matrices
         efs.run(
@@ -70,8 +74,6 @@ def main():
             recreate_attractions=recreate_attractions,
             recreate_nhb_productions=recreate_nhb_productions,
             echo_distribution=verbose,
-
-            apply_growth_criteria=rerun_growth_criteria,
         )
 
     if run_bespoke_zones:
@@ -96,18 +98,14 @@ def main():
 
     if run_pa_to_od:
         efs.pa_to_od(
-            years_needed=[2050],
+            years_needed=output_years,
             use_bespoke_pa=(not ignore_bespoke_zones),
             verbose=verbose
         )
 
-    if run_compile_od:
-        # Compiles base year OD matrices
-        efs.compile_od_matrices(
-            year=2050,
-            overwrite_aggregated_od=True,
-            overwrite_compiled_od=True,
-        )
+    if run_compile_mats:
+        for year in output_years:
+            efs.compile_matrices(year=year)
 
     if run_decompile_post_me:
         # Decompiles post-me base year matrices
