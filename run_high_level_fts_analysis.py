@@ -3,14 +3,126 @@ import os
 
 from typing import List
 
+import numpy as np
 import pandas as pd
 
 from tqdm import tqdm
 
 import normits_demand as nd
+
 from normits_demand import constants as consts
 from normits_demand.utils import general as du
+from normits_demand.utils import file_ops
+
+from normits_demand.models import efs_zone_translator as zone_translation
 from normits_demand.matrices import matrix_processing as mat_p
+
+
+def get_inter_intra_trips(model_names: List[str],
+                          scenario_names: List[str],
+                          iter_num,
+                          years,
+                          import_home,
+                          export_home,
+                          ):
+    # Init
+    return_ph = list()
+    purposes = ['commute', 'business', 'other']
+
+    # Build translation dataframes
+    trans_home = r'I:\NorMITs Demand\import\zone_translation\weighted'
+
+    zones_dict = {
+        'norms': list(range(1, 1301)),
+        'noham': list(range(1, 2771)),
+        'sectors': list(range(1, 25))
+    }
+
+    tdf_dict = {
+        'norms': os.path.join(trans_home, 'norms_ca_sector_2020_pop_weighted.csv'),
+        'noham': os.path.join(trans_home, 'noham_ca_sector_2020_pop_weighted.csv'),
+    }
+
+    # progress bar
+    p_bar = tqdm(
+        desc="Getting inter/intra sector counts",
+        total=len(scenario_names) * len(model_names) * len(years) * len(purposes),
+    )
+
+    for model_name in model_names:
+        model_zone_col = "%s_zone_id" % model_name
+        mode = consts.MODEL_MODES[model_name][0]
+
+        tdf_cols = [model_zone_col, 'ca_sector_2020_zone_id']
+        tdf = pd.read_csv(tdf_dict[model_name], usecols=tdf_cols, index_col=model_zone_col)
+        tdf = tdf.reindex(zones_dict[model_name]).fillna(-1).reset_index()
+
+        for scenario in scenario_names:
+            reporter = nd.EfsReporter(
+                iter_num=iter_num,
+                model_name=model_name,
+                scenario_name=scenario,
+                years_needed=years,
+                import_home=import_home,
+                export_home=export_home,
+            )
+
+            mat_dir = reporter.efs_exports['aggregated_pa']
+            mat_fnames = file_ops.list_files(mat_dir)
+
+            for year in years:
+                yr_mats = [x for x in mat_fnames if '_yr%s_' % year in x]
+
+                for p in purposes:
+                    ps = ['_p%s_' % x for x in consts.USER_CLASS_PURPOSES[p]]
+                    p_mats = [x for x in yr_mats if du.is_in_string(ps, x)]
+
+                    inter_sec_trips = 0
+                    intra_sec_trips = 0
+                    for fname in p_mats:
+                        # Read in the matrix
+                        path = os.path.join(mat_dir, fname)
+                        mat = file_ops.read_df(path, index_col=0, find_similar=True)
+
+                        # Translate to TfN Sectors
+                        mat, _ = zone_translation.translate_matrix(
+                            mat,
+                            lookup=tdf,
+                            lookup_cols=tdf_cols,
+                        )
+
+                        # Make sure we remove the negative number added above
+                        mat = mat.reindex(index=zones_dict['sectors'])
+                        mat = mat.reindex(columns=zones_dict['sectors'])
+
+                        if mat.shape[0] != mat.shape[1]:
+                            raise nd.NormitsDemandError(
+                                "The read in matrix isn't square! Read in %s and got "
+                                "shape %s" % (fname, mat.shape)
+                            )
+
+                        # Generate a mask for inter and intra
+                        intra_mask = np.diag([1] * mat.shape[0])
+                        inter_mask = 1 - intra_mask
+
+                        # Calculate totals
+                        intra_sec_trips += (mat.values * intra_mask).sum()
+                        inter_sec_trips += (mat.values * inter_mask).sum()
+
+                        p_bar.update(1)
+
+                    # Add to report
+                    return_ph.append({
+                        'scenario': scenario,
+                        'm': mode,
+                        'p': p,
+                        'inter_sector': inter_sec_trips,
+                        'intra_sector': intra_sec_trips,
+                    })
+
+    p_bar.close()
+    return pd.concat(return_ph)
+
 
 
 def get_internal_vectors(model_names: List[str],
@@ -37,7 +149,7 @@ def get_internal_vectors(model_names: List[str],
 
         model_dict = dict()
         for scenario_name in scenario_names:
-            efs = nd.EfsReporter(
+            reporter = nd.EfsReporter(
                 iter_num=iter_num,
                 model_name=model_name,
                 scenario_name=scenario_name,
@@ -51,12 +163,12 @@ def get_internal_vectors(model_names: List[str],
 
             # Read in internal P/A Vectors
             vectors = mat_p.maybe_convert_matrices_to_vector(
-                mat_import_dir=efs.imports['matrices']['pa_24'],
-                years_needed=efs.years_needed,
+                mat_import_dir=reporter.imports['matrices']['pa_24'],
+                years_needed=reporter.years_needed,
                 cache_path=cache_path,
                 matrix_format='pa',
                 model_zone_col=model_zone_col,
-                internal_zones=efs.model_internal_zones,
+                internal_zones=reporter.model_internal_zones,
             )
 
             # Aggregate to needed data
@@ -373,60 +485,72 @@ def main():
 
     years = ['2018', '2033', '2035', '2050']
 
-    # Read in internal P/A Vectors
-    print("Reading in vectors...")
-    vectors_dict = get_internal_vectors(
+    # # Read in internal P/A Vectors
+    # print("Reading in vectors...")
+    # vectors_dict = get_internal_vectors(
+    #     model_names,
+    #     scenario_names,
+    #     iter_num,
+    #     years,
+    #     import_home,
+    #     export_home,
+    #     cache_drive,
+    #     agg_cols=['p', 'm'],
+    # )
+    #
+    # # Translate noham to norms system
+    # print("Translating to norms zoning...")
+    # vectors_dict = translate_noham_to_norms(
+    #     vectors_dict,
+    #     pop_translation,
+    #     emp_translation,
+    #     split_cols=years,
+    # )
+    #
+    # vectors_dict = join_norms_noham(
+    #     vectors_dict,
+    #     scenario_names,
+    #     years=years,
+    # )
+    #
+    # # Get norms AT per zone per year
+    # print("Getting area_types for norms...")
+    # area_types = get_norms_area_types_per_year(
+    #     years=years,
+    #     scenario_names=scenario_names,
+    #     lu_drive=lu_drive,
+    #     land_use_iter=lu_iter,
+    # )
+    #
+    # # Translate P/A Vectors to TfN Sectors
+    # print("Converting to TfN Sectors...")
+    # sector_vectors_dict = translate_to_tfn_sectors(
+    #     vectors_dict,
+    #     area_types,
+    #     scenario_names,
+    #     years,
+    #     sec_pop_trans,
+    #     sec_emp_trans,
+    # )
+    #
+    # # Join vector types
+    # print("Joining scenarios together...")
+    # type_dict = join_scenarios(
+    #     sector_vectors_dict,
+    #     scenario_names,
+    # )
+
+    print('Getting inter/intra sector trips per sector...')
+    sector_trips = get_inter_intra_trips(
         model_names,
         scenario_names,
         iter_num,
         years,
         import_home,
         export_home,
-        cache_drive,
-        agg_cols=['p', 'm'],
     )
 
-    # Translate noham to norms system
-    print("Translating to norms zoning...")
-    vectors_dict = translate_noham_to_norms(
-        vectors_dict,
-        pop_translation,
-        emp_translation,
-        split_cols=years,
-    )
-
-    vectors_dict = join_norms_noham(
-        vectors_dict,
-        scenario_names,
-        years=years,
-    )
-
-    # Get norms AT per zone per year
-    print("Getting area_types for norms...")
-    area_types = get_norms_area_types_per_year(
-        years=years,
-        scenario_names=scenario_names,
-        lu_drive=lu_drive,
-        land_use_iter=lu_iter,
-    )
-
-    # Translate P/A Vectors to TfN Sectors
-    print("Converting to TfN Sectors...")
-    sector_vectors_dict = translate_to_tfn_sectors(
-        vectors_dict,
-        area_types,
-        scenario_names,
-        years,
-        sec_pop_trans,
-        sec_emp_trans,
-    )
-
-    # Join vector types
-    print("Joining scenarios together...")
-    type_dict = join_scenarios(
-        sector_vectors_dict,
-        scenario_names,
-    )
+    sector_trips.to_csv('E:/inter_intra_test.csv')
 
 
 if __name__ == '__main__':
