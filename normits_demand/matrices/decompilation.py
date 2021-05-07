@@ -415,6 +415,7 @@ def decompile_norms(year: int,
                     csv_out: bool = False,
                     compress_out: bool = True,
                     final_export_csv: bool = True,
+                    audit_tol: float = 0.1,
                     ) -> None:
     # TODO: Write decompile_norms() docs
     # final_export_csv = True for seg disagg
@@ -456,15 +457,14 @@ def decompile_norms(year: int,
         )
         decompile_factors_path = os.path.join(decompile_factors_dir, factors_fname)
 
-        print(out_dir)
         decompile_matrices(
             matrix_import=post_me_renamed_export,
             matrix_export=out_dir,
             decompile_factors_path=decompile_factors_path,
+            audit_tol=audit_tol,
         )
 
     # ## RECOMBINE INTERNAL AND EXTERNAL DEMAND ## #
-    print(post_me_decompiled_export)
     mat_p.recombine_internal_external(
         internal_import=int_dir,
         external_import=ext_dir,

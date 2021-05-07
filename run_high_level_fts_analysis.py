@@ -16,6 +16,44 @@ from normits_demand.utils import file_ops
 
 from normits_demand.models import efs_zone_translator as zone_translation
 from normits_demand.matrices import matrix_processing as mat_p
+from normits_demand.concurrency import multiprocessing
+
+
+def worker(mat_dir,
+           fname,
+           tdf,
+           tdf_cols,
+           sector_zones,
+           ):
+    # Read in the matrix
+    path = os.path.join(mat_dir, fname)
+    mat = file_ops.read_df(path, index_col=0, find_similar=True)
+
+    # Translate to TfN Sectors
+    mat, _ = zone_translation.translate_matrix(
+        mat,
+        lookup=tdf,
+        lookup_cols=tdf_cols,
+    )
+
+    # Make sure we remove the negative number added above
+    mat = mat.reindex(index=sector_zones)
+    mat = mat.reindex(columns=sector_zones)
+
+    if mat.shape[0] != mat.shape[1]:
+        raise nd.NormitsDemandError(
+            "The read in matrix isn't square! Read in %s and got "
+            "shape %s" % (fname, mat.shape)
+        )
+
+    # Generate a mask for inter and intra
+    intra_mask = np.diag([1] * mat.shape[0])
+    inter_mask = 1 - intra_mask
+
+    intra_trips = (mat.values * intra_mask).sum()
+    inter_trips = (mat.values * inter_mask).sum()
+
+    return intra_trips, inter_trips
 
 
 def get_inter_intra_trips(model_names: List[str],
@@ -77,43 +115,39 @@ def get_inter_intra_trips(model_names: List[str],
                     ps = ['_p%s_' % x for x in consts.USER_CLASS_PURPOSES[p]]
                     p_mats = [x for x in yr_mats if du.is_in_string(ps, x)]
 
-                    inter_sec_trips = 0
-                    intra_sec_trips = 0
+                    # MULTIPROCESS READ AND TRANSLATION
+                    unchanging_kwargs = {
+                        'mat_dir': mat_dir,
+                        'tdf': tdf,
+                        'tdf_cols': tdf_cols,
+                        'sector_zones': zones_dict['sectors'],
+                    }
+
+                    kwarg_list = list()
                     for fname in p_mats:
-                        # Read in the matrix
-                        path = os.path.join(mat_dir, fname)
-                        mat = file_ops.read_df(path, index_col=0, find_similar=True)
+                        kwargs = unchanging_kwargs.copy()
+                        kwargs['fname'] = fname
+                        kwarg_list.append(kwargs)
 
-                        # Translate to TfN Sectors
-                        mat, _ = zone_translation.translate_matrix(
-                            mat,
-                            lookup=tdf,
-                            lookup_cols=tdf_cols,
-                        )
+                    return_vals = multiprocessing.multiprocess(
+                        fn=worker,
+                        kwargs=kwarg_list,
+                        process_count=consts.PROCESS_COUNT,
+                    )
 
-                        # Make sure we remove the negative number added above
-                        mat = mat.reindex(index=zones_dict['sectors'])
-                        mat = mat.reindex(columns=zones_dict['sectors'])
+                    # Calculate totals
+                    intra, inter = zip(*return_vals)
+                    intra_sec_trips = sum(intra)
+                    inter_sec_trips = sum(inter)
 
-                        if mat.shape[0] != mat.shape[1]:
-                            raise nd.NormitsDemandError(
-                                "The read in matrix isn't square! Read in %s and got "
-                                "shape %s" % (fname, mat.shape)
-                            )
+                    print(scenario, year, mode, p, inter_sec_trips, intra_sec_trips)
 
-                        # Generate a mask for inter and intra
-                        intra_mask = np.diag([1] * mat.shape[0])
-                        inter_mask = 1 - intra_mask
-
-                        # Calculate totals
-                        intra_sec_trips += (mat.values * intra_mask).sum()
-                        inter_sec_trips += (mat.values * inter_mask).sum()
-
-                        p_bar.update(1)
+                    p_bar.update(1)
 
                     # Add to report
                     return_ph.append({
                         'scenario': scenario,
+                        'year': year,
                         'm': mode,
                         'p': p,
                         'inter_sector': inter_sec_trips,
@@ -121,8 +155,7 @@ def get_inter_intra_trips(model_names: List[str],
                     })
 
     p_bar.close()
-    return pd.concat(return_ph)
-
+    return pd.DataFrame(return_ph)
 
 
 def get_internal_vectors(model_names: List[str],
@@ -550,7 +583,7 @@ def main():
         export_home,
     )
 
-    sector_trips.to_csv('E:/inter_intra_test.csv')
+    sector_trips.to_csv('E:/inter_intra_test.csv', index=False)
 
 
 if __name__ == '__main__':
