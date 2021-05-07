@@ -1034,7 +1034,9 @@ def filter_pa_cols(pa_frame,
 def get_costs(model_lookup_path,
               calib_params,
               tp = '24hr',
-              iz_infill = 0.5):
+              iz_infill = 0.5,
+              replace_nhb_with_hb = False,
+              ):
 
     # units takes different parameters
     # TODO: Needs a config guide for the costs somewhere
@@ -1113,6 +1115,9 @@ def get_costs(model_lookup_path,
     cost_cols = [x for x in cols if str_purpose in x]
     # Handle if we have numeric purpose costs, hope so, they're better!
     if len(cost_cols) == 0:
+        if replace_nhb_with_hb:
+            if purpose >= 10:
+                purpose -= 10
         cost_cols = [x for x in cols if ('p' + str(purpose)) in x]
 
     # Filter down on car availability
@@ -2366,6 +2371,8 @@ def parse_mat_output(list_dir,
                      file_name = 'file'):
     """
     """
+    list_dir = os.listdir(list_dir)
+
     # Define UC format
     uc = ['commute','business','other',
           'Commute', 'Business', 'Other']

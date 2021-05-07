@@ -458,6 +458,7 @@ def build_efs_io_paths(import_location: str,
         'model_home': os.path.join(import_home, model_name),
         'internal_zones': os.path.join(model_schema_home, consts.INTERNAL_AREA % model_name),
         'external_zones': os.path.join(model_schema_home, consts.EXTERNAL_AREA % model_name),
+        'param_home': model_param_home,
         'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
         'params': model_param_home,
         'post_me_factors': os.path.join(model_param_home, 'post_me_tms_decompile_factors.pkl'),
@@ -1843,6 +1844,7 @@ def sort_vector_cols(vector: pd.DataFrame,
     if zone_col is None:
         zone_col_candidates = [x for x in columns if '_zone_id' in x]
         if zone_col_candidates == list():
+            print(columns)
             raise ValueError(
                 "No zone_col argument was given. Tried to infer which "
                 "column to use, but there were not columns containing "
@@ -2383,8 +2385,16 @@ def get_zone_translation(import_dir: str,
 
     # Make sure the columns are in the correct format
     translation = translation.reindex([from_col, to_col], axis='columns')
-    translation[from_col] = translation[from_col].astype(int)
-    translation[to_col] = translation[to_col].astype(int)
+    try:
+        translation[from_col] = translation[from_col].astype(int)
+    except ValueError:
+        pass
+
+    try:
+        translation[to_col] = translation[to_col].astype(int)
+    except ValueError:
+        pass
+
     if return_dataframe:
         return translation
 
@@ -3252,7 +3262,7 @@ def sum_df_dict(dict_list: List[Dict[Any, pd.DataFrame]],
                 "Cannot find all the sum_keys in all the dictionaries."
             )
 
-    # Sub across keys
+    # Sum across keys
     ret_dict = dict()
     for k in sum_keys:
         print(k)

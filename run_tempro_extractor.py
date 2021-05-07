@@ -1,18 +1,19 @@
 
 import os
 
-import pandas as pd
-
 import normits_demand.utils.tempro_extractor as te
 
 if __name__ == '__main__':
 
     # Config
     # TODO: some tying up params to funcs here
-    get_planning_data = True
-    get_car_ownership = True  
+
+    output_years = [2011, 2018, 2027, 2033, 2035, 2040, 2050]
+
+    get_planning_data = False
+    get_car_ownership = False
     get_trip_ends = True
-    
+
     out_path = os.path.join(
         'C:/Users/',
         os.getlogin(),
@@ -22,7 +23,7 @@ if __name__ == '__main__':
     verbose = True
 
     # Build object
-    parser = te.TemproParser()
+    parser = te.TemproParser(output_years=output_years)
     
     # Get planning data
     if get_planning_data:
@@ -43,6 +44,16 @@ if __name__ == '__main__':
     
     # Get trip ends
     if get_trip_ends:
-        te_out = te.get_trip_ends(trip_type='pa',
-                                  aggregate_car=True)
-        # TODO: Finish this w/ export - underlying query is still messy
+        te_out = parser.get_trip_ends(trip_type=None,
+                                      all_commute_hb=True,
+                                      aggregate_car=True,
+                                      average_weekday=True)
+        pa = ['productions', 'attractions']
+        od = ['origins', 'destination']
+        if write:
+            te_out[te_out['trip_end_type'].isin(pa)].to_csv(
+                os.path.join(out_path,
+                             'tempro_pa_data.csv'), index=False)
+            te_out[te_out['trip_end_type'.isin(od)]].to_csv(
+                os.path.join(out_path,
+                             'tempro_od_data.csv'), index=False)

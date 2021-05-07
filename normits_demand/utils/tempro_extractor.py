@@ -46,8 +46,7 @@ class TemproParser:
         'WM_',
         'YH_'
     ]
-    _output_years = [2018, 2033, 2035, 2050]
-    _output_years_str = [str(x) for x in _output_years]
+    _output_years = [2011, 2018, 2033, 2035, 2040, 2050]
 
     planning_data_types = {
         'under16': [1],
@@ -66,6 +65,13 @@ class TemproParser:
         '3+_cars': [4],
         'nca': [1],
         'ca': [2, 3, 4]}
+
+    trip_end_types = {
+        'productions': [1],
+        'attractions': [2],
+        'origins': [3],
+        'destinations': [4]
+    }
 
     def __init__(self,
                  access_driver: str = None,
@@ -93,6 +99,7 @@ class TemproParser:
         self.data_source = data_source
         self.region_list = region_list
         self.output_years = output_years
+        self.output_years_str = [str(x) for x in output_years]
         self.out_folder = out_folder
 
         # Set up paths
@@ -161,16 +168,39 @@ class TemproParser:
             plan_dat = plan_dat.reindex(ri_list, axis=1)
 
         return plan_dat
-                    
 
-    def get_pop_emp_growth_factors(self,
-                                   verbose=True):
+    def get_trip_ends(self,
+                      trip_type=None,
+                      all_commute_hb: bool = True,
+                      aggregate_car: bool = True,
+                      average_weekday: bool = True,
+                      verbose=True):
+
+        """
+        trip_type = 'pa' or 'od':
+            If none returns both
+
+        compile_trip_end_data:
+            True or false, compile dict to dataframe or no
+
+        all_commute_hb: bool
+            If true, compiles NHB commute in TEMPRO into HB commute
+
+        aggregate_car: bool
+            Very important for car demand. If aggregate = False will take Tempro
+            mode 3 only - ie. growth in car drivers.
+            If False, will add Modes 3 & 4, so car driver and passenger.
+
+        average_weekday: bool
+            If true, drops weekends and divides weekday trips by 5
+
+        """
         # Init
         available_dbs = self.get_available_dbs()
 
         # Loop setup
-        pop_ph = list()
-        emp_ph = list()
+        te_ph = list()
+
         pbar = tqdm(
             total=len(available_dbs),
             desc="Extracting trip ends from DBs",
@@ -178,37 +208,47 @@ class TemproParser:
         )
 
         for db_fname in available_dbs:
-            pop, emp = self._get_pop_emp_factors_internal(
-                db_fname,
-                pbar,
-            )
-            pop_ph.append(pop)
-            emp_ph.append(emp)
+            if verbose:
+                print(db_fname)
 
-        # Stick all the partials together
-        pop = pd.concat(pop_ph)
-        emp = pd.concat(emp_ph)
+            te_dat = self._get_trip_ends(db_fname,
+                                         pbar,
+                                         trip_type)
 
-        # Sort by zone_col
-        pop = pop.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
-        emp = emp.sort_values(by=['msoa_zone_id']).reset_index(drop=True)
+            te_ph.append(te_dat)
 
-        # ## CALCULATE GROWTH FACTORS ## #
-        # Need to know which is the base year
-        base_year, future_years = du.split_base_future_years(self._output_years)
-        base_year_col = str(base_year)
-        future_year_cols = [str(x) for x in future_years]
+        # Compile segments dict label wise
+        te_dat = du.concat_df_dict(te_ph,
+                                   non_sum_cols=['msoa_zone_id'],
+                                   sort=True)
 
-        pop_df = pop.copy()
-        emp_gf = emp.copy()
+        # Compile to 1 df by default
+        te_dat = pd.concat(
+            te_dat, names=('trip_end_type', 'indo')).reset_index()
+        ri_list = ['msoa_zone_id', 'trip_end_type', 'Purpose',
+                   'Mode', 'TimePeriod'] + list(map(str, self.output_years))
+        te_dat = te_dat.reindex(ri_list, axis=1)
 
-        for vector in [pop_df, emp_gf]:
-            # Calculate growth factors
-            for col in future_year_cols:
-                vector[col] /= vector[base_year_col]
-            vector[base_year_col] = 1
+        if all_commute_hb:
+            te_dat['Purpose'] = te_dat['Purpose'].replace([11], 12)
 
-        return pop_df, emp_gf, pop, emp
+        if aggregate_car:
+            te_dat['Mode'] = te_dat['Mode'].replace(4, 3)
+
+        if average_weekday:
+            te_dat = te_dat[te_dat['TimePeriod'].isin([1, 2, 3, 4])]
+            for year in self.output_years:
+                te_dat[str(year)] = te_dat[str(year)]/5
+
+        # Final reindex and out
+        final_groups = ['msoa_zone_id', 'trip_end_type', 'Purpose',
+                        'Mode', 'TimePeriod']
+        final_cols = final_groups.copy() + list(map(str, self.output_years))
+        te_dat = te_dat.reindex(final_cols, axis=1)
+        te_dat = te_dat.groupby(final_groups).sum().reset_index()
+        te_dat = te_dat.sort_values(final_groups).reset_index(drop=True)
+
+        return te_dat
 
     def get_growth_factors(self, verbose=True):
         # Init
@@ -244,7 +284,7 @@ class TemproParser:
 
         # ## CALCULATE GROWTH FACTORS ## #
         # Need to know which is the base year
-        base_year, future_years = du.split_base_future_years(self._output_years)
+        base_year, future_years = du.split_base_future_years(self.output_years)
         base_year_col = str(base_year)
         future_year_cols = [str(x) for x in future_years]
 
@@ -340,7 +380,7 @@ class TemproParser:
 
         # Build factor and share outputs
         # Get headings for base and future year cols
-        base_year, future_years = du.split_base_future_years(self._output_years)
+        base_year, future_years = du.split_base_future_years(self.output_years)
         base_year_col = str(base_year)
         future_year_cols = [str(x) for x in future_years]
 
@@ -383,117 +423,113 @@ class TemproParser:
         
         return fy_ca_share, fy_ca_growth, nca, ca
 
-    def get_trip_ends(self,
-                     trip_type: str = 'pa',
-                     aggregate_car: bool = True):
+    def _get_trip_ends(self,
+                       db_fname,
+                       pbar=None,
+                       trip_type=None) -> pd.DataFrame:
+        """
+        Get segmented planning data from Tempro DB.
 
+        Parameters
+        ----------
+        db_fname : str
+            Name of DB.
+        pbar : std.tqdm
+            Progress bar
+
+        Returns
+        -------
+        trip_ends :
+            Dictionary of trip ends
         """
-        trip_type = 'pa' or 'od'
-        
-        aggregate_car: Takes True or False
-            Very important for car demand. If aggregate = False will take Tempro
-            mode 3 only - ie. growth in car drivers.
-            If False, will add Modes 3 & 4, so car driver and passenger.
-        """
+        # Init
         if trip_type == 'pa':
-            col_indices = '(1,2)'
-            col_a = 'Productions'
-            col_b = 'Attractions'
+            te = '(1,2)'
+            segmented_trip_ends = {
+                'productions': self.trip_end_types['productions'],
+                'attractions': self.trip_end_types['attractions']
+            }
+        elif trip_type == 'od':
+            te = '(3,4)'
+            segmented_trip_ends = {
+                'origins': self.trip_end_types['origins'],
+                'destinations': self.trip_end_types['destinations']
+            }
         else:
-            col_indices = '(3,4)'
-            col_a = 'Origin'
-            col_b = 'Destination'
+            te = '(1,2,3,4)'
+            segmented_trip_ends = {
+                'productions': self.trip_end_types['productions'],
+                'attractions': self.trip_end_types['attractions'],
+                'origins': self.trip_end_types['origins'],
+                'destinations': self.trip_end_types['destinations']
+            }
 
-        ntem_trans = pd.read_csv(self.ntem_trans_path)
-        ntem_code_trans = pd.read_csv(self.ntem_code_zone_trans_path)
-        ntem_lad_trans = pd.read_csv(self.ntem_lad_trans_path)
+        query = 'select * from TripEndDataByDirection where TripType in ' + te
+        target_table_attr = 'TripType'
 
-        available_dbs = self.get_available_dbs()
+        query_dat, zones = self._hit_ntem_db(
+            db_fname,
+            query)
 
-        # TODO: Check there's the full whack of regions here - say which aren't - error if any North missing
+        # Get years
+        query_dat = self._select_years_and_interpolate(query_dat)
 
-        # Iterate over all databases
-        # TODO: multithread wrapper
+        # Split off data into nice usable pots
 
-        db_ph = []
-        for db_fname in tqdm(available_dbs, desc="Extracting from DBs..."):
-            
-            trip_ends, years = self._get_pa_trip_ends(db_fname, col_indices)
+        for segment, indices in segmented_trip_ends.items():
 
+            # Filter to target
+            mask = query_dat[target_table_attr].isin(indices)
+            query_out = query_dat[mask]
 
-            # TODO: Join LA (as NTEM) to new LA (lookup)
-            # Nightmare because NTEM zone id != NTEM_zone_id - have to go round the houses
-            trip_ends = trip_ends.merge(ntem_trans,
-                                        how='inner',
-                                        on='ZoneName')
+            # ## GET INTO NORMITS NTEM ## #
+            # Attach the zones
+            query_out = pd.merge(
+                query_out,
+                zones,
+                how='left',
+                on='ZoneID'
+            )
 
-            trip_ends = trip_ends.merge(ntem_code_trans,
-                                        how='inner',
-                                        on='ntem_id')
+            # Drop this GB zone thats repeated across DBs
+            odd_zone = query_out['ZoneID'] == 9999
+            query_out = query_out[~odd_zone]
 
-            trip_ends = trip_ends.merge(ntem_lad_trans,
-                                        how='inner',
-                                        left_on='Zone_ID',
-                                        right_on='ntem_zone_id')
+            # Convert
+            query_out = self._tempro_ntem_to_normits_ntem(
+                query_out,
+                return_zone_col='ntem_zone_id'
+            )
 
-            # Reindex
-            group_cols = ['lad_zone_id', 'Purpose', 'Mode', 'TimePeriod', 'TripType']
-            target_cols = group_cols.copy()
-            for year in years:
-                target_cols.append(year)
+            # ## FILTER DOWN TO NEEDED DATA ONLY ## #
+            ri_list = ['ntem_zone_id', target_table_attr,
+                       'Purpose', 'Mode', 'TimePeriod']
+            for oy in self.output_years:
+                ri_list.append(str(oy))
+            query_out = query_out.reindex(ri_list, axis=1)
 
-            # Compile segments (mode 3&4 == 3, purpose 11 & 12 == 12)
-            # Weekdays only - ave weekday = weekday / 5 - see below
-            trip_ends['Purpose'] = trip_ends['Purpose'].replace([11], 12)
-        
-            if aggregate_car:
-                trip_ends['Mode'] = trip_ends['Mode'].replace(4, 3)
+            # Translate to MSOA
+            translator = zt.ZoneTranslator()
+            query_out = translator.run(
+                query_out,
+                pd.read_csv(self.ntem_to_msoa_path),
+                'ntem',
+                'msoa',
+                non_split_cols=['ntem_zone_id', 'Purpose', 'Mode', 'TimePeriod'])
 
-            trip_ends = trip_ends[
-                    trip_ends['TimePeriod'].isin([1, 2, 3, 4])].reset_index(drop=True)
+            # Aggregate to required data only
+            group_cols = ['msoa_zone_id', 'Purpose', 'Mode', 'TimePeriod']
+            needed_cols = group_cols.copy(
+            ) + [str(x) for x in self.output_years]
+            query_out = query_out.reindex(
+                columns=needed_cols).groupby(group_cols).sum().reset_index()
 
-            # Aggregate @ LA
-            trip_ends = trip_ends.reindex(target_cols, axis=1).groupby(
-                    group_cols).sum().reset_index()
+            segmented_trip_ends.update({segment: query_out})
 
-            # output constraint data.
-            db_ph.append(trip_ends)
+        if pbar is not None:
+            pbar.update(1)
 
-            # Subset by year & chunk out
-            out_dat = pd.concat(db_ph)
-
-        # Iterate over years, pivot out P/A - needs segments lookup like NTS script
-        out_years = [int(x) for x in list(trip_ends) if x.isdigit()]
-
-        # Test for unq zones
-        for year in out_years:
-            # Get year cols
-            target_cols = group_cols.copy()
-            target_cols.append(str(year))
-            pivot_cols = group_cols.copy()
-            pivot_cols.remove('TripType')
-
-            # Reindex
-            single_year = out_dat.reindex(target_cols, axis=1).groupby(
-                    group_cols).sum().reset_index()
-        
-            # / 5 to get weekday
-            single_year[str(year)] = single_year[str(year)]/5
-
-            # Pivot to PA
-            single_year = single_year.pivot_table(
-                    index=pivot_cols,
-                    columns=['TripType'],
-                    values=str(year)).reset_index()
-            # Rename
-            single_year = single_year.rename(
-                    columns={1: col_a, 2: col_b,
-                             3: col_a, 4: col_b})
-
-            # Write to disk
-            out_fname = "ntem_%s_ave_wday_%s.csv" % (trip_type, str(year))
-            out_path = os.path.join(self.out_folder, out_fname)
-            single_year.to_csv(out_path, index=False)
+        return segmented_trip_ends
 
     def _get_co_data(self,
                      db_fname
@@ -624,6 +660,9 @@ class TemproParser:
                           db_fname: str,
                           col_indices: str
                           ):
+
+        ## TODO: DELETE
+
         # Connect
         db_path = os.path.join(self.data_source, db_fname)
         conn_string = (
@@ -723,7 +762,7 @@ class TemproParser:
                                      tolerance: float = 0.05,
                                      ) -> pd.DataFrame:
         # Init
-        val_cols = self._output_years_str if val_cols is None else val_cols
+        val_cols = self.output_years_str if val_cols is None else val_cols
 
         ntem_trans = pd.read_csv(self.ntem_trans_path)
         ntem_code_trans = pd.read_csv(self.ntem_code_zone_trans_path)
@@ -814,7 +853,7 @@ class TemproParser:
 
         # Aggregate up to just zones
         group_cols = ['ntem_zone_id', 'TripType']
-        needed_cols = group_cols.copy() + [str(x) for x in self._output_years]
+        needed_cols = group_cols.copy() + [str(x) for x in self.output_years]
         trip_ends = trip_ends.reindex(columns=needed_cols)
         trip_ends = trip_ends.groupby(group_cols).sum().reset_index()
 
@@ -830,12 +869,12 @@ class TemproParser:
 
         # Tidy up and hold to join later
         group_cols = ['msoa_zone_id', 'TripType']
-        needed_cols = group_cols.copy() + [str(x) for x in self._output_years]
+        needed_cols = group_cols.copy() + [str(x) for x in self.output_years]
         trip_ends = trip_ends.reindex(columns=needed_cols)
         trip_ends = trip_ends.groupby(group_cols).sum().reset_index()
 
         # Divide by 5 to get the average weekday
-        for year in self._output_years_str:
+        for year in self.output_years_str:
             trip_ends[year] /= 5
 
         # ## SPLIT INTO P/A VECTORS ##
@@ -890,7 +929,9 @@ class TemproParser:
             'under16': self.planning_data_types['under16'],
             '16-74': self.planning_data_types['16-74'],
             '75+': self.planning_data_types['75+'],
-            'HHs': self.planning_data_types['HHs']
+            'HHs': self.planning_data_types['HHs'],
+            'jobs': self.planning_data_types['jobs'],
+            'workers': self.planning_data_types['workers']
             }
         for segment, indices in segmented_population.items():
             # Filter to target
@@ -935,7 +976,7 @@ class TemproParser:
             # Aggregate to required data only
             group_cols = ['msoa_zone_id']
             needed_cols = group_cols.copy(
-                ) + [str(x) for x in self._output_years]
+                ) + [str(x) for x in self.output_years]
             query_out = query_out.reindex(
                 columns=needed_cols).groupby(group_cols).sum().reset_index()
 
@@ -1024,7 +1065,7 @@ class TemproParser:
             # Aggregate to required data only
             group_cols = ['msoa_zone_id']
             needed_cols = group_cols.copy(
-            ) + [str(x) for x in self._output_years]
+            ) + [str(x) for x in self.output_years]
             query_out = query_out.reindex(
                 columns=needed_cols).groupby(group_cols).sum().reset_index()
 
@@ -1056,7 +1097,7 @@ class TemproParser:
         
         # ## AGGREGATE TO NEEDED DATA ONLY ## #
         group_cols = ['ntem_zone_id']
-        needed_cols = group_cols.copy() + [str(x) for x in self._output_years]
+        needed_cols = group_cols.copy() + [str(x) for x in self.output_years]
 
         nca = nca.reindex(
             columns=needed_cols).groupby(group_cols).sum().reset_index()
@@ -1083,7 +1124,7 @@ class TemproParser:
 
         # Tidy up and hold to join later
         group_cols = ['msoa_zone_id']
-        needed_cols = group_cols.copy() + [str(x) for x in self._output_years]
+        needed_cols = group_cols.copy() + [str(x) for x in self.output_years]
 
         nca = nca.reindex(
             columns=needed_cols).groupby(group_cols).sum().reset_index()
@@ -1161,8 +1202,7 @@ class TemproParser:
                 conn.close()
         
         return query_dat, zones
-    
-    
+
     def _select_years_and_interpolate(self,
                                       query_dat,
                                       verbose=False):
@@ -1229,5 +1269,3 @@ class TemproParser:
                 query_dat = query_dat.drop('annual_growth', axis=1)
                 
         return query_dat
-
-
