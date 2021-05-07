@@ -13,6 +13,7 @@ import numpy as np
 from normits_demand.concurrency import multiprocessing as mp
 
 from normits_demand.utils import utils as nup
+from normits_demand.utils import file_ops
 from normits_demand.reports import reports_audits as ra
 
 _TINY_INFILL = 1*10**-8
@@ -248,14 +249,14 @@ def disaggregate_segments(import_folder,
         enhanced segmentation, aggregated them. Will 
     """
     # Look at segmentation in base matrices
-    base_mat_seg = nup.parse_mat_output(os.listdir(import_folder),
+    base_mat_seg = nup.parse_mat_output(import_folder,
                                         sep = '_',
                                         mat_type = 'pa',
                                         file_name = 'base_seg').drop(
                                                 'mat_type', axis=1)
 
     # Look at segmentation in tld
-    tld_seg = nup.parse_mat_output(os.listdir(target_tld_folder),
+    tld_seg = nup.parse_mat_output(target_tld_folder,
                                    sep = '_',
                                    mat_type = 'tlb',
                                    file_name = 'enh_tld').drop(
@@ -375,6 +376,7 @@ def disaggregate_segments(import_folder,
 
     return out_dat
 
+
 def _segment_build_worker(agg_split_index,
                           unq_splits,
                           it_set,
@@ -432,6 +434,7 @@ def _segment_build_worker(agg_split_index,
     # Import and aggregate
     for ipi, ipr in import_params.iterrows():
 
+
         # Name params calib_params style
         base_params = ipr.to_dict()
         # Handle data type
@@ -440,7 +443,7 @@ def _segment_build_worker(agg_split_index,
                 base_params.update({item:int(dat)})
 
         print('Importing ' + ipr['base_seg'])
-        sd = pd.read_csv(os.path.join(import_folder, ipr['base_seg']))
+        sd = file_ops.read_df(os.path.join(import_folder, ipr['base_seg']))
         seed_name = ipr['base_seg']
 
         if 'zone' in list(sd)[0] or 'Unnamed' in list(sd)[0]:
@@ -474,7 +477,6 @@ def _segment_build_worker(agg_split_index,
                                    'trips',
                                    p_cols,
                                    unq_zone_list=unq_zone_list)
-
 
     # Get best possible attraction subset
     attr_list = _build_enhanced_pa(tld_mat,
