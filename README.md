@@ -92,3 +92,5 @@ better with TMS output paths.
 - Added Mobile Network Data LOT 2 segmentor and privacy masker
 - Future years changed - 2035 has been swapped for 2040
 
+### v0.3.5
+
