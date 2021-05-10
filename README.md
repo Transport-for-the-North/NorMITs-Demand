@@ -86,7 +86,9 @@ better with TMS output paths.
 - Updated the PopEmpComparator to use the new land use imports to compare to.
 - Fixed issue in Production/Attraction models dropping population and employment
 - Updated NoRMS I/O to decompile post-ME and compile outputs correctly for NoRMS
+    - Fixed an issue with demand being dropped - issue added to backlog for a full fix 
 
 - CS - Write updates to TMS since last merge
 - Added Mobile Network Data LOT 2 segmentor and privacy masker
+- Future years changed - 2035 has been swapped for 2040
 

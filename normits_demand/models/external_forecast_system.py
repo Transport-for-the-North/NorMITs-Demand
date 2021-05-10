@@ -1190,7 +1190,7 @@ class ExternalForecastSystem:
                 round_dp=round_dp,
             )
 
-        # # Set up the segmentation params
+        # Set up the segmentation params
         seg_level = 'tms'
         seg_params = {
             'p_needed': hb_p_needed,
@@ -1447,7 +1447,7 @@ class ExternalForecastSystem:
         elif self.model_name == 'norms':
             # Load in the splitting factors
             fname = consts.POSTME_FROM_TO_FACTORS_FNAME
-            path = os.path.join(self.params['home'], fname)
+            path = os.path.join(self.imports['params'], fname)
             from_to_split_factors = pd.read_pickle(path)
 
             # Compile

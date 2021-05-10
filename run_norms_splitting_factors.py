@@ -16,11 +16,13 @@ import pandas as pd
 
 import normits_demand.constants as consts
 from normits_demand.matrices import matrix_processing as mat_p
+from normits_demand.matrices import decompilation
 
 PA_MATRICES_DIR = r'I:\NorMITs Synthesiser\Norms\iter4\Compilation Outputs'
-PA_24_MATRICES_DIR = r'I:\NorMITs Synthesiser\Norms\iter4\24hr PA Matrices'
-PA_VDM_MATRICES_DIR = r'I:\NorMITs Synthesiser\Norms\iter4\24hr VDM PA Matrices'
-PARAMS_EXPORT = r'I:\NorMITs Synthesiser\Norms\iter4\params'
+PA_MATRICES_DIR = None
+PA_24_MATRICES_DIR = r'I:\NorMITs Synthesiser\Norms_2015\iter4\24hr PA Matrices'
+PA_VDM_MATRICES_DIR = r'I:\NorMITs Synthesiser\Norms_2015\iter4\24hr VDM PA Matrices'
+PARAMS_EXPORT = r'I:\NorMITs Synthesiser\Norms_2015\iter4\params'
 
 MODEL_SCHEMA_DIR = r'I:\NorMITs Demand\import\norms\model schema'
 BASE_YEAR = '2018'
@@ -28,7 +30,7 @@ BASE_YEAR = '2018'
 AVOID_ZERO_SPLITS = True
 
 
-def main():
+def generate_splitting_factors():
     int_path = os.path.join(MODEL_SCHEMA_DIR, consts.INTERNAL_AREA % 'norms')
     ext_path = os.path.join(MODEL_SCHEMA_DIR, consts.EXTERNAL_AREA % 'norms')
 
@@ -60,11 +62,30 @@ def main():
         m_needed=consts.MODEL_MODES['norms'],
         internal_zones=internal_zones,
         external_zones=external_zones,
-        post_me_import=None,
         matrix_format='pa',
         avoid_zero_splits=AVOID_ZERO_SPLITS
     )
 
 
+def split_post_me():
+    post_me_in = r'I:\NorMITs Synthesiser\Norms_2015\iter4\Norms 15 Post ME'
+    renamed_pme = r'I:\NorMITs Synthesiser\Norms_2015\iter4\Norms 15 Post ME\renamed'
+    tms_post_me_out = r'I:\NorMITs Synthesiser\Norms_2015\iter4\Norms 15 Post ME\tms_seg'
+    params_dir = r'I:\NorMITs Synthesiser\Norms_2015\iter4\params'
+
+    decompilation.decompile_norms(
+        year=2018,
+        post_me_import=post_me_in,
+        post_me_renamed_export=renamed_pme,
+        post_me_decompiled_export=tms_post_me_out,
+        decompile_factors_dir=params_dir,
+        from_to_factors_out=None,
+        audit_tol=0.3,
+    )
+
+
 if __name__ == '__main__':
-    main()
+    # generate_splitting_factors()
+
+    split_post_me()
+

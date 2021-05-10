@@ -1844,6 +1844,7 @@ def sort_vector_cols(vector: pd.DataFrame,
     if zone_col is None:
         zone_col_candidates = [x for x in columns if '_zone_id' in x]
         if zone_col_candidates == list():
+            print(columns)
             raise ValueError(
                 "No zone_col argument was given. Tried to infer which "
                 "column to use, but there were not columns containing "
@@ -2384,8 +2385,16 @@ def get_zone_translation(import_dir: str,
 
     # Make sure the columns are in the correct format
     translation = translation.reindex([from_col, to_col], axis='columns')
-    translation[from_col] = translation[from_col].astype(int)
-    translation[to_col] = translation[to_col].astype(int)
+    try:
+        translation[from_col] = translation[from_col].astype(int)
+    except ValueError:
+        pass
+
+    try:
+        translation[to_col] = translation[to_col].astype(int)
+    except ValueError:
+        pass
+
     if return_dataframe:
         return translation
 
