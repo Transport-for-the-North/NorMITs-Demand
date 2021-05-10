@@ -249,14 +249,14 @@ def disaggregate_segments(import_folder,
         enhanced segmentation, aggregated them. Will 
     """
     # Look at segmentation in base matrices
-    base_mat_seg = nup.parse_mat_output(import_folder,
+    base_mat_seg = nup.parse_mat_output(os.listdir(import_folder),
                                         sep = '_',
                                         mat_type = 'pa',
                                         file_name = 'base_seg').drop(
                                                 'mat_type', axis=1)
 
     # Look at segmentation in tld
-    tld_seg = nup.parse_mat_output(target_tld_folder,
+    tld_seg = nup.parse_mat_output(os.listdir(target_tld_folder),
                                    sep = '_',
                                    mat_type = 'tlb',
                                    file_name = 'enh_tld').drop(

@@ -2364,6 +2364,7 @@ def get_compilation_params(lookup_folder,
 
     return out_dict
 
+
 def parse_mat_output(list_dir,
                      sep = '_',
                      mat_type = 'dat',
@@ -2371,7 +2372,6 @@ def parse_mat_output(list_dir,
                      file_name = 'file'):
     """
     """
-    list_dir = os.listdir(list_dir)
 
     # Define UC format
     uc = ['commute','business','other',

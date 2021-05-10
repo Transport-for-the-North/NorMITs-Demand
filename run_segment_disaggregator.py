@@ -157,5 +157,5 @@ def rename_tst_outputs():
 
 
 if __name__ == '__main__':
-   main()
-   # rename_tst_outputs()
+    main()
+    # rename_tst_outputs()
