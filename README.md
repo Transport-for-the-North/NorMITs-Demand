@@ -88,4 +88,5 @@ better with TMS output paths.
 - Updated NoRMS I/O to decompile post-ME and compile outputs correctly for NoRMS
 
 - CS - Write updates to TMS since last merge
+- Added Mobile Network Data LOT 2 segmentor and privacy masker
 
