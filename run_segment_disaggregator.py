@@ -10,6 +10,8 @@ ITER_NAME = 'iter4'
 # Noham == iter8c
 # Norms == iter4
 
+# BACKLOG: Adjust output of TST so EFS can take in as is
+#  labels: EFS, QoL Updates
 
 def main():
     global MODEL_NAME
@@ -66,8 +68,8 @@ def main():
         furness_loops=1999,
         min_pa_diff=.1,
         bs_con_crit=.975,
-        max_bs_loops=50,
-        mp_threads=0,
+        max_bs_loops=200,
+        mp_threads=-1,
         export_original=True,
         export_furness=False)
 
@@ -88,7 +90,7 @@ def main():
         furness_loops=1999,
         min_pa_diff=.1,
         bs_con_crit=.975,
-        max_bs_loops=50,
+        max_bs_loops=200,
         mp_threads=-1,
         export_original=True,
         export_furness=False)
