@@ -36,7 +36,7 @@ def main():
     run_bespoke_zones = False
     ignore_bespoke_zones = True
 
-    run_pa_to_od = True
+    run_pa_to_od = False
     run_compile_mats = False
     run_decompile_post_me = True
     run_future_year_compile_od = False
