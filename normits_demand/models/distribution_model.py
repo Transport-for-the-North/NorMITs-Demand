@@ -11,2046 +11,1162 @@ using the census journey to work data reformatted to model dimensions
 import pandas as pd # most of the heavy lifting
 import os # File ops
 
+import normits_demand.build.tms_pathing as tms
+
 from normits_demand.concurrency import multiprocessing as mp
 from normits_demand.distribution import gravity_model as gm # For distribution functions
 from normits_demand.utils import utils as nup # Folder management, reindexing, optimisation
 
-import warnings # Non-critical warnings
 
-# TODO: Keep separate area type lookups.
-# TODO: Write params for various outputs - full, fast, custom
-# TODO: More numpy & more square format exports. Especially for TDM & PA2OD
-
-_default_import_file_drive = "Y:/"
-_default_model_name = 'Noham'
-_default_iter = 'iter7c'
-
-_default_target_trip_length_path = 'Y:/NorMITs Synthesiser/import/average_trip_length_2017.csv'
-_default_time_period_splits_path = 'Y:/NorMITs Synthesiser/import/IphiHDHD_Final.csv'
-_default_rounding = 3
-
-def path_config(file_drive = _default_import_file_drive,
-                model_name = _default_model_name,
-                iteration = _default_iter,
-                trip_origin = 'hb'):
-
-    """
-    Sets paths for imports to be set as variables.
-    Creates project folders.
-
-    Parameters
-    ----------
-    file_drive = 'Y:/':
-        Name of root drive to do work on. Defaults to TfN Y drive.
-
-    model_name:
-        Name of model as string. Should be same as model descriptions.
-
-    iteration:
-        Current iteration of model. Defaults to global default.
-
-    Returns
-    ----------
-    [0] imports:
-        Paths to all Synthesiser import parameters.
-
-    [1] exports:
-        Paths to all Synthesiser output parameters
-    """
-
-    # Set base dir
-    home_path = os.path.join(file_drive, 'NorMITs Synthesiser')
-
-    # Set synth import folder
-    import_path = os.path.join(home_path, 'import')
-
-    # Set top level model folder, leave the slash on
-    model_path = os.path.join(home_path,
-                              model_name,
-                              iteration)
-    model_path += os.path.sep
-
-    # Set model lookups location
-    model_lookup_path = os.path.join(home_path,
-                                     model_name,
-                                     'Model Zone Lookups')
-
-    # Set production path, leave slash on
-    production_path = os.path.join(model_path, 'Production Outputs')
-    production_path += os.path.sep
-
-    # Set production path
-    production_path = (model_path +
-                       'Production Outputs/')
-
-    # Set attraction path
-    attraction_path = (model_path +
-                     'Attraction Outputs/')
-
-    # Production import path
-    if trip_origin =='hb':
-        p_import_path = (production_path +
-                         model_name.lower() +
-                         '_hb_internal_productions.csv')
-        a_import_path = (attraction_path +
-                         model_name.lower() +
-                         '_hb_internal_attractions.csv')
-    elif trip_origin == 'nhb':
-        p_import_path = (production_path +
-                         model_name.lower() +
-                         '_nhb_internal_productions.csv')
-        a_import_path = (attraction_path +
-                         model_name.lower() +
-                         '_nhb_internal_attractions.csv')
-    # Raise user warning if no productions by this name
-    if not os.path.exists(p_import_path):
-        warnings.warn('No productions in folder.' +
-                      'Check path or run production model')
-
-    # Raise user warning if no productions by this name
-    if not os.path.exists(a_import_path):
-        warnings.warn('No attractions in folder.' +
-                      'Check path or run attraction model')
-
-    # Create project folders
-    distribution_path = os.path.join(model_path, 'Distribution Outputs')
-    nup.create_folder(distribution_path, chDir=False)
-
-    fusion_path = os.path.join(model_path, 'Fusion Outputs')
-    nup.create_folder(fusion_path, chDir=False)
-
-    pcu_path = os.path.join(model_path, 'PCU Outputs')
-    nup.create_folder(pcu_path)
-
-    # Set distribution outputs (synthetic)
-    reports = os.path.join(distribution_path, 'Logs & Reports')
-    nup.create_folder(reports)
-
-    summary_matrix_export = os.path.join(distribution_path, '24hr PA Distributions')
-    nup.create_folder(summary_matrix_export)
-
-    cjtw_hb_export = os.path.join(distribution_path, 'Cjtw PA Distributions')
-    nup.create_folder(cjtw_hb_export)
-
-    external_export = os.path.join(distribution_path, 'External Distributions')
-    nup.create_folder(external_export)
-
-    bin_export = os.path.join(distribution_path, 'Trip Length Distributions')
-    nup.create_folder(bin_export)
-
-    pa_export = os.path.join(distribution_path, 'PA Matrices')
-    nup.create_folder(pa_export)
-
-    pa_export_24 = os.path.join(distribution_path, 'PA Matrices 24hr')
-    nup.create_folder(pa_export_24)
-
-    arrival_export = os.path.join(distribution_path, 'D Arrivals')
-    nup.create_folder(arrival_export)
-
-    od_export = os.path.join(distribution_path, 'OD Matrices')
-    nup.create_folder(od_export)
-
-    me_export = os.path.join(distribution_path, 'PostME OD Matrices')
-    nup.create_folder(me_export)
-
-    compiled_pa_export = os.path.join(distribution_path, 'Compiled PA Matrices')
-    nup.create_folder(compiled_pa_export)
-
-    compiled_od_export = os.path.join(distribution_path, 'Compiled OD Matrices')
-    nup.create_folder(compiled_od_export)
-
-    # Set fusion exports
-    fusion_summary_export = os.path.join(fusion_path, '24hr Fusion PA Distributions')
-    nup.create_folder(fusion_summary_export)
-
-    fusion_pa_export = os.path.join(fusion_path, 'Fusion PA Matrices')
-    nup.create_folder(fusion_pa_export)
-
-    fusion_od_export = os.path.join(fusion_path, 'Fusion OD Matrices')
-    nup.create_folder(fusion_od_export)
-
-    pcu_od_export = os.path.join(pcu_path, 'PCU OD Matrices')
-    nup.create_folder(pcu_od_export)
-
-    compiled_fusion_pa_export = os.path.join(fusion_path, 'Compiled Fusion PA Matrices')
-    nup.create_folder(compiled_fusion_pa_export)
-
-    compiled_fusion_od_export = os.path.join(fusion_path, 'Compiled Fusion OD Matrices')
-    nup.create_folder(compiled_fusion_od_export)
-
-    # Compile into import and export
-    imports = {'imports': import_path,
-               'lookups': model_lookup_path,
-               'production_import': p_import_path,
-               'attraction_import': a_import_path}
-
-    exports = {'production_export': production_path,
-               'attraction_export': attraction_path,
-               'reports': reports,
-               'summaries': summary_matrix_export,
-               'cjtw': cjtw_hb_export,
-               'external': external_export,
-               'tld': bin_export,
-               'pa': pa_export,
-               'pa_24': pa_export_24,
-               'od_export': od_export,
-               'arrival_export': arrival_export,
-               'me_export': me_export,
-               'c_pa_export': compiled_pa_export,
-               'c_od_export': compiled_od_export,
-               'fusion_summaries': fusion_summary_export,
-               'fusion_pa_export': fusion_pa_export,
-               'fusion_od_export': fusion_od_export,
-               'pcu_od_export': pcu_od_export,
-               'c_fusion_pa_export': compiled_fusion_pa_export,
-               'c_fusion_od_export': compiled_fusion_od_export}
-
-    return imports, exports
-
-
-def rail_audit(productions,
-               nhb_productions):
-
-    # If I was going to control rail it would be here
-    # TODO: Control rail to ~9% of total
-    hb_rail_internal = productions.copy()
-    hb_rail_internal = hb_rail_internal[hb_rail_internal['m']==6]
-    hb_rail_internal = hb_rail_internal[hb_rail_internal['norms_zone_id']<=1095]
-    hb_rail_internal = hb_rail_internal.reindex(['norms_zone_id',
-                                                     'p',
-                                                     'trips'],
-    axis=1).groupby(['norms_zone_id',
-              'p']).sum().reset_index()
-
-    # hb rail internal
-    hb_rail_total = hb_rail_internal['trips'].sum()
-
-    # nhb rail internal
-    nhb_rail_internal = nhb_productions.copy()
-    nhb_rail_internal = nhb_rail_internal[nhb_rail_internal['m']==6]
-    nhb_rail_internal = nhb_rail_internal[nhb_rail_internal['o_zone']<=1095]
-    nhb_rail_internal = nhb_rail_internal.reindex(['o_zone',
-                                                   'p',
-                                                       'trips'],
-    axis=1).groupby(['o_zone',
-              'p']).sum().reset_index()
-
-    # hb rail internal
-    nhb_rail_total = nhb_rail_internal['trips'].sum()
-
-    return(hb_rail_total, nhb_rail_total)
-
-def get_production_splits(productions,
-                          ia_name):
-    """
-    Function to get splits from production zone into time, car_availability,
-    employment type and age.
-    Recently gutted to work with NHB out of the box.
-
-    Parameters
-    ----------
-    productions:
-        Time period productions from production model.
-
-    ia_name:
-        Name of internal area, proxy for model name.
-
-    Returns
-    ---------
-    production_splits:
-        Vector of factors to multiply production zone productions by to get
-        splits in function description.
-    """
-    # TODO: Make this work with custom segments, and by extension NHB.
-
-
-    # Figure out what sort of mode we're dealing with
-    if 'mode' in list(productions):
-        mode_col = 'mode'
-        purpose_col = 'purpose'
-    elif 'm' in list(productions):
-        mode_col = 'm'
-        purpose_col = 'p'
-
-    ps_cols = [ia_name, mode_col, purpose_col]
-    ps = productions.reindex([ia_name, mode_col, purpose_col, 'trips'],
-                             axis=1).groupby(
-                                     ps_cols).sum().reset_index().copy()
-    ps = ps.rename(columns={'trips':'total_trips'})
-
-    total_p = productions.reindex([ia_name,
-                                   mode_col,
-                                   purpose_col,
-                                   'tp',
-                                   'trips'],
-    axis=1).groupby([ia_name, mode_col, purpose_col, 'tp']).sum().reset_index().copy()
-
-    production_splits = total_p.merge(ps,
-                                      how='left',
-                                      on=ps_cols)
-
-    production_splits['time_split'] = (production_splits['trips'] /
-                     production_splits['total_trips'])
-
-    production_splits = production_splits.drop(
-            ['trips', 'total_trips'], axis=1)
-
-    return(production_splits)
-
-
-def distribute_cjtw(internal_24hr_productions,
-                    model_lookup_path,
-                    ia_name,
-                    model_name,
-                    calib_params,
-                    cost_type = '24hr',
-                    subset=None,
-                    echo=True):
-    """
-    This distributes commute productions by census journey to work distributions
-    using zone to zone movements as a factor.
-
-    Parameters
-    ----------
-    internal_24hr_productions:
-        Commute only productions, should be pre-filtered before coming into
-        function.
-
-    ia_name:
-        The name of the internal area of the model in use. Required for
-        ensuring the right columns come through.
-
-    model_name:
-        Name of model. From global definition
-
-    distribution_segments:
-        Segments to distribute to. From distribution model definition.
-
-    model_lookup_path:
-        A model folder to pass to get_cjtw to find a census journey to work
-        distribution.
-
-    subset:
-        Takes a vector of model zones to filter by. Mostly for test model runs.
-
-    echo:
-        Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops.
-        Defaults to True.
-
-    Returns
-    ----------
-    [0] commute_pa:
-        A 24hr commute matrix distributed by census journey to work, internal
-        only, wide format.
-
-    [1] d_bin:
-        Trip length distribution bins (km) for cjtw distribution
-    """
-
-    # Get unique internal zones in a smart way
-    min_zone = min(internal_24hr_productions['p_zone'])
-    max_zone = max(internal_24hr_productions['p_zone'])
-    unq_internal_zones = [i for i in range(min_zone,max_zone+1)]
-
-    # Filter to calib params - should be p1 only
-    target_p = nup.filter_pa_cols(internal_24hr_productions,
-                                  'p_zone',
-                                  calib_params,
-                                  round_val=3,
-                                  echo=echo)[0]
-    target_p = target_p.rename(
-            columns={list(target_p)[-1]: 'productions'})
-
-    target_p = target_p.rename(columns={'p_zone': ia_name})
-
-    # Get productions before
-    total_commute_productions = target_p['productions'].sum()
-    
-    # Get census journey to work
-    cjtw = nup.get_cjtw(model_lookup_path,
+class DistributionModel(tms.TMSPathing):
+    pass
+
+    def distribute_cjtw(
+            self,
+            internal_24hr_productions,
+                        model_lookup_path,
+                        ia_name,
                         model_name,
-                        subset=subset)
+                        calib_params,
+                        cost_type = '24hr',
+                        subset=None,
+                        verbose=True):
+        """
+        This distributes commute productions by census journey to work distributions
+        using zone to zone movements as a factor.
 
-    # Get area of residence col name
-    aor_col = list(cjtw)[0]
-    # Get area of workplace col name
-    aow_col = list(cjtw)[1]
-    # Change mode desc col to int for join
-    # TODO: I would like this type change to be done in the function call
-    cjtw['mode'] = cjtw['mode'].astype('int8')
-    # Rename as m
-    cjtw = cjtw.rename(columns={'mode': 'm'})
-    # Filter to calib params mode
-    cjtw = cjtw[cjtw['m']==calib_params['m']].reset_index(drop=True)
-    cjtw = cjtw.drop('m', axis=1)
+        Parameters
+        ----------
+        internal_24hr_productions:
+            Commute only productions, should be pre-filtered before coming into
+            function.
 
-    commute_pa = target_p.merge(cjtw,
+        ia_name:
+            The name of the internal area of the model in use. Required for
+            ensuring the right columns come through.
+
+        model_name:
+            Name of model. From global definition
+
+        distribution_segments:
+            Segments to distribute to. From distribution model definition.
+
+        model_lookup_path:
+            A model folder to pass to get_cjtw to find a census journey to work
+            distribution.
+
+        subset:
+            Takes a vector of model zones to filter by. Mostly for test model runs.
+
+        verbose:
+            Indicates whether to print a log of the process to the terminal.
+            Useful to set verbose=False when using multi-threaded loops.
+            Defaults to True.
+
+        Returns
+        ----------
+        [0] commute_pa:
+            A 24hr commute matrix distributed by census journey to work, internal
+            only, wide format.
+
+        [1] d_bin:
+            Trip length distribution bins (km) for cjtw distribution
+        """
+
+        # Get unique internal zones in a smart way
+        min_zone = min(internal_24hr_productions['p_zone'])
+        max_zone = max(internal_24hr_productions['p_zone'])
+        unq_internal_zones = [i for i in range(min_zone,max_zone+1)]
+
+        # Filter to calib params - should be p1 only
+        target_p = nup.filter_pa_cols(internal_24hr_productions,
+                                      'p_zone',
+                                      calib_params,
+                                      round_val=3,
+                                      verbose=verbose)[0]
+        target_p = target_p.rename(
+                columns={list(target_p)[-1]: 'productions'})
+
+        target_p = target_p.rename(columns={'p_zone': ia_name})
+
+        # Get productions before
+        total_commute_productions = target_p['productions'].sum()
+
+        # Get census journey to work
+        cjtw = nup.get_cjtw(model_lookup_path,
+                            model_name,
+                            subset=subset)
+
+        # Get area of residence col name
+        aor_col = list(cjtw)[0]
+        # Get area of workplace col name
+        aow_col = list(cjtw)[1]
+        # Change mode desc col to int for join
+        # TODO: I would like this type change to be done in the function call
+        cjtw['mode'] = cjtw['mode'].astype('int8')
+        # Rename as m
+        cjtw = cjtw.rename(columns={'mode': 'm'})
+        # Filter to calib params mode
+        cjtw = cjtw[cjtw['m']==calib_params['m']].reset_index(drop=True)
+        cjtw = cjtw.drop('m', axis=1)
+
+        commute_pa = target_p.merge(cjtw,
+                                    how='left',
+                                    left_on=[ia_name],
+                                    right_on=[aor_col])
+
+        commute_pa = commute_pa.rename(columns={aor_col: 'p_zone',
+                                                aow_col: 'a_zone'})
+        commute_pa = commute_pa.drop(ia_name, axis=1)
+
+        # Balance to production totals
+        commute_pa['dt'] = commute_pa['productions'] * commute_pa['distribution']
+
+        total_cjtw_productions = commute_pa['dt'].sum()
+
+        commute_pa['p_zone'] = commute_pa['p_zone'].astype('int16')
+        commute_pa['a_zone'] = commute_pa['a_zone'].astype('int16')
+
+        # TODO: Log audit variables
+        prod_diff = total_commute_productions - total_cjtw_productions
+
+        nup.print_w_toggle('Difference in productions:', str(prod_diff), verbose=verbose)
+
+        # Drop stuff we don't need
+        commute_pa = commute_pa.drop(['productions', 'distribution'], axis=1)
+        long_pa = commute_pa.copy()
+
+        # Push to wide format
+        commute_pa = nup.df_to_np(commute_pa,
+                                  v_heading='p_zone',
+                                  h_heading='a_zone',
+                                  values='dt',
+                                  unq_internal_zones=unq_internal_zones,
+                                  verbose=verbose)
+
+        commute_pa = pd.DataFrame(commute_pa,
+                                  index=unq_internal_zones,
+                                  columns=unq_internal_zones)
+
+        # Get costs for trip length curve only
+        internal_costs = nup.get_costs(model_lookup_path,
+                                       calib_params,
+                                       tp=cost_type,
+                                       iz_infill=0.5)
+
+        nup.print_w_toggle('Cost lookup returned ' + internal_costs[1], verbose=verbose)
+        internal_costs = internal_costs[0].copy()
+
+        # Build a trip length curve
+        # TODO: Failing for some reason
+        d_bin = nup.build_distribution_bins(internal_costs,
+                                            long_pa,
+                                            verbose=verbose)
+
+        return commute_pa, d_bin
+
+    def get_distribution_parameters(
+            self,
+            initial_betas,
+            calib_params):
+        """
+        This function retreives a beta from an initial beta sheet in the input
+        folder. It takes the purpose, mode and traget trip lengths.
+
+        Parameters
+        ----------
+        initial_betas:
+            A list of segmented productions for the internal area to be aggregated.
+            Will need to have standard NorMITs Synthesiser column names.
+
+        calib_params:
+            A dictionary containing calibration parameters for a given distribution
+            run.
+
+        Returns
+        ----------
+        beta:
+            24hr productions by zone by mode and purpose. Ready for distribution.
+
+        ttl:
+            Target trip length from beta segment.
+        """
+        beta_subset = initial_betas.copy()
+
+        # Quite lovely dictionary loop to define intial betas.
+        # Will throw an error if the betas can't give it an exact beta for a segment.
+        # Should be handled by a beta seeding function in the run_gravity_model.
+        for index, cp in calib_params.items():
+            beta_subset = beta_subset[
+                    beta_subset[index] == cp
+            ].reset_index(drop=True)
+
+        init_param_a = beta_subset['init_param_a'][0]
+        init_param_b = beta_subset['init_param_b'][0]
+        ttl = beta_subset['average_trip_length'][0]
+
+        distribution_params = {'init_param_a':init_param_a,
+                               'init_param_b':init_param_b,
+                               'ttl':ttl}
+        return distribution_params
+
+    def translate_distribution(
+        self,
+        om_dist,
+        model_name,
+        other_model_name,
+        internal_24hr_productions,
+        calib_params,
+        target_path):
+
+        """
+        Translate distribution from one model zoning system to another using
+        given lookups
+        """
+
+        # Drop segments from distribution, retain p/a & trips
+        om_dist = om_dist.reindex(['p_zone', 'a_zone', 'dt'], axis=1)
+
+        # Get original total productions
+        om_productions = om_dist['dt'].sum()
+
+        lookup_types = [(other_model_name + '_' + model_name.lower()),
+                        (model_name.lower()) + '_' + other_model_name]
+        # Check for lookup types, pop weighted and employment weighted
+        # TODO: if there isn't one run one - or have this at the outset
+        zone_translation_lookups = []
+        mzl_dir = os.listdir(target_path)
+        for lt in lookup_types:
+            ztl = [x for x in mzl_dir if lt in x]
+            if len(ztl) > 0:
+                zone_translation_lookups.append(ztl)
+        # flatten list of lists
+        zone_translation_lookups = [x for y in zone_translation_lookups for x in y]
+        # Pull out individuals
+        zt_pop = [x for x in zone_translation_lookups if 'pop' in x][0]
+        zt_emp = [x for x in zone_translation_lookups if 'emp' in x][0]
+
+        zt_pop = pd.read_csv((target_path + '/' + zt_pop))
+        zt_emp = pd.read_csv((target_path + '/' + zt_emp))
+
+        # Define index cols for lookups
+        li_cols = [(other_model_name + '_zone_id'),
+                   (model_name.lower() + '_zone_id'),
+                   ('overlap_' + other_model_name + '_split_factor')]
+
+        # Model name first, other model second
+        split_factor_col = ('overlap_' + other_model_name + '_split_factor')
+
+        zt_pop = zt_pop.reindex(li_cols, axis=1)
+        zt_emp = zt_emp.reindex(li_cols, axis=1)
+
+        # Process to get cleaner matches
+        original_model_col = (other_model_name + '_zone_id')
+        target_model_col = (model_name.lower() + '_zone_id')
+
+        # Round & drop 0 segments
+        zt_pop[split_factor_col] = zt_pop[split_factor_col].round(3)
+        zt_pop = zt_pop[zt_pop[split_factor_col]>0]
+
+        # Correct factors back to 0
+        zt_pop_tot = zt_pop.reindex([original_model_col, split_factor_col], axis=1).groupby(
+                original_model_col).sum().reset_index()
+
+        # Derive adjustment for factor
+        zt_pop_tot['adj_factor'] = 1/(zt_pop_tot[split_factor_col]/1)
+        zt_pop_tot = zt_pop_tot.drop(split_factor_col, axis=1)
+        zt_pop = zt_pop.merge(zt_pop_tot,
+                              how='left',
+                              on = original_model_col)
+        zt_pop[split_factor_col] = zt_pop[split_factor_col] * zt_pop['adj_factor']
+        zt_pop = zt_pop.drop('adj_factor', axis=1)
+
+        # Round & drop 0 segments
+        zt_emp[split_factor_col] = zt_emp[split_factor_col].round(3)
+        zt_emp = zt_emp[zt_emp[split_factor_col]>0]
+
+        # Correct factors back to 0
+        zt_emp_tot = zt_emp.reindex([original_model_col,
+                                     split_factor_col],
+        axis=1).groupby(
+                original_model_col).sum().reset_index()
+        # Derive adjustment for factor
+        zt_emp_tot['adj_factor'] = 1/(zt_emp_tot[split_factor_col]/1)
+        zt_emp_tot = zt_emp_tot.drop(split_factor_col, axis=1)
+        zt_emp = zt_emp.merge(zt_emp_tot,
+                              how='left',
+                              on = original_model_col)
+        zt_emp[split_factor_col] = zt_emp[split_factor_col] * zt_emp['adj_factor']
+        zt_emp = zt_emp.drop('adj_factor', axis=1)
+        # zone translations defined
+
+        # Rename destination zone names to join w/o duplication
+        zt_pop = zt_pop.rename(
+                columns={(other_model_name + '_zone_id'):'p_zone'})
+        zt_emp = zt_emp.rename(
+                columns={(other_model_name + '_zone_id'):'a_zone'})
+
+        # Transform model demand to current model zones
+        # Bring in population split for productions
+        om_dist = om_dist.merge(zt_pop,
                                 how='left',
-                                left_on=[ia_name],
-                                right_on=[aor_col])
+                                on='p_zone')
+        # Multiply out
+        om_dist['dt'] = om_dist['dt'] * om_dist[('overlap_' + other_model_name + '_split_factor')]
+        om_dist = om_dist.drop(
+                ['p_zone',
+                 'overlap_' + other_model_name + '_split_factor'], axis=1)
+        om_dist = om_dist.rename(
+                columns={(model_name.lower() + '_zone_id'):'p_zone'})
+        # Group and sum
+        group_cols = ['p_zone', 'a_zone']
+        sum_cols = group_cols.copy()
+        sum_cols.append('dt')
 
-    commute_pa = commute_pa.rename(columns={aor_col: 'p_zone',
-                                            aow_col: 'a_zone'})
-    commute_pa = commute_pa.drop(ia_name, axis=1)
+        om_dist = om_dist.reindex(
+                sum_cols,axis=1).groupby(
+                        group_cols).sum().reset_index()
 
-    # Balance to production totals
-    commute_pa['dt'] = commute_pa['productions'] * commute_pa['distribution']
+        # Bring in employment split for attractions
+        om_dist = om_dist.merge(zt_emp,
+                                how='left',
+                                on='a_zone')
+        # Multiply out
+        om_dist['dt'] = om_dist['dt'] * om_dist[('overlap_' + other_model_name + '_split_factor')]
+        om_dist = om_dist.drop(
+                ['a_zone',
+                 'overlap_' + other_model_name + '_split_factor'], axis=1)
+        om_dist = om_dist.rename(
+                columns={(model_name.lower() + '_zone_id'):'a_zone'})
+        # Group and sum
+        om_dist = om_dist.reindex(
+                sum_cols,axis=1).groupby(
+                        group_cols).sum().reset_index()
 
-    total_cjtw_productions = commute_pa['dt'].sum()
+        # Audit total
+        if om_productions.round(0) == om_dist['dt'].sum().round(0):
+            print('Balanced well')
+        else:
+            print('Balance off') # TODO: Bit more
 
-    commute_pa['p_zone'] = commute_pa['p_zone'].astype('int16')
-    commute_pa['a_zone'] = commute_pa['a_zone'].astype('int16')
+        # Reduce to zonal factors to apply new productions to
+        om_dist_p_totals = om_dist.reindex(['p_zone', 'dt'], axis=1).groupby('p_zone').sum().reset_index()
+        om_dist_p_totals = om_dist_p_totals.rename(columns={'dt':'dt_total'})
 
-    # TODO: Log audit variables
-    prod_diff = total_commute_productions - total_cjtw_productions
+        om_dist = om_dist.merge(om_dist_p_totals,
+                                how='left',
+                                on='p_zone')
+        # Derive p/a share by p
+        om_dist['p_a_share'] = om_dist['dt']/om_dist['dt_total']
+        om_dist = om_dist.drop(['dt', 'dt_total'],axis=1)
 
-    nup.print_w_toggle('Difference in productions:', str(prod_diff), echo=echo)
+        # Get target productions
+        target_p = nup.filter_distribution_p(internal_24hr_productions,
+                                             model_name.lower() + '_zone_id',
+                                             calib_params,
+                                             round_val=3)
 
-    # Drop stuff we don't need
-    commute_pa = commute_pa.drop(['productions', 'distribution'], axis=1)
-    long_pa = commute_pa.copy()
+        original_p = target_p['productions'].sum()
+        target_p = target_p.rename(columns={target_model_col:'p_zone'})
 
-    # Push to wide format
-    commute_pa = nup.df_to_np(commute_pa,
-                              v_heading='p_zone',
-                              h_heading='a_zone',
-                              values='dt',
-                              unq_internal_zones=unq_internal_zones,
-                              echo=echo)
+        # Join on distribution
+        target_p = target_p.merge(om_dist,
+                                  how='left',
+                                  on='p_zone')
+        target_dist = target_p.copy()
+        target_dist['dt'] = (target_dist['productions'] *
+                   target_dist['p_a_share'])
+        target_dist = target_dist.drop(['productions', 'p_a_share'], axis=1)
 
-    commute_pa = pd.DataFrame(commute_pa,
-                              index=unq_internal_zones,
-                              columns=unq_internal_zones)
+        # Correct for dropped trips as required
+        correction_factor = 1/(target_dist['dt'].sum()/original_p)
+        if correction_factor > 1.1 or correction_factor < 0.9:
+            Warning('Massive correction required for balance, check inputs')
+        target_dist['dt'] = target_dist['dt'] * correction_factor
 
-    # Get costs for trip length curve only
-    internal_costs = nup.get_costs(model_lookup_path,
-                                   calib_params,
-                                   tp=cost_type,
-                                   iz_infill=0.5)
+        # Audit total
+        if original_p.round(0) == target_dist['dt'].sum().round(0):
+            print('Balanced well')
+        else:
+            print('Balance off') # TODO: Bit more
 
-    nup.print_w_toggle('Cost lookup returned ' + internal_costs[1], echo=echo)
-    internal_costs = internal_costs[0].copy()
+        # Reapply segments
+        col_ph = ['p_zone', 'a_zone']
+        for key, value in calib_params.items():
+            col_ph.append(key)
+            print('Reappending segment values for ' + key)
+            target_dist[key] = value
+        col_ph.append('dt')
 
-    # Build a trip length curve
-    # TODO: Failing for some reason
-    d_bin = nup.build_distribution_bins(internal_costs,
-                                        long_pa,
-                                        echo=echo)
+        # Final order preserving reindex
+        target_dist = target_dist.reindex(col_ph, axis=1)
 
-    return(commute_pa, d_bin)
+        return(target_dist)
 
-def get_target_trip_lengths(path = _default_target_trip_length_path,
-                            adapt_to_nhb = False):
-    """
-    DEPRECATED - these now come in with the betas
-    This function imports target trip lengths from a given path.
 
-    Parameters
-    ----------
-    path:
-        Path to .csv file containing required target trip lengths.
+    def pass_to_intrazonal(internal_24hr_productions,
+                           ia_name,
+                           calib_params,
+                           verbose=True):
 
-    adapt_to_nhb:
-        If true, replaces homebased NTEM purposes with
+        """
+        Function to pass distributions straight to intrazonal as required.
+        For active modes and PT until MSOA distribution in March-20
+        """
 
-    Returns:
-    ----------
-    target_trip_lengths:
-        DataFrame containing target trip lengths for distribution.
-    """
-    target_trip_lengths = pd.read_csv(path)
+        # Get unique internal zones in a smart way
+        min_zone = min(internal_24hr_productions[ia_name])
+        max_zone = max(internal_24hr_productions[ia_name])
+        unq_internal_zones = [i for i in range(min_zone, max_zone+1)]
 
-    # If adapt
-    if adapt_to_nhb:
-        nhb_dat = {'purpose':[1,2,3,4,5,6,8],
-                   'nhb_purpose':[11,12,13,14,15,16,18]}
-        nhb_frame = pd.DataFrame(nhb_dat)
-        target_trip_lengths = target_trip_lengths.merge(nhb_frame,
-                                                        how='inner',
-                                                        on='purpose')
-        nhb_cols = ['nhb_purpose','mode','average_trip_length']
-        target_trip_lengths = target_trip_lengths.reindex(
-                nhb_cols, axis=1).reset_index(drop=True)
-        target_trip_lengths = target_trip_lengths.rename(
-                columns={'nhb_purpose':'purpose'})
+        target_p = nup.filter_distribution_p(internal_24hr_productions,
+                                             ia_name,
+                                             calib_params,
+                                             round_val=3,
+                                             verbose=verbose)[0]
+        intra_dist = target_p
+        intra_dist['p_zone'] = intra_dist[ia_name]
+        intra_dist['a_zone'] = intra_dist[ia_name]
+        intra_dist = intra_dist.drop(ia_name,
+                                     axis=1)
+        intra_dist = intra_dist.rename(columns={'productions': 'dt'})
 
-    return(target_trip_lengths)
+        # Re-append values
+        reindex_cols = ['p_zone', 'a_zone']
+        for key, value in calib_params.items():
+            intra_dist[key] = value
+            reindex_cols.append(key)
 
-def get_distribution_parameters(initial_betas, calib_params):
-    """
-    This function retreives a beta from an initial beta sheet in the input
-    folder. It takes the purpose, mode and traget trip lengths.
+        # Reindex cols to match standard
+        reindex_cols.append('dt')
+        intra_dist = intra_dist.reindex(
+                reindex_cols, axis=1).reset_index(drop=True)
 
-    Parameters
-    ----------
-    initial_betas:
-        A list of segmented productions for the internal area to be aggregated.
-        Will need to have standard NorMITs Synthesiser column names.
+        # Push to wide format
+        intra_dist = nup.df_to_np(intra_dist,
+                                  v_heading='p_zone',
+                                  h_heading='a_zone',
+                                  values='dt',
+                                  unq_internal_zones=unq_internal_zones,
+                                  verbose=verbose)
 
-    calib_params:
-        A dictionary containing calibration parameters for a given distribution
-        run.
+        intra_dist = pd.DataFrame(intra_dist,
+                                  index=unq_internal_zones,
+                                  columns=unq_internal_zones)
 
-    Returns
-    ----------
-    beta:
-        24hr productions by zone by mode and purpose. Ready for distribution.
+        return intra_dist
 
-    ttl:
-        Target trip length from beta segment.
-    """
-    beta_subset = initial_betas.copy()
 
-    # Quite lovely dictionary loop to define intial betas.
-    # Will throw an error if the betas can't give it an exact beta for a segment.
-    # Should be handled by a beta seeding function in the run_gravity_model.
-    for index, cp in calib_params.items():
-        beta_subset = beta_subset[
-                beta_subset[index] == cp
+    def run_separation(initial_betas, available_dists):
+
+        """
+        Function to separate intial betas based on the type of distribution required.
+
+        null_dists = Distributions to be ignored (usually cjtw)
+        intra_zonal_dists = Combos to be passed straight to intra zonal and exported
+        zone_conversion_dists = Combos to be translated from another zoning system
+        initial_betas = actual distribution betas
+
+        """
+        # Get len at the start
+        beta_length_start = len(initial_betas.iloc[:, 0])
+
+        null_dists = initial_betas[
+            initial_betas['distribution'] == 'none'
+        ].copy().reset_index(drop=True)
+
+        cjtw_dists = initial_betas[
+            initial_betas['distribution'] == 'cjtw'
+        ].copy().reset_index(drop=True)
+
+        intra_zonal_dists = initial_betas[
+            initial_betas['distribution'] == 'intra'
+        ].copy().reset_index(drop=True)
+
+        translated_dists = initial_betas[
+            initial_betas['distribution'].isin(available_dists)
+        ].copy().reset_index(drop=True)
+
+        initial_betas = initial_betas[
+            initial_betas['distribution'] == 'synthetic'
         ].reset_index(drop=True)
 
-    init_param_a = beta_subset['init_param_a'][0]
-    init_param_b = beta_subset['init_param_b'][0]
-    ttl = beta_subset['average_trip_length'][0]
-
-    distribution_params = {'init_param_a':init_param_a,
-                           'init_param_b':init_param_b,
-                           'ttl':ttl}
-    return(distribution_params)
-
-def aggregate_to_24hr(internal_productions,
-                      ia_name='internal_area_name',
-                      index_cols = None):
-    """
-    This function takes segmented, unbalanced internal productions and
-    aggregates to 24hr productions segmented only by purpose and mode.
-    The splitting factors are retained for multiplying out post-distribution.
-
-    Parameters
-    ----------
-    internal_productions:
-        A list of segmented productions for the internal area to be aggregated.
-        Will need to have standard NorMITs Synthesiser column names.
-
-    ia_name:
-        The name of the internal area column. Used for indexing and grouping.
-
-    Returns
-    ----------
-    [0] internal_24hr_productions:
-        24hr productions by zone by mode and purpose. Ready for distribution.
-
-    [1] split_factors:
-        Factor of productions by NorMITs Land Use output categories. To be kept
-        to regsegment distributed trip making data.
-    """
-
-    # Get time split factors
-    ip_cols = [ia_name]
-    ip_group_cols = [ia_name]
-    if index_cols is not None:
-        for sfc in index_cols:
-            ip_cols.append(sfc)
-            ip_group_cols.append(sfc)
-    ip_cols.append('trips')
-
-    internal_24hr_productions = internal_productions.reindex(
-            ip_cols,
-            axis=1).groupby(
-                    ip_group_cols).sum().reset_index()
-
-    print('internal productions before:')
-    print(internal_productions['trips'].sum().round())
-
-    print('internal productions after:')
-    print(internal_24hr_productions['trips'].sum().round())
-
-    print('productions aggregated to 24hr')
-
-    return(internal_24hr_productions)
-
-def dt_to_factors(pa, dt_type = 'new_ba'):
-    """
-    This function calculates the new pa values of a given distribution.
-    It rounds the distributed trips to a given value to allow convergence at
-    a lower level than 64bit float.
-
-    Parameters
-    ----------
-    pa:
-        pa matrix
-
-    dt_type:
-        which balancing factors have been changed and need to be summed.
-        Takes 'new_ba' ie. 'balancing factor a' or
-        'new_bb' ie. 'balancing factor b'
-
-    Returns:
-    ----------
-    [0] new:
-        PA matrix with dt reduced to factors for calculation.
-
-    [1] new_col:
-        Column name of the new balancing factors.
-
-    [2] zone_col:
-        Zone type of the new balancing factors.
-    """
-    # TODO: Errors if conditions aren't met
-    if dt_type == 'new_ba':
-        zone_col = 'p_zone'
-        new_col = 'ba'
-    elif dt_type == 'new_bb':
-        zone_col = 'a_zone'
-        new_col = 'bb'
-
-    new = pa.reindex([zone_col,'dt'],
-                     axis=1).groupby(zone_col).sum().reset_index()
-    # Seed in >0 to avoid div0
-    new['dt'] = new['dt'].replace(0, 0.0001)
-    new['dt'] = 1/new['dt']
-    new = new.rename(columns={'dt':new_col})
-
-    return(new, new_col, zone_col)
-
-def apply_new_dt(pa, new, new_col, zone_col):
-    """
-    This function adds new balancing factors in to a matrix. They are returned
-    in the dt col and added to whichever col comes through in zone_col
-    parameter.
-
-    Parameters
-    ----------
-    pa:
-        Pa matrix.
-
-    new:
-        new balancing factors.
-
-    new_col:
-        column to replace with new balancing factors.
-
-    zone_col:
-        Zone column to join new balancing factors on.
-
-    Returns:
-    ----------
-    pa:
-        PA matrix with new balancing factors added in.
-    """
-
-    pa = pa.drop([new_col,'dt'],axis=1)
-    pa = pa.merge(new, how='inner', on=zone_col)
-
-    return(pa)
-
-def p_a_to_pa(ia_name,
-              distribution_p,
-              distribution_a):
-    """
-    This function combines productions and attractions into PA format.
-    The returned productions and attractions are aggregate and therefore
-    duplicate.
-
-    Parameters
-    ----------
-    ia_name:
-        Internal area name to use as column heading.
-
-    distribution_p:
-        Productions as a vector containing zones and productions.
-
-    distribution_a:
-        Attractions as a vector containing zones and attractions.
-
-    array:
-        Boolean. Return as numpy array or pandas dataframe. True = numpy.
-
-    Returns
-    ----------
-    pa:
-        PA matrix format, ready for distribution.
-    """
-    distribution_p = distribution_p.rename(columns={ia_name:'p_zone',
-                                                    'productions':'p'})
-    distribution_p['key'] = 1
-    distribution_a = distribution_a.rename(columns={ia_name:'a_zone',
-                                                    'attractions':'a'})
-    distribution_a['key'] = 1
-    pa = distribution_p.merge(distribution_a, how='inner', on='key')
-    pa = pa.drop('key',axis=1)
-
-    return(pa)
-
-def od_cost_to_pa(costs,
-                  tour_factors,
-                  tp):
-    """
-    Function to return 24 hr PA cost from OD cost.
-
-    Parameters
-    ----------
-    costs:
-        24hr cost
-    tour_factors:
-        vector of tour factors with from/to
-    tp = None:
-        Target time period. Will subset to if not None.
-
-    """
-
-    return()
-
-def tidy_pa(internal_pa,
-            params,
-            rounding=_default_rounding):
-    """
-    Function to tidy up the pa matrix, remove null values, reinsert purpose &
-    mode data and correct back to target productions (if required).
-
-    Parameters
-    ----------
-    internal_pa:
-        PA matrix for a given distribution.
-
-    params:
-         Dataframe row containing target parameters for mode and purpose.
-
-    rounding=_default_rounding:
-        Number of decimal places to round to. Takes the default rounding from
-        the function (usually 3)
-
-    Returns
-    ----------
-    internal_pa:
-        Tidied PA matrix.
-    """
-    # Round dt
-    internal_pa['dt'] = internal_pa['dt'].round(rounding)
-    # Drop null values
-    internal_pa = internal_pa[internal_pa['dt']>0]
-    # Reintegrate mode and purpose
-    internal_pa.loc[:,'mode'] = params['mode']
-    internal_pa.loc[:,'purpose'] = params['purpose']
-
-    return(internal_pa)
-
-def zones_to_pa_pairs(zone_heading, zone_list_1, zone_list_2=None):
-    """
-    """
-    zone_p = zone_list_1.copy()
-    zone_p['dummy'] = 1
-    zone_p = zone_p.rename(columns={zone_heading:'p_zone'})
-
-    if zone_list_2 is not None:
-        zone_a = zone_list_2.copy()
-        zone_a['dummy'] = 1
-        zone_a = zone_a.rename(columns={zone_heading:'a_zone'})
-    else:
-        zone_a = zone_p.copy()
-        zone_a = zone_a.rename(columns={'p_zone':'a_zone'})
-
-    zone_to_zone = zone_p.merge(zone_a,
-                                how = 'outer',
-                                on = 'dummy').reset_index(
-                                        drop=True)
-    del(zone_to_zone['dummy'])
-
-    return(zone_to_zone)
-
-def productions_to_internal_external(productions,
-                                     i_e_factors,
-                                     model_name,
-                                     distribution_segments):
-
-    """
-    Much needed split to get productions ready for distribution.
-    """
-    # Join factors onto productions
-    w_productions = productions.copy()
-    w_productions = w_productions.reset_index(drop=True)
-
-    # Make sure merge criteria are int
-    w_productions[(model_name.lower() + '_zone_id')] = (
-        w_productions[(model_name.lower() + '_zone_id')].astype(int)
-    )
-    w_productions['m'] = w_productions['m'].astype(int)
-    i_e_factors['m'] = i_e_factors['m'].astype(int)
-
-    w_productions = w_productions.merge(i_e_factors,
-                                        how = 'left',
-                                        on = [(model_name.lower() + '_zone_id'),
-                                              'p',
-                                              'm'])
-
-    # Build single external factor
-    w_productions['e'] = (w_productions['e_to_e'] +
-                 w_productions['e_to_i'] +
-                 w_productions['i_to_e'])
-
-    # Drop other external factors
-    w_productions = w_productions.drop(['e_to_e',
-                                        'e_to_i',
-                                        'i_to_e'],
-    axis=1)
-
-    # Build cols for reindex
-    internal_cols = [(model_name.lower() +
-                      '_zone_id')]
-    for ms_col in distribution_segments:
-        print(ms_col)
-        internal_cols.append(ms_col)
-    external_cols = internal_cols.copy()
-    internal_cols.append('i_to_i')
-    external_cols.append('e')
-    internal_cols.append('trips')
-    external_cols.append('trips')
-
-    # Reindex
-    internal_productions = w_productions.reindex(
-            internal_cols, axis=1).reset_index(drop=True)
-    external_productions = w_productions.reindex(
-            external_cols, axis=1).reset_index(drop=True)
-
-    # Factor trips
-    internal_productions['trips'] = (internal_productions['trips'] *
-                        internal_productions['i_to_i'])
-    external_productions['trips'] = (external_productions['trips'] *
-                        external_productions['e'])
-
-    internal_productions['trips'].sum()
-    external_productions['trips'].sum()
-
-    # Drop factors
-    internal_productions = internal_productions.drop('i_to_i', axis=1)
-    external_productions = external_productions.drop('e', axis=1)
-
-    # Get rid of 0 trips
-    internal_productions = internal_productions[
-            internal_productions['trips']>0].reset_index(drop=True)
-    external_productions = external_productions[
-            external_productions['trips']>0].reset_index(drop=True)
-
-    # Optimise
-    internal_productions = nup.optimise_data_types(internal_productions)
-    external_productions = nup.optimise_data_types(external_productions)
-
-    return(internal_productions,
-           external_productions)
-
-def define_zone_movements(ia_name,
-                          internal_area,
-                          external_area,
-                          movement_type = 'i_to_i',
-                          labels = False):
-    """
-    movement_type takes 'i_to_i, i_to_e, e_to_i, e_to_e, external, all'
-    """
-    # This has been audited. It craetes the right amount of zone to zones.
-    # Build internal to internal lookup
-    i_to_i = zones_to_pa_pairs(ia_name, internal_area)
-    i_to_e = zones_to_pa_pairs(ia_name, internal_area, external_area)
-    e_to_i = zones_to_pa_pairs(ia_name, external_area, internal_area)
-    e_to_e = zones_to_pa_pairs(ia_name, external_area)
-
-    if labels:
-        i_to_i.loc[:,'m_type'] = 'i_to_i'
-        i_to_e.loc[:,'m_type'] = 'i_to_e'
-        e_to_i.loc[:,'m_type'] = 'e_to_i'
-        e_to_e.loc[:,'m_type'] = 'e_to_e'
-
-    if movement_type == 'i_to_i':
-        return(i_to_i)
-    elif movement_type == 'i_to_e':
-        return(i_to_e)
-    elif movement_type == 'e_to_i':
-        return(e_to_i)
-    elif movement_type == 'e_to_e':
-        return(e_to_e)
-    elif movement_type == 'external':
-        return(pd.concat([i_to_e, e_to_i, e_to_e], sort=True))
-    elif movement_type == 'all':
-        return(pd.concat([i_to_i, i_to_e, e_to_i, e_to_e], sort=True))
-    else:
-        # TODO: Catch & handle
-        return('Error!')
-
-def get_project_status(o_paths):
-    # DEPRECATED
-    """
-    Function to use the output lookups to check what needs to be run.
-
-    Parameters
-    o_paths: Dict of paths to export folders.
-
-    Returns
-    p_status: Dict of project status
-    """
-    # TODO: Something for NHB production run
-
-    # Cjtw status
-    if len(os.listdir(o_paths['cjtw'])) > 0:
-        cjtw_run = True
-    else:
-        cjtw_run = False
-
-    # External cjtw status
-    if 'external_purpose_1.csv' in os.listdir(o_paths['external']):
-        external_cjtw_run = True
-    else:
-        external_cjtw_run = False
-
-    # External hb pa status
-    if 'hb_pa_external_export.csv' in os.listdir(o_paths['external']):
-        external_hb_pa_run = True
-    else:
-        external_hb_pa_run = False
-
-    # External nhb pa status
-    if 'nhb_pa_external_export.csv' in os.listdir(o_paths['external']):
-        external_nhb_pa_run = True
-    else:
-        external_nhb_pa_run = False
-
-    # NHB production run status
-    if 'nhb_productions' in os.listdir(o_paths['production_export']):
-        nhb_production_run = True
-    else:
-        nhb_production_run = False
-
-    status = {'cjtw_run':cjtw_run,
-              'external_cjtw_run':external_cjtw_run,
-              'external_hb_pa_run':external_hb_pa_run,
-              'external_nhb_pa_run':external_nhb_pa_run,
-              'nhb_production_run':nhb_production_run}
-
-    return(status)
-
-def get_cjtw_internal_external_factors(movements,
-                                       model_lookup_path,
-                                       model_name):
-    """
-    Function to factor down the internal to external trips
-    in the internal area, so that they don't nerf the internal to internal
-    trips.
-    This function takes the census journey to work commute distribution and
-    compares the number of trips within the internal area to the number of
-    trips that go into the external area.
-    These factors are then used to balance distributions when the PA matrix
-    is brought together.
-    """
-
-    # Get census journey to work
-    cjtw = nup.get_cjtw(model_lookup_path,
-                        model_name,
-                        subset=None)
-
-    # Rename cjtw to p/a, factor to cjtw factor
-    cjtw = cjtw.rename(columns={('1_' +
-                                 model_name.lower() +
-                                 'Areaofresidence'):'p_zone',
-                                ('2_' +
-                                 model_name.lower() +
-                                 'Areaofworkplace'):'a_zone',
-                                 'distribution':'cjtw_factor'})
-
-    # TODO: Attach productions so out i_to_e factors are reflective of 2018?
-    # Maybe not - think this would just give the same factors back!
-
-    # Join movement types
-    cjtw = cjtw.merge(movements,
-                      how='inner',
-                      on=['p_zone','a_zone'])
-
-    # Group by p_zone, mode, movement type - sum distribution
-    # Gives movement type by zone
-    i_e_factors = cjtw.reindex(['p_zone',
-                                'mode',
-                                'm_type',
-                                'cjtw_factor'],
-    axis=1).groupby(['p_zone', 'mode', 'm_type']).sum().reset_index()
-
-    dir_cols = i_e_factors['m_type'].drop_duplicates().reset_index(drop=True)
-
-    i_e_factors = i_e_factors.pivot_table(index=['p_zone', 'mode'],
-                                          columns='m_type',
-                                          values='cjtw_factor').fillna(
-                                                  0).reset_index()
-
-    # TODO: Correct to 1 by zone
-    i_e_factors['total'] = (i_e_factors[dir_cols[0]] +
-               i_e_factors[dir_cols[1]] +
-               i_e_factors[dir_cols[2]] +
-               i_e_factors[dir_cols[3]])
-
-    i_e_factors['corr'] = 1/i_e_factors['total']
-
-    i_e_factors = i_e_factors.drop(['total', 'corr'], axis=1)
-
-    # Back to target zone id
-    i_e_factors = i_e_factors.rename(
-            columns={'p_zone':model_name.lower()+'_zone_id',
-                     'mode':'m'})
-
-    # Reset the whole index
-    i_e_factors = i_e_factors.reset_index(drop=True)
-
-    return(i_e_factors)
-
-def combine_internal_external(productions,
-                              movements,
-                              ia_name,
-                              model_lookup_path,
-                              internal_area,
-                              external_area,
-                              internal_pa,
-                              external_pa):
-    """
-    """
-    # TODO: If this is going to work this needs to already have the internals & externals split
-
-    mainland_gb_pa = pd.concat([internal_pa,
-                                external_pa],sort=False).reset_index(drop=True)
-
-    # Balance GB productions to target productions
-    # Get distributed productions from mainland gb pa
-    # TODO: This could be done with factor_distributed_trips
-    # pa-productions = too many
-    pa_productions = mainland_gb_pa.reindex(
-            ['p_zone', 'dt'],axis=1).groupby(
-                    ['p_zone']).sum().reset_index()
-
-    # Balance productions to mainland GB PA - for factors to work.
-    # See note in get_cjtw_internal_external_factors function.
-    # TODO: Might as well be a function
-    target_productions = productions.reindex(
-            [ia_name, 'trips'],axis=1).groupby(
-                    [ia_name]).sum().reset_index()
-
-    target_productions = target_productions.rename(
-            columns={ia_name:'p_zone'})
-    pa_productions = pa_productions.merge(target_productions, how='left',
-                                          on=['p_zone'])
-    pa_productions.loc[:,'balance_factor'] = (pa_productions['trips'].values/
-                      pa_productions['dt'].values)
-    pa_productions['test'] = (pa_productions['dt'] *
-                  pa_productions['balance_factor'])
-    print(pa_productions['test'].sum())
-    del(pa_productions['test'], pa_productions['dt'], pa_productions['trips'])
-
-    # Join balance factors on to mainland gb pa
-    mainland_gb_pa = mainland_gb_pa.merge(pa_productions,
-                                          how='left',
-                                          on=['p_zone'])
-    mainland_gb_pa.loc[:,'dt'] = (mainland_gb_pa['dt'].values*
-                      mainland_gb_pa['balance_factor'].values)
-    del(mainland_gb_pa['balance_factor'])
-
-    # TODO: Need to check the internal external splits are sensible before deleting
-    del(internal_pa, external_pa)
-
-    mainland_gb_pa = nup.optimise_data_types(mainland_gb_pa)
-
-    return(mainland_gb_pa)
-
-def get_nhb_arrivals(time_period_pa,
-                     ia_name):
-    # TODO: Fix time period with aggregate
-    """
-    This function takes a mainland gb time period pa matrix and returns
-    the arrivals in attraction zones.
-
-    Parameters
-    ----------
-    time_period_pa:
-        DataFrame of time period PA dsitributions.
-
-    ia_name:
-        Internal area name.
-
-    Returns
-    ----------
-    arrivals:
-        Vector of mainland GB trip arrivals to seed nhb distributions.
-    """
-    # Subset whichever O or D to get arrivals for NHB productions
-    arrival_cols = ['a_zone', 'mode', 'purpose', 'car_availability',
-                    'employment_type', 'age', 'dt']
-    arrivals = time_period_pa.reindex(
-            arrival_cols, axis=1).reset_index(drop=True)
-    arrival_cols.remove('dt')
-    arrivals = arrivals.groupby(arrival_cols).sum().reset_index()
-    arrivals = arrivals.rename(columns={'a_zone':ia_name,
-                                        'dt':'arrivals'})
-    return(arrivals)
-
-def translate_distribution(om_dist,
-                           model_name,
-                           other_model_name,
-                           internal_24hr_productions,
-                           calib_params,
-                           target_path):
-
-    """
-    Translate distribution from one model zoning system to another using
-    given lookups
-    """
-
-    # Drop segments from distribution, retain p/a & trips
-    om_dist = om_dist.reindex(['p_zone', 'a_zone', 'dt'], axis=1)
-
-    # Get original total productions
-    om_productions = om_dist['dt'].sum()
-
-    lookup_types = [(other_model_name + '_' + model_name.lower()),
-                    (model_name.lower()) + '_' + other_model_name]
-    # Check for lookup types, pop weighted and employment weighted
-    # TODO: if there isn't one run one - or have this at the outset
-    zone_translation_lookups = []
-    mzl_dir = os.listdir(target_path)
-    for lt in lookup_types:
-        ztl = [x for x in mzl_dir if lt in x]
-        if len(ztl) > 0:
-            zone_translation_lookups.append(ztl)
-    # flatten list of lists
-    zone_translation_lookups = [x for y in zone_translation_lookups for x in y]
-    # Pull out individuals
-    zt_pop = [x for x in zone_translation_lookups if 'pop' in x][0]
-    zt_emp = [x for x in zone_translation_lookups if 'emp' in x][0]
-
-    zt_pop = pd.read_csv((target_path + '/' + zt_pop))
-    zt_emp = pd.read_csv((target_path + '/' + zt_emp))
-
-    # Define index cols for lookups
-    li_cols = [(other_model_name + '_zone_id'),
-               (model_name.lower() + '_zone_id'),
-               ('overlap_' + other_model_name + '_split_factor')]
-
-    # Model name first, other model second
-    split_factor_col = ('overlap_' + other_model_name + '_split_factor')
-
-    zt_pop = zt_pop.reindex(li_cols, axis=1)
-    zt_emp = zt_emp.reindex(li_cols, axis=1)
-
-    # Process to get cleaner matches
-    original_model_col = (other_model_name + '_zone_id')
-    target_model_col = (model_name.lower() + '_zone_id')
-
-    # Round & drop 0 segments
-    zt_pop[split_factor_col] = zt_pop[split_factor_col].round(3)
-    zt_pop = zt_pop[zt_pop[split_factor_col]>0]
-
-    # Correct factors back to 0
-    zt_pop_tot = zt_pop.reindex([original_model_col, split_factor_col], axis=1).groupby(
-            original_model_col).sum().reset_index()
-
-    # Derive adjustment for factor
-    zt_pop_tot['adj_factor'] = 1/(zt_pop_tot[split_factor_col]/1)
-    zt_pop_tot = zt_pop_tot.drop(split_factor_col, axis=1)
-    zt_pop = zt_pop.merge(zt_pop_tot,
-                          how='left',
-                          on = original_model_col)
-    zt_pop[split_factor_col] = zt_pop[split_factor_col] * zt_pop['adj_factor']
-    zt_pop = zt_pop.drop('adj_factor', axis=1)
-
-    # Round & drop 0 segments
-    zt_emp[split_factor_col] = zt_emp[split_factor_col].round(3)
-    zt_emp = zt_emp[zt_emp[split_factor_col]>0]
-
-    # Correct factors back to 0
-    zt_emp_tot = zt_emp.reindex([original_model_col,
-                                 split_factor_col],
-    axis=1).groupby(
-            original_model_col).sum().reset_index()
-    # Derive adjustment for factor
-    zt_emp_tot['adj_factor'] = 1/(zt_emp_tot[split_factor_col]/1)
-    zt_emp_tot = zt_emp_tot.drop(split_factor_col, axis=1)
-    zt_emp = zt_emp.merge(zt_emp_tot,
-                          how='left',
-                          on = original_model_col)
-    zt_emp[split_factor_col] = zt_emp[split_factor_col] * zt_emp['adj_factor']
-    zt_emp = zt_emp.drop('adj_factor', axis=1)
-    # zone translations defined
-
-    # Rename destination zone names to join w/o duplication
-    zt_pop = zt_pop.rename(
-            columns={(other_model_name + '_zone_id'):'p_zone'})
-    zt_emp = zt_emp.rename(
-            columns={(other_model_name + '_zone_id'):'a_zone'})
-
-    # Transform model demand to current model zones
-    # Bring in population split for productions
-    om_dist = om_dist.merge(zt_pop,
-                            how='left',
-                            on='p_zone')
-    # Multiply out
-    om_dist['dt'] = om_dist['dt'] * om_dist[('overlap_' + other_model_name + '_split_factor')]
-    om_dist = om_dist.drop(
-            ['p_zone',
-             'overlap_' + other_model_name + '_split_factor'], axis=1)
-    om_dist = om_dist.rename(
-            columns={(model_name.lower() + '_zone_id'):'p_zone'})
-    # Group and sum
-    group_cols = ['p_zone', 'a_zone']
-    sum_cols = group_cols.copy()
-    sum_cols.append('dt')
-
-    om_dist = om_dist.reindex(
-            sum_cols,axis=1).groupby(
-                    group_cols).sum().reset_index()
-
-    # Bring in employment split for attractions
-    om_dist = om_dist.merge(zt_emp,
-                            how='left',
-                            on='a_zone')
-    # Multiply out
-    om_dist['dt'] = om_dist['dt'] * om_dist[('overlap_' + other_model_name + '_split_factor')]
-    om_dist = om_dist.drop(
-            ['a_zone',
-             'overlap_' + other_model_name + '_split_factor'], axis=1)
-    om_dist = om_dist.rename(
-            columns={(model_name.lower() + '_zone_id'):'a_zone'})
-    # Group and sum
-    om_dist = om_dist.reindex(
-            sum_cols,axis=1).groupby(
-                    group_cols).sum().reset_index()
-
-    # Audit total
-    if om_productions.round(0) == om_dist['dt'].sum().round(0):
-        print('Balanced well')
-    else:
-        print('Balance off') # TODO: Bit more
-
-    # Reduce to zonal factors to apply new productions to
-    om_dist_p_totals = om_dist.reindex(['p_zone', 'dt'], axis=1).groupby('p_zone').sum().reset_index()
-    om_dist_p_totals = om_dist_p_totals.rename(columns={'dt':'dt_total'})
-
-    om_dist = om_dist.merge(om_dist_p_totals,
-                            how='left',
-                            on='p_zone')
-    # Derive p/a share by p
-    om_dist['p_a_share'] = om_dist['dt']/om_dist['dt_total']
-    om_dist = om_dist.drop(['dt', 'dt_total'],axis=1)
-
-    # Get target productions
-    target_p = nup.filter_distribution_p(internal_24hr_productions,
-                                         model_name.lower() + '_zone_id',
-                                         calib_params,
-                                         round_val=3)
-
-    original_p = target_p['productions'].sum()
-    target_p = target_p.rename(columns={target_model_col:'p_zone'})
-
-    # Join on distribution
-    target_p = target_p.merge(om_dist,
-                              how='left',
-                              on='p_zone')
-    target_dist = target_p.copy()
-    target_dist['dt'] = (target_dist['productions'] *
-               target_dist['p_a_share'])
-    target_dist = target_dist.drop(['productions', 'p_a_share'], axis=1)
-
-    # Correct for dropped trips as required
-    correction_factor = 1/(target_dist['dt'].sum()/original_p)
-    if correction_factor > 1.1 or correction_factor < 0.9:
-        Warning('Massive correction required for balance, check inputs')
-    target_dist['dt'] = target_dist['dt'] * correction_factor
-
-    # Audit total
-    if original_p.round(0) == target_dist['dt'].sum().round(0):
-        print('Balanced well')
-    else:
-        print('Balance off') # TODO: Bit more
-
-    # Reapply segments
-    col_ph = ['p_zone', 'a_zone']
-    for key, value in calib_params.items():
-        col_ph.append(key)
-        print('Reappending segment values for ' + key)
-        target_dist[key] = value
-    col_ph.append('dt')
-
-    # Final order preserving reindex
-    target_dist = target_dist.reindex(col_ph, axis=1)
-
-    return(target_dist)
-
-
-def pass_to_intrazonal(internal_24hr_productions,
-                       ia_name,
-                       calib_params,
-                       echo=True):
-
-    """
-    Function to pass distributions straight to intrazonal as required.
-    For active modes and PT until MSOA distribution in March-20
-    """
-
-    # Get unique internal zones in a smart way
-    min_zone = min(internal_24hr_productions[ia_name])
-    max_zone = max(internal_24hr_productions[ia_name])
-    unq_internal_zones = [i for i in range(min_zone, max_zone+1)]
-
-    target_p = nup.filter_distribution_p(internal_24hr_productions,
-                                         ia_name,
-                                         calib_params,
-                                         round_val=3,
-                                         echo=echo)[0]
-    intra_dist = target_p
-    intra_dist['p_zone'] = intra_dist[ia_name]
-    intra_dist['a_zone'] = intra_dist[ia_name]
-    intra_dist = intra_dist.drop(ia_name,
-                                 axis=1)
-    intra_dist = intra_dist.rename(columns={'productions': 'dt'})
-
-    # Re-append values
-    reindex_cols = ['p_zone', 'a_zone']
-    for key, value in calib_params.items():
-        intra_dist[key] = value
-        reindex_cols.append(key)
-
-    # Reindex cols to match standard
-    reindex_cols.append('dt')
-    intra_dist = intra_dist.reindex(
-            reindex_cols, axis=1).reset_index(drop=True)
-
-    # Push to wide format
-    intra_dist = nup.df_to_np(intra_dist,
-                              v_heading='p_zone',
-                              h_heading='a_zone',
-                              values='dt',
-                              unq_internal_zones=unq_internal_zones,
-                              echo=echo)
-
-    intra_dist = pd.DataFrame(intra_dist,
-                              index=unq_internal_zones,
-                              columns=unq_internal_zones)
-
-    return intra_dist
-
-
-def run_separation(initial_betas, available_dists):
-
-    """
-    Function to separate intial betas based on the type of distribution required.
-
-    null_dists = Distributions to be ignored (usually cjtw)
-    intra_zonal_dists = Combos to be passed straight to intra zonal and exported
-    zone_conversion_dists = Combos to be translated from another zoning system
-    initial_betas = actual distribution betas
-
-    """
-    # Get len at the start
-    beta_length_start = len(initial_betas.iloc[:, 0])
-
-    null_dists = initial_betas[
-        initial_betas['distribution'] == 'none'
-    ].copy().reset_index(drop=True)
-
-    cjtw_dists = initial_betas[
-        initial_betas['distribution'] == 'cjtw'
-    ].copy().reset_index(drop=True)
-
-    intra_zonal_dists = initial_betas[
-        initial_betas['distribution'] == 'intra'
-    ].copy().reset_index(drop=True)
-
-    translated_dists = initial_betas[
-        initial_betas['distribution'].isin(available_dists)
-    ].copy().reset_index(drop=True)
-
-    initial_betas = initial_betas[
-        initial_betas['distribution'] == 'synthetic'
-    ].reset_index(drop=True)
-
-    beta_length_end = sum([len(null_dists.iloc[:,0]),
-                          len(cjtw_dists.iloc[:0]),
-                          len(intra_zonal_dists.iloc[:,0]),
-                          len(translated_dists.iloc[:,0]),
-                          len(initial_betas.iloc[:,0])])
-    if beta_length_start == beta_length_end:
-        print('All betas accounted for')
-    else:
-        Warning('Some betas dropped')
-
-    return(initial_betas,
-           translated_dists,
-           intra_zonal_dists,
-           cjtw_dists,
-           null_dists)
-
-
-def fetch_other_model_distribution(other_model_name,
-                                   file_drive,
-                                   available_dists,
-                                   calib_params,
-                                   distribution_segments,
-                                   t_iteration=None,
-                                   echo=True):
-
-    """
-    Function to smartly path into another distribution, as specified in
-    a set of target betas.
-    Returns a distribution in long format (internal 24hr PA)
-    """
-    # TODO: Add ability to take dist from fusion output!
-
-    l_available_dists = [x.lower() for x in available_dists]
-
-    t_import_source = other_model_name
-    t_import_path = os.path.join(file_drive,
-                                 'NorMITs Synthesiser',
-                                 available_dists[l_available_dists.index(t_import_source)])
-
-    # Find largest iter
-    if t_iteration is None:
+        beta_length_end = sum([len(null_dists.iloc[:,0]),
+                              len(cjtw_dists.iloc[:0]),
+                              len(intra_zonal_dists.iloc[:,0]),
+                              len(translated_dists.iloc[:,0]),
+                              len(initial_betas.iloc[:,0])])
+        if beta_length_start == beta_length_end:
+            print('All betas accounted for')
+        else:
+            Warning('Some betas dropped')
+
+        return(initial_betas,
+               translated_dists,
+               intra_zonal_dists,
+               cjtw_dists,
+               null_dists)
+
+
+    def fetch_other_model_distribution(other_model_name,
+                                       file_drive,
+                                       available_dists,
+                                       calib_params,
+                                       distribution_segments,
+                                       t_iteration=None,
+                                       verbose=True):
+
+        """
+        Function to smartly path into another distribution, as specified in
+        a set of target betas.
+        Returns a distribution in long format (internal 24hr PA)
+        """
+        # TODO: Add ability to take dist from fusion output!
+
+        l_available_dists = [x.lower() for x in available_dists]
+
+        t_import_source = other_model_name
+        t_import_path = os.path.join(file_drive,
+                                     'NorMITs Synthesiser',
+                                     available_dists[l_available_dists.index(t_import_source)])
+
+        # Find largest iter
+        if t_iteration is None:
+            t_import_dir = os.listdir(t_import_path)
+            t_iter_list = []
+            for item in t_import_dir:
+                if len(item) < 7 and item.startswith('iter'):
+                    if item == 'iterx':
+                        break
+                    else:
+                        t_iter_list.append(item)
+                     # Remove iterx
+            t_iteration = max(t_iter_list)
+        else:
+            nup.print_w_toggle('Checking for ' + str(t_iteration), verbose=verbose)
+
+        t_import_path = os.path.join(t_import_path,
+                                     t_iteration,
+                                     'Distribution Outputs',
+                                     '24hr PA Distributions')
+
+        # Try and get a matching distribution from the folder
+        # TODO: Update to lookup by segment, or at least try
         t_import_dir = os.listdir(t_import_path)
-        t_iter_list = []
-        for item in t_import_dir:
-            if len(item) < 7 and item.startswith('iter'):
-                if item == 'iterx':
-                    break
-                else:
-                    t_iter_list.append(item)
-                 # Remove iterx
-        t_iteration = max(t_iter_list)
-    else:
-        nup.print_w_toggle('Checking for ' + str(t_iteration), echo=echo)
 
-    t_import_path = os.path.join(t_import_path,
-                                 t_iteration,
-                                 'Distribution Outputs',
-                                 '24hr PA Distributions')
+        cal_mode = ('mode_' + str(calib_params['m']))
+        cal_purpose = ('purpose_' + str(calib_params['p']))
+        t_import_dist = [x for x in t_import_dir if cal_mode in x]
+        t_import_dist = [x for x in t_import_dist if cal_purpose in x]
 
-    # Try and get a matching distribution from the folder
-    # TODO: Update to lookup by segment, or at least try
-    t_import_dir = os.listdir(t_import_path)
+        # If more than 1, try segments!
+        # Drop mode and purpose from segments
+        other_segments = distribution_segments.copy()
+        other_segments.remove('m')
+        other_segments.remove('p')
 
-    cal_mode = ('mode_' + str(calib_params['m']))
-    cal_purpose = ('purpose_' + str(calib_params['p']))
-    t_import_dist = [x for x in t_import_dir if cal_mode in x]
-    t_import_dist = [x for x in t_import_dist if cal_purpose in x]
+        if len(t_import_dist) > 1:
+            t_import_dist_seg = t_import_dist
+            # Check if we can make a match to segmented data
+            for segment in other_segments:
+                cal_seg = (segment + '_' + str(calib_params[segment]))
+                t_import_dist_seg = [x for x in t_import_dist_seg if cal_seg in x]
+            # If yes use that going forward
+            if len(t_import_dist_seg) == 1:
+                t_import_dist = t_import_dist_seg
+                # TODO: Smarter append to ignored segment list
+                # ignored_segs = None
+        else:
+            nup.print_w_toggle('Ignored segs on reimport ', other_segments, verbose=verbose)
+            # ignored_segs = other_segments.copy()
 
-    # If more than 1, try segments!
-    # Drop mode and purpose from segments
-    other_segments = distribution_segments.copy()
-    other_segments.remove('m')
-    other_segments.remove('p')
+        dist_ph = []
+        for item in t_import_dist:
+            temp_dist = pd.read_csv(os.path.join(t_import_path, item))
+            temp_dist = nup.optimise_data_types(temp_dist, verbose=verbose)
+            dist_ph.append(temp_dist)
+            del(temp_dist)
 
-    if len(t_import_dist) > 1:
-        t_import_dist_seg = t_import_dist
-        # Check if we can make a match to segmented data
-        for segment in other_segments:
-            cal_seg = (segment + '_' + str(calib_params[segment]))
-            t_import_dist_seg = [x for x in t_import_dist_seg if cal_seg in x]
-        # If yes use that going forward
-        if len(t_import_dist_seg) == 1:
-            t_import_dist = t_import_dist_seg
-            # TODO: Smarter append to ignored segment list
-            # ignored_segs = None
-    else:
-        nup.print_w_toggle('Ignored segs on reimport ', other_segments, echo=echo)
-        # ignored_segs = other_segments.copy()
+        t_dist = pd.concat(dist_ph, sort=True)
 
-    dist_ph = []
-    for item in t_import_dist:
-        temp_dist = pd.read_csv(os.path.join(t_import_path, item))
-        temp_dist = nup.optimise_data_types(temp_dist, echo=echo)
-        dist_ph.append(temp_dist)
-        del(temp_dist)
-
-    t_dist = pd.concat(dist_ph, sort=True)
-
-    # Used to return ignored segs but I don't want it to anymore
-    return t_import_dist, t_dist
+        # Used to return ignored segs but I don't want it to anymore
+        return t_import_dist, t_dist
 
 
-def _synthetic_distributions_worker(dist_index,
-                                    synthetic_dists,
-                                    segmentation,
-                                    distribution_segments,
-                                    dist_function,
-                                    tlb_area,
-                                    trip_origin,
-                                    target_trip_lengths,
-                                    ia_name,
-                                    productions,
-                                    attractions,
-                                    cost_type,
-                                    furness_loops,
-                                    fitting_loops,
-                                    i_paths,
-                                    o_paths,
-                                    iz_cost_infill,
-                                    echo=True):
-
-    """
-    Distributes the synthetic distributions, producing 24hr PA Matrices
-
-    Encapsulates the inner workings of the synthetic distribution loop from
-    run_distribution_model(). Useful for use in multi-threaded environments
-    """
-    # get all segments and define parameters for distribution
-    calib_params = {}
-    for ds in distribution_segments:
-        calib_params.update({ds: target_trip_lengths[ds][dist_index]})
-
-    # Get initial alpha & beta from distribution parameters
-    distribution_params = get_distribution_parameters(
-        synthetic_dists, calib_params)
-
-    # Print a message telling the user which matrix is being worked on
-    dist_name = nup.generate_distribution_name(calib_params)
-    print("INFO: Creating the synthetic distribution for %s..." % dist_name)
-
-    # Unpack params into dict
-    init_param_a = distribution_params['init_param_a']
-    init_param_b = distribution_params['init_param_b']
-
-    del distribution_params
-
-    # Work out trip length band path from given params
-    # Only want standard segments at this point
-    tlb_folder = os.path.join(i_paths['imports'],
-                              'trip_length_bands',
-                              tlb_area,
-                              'standard_segments')
-
-    # Get trip length bands
-    tlb = nup.get_trip_length_bands(tlb_folder,
-                                    calib_params,
-                                    segmentation,
-                                    trip_origin=trip_origin,
-                                    replace_nan=True,
-                                    echo=echo)
-
-    calib_params.update({'tlb': tlb})
-
-    # Loop over the distributions until beta gives:
-    # 1. a decent average trip length by band
-    # 2. decent proportions within the segments
-
-    # TODO: Filter should be done outside of function and passed as np vector, still inside atm
-    #  - this applies to intra & cjtw too
-    hb_distribution = gm.run_gravity_model(
+    def _synth_dist_worker(
+            self,
+            dist_index,
+            synthetic_dists,
+            segmentation,
+            distribution_segments,
+            dist_function,
+            tlb_area,
+            trip_origin,
+            target_trip_lengths,
             ia_name,
-            calib_params,
-            init_param_a,
-            init_param_b,
             productions,
             attractions,
-            model_lookup_path=i_paths['lookups'],
-            dist_log_path=o_paths['reports'],
-            dist_log_fname=trip_origin + '_internal_distribution',
-            dist_function = dist_function,
-            cost_type=cost_type,
-            apply_k_factoring = True,
-            furness_loops=furness_loops,
-            fitting_loops=fitting_loops,
-            bs_con_target = .95,
-            target_r_gap = 1,
-            rounding_factor=3,
-            iz_cost_infill=iz_cost_infill,
-            echo=echo
-    )
+            cost_type,
+            furness_loops,
+            fitting_loops,
+            i_paths,
+            o_paths,
+            iz_cost_infill,
+            verbose=True):
 
+        """
+        Distributes the synthetic distributions, producing 24hr PA Matrices
 
-    # Print calib outputs - append calib outputs
- 
+        Encapsulates the inner workings of the synthetic distribution loop from
+        run_distribution_model(). Useful for use in multi-threaded environments
+        """
+        # get all segments and define parameters for distribution
+        calib_params = {}
+        for ds in distribution_segments:
+            calib_params.update({ds: target_trip_lengths[ds][dist_index]})
 
-    # Export 24hr distribution
-    # Generate distribution name
-    dist_path = os.path.join(o_paths['summaries'],
-                             trip_origin + '_synthetic')
+        # Get initial alpha & beta from distribution parameters
+        distribution_params = self.get_distribution_parameters(
+            synthetic_dists, calib_params)
 
-    dist_path = nup.build_path(dist_path, calib_params)
+        # Print a message telling the user which matrix is being worked on
+        dist_name = nup.generate_distribution_name(calib_params)
+        print("INFO: Creating the synthetic distribution for %s..." % dist_name)
 
-    # Generate trip length bin name
-    bin_path = os.path.join(o_paths['tld'],
-                            trip_origin + '_synthetic_bin')
+        # Unpack params into dict
+        init_param_a = distribution_params['init_param_a']
+        init_param_b = distribution_params['init_param_b']
 
-    bin_path = nup.build_path(bin_path, calib_params)
+        del distribution_params
 
-    # Generate trip length band name
-    tlb_path = os.path.join(o_paths['reports'],
-                            trip_origin + '_trip_length_bands')
+        # Work out trip length band path from given params
+        # Only want standard segments at this point
+        tlb_folder = os.path.join(i_paths['imports'],
+                                  'trip_length_bands',
+                                  tlb_area,
+                                  'standard_segments')
 
-    tlb_path = nup.build_path(tlb_path, calib_params)
-
-    # Generate band distribution name
-    tbd_path = os.path.join(o_paths['reports'],
-                            trip_origin + '_band_distribution')
-
-    tbd_path = nup.build_path(tbd_path, calib_params)
-
-    # Export distribution
-    hb_distribution[0].to_csv(dist_path, index=False)
-    # Export trip length bins
-    hb_distribution[1].to_csv(bin_path, index=False)
-
-    del hb_distribution
-
-def _translated_distributions_outer_loop_worker(dist_index,
-                                                translated_dists,
-                                                available_dists,
-                                                model_name,
-                                                distribution_segments,
-                                                trip_origin,
-                                                internal_24hr_productions,
-                                                i_paths,
-                                                o_paths,
-                                                file_drive,
-                                                echo=True):
-    """
-    Distributes the translated distributions, producing 24hr PA Matrices
-
-    Encapsulates the inner workings of the translated distribution loop from
-    run_distribution_model(). Useful for use in multi-threaded environments
-    """
-    # TODO: make sure echo=False it actually suppresses all prints
-    calib_params = {}
-    for ds in distribution_segments:
-        calib_params.update({ds: translated_dists[ds][dist_index]})
-
-    # Print a message telling the user which matrix is being worked on
-    dist_name = nup.generate_distribution_name(calib_params)
-    print("INFO: Creating the synthetic distribution for %s..." % dist_name)
-
-    # Get distribution from import source
-    # TODO: tighten up calls to other dists
-    other_model_name = translated_dists['distribution'][dist_index]
-    omd = fetch_other_model_distribution(other_model_name,
-                                         file_drive,
-                                         available_dists,
-                                         calib_params,
-                                         distribution_segments,
-                                         t_iteration='iter4',
-                                         echo=echo)
-
-    om_name = omd[0]
-    nup.print_w_toggle('Using ' + str(om_name), echo=echo)
-    om_dist = omd[1]
-    # om_ignored_segs = omd[2]
-    # print('This distribution ignoring ' + str(om_ignored_segs) +
-    #       ' this may mean distribution ignores segment costs')
-
-    del omd
-    source_trips = om_dist['dt'].sum()
-    nup.print_w_toggle('Source trips: ' + str(source_trips), echo=echo)
-
-    t_distribution = translate_distribution(om_dist,
-                                            model_name,
-                                            other_model_name,
-                                            internal_24hr_productions,
-                                            calib_params,
-                                            target_path=i_paths['lookups'])
-
-    target_trips = t_distribution['dt'].sum()
-    nup.print_w_toggle('Target trips: ' + str(target_trips), echo=echo)
-
-    # Export translated distribution
-    t_dist_path = os.path.join(o_paths['summaries'],
-                               trip_origin + '_synthetic')
-    t_dist_path = nup.build_path(t_dist_path, calib_params)
-
-    t_distribution.to_csv(t_dist_path, index=False)
-
-
-def _intra_zonal_distributions_outer_loop_worker(dist_index,
-                                                 intra_zonal_dists,
-                                                 distribution_segments,
-                                                 trip_origin,
-                                                 internal_24hr_productions,
-                                                 ia_name,
-                                                 o_paths,
-                                                 echo=True):
-    """
-    Distributes the intra_zonal distributions, producing 24hr PA Matrices
-
-    Encapsulates the inner workings of the intra_zonal distribution loop from
-    run_distribution_model(). Useful for use in multi-threaded environments
-    """
-    calib_params = {}
-    for ds in distribution_segments:
-        calib_params.update({ds: intra_zonal_dists[ds][dist_index]})
-
-    # Print a message telling the user which matrix is being worked on
-    dist_name = nup.generate_distribution_name(calib_params)
-    print("INFO: Creating the synthetic distribution for %s..." % dist_name)
-
-    iz_distribution = pass_to_intrazonal(internal_24hr_productions,
-                                         ia_name,
-                                         calib_params,
-                                         echo=echo)
-
-    # Export translated distribution
-    iz_dist_path = os.path.join(o_paths['summaries'],
-                                trip_origin + '_synthetic')
-    iz_dist_path = nup.build_path(iz_dist_path, calib_params)
-
-    iz_distribution.to_csv(iz_dist_path)
-
-def _cjtw_distributions_outer_loop_worker(dist_index,
-                                          cjtw_dists,
-                                          model_name,
-                                          distribution_segments,
-                                          trip_origin,
-                                          internal_24hr_productions,
-                                          cost_type,
-                                          ia_name,
-                                          i_paths,
-                                          o_paths,
-                                          echo=True):
-    """
-    Distributes the cjtw distributions, producing 24hr PA Matrices
-
-    Encapsulates the inner workings of the cjtw distribution loop from
-    run_distribution_model(). Useful for use in multi-threaded environments
-    """
-
-    # TODO: Get to work in same way as others
-    calib_params = {}
-    for ds in distribution_segments:
-        calib_params.update({ds: cjtw_dists[ds][dist_index]})
-
-    # Print a message telling the user which matrix is being worked on
-    dist_name = nup.generate_distribution_name(calib_params)
-    print("INFO: Creating the synthetic distribution for %s..." % dist_name)
-
-    # Doesn't look like this is used?
-    # tlb_folder = os.path.join(i_paths['imports'],
-    #                           'trip_length_bands',
-    #                           tlb_area,
-    #                           'standard_segments')
-    # Get trip length bands
-    # tlb = nup.get_trip_length_bands(tlb_folder,
-    #                                 calib_params,
-    #                                 segmentation,
-    #                                 trip_origin = trip_origin)
-
-    if cost_type != '24hr':
-        print('WARNING: Costs are not 24hr, trip length band audit may not work.')
-
-    cjtw_distribution = distribute_cjtw(internal_24hr_productions,
-                                        i_paths['lookups'],
-                                        ia_name,
-                                        model_name,
+        # Get trip length bands
+        tlb = nup.get_trip_length_bands(tlb_folder,
                                         calib_params,
-                                        cost_type=cost_type,
-                                        subset=None,
-                                        echo=echo)
+                                        segmentation,
+                                        trip_origin=trip_origin,
+                                        replace_nan=True,
+                                        verbose=verbose)
 
-    # Export 24hr distribution
-    # Generate distribution name
-    c_dist_path = os.path.join(o_paths['summaries'],
-                               trip_origin + '_synthetic')
-    c_dist_path = nup.build_path(c_dist_path, calib_params)
+        calib_params.update({'tlb': tlb})
 
-    # Generate trip length bin name
-    c_bin_path = os.path.join(o_paths['tld'],
-                              trip_origin + '_synthetic_bin')
-    c_bin_path = nup.build_path(c_bin_path, calib_params)
+        # Loop over the distributions until beta gives:
+        # 1. a decent average trip length by band
+        # 2. decent proportions within the segments
 
-    # Export distribution
-    cjtw_distribution[0].to_csv(c_dist_path, index=True)
-    # Export trip length bins
-    cjtw_distribution[1].to_csv(c_bin_path, index=False)
+        # TODO: Filter should be done outside of function and passed as np vector, still inside atm
+        #  - this applies to intra & cjtw too
+        hb_distribution = gm.run_gravity_model(
+                ia_name,
+                calib_params,
+                init_param_a,
+                init_param_b,
+                productions,
+                attractions,
+                model_lookup_path=i_paths['lookups'],
+                dist_log_path=o_paths['reports'],
+                dist_log_fname=trip_origin + '_internal_distribution',
+                dist_function = dist_function,
+                cost_type=cost_type,
+                apply_k_factoring = True,
+                furness_loops=furness_loops,
+                fitting_loops=fitting_loops,
+                bs_con_target = .95,
+                target_r_gap = 1,
+                rounding_factor=3,
+                iz_cost_infill=iz_cost_infill,
+                verbose=verbose
+        )
 
 
-def run_distribution_model(file_drive=_default_import_file_drive,
-                           model_name=_default_model_name,
-                           iteration=_default_iter,
-                           tlb_area='north',
-                           segmentation='tfn',
-                           distribution_segments=['p', 'm'],
-                           dist_function = 'tanner',
-                           trip_origin='hb',
-                           cost_type='24hr',
-                           furness_loops=1999,
-                           fitting_loops=100,
-                           iz_cost_infill=.5,
-                           export_modes=[3],
-                           echo=True,
-                           mp_threads=-1
-                           ):
+        # Print calib outputs - append calib outputs
 
-    """
-    This function runs the distribution of productions and attractions to a
-    24hr PA matrix.
 
-    Parameters
-    ----------
-    production_import_path=_default_p_import_path:
-        Import path for productions.
+        # Export 24hr distribution
+        # Generate distribution name
+        dist_path = os.path.join(o_paths['summaries'],
+                                 trip_origin + '_synthetic')
 
-    attraction_import_path=_default_a_import_path:
-        Import path for attractions.
+        dist_path = nup.build_path(dist_path, calib_params)
 
-    model_folder:
-        Folder containing the relevant meta data for the desired zoning
-        system.
+        # Generate trip length bin name
+        bin_path = os.path.join(o_paths['tld'],
+                                trip_origin + '_synthetic_bin')
 
-    iteration:
-        Iteration of current run. This will be in output names and also the
-        target folder.
+        bin_path = nup.build_path(bin_path, calib_params)
 
-    segmentation = 'tfn':
-        target segmentation, takes 'ntem' or 'tfn'
+        # Generate trip length band name
+        tlb_path = os.path.join(o_paths['reports'],
+                                trip_origin + '_trip_length_bands')
 
-    distribution_segments = ['purpose', 'mode', 'car_availability']:
-        Segments to distribute to at 24hr PA. D
+        tlb_path = nup.build_path(tlb_path, calib_params)
 
-    distribution_method = 'tanner':
-        distribution method for gravity model - takes 'tanner' which works and
-        soon to take 'ln' as log normal.
+        # Generate band distribution name
+        tbd_path = os.path.join(o_paths['reports'],
+                                trip_origin + '_band_distribution')
 
-    echo:
-        Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops.
-        Defaults to True.
+        tbd_path = nup.build_path(tbd_path, calib_params)
 
-    echo_outer_loop_updates:
-        Similar to echo. If True, overwrites echo for outer loop updates in
-        the gravity model. Useful for dev to see alpha/beta progress.
-        Defaults to False.
+        # Export distribution
+        hb_distribution[0].to_csv(dist_path, index=False)
+        # Export trip length bins
+        hb_distribution[1].to_csv(bin_path, index=False)
 
-    mp_threads:
-        The number of threads to use when multiprocessing.
-        Set mp_threads=1 to not use multiple threads.
-        Set mp_threads=0 to not use multi-threaded code at all.
-        Defaults to 0.
+        del hb_distribution
 
-    Returns
-    ----------
-    pa_24hr:
-        24hr PA matrix by zone by mode and purpose.
-    """
-    # Argument validation
-    assert (mp_threads >= -1), ("In distribution_model.run_distribution_model(), " +
-                                "mp_threads must be -1 or greater.\n" +
-                                "Got %s." % str(mp_threads))
-    if mp_threads == -1:
-        mp_threads = os.cpu_count()-1
+    def _trans_dist_worker(
+            self,
+            dist_index,
+            translated_dists,
+            available_dists,
+            model_name,
+            distribution_segments,
+            trip_origin,
+            internal_24hr_productions,
+            i_paths,
+            o_paths,
+            verbose=True):
+        """
+        Distributes the translated distributions, producing 24hr PA Matrices
 
-    # Path to root, stop any folder overwrites
+        Encapsulates the inner workings of the translated distribution loop from
+        run_distribution_model(). Useful for use in multi-threaded environments
+        """
+        # TODO: make sure verbose=False it actually suppresses all prints
+        calib_params = {}
+        for ds in distribution_segments:
+            calib_params.update({ds: translated_dists[ds][dist_index]})
 
-    # Define paths for import
-    paths = path_config(file_drive=file_drive,
-                        model_name=model_name,
-                        iteration=iteration,
-                        trip_origin=trip_origin)
-    i_paths = paths[0]
-    o_paths = paths[1]
-    del(paths)
+        # Print a message telling the user which matrix is being worked on
+        dist_name = nup.generate_distribution_name(calib_params)
+        print("INFO: Creating the synthetic distribution for %s..." % dist_name)
 
-    # Define list of available distributions (for translation)
-    # TODO: filter out fluff, lower case
-    # TODO: Push to run script
-    available_dists = os.listdir(os.path.join(file_drive, 'NorMITs Synthesiser/'))
+        # Get distribution from import source
+        # TODO: tighten up calls to other dists
+        other_model_name = translated_dists['distribution'][dist_index]
+        omd = self.fetch_other_model_distribution(
+            other_model_name,
+            available_dists,
+            calib_params,
+            distribution_segments,
+            t_iteration='iter4',
+            verbose=verbose)
 
-    # Paths returns:
-    # (import_folder_path, model_lookup_path,
-    # p_import_path, a_import_path, export_list)
+        om_name = omd[0]
+        nup.print_w_toggle('Using ' + str(om_name), verbose=verbose)
+        om_dist = omd[1]
+        # om_ignored_segs = omd[2]
+        # print('This distribution ignoring ' + str(om_ignored_segs) +
+        #       ' this may mean distribution ignores segment costs')
 
-    print('working folder:' + os.getcwd())
-    print('importing global params from:' + i_paths['imports'])
-    print('lookups from:' + i_paths['lookups'])
-    print('productions from:' + i_paths['production_import'])
-    print('attractions from:' + i_paths['attraction_import'])
+        del omd
+        source_trips = om_dist['dt'].sum()
+        nup.print_w_toggle(
+            'Source trips: ' + str(source_trips), verbose=verbose)
 
-    # Import productions and attractions
-    pa = nup.import_pa(i_paths['production_import'], # p import path
-                       i_paths['attraction_import']) # a import path
-    productions = pa[0]
-    attractions = pa[1]
-    del(pa)
+        t_distribution = self.translate_distribution(
+            om_dist,
+            model_name,
+            other_model_name,
+            internal_24hr_productions,
+            calib_params,
+            target_path=i_paths['lookups'])
 
-    ia_areas = nup.define_internal_external_areas(i_paths['lookups'])
-    internal_area = ia_areas[0]
-    ia_name = list(internal_area)[0]
-    external_area = ia_areas[1]
+        target_trips = t_distribution['dt'].sum()
+        nup.print_w_toggle('Target trips: ' + str(target_trips), verbose=verbose)
 
-    ### TODO: Distribution model is an object and this is the end of the _init_
-    ### End of production core, ready for all homebased runs.
-    
-    # TODO: Build the init_params, if there aren't any
+        # Export translated distribution
+        t_dist_path = os.path.join(o_paths['summaries'],
+                                   trip_origin + '_synthetic')
+        t_dist_path = nup.build_path(t_dist_path, calib_params)
 
-    # Get initial betas
-    init_params = nup.get_init_params(i_paths['lookups'],
-                                      distribution_type=trip_origin,
-                                      model_name=model_name,
-                                      mode_subset=None,
-                                      purpose_subset=None)
+        t_distribution.to_csv(t_dist_path, index=False)
 
-    # null_dists = Distributions to be ignored (usually cjtw)
-    # intra_zonal_dists = Combos to be passed straight to intra zonal and exported
-    # zone_conversion_dists = Combos to be translated from another zoning system
-    # init_params = actual distribution alphas & betas
+    def _iz_dist_worker(
+            self,
+            dist_index,
+            intra_zonal_dists,
+            distribution_segments,
+            trip_origin,
+            internal_24hr_productions,
+            ia_name,
+            o_paths,
+            verbose=True):
+        """
+        Distributes the intra_zonal distributions, producing 24hr PA Matrices
 
-    segmented_params = run_separation(init_params,
-                                      # lower dist list
-                                      [x.lower() for x in available_dists])
+        Encapsulates the inner workings of the intra_zonal distribution loop from
+        run_distribution_model(). Useful for use in multi-threaded environments
+        """
+        calib_params = {}
+        for ds in distribution_segments:
+            calib_params.update({ds: intra_zonal_dists[ds][dist_index]})
 
-    synthetic_dists = segmented_params[0]
-    translated_dists = segmented_params[1] # TODO: Specify iteration
-    intra_zonal_dists = segmented_params[2]
-    cjtw_dists = segmented_params[3]
-    null_dists = segmented_params[4]
+        # Print a message telling the user which matrix is being worked on
+        dist_name = nup.generate_distribution_name(calib_params)
+        print("INFO: Creating the synthetic distribution for %s..." % dist_name)
 
-    # Get target trip length
-    ttl_cols = distribution_segments.copy()
-    ttl_cols.append('average_trip_length')
+        iz_distribution = self.pass_to_intrazonal(
+            internal_24hr_productions,
+            ia_name,
+            calib_params,
+            verbose=verbose)
 
-    # Target trip lengths here, derived straight from beta file
-    target_trip_lengths = synthetic_dists.reindex(
-            ttl_cols,
-            axis=1).reset_index(drop=True)
+        # Export translated distribution
+        iz_dist_path = os.path.join(o_paths['summaries'],
+                                    trip_origin + '_synthetic')
+        iz_dist_path = nup.build_path(iz_dist_path, calib_params)
 
-    # Let the user know if threads are being used or not
-    if mp_threads == 0:
-        print("INFO: mp_threads set to 0, running as basic loops.")
-    elif mp_threads == 1:
-        print("INFO: mp_threads set to 1, using a single thread.")
-    else:
-        print("INFO: mp_threads set to 2 or greater, using multiple threads.")
+        iz_distribution.to_csv(iz_dist_path)
 
-    # Iterate over distributions
-    print("-" * 20, " Start Synthetic Distributions ", "-" * 20)
-    # Build a dictionary of unchanging keyword arguments for each function call
-    unchanging_kwargs = {'synthetic_dists': synthetic_dists,
-                         'segmentation': segmentation,
-                         'distribution_segments': distribution_segments,
-                         'dist_function': dist_function,
-                         'tlb_area': tlb_area,
-                         'trip_origin': trip_origin,
-                         'target_trip_lengths': target_trip_lengths,
-                         'ia_name': ia_name,
-                         'productions': productions,
-                         'attractions': attractions,
-                         'cost_type': cost_type,
-                         'furness_loops':furness_loops,
-                         'fitting_loops':fitting_loops,
-                         'i_paths': i_paths,
-                         'o_paths': o_paths,
-                         'iz_cost_infill': iz_cost_infill,
-                         'echo': echo}
+    def _cjtw_dist_worker(
+            self,
+            dist_index,
+            cjtw_dists,
+            model_name,
+            distribution_segments,
+            trip_origin,
+            internal_24hr_productions,
+            cost_type,
+            ia_name,
+            i_paths,
+            o_paths,
+            verbose=True):
+        """
+        Distributes the cjtw distributions, producing 24hr PA Matrices
 
-    if mp_threads == 0:
-        for i in target_trip_lengths.index:
-            kwargs = unchanging_kwargs.copy()
-            kwargs['dist_index'] = i
-            print('Running ' + str(i))
-            _synthetic_distributions_worker(**kwargs)
-    else:
-        # Build a list of kwargs for each function call
-        kwargs_list = list()
-        for i in target_trip_lengths.index:
-            kwargs = unchanging_kwargs.copy()
-            kwargs['dist_index'] = i
-            kwargs_list.append(kwargs)
+        Encapsulates the inner workings of the cjtw distribution loop from
+        run_distribution_model(). Useful for use in multi-threaded environments
+        """
 
-        # Call using multiple threads
-        mp.process_pool_wrapper(_synthetic_distributions_worker,
-                                kwargs=kwargs_list,
-                                process_count=mp_threads)
-    del unchanging_kwargs
-    print("-" * 20, " End Synthetic Distributions ", "-" * 20)
+        # TODO: Get to work in same way as others
+        calib_params = {}
+        for ds in distribution_segments:
+            calib_params.update({ds: cjtw_dists[ds][dist_index]})
 
-    print("-" * 20, " Start Translated Distributions ", "-" * 20)
+        # Print a message telling the user which matrix is being worked on
+        dist_name = nup.generate_distribution_name(calib_params)
+        print("INFO: Creating the synthetic distribution for %s..." % dist_name)
 
-    # Build a dictionary of unchanging keyword arguments for each function call
-    unchanging_kwargs = {'translated_dists': translated_dists,
-                         'available_dists': available_dists,
-                         'model_name': model_name,
-                         'distribution_segments': distribution_segments,
-                         'trip_origin': trip_origin,
-                         'internal_24hr_productions': productions,
-                         'i_paths': i_paths,
-                         'o_paths': o_paths,
-                         'file_drive': file_drive,
-                         'echo': echo}
+        # Doesn't look like this is used?
+        # tlb_folder = os.path.join(i_paths['imports'],
+        #                           'trip_length_bands',
+        #                           tlb_area,
+        #                           'standard_segments')
+        # Get trip length bands
+        # tlb = nup.get_trip_length_bands(tlb_folder,
+        #                                 calib_params,
+        #                                 segmentation,
+        #                                 trip_origin = trip_origin)
 
-    if mp_threads == 0:
-        for i in translated_dists.index:
-            kwargs = unchanging_kwargs.copy()
-            kwargs['dist_index'] = i
-            _translated_distributions_outer_loop_worker(**kwargs)
-    else:
-        # Build a list of kwargs for each function call
-        kwargs_list = list()
-        for i in translated_dists.index:
-            kwargs = unchanging_kwargs.copy()
-            kwargs['dist_index'] = i
-            kwargs_list.append(kwargs)
+        if cost_type != '24hr':
+            print('WARNING: Costs are not 24hr, trip length band audit may not work.')
 
-        # Call using multiple threads
-        mp.process_pool_wrapper(_translated_distributions_outer_loop_worker,
-                                kwargs=kwargs_list,
-                                process_count=mp_threads)
-    del unchanging_kwargs
-    print("-" * 20, " End Translated Distributions ", "-" * 20)
+        cjtw_distribution = self.distribute_cjtw(
+            internal_24hr_productions,
+            i_paths['lookups'],
+            ia_name,
+            model_name,
+            calib_params,
+            cost_type=cost_type,
+            subset=None,
+            verbose=verbose)
 
-    print("-" * 20, " Start Intra-Zonal Distributions ", "-" * 20)
-    # Build a dictionary of unchanging keyword arguments for each function call
-    unchanging_kwargs = {'intra_zonal_dists': intra_zonal_dists,
-                         'distribution_segments': distribution_segments,
-                         'trip_origin': trip_origin,
-                         'internal_24hr_productions': productions,
-                         'ia_name': ia_name,
-                         'o_paths': o_paths,
-                         'echo': echo}
+        # Export 24hr distribution
+        # Generate distribution name
+        c_dist_path = os.path.join(o_paths['summaries'],
+                                   trip_origin + '_synthetic')
+        c_dist_path = nup.build_path(c_dist_path, calib_params)
 
-    if mp_threads == 0:
-        for i in intra_zonal_dists.index:
-            kwargs = unchanging_kwargs.copy()
-            kwargs['dist_index'] = i
-            _intra_zonal_distributions_outer_loop_worker(**kwargs)
-    else:
-        # Build a list of kwargs for each function call
-        kwargs_list = list()
-        for i in intra_zonal_dists.index:
-            kwargs = unchanging_kwargs.copy()
-            kwargs['dist_index'] = i
-            kwargs_list.append(kwargs)
+        # Generate trip length bin name
+        c_bin_path = os.path.join(o_paths['tld'],
+                                  trip_origin + '_synthetic_bin')
+        c_bin_path = nup.build_path(c_bin_path, calib_params)
 
-        # Call using multiple threads
-        mp.process_pool_wrapper(_intra_zonal_distributions_outer_loop_worker,
-                                kwargs=kwargs_list,
-                                process_count=mp_threads)
-    del unchanging_kwargs
-    print("-" * 20, " End Intra-Zonal Distributions ", "-" * 20)
+        # Export distribution
+        cjtw_distribution[0].to_csv(c_dist_path, index=True)
+        # Export trip length bins
+        cjtw_distribution[1].to_csv(c_bin_path, index=False)
 
-    print("-" * 20, " Start CJTW Distributions ", "-" * 20)
-    # Build a dictionary of unchanging keyword arguments for each function call
-    unchanging_kwargs = {'cjtw_dists': cjtw_dists,
-                         'model_name': model_name,
-                         'distribution_segments': distribution_segments,
-                         'trip_origin': trip_origin,
-                         'internal_24hr_productions': productions,
-                         'cost_type': cost_type,
-                         'ia_name': ia_name,
-                         'i_paths': i_paths,
-                         'o_paths': o_paths,
-                         'echo': echo}
 
-    if mp_threads == 0:
-        for i in cjtw_dists.index:
-            kwargs = unchanging_kwargs.copy()
-            kwargs['dist_index'] = i
-            _cjtw_distributions_outer_loop_worker(**kwargs)
-    else:
-        # Build a list of kwargs for each function call
-        kwargs_list = list()
-        for i in cjtw_dists.index:
-            kwargs = unchanging_kwargs.copy()
-            kwargs['dist_index'] = i
-            kwargs_list.append(kwargs)
+    def run_distribution_model(
+            self,
+            trip_origin='hb',
+            cost_type='24hr',
+            furness_loops=1999,
+            fitting_loops=100,
+            iz_cost_infill=.5,
+            export_modes=[3],
+            verbose=True,
+            mp_threads=-1):
 
-        # Call using multiple threads
-        mp.process_pool_wrapper(_cjtw_distributions_outer_loop_worker,
-                                kwargs=kwargs_list,
-                                process_count=mp_threads)
-    del unchanging_kwargs
-    print("-" * 20, " End CJTW Distributions ", "-" * 20)
-    print('Done!')
+        """
+        This function runs the distribution of productions and attractions to a
+        24hr PA matrix.
+
+        Parameters
+        ----------
+        production_import_path=_default_p_import_path:
+            Import path for productions.
+
+        attraction_import_path=_default_a_import_path:
+            Import path for attractions.
+
+        model_folder:
+            Folder containing the relevant meta data for the desired zoning
+            system.
+
+        iteration:
+            Iteration of current run. This will be in output names and also the
+            target folder.
+
+        segmentation = 'tfn':
+            target segmentation, takes 'ntem' or 'tfn'
+
+        distribution_segments = ['purpose', 'mode', 'car_availability']:
+            Segments to distribute to at 24hr PA. D
+
+        distribution_method = 'tanner':
+            distribution method for gravity model - takes 'tanner' which works and
+            soon to take 'ln' as log normal.
+
+        verbose:
+            Indicates whether to print a log of the process to the terminal.
+            Useful to set verbose=False when using multi-threaded loops.
+            Defaults to True.
+
+        mp_threads:
+            The number of threads to use when multiprocessing.
+            Set mp_threads=1 to not use multiple threads.
+            Set mp_threads=0 to not use multi-threaded code at all.
+            Defaults to 0.
+
+        Returns
+        ----------
+        pa_24hr:
+            24hr PA matrix by zone by mode and purpose.
+        """
+        # Argument validation
+        assert (mp_threads >= -1), ("In distribution_model.run_distribution_model(), " +
+                                    "mp_threads must be -1 or greater.\n" +
+                                    "Got %s." % str(mp_threads))
+        if mp_threads == -1:
+            mp_threads = os.cpu_count()-1
+
+        # Path to root, stop any folder overwrites
+        # Define list of available distributions (for translation)
+        # TODO: filter out fluff, lower case
+        # TODO: Push to run script
+        available_dists = os.listdir(os.path.join(file_drive, 'NorMITs Synthesiser/'))
+
+        # Paths returns:
+        # (import_folder_path, model_lookup_path,
+        # p_import_path, a_import_path, export_list)
+
+        print('working folder:' + os.getcwd())
+        print('importing global params from:' + i_paths['imports'])
+        print('lookups from:' + i_paths['lookups'])
+        print('productions from:' + i_paths['production_import'])
+        print('attractions from:' + i_paths['attraction_import'])
+
+        # Import productions and attractions
+        pa = nup.import_pa(i_paths['production_import'], # p import path
+                           i_paths['attraction_import']) # a import path
+        productions = pa[0]
+        attractions = pa[1]
+        del(pa)
+
+        ia_areas = nup.define_internal_external_areas(i_paths['lookups'])
+        internal_area = ia_areas[0]
+        ia_name = list(internal_area)[0]
+        external_area = ia_areas[1]
+
+        ### TODO: Distribution model is an object and this is the end of the _init_
+        ### End of production core, ready for all homebased runs.
+
+        # TODO: Build the init_params, if there aren't any
+
+        # Get initial betas
+        init_params = nup.get_init_params(i_paths['lookups'],
+                                          distribution_type=trip_origin,
+                                          model_name=model_name,
+                                          mode_subset=None,
+                                          purpose_subset=None)
+
+        # null_dists = Distributions to be ignored (usually cjtw)
+        # intra_zonal_dists = Combos to be passed straight to intra zonal and exported
+        # zone_conversion_dists = Combos to be translated from another zoning system
+        # init_params = actual distribution alphas & betas
+
+        segmented_params = run_separation(init_params,
+                                          # lower dist list
+                                          [x.lower() for x in available_dists])
+
+        synthetic_dists = segmented_params[0]
+        translated_dists = segmented_params[1] # TODO: Specify iteration
+        intra_zonal_dists = segmented_params[2]
+        cjtw_dists = segmented_params[3]
+        null_dists = segmented_params[4]
+
+        # Get target trip length
+        ttl_cols = distribution_segments.copy()
+        ttl_cols.append('average_trip_length')
+
+        # Target trip lengths here, derived straight from beta file
+        target_trip_lengths = synthetic_dists.reindex(
+                ttl_cols,
+                axis=1).reset_index(drop=True)
+
+        # Let the user know if threads are being used or not
+        if mp_threads == 0:
+            print("INFO: mp_threads set to 0, running as basic loops.")
+        elif mp_threads == 1:
+            print("INFO: mp_threads set to 1, using a single thread.")
+        else:
+            print("INFO: mp_threads set to 2 or greater, using multiple threads.")
+
+        # Iterate over distributions
+        print("-" * 20, " Start Synthetic Distributions ", "-" * 20)
+        # Build a dictionary of unchanging keyword arguments for each function call
+        unchanging_kwargs = {'synthetic_dists': synthetic_dists,
+                             'segmentation': segmentation,
+                             'distribution_segments': distribution_segments,
+                             'dist_function': dist_function,
+                             'tlb_area': tlb_area,
+                             'trip_origin': trip_origin,
+                             'target_trip_lengths': target_trip_lengths,
+                             'ia_name': ia_name,
+                             'productions': productions,
+                             'attractions': attractions,
+                             'cost_type': cost_type,
+                             'furness_loops':furness_loops,
+                             'fitting_loops':fitting_loops,
+                             'i_paths': i_paths,
+                             'o_paths': o_paths,
+                             'iz_cost_infill': iz_cost_infill,
+                             'verbose': verbose}
+
+        if mp_threads == 0:
+            for i in target_trip_lengths.index:
+                kwargs = unchanging_kwargs.copy()
+                kwargs['dist_index'] = i
+                print('Running ' + str(i))
+                self._synth_dist_worker(**kwargs)
+        else:
+            # Build a list of kwargs for each function call
+            kwargs_list = list()
+            for i in target_trip_lengths.index:
+                kwargs = unchanging_kwargs.copy()
+                kwargs['dist_index'] = i
+                kwargs_list.append(kwargs)
+
+            # Call using multiple threads
+            mp.process_pool_wrapper(self._synth_dist_worker,
+                                    kwargs=kwargs_list,
+                                    process_count=mp_threads)
+        del unchanging_kwargs
+        print("-" * 20, " End Synthetic Distributions ", "-" * 20)
+
+        print("-" * 20, " Start Translated Distributions ", "-" * 20)
+
+        # Build a dictionary of unchanging keyword arguments for each function call
+        unchanging_kwargs = {'translated_dists': translated_dists,
+                             'available_dists': available_dists,
+                             'model_name': model_name,
+                             'distribution_segments': distribution_segments,
+                             'trip_origin': trip_origin,
+                             'internal_24hr_productions': productions,
+                             'i_paths': i_paths,
+                             'o_paths': o_paths,
+                             'file_drive': file_drive,
+                             'verbose': verbose}
+
+        if mp_threads == 0:
+            for i in translated_dists.index:
+                kwargs = unchanging_kwargs.copy()
+                kwargs['dist_index'] = i
+                self._trans_dist_worker(**kwargs)
+        else:
+            # Build a list of kwargs for each function call
+            kwargs_list = list()
+            for i in translated_dists.index:
+                kwargs = unchanging_kwargs.copy()
+                kwargs['dist_index'] = i
+                kwargs_list.append(kwargs)
+
+            # Call using multiple threads
+            mp.process_pool_wrapper(self._trans_dist_worker,
+                                    kwargs=kwargs_list,
+                                    process_count=mp_threads)
+        del unchanging_kwargs
+        print("-" * 20, " End Translated Distributions ", "-" * 20)
+
+        print("-" * 20, " Start Intra-Zonal Distributions ", "-" * 20)
+        # Build a dictionary of unchanging keyword arguments for each function call
+        unchanging_kwargs = {'intra_zonal_dists': intra_zonal_dists,
+                             'distribution_segments': distribution_segments,
+                             'trip_origin': trip_origin,
+                             'internal_24hr_productions': productions,
+                             'ia_name': ia_name,
+                             'o_paths': o_paths,
+                             'verbose': verbose}
+
+        if mp_threads == 0:
+            for i in intra_zonal_dists.index:
+                kwargs = unchanging_kwargs.copy()
+                kwargs['dist_index'] = i
+                self._iz_dist_worker(**kwargs)
+        else:
+            # Build a list of kwargs for each function call
+            kwargs_list = list()
+            for i in intra_zonal_dists.index:
+                kwargs = unchanging_kwargs.copy()
+                kwargs['dist_index'] = i
+                kwargs_list.append(kwargs)
+
+            # Call using multiple threads
+            mp.process_pool_wrapper(self._iz_dist_worker,
+                                    kwargs=kwargs_list,
+                                    process_count=mp_threads)
+        del unchanging_kwargs
+        print("-" * 20, " End Intra-Zonal Distributions ", "-" * 20)
+
+        print("-" * 20, " Start CJTW Distributions ", "-" * 20)
+        # Build a dictionary of unchanging keyword arguments for each function call
+        unchanging_kwargs = {'cjtw_dists': cjtw_dists,
+                             'model_name': model_name,
+                             'distribution_segments': distribution_segments,
+                             'trip_origin': trip_origin,
+                             'internal_24hr_productions': productions,
+                             'cost_type': cost_type,
+                             'ia_name': ia_name,
+                             'i_paths': i_paths,
+                             'o_paths': o_paths,
+                             'verbose': verbose}
+
+        if mp_threads == 0:
+            for i in cjtw_dists.index:
+                kwargs = unchanging_kwargs.copy()
+                kwargs['dist_index'] = i
+                self._cjtw_dist_worker(**kwargs)
+        else:
+            # Build a list of kwargs for each function call
+            kwargs_list = list()
+            for i in cjtw_dists.index:
+                kwargs = unchanging_kwargs.copy()
+                kwargs['dist_index'] = i
+                kwargs_list.append(kwargs)
+
+            # Call using multiple threads
+            mp.process_pool_wrapper(self._cjtw_dist_worker,
+                                    kwargs=kwargs_list,
+                                    process_count=mp_threads)
+        del unchanging_kwargs
+        print("-" * 20, " End CJTW Distributions ", "-" * 20)
+        print('Done!')

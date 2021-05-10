@@ -33,18 +33,20 @@ def create_project_folder(projectName, echo=True):
         os.chdir(os.getcwd() + '/' + projectName)
         print_w_toggle('Project folder already exists, wd set there', echo)
 
-def create_folder(folder, chDir=False, echo=True):
+
+def create_folder(folder, chDir=False, verbose=True):
     """
     """
     if not os.path.exists(folder):
         os.makedirs(folder)
         if chDir:
             os.chdir(folder)
-        print_w_toggle("New project folder created in " + folder, echo=echo)
+        print_w_toggle("New project folder created in " + folder, echo=verbose)
     else:
         if chDir:
             os.chdir(folder)
-        print_w_toggle('Folder already exists', echo=echo)
+        print_w_toggle('Folder already exists', echo=verbose)
+
 
 def set_time():
     """
@@ -75,7 +77,7 @@ def set_wd(home_dir = _default_home_dir, iteration=_default_iter):
         Path to base directory to sit under project.
 
     iteration:
-        Project folder for exports
+        Project folder for efs_exports
 
     Returns
     ----------
@@ -326,187 +328,6 @@ def glimpse(dataframe):
     gl = dataframe.iloc[0:5]
     return gl
 
-def control_to_ntem(msoa_output,
-                    ntem_totals,
-                    lad_lookup,
-                    group_cols = ['p', 'm'],
-                    base_value_name = 'attractions',
-                    ntem_value_name = 'Attractions',
-                    base_zone_name = 'msoa_zone_id',
-                    purpose = 'hb'):
-    """
-    Control to a vector of NTEM constraints using single factor.
-    Return productions controlled to NTEM.
-
-    HAS SEPARATE SCRIPT REMOVE FROM UTILS
-
-    Parameters:
-    ----------
-    msoa_output:
-        DF of productions, flexible segments, should be in MSOA zones
-
-    ntem_totals:
-        DF of NTEM totals to control to. Will need all group cols.
-
-    lad_lookup:
-        DF of translation between MSOA and LAD - should be in globals
-
-    group_cols = ['p', 'm']:
-        Segments to include in control. Will usually be ['p','m'], or
-        ['p','m','ca'] for rail
-
-    msoa_value_name = 'attractions':
-        Name of the value column in the MSOA dataset - ie. productions or
-        attractions. Might also be trips or dt.
-
-    ntem_value_name = 'Attractions':
-        Name of the value column in the NTEM dataset. Usually 'Productions'
-        or 'Attractions' but could be used for ca variable or growth.
-
-    base_zone_name = 'msoa_zone_id':
-        name of base zoning system. Will be dictated by the lad lookup.
-        Should be msoa in hb production model and attraction model but will
-        be target zoning system in nhb production model.
-
-    purpose = 'hb':
-        Purpose set to aggregate on. Can be 'hb' or 'nhb'
-
-    Returns:
-    ----------
-        adjusted_output:
-            DF with same msoa zoning as input but controlled to NTEM.
-    """
-    # Copy output
-    output = msoa_output.copy()
-
-    # Check params
-    # Groups
-    for col in group_cols:
-        if col not in list(output):
-            raise ValueError('Column ' + col + ' not in MSOA data')
-        if col not in list(ntem_totals):
-            raise ValueError('Column ' + col + ' not in NTEM data')
-
-    # Establish all non trip segments
-    segments = []
-    for col in list(output):
-        if col not in [base_zone_name,
-                       base_value_name]:
-            segments.append(col)
-
-    # Purposes
-    hb_purpose = [1,2,3,4,5,6,7,8]
-    nhb_purpose = [12,13,14,15,16,18]
-    if purpose not in ['hb', 'nhb']:
-        raise ValueError('Invalid purpose type')
-    else:
-        if purpose == 'hb':
-            p_vector = hb_purpose
-        else:
-            p_vector = nhb_purpose
-
-    # Print target value
-    before = output[base_value_name].sum()
-    print('Before: ' + str(before))
-
-    # Build factors
-    ntem_k_factors = ntem_totals[ntem_totals['p'].isin(p_vector)].copy()
-
-    kf_groups = ['lad_zone_id']
-    for col in group_cols:
-        kf_groups.append(col)
-    kf_sums = kf_groups.copy()
-    kf_sums.append(ntem_value_name)
-
-    # Sum down to drop non attraction segments
-    ntem_k_factors = ntem_k_factors.reindex(kf_sums,
-                                            axis=1).groupby(
-                                                    kf_groups).sum().reset_index()
-
-    target = ntem_k_factors[ntem_value_name].sum()
-    print('NTEM: ' + str(target))
-
-    # Assumes vectors are called productions or attractions
-    for col in group_cols:
-        ntem_k_factors.loc[:,col] = ntem_k_factors[
-                col].astype(int).astype(str)
-    ntem_k_factors['lad_zone_id'] = ntem_k_factors[
-            'lad_zone_id'].astype(float).astype(int)
-
-    lad_lookup = lad_lookup.reindex(['lad_zone_id', base_zone_name], axis=1)
-
-    output = output.merge(lad_lookup,
-                          how = 'left',
-                          on = base_zone_name)
-
-    # No lad match == likely an island - have to drop
-    output = output[~output['lad_zone_id'].isna()]
-
-    for col in group_cols:
-        output.loc[:,col] = output[col].astype(int).astype(str)
-    output['lad_zone_id'] = output['lad_zone_id'].astype(float).astype(int)
-
-    # Seed zero infill
-    output[base_value_name] = output[base_value_name].replace(0,0.001)
-
-    # Build LA adjustment
-    # Note tp not in the picture
-    af_groups = ['lad_zone_id']
-    for col in group_cols:
-        af_groups.append(col)
-    af_sums = af_groups.copy()
-    af_sums.append(base_value_name)
-
-    adj_fac = output.reindex(af_sums, axis=1).groupby(
-            af_groups).sum().reset_index().copy()
-    # Just have to do this manually
-    adj_fac['lad_zone_id'] = adj_fac['lad_zone_id'].astype(float).astype(int)
-
-    # Merge NTEM values
-    adj_fac = adj_fac.merge(ntem_k_factors,
-                            how = 'left',
-                            on = af_groups)
-    # Get adjustment factors
-    adj_fac['adj_fac'] = adj_fac[ntem_value_name]/adj_fac[base_value_name]
-    af_only = af_groups.copy()
-    af_only.append('adj_fac')
-    adj_fac = adj_fac.reindex(af_only, axis=1)
-    adj_fac['adj_fac'] = adj_fac['adj_fac'].replace(np.nan, 1)
-
-    for col in group_cols:
-        adj_fac.loc[:,col] = adj_fac[col].astype(int).astype(str)
-
-    adjustments = adj_fac['adj_fac']
-
-    # TODO: Report adj factors here
-    output = output.merge(adj_fac,
-                          how = 'left',
-                          on = kf_groups)
-
-    output[base_value_name] = output[base_value_name] * output['adj_fac']
-
-    # Output segmented lad totals
-    lad_groups = ['lad_zone_id']
-    for col in segments:
-        lad_groups.append(col)
-    lad_index = lad_groups.copy()
-    lad_index.append(base_value_name)
-
-    lad_totals = output.reindex(lad_index,
-                                axis=1).groupby(
-                                        lad_groups).sum().reset_index()
-
-    # Reindex outputs
-    output = output.drop(['lad_zone_id','adj_fac'], axis=1)
-
-    after = output[base_value_name].sum()
-    print('After: ' + str(after))
-
-    audit = {'before':before,
-             'target':target,
-             'after':after}
-
-    return output, audit, adjustments, lad_totals
 
 def aggregate_merger(dataframe,
                      target_segments,
@@ -648,6 +469,10 @@ def build_path(base_path,
     Build a finished param path from a base string containing file location
     and a list of input params for a given run.
     """
+    # BACKLOG: Update TMS filenames to include the year.
+    #  Will always be 2018 in TMS.
+    #  labels: demand merge, TMS
+
     if base_path[-4:] == '.csv':
         base_path = base_path[:-4]
 
@@ -680,7 +505,7 @@ def n_matrix_split(matrix,
     # Check for missing indices in the given matrix
     sum_len = sum([len(x) for x in indices])
     if sum_len != len(matrix):
-        # build a third category with a name and a list of the missing
+        # TODO: build a third category with a name and a list of the missing
         print('Do something')
 
     # Bundle up indices into a dict
@@ -720,7 +545,6 @@ def compile_od(od_folder,
     """
     Function to compile model format od matrices to a given specification
     """
-
     import_params = pd.read_csv(compile_param_path)
 
     # Define cols
@@ -732,13 +556,11 @@ def compile_od(od_folder,
     files = os.listdir(od_folder)
     # Filter pickles or anything else odd in there
     files = [x for x in files if '.csv' in x]
-    print(files)
 
     comp_ph = []
     od_pickle = {}
     for index,row in compilations.iterrows():
         compilation_name = row['compilation']
-        print(compilation_name)
 
         if row['format'] == 'long':
             target_format = 'long'
@@ -1111,15 +933,10 @@ def filter_distribution_p(internal_24hr_productions,
 def filter_pa_vector(pa_vector,
                      ia_name,
                      calib_params,
-                     value_var = 'trips',
+                     value_var='trips',
                      round_val=3,
                      echo=True):
     """
-    This function adds new balancing factors in to a matrix. They are returned
-    in the dt col and added to whichever col comes through in zone_col
-    parameter.
-
-    # TODO: Generalise for P or A vectors
 
     Parameters
     ----------
@@ -1154,7 +971,7 @@ def filter_pa_vector(pa_vector,
                 # Ignore nulled out segments (soc or ns)
                 # Force the parameter to integer, or it drops trips
                 param = cp
-                dp = dp[dp[index]==param]
+                dp = dp[dp[index] == param]
                 if echo:
                     print(index, cp)
             else:
@@ -1175,12 +992,12 @@ def filter_pa_vector(pa_vector,
 
         if echo:
             print('Values=%f before rounding.' % total_dp)
-            print('Values=%f after rounding.' % (dp['productions'].sum()))
-            print('Same=%s' % str(total_dp == dp['productions'].sum()))
+            print('Values=%f after rounding.' % (dp[value_var].sum()))
+            print('Same=%s' % str(total_dp == dp[value_var].sum()))
     else:
         total_dp = None
 
-    return(dp, total_dp)
+    return dp, total_dp
 
 def filter_pa_cols(pa_frame,
                    ia_name,
@@ -1217,7 +1034,9 @@ def filter_pa_cols(pa_frame,
 def get_costs(model_lookup_path,
               calib_params,
               tp = '24hr',
-              iz_infill = 0.5):
+              iz_infill = 0.5,
+              replace_nhb_with_hb = False,
+              ):
 
     # units takes different parameters
     # TODO: Needs a config guide for the costs somewhere
@@ -1289,13 +1108,16 @@ def get_costs(model_lookup_path,
     elif purpose in other:
         str_purpose = 'other'
     else:
-        raise ValueError("Cannot convert purpose to string." +
-                         "Got %s" % str(purpose))
+        raise ValueError("Cannot convert purpose to string. " +
+                         "Got %s." % str(purpose))
 
     # Filter down on purpose
     cost_cols = [x for x in cols if str_purpose in x]
     # Handle if we have numeric purpose costs, hope so, they're better!
     if len(cost_cols) == 0:
+        if replace_nhb_with_hb:
+            if purpose >= 10:
+                purpose -= 10
         cost_cols = [x for x in cols if ('p' + str(purpose)) in x]
 
     # Filter down on car availability
@@ -1337,133 +1159,6 @@ def get_costs(model_lookup_path,
         dat = pd.concat([iz, non_iz],axis=0,sort=True).reset_index(drop=True)
 
     return(dat, cost_return_name)
-
-def get_distance_and_costs(model_lookup_path,
-                           request_type='cost',
-                           journey_purpose=None,
-                           direction=None,
-                           car_available=None,
-                           seed_intrazonal = True):
-
-    # units takes different parameters
-    # TODO: Needs a config guide for the costs somewhere
-    # DEPRECATED CAN REMOVE
-    """
-    This function imports distances or costs from a given path.
-
-    Parameters
-    ----------
-    model_lookup_path:
-        Model folder to look in for distances/costs. Should be in call or global.
-
-    request_type:
-        Takes 'cost' or 'distance'
-
-    journey_purpose = None:
-        Takes None, 'commute', 'business' or 'other'. Costs differ.
-
-    direction = None:
-        Takes None, 'To', 'From'
-
-    car_available = None:
-        Takes None, True, False
-
-    seed_intrazonal = True:
-        Takes True or False - whether to add a value half the minimum
-        interzonal value to the intrazonal cells. Currently needed for distance
-        but not cost.
-
-    Returns:
-    ----------
-    dat:
-        DataFrame containing required cost or distance values.
-    """
-    # TODO: Adapt model input costs to take time periods
-    # TODO: The name cost_cols is misleading
-    file_sys = os.listdir(model_lookup_path)
-    cost_path = [x for x in file_sys if request_type in x][0]
-    dat = pd.read_csv(model_lookup_path + '/' + cost_path)
-    cols = list(dat)
-
-    # Parse function parameters to get the right cost column
-    # TODO: Works with distance but could be tidier
-    if request_type == 'distance':
-        if journey_purpose is not None:
-            cost_cols = [x for x in cols if journey_purpose in x]
-        else:
-            cost_cols = cols[2:]
-        if direction is not None:
-            cost_cols = [x for x in cost_cols if direction in x]
-        else:
-            cost_cols = cost_cols.copy()
-        if car_available is not None:
-            if car_available==True:
-                car_available='_ca'
-            elif car_available==False:
-                car_available='nca'
-            cost_cols = [x for x in cost_cols if car_available in x]
-        else:
-            cost_cols = cost_cols.copy()
-        cols = [cols[0], cols[1]]
-        # Append segments to the reindex list
-        for col in cost_cols:
-            cols.append(col)
-        # If there's nothing in there just append the distance col (Noham)
-        if len(cost_cols) == 0:
-            cols.append('distance')
-        dat = dat.reindex(cols,axis=1)
-        # Consolidate name, if there was a cost col
-        if len(cost_cols) != 0:
-            dat = dat.rename(columns={cost_cols[0]:request_type})
-        # TODO: Does this come back okay?
-        else:
-            # This is just naming distance to distance - remove
-            dat = dat.rename(columns={cols[2]:request_type})
-
-    # Handle cost request
-    elif request_type == 'cost':
-        if journey_purpose is not None:
-            cost_cols = [x for x in cols if journey_purpose in x]
-        else:
-            cost_cols = cols[2:]
-        if direction is not None:
-            cost_cols = [x for x in cost_cols if direction in x]
-        else:
-            cost_cols = cost_cols.copy()
-        if car_available is not None:
-            if car_available==True:
-                car_available='ca'
-            elif car_available==False:
-                car_available='nca'
-            cost_cols = [x for x in cost_cols if car_available in x]
-        else:
-            cost_cols = cost_cols.copy()
-        cols = [cols[0], cols[1]]
-        for col in cost_cols:
-            cols.append(col)
-        dat = dat.reindex(cols,axis=1)
-        dat = dat.rename(columns={cost_cols[0]:request_type})
-
-    # Redefine cols
-    cols = list(dat)
-
-    # TODO: Seed intrazonal currently duplicates on multiple cols.
-    if seed_intrazonal:
-        dat = dat.copy()
-        min_inter_dat = dat[dat[cols[2]]>0]
-        # Derive minimum intrazonal
-        min_inter_dat = min_inter_dat.groupby(
-                cols[0]).min().reset_index().drop(cols[1],axis=1)
-        intra_dat = min_inter_dat.copy()
-        intra_dat[cols[2]] = intra_dat[cols[2]]/2
-        iz = dat[dat[cols[0]] == dat[cols[1]]]
-        non_iz = dat[dat[cols[0]] != dat[cols[1]]]
-        iz = iz.drop(cols[2],axis=1)
-        # Rejoin
-        iz = iz.merge(intra_dat, how='inner', on=cols[0])
-        dat = pd.concat([iz, non_iz],axis=0,sort=True).reset_index(drop=True)
-
-    return(dat)
 
 def get_distance(model_lookup_path,
                  journey_purpose=None,
@@ -1710,8 +1405,8 @@ def build_distribution_bins(internal_distance,
 def balance_a_to_p(ia_name,
                    productions,
                    attractions,
-                   p_var_name = 'productions',
-                   a_var_name = 'attractions',
+                   p_var_name='productions',
+                   a_var_name='attractions',
                    round_val=None,
                    echo=True):
 
@@ -1752,7 +1447,6 @@ def balance_a_to_p(ia_name,
     dp = productions.copy()
     ia = attractions.copy()
 
-
     total_internal_productions = dp['productions'].sum()
     # Add total attraction column for balancing
     ia['total_attractions'] = ia[a_var_name].sum()
@@ -1760,8 +1454,7 @@ def balance_a_to_p(ia_name,
 
     # Balance internal productions and attractions
     a_factors = ia.copy()
-    a_factors[a_var_name] = (a_factors[a_var_name]/
-             a_factors['total_attractions'])
+    a_factors[a_var_name] /= a_factors['total_attractions']
 
     if (len(dp[ia_name].drop_duplicates()) != len(a_factors[ia_name])):
         # Always print as it's a warning of future problems
@@ -1788,10 +1481,10 @@ def balance_a_to_p(ia_name,
 
     ia = ia.reset_index(drop=True)
 
-    # Round. This was commented out. Will become apparent why.
+    # Round
     ia[a_var_name] = ia[a_var_name].round(round_val)
 
-    return(ia)
+    return ia
 
 def define_internal_external_areas(model_lookup_path):
     """
@@ -1864,23 +1557,12 @@ def get_trip_length_bands(import_folder,
     # Define file contents, should just be target files - should fix.
     import_files = target_files.copy()
 
-    # TODO: Fixed for new ntem dists - pointless duplication now
-    if segmentation == 'ntem':
-        for key, value in calib_params.items():
-            # Don't want empty segments, don't want ca
-            if value != 'none' and key != 'ca':
-                 # print_w_toggle(key + str(value), echo=echo)
-                import_files = [x for x in import_files if
-                                ('_' + key + str(value)) in x]
-    elif segmentation == 'tfn':
-        for key, value in calib_params.items():
-            # Don't want empty segments, don't want ca
-            if value != 'none' and key != 'ca':
-                # print_w_toggle(key + str(value), echo=echo)
-                import_files = [x for x in import_files if
-                                ('_' + key + str(value)) in x]
-    else:
-        raise ValueError('Non-valid segmentation. How did you get this far?')
+    for key, value in calib_params.items():
+        # Don't want empty segments, don't want ca
+        if value != 'none' and key != 'mat_type':
+            # print_w_toggle(key + str(value), echo=echo)
+            import_files = [x for x in import_files if
+                            ('_' + key + str(value)) in x]
 
     if trip_origin == 'hb':
         import_files = [x for x in import_files if 'nhb' not in x]
@@ -1897,11 +1579,7 @@ def get_trip_length_bands(import_folder,
     if echo:
         print(import_files)
         print(import_files[0])
-    tlb = pd.read_csv(import_folder + '/' + import_files[0])
-
-    # Filter to target purpose
-    # TODO: Don't want to have to do this for NTEM anymore. Just keep them individual.
-    # tlb = tlb[tlb[trip_origin +'_purpose']==purpose].copy()
+    tlb = pd.read_csv(os.path.join(import_folder, import_files[0]))
 
     if replace_nan:
         for col_name in list(tlb):
@@ -2693,6 +2371,8 @@ def parse_mat_output(list_dir,
                      file_name = 'file'):
     """
     """
+    list_dir = os.listdir(list_dir)
+
     # Define UC format
     uc = ['commute','business','other',
           'Commute', 'Business', 'Other']
@@ -2735,7 +2415,8 @@ def parse_mat_output(list_dir,
     segments = pd.DataFrame(split_list)
     segments = segments.replace({np.nan:'none'})
 
-    return(segments)
+    return segments
+
 
 def unpack_tlb(tlb,
                km_constant = _M_KM):
@@ -2765,7 +2446,18 @@ def unpack_tlb(tlb,
     # TODO: Check that this works!!
     obs_dist = tlb['ave_km'].astype(float).to_numpy()
 
-    return(min_dist,
-           max_dist,
-           obs_trip,
-           obs_dist)
+    return min_dist, max_dist, obs_trip, obs_dist
+
+def iz_costs_to_mean(costs):
+    """
+    Sort bands that are too big outside of the north
+    - nudge towards intrazonal
+    """
+    # Get mean
+    diag_mean = np.mean(np.diag(costs))
+    diag = costs.diagonal()
+    diag = np.where(diag > diag_mean, diag_mean, diag)
+
+    np.fill_diagonal(costs, diag)
+
+    return costs

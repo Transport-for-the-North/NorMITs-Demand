@@ -17,6 +17,8 @@ import os
 import re
 import shutil
 import random
+import inspect
+import operator
 
 
 import pandas as pd
@@ -34,12 +36,15 @@ from pathlib import Path
 
 from math import isclose
 
+import functools
 from tqdm import tqdm
 from itertools import product
 from collections import defaultdict
 
 # Local imports
-from normits_demand import efs_constants as consts
+import normits_demand as nd
+from normits_demand import constants as consts
+from normits_demand import efs_constants as efs_consts
 
 # Can call tms utils.py functions from here
 from normits_demand.utils.utils import *
@@ -49,7 +54,7 @@ from normits_demand.utils.utils import *
 
 class NormitsDemandError(Exception):
     """
-    Base Exception for all custom NotMITS demand errors
+    Base Exception for all custom NorMITS demand errors
     """
 
     def __init__(self, message=None):
@@ -60,6 +65,15 @@ class NormitsDemandError(Exception):
 class ExternalForecastSystemError(NormitsDemandError):
     """
     Base Exception for all custom EFS errors
+    """
+    def __init__(self, message=None):
+        self.message = message
+        super().__init__(self.message)
+
+
+class InitialisationError(NormitsDemandError):
+    """
+    Exception for all errors that occur during normits_demand initialisation
     """
     def __init__(self, message=None):
         self.message = message
@@ -94,7 +108,7 @@ def get_seg_level_cols(seg_level: str,
     """
     # Init
     seg_level = validate_seg_level(seg_level)
-    seg_cols = consts.SEG_LEVEL_COLS[seg_level]
+    seg_cols = efs_consts.SEG_LEVEL_COLS[seg_level]
 
     # Remove cols if asked to and they exist
     if not keep_ca:
@@ -129,7 +143,7 @@ def validate_seg_level(seg_level: str) -> str:
     # Init
     seg_level = seg_level.strip().lower()
 
-    if seg_level not in consts.SEG_LEVELS:
+    if seg_level not in efs_consts.SEG_LEVELS:
         raise ValueError("%s is not a valid name for a level of segmentation"
                          % seg_level)
     return seg_level
@@ -158,7 +172,7 @@ def validate_zoning_system(zoning_system: str) -> str:
     # Init
     zoning_system = zoning_system.strip().lower()
 
-    if zoning_system not in consts.ZONING_SYSTEMS:
+    if zoning_system not in efs_consts.ZONING_SYSTEMS:
         raise ValueError("%s is not a valid name for a zoning system"
                          % zoning_system)
     return zoning_system
@@ -187,7 +201,7 @@ def validate_scenario_name(scenario_name: str) -> str:
     # Init
     scenario_name = scenario_name.strip().upper()
 
-    if scenario_name not in consts.SCENARIOS:
+    if scenario_name not in efs_consts.SCENARIOS:
         raise ValueError("%s is not a valid name for a scenario."
                          % scenario_name)
     return scenario_name
@@ -216,14 +230,14 @@ def validate_model_name(model_name: str) -> str:
     # Init
     model_name = model_name.strip().lower()
 
-    if model_name not in consts.MODEL_NAMES:
+    if model_name not in efs_consts.MODEL_NAMES:
         raise ValueError("%s is not a valid name for a model"
                          % model_name)
     return model_name
 
 
 def validate_model_name_and_mode(model_name: str,
-                                 m_needed: List[int] = consts.MODES_NEEDED
+                                 m_needed: List[int] = efs_consts.MODES_NEEDED
                                  ) -> None:
     """
     Checks that the given modes are valid modes for the given model name
@@ -250,7 +264,7 @@ def validate_model_name_and_mode(model_name: str,
     model_name = validate_model_name(model_name)
 
     for mode in m_needed:
-        if mode not in consts.MODEL_MODES[model_name]:
+        if mode not in efs_consts.MODEL_MODES[model_name]:
             raise ValueError("%s is not a valid mode for model %s"
                              % (str(mode), model_name))
 
@@ -278,7 +292,7 @@ def validate_user_class(user_class: str) -> str:
     # Init
     user_class = user_class.strip().lower()
 
-    if user_class not in consts.USER_CLASSES:
+    if user_class not in efs_consts.USER_CLASSES:
         raise ValueError("%s is not a valid name for user class"
                          % user_class)
     return user_class
@@ -336,15 +350,16 @@ def print_w_toggle(*args, echo, **kwargs):
         print(*args, **kwargs)
 
 
-def build_io_paths(import_location: str,
-                   export_location: str,
-                   base_year: str,
-                   model_name: str,
-                   iter_name: str,
-                   scenario_name: str,
-                   demand_version: str,
-                   demand_dir_name: str = 'NorMITs Demand',
-                   ) -> Tuple[dict, dict, dict]:
+def build_efs_io_paths(import_location: str,
+                       export_location: str,
+                       model_name: str,
+                       iter_name: str,
+                       scenario_name: str,
+                       demand_dir_name: str = 'NorMITs Demand',
+                       base_year: str = efs_consts.BASE_YEAR_STR,
+                       land_use_iteration: str = None,
+                       land_use_drive: str = None,
+                       ) -> Tuple[dict, dict, dict]:
     """
     Builds three dictionaries of paths to the locations of all inputs and
     outputs for EFS
@@ -353,12 +368,12 @@ def build_io_paths(import_location: str,
     ----------
     import_location:
         The directory the import directory exists - a dir named
-        self._out_dir (NorMITs Demand) should exist here. Usually
+        self.out_dir (NorMITs Demand) should exist here. Usually
         a drive name e.g. Y:/
 
     export_location:
         The directory to create the new output directory in - a dir named
-        self._out_dir (NorMITs Demand) should exist here. Usually
+        self.out_dir (NorMITs Demand) should exist here. Usually
         a drive name e.g. Y:/
 
     model_name:
@@ -370,7 +385,7 @@ def build_io_paths(import_location: str,
 
     scenario_name:
         The name of the scenario use to produce outputs. This should be one
-        of consts.SCENARIOS
+        of efs_consts.SCENARIOS
 
     demand_version:
         Version number of NorMITs Demand being run - this is used to generate
@@ -386,7 +401,7 @@ def build_io_paths(import_location: str,
         Dictionary of import paths with the following keys:
         imports, lookups, seed_dists, default
 
-    exports:
+    efs_exports:
         Dictionary of export paths with the following keys:
         productions, attractions, pa, od, pa_24, od_24, sectors
 
@@ -401,19 +416,7 @@ def build_io_paths(import_location: str,
     model_name = validate_model_name(model_name)
 
     # ## IMPORT PATHS ## #
-    # Attraction weights are a bit special, we get these directly from
-    # TMS to ensure they are the same - update this on integration
-    temp_model_name = 'norms' if model_name == 'norms_2015' else model_name
-    tms_path_parts = [
-        import_location,
-        "NorMITs Synthesiser",
-        temp_model_name,
-        "Model Zone Lookups",
-        "attraction_weights.csv"
-    ]
-    a_weights_path = os.path.join(*tms_path_parts)
-
-    # Generate import and export paths
+    # Generate general import paths
     model_home = os.path.join(import_location, demand_dir_name)
     import_home = os.path.join(model_home, 'import')
     input_home = os.path.join(import_home, 'default')
@@ -422,28 +425,71 @@ def build_io_paths(import_location: str,
     path = 'attractions/soc_2_digit_sic_%s.csv' % base_year
     soc_weights_path = os.path.join(import_home, path)
 
+    # Build the zone translation dict
+    zt_home = os.path.join(import_home, 'zone_translation')
+    zone_translation = {
+        'home': zt_home,
+        'one_to_one': os.path.join(zt_home, 'one_to_one'),
+        'weighted': os.path.join(zt_home, 'weighted'),
+        'no_overlap': os.path.join(zt_home, 'no_overlap'),
+        'msoa_str_int': os.path.join(zt_home, 'msoa_zones.csv'),
+    }
+
+    # BACKLOG: EFS Attraction model needs to make use of HB and NHB
+    #  attraction weights. Currently only uses HB for both.
+    #  labels: demand merge, EFS
+
+    # Build model specific paths
+    model_schema_home = os.path.join(import_home, model_name, 'model schema')
+    model_param_home = os.path.join(import_home, model_name, 'params')
+    model_tour_prop_home = os.path.join(import_home, model_name, 'post_me_tour_proportions')
+
     imports = {
         'home': import_home,
         'default_inputs': input_home,
+        'zone_translation': zone_translation,
         'tp_splits': os.path.join(import_home, 'tp_splits'),
-        'zone_translation': os.path.join(import_home, 'zone_translation'),
         'lookups': os.path.join(model_home, 'lookup'),
-        'seed_dists': os.path.join(import_home, model_name, 'seed_distributions'),
-        'zoning': os.path.join(input_home, 'zoning'),
         'scenarios': os.path.join(import_home, 'scenarios'),
-        'a_weights': a_weights_path,
-        'soc_weights': soc_weights_path
+        'a_weights': os.path.join(import_home, 'attractions', 'hb_attraction_weights.csv'),
+        'soc_weights': soc_weights_path,
+        'ntem_control': os.path.join(import_home, 'ntem_constraints'),
+        'model_schema': model_schema_home,
+        'model_home': os.path.join(import_home, model_name),
+        'internal_zones': os.path.join(model_schema_home, consts.INTERNAL_AREA % model_name),
+        'external_zones': os.path.join(model_schema_home, consts.EXTERNAL_AREA % model_name),
+        'param_home': model_param_home,
+        'post_me_matrices': os.path.join(import_home, model_name, 'post_me'),
+        'params': model_param_home,
+        'post_me_factors': os.path.join(model_param_home, 'post_me_tms_decompile_factors.pkl'),
+        'post_me_tours': model_tour_prop_home,
+        'decomp_post_me': os.path.join(import_home, model_name, 'decompiled_post_me'),
+
     }
 
-    #  ## EXPORT PATHS ## #
+    # Add Land use import if we have an iteration
+    if land_use_drive is not None and land_use_iteration is not None:
+        land_use_home = os.path.join(
+            land_use_drive,
+            'NorMITs Land Use',
+            land_use_iteration,
+            'outputs',
+        )
+        land_use_fy = os.path.join(land_use_home, 'scenarios', scenario_name)
+
+        imports['pop_by'] = os.path.join(land_use_home, consts.BASE_YEAR_POP_FNAME)
+        imports['emp_by'] = os.path.join(land_use_home, consts.BASE_YEAR_EMP_FNAME)
+        imports['land_use_fy_dir'] = land_use_fy
+
+    # ## EXPORT PATHS ## #
     # Create home paths
     fname_parts = [
         export_location,
         demand_dir_name,
         model_name,
-        "v%s-EFS_Output" % demand_version,
-        scenario_name,
+        "EFS",
         iter_name,
+        scenario_name,
     ]
     export_home = os.path.join(*fname_parts)
     matrices_home = os.path.join(export_home, 'Matrices')
@@ -452,6 +498,7 @@ def build_io_paths(import_location: str,
     # Create consistent filenames
     pa = 'PA Matrices'
     pa_24 = '24hr PA Matrices'
+    vdm_pa_24 = '24hr VDM PA Matrices'
     od = 'OD Matrices'
     od_24 = '24hr OD Matrices'
     compiled = 'Compiled'
@@ -465,20 +512,23 @@ def build_io_paths(import_location: str,
         'attractions': os.path.join(export_home, 'Attractions'),
         'sectors': os.path.join(export_home, 'Sectors'),
         'audits': os.path.join(export_home, 'Audits'),
-        'dist_audits': os.path.join(export_home, 'Audits', 'Matrices'),
         'reports': os.path.join(export_home, 'Reports'),
+        'dist_reports': os.path.join(export_home, 'Reports', 'Matrices'),
 
         # Pre-ME
         'pa': os.path.join(matrices_home, pa),
         'pa_24': os.path.join(matrices_home, pa_24),
+        'vdm_pa_24': os.path.join(matrices_home, vdm_pa_24),
         'od': os.path.join(matrices_home, od),
         'od_24': os.path.join(matrices_home, od_24),
 
+        'compiled_pa': os.path.join(matrices_home, ' '.join([compiled, pa])),
         'compiled_od': os.path.join(matrices_home, ' '.join([compiled, od])),
         'compiled_od_pcu': os.path.join(matrices_home, ' '.join([compiled, od, pcu])),
 
         'aggregated_pa_24': os.path.join(matrices_home, ' '.join([aggregated, pa_24])),
         'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
+        'aggregated_pa': os.path.join(matrices_home, ' '.join([aggregated, pa])),
 
         'pa_24_bespoke': os.path.join(matrices_home, pa_24_bespoke)
     }
@@ -489,8 +539,11 @@ def build_io_paths(import_location: str,
     # Post-ME
     compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
     post_me_exports = {
+        'home': post_me_home,
+        'cache': os.path.join(post_me_home, 'cache'),
         'pa': os.path.join(post_me_home, pa),
         'pa_24': os.path.join(post_me_home, pa_24),
+        'vdm_pa_24': os.path.join(post_me_home, vdm_pa_24),
         'od': os.path.join(post_me_home, od),
         'od_24': os.path.join(post_me_home, od_24),
         'compiled_od': compiled_od_path,
@@ -515,94 +568,6 @@ def build_io_paths(import_location: str,
         create_folder(path, chDir=False)
 
     return imports, exports, params
-
-
-def grow_to_future_years(base_year_df: pd.DataFrame,
-                         growth_df: pd.DataFrame,
-                         base_year: str,
-                         future_years: List[str],
-                         growth_merge_cols: Union[str, List[str]] = 'msoa_zone_id',
-                         no_neg_growth: bool = True,
-                         infill: float = 0.001,
-                         ) -> pd.DataFrame:
-    """
-    Grows the base_year dataframe using the growth_dataframe to produce future
-    year values.
-
-    Can ensure there is no negative growth through an infill if requested.
-
-    Parameters
-    ----------
-    base_year_df:
-        Dataframe containing the base year values. The column named with
-        base_year value will be grown.
-
-    growth_df:
-        Dataframe containing the growth factors for future_years. The base year
-        population will be multiplied by these factors to produce future year
-        growth.
-
-    base_year:
-        The column name containing the base year data in base_year_df and
-        growth_df.
-
-    future_years:
-        The columns names containing the future year data in growth_df.
-
-    growth_merge_cols:
-        The name of the column(s) to merge the base_year_df and growth_df
-        dataframes. This is usually the model_zone column plus any further
-        segmentation
-
-    no_neg_growth:
-        Whether to ensure there is no negative growth. If True, any growth
-        values below 0 will be replaced with infill.
-
-    infill:
-        If no_neg_growth is True, this value will be used to replace all values
-        that are less than 0.
-
-    Returns
-    -------
-    grown_df:
-        base_year_df extended to include future_years, which will contain the
-        base year data grown by the factors provided in growth_df.
-    """
-    # Init
-    all_years = [base_year] + future_years
-
-    # Get the growth factors based from base year
-    growth_df = convert_growth_off_base_year(
-        growth_df,
-        base_year,
-        future_years
-    )
-
-    # Convert growth factors to growth values
-    grown_df = get_growth_values(
-        base_year_df,
-        growth_df,
-        base_year,
-        future_years,
-        merge_cols=growth_merge_cols
-    )
-
-    # TODO: Maybe allow negative growth at MSOA but not LAD
-    # Ensure there is no minus growth
-    if no_neg_growth:
-        for year in all_years:
-            mask = (grown_df[year] < 0)
-            grown_df.loc[mask, year] = infill
-
-    # Add base year back in to get full grown values
-    grown_df = growth_recombination(
-        grown_df,
-        base_year_col=base_year,
-        future_year_cols=future_years,
-        drop_base_year=False
-    )
-
-    return grown_df
 
 
 def convert_msoa_naming(df: pd.DataFrame,
@@ -686,227 +651,6 @@ def convert_msoa_naming(df: pd.DataFrame,
 
     return df.reindex(column_order, axis='columns')
 
-
-def growth_recombination(df: pd.DataFrame,
-                         base_year_col: str,
-                         future_year_cols: List[str],
-                         in_place: bool = False,
-                         drop_base_year: bool = True
-                         ) -> pd.DataFrame:
-    """
-    Combines the future year and base year column values to give full
-    future year values
-
-     e.g. base year will get 0 + base_year_population
-
-    Parameters
-    ----------
-    df:
-        The dataframe containing the data to be combined
-
-    base_year_col:
-        Which column in df contains the base year data
-
-    future_year_cols:
-        A list of all the growth columns in df to convert
-
-    in_place:
-        Whether to do the combination in_place, or make a copy of
-        df to return
-
-    drop_base_year:
-        Whether to drop the base year column or not before returning.
-
-    Returns
-    -------
-    growth_df:
-        Dataframe with full growth values for all_year_cols.
-    """
-    if not in_place:
-        df = df.copy()
-
-    for year in future_year_cols:
-        df[year] += df[base_year_col]
-
-    if drop_base_year:
-        df = df.drop(labels=base_year_col, axis=1)
-
-    return df
-
-
-def get_grown_values(base_year_df: pd.DataFrame,
-                     growth_df: pd.DataFrame,
-                     base_year_col: str,
-                     future_years: List[str],
-                     merge_col: str = "model_zone_id"
-                     ) -> pd.DataFrame:
-    """
-    Returns base_year_df extended to include the grown values in
-    future_year_cols
-
-    Parameters
-    ----------
-    base_year_df:
-        Dataframe containing the base year data. Must have at least 2 columns
-        of merge_col, and base_year_col
-
-    growth_df:
-        Dataframe containing the growth factors over base year for all future
-        years i.e. The base year column would be 1 as it cannot grow over
-        itself. Must have at least the following cols: merge_col and all
-        future_year_cols.
-
-    base_year_col:
-        The column name that the base year data is in
-
-    future_years:
-        The columns names that contain the growth factor data for base and
-        future years.
-
-    merge_col:
-        Name of the column to merge base_year_df and growth_df on.
-
-    Returns
-    -------
-    Grown_values_df:
-        base_year_df extended and populated with the future_year_cols
-        columns.
-    """
-    # Init
-    base_year_df = base_year_df.copy()
-    growth_df = growth_df.copy()
-
-    # CREATE GROWN DATAFRAME
-    grown_df = pd.merge(
-        base_year_df,
-        growth_df,
-        on=merge_col
-    )
-
-    for year in future_years:
-        grown_df[year] *= grown_df.loc[base_year_col]
-    return grown_df
-
-
-def get_growth_values(base_year_df: pd.DataFrame,
-                      growth_df: pd.DataFrame,
-                      base_year_col: str,
-                      future_year_cols: List[str],
-                      merge_cols: Union[str, List[str]] = 'model_zone_id'
-                      ) -> pd.DataFrame:
-    """
-    Returns base_year_df extended to include the growth values in
-    future_year_cols
-
-    Parameters
-    ----------
-    base_year_df:
-        Dataframe containing the base year data. Must have at least 2 columns
-        of merge_col, and base_year_col
-
-    growth_df:
-        Dataframe containing the growth factors over base year for all future
-        years i.e. The base year column would be 1 as it cannot grow over
-        itself. Must have at least the following cols: merge_col and all
-        future_year_cols.
-
-    base_year_col:
-        The column name that the base year data is in
-
-    future_year_cols:
-        The columns names that contain the future year growth factor data.
-
-    merge_cols:
-        Name of the column(s) to merge base_year_df and growth_df on.
-
-    Returns
-    -------
-    Growth_values_df:
-        base_year_df extended and populated with the future_year_cols
-        columns.
-    """
-    # Init
-    base_year_df = base_year_df.copy()
-    growth_df = growth_df.copy()
-    base_year_pop = base_year_df[base_year_col].sum()
-
-    base_year_df.columns = base_year_df.columns.astype(str)
-    growth_df.columns = growth_df.columns.astype(str)
-
-    # Avoid clashes in the base year
-    if base_year_col in growth_df:
-        growth_df = growth_df.drop(base_year_col, axis='columns')
-
-    # Avoid future year clashes
-    base_year_df = base_year_df.drop(future_year_cols,
-                                     axis='columns',
-                                     errors='ignore')
-
-    # Merge on merge col
-    growth_values = pd.merge(base_year_df,
-                             growth_df,
-                             on=merge_cols)
-
-    # Grow base year value by values given in growth_df - 1
-    # -1 so we get growth values. NOT growth values + base year
-    for year in future_year_cols:
-        growth_values[year] = (
-                (growth_values[year] - 1)
-                *
-                growth_values[base_year_col]
-        )
-
-    # If these don't match, something has gone wrong
-    new_by_pop = growth_values[base_year_col].sum()
-    if not is_almost_equal(base_year_pop, new_by_pop):
-        raise NormitsDemandError(
-            "Base year totals have changed before and after growing the "
-            "future years - something must have gone wrong. Perhaps the "
-            "merge columns are wrong and data is being replicated.\n"
-            "Total base year before growth:\t %.4f\n"
-            "Total base year after growth:\t %.4f\n"
-            % (base_year_pop, new_by_pop)
-        )
-
-    return growth_values
-
-
-def convert_growth_off_base_year(growth_df: pd.DataFrame,
-                                 base_year: str,
-                                 future_years: List[str]
-                                 ) -> pd.DataFrame:
-    """
-    Converts the multiplicative growth value of each future_years to be
-    based off of the base year.
-
-    Parameters
-    ----------
-    growth_df:
-        The starting dataframe containing the growth values of all_years
-        and base_year
-
-    base_year:
-        The new base year to base all the all_years growth off of.
-
-    future_years:
-        The years in growth_dataframe to convert to be based off of
-        base_year growth
-
-    Returns
-    -------
-    converted_growth_dataframe:
-        The original growth dataframe with all growth values converted
-
-    """
-    # Init
-    growth_df = growth_df.copy()
-    growth_df.columns = growth_df.columns.astype(str)
-
-    # Do base year last, otherwise conversion won't work
-    for year in future_years + [base_year]:
-        growth_df[year] /= growth_df[base_year]
-
-    return growth_df
 
 
 def copy_and_rename(src: str, dst: str) -> None:
@@ -1099,6 +843,7 @@ def get_dist_name(trip_origin: str,
                   car_availability: str = None,
                   tp: str = None,
                   csv: bool = False,
+                  compressed: bool = False,
                   suffix: str = None,
                   ) -> str:
     """
@@ -1121,7 +866,7 @@ def get_dist_name(trip_origin: str,
         name_parts += ["m" + mode]
 
     if not is_none_like(segment) and not is_none_like(purpose):
-        seg_name = "soc" if int(purpose) in consts.SOC_P else "ns"
+        seg_name = "soc" if int(purpose) in efs_consts.SOC_P else "ns"
         name_parts += [seg_name + segment]
 
     if not is_none_like(car_availability):
@@ -1140,6 +885,8 @@ def get_dist_name(trip_origin: str,
     # Optionally add on the csv if needed
     if csv:
         final_name += '.csv'
+    elif compressed:
+        final_name += consts.COMPRESSION_SUFFIX
 
     return final_name
 
@@ -1148,12 +895,13 @@ def calib_params_to_dist_name(trip_origin: str,
                               matrix_format: str,
                               calib_params: Dict[str, int],
                               csv: bool = False,
+                              compressed: bool = False,
                               suffix: str = None,
                               ) -> str:
     """
     Wrapper for get_distribution_name() using calib params
     """
-    segment_str = 'soc' if calib_params['p'] in consts.SOC_P else 'ns'
+    segment_str = 'soc' if calib_params['p'] in efs_consts.SOC_P else 'ns'
 
     return get_dist_name(
         trip_origin=trip_origin,
@@ -1165,7 +913,8 @@ def calib_params_to_dist_name(trip_origin: str,
         car_availability=str(calib_params.get('ca')),
         tp=str(calib_params.get('tp')),
         csv=csv,
-        suffix=suffix
+        compressed=compressed,
+        suffix=suffix,
     )
 
 
@@ -1281,7 +1030,7 @@ def generate_calib_params(year: str = None,
         raise ValueError("If segment is set, purpose needs to be set too, "
                          "otherwise segment text cannot be determined.")
     # Init
-    segment_str = 'soc' if purpose in consts.SOC_P else 'ns'
+    segment_str = 'soc' if purpose in efs_consts.SOC_P else 'ns'
 
     keys = ['yr', 'p', 'm', segment_str, 'ca', 'tp']
     vals = [year, purpose, mode, segment, ca, tp]
@@ -1575,10 +1324,10 @@ def expand_distribution(dist: pd.DataFrame,
         dist[ca_col] = car_availability
 
     if not is_none_like(segment):
-        if purpose in consts.SOC_P:
+        if purpose in efs_consts.SOC_P:
             dist[soc_col] = segment
             dist[ns_col] = 'none'
-        elif purpose in consts.NS_P:
+        elif purpose in efs_consts.NS_P:
             dist[soc_col] = 'none'
             dist[ns_col] = segment
         else:
@@ -1783,9 +1532,9 @@ def segmentation_loop_generator(p_list: Iterable[int],
     Simple generator to avoid the need for so many nested loops
     """
     for purpose in p_list:
-        if purpose in consts.SOC_P:
+        if purpose in efs_consts.SOC_P:
             required_segments = soc_list
-        elif purpose in consts.NS_P:
+        elif purpose in efs_consts.NS_P:
             required_segments = ns_list
         else:
             raise ValueError("'%s' does not seem to be a valid soc or ns "
@@ -2038,7 +1787,7 @@ def segmentation_order(segmentation_lst: List[str]) -> List[str]:
     Parameters
     ----------
     segmentation_lst:
-        A list of segmentation keys. See consts.SEGMENTATION_ORDER for a list
+        A list of segmentation keys. See efs_consts.SEGMENTATION_ORDER for a list
         of valid values
 
     Returns
@@ -2048,12 +1797,66 @@ def segmentation_order(segmentation_lst: List[str]) -> List[str]:
         same order as filenames etc.
     """
     # Init
-    seg_order = consts.SEGMENTATION_ORDER.copy()
+    seg_order = efs_consts.SEGMENTATION_ORDER.copy()
 
     # Order the segmentation keys, stick non seg back on the end
     non_seg_vals = [x for x in segmentation_lst if x not in seg_order]
     ordered_seg_vals = [x for x in seg_order if x in segmentation_lst]
     return ordered_seg_vals + non_seg_vals
+
+
+def sort_vector_cols(vector: pd.DataFrame,
+                     zone_col: str = None,
+                     in_place: bool = False,
+                     ) -> pd.DataFrame:
+    """
+    Re-orders the columns if vector to be in the correct segmentation order
+
+    The zone column will be placed first, and any other non-segment columns
+    are appended to the end of the order.
+
+    Parameters
+    ----------
+    vector:
+        The vector to re-order the columns of
+
+    zone_col:
+        The name of the column containing the zone_id data. If not given,
+        it will be inferred by looking for the first column containing
+        "zone_id".
+
+    in_place:
+        Whether to re-order in place or return a copy of the given dataframe.
+
+    Returns
+    -------
+    reindexed_vector:
+        The given vector re-indexed to to be in the correct segmentation order,
+        as defined by efs_consts.SEGMENTATION_ORDER.
+    """
+    # init
+    columns = list(vector)
+
+    if not in_place:
+        vector = vector.copy()
+
+    # Infer the zone col if not given
+    if zone_col is None:
+        zone_col_candidates = [x for x in columns if '_zone_id' in x]
+        if zone_col_candidates == list():
+            raise ValueError(
+                "No zone_col argument was given. Tried to infer which "
+                "column to use, but there were not columns containing "
+                "'zone_col'."
+            )
+        zone_col = zone_col_candidates[0]
+
+    # Build a list of the final output order
+    col_order = segmentation_order(list_safe_remove(columns, [zone_col]))
+    col_order = [zone_col] + col_order
+
+    # Reindex and return
+    return vector.reindex(columns=col_order)
 
 
 def seg_dict_key_order(segmentation_dict: Dict[str, Any]) -> List[str]:
@@ -2080,7 +1883,7 @@ def long_to_wide_out(df: pd.DataFrame,
                      values: str,
                      out_path: str,
                      unq_zones: List[str] = None,
-                     round: int = 4,
+                     round_dp: int = 12,
                      ) -> None:
     """
     Converts a long format pd.Dataframe, converts it to long and writes
@@ -2110,7 +1913,7 @@ def long_to_wide_out(df: pd.DataFrame,
         If left as None, it assumes all zones in the range 1 to max zone number
         should exist.
 
-    round:
+    round_dp:
         The number of decimal places to round the output to
 
     Returns
@@ -2136,7 +1939,7 @@ def long_to_wide_out(df: pd.DataFrame,
         index=v_heading,
         columns=h_heading,
         values=values
-    ).round(4)
+    ).round(decimals=round_dp)
 
     # Finally, write to disk
     df.to_csv(out_path)
@@ -2161,11 +1964,31 @@ def wide_to_long_out(df: pd.DataFrame,
     df.to_csv(out_path, index=False)
 
 
-def get_compile_params_name(matrix_format: str, year: str) -> str:
+def get_compile_params_name(matrix_format: str,
+                            year: str,
+                            suffix: str = None
+                            ) -> str:
     """
     Generates the compile params filename
     """
-    return "%s_yr%s_compile_params.csv" % (matrix_format, year)
+    if suffix is None:
+        return "%s_yr%s_compile_params.csv" % (matrix_format, year)
+
+    return "%s_yr%s_%s_compile_params.csv" % (matrix_format, year, suffix)
+
+
+def get_split_factors_fname(matrix_format: str,
+                            year: str,
+                            suffix: str = None
+                            ) -> str:
+    """
+    Generates the splitting factors filename
+    """
+    ftype = consts.COMPRESSION_SUFFIX.strip('.')
+    if suffix is None:
+        return "%s_yr%s_splitting_factors.%s" % (matrix_format, year, ftype)
+
+    return "%s_yr%s_%s_splitting_factors.%s" % (matrix_format, year, suffix, ftype)
 
 
 def build_full_paths(base_path: str,
@@ -2177,7 +2000,8 @@ def build_full_paths(base_path: str,
     return [os.path.join(base_path, x) for x in fnames]
 
 
-def list_files(path: str,
+def list_files(path: nd.PathLike,
+               ftypes: List[str] = None,
                include_path: bool = False
                ) -> List[str]:
     """
@@ -2187,6 +2011,9 @@ def list_files(path: str,
     ----------
     path:
         Where to search for the files
+
+    ftypes:
+        A list of filetypes to accept. If None, all are accepted.
 
     include_path:
         Whether to include the path with the returned filenames
@@ -2199,10 +2026,21 @@ def list_files(path: str,
     """
     if include_path:
         file_paths = build_full_paths(path, os.listdir(path))
-        return [x for x in file_paths if os.path.isfile(x)]
+        paths = [x for x in file_paths if os.path.isfile(x)]
     else:
         fnames = os.listdir(path)
-        return [x for x in fnames if os.path.isfile(os.path.join(path, x))]
+        paths = [x for x in fnames if os.path.isfile(os.path.join(path, x))]
+
+    if ftypes is None:
+        return paths
+
+    # Filter down to only the filetypes asked for
+    keep_paths = list()
+    for file_type in ftypes:
+        temp = [x for x in paths if file_type in x]
+        keep_paths = list(set(temp + keep_paths))
+
+    return keep_paths
 
 
 def is_in_string(vals: Iterable[str],
@@ -2224,7 +2062,8 @@ def get_compiled_matrix_name(matrix_format: str,
                              mode: str = None,
                              ca: int = None,
                              tp: str = None,
-                             csv=False,
+                             csv: bool = False,
+                             compress: bool = False,
                              suffix: str = None,
                              ) -> str:
 
@@ -2269,6 +2108,8 @@ def get_compiled_matrix_name(matrix_format: str,
     # Optionally add on the csv if needed
     if csv:
         final_name += '.csv'
+    elif compress:
+        final_name += consts.COMPRESSION_SUFFIX
 
     return final_name
 
@@ -2627,7 +2468,11 @@ def file_write_check(path: Union[str, Path], wait: bool=True) -> Path:
                     raise ValueError('Too many files in use!')
 
 
-def safe_dataframe_to_csv(df, out_path, flatten_header=False, **to_csv_kwargs):
+def safe_dataframe_to_csv(df: pd.DataFrame,
+                          out_path: str,
+                          flatten_header: bool = False,
+                          **to_csv_kwargs: Any,
+                          ) -> None:
     """
     Wrapper around df.to_csv. Gives the user a chance to close the open file.
 
@@ -2980,7 +2825,7 @@ def balance_a_to_p(productions: pd.DataFrame,
         if productions[col].sum() == 0:
             attractions[col] = 0
         else:
-            attractions[col] /= attractions[col].sum() / productions[col].sum()
+            attractions[col] *= productions[col].sum() / attractions[col].sum()
 
         # Throw an error if we somehow don't match
         np.testing.assert_approx_equal(
@@ -3034,7 +2879,7 @@ def compile_efficient_df(eff_df: List[Dict[str, Any]],
         df = df.reindex(columns=col_names)
         concat_ph.append(df)
 
-    return pd.concat(concat_ph)
+    return pd.concat(concat_ph).reset_index(drop=True)
 
 
 def list_safe_remove(lst: List[Any],
@@ -3173,237 +3018,8 @@ def add_all_commute_cat(df: pd.DataFrame,
     return df.reset_index(drop=True)
 
 
-# ## BELOW HERE IS OLD TMS CODE ## #
-
-
-def get_costs(model_lookup_path,
-              calib_params,
-              tp='24hr',
-              iz_infill = 0.5
-              ):
-    """
-    This function imports distances or costs from a given path.
-
-    Parameters
-    ----------
-    model_lookup_path:
-        Model folder to look in for distances/costs. Should be in call or global.
-
-    calib_params:
-        Calibration parameters dictionary'
-
-    tp:
-        Should ultimately take 24hr & tp, usually 24hr for hb and tp for NHB.
-
-    direction = None:
-        Takes None, 'To', 'From'
-
-    car_available = None:
-        Takes None, True, False
-
-    iz_infill = 0.5:
-        Currently needed for distance but not cost. Add a value of iz_infill *
-        the minimum inter-zonal value to the intra-zonal cells.
-
-    Returns
-    ----------
-    dat:
-        DataFrame containing required cost or distance values.
-        DataFrame containing required cost or distance values.
-    """
-    # units takes different parameters
-    # TODO: Needs a config guide for the costs somewhere
-    # TODO: Adapt model input costs to take time periods
-    # TODO: The name cost_cols is misleading
-    file_sys = os.listdir(os.path.join(model_lookup_path, 'costs'))
-    tp_path = [x for x in file_sys if tp in x]
-
-    dat = pd.read_csv(os.path.join(model_lookup_path,
-                                   'costs',
-                                   tp_path[0]))
-    cols = list(dat)
-
-    # Get purpose and direction from calib_params
-    ca = None
-    purpose = None
-    time_period = None
-
-    for index, param in calib_params.items():
-        # Need a purpose, if a ca is not picked up returns none
-        if index == 'p':
-            purpose = param
-        if index == 'ca':
-            if param == 1:
-                ca = 'nca'
-            elif param == 2:
-                ca = 'ca'
-        if index == 'tp':
-            time_period = param
-
-    # Purpose to string
-    commute = [1]
-    business = [2, 12]
-    other = [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
-    if purpose in commute:
-        str_purpose = 'commute'
-    elif purpose in business:
-        str_purpose = 'business'
-    elif purpose in other:
-        str_purpose = 'other'
-    else:
-        raise ValueError("Cannot convert purpose to string." +
-                         "Got %s" % str(purpose))
-
-    # Filter down on purpose
-    cost_cols = [x for x in cols if str_purpose in x]
-
-    # Handle if we have numeric purpose costs, hope so, they're better!
-    if len(cost_cols) == 0:
-        cost_cols = [x for x in cols if ('p' + str(purpose)) in x]
-
-    # Filter down on car availability
-    if ca is not None:
-        # Have to be fussy as ca is in nca...
-        if ca == 'ca':
-            cost_cols = [x for x in cost_cols if 'nca' not in x]
-        elif ca == 'nca':
-            cost_cols = [x for x in cost_cols if 'nca' in x]
-
-    if time_period is not None:
-        cost_cols = [x for x in cost_cols if str(time_period) in x]
-
-    target_cols = ['p_zone', 'a_zone']
-    for col in cost_cols:
-        target_cols.append(col)
-
-    cost_return_name = cost_cols[0]
-
-    dat = dat.reindex(target_cols, axis=1)
-    dat = dat.rename(columns={cost_cols[0]: 'cost'})
-
-    # Redefine cols
-    cols = list(dat)
-
-    if iz_infill is not None:
-        dat = dat.copy()
-        min_inter_dat = dat[dat[cols[2]]>0]
-        # Derive minimum intra-zonal
-        min_inter_dat = min_inter_dat.groupby(
-                cols[0]).min().reset_index().drop(cols[1],axis=1)
-        intra_dat = min_inter_dat.copy()
-        intra_dat[cols[2]] = intra_dat[cols[2]]*iz_infill
-        iz = dat[dat[cols[0]] == dat[cols[1]]]
-        non_iz = dat[dat[cols[0]] != dat[cols[1]]]
-        iz = iz.drop(cols[2], axis=1)
-        # Rejoin
-        iz = iz.merge(intra_dat, how='inner', on=cols[0])
-        dat = pd.concat([iz, non_iz], axis=0, sort=True).reset_index(drop=True)
-
-    return dat, cost_return_name
-
-
-def get_trip_length_bands(import_folder,
-                          calib_params,
-                          segmentation,
-                          trip_origin,
-                          replace_nan=False,
-                          echo=True):
-    # TODO: Overwrite the segmentation parameter, sorry Ben
-    """
-    Function to check a folder for trip length band parameters.
-    Returns a subset.
-    """
-    # Index folder
-    target_files = os.listdir(import_folder)
-    # Define file contents, should just be target files - should fix.
-    import_files = target_files.copy()
-
-    # TODO: Fixed for new ntem dists - pointless duplication now
-    if segmentation == 'ntem':
-        for key, value in calib_params.items():
-            # Don't want empty segments, don't want ca
-            if value != 'none' and key != 'ca':
-                # print_w_toggle(key + str(value), echo=echo)
-                import_files = [x for x in import_files if
-                                ('_' + key + str(value)) in x]
-    elif segmentation == 'tfn':
-        for key, value in calib_params.items():
-            # Don't want empty segments, don't want ca
-            if value != 'none' and key != 'ca':
-                # print_w_toggle(key + str(value), echo=echo)
-                import_files = [x for x in import_files if
-                                ('_' + key + str(value)) in x]
-    else:
-        raise ValueError('Non-valid segmentation. How did you get this far?')
-
-    if trip_origin == 'hb':
-        import_files = [x for x in import_files if 'nhb' not in x]
-    elif trip_origin == 'nhb':
-        import_files = [x for x in import_files if 'nhb' in x]
-    else:
-        raise ValueError('Trip length band import failed,' +
-                         'provide valid trip origin')
-    if len(import_files) > 1:
-        raise Warning('Picking from two similar files,' +
-                      ' check import folder')
-
-    # Import
-    tlb = pd.read_csv(import_folder + '/' + import_files[0])
-
-    # Filter to target purpose
-    # TODO: Don't want to have to do this for NTEM anymore. Just keep them individual.
-    # tlb = tlb[tlb[trip_origin +'_purpose']==purpose].copy()
-
-    if replace_nan:
-        for col_name in list(tlb):
-            tlb[col_name] = tlb[col_name].fillna(0)
-
-    return tlb
-
-
-def parse_mat_output(list_dir,
-                     sep='_',
-                     mat_type='dat',
-                     file_format='.csv',
-                     file_name='file'):
-    """
-    """
-    # Get target file format only
-    unq_files = [x for x in list_dir if file_format in x]
-    # If no numbers in then drop
-    unq_files = [x for x in list_dir if any(c.isdigit() for c in x)]
-
-    split_list = []
-    for file in unq_files:
-        split_dict = {file_name:file}
-        file = file.replace(file_format,'')
-        test = str(file).split('_')
-        for item in test:
-            if 'hb' in item:
-                name = 'trip_origin'
-                dat = item
-            elif item == mat_type:
-                name = ''
-                dat = ''
-            else:
-                name = ''
-                dat = ''
-                # name = letters, dat = numbers
-                for char in item:
-                    if char.isalpha():
-                        name += str(char)
-                    else:
-                        dat += str(char)
-            # Return None not nan
-            if len(dat) == 0:
-                dat = 'none'
-            split_dict.update({name: dat})
-        split_list.append(split_dict)
-
-    segments = pd.DataFrame(split_list)
-    segments = segments.replace({np.nan:'none'})
-
-    return segments
+def create_iter_name(iter_num: Union[int, str]) -> str:
+    return 'iter' + str(iter_num)
 
 
 def convert_to_weights(df: pd.DataFrame,
@@ -3426,3 +3042,278 @@ def convert_to_weights(df: pd.DataFrame,
             )
     return df
 
+
+def trip_origin_to_purposes(trip_origin: str) -> List[int]:
+    """
+    Returns a list of purposes for the given trip origin
+
+    Parameters
+    ----------
+    trip_origin:
+        The trip origin to get purposes for.
+
+    Returns
+    -------
+    purposes:
+        A list of integers representing purposes
+    """
+    # TODO Validate trip origin
+    return efs_consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
+
+
+def merge_df_list(df_list, **kwargs):
+    """
+    Merge all dfs in df_list into a single dataframe
+
+    Parameters
+    ----------
+    df_list:
+        The list of dataframes to merge
+
+    kwargs:
+        ANy extra arguments to pass straight to pandas.merge()
+
+    Returns
+    -------
+    merged_df:
+        A single df of all items in df_list merged together
+    """
+    return functools.reduce(lambda l, r: pd.merge(l, r, **kwargs), df_list)
+
+
+def split_base_future_years(years: List[int],
+                            ) -> Tuple[int, List[int]]:
+    """
+    Splits years into base and future years.
+
+    The smallest year in the list is assumed to be the base
+
+    Parameters
+    ----------
+    years:
+        A list of years to split
+
+    Returns
+    -------
+    base_year:
+        The base year from years
+
+    future_years:
+        A list of all other years than base_year in years.
+        This will be returned in order, from lowest to highest.
+    """
+    # Validate inputs
+    if not isinstance(years, list):
+        raise TypeError(
+            "Expecting a list of years but got %s instead."
+            % str(type(years))
+        )
+
+    if not all([isinstance(x, int) for x in years]):
+        raise TypeError(
+            "Expecting a list of integers, but not all items are integers."
+        )
+
+    # Find the smallest value
+    base_year = years.pop(years.index(min(years)))
+
+    # Sort other items
+    years.sort()
+
+    return base_year, years
+
+
+def split_base_future_years_str(years: List[str],
+                                ) -> Tuple[str, List[str]]:
+    """
+    Splits years into base and future years.
+
+    The smallest year in the list is assumed to be the base.
+    A wrapper around split_base_future_years() to handle strings
+
+    Parameters
+    ----------
+    years:
+        A list of years to split
+
+    Returns
+    -------
+    base_year:
+        The base year from years
+
+    future_years:
+        A list of all other years than base_year in years.
+        This will be returned in order, from lowest to highest.
+    """
+    base_year, future_years = split_base_future_years([int(x) for x in years])
+    return str(base_year), [str(x) for x in future_years]
+
+
+def get_norms_vdm_segment_aggregation_dict(norms_vdm_seg_name: str
+                                           ) -> Dict[str, List[Any]]:
+    """
+    Returns a dictionary of valid segments for the given name
+
+    Parameters
+    ----------
+    norms_vdm_seg_name:
+        The name of the norms_vdm_matrix to get a dictionary for.
+        Should be one of the values in efs_consts.NORMS_VDM_MATRIX_NAMES
+
+    Returns
+    -------
+    segment_aggregation_dictionary:
+        A dictionary of valid segments for norms_vdm_seg_name
+    """
+    if norms_vdm_seg_name in list(consts.NORMS_VDM_SEG_INTERNAL.keys()):
+        return consts.NORMS_VDM_SEG_INTERNAL[norms_vdm_seg_name]
+    elif norms_vdm_seg_name in list(consts.NORMS_VDM_SEG_EXTERNAL.keys()):
+        return consts.NORMS_VDM_SEG_EXTERNAL[norms_vdm_seg_name]
+
+    raise ValueError(
+        "norms_vdm_seg_name does not seem to be a valid name. Expecting "
+        "one of the values from efs_consts.NORMS_VDM_MATRIX_NAMES"
+    )
+
+
+def get_default_kwargs(func):
+    signature = inspect.signature(func)
+    return {
+        k: v.default
+        for k, v in signature.parameters.items()
+        if v.default is not inspect.Parameter.empty
+    }
+
+
+def split_hb_nhb_purposes(purposes: List[int]) -> Tuple[List[int], List[int]]:
+    """
+    Splits purposes into two lists of HB and NHB purposes
+
+    Parameters
+    ----------
+    purposes:
+        A list of the purposes to split
+
+    Returns
+    -------
+    hb_purposes:
+        A list of the hb purposes from purposes
+
+    nhb_purposes:
+        A list of the nhb purposes from purposes
+    """
+    # Init
+    hb_p = list()
+    nhb_p = list()
+
+    for p in purposes:
+        if p in consts.ALL_HB_P:
+            hb_p.append(p)
+        elif p in consts.ALL_NHB_P:
+            nhb_p.append(p)
+        else:
+            raise nd.NormitsDemandError(
+                "%s is not a valid HB or NHB purpose" % str(p)
+            )
+    return hb_p, nhb_p
+
+
+def sum_df_dict(dict_list: List[Dict[Any, pd.DataFrame]],
+                non_sum_cols: List[str],
+                sum_keys: List[Any] = None,
+                ) -> Dict[Any, pd.DataFrame]:
+    """
+    Sums the dataframes in dict_list on matching keys
+
+    Parameters
+    ----------
+    dict_list:
+        A list of the dictionaries to sum
+
+    non_sum_cols:
+        A list of the column names that should not be summed
+
+    sum_keys:
+        A list of the keys to sum on. If left as None, will infer the keys
+        to use based on those existing in dict_list[0].
+
+    Returns
+    -------
+    summed_df_dict:
+        A dictionary with sum_keys, containing the sum all vales at
+        that key in dict_list.
+    """
+    # Infer sum keys
+    sum_keys = list(dict_list[0].keys()) if sum_keys is None else sum_keys
+
+    # Check all keys exist
+    for sub_dict in dict_list:
+        if not all([k in sub_dict for k in sum_keys]):
+            raise KeyError(
+                "Cannot find all the sum_keys in all the dictionaries."
+            )
+
+    # Sum across keys
+    ret_dict = dict()
+    for k in sum_keys:
+        print(k)
+        dfs = [d[k] for d in dict_list]
+        dfs = [df.set_index(non_sum_cols) for df in dfs]
+
+        sum_df = functools.reduce(operator.add, dfs)
+        ret_dict[k] = sum_df.reset_index()
+
+    return ret_dict
+
+
+def concat_df_dict(dict_list: List[Dict[Any, pd.DataFrame]],
+                   non_sum_cols: List[str],
+                   concat_keys: List[Any] = None,
+                   sort: bool = False
+                ) -> Dict[Any, pd.DataFrame]:
+    """
+    Sums the dataframes in dict_list on matching keys
+
+    Parameters
+    ----------
+    dict_list:
+        A list of the dictionaries to sum
+
+    non_sum_cols:
+        A list of the column names that should not be summed
+
+    concat_keys:
+        A list of the keys to sum on. If left as None, will infer the keys
+        to use based on those existing in dict_list[0].
+
+    Returns
+    -------
+    summed_df_dict:
+        A dictionary with sum_keys, containing the sum all vales at
+        that key in dict_list.
+    """
+    # Infer sum keys
+    concat_keys = list(
+        dict_list[0].keys()) if concat_keys is None else concat_keys
+
+    # Check all keys exist
+    for sub_dict in dict_list:
+        if not all([k in sub_dict for k in concat_keys]):
+            raise KeyError(
+                "Cannot find all the sum_keys in all the dictionaries."
+            )
+
+    # Sub across keys
+    ret_dict = dict()
+    for k in concat_keys:
+        print(k)
+        dfs = [d[k] for d in dict_list]
+        dfs = [df.set_index(non_sum_cols) for df in dfs]
+
+        concat_df = pd.concat(dfs).reset_index()
+
+        if sort:
+            concat_df = concat_df.sort_values(non_sum_cols)
+        ret_dict[k] = concat_df
+
+    return ret_dict

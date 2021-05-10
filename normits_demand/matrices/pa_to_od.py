@@ -27,11 +27,111 @@ from tqdm import tqdm
 # self imports
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
+from normits_demand.utils import file_ops
 from normits_demand.concurrency import multiprocessing
 
 # Can call tms pa_to_od.py functions from here
 from normits_demand.matrices.tms_pa_to_od import *
 
+def trip_end_pa_to_od(pa_productions,
+                      phi_lookup_folder: str,
+                      phi_type: str,
+                      modes: List[int],
+                      tp_col: str = 'tp',
+                      trip_col: str = 'trips',
+                      round_dp: int = 4,
+                      aggregate_to_wday: bool = True,
+                      verbose: bool = True):
+    
+    """
+    pa_productions
+    """
+    # Check for TP and trips
+    # What is this - error handling !?
+    if 'tp' not in list(pa_productions):
+        if tp_col == 'tp':
+            raise ValueError('No time period column in trip end vector')
+    if 'trips' not in list(pa_productions):
+        if trip_col == 'trips':
+            raise ValueError('No trips column in trip end vector')
+
+    # Initialise group and sum cols
+    out_cols = list(pa_productions)
+    out_cols.remove(trip_col)
+    group_cols = out_cols.copy()
+    append_cols = ['o_' + trip_col, 'd_' + trip_col]
+    [out_cols.append(x) for x in append_cols]
+    del(append_cols)
+    toh_cols = out_cols.copy()
+    toh_cols.remove('o_' + trip_col)
+
+    # initialise time periods
+    tp_nos = [1,2,3,4]
+    tp_list = []
+    [tp_list.append(tp_col+str(x)) for x in tp_nos]
+
+    # Do subset by mode
+    mode_subs = []
+    for mode in modes:
+        mode_sub = pa_productions.copy()
+        mode_sub = mode_sub[mode_sub['m']==mode]
+
+        phi_factors = get_time_period_splits(
+            mode,
+            phi_type,
+            aggregate_to_wday=aggregate_to_wday,
+            lookup_folder=phi_lookup_folder)
+        
+        # Rename phi factors
+        phi_factors = phi_factors.rename(
+            columns={'purpose_from_home':'p',
+                     'time_from_home':tp_col})
+        # BACKLOG: Handle different types of phi factor
+
+        time_subs = []
+        for time in tp_nos:
+            from_home = mode_sub.copy()
+            from_home = from_home[from_home[tp_col]==time]
+            from_home = from_home.rename(columns={trip_col:'o_' + trip_col})
+            to_home = from_home.copy()
+            to_home = to_home.merge(
+                phi_factors,
+                how='left',
+                on=['p',tp_col])
+            to_home['d_' + trip_col] = (to_home['o_trips'] *
+                                  to_home['direction_factor'])
+            to_home = to_home.drop(
+                ['tp', 'direction_factor', 'o_trips'], axis=1)
+            to_home = to_home.rename(
+                columns = {'time_to_home':'tp'})
+            to_home = to_home.groupby(group_cols).sum().reset_index()
+            to_home = to_home.sort_values(toh_cols)
+            
+            time_sub = from_home.merge(to_home,
+                                       how='left',
+                                       on=group_cols)
+            time_subs.append(time_sub)
+        
+        mode_subs.append(pd.concat(time_subs))
+    
+    od_productions = pd.concat(mode_subs)
+    od_productions = od_productions.groupby(
+        group_cols).sum().reset_index()
+    od_productions = od_productions.sort_values(
+        group_cols).reset_index(drop=True)
+    
+    # Round
+    od_productions['o_'+trip_col] = od_productions[
+        'o_'+trip_col].round(round_dp)
+    od_productions['d_'+trip_col] = od_productions[
+        'd_'+trip_col].round(round_dp)
+    
+    totals = {'o_total':od_productions['o_'+trip_col].sum(),
+              'd_total':od_productions['o_'+trip_col].sum()}
+    if verbose:
+        print(totals)
+
+    return od_productions, totals
 
 def simplify_time_period_splits(time_period_splits: pd.DataFrame):
     """
@@ -79,12 +179,14 @@ def _build_tp_pa_internal(pa_import,
                           pa_export,
                           tp_splits,
                           model_zone_col,
+                          model_name,
                           matrix_format,
                           year,
                           purpose,
                           mode,
                           segment,
                           car_availability,
+                          round_dp,
                           ):
     """
     The internals of build_tp_pa(). Useful for making the code more
@@ -121,8 +223,15 @@ def _build_tp_pa_internal(pa_import,
         str(car_availability),
         csv=True
     )
-    pa_24hr = pd.read_csv(os.path.join(pa_import, dist_fname))
-    zoning_system = pa_24hr.columns[0]
+    path = os.path.join(pa_import, dist_fname)
+    path = file_ops.find_filename(path)
+    pa_24hr = file_ops.read_df(path, index_col=0)
+
+    # Pull the zoning system out of the index if we need to
+    zoning_system = "%s_zone_id" % model_name
+    if pa_24hr.columns[0] != zoning_system:
+        pa_24hr.index.name = zoning_system
+        pa_24hr = pa_24hr.reset_index()
 
     print("Working on splitting %s..." % dist_fname)
 
@@ -230,6 +339,7 @@ def _build_tp_pa_internal(pa_import,
             v_heading=zoning_system,
             h_heading=out_zone_col,
             values='trips',
+            round_dp=round_dp,
             out_path=out_tp_pa_path
         )
 
@@ -238,6 +348,7 @@ def efs_build_tp_pa(pa_import: str,
                     pa_export: str,
                     tp_splits: pd.DataFrame,
                     model_zone_col: str,
+                    model_name: str,
                     years_needed: List[int],
                     p_needed: List[int],
                     m_needed: List[int],
@@ -245,6 +356,7 @@ def efs_build_tp_pa(pa_import: str,
                     ns_needed: List[int] = None,
                     ca_needed: List[int] = None,
                     matrix_format: str = 'pa',
+                    round_dp: int = consts.DEFAULT_ROUNDING,
                     process_count: int = consts.PROCESS_COUNT
                     ) -> None:
     """
@@ -288,6 +400,10 @@ def efs_build_tp_pa(pa_import: str,
     matrix_format:
         Which format the matrix is in. Either 'pa' or 'od'
 
+    round_dp:
+        The number of decimal places to round the output values to.
+        Uses efs_consts.DEFAULT_ROUNDING by default.
+
     process_count:
         The number of processes to use when multiprocessing. Negative numbers
         use that many processes less than the max. i.e. -1 ->
@@ -313,8 +429,10 @@ def efs_build_tp_pa(pa_import: str,
         'pa_import': pa_import,
         'pa_export': pa_export,
         'matrix_format': matrix_format,
+        'model_name': model_name,
         'tp_splits': tp_splits,
         'model_zone_col': model_zone_col,
+        'round_dp': round_dp,
     }
 
     # Build a list of the changing arguments
@@ -354,6 +472,7 @@ def _build_od_internal(pa_import,
                        phi_lookup_folder,
                        phi_type,
                        aggregate_to_wday,
+                       round_dp,
                        full_od_out=False,
                        echo=True):
     """
@@ -506,7 +625,13 @@ def _build_od_internal(pa_import,
         output_to_path = os.path.join(od_export, output_to_name)
         output_od_path = os.path.join(od_export, output_od_name)
 
-        # TODO: Add tidality checks into efs_build_od()
+        # Round the outputs
+        output_from = output_from.round(decimals=round_dp)
+        output_to = output_to.round(decimals=round_dp)
+        output_od = output_od.round(decimals=round_dp)
+
+        # BACKLOG: Add tidality checks into efs_build_od()
+        #  labels: demand merge, audits, EFS
         # Auditing checks - tidality
         # OD from = PA
         # OD to = if it leaves it should come back
@@ -533,8 +658,9 @@ def efs_build_od(pa_import: str,
                  phi_lookup_folder: str = None,
                  phi_type: str = 'fhp_tp',
                  aggregate_to_wday: bool = True,
-                 echo: bool = True,
-                 process_count: int = -2
+                 verbose: bool = True,
+                 round_dp: int = consts.DEFAULT_ROUNDING,
+                 process_count: int = consts.PROCESS_COUNT
                  ) -> None:
     """
      This function imports time period split factors from a given path.
@@ -554,7 +680,11 @@ def efs_build_od(pa_import: str,
     phi_lookup_folder
     phi_type
     aggregate_to_wday
-    echo
+    verbose
+    round_dp:
+        The number of decimal places to round the output values to.
+        Uses efs_consts.DEFAULT_ROUNDING by default.
+
     process_count:
         The number of processes to use when multiprocessing. Set to 0 to not
         use multiprocessing at all. Set to -1 to use all expect 1 available
@@ -564,9 +694,12 @@ def efs_build_od(pa_import: str,
     -------
     None
     """
+
+    # BACKLOG: Dynamically generate the path to phi_factors
+    #  labels: EFS
     # Init
     if phi_lookup_folder is None:
-        phi_lookup_folder = 'Y:/NorMITs Demand/import/phi_factors'
+        phi_lookup_folder = 'I:/NorMITs Demand/import/phi_factors'
 
     # ## MULTIPROCESS ## #
     unchanging_kwargs = {
@@ -576,7 +709,8 @@ def efs_build_od(pa_import: str,
        'phi_lookup_folder': phi_lookup_folder,
        'phi_type': phi_type,
        'aggregate_to_wday': aggregate_to_wday,
-       'echo': echo
+       'round_dp': round_dp,
+       'echo': verbose
     }
 
     # Build a list of the changing arguments
@@ -1101,7 +1235,7 @@ def build_od_from_tour_proportions(pa_import: str,
                                    seg_params: Dict[str, Any],
                                    base_year: str = consts.BASE_YEAR,
                                    years_needed: List[int] = consts.FUTURE_YEARS,
-                                   process_count: int = os.cpu_count() - 2
+                                   process_count: int = consts.PROCESS_COUNT,
                                    ) -> None:
     """
     Builds future year OD matrices based on the base year tour proportions

@@ -18,8 +18,11 @@ from itertools import product
 from tqdm import tqdm
 
 # self imports
+import normits_demand as nd
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
+
+from normits_demand.constraints import ntem_control as ntem
 
 from normits_demand.d_log import processor as dlog_p
 
@@ -60,8 +63,7 @@ class EFSAttractionGenerator:
         # Define the segmentation we're using
         if seg_level == 'tfn':
             self.emp_segments = [self.emp_cat_col, 'soc']
-            self.attr_segments = ['p', 'soc']
-            self.return_segments = [self.zone_col] + self.attr_segments
+            self.return_segments = [self.zone_col, 'p', 'soc']
         else:
             raise ValueError(
                 "'%s' is a valid segmentation level, but I don't have a way "
@@ -74,17 +76,17 @@ class EFSAttractionGenerator:
             base_year: str,
             future_years: List[str],
 
-            # Employment Growth
-            employment_growth: pd.DataFrame,
-            employment_constraint: pd.DataFrame,
-
             # Build import paths
             import_home: str,
             export_home: str,
 
+            # Employment data
+            by_emp_import_path: nd.PathLike,
+            emp_constraint: pd.DataFrame,
+            fy_emp_import_dir: nd.PathLike = None,
+
             # Alternate population/attraction creation files
-            attraction_weights_path: str,
-            employment_path: str = None,
+            attraction_weights_path: str = None,
             mode_splits_path: str = None,
             soc_weights_path: str = None,
             msoa_lookup_path: str = None,
@@ -110,8 +112,6 @@ class EFSAttractionGenerator:
             m_needed: List[int] = consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
-            no_neg_growth: bool = True,
-            employment_infill: float = 0.001,
 
             # Handle outputs
             audits: bool = True,
@@ -147,13 +147,12 @@ class EFSAttractionGenerator:
         future_years:
             The future years to forecast.
 
-        employment_growth:
-            dataframe containing the future year growth values for
-            growing the base year employment. Must be segmented by the same
-            zoning system (at least) as employment_path data (usually
-            msoa_zone_id).
+        employment_import_path:
+            Path to the directory containing the NorMITs Land Use outputs
+            for future year employment estimates. The filenames will
+            be automatically generated based on efs_consts.LU_EMP_FNAME
 
-        employment_constraint:
+        emp_constraint:
             Values to constrain the employment numbers to.
 
         import_home:
@@ -169,10 +168,6 @@ class EFSAttractionGenerator:
         attraction_weights_path:
             The path to alternate attraction weights import data. If left as
             None, the attraction model will use the default land use data.
-
-        employment_path:
-            The path to alternate employment import data. If left as None, the
-            attraction model will use the default land use data.
 
         mode_splits_path:
             The path to alternate mode splits import data. If left as None, the
@@ -234,14 +229,6 @@ class EFSAttractionGenerator:
             zoning name used internally in employment_path and
             attraction_weights data.
 
-        no_neg_growth:
-            Whether to ensure there is no negative growth. If True, any growth
-            values below 0 will be replaced with employment_infill.
-
-        employment_infill:
-            If no_neg_growth is True, this value will be used to replace all
-            values that are less than 0.
-
         audits:
             Whether to output print_audits to the terminal during running. This can
             be used to monitor the employment and attraction numbers being
@@ -290,17 +277,14 @@ class EFSAttractionGenerator:
         # TODO: Make this more adaptive
         # Set the level of segmentation being used
         if segmentation_cols is None:
-            segmentation_cols = [self.emp_cat_col]
+            segmentation_cols = self.emp_segments
 
         # Fix column naming if different
         if external_zone_col != self.zone_col:
-            employment_growth = employment_growth.copy().rename(
-                columns={external_zone_col: self.zone_col}
-            )
             designated_area = designated_area.copy().rename(
                 columns={external_zone_col: self.zone_col}
             )
-            employment_constraint = employment_constraint.rename(
+            emp_constraint = emp_constraint.rename(
                 columns={external_zone_col: self.zone_col}
             )
 
@@ -309,7 +293,6 @@ class EFSAttractionGenerator:
             import_home=import_home,
             base_year=base_year,
             attraction_weights_path=attraction_weights_path,
-            employment_path=employment_path,
             mode_splits_path=mode_splits_path,
             soc_weights_path=soc_weights_path,
             msoa_lookup_path=msoa_lookup_path,
@@ -323,66 +306,13 @@ class EFSAttractionGenerator:
             audit_write_dir=audit_write_dir
         )
 
-        # ## BASE YEAR EMPLOYMENT ## #
-        print("Loading the base year employment data...")
-        base_year_emp = get_employment_data(
-            import_path=imports['base_employment'],
-            zone_col=self.zone_col,
-            emp_cat_col=self.emp_cat_col,
-            return_format='long',
-            value_col=base_year,
-        )
-
-        # Audit employment numbers
-        mask = (base_year_emp[self.emp_cat_col] == 'E01')
-        total_base_year_emp = base_year_emp.loc[mask, base_year].sum()
-        du.print_w_toggle("Base Year Employment: %d" % total_base_year_emp,
-                          echo=audits)
-
-        # ## FUTURE YEAR EMPLOYMENT ## #
-        print("Generating future year employment data...")
-        # If soc splits in the growth factors, we have a few extra steps
-        if 'soc' in employment_growth:
-            # Add Soc splits into the base year
-            base_year_emp = split_by_soc(
-                df=base_year_emp,
-                soc_weights=get_soc_weights(imports['soc_weights']),
-                unique_col=base_year,
-                split_cols=[self.zone_col, self.emp_cat_col]
-            )
-
-            # Aggregate the growth factors to remove extra segmentation
-            group_cols = [self.zone_col, 'soc']
-            index_cols = group_cols.copy() + all_years
-
-            # Make sure both soc columns are the same format
-            base_year_emp['soc'] = base_year_emp['soc'].astype('float').astype('int')
-            employment_growth['soc'] = employment_growth['soc'].astype('float').astype('int')
-        else:
-            # We're not using soc, remove it from our segmentations
-            self.emp_segments.remove('soc')
-            self.attr_segments.remove('soc')
-
-        # Make sure our growth factors are at the right segmentation
-        group_cols = [self.zone_col] + self.emp_segments.copy()
-        group_cols.remove(self.emp_cat_col)
-        index_cols = group_cols.copy() + all_years
-
-        employment_growth = employment_growth.reindex(columns=index_cols)
-        employment_growth = employment_growth.groupby(group_cols).mean().reset_index()
-
-        # Merge on all possible segmentations - not years
-        merge_cols = du.intersection(list(base_year_emp), list(employment_growth))
-        merge_cols = du.list_safe_remove(merge_cols, all_years)
-
-        employment = du.grow_to_future_years(
-            base_year_df=base_year_emp,
-            growth_df=employment_growth,
+        # # ## READ IN EMPLOYMENT DATA ## #
+        employment = get_emp_data_from_land_use(
+            by_emp_import_path=by_emp_import_path,
+            fy_emp_import_dir=fy_emp_import_dir,
             base_year=base_year,
             future_years=future_years,
-            growth_merge_cols=merge_cols,
-            no_neg_growth=no_neg_growth,
-            infill=employment_infill
+            segmentation_cols=segmentation_cols,
         )
 
         # Remove E01 for constraints / dlog
@@ -396,16 +326,15 @@ class EFSAttractionGenerator:
             print("Performing the first constraint on employment...")
             print(". Pre Constraint:\n%s" % employment[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
-                                                  employment_constraint)
+                                                  emp_constraint)
 
             employment = dlog_p.constrain_forecast(
                 employment,
-                employment_constraint,
+                emp_constraint,
                 designated_area,
                 base_year,
                 future_years,
                 self.zone_col,
-                msoa_path=imports['msoa_lookup'],
                 segment_cols=constraint_segments
             )
             print(". Post Constraint:\n%s" % employment[future_years].sum())
@@ -415,7 +344,7 @@ class EFSAttractionGenerator:
             print("Integrating the development log...")
 
             dlog_segments = ["employment_cat"]
-            if "soc" in employment_growth:
+            if "soc" in list(employment):
                 dlog_segments.append("soc")
 
             employment, hg_zones = dlog_p.apply_d_log(
@@ -441,18 +370,17 @@ class EFSAttractionGenerator:
             pd.set_option('display.float_format', str)
             print("Performing the post-development log constraint on employment...")
             print(". Pre Constraint:\n%s" % employment[future_years].sum())
-            print(". Constraint:\n%s" % employment_constraint[future_years].sum())
+            print(". Constraint:\n%s" % emp_constraint[future_years].sum())
             constraint_segments = du.intersection(segmentation_cols,
-                                                  employment_constraint)
+                                                  emp_constraint)
 
             employment = dlog_p.constrain_forecast(
                 employment,
-                employment_constraint,
+                emp_constraint,
                 designated_area,
                 base_year,
                 future_years,
                 self.zone_col,
-                msoa_path=imports['msoa_lookup'],
                 segment_cols=constraint_segments
             )
             print(". Post Constraint:\n%s" % employment[future_years].sum())
@@ -464,24 +392,16 @@ class EFSAttractionGenerator:
             unique_data_cols=all_years
         )
 
-        # Write the produced employment to file
-        # Earlier than previously to also save the soc segmentation
-        if out_path is None:
-            print("WARNING! No output path given. "
-                  "Not writing employment to file.")
-        else:
-            print("Writing employment to file...")
-            path = os.path.join(out_path, consts.EMP_FNAME % self.zone_col)
-            employment.to_csv(path, index=False)
+        if 'soc' not in list(employment):
+            self.emp_segments = du.list_safe_remove(self.emp_segments, ['soc'])
 
         # Reindex and sum
-        # Removes soc splits - attractions weights can't cope
         group_cols = [self.zone_col] + self.emp_segments
         index_cols = group_cols.copy() + all_years
         employment = employment.reindex(index_cols, axis='columns')
         employment = employment.groupby(group_cols).sum().reset_index()
 
-        # Population Audit
+        # Employment Audit
         if audits:
             print('\n', '-'*15, 'Employment Audit', '-'*15)
             mask = (employment[self.emp_cat_col] == 'E01')
@@ -510,13 +430,9 @@ class EFSAttractionGenerator:
             mode_splits_path=imports['mode_splits'],
             soc_weights_path=imports['soc_weights'],
             idx_cols=idx_cols,
-            audit_dir=exports['audits'],
             emp_cat_col=self.emp_cat_col,
             p_col=a_weights_p_col,
             m_col=mode_split_m_col,
-            ntem_control_dir=imports['ntem_control'],
-            lad_lookup_dir=imports['lad_lookup'],
-            control_fy_attractions=control_fy_attractions
         )
 
         # Aggregate nhb trips if needed
@@ -528,7 +444,7 @@ class EFSAttractionGenerator:
             nhb_att = nhb_att.reindex(reindex_cols, axis='columns')
             nhb_att = nhb_att.groupby(group_cols).sum().reset_index()
 
-        # Align purpose and mode columns to standards
+        # ## TIDY UP THE VECTORS ## #
         p_col = 'p'
         m_col = 'm'
         soc_col = 'soc'
@@ -536,8 +452,38 @@ class EFSAttractionGenerator:
         attractions = attractions.rename(columns=columns)
         nhb_att = nhb_att.rename(columns=columns)
 
+        # ## OPTIONALLY CONTROL TO NTEM ## #
+        lad_lookup_path = os.path.join(imports['lad_lookup'],
+                                       consts.DEFAULT_LAD_LOOKUP)
+
+        attractions = ntem.control_vector_to_ntem(
+            vector=attractions,
+            vector_type='attractions',
+            trip_origin='hb',
+            ntem_dir=imports['ntem_control'],
+            lad_lookup_path=lad_lookup_path,
+            base_year=base_year,
+            future_years=future_years,
+            control_base_year=control_attractions,
+            control_future_years=control_fy_attractions,
+            reports_dir=exports['audits'],
+        )
+
+        nhb_att = ntem.control_vector_to_ntem(
+            vector=nhb_att,
+            vector_type='attractions',
+            trip_origin='nhb',
+            ntem_dir=imports['ntem_control'],
+            lad_lookup_path=lad_lookup_path,
+            base_year=base_year,
+            future_years=future_years,
+            control_base_year=control_attractions,
+            control_future_years=control_fy_attractions,
+            reports_dir=exports['audits']
+        )
+
         # Write attractions to file
-        print("Writing attractions to file...")
+        print("Writing attractions to disk...")
         fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_hb')
         nhb_fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_nhb')
         attractions.to_csv(os.path.join(out_path, fname), index=False)
@@ -580,249 +526,6 @@ class EFSAttractionGenerator:
         nhb_att.to_csv(os.path.join(out_path, nhb_fname), index=False)
 
         return attractions, nhb_att
-
-    def attraction_generation(self,
-                              worker_dataframe: pd.DataFrame,
-                              attraction_weight: pd.DataFrame,
-                              year_list: List[str]
-                              ) -> pd.DataFrame:
-        """
-        #TODO
-        """
-        worker_dataframe = worker_dataframe.copy()
-        attraction_weight = attraction_weight.copy()
-
-        attraction_dataframe = pd.merge(
-            worker_dataframe,
-            attraction_weight,
-            on=["employment_class"],
-            suffixes=("", "_weights")
-        )
-
-        for year in year_list:
-            attraction_dataframe.loc[:, year] = (
-                attraction_dataframe[year]
-                *
-                attraction_dataframe[year + "_weights"]
-            )
-
-        group_by_cols = ["model_zone_id", "purpose_id"]
-        needed_columns = group_by_cols.copy()
-        needed_columns.extend(year_list)
-
-        attraction_dataframe = attraction_dataframe[needed_columns]
-        attraction_dataframe = attraction_dataframe.groupby(
-            by=group_by_cols,
-            as_index=False
-        ).sum()
-
-        return attraction_dataframe
-
-
-
-    def worker_grower(self,
-                      worker_growth: pd.DataFrame,
-                      worker_values: pd.DataFrame,
-                      base_year: str,
-                      year_string_list: List[str]
-                      ) -> pd.DataFrame:
-        # get workers growth from base year
-        print("Adjusting workers growth to base year...")
-        worker_growth = du.convert_growth_off_base_year(
-                worker_growth,
-                base_year,
-                year_string_list
-                )
-        print("Adjusted workers growth to base year!")
-        
-        
-        print("Growing workers from base year...")
-        grown_workers = du.get_grown_values(
-                worker_values,
-                worker_growth,
-                "base_year_workers",
-                year_string_list
-                )
-        print("Grown workers from base year!")
-        
-        return grown_workers
-    
-    def split_workers(self,
-                      workers_dataframe: pd.DataFrame,
-                      workers_split_dataframe: pd.DataFrame,
-                      base_year_string: str,
-                      all_years: List[str]
-                      ) -> pd.DataFrame:
-        workers_dataframe = workers_dataframe.copy()
-        workers_split_dataframe = workers_split_dataframe.copy()
-        
-        split_workers_dataframe = pd.merge(
-                workers_dataframe,
-                workers_split_dataframe,
-                on = ["model_zone_id"],
-                suffixes = {"", "_split"}
-                )
-                
-        split_workers_dataframe["base_year_workers"] = (
-                split_workers_dataframe["base_year_workers"]
-                *
-                split_workers_dataframe[base_year_string + "_split"]
-                )
-        
-        for year in all_years:
-            # we iterate over each zone
-            # create zone mask
-            split_workers_dataframe[year] = (
-                    split_workers_dataframe[year]
-                    *
-                    split_workers_dataframe[year + "_split"]
-                    )
-        
-        required_columns = [
-                "model_zone_id",
-                "employment_class",
-                "base_year_workers"
-                ]
-        
-        required_columns.extend(all_years)
-        split_workers_dataframe = split_workers_dataframe[
-                required_columns
-                ]
-        return split_workers_dataframe
-    
-    def add_all_worker_category(self,
-                                workers_dataframe: pd.DataFrame,
-                                all_worker_category_id: str,
-                                all_years: List[str]
-                                ) -> pd.DataFrame:
-        workers_dataframe = workers_dataframe.copy()
-        zones = workers_dataframe["model_zone_id"].unique()
-        
-        for zone in zones:
-            total_line = workers_dataframe[
-                    workers_dataframe["model_zone_id"] == zone
-                    ].sum()
-            
-            year_data = {
-                    "base_year_workers": [total_line["base_year_workers"]]
-                    }            
-            for year in all_years:
-                year_data[year] = [total_line[year]]
-                
-            data = {
-                    "model_zone_id": [zone],
-                    "employment_class": [all_worker_category_id]
-                    }
-            
-            data.update(year_data)
-            
-            total_line = pd.DataFrame(data)
-            
-            workers_dataframe = workers_dataframe.append(total_line)
-            
-        workers_dataframe = workers_dataframe.sort_values(
-                by = [
-                        "model_zone_id",
-                        "employment_class"
-                        ]
-                )
-        
-        return workers_dataframe
-
-
-def get_employment_data(import_path: str,
-                        msoa_path: str = None,
-                        zone_col: str = 'msoa_zone_id',
-                        emp_cat_col: str = 'employment_cat',
-                        value_col: str = 'jobs',
-                        return_format: str = 'wide',
-                        add_all_commute: bool = True,
-                        all_commute_col: str = 'E01'
-                        ) -> pd.DataFrame:
-    """
-    Reads in employment data from file and returns dataframe.
-
-    Can be updated in future to accept different types of inputs,
-    and return all in the same format.
-
-    Parameters
-    ----------
-    import_path:
-        The path to the employment data to import
-
-    msoa_path:
-        Path to the msoa file for converting from msoa string ids to
-        integer ids. If left as None, then MSOA codes are returned instead
-
-    zone_col:
-        The name of the column in the employment data that refers to the zones.
-
-    emp_cat_col:
-        The name to give to the employment category column when converting to
-        long format.
-
-    value_col:
-        The name to give to the values in the wide matrix when converting to
-        long format.
-
-    return_format:
-        What format to return the employment data in. Can take either 'wide' or
-        'long'
-
-    add_all_commute:
-        Whether to add an additional employment category that covers commuting.
-        The new category will be a sum of all other employment categories.
-        If added, the column will be named all_commute_col
-
-    all_commute_col:
-        If add_all_commute is True, the added column will be given this name
-
-    Returns
-    -------
-    employment_data:
-        Dataframe with zone_col as the index, and employment categories
-        as the columns
-
-    """
-    # Error check
-    valid_return_formats = ['wide', 'long']
-    return_format = return_format.strip().lower()
-    if return_format not in valid_return_formats:
-        raise ValueError(
-            "'%s' is not a valid return format. Expected one of: %s"
-            % (str(return_format), str(valid_return_formats))
-        )
-
-    # Read in raw data
-    emp_data = pd.read_csv(import_path)
-    emp_data = emp_data.rename(columns={'geo_code': zone_col})
-
-    # Add in commute category if required
-    if add_all_commute:
-        # Commute is a sum of all other employment categories
-        emp_cats = list(emp_data.columns)
-        emp_cats.remove(zone_col)
-
-        emp_data[all_commute_col] = emp_data[emp_cats].sum(axis='columns')
-
-    # Convert to long format if needed
-    if return_format == 'long':
-        emp_data = emp_data.melt(
-            id_vars=zone_col,
-            var_name=emp_cat_col,
-            value_name=value_col
-        )
-
-    # Convert to msoa zone numbers if needed
-    if msoa_path is not None:
-        emp_data = du.convert_msoa_naming(
-            emp_data,
-            msoa_col_name=zone_col,
-            msoa_path=msoa_path,
-            to='int'
-        )
-
-    return emp_data
 
 
 def get_mode_splits(mode_splits_path: str,
@@ -1229,13 +932,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
                              m_col: str = 'mode',
                              m_split_col: str = 'mode_share',
                              unique_col: str = 'trips',
-                             control_path: str = None,
-                             lad_lookup_dir: str = None,
-                             lad_lookup_name: str = consts.DEFAULT_LAD_LOOKUP,
-                             ) -> Tuple[pd.DataFrame,
-                                        pd.DataFrame,
-                                        Dict[str, float],
-                                        Dict[str, float]]:
+                             ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Combines employment numbers with attractions weights to produce the
     attractions per purpose.
@@ -1284,20 +981,6 @@ def merge_attraction_weights(employment: pd.DataFrame,
     unique_col:
         The name to give to the unique column for each year
 
-    control_path:
-        Path to the file containing the data to control the produced
-        attractions to. If left as None, no control will be carried out.
-
-
-    lad_lookup_dir:
-        Path to the file containing the conversion from msoa zoning to LAD
-        zoning, to be used for controlling the attractions. If left as None, no
-        control will be carried out.
-
-    lad_lookup_name:
-        The name of the file in lad_lookup_dir that contains the msoa zoning
-        to LAD zoning conversion.
-
     Returns
     -------
     hb_attractions:
@@ -1309,18 +992,8 @@ def merge_attraction_weights(employment: pd.DataFrame,
         A wide dataframe containing the attraction numbers. The index will
         match the index from employment, the columns will be the purposes
         given in p_col of attractions_weight_path.
-
-    hb_audit:
-        A dictionary showing the values before and after an NTEM control
-        (if carried out) for the hb_attractions
-
-    nhb_audit:
-        A dictionary showing the values before and after an NTEM control
-        (if carried out) for the nhb_attractions
-
     """
     # Init
-    do_ntem_control = control_path is not None and lad_lookup_dir is not None
     idx_cols = ['msoa_zone_id'] if idx_cols is None else idx_cols.copy()
     emp_cats = list(employment.columns.unique())
 
@@ -1437,61 +1110,7 @@ def merge_attraction_weights(employment: pd.DataFrame,
     ).drop('ph', axis='columns')
     del tp_infill
 
-    # Control if required
-    if do_ntem_control:
-        # Get ntem totals
-        ntem_totals = pd.read_csv(control_path)
-        ntem_lad_lookup = pd.read_csv(os.path.join(lad_lookup_dir,
-                                                   lad_lookup_name))
-
-        print("Performing HB NTEM constraint...")
-        # TODO: Allow control_to_ntem() to take flexible col names
-        attractions = attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        attractions, hb_audit, *_ = du.control_to_ntem(
-            attractions,
-            ntem_totals,
-            ntem_lad_lookup,
-            group_cols=['p', 'm'],
-            base_value_name='trips',
-            ntem_value_name='Attractions',
-            purpose='hb'
-        )
-        attractions = attractions.rename(columns={'p': p_col, 'm': m_col})
-
-        print("Performing NHB NTEM constraint...")
-        nhb_attractions = nhb_attractions.rename(columns={p_col: 'p', m_col: 'm'})
-        nhb_attractions, nhb_audit, *_ = du.control_to_ntem(
-            nhb_attractions,
-            ntem_totals,
-            ntem_lad_lookup,
-            group_cols=['p', 'm', 'tp'],
-            base_value_name='trips',
-            ntem_value_name='Attractions',
-            purpose='nhb'
-        )
-        nhb_attractions = nhb_attractions.rename(columns={'p': p_col, 'm': m_col})
-
-        # Control to NTEM returns wrong type
-        attractions[p_col] = attractions[p_col].astype(int)
-        attractions[m_col] = attractions[m_col].astype(int)
-        nhb_attractions[p_col] = nhb_attractions[p_col].astype(int)
-        nhb_attractions[m_col] = nhb_attractions[m_col].astype(int)
-        nhb_attractions['tp'] = nhb_attractions['tp'].astype(int)
-
-    else:
-        # Create audit showing no NTEM control was used
-        hb_audit = {
-            'before': attractions['trips'].sum(),
-            'target': -1,
-            'after': attractions['trips'].sum()
-        }
-        nhb_audit = {
-            'before': nhb_attractions['trips'].sum(),
-            'target': -1,
-            'after': nhb_attractions['trips'].sum()
-        }
-
-    return attractions, nhb_attractions, hb_audit, nhb_audit
+    return attractions, nhb_attractions
 
 
 def generate_attractions(employment: pd.DataFrame,
@@ -1501,15 +1120,11 @@ def generate_attractions(employment: pd.DataFrame,
                          mode_splits_path: str,
                          soc_weights_path: str,
                          idx_cols: List[str],
-                         audit_dir: str,
                          emp_cat_col: str = 'employment_cat',
                          p_col: str = 'purpose',
                          m_col: str = 'mode',
                          m_split_col: str = 'mode_share',
-                         ntem_control_dir: str = None,
-                         lad_lookup_dir: str = None,
                          soc_split: bool = True,
-                         control_fy_attractions: bool = True
                          ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Converts employment to attractions using attraction_weights
@@ -1563,23 +1178,9 @@ def generate_attractions(employment: pd.DataFrame,
         The name of the column in mode_splits_path containing the mode share
         values.
 
-    ntem_control_dir:
-        Path to the file containing the data to control the produced
-        attractions to. If left as None, no control will be carried out.
-
-    lad_lookup_dir:
-        Path to the file containing the conversion from msoa zoning to LAD
-        zoning, to be used for controlling the attractions. If left as None, no
-        control will be carried out.
-
     soc_split:
         Whether to apply the soc splits from soc_weights_path to the
         attractions or not.
-
-    control_fy_attractions:
-        Whether to control the generated future year attractions to the
-        constraints given in ntem_control_dir or not. When running for
-        scenarios other than the base NTEM, this should be False.
 
     Returns
     -------
@@ -1603,19 +1204,8 @@ def generate_attractions(employment: pd.DataFrame,
     # Generate attractions per year
     yr_ph = dict()
     yr_ph_nhb = dict()
-    hb_audits = list()
-    nhb_audits = list()
     for year in all_years:
         print("\nConverting year %s to attractions..." % str(year))
-
-        # Only only set the control path if we need to constrain
-        if not control_fy_attractions and year != base_year:
-            ntem_control_path = None
-        elif ntem_control_dir is not None:
-            ntem_fname = ntem_base_fname % year
-            ntem_control_path = os.path.join(ntem_control_dir, ntem_fname)
-        else:
-            ntem_control_path = None
 
         # Convert to wide format, for this single year
         yr_emp = employment.pivot_table(
@@ -1625,7 +1215,7 @@ def generate_attractions(employment: pd.DataFrame,
         )
 
         # Convert employment to attractions for this year
-        yr_ph[year], yr_ph_nhb[year], hb_audit, nhb_audit = merge_attraction_weights(
+        yr_ph[year], yr_ph_nhb[year] = merge_attraction_weights(
             employment=yr_emp,
             attraction_weights_path=attraction_weights_path,
             mode_splits_path=mode_splits_path,
@@ -1635,19 +1225,7 @@ def generate_attractions(employment: pd.DataFrame,
             m_col=m_col,
             m_split_col=m_split_col,
             unique_col=unique_col,
-            control_path=ntem_control_path,
-            lad_lookup_dir=lad_lookup_dir
-
         )
-
-        # Update list of audits
-        year_hb_audit = {'year': year}
-        year_hb_audit.update(hb_audit)
-        hb_audits.append(year_hb_audit)
-
-        year_nhb_audit = {'year': year}
-        year_nhb_audit.update(nhb_audit)
-        nhb_audits.append(year_nhb_audit)
 
     # Get all the attractions into a single df, efficiently
     attractions = du.combine_yearly_dfs(
@@ -1661,25 +1239,12 @@ def generate_attractions(employment: pd.DataFrame,
         p_col=p_col
     )
 
-    # Write the production audits to disk
-    if len(hb_audits) > 0:
-        fname = consts.ATTRS_FNAME % ('msoa', 'hb')
-        path = os.path.join(audit_dir, fname)
-        pd.DataFrame(hb_audits).to_csv(path, index=False)
-
-    # Write the production audits to disk
-    if len(nhb_audits) > 0:
-        fname = consts.ATTRS_FNAME % ('msoa', 'nhb')
-        path = os.path.join(audit_dir, fname)
-        pd.DataFrame(nhb_audits).to_csv(path, index=False)
-
     return attractions, nhb_attractions
 
 
 def build_attraction_imports(import_home: str,
                              base_year: str,
                              attraction_weights_path: str,
-                             employment_path: str = None,
                              mode_splits_path: str = None,
                              soc_weights_path: str = None,
                              msoa_lookup_path: str = None,
@@ -1705,10 +1270,6 @@ def build_attraction_imports(import_home: str,
     attraction_weights_path:
         The path to the attractions weights. Unable to give a default value for
         this as it changes depending on the mode.
-
-    employment_path:
-        An alternate base year employment import path to use. File will need to
-        follow the same format as default file.
 
     mode_splits_path:
         An alternate mode splits import path to use. File will need to follow
@@ -1746,10 +1307,6 @@ def build_attraction_imports(import_home: str,
         'lad_lookup'
     """
     # Set all unset paths
-    if employment_path is None:
-        path = 'attractions/non_freight_msoa_%s.csv' % base_year
-        employment_path = os.path.join(import_home, path)
-
     if mode_splits_path is None:
         path = 'attractions/attraction_mode_split.csv'
         mode_splits_path = os.path.join(import_home, path)
@@ -1759,7 +1316,7 @@ def build_attraction_imports(import_home: str,
         soc_weights_path = os.path.join(import_home, path)
 
     if msoa_lookup_path is None:
-        path = "default\zoning\msoa_zones.csv"
+        path = "zone_translation\msoa_zones.csv"
         msoa_lookup_path = os.path.join(import_home, path)
 
     if set_controls and ntem_control_dir is None:
@@ -1767,12 +1324,12 @@ def build_attraction_imports(import_home: str,
         ntem_control_dir = os.path.join(import_home, path)
 
     if set_controls and lad_lookup_dir is None:
-        lad_lookup_dir = import_home
+        path = os.path.join('zone_translation', 'no_overlap')
+        lad_lookup_dir = os.path.join(import_home, path)
 
     # Assign to dict
     imports = {
         'weights': attraction_weights_path,
-        'base_employment': employment_path,
         'mode_splits': mode_splits_path,
         'soc_weights': soc_weights_path,
         'msoa_lookup': msoa_lookup_path,
@@ -1788,7 +1345,7 @@ def build_attraction_imports(import_home: str,
             continue
 
         if not os.path.exists(path):
-            raise IOError(
+            raise FileNotFoundError(
                 "Attraction Model Imports: The path for %s does not "
                 "exist.\nFull path: %s" % (key, path)
             )
@@ -1801,7 +1358,7 @@ def build_attraction_exports(export_home: str,
                              ) -> Dict[str, str]:
     """
     Builds a dictionary of attraction export paths, forming a standard calling
-    procedure for attraction exports. Arguments allow default paths to be
+    procedure for attraction efs_exports. Arguments allow default paths to be
     replaced.
 
 
@@ -1829,7 +1386,7 @@ def build_attraction_exports(export_home: str,
                                        'Attractions')
     du.create_folder(audit_write_dir, chDir=False)
 
-    # Build the exports dictionary
+    # Build the efs_exports dictionary
     exports = {
         'audits': audit_write_dir
     }
@@ -1843,3 +1400,132 @@ def build_attraction_exports(export_home: str,
             )
 
     return exports
+
+
+def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
+                               base_year: str,
+                               fy_emp_import_dir: nd.PathLike = None,
+                               future_years: List[str] = None,
+                               segmentation_cols: List[str] = None,
+                               lu_zone_col: str = 'msoa_zone_id',
+                               base_year_data_col: str = '2018',
+                               dtype: Dict[str, np.dtype] = None,
+                               soc_col: str = 'soc',
+                               ignore_missing_soc: bool = True,
+                               ) -> pd.DataFrame:
+    """
+    Reads in land use outputs and aggregates up to segmentation_cols.
+
+    Combines all the dataframe from each into a single dataframe.
+
+    Parameters
+    ----------
+    by_emp_import_path:
+        Path to the file containing base year population data.
+
+    base_year:
+        The base year. The year the data in by_pop_import_path was created
+        for.
+
+    fy_emp_import_dir:
+        Path to the land use directory containing population data for future years
+
+    future_years:
+        The future years of population data to read in.
+
+    segmentation_cols:
+        The columns to keep in the land use data. If None, defaults to:
+         [
+            'area_type',
+            'traveller_type',
+            'soc',
+            'ns',
+        ]
+
+    lu_zone_col:
+        The name of the column in the land use data that refers to the zones.
+
+    base_year_data_col:
+        The name of the column in by_pop_import_path that contains the
+        base year population figures.
+
+    dtype:
+        The data types to assign to columns in the read in data. Follows the
+        same format as dtypes argument in pd.read_csv()
+
+    soc_col:
+        The name of the column containing soc data. If this column doesn't
+        exist, this argument can be safely ignored
+
+    ignore_missing_soc:
+        If the given segmentation_cols contain soc_col and this is set to
+        True an error will not be thrown if no soc col exists in the data.
+        Instead soc_col will be removed from segmentation_cols
+
+    Returns
+    -------
+    population:
+        A dataframe of population data for all years segmented by
+        segmentation_cols. Will also include lu_zone_col and year cols
+        from land use.
+    """
+    # Init
+    future_years = list() if future_years is None else future_years
+    all_years = [base_year] + future_years
+
+    if dtype is None:
+        dtype = {'soc': int, 'ns': int}
+
+    if segmentation_cols is None:
+        segmentation_cols = ['employment_cat']
+    group_cols = [lu_zone_col] + segmentation_cols
+
+    # We can use the future years to determine if we should keep soc in the
+    # base year. Do the years backwards!
+    all_emp_ph = list()
+    for year in reversed(all_years):
+
+        # Read in the dataframe - different if base year
+        if year == base_year:
+            year_emp = pd.read_csv(by_emp_import_path, dtype=dtype)
+            year_emp = year_emp.rename(columns={base_year_data_col: base_year})
+
+        else:
+            # Build the path to this years data
+            fname = consts.LU_EMP_FNAME % str(year)
+            lu_path = os.path.join(fy_emp_import_dir, fname)
+            year_emp = pd.read_csv(lu_path, dtype=dtype)
+
+        # ## CHECK IF WE SHOULD IGNORE SOC ## #
+        if soc_col in segmentation_cols and soc_col not in list(year_emp):
+            # We'll catch the error lower down, so don't need to here
+            if ignore_missing_soc:
+                segmentation_cols.remove(soc_col)
+                group_cols.remove(soc_col)
+
+        # ## FILTER TO JUST THE DATA WE NEED ## #
+        # Set up the columns to keep
+        index_cols = group_cols.copy() + [year]
+
+        # Check all columns exist
+        year_emp_cols = list(year_emp)
+        for col in index_cols:
+            if col not in year_emp_cols:
+                raise nd.NormitsDemandError(
+                    "Tried to read in population data from NorMITs Land Use "
+                    "for year %s. Cannot find all the needed columns in the "
+                    "data. Specifically, column %s does not exist."
+                    % (year, col)
+                )
+
+        # Filter down
+        year_emp = year_emp.reindex(columns=index_cols)
+        year_emp = year_emp.groupby(group_cols).sum().reset_index()
+
+        all_emp_ph.append(year_emp)
+
+    # Can't merge if there is only one dataframe!
+    if len(all_emp_ph) == 1:
+        return all_emp_ph[0]
+
+    return du.merge_df_list(all_emp_ph, on=group_cols, how='outer').fillna(0)

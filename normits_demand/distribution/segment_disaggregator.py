@@ -62,6 +62,7 @@ def _build_enhanced_pa(tld_mat,
                 else:
                     value = int(itd[col])
                 calib_params.update({col:value})
+
         te, total = nup.filter_pa_vector(te,
                                          ia_name,
                                          calib_params,
@@ -78,7 +79,8 @@ def _build_enhanced_pa(tld_mat,
         calib_params.update({'trips':te})
         out_list.append(calib_params)
 
-    return(out_list)
+    return out_list
+
 
 def _control_a_to_seed_matrix(sd,
                               attr_list):
@@ -110,14 +112,13 @@ def _control_a_to_seed_matrix(sd,
 
     new_attr = attr_list.copy()
 
-    for ait,dat in enumerate(new_attr,0):
+    for ait, dat in enumerate(new_attr, 0):
         new_attr[ait]['trips'] = mat_attr * cell_splits[ait]
 
     audit_sum =  []
     for a in new_attr:
         audit_sum.append(a['trips'])
     audit_sum = sum(audit_sum)
-
     audit = audit_sum.round() == mat_attr.round()
 
     return new_attr, audit
@@ -218,6 +219,7 @@ base_attractions_path = base_hb_attractions
 
 def disaggregate_segments(import_folder,
                           target_tld_folder,
+                          model_name,
                           base_productions_path,
                           base_attractions_path,
                           export_folder,
@@ -230,6 +232,7 @@ def disaggregate_segments(import_folder,
                           furness_loops = 1999,
                           min_pa_diff = .1,
                           bs_con_crit = .975,
+                          max_bs_loops: int = 300,
                           mp_threads = -1,
                           export_original = True,
                           export_furness = False):
@@ -244,7 +247,6 @@ def disaggregate_segments(import_folder,
         If there are segments on the left hand side that aren't in the
         enhanced segmentation, aggregated them. Will 
     """
-
     # Look at segmentation in base matrices
     base_mat_seg = nup.parse_mat_output(os.listdir(import_folder),
                                         sep = '_',
@@ -260,7 +262,8 @@ def disaggregate_segments(import_folder,
                                                 'mat_type', axis=1)
 
     # Look at segmentation in base p
-    base_p = pd.read_csv(base_productions_path)
+    dtype = {'soc': str, 'ns': str}
+    base_p = pd.read_csv(base_productions_path, dtype=dtype)
     # Get unq zones
     ia_name = list(base_p)[0]
     min_zone = min(base_p[ia_name])
@@ -274,7 +277,7 @@ def disaggregate_segments(import_folder,
     unq_zone_list = nup.get_zone_range(base_p[ia_name])
 
     # Look at segmentation in base a
-    base_a = pd.read_csv(base_attractions_path)
+    base_a = pd.read_csv(base_attractions_path, dtype=dtype)
 
     # Get p_seg
     p_seg = read_pa_seg(base_p,
@@ -295,6 +298,8 @@ def disaggregate_segments(import_folder,
     agg_cols = [x for x in list(
             base_mat_seg) if x not in list(tld_seg)]
     agg_cols.remove('base_seg')
+    if model_name.lower() == 'norms' and 'ca' in agg_cols:
+        agg_cols.remove('ca')
 
     # Get cols in tld that form the added segments
     add_cols = [x for x in list(tld_seg) if x not in list(base_mat_seg)]
@@ -310,8 +315,8 @@ def disaggregate_segments(import_folder,
     
     # Drop surplus segments on import descriptors - if you want
     if aggregate_surplus_segments:
-        it_set = it_set.drop(agg_cols,axis=1)
-        base_mat_seg = base_mat_seg.drop(agg_cols,axis=1)
+        it_set = it_set.drop(agg_cols, axis=1)
+        base_mat_seg = base_mat_seg.drop(agg_cols, axis=1)
 
     # Get cols in productions that are also in it set
     p_cols = [x for x in list(it_set) if x in list(p_seg)]
@@ -348,26 +353,25 @@ def disaggregate_segments(import_folder,
                          'furness_loops':furness_loops, # unchanging
                          'min_pa_diff':min_pa_diff, # unchanging
                          'bs_con_crit':bs_con_crit,
+                         'max_bs_loops':max_bs_loops,
                          'export_original':export_original,
                          'export_furness':export_furness,
                          'ia_name':ia_name,
                          'export_folder':export_folder,
                          'trip_origin':trip_origin} # unchanging
 
-    out_dat = []
+    out_dat = list()
+    kwargs_list = list()
     for i in unq_splits.index:
-        # Build a list of kwargs for each function call
-        kwargs_list = list()
-        for i in unq_splits.index:
-            kwargs = unchanging_kwargs.copy()
-            kwargs['agg_split_index'] = i
-            kwargs_list.append(kwargs)
+        kwargs = unchanging_kwargs.copy()
+        kwargs['agg_split_index'] = i
+        kwargs_list.append(kwargs)
 
-        # Call using multiple threads
-        mp.multiprocess(
-            _segment_build_worker,
-            kwargs=kwargs_list,
-            process_count=mp_threads)
+    # Call using multiple threads
+    mp.multiprocess(
+        _segment_build_worker,
+        kwargs=kwargs_list,
+        process_count=mp_threads)
 
     return out_dat
 
@@ -389,11 +393,12 @@ def _segment_build_worker(agg_split_index,
                           furness_loops,
                           min_pa_diff,
                           bs_con_crit,
+                          max_bs_loops,
                           export_original,
                           export_furness,
                           ia_name,
                           export_folder,
-                          trip_origin
+                          trip_origin,
                           ):
     
     """
@@ -421,7 +426,8 @@ def _segment_build_worker(agg_split_index,
             calib_params.update({item:int(dat)})
 
     # Mat list
-    mat_list = []
+    mat_list = list()
+    seed_name = ''
 
     # Import and aggregate
     for ipi, ipr in import_params.iterrows():
@@ -435,20 +441,21 @@ def _segment_build_worker(agg_split_index,
 
         print('Importing ' + ipr['base_seg'])
         sd = pd.read_csv(os.path.join(import_folder, ipr['base_seg']))
+        seed_name = ipr['base_seg']
 
         if 'zone' in list(sd)[0] or 'Unnamed' in list(sd)[0]:
             sd = sd.drop(list(sd)[0], axis=1)
         sd = sd.values
         mat_list.append(sd)
 
-        # Compile matrices in segment into single matrix
-        sd = sum(mat_list) # I can't believe this works
+    # Compile matrices in segment into single matrix
+    sd = sum(mat_list) # I can't believe this works
 
-        # Get required tld for splitting
-        tld_mat = ie_params.copy().drop(
-                'base_seg',
-                axis=1).drop_duplicates(
-                        ).reset_index(drop=True)
+    # Get required tld for splitting
+    tld_mat = ie_params.copy().drop(
+            'base_seg',
+            axis=1).drop_duplicates(
+                    ).reset_index(drop=True)
 
     tld_list = []
     for itl, itd in tld_mat.iterrows():
@@ -468,6 +475,7 @@ def _segment_build_worker(agg_split_index,
                                    p_cols,
                                    unq_zone_list=unq_zone_list)
 
+
     # Get best possible attraction subset
     attr_list = _build_enhanced_pa(tld_mat,
                                    base_a,
@@ -480,22 +488,33 @@ def _segment_build_worker(agg_split_index,
                                                        attr_list)
     # Control a to p, exactly this time
     attr_list, bal_aud = _control_a_to_enhanced_p(prod_list,
-                                                      attr_list)
-    
+                                                  attr_list)
+
+    # TODO: Make this a parameter for func
+    match_tol = 0.95
+
     # Check audit vectors
-    if sum(control_aud) != len(control_aud):
+    if sum(control_aud) < len(control_aud) * match_tol:
         # TODO: Error format
         raise Warning('PA Vectors not balanced')
-    if sum(bal_aud) != len(bal_aud):
+    if sum(bal_aud) < len(bal_aud) * match_tol:
         # TODO: Error format
         raise Warning('PA Vectors not balanced')
 
     # Get distance/cost
     # Costs should be same for each segment, so get here
+    cost_cp = calib_params.copy()
+    if 'ca' in calib_params and tp == 'tp':
+        cost_cp.pop('ca')
+
+    print(cost_cp)
+
     costs, c_name = nup.get_costs(lookup_folder,
-                                  calib_params,
+                                  cost_cp,
                                   tp=tp,
-                                  iz_infill = iz_infill)
+                                  iz_infill = iz_infill,
+                                  replace_nhb_with_hb=True
+                                  )
 
     print('Cost lookup returned ' + c_name)
     costs = nup.df_to_np(costs,
@@ -508,11 +527,14 @@ def _segment_build_worker(agg_split_index,
     out_mats, out_reps, fd = _dissag_seg(prod_list,
                                          attr_list,
                                          tld_list,
+                                         seed_name,
                                          sd,
                                          costs,
                                          furness_loops = furness_loops,
                                          min_pa_diff = min_pa_diff,
-                                         bs_con_crit = bs_con_crit)
+                                         bs_con_crit = bs_con_crit,
+                                         max_bs_loops=max_bs_loops
+                                         )
 
     # Unpack list of lists
     # Read, convert, build path and write out
@@ -606,11 +628,14 @@ def _segment_build_worker(agg_split_index,
 def _dissag_seg(prod_list,
                 attr_list,
                 tld_list,
+                seed_name,
                 sd,
                 costs,
                 furness_loops = 1500,
                 min_pa_diff = .1,
-                bs_con_crit = .975):
+                bs_con_crit = .975,
+                max_bs_loops: int = 300,
+                ):
     """
     prod_list:
         List of production vector dictionaries
@@ -633,67 +658,100 @@ def _dissag_seg(prod_list,
     out_cube = np.ndarray((len(sd),len(sd),len(prod_list)))
 
     # seg_x = 0,prod_list[0]
-    seg_audit = []
+    seg_audit = list()
 
-    for seg_x in enumerate(prod_list,0):
+    for i, seg in enumerate(prod_list, 0):
 
         # Build audit dict
         audit_dict = {}
-        for name,dat in prod_list[seg_x[0]].items():
+        for name, dat in seg.items():
             if name != 'trips':
-                audit_dict.update({name:dat})
+                audit_dict.update({name: dat})
 
-        new_mat = sd/sd.sum()
-        new_mat = new_mat*seg_x[1]['trips'].sum()
+        # Initialise the output mat
+        new_mat = sd / sd.sum()
+        new_mat = new_mat * seg['trips'].sum()
 
         # Unpack target p/a vectors
-        target_p =  prod_list[seg_x[0]]['trips']
-        target_a = attr_list[seg_x[0]]['trips']
-        target_tld = tld_list[seg_x[0]]['enh_tld']
+        target_p = prod_list[i]['trips']
+        target_a = attr_list[i]['trips']
+        target_tld = tld_list[i]['enh_tld']
 
-        # Add to audit_dict
-        audit_dict.update({'target_p':target_p.sum(),
-                           'target_a':target_a.sum()})
+        # Update audit_dict
+        audit_dict['target_p'] = target_p.sum()
+        audit_dict['target_a'] = target_a.sum()
 
-        tlb_con = ra.get_trip_length_by_band(target_tld,
-                                             costs,
-                                             new_mat)
+        # Get the band share, rename for readability
+        tlb_con = ra.get_trip_length_by_band(target_tld, costs, new_mat)
+        dist_mat, band_shares, global_atl = tlb_con
+        achieved_bs = band_shares['bs']
+        target_bs = band_shares['tbs']
 
-        bs_con = max(1-np.sum(
-                (tlb_con[1]['bs']-tlb_con[1]['tbs'])**2)/np.sum(
-                        (tlb_con[1]['tbs']-np.sum(
-                                tlb_con[1]['tbs'])/len(
-                                        tlb_con[1]['tbs']))**2),0)
+        # Calculate the band share convergence
+        bs_con = (
+            1
+            - np.sum((achieved_bs - target_bs) ** 2)
+            / np.sum((target_bs - np.mean(target_bs)) ** 2))
+        bs_con = max(bs_con, 0)
 
         # Unpack tld
         min_dist, max_dist, obs_trip, obs_dist = nup.unpack_tlb(target_tld)
-        # get num band
         num_band = len(min_dist)
 
         # TLB balance/furness
         tlb_loop = 1
+        conv_fail = False
+        audit_dict.update({'estimated_p': None,
+                           'estimated_a': None,
+                           'pa_diff': None,
+                           'bs_con': bs_con,
+                           'tlb_con': tlb_con,
+                           'conv_fail': conv_fail})
         while bs_con < bs_con_crit:
 
-            # Seed con crit
+            # Seed convergence critical values for each band
             est_trip, est_dist, cij_freq = [0]*num_band, [0]*num_band, [0]*num_band
-
             for row in range(num_band):
-                est_trip[row] = np.sum(np.where(
-                        (costs>=min_dist[row]) & (
-                                costs<max_dist[row]),new_mat,0))
-                est_dist[row] = np.sum(np.where(
-                        (costs>=min_dist[row]) & (
-                                costs<max_dist[row]), costs*new_mat,0))
+                # Calculate the estimated trips
+                est_trip[row] = np.sum(
+                    np.where(
+                        (costs >= min_dist[row]) & (costs < max_dist[row]),
+                        new_mat,
+                        0
+                    )
+                )
+                est_trip[row] = est_trip[row] / np.sum(new_mat) * 100
+
+                # Calculate the estimated distances
+                est_dist[row] = np.sum(
+                    np.where(
+                        (costs >= min_dist[row]) & (costs < max_dist[row]),
+                        costs*new_mat,
+                        0
+                    )
+                )
                 est_dist[row] = np.where(
-                        est_trip[row]>0,est_dist[row]/est_trip[row],(
-                                min_dist[row]+max_dist[row])/2)
+                    est_trip[row] > 0,
+                    est_dist[row] / est_trip[row],
+                    (min_dist[row] + max_dist[row]) / 2
+                )
+
+                # Calculate the observed distances
                 obs_dist[row] = np.where(
-                        obs_dist[row]>0,obs_dist[row],est_dist[row])
-                est_trip[row] = est_trip[row]/np.sum(new_mat)*100
-                cij_freq[row] = np.sum(np.where(
-                        (costs>=min_dist[row]) & (
-                                costs<max_dist[row]),len(costs),0))
-                cij_freq[row] = cij_freq[row]/np.sum(len(costs))*100
+                    obs_dist[row] > 0,
+                    obs_dist[row],
+                    est_dist[row]
+                )
+
+                # CiJ Frequencies?
+                cij_freq[row] = np.sum(
+                    np.where(
+                        (costs >= min_dist[row]) & (costs < max_dist[row]),
+                        len(costs),
+                        0
+                    )
+                )
+                cij_freq[row] = cij_freq[row] / np.sum(len(costs))*100
 
             # Get k factors
             k_factors = k_factors = costs**0
@@ -702,11 +760,15 @@ def _dissag_seg(prod_list,
 
             for row in range(num_band):
                 kfc_dist[row] = np.where(
-                        est_trip[row]>0,min(
-                                max(obs_trip[row]/est_trip[row],.001),10),1)
+                    est_trip[row] > 0,
+                    min(max(obs_trip[row]/est_trip[row], .001), 10),
+                    1
+                )
                 k_factors = np.where(
-                        (costs>=min_dist[row]) & (
-                                costs<max_dist[row]),kfc_dist[row],k_factors)
+                    (costs >= min_dist[row]) & (costs < max_dist[row]),
+                    kfc_dist[row],
+                    k_factors
+                )
 
             # Run furness
             new_mat = k_factors*new_mat
@@ -717,16 +779,19 @@ def _dissag_seg(prod_list,
 
                 fur_loop += 1
 
-                mat_d = np.sum(new_mat,axis=0)
-                mat_d[target_a==0]=1
-                new_mat = new_mat*target_a/mat_d
-                mat_o = np.sum(new_mat,axis=1)
-                mat_o[mat_o==0]=1
-                new_mat = (new_mat.T*target_p/mat_o).T
+                # Adjust attractions
+                mat_d = np.sum(new_mat, axis=0)
+                mat_d[mat_d == 0] = 1
+                new_mat = new_mat * target_a / mat_d
+
+                # Adjust productions
+                mat_o = np.sum(new_mat, axis=1)
+                mat_o[mat_o == 0] = 1
+                new_mat = (new_mat.T * target_p / mat_o).T
 
                 # Get pa diff
-                mat_o = np.sum(new_mat,axis=1)
-                mat_d = np.sum(new_mat,axis=0)
+                mat_o = np.sum(new_mat, axis=1)
+                mat_d = np.sum(new_mat, axis=0)
                 pa_diff = nup.get_pa_diff(mat_o,
                                           target_p,
                                           mat_d,
@@ -738,37 +803,48 @@ def _dissag_seg(prod_list,
 
             prior_bs_con = bs_con
 
-            tlb_con = ra.get_trip_length_by_band(target_tld,
-                                                 costs,
-                                                 new_mat)
-        
-            bs_con = max(1-np.sum(
-                    (tlb_con[1]['bs']-tlb_con[1]['tbs'])**2)/np.sum(
-                            (tlb_con[1]['tbs']-np.sum(
-                                    tlb_con[1]['tbs'])/len(
-                                            tlb_con[1]['tbs']))**2),0)
+            # Get the band share, rename for readability
+            tlb_con = ra.get_trip_length_by_band(target_tld, costs, new_mat)
+            dist_mat, band_shares, global_atl = tlb_con
+            achieved_bs = band_shares['bs']
+            target_bs = band_shares['tbs']
+
+            # Calculate the band share convergence
+            bs_con = (
+                    1
+                    - np.sum((achieved_bs - target_bs) ** 2)
+                    / np.sum((target_bs - np.sum(target_bs) / len(target_bs)) ** 2))
+            bs_con = max(bs_con, 0)
 
             print('Loop ' + str(tlb_loop))
             print('Band share convergence: ' + str(bs_con))
 
             # If tiny improvement, exit loop
-            if bs_con - prior_bs_con < .001:
-                break
+            if np.absolute(bs_con - prior_bs_con) < .001:
+                if bs_con != 0:
+                    break
 
             tlb_loop += 1
+
+            if tlb_loop >= max_bs_loops:
+                conv_fail = True
 
             # Add to audit dict
             audit_dict.update({'estimated_p':mat_o.sum(),
                                'estimated_a':mat_d.sum(),
                                'pa_diff':pa_diff,
                                'bs_con':bs_con,
-                               'tlb_con':tlb_con})
+                               'tlb_con':tlb_con,
+                               'conv_fail': conv_fail})
+
+            if conv_fail:
+                break
 
         # Append dict
         seg_audit.append(audit_dict)
 
         # Push back to the cube
-        seg_cube[:,:,seg_x[0]] = new_mat
+        seg_cube[:, :, i] = new_mat
     
     # ORDER OF PREFERENCE
     # Balance to p/a sd, tld, cells @ sd if possible, P/A slice
@@ -782,16 +858,24 @@ def _dissag_seg(prod_list,
         test = sum(test)
    """
 
-    # Get total through calc matrix
+    # TODO(BT): Replace with LAD aggregation method
+    # Replaces all zeros with tiny value - prevents zero splits
+    for i in range(len(prod_list)):
+        val = seg_cube[:, :, i]
+        val = np.where(val == 0, _TINY_INFILL, val)
+        seg_cube[:, :, i] = val
+
+    # Calculate the total of all the matrices
     cube_sd = seg_cube.sum(axis=2)
 
+    # calculate the splitting factors
     for seg_x in enumerate(prod_list,0):
         # Get share of cell values from original matrix
-        factor_cube[:,:,seg_x[0]] = seg_cube[:,:,seg_x[0]]/np.where(
-            cube_sd==0,_TINY_INFILL,cube_sd)
+        factor_cube[:,:,seg_x[0]] = seg_cube[:,:,seg_x[0]] / cube_sd
+
         # Multiply original matrix by share to get cell balanced out matrix
         out_cube[:,:,seg_x[0]] = sd * factor_cube[:,:,seg_x[0]]
-        print(out_cube[:,:,seg_x[0]].sum())
+        print(out_cube[:, :, seg_x[0]].sum())
 
         # Get trip length by band
         tlb_con = ra.get_trip_length_by_band(tld_list[seg_x[0]]['enh_tld'],
@@ -823,4 +907,4 @@ def _dissag_seg(prod_list,
                                     out_sd.sum(axis=0),
                                     sd.sum(axis=0))
 
-    return(out_mats, seg_audit, final_pa_diff)
+    return out_mats, seg_audit, final_pa_diff

@@ -56,6 +56,36 @@ pulled straight from the module version.
 Code has been refactored in this version - ready for merge with TMS
 
 ### v0.3.1
-TMS added to codebase.
-A bunch of minor fixes were added to get EFS and TMS working correctly.
-EFS PA to OD process was fixed for NoHAM outputs.
+- TMS added to codebase.
+- A bunch of minor fixes were added to get EFS and TMS working correctly.
+- EFS PA to OD process was fixed for NoHAM outputs.
+
+### v0.3.2
+- Added a new EFS reporter class, capable of comparing EFS outputs to NTEM.
+- Changed NTEM scenario future year growth for productions to match other scenarios.
+Only constrained in base year, and multiplicative growth on top.
+
+### v0.3.3
+- Removed pop/emp growth from EFS. Future year population and employment
+is now read in straight from NorMITs Land Use.
+- Integration of NoRMS IO to and from PA NoRMS VDM compilation
+- Fixes to bring NoHAM outputs closer to NTEM
+    - Splitting out internal and external distribution
+        * Internal distribution follows the furness
+        *  External distribution is a grown post-ME PA matrix. Grown by synth FY / synth BY productions
+    - Furness uses post-me matrices as is for seed matrices
+    - post-me vector is now used for the base year P/A vectors (Internal demand only)
+    - multiplicative growth added into the attractions
+    - Attractions now take segmentation from the post-me matrices, Grows them using synth fy/by
+    
+### v0.3.4
+- Updated the EFS output paths to no longer include the version number in the name, but align
+better with TMS output paths.
+    - Paths look more like `NorMITs Demand/nohmam/EFS/iter1/NTEM/...`
+    - The Land Use iteration being used is now included in the inputs.txt
+- Updated the PopEmpComparator to use the new land use imports to compare to.
+- Fixed issue in Production/Attraction models dropping population and employment
+- Updated NoRMS I/O to decompile post-ME and compile outputs correctly for NoRMS
+
+- CS - Write updates to TMS since last merge
+

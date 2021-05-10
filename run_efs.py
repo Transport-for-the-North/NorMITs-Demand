@@ -14,28 +14,41 @@ Running test runs of EFS
 import normits_demand as nd
 from normits_demand import efs_constants as consts
 
+from normits_demand.utils import exceptional_growth as eg
+
 
 def main():
     verbose = False
 
+    # Land Use imports
+    land_use_drive = "Y:/"
+    land_use_iteration = 'iter3b'
+
     # Running control
     integrate_dlog = False
+    run_pop_emp_comparison = False
 
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = True
-    recreate_attractions = False
-    recreate_nhb_productions = False
+    recreate_attractions = True
+    recreate_nhb_productions = True
 
-    run_hb_pa_to_od = False
-    run_compile_od = False
-    run_decompile_od = False
+    run_bespoke_zones = False
+    ignore_bespoke_zones = True
+
+    run_pa_to_od = False
+    run_compile_mats = False
+    run_decompile_post_me = True
     run_future_year_compile_od = False
+
+    # Controls matrix conversion
+    output_years = consts.ALL_YEARS
 
     # Controls I/O
     scenario = consts.SC00_NTEM
-    iter_num = 0
-    import_home = "Y:/"
-    export_home = "E:/"
+    iter_num = '3g'
+    import_home = "I:/"
+    export_home = "F:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
@@ -43,14 +56,16 @@ def main():
         iter_num=iter_num,
         model_name=model_name,
         integrate_dlog=integrate_dlog,
+        run_pop_emp_comparison=run_pop_emp_comparison,
         scenario_name=scenario,
         import_home=import_home,
         export_home=export_home,
+        land_use_drive=land_use_drive,
+        land_use_iteration=land_use_iteration,
         verbose=verbose
     )
 
-    # BACKLOG: Properly integrate bespoke zones code
-    #  labels: demand merge
+    print("-" * 40, "Running for %s" % model_name, "-" * 40)
 
     if run_base_efs:
         # Generates HB PA matrices
@@ -61,31 +76,41 @@ def main():
             echo_distribution=verbose,
         )
 
-    if run_hb_pa_to_od:
+    if run_bespoke_zones:
         # Convert to HB to OD
-        efs.pa_to_od(
-            years_needed=[2050],
-            use_bespoke_pa=True,
+        efs.old_pa_to_od(
+            years_needed=[2018],
+            p_needed=consts.ALL_HB_P,
+            use_bespoke_pa=False,
             overwrite_hb_tp_pa=True,
             overwrite_hb_tp_od=True,
-            echo=verbose
+            verbose=verbose
         )
 
-    # TODO: Update Integrated OD2PA codebase
-    if run_compile_od:
-        # Compiles base year OD matrices
-        efs.pre_me_compile_od_matrices(
-            year=2050,
-            overwrite_aggregated_od=False,
-            overwrite_compiled_od=True,
+        eg.adjust_bespoke_zones(
+            consts.BESPOKE_ZONES_INPUT_FILE,
+            efs.exports,
+            efs.model_name,
+            base_year=consts.BASE_YEAR_STR,
+            recreate_donor=True,
+            audit_path=efs.exports["audits"],
         )
 
-    if run_decompile_od:
-        # Decompiles post-me base year OD matrices - generates tour
-        # proportions in the process
-        efs.generate_post_me_tour_proportions(
-            model_name=model_name,
-            overwrite_decompiled_od=True,
+    if run_pa_to_od:
+        efs.pa_to_od(
+            years_needed=output_years,
+            use_bespoke_pa=(not ignore_bespoke_zones),
+            verbose=verbose
+        )
+
+    if run_compile_mats:
+        for year in output_years:
+            efs.compile_matrices(year=year)
+
+    if run_decompile_post_me:
+        # Decompiles post-me base year matrices
+        efs.decompile_post_me(
+            overwrite_decompiled_matrices=True,
             overwrite_tour_proportions=True,
         )
 

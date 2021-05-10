@@ -23,7 +23,7 @@ from collections import defaultdict
 
 from tqdm import tqdm
 
-import demand_utilities.utils as du
+from normits_demand.utils import general as du
 
 
 def noham_vdm_tour_proportions_out(input_path: str,
@@ -71,7 +71,7 @@ def noham_vdm_tour_proportions_out(input_path: str,
         tour_props_name = du.get_seg_level_dist_name(
             seg_level=seg_level,
             seg_values=seg_values,
-            matrix_format='tour_proportions',
+            matrix_format='%s_tour_proportions' % seg_level,
             year=year,
             suffix='.pkl'
         )
