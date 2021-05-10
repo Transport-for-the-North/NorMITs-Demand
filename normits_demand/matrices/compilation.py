@@ -20,6 +20,7 @@ import pandas as pd
 # Local
 import normits_demand as nd
 
+from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 
 
@@ -60,11 +61,26 @@ def convert_efs_to_norms_matrices(mat_import: nd.PathLike,
     # Split the matrices according to the split factors
     for efs_mat_name, split_factors_dict in from_to_split_factors.items():
         # Find the efs matrix in the import matrices
-        efs_mat = None
-        for fname in import_mats:
-            if efs_mat_name in fname:
-                path = os.path.join(mat_import, fname)
-                efs_mat = file_ops.read_df(path, index_col=0)
+        potential_mats = [x for x in import_mats if efs_mat_name in x]
+
+        if len(potential_mats) == 1:
+            # Load as normal
+            path = os.path.join(mat_import, potential_mats[0])
+            efs_mat = file_ops.read_df(path, index_col=0)
+
+        elif len(potential_mats) > 1:
+            # Mark default error in case we don't succeed
+            efs_mat = None
+
+            # Might be getting mixed up with HB / NHB
+            if du.starts_with(efs_mat_name.lower(), 'hb'):
+                # Read in only matrix which starts with HB !NHB
+                mats = [x for x in potential_mats if 'nhb' not in x.lower()]
+                if len(mats) == 1:
+                    path = os.path.join(mat_import, mats[0])
+                    efs_mat = file_ops.read_df(path, index_col=0)
+        else:
+            efs_mat = None
 
         if efs_mat is None:
             raise FileNotFoundError(

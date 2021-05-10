@@ -105,13 +105,10 @@ class ZoneTranslator:
         zone_cols = [from_zone_col, to_zone_col]
         non_split_cols = du.list_safe_remove(non_split_cols, zone_cols)
         split_cols = du.list_safe_remove(split_cols, zone_cols)
-        # TODO: Remove echo
-        print(split_cols)
 
         # Get total for the splitting columns
         split_totals = dict()
         for col in split_cols:
-            print(col)
             split_totals[col] = dataframe[col].sum()
 
         if needs_zone_id_rename:
@@ -251,9 +248,7 @@ def translate_matrix(matrix: pd.DataFrame,
     avg_method = "weighted_average"
     agg_methods = ["sum", "mean", avg_method]
     check_total = False if aggregation_method == avg_method else check_total
-    if aggregation_method == avg_method and not isinstance(
-        weights, pd.DataFrame
-    ):
+    if aggregation_method == avg_method and not isinstance(weights, pd.DataFrame):
         raise ValueError(
             f"'weights' should be 'DataFrame' when 'weighted_average' "
             f"is chosen not '{type(weights).__name__}'"
@@ -317,6 +312,9 @@ def translate_matrix(matrix: pd.DataFrame,
         lookup.drop(columns=["weights", "weights_total"], inplace=True)
 
     # Check missing zones in lookup
+    for col in zone_cols:
+        matrix[col] = matrix[col].astype(int)
+
     missing = np.isin(
         np.unique(matrix[zone_cols].values),
         np.unique(lookup[lookup_cols[:2]].values),
@@ -337,9 +335,11 @@ def translate_matrix(matrix: pd.DataFrame,
         how="left",
         validate="1:m",
     ).drop(columns=zone_cols)
+
     for s in splitting_cols:
         matrix[s] = matrix[s] * matrix[split_column]
     reverse = matrix.copy()
+
     if aggregation_method == avg_method:
         aggregation_method = "sum"
     matrix = (
@@ -382,9 +382,10 @@ def translate_matrix(matrix: pd.DataFrame,
     return matrix, reverse[lookup_cols + ["split"]]
 
 
-def _lookup_matrix(
-    lookup: pd.DataFrame, lookup_cols: List[str], split: str
-) -> Tuple[pd.DataFrame, List[str]]:
+def _lookup_matrix(lookup: pd.DataFrame,
+                   lookup_cols: List[str],
+                   split: str,
+                   ) -> Tuple[pd.DataFrame, List[str]]:
     """Convert a zone corrsepondence lookup to an OD pair lookup.
 
     Convert from format [old zone, new zone, splitting factor] to
