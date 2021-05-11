@@ -359,6 +359,7 @@ def build_efs_io_paths(import_location: str,
                        base_year: str = efs_consts.BASE_YEAR_STR,
                        land_use_iteration: str = None,
                        land_use_drive: str = None,
+                       verbose: bool = True,
                        ) -> Tuple[dict, dict, dict]:
     """
     Builds three dictionaries of paths to the locations of all inputs and
@@ -417,8 +418,8 @@ def build_efs_io_paths(import_location: str,
 
     # ## IMPORT PATHS ## #
     # Generate general import paths
-    model_home = os.path.join(import_location, demand_dir_name)
-    import_home = os.path.join(model_home, 'import')
+    demand_home = os.path.join(import_location, demand_dir_name)
+    import_home = os.path.join(demand_home, 'import')
     input_home = os.path.join(import_home, 'default')
 
     # Build the longer paths
@@ -440,16 +441,18 @@ def build_efs_io_paths(import_location: str,
     #  labels: demand merge, EFS
 
     # Build model specific paths
-    model_schema_home = os.path.join(import_home, model_name, 'model schema')
-    model_param_home = os.path.join(import_home, model_name, 'params')
-    model_tour_prop_home = os.path.join(import_home, model_name, 'post_me_tour_proportions')
+    efs_model_home = os.path.join(import_home, model_name)
+    model_schema_home = os.path.join(efs_model_home, 'model schema')
+    model_param_home = os.path.join(efs_model_home, 'params')
+    model_tour_prop_home = os.path.join(efs_model_home, 'post_me_tour_proportions')
 
     imports = {
         'home': import_home,
         'default_inputs': input_home,
         'zone_translation': zone_translation,
         'tp_splits': os.path.join(import_home, 'tp_splits'),
-        'lookups': os.path.join(model_home, 'lookup'),
+        'lookups': os.path.join(demand_home, 'lookup'),
+        'costs': os.path.join(efs_model_home, 'costs'),
         'scenarios': os.path.join(import_home, 'scenarios'),
         'a_weights': os.path.join(import_home, 'attractions', 'hb_attraction_weights.csv'),
         'soc_weights': soc_weights_path,
@@ -507,6 +510,7 @@ def build_efs_io_paths(import_location: str,
     pcu = 'PCU'
 
     exports = {
+        'base': os.path.join(export_location, demand_dir_name),
         'home': export_home,
         'productions': os.path.join(export_home, 'Productions'),
         'attractions': os.path.join(export_home, 'Attractions'),
@@ -516,6 +520,7 @@ def build_efs_io_paths(import_location: str,
         'dist_reports': os.path.join(export_home, 'Reports', 'Matrices'),
 
         # Pre-ME
+        'mat_home': matrices_home,
         'pa': os.path.join(matrices_home, pa),
         'pa_24': os.path.join(matrices_home, pa_24),
         'vdm_pa_24': os.path.join(matrices_home, vdm_pa_24),
@@ -534,7 +539,7 @@ def build_efs_io_paths(import_location: str,
     }
 
     for _, path in exports.items():
-        create_folder(path, chDir=False)
+        create_folder(path, chDir=False, verbose=verbose)
 
     # Post-ME
     compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
@@ -551,7 +556,7 @@ def build_efs_io_paths(import_location: str,
     }
 
     for _, path in post_me_exports.items():
-        create_folder(path, chDir=False)
+        create_folder(path, chDir=False, verbose=verbose)
 
     # Combine into full export dict
     exports['post_me'] = post_me_exports
@@ -565,7 +570,7 @@ def build_efs_io_paths(import_location: str,
         'tours': os.path.join(param_home, 'Tour Proportions')
     }
     for _, path in params.items():
-        create_folder(path, chDir=False)
+        create_folder(path, chDir=False, verbose=verbose)
 
     return imports, exports, params
 

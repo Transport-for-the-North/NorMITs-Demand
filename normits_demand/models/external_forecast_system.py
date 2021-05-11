@@ -76,6 +76,7 @@ class ExternalForecastSystem:
 
                  land_use_drive: str = "Y:/",
                  land_use_iteration: str = 'iter3b',
+                 modes_needed: List[int] = None,
                  verbose: bool = True,
                  ):
         # TODO: Write EFS constructor docs
@@ -84,8 +85,11 @@ class ExternalForecastSystem:
         current_time = begin_time
         print("Initiating External Forecast System...")
 
+        if modes_needed is None:
+            modes_needed = consts.MODEL_MODES[model_name]
+
         # Initialise
-        du.validate_model_name_and_mode(model_name, efs_consts.MODES_NEEDED)
+        du.validate_model_name_and_mode(model_name, modes_needed)
         self.model_name = du.validate_model_name(model_name)
         self.iter_name = du.create_iter_name(iter_num)
         self.scenario_name = du.validate_scenario_name(scenario_name)
@@ -1697,6 +1701,7 @@ class ExternalForecastSystem:
             demand_dir_name=self.out_dir,
             land_use_iteration=self.land_use_iteration,
             land_use_drive=self.land_use_drive,
+            verbose=self.verbose,
         )
 
 
