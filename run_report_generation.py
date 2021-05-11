@@ -892,10 +892,10 @@ if __name__ == "__main__":
     # Power BI
 
     # Controls I/O
-    scenario = consts.SC00_NTEM
+    scenario = consts.SC01_JAM
     iter_num = '3g'
     import_home = "I:/"
-    export_home = "F:/"
+    export_home = "I:/"
     model_name = consts.MODEL_NAME
 
     efs_main = ExternalForecastSystem(

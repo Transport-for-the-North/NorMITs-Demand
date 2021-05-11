@@ -10,6 +10,7 @@ Output at model level
 """
 
 import os
+import itertools
 
 import pandas as pd
 import geopandas as gpd
@@ -185,9 +186,6 @@ class CjtwTranslator:
             Pandas dataframe with original format cjtw
         """
 
-        # Init
-        normits_cjtw = dict()
-
         # Define p/a cols
         pa_cols = ['1_msoaAreaofresidence',
                    '2_msoaAreaofworkplace']
@@ -203,6 +201,7 @@ class CjtwTranslator:
                      5: ['7_Busminibusorcoach'],
                      6: ['6_Train']}
 
+        mode_list = list()
         for key, cols in mode_bins.items():
 
             # Subset by mode, col wise
@@ -218,7 +217,12 @@ class CjtwTranslator:
             # Drop 0 cells
             mode_sub = mode_sub[mode_sub['demand'] > 0]
 
-            normits_cjtw.update({key: mode_sub})
+            # Add mode col
+            mode_sub['mode'] = key
+
+            mode_list.append(mode_sub)
+
+        normits_cjtw = pd.concat(mode_list)
 
         return normits_cjtw
 
@@ -264,7 +268,7 @@ class CjtwTranslator:
         # Sum remainder - makes assumptions about col names
         tempro = tempro.groupby(group_cols).sum().reset_index()
 
-        # Seperate p/a
+        # Separate p/a
         productions = tempro[tempro['trip_end_type'] == 'productions']
         attractions = tempro[tempro['trip_end_type'] == 'attractions']
         del tempro
@@ -278,44 +282,50 @@ class CjtwTranslator:
         productions['gf'] = productions[str(target_year)] / productions[str(self.cjtw_year)]
 
         # Grow prod wise
-        for key, dat in fy_cjtw.items():
+        unq_mode = fy_cjtw['mode'].unique()
 
-            tempro_sub = productions[productions['Mode'] == key]
+        out_list = list()
+        for m in unq_mode:
+
+            # Subset dat
+            dat = fy_cjtw.copy()
+            dat = dat[dat['mode'] == m]
+
+            tempro_sub = productions[productions['Mode'] == m]
             tempro_sub = tempro_sub.reindex(
                 ['msoa_zone_id', str(target_year), 'gf'],
                 axis=1)
             tempro_sub = tempro_sub.reset_index(drop=True)
 
-            future_cjtw = dat.copy()
-            demand_before = future_cjtw['demand'].sum()
+            demand_before = dat['demand'].sum()
 
             if take_ntem_totals:
                 # Reduce cjtw to a factor, using a 64 bit float
-                future_cjtw['demand'] = future_cjtw['demand'].astype('float64')
-                future_cjtw['demand'] /= future_cjtw['demand'].sum()
+                dat['demand'] = dat['demand'].astype('float64')
+                dat['demand'] /= dat['demand'].sum()
                 # Get NTEM total
                 tempro_total = tempro_sub['2018'].sum()
                 # Multiply factor by total
-                future_cjtw['demand'] *= tempro_total
+                dat['demand'] *= tempro_total
 
                 if verbose:
                     print('Infilling with NTEM totals')
                     print('TEMPRO sub total: %d' % tempro_total)
 
             else:
-                future_cjtw = future_cjtw.merge(
+                dat = dat.merge(
                     tempro_sub,
                     how='left',
                     left_on='p_zone',
                     right_on='msoa_zone_id'
                 ).fillna(1)
-                future_cjtw['demand'] *= future_cjtw['gf']
-                future_cjtw = future_cjtw.drop(
+                dat['demand'] *= dat['gf']
+                dat = dat.drop(
                     ['msoa_zone_id', 'gf'], axis=1)
 
             if infill_tp:
                 # Get MSOA time props from productions
-                time_sub = productions[productions['Mode'] == key]
+                time_sub = productions[productions['Mode'] == m]
                 time_sub = time_sub.reindex(
                     ['msoa_zone_id', 'TimePeriod', str(target_year)],
                     axis=1).reset_index(drop=True)
@@ -324,28 +334,30 @@ class CjtwTranslator:
                 time_sub = time_sub.drop(str(target_year), axis=1)
 
                 # Merge on time sub & multiply out
-                future_cjtw = future_cjtw.merge(
+                dat = dat.merge(
                     time_sub,
                     how='left',
                     left_on='p_zone',
                     right_on='msoa_zone_id'
                 )
-                future_cjtw['demand'] *= future_cjtw['tp_factor']
-                future_cjtw = future_cjtw.drop(
+                dat['demand'] *= dat['tp_factor']
+                dat = dat.drop(
                     ['msoa_zone_id', 'tp_factor'], axis=1)
 
-            demand_after = future_cjtw['demand'].sum()
+            demand_after = dat['demand'].sum()
 
             if verbose:
-                print('Adjusting mode %d from %d to %d' % (key,
+                print('Adjusting mode %d from %d to %d' % (m,
                                                            self.cjtw_year,
                                                            target_year))
                 print('%d before' % demand_before)
                 print('%d after' % demand_after)
 
-            fy_cjtw.update({key: future_cjtw})
+            out_list.append(dat)
 
-        return fy_cjtw
+        out_dat = pd.concat(out_list)
+
+        return out_dat
 
     def _cjtw_to_msoa(self,
                       write=True):

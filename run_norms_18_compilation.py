@@ -14,7 +14,7 @@ opa = r'C:\Users\genie\Documents\liability'
 opa2 = r'C:\Users\genie\Documents\liability2'
 params = os.path.join(opa2, 'params')
 
-mats = nup.parse_mat_output(list_dir=n18_path,
+mats = nup.parse_mat_output(list_dir=os.listdir(n18_path),
                             sep='_',
                             mat_type = 'pa',
                             file_format = '.csv',
@@ -42,7 +42,7 @@ for nhb in nhb_file:
     mat_ca1.to_csv(os.path.join(opa, nhb.replace('tp', 'ca1_tp')))
     mat_ca2.to_csv(os.path.join(opa, nhb.replace('tp', 'ca2_tp')))
 
-new_mats = nup.parse_mat_output(list_dir=opa,
+new_mats = nup.parse_mat_output(list_dir=os.listdir(opa),
                             sep='_',
                             mat_type = 'pa',
                             file_format = '.csv',

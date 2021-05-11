@@ -20,10 +20,10 @@ def main():
 
     # ## SETUP ## #
     # Controls I/O
-    scenario = consts.SC00_NTEM
+    scenario = consts.SC04_UZC
     iter_num = '3g'
     import_home = "I:/"
-    export_home = "F:/"
+    export_home = "I:/"
     model_name = consts.MODEL_NAME
 
     auditor = nd.EfsReporter(
@@ -39,6 +39,7 @@ def main():
     auditor.run(
         run_raw_vector_report=False,
         compare_trip_lengths=False,
+        compare_to_scenario=False,
     )
 
 

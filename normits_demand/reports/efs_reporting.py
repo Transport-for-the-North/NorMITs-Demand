@@ -197,6 +197,7 @@ class EfsReporter:
         # matrix imports
         matrices = {
             'pa_24': self.efs_exports['pa_24'],
+            'agg_pa_24': self.efs_exports['aggregated_pa'],
             'pa_24_bespoke': self.efs_exports['pa_24_bespoke'],
             'pa': self.efs_exports['pa'],
             'od': self.efs_exports['od'],
@@ -1107,7 +1108,7 @@ class EfsReporter:
 
         # Convert matrices into vector
         vectors = mat_p.maybe_convert_matrices_to_vector(
-            mat_import_dir=self.imports['matrices']['pa_24'],
+            mat_import_dir=self.imports['matrices']['agg_pa_24'],
             years_needed=self.years_needed,
             cache_path=self.exports['cache']['pa_24'],
             matrix_format=matrix_format,

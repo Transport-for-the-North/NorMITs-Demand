@@ -10,8 +10,8 @@ if __name__ == '__main__':
 
     output_years = [2011, 2018, 2027, 2033, 2035, 2040, 2050]
 
-    get_planning_data = True
-    get_car_ownership = True
+    get_planning_data = False
+    get_car_ownership = False
     get_trip_ends = True
 
     out_path = os.path.join(
