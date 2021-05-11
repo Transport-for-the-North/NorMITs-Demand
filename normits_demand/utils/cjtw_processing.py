@@ -99,9 +99,9 @@ class CjtwTranslator:
         # TODO: Build better/consistent translation method for splits
         # TODO: Update to use new indices
 
-        zonal_cjtw = msoa_cjtw.copy()
-
         # Init
+        # Build iterator for DataFrame
+
         # Get msoa pop and emp lookups
         index_folder = os.listdir(self.model_folder)
         model_lookups = [x for x in index_folder if
