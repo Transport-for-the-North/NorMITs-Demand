@@ -78,16 +78,7 @@ class CjtwTranslator:
         if self.model_name != 'msoa':
             zone_cjtw = self._translate_to_model_zoning(msoa_cjtw)
 
-        # Pack up into nice dictionaries
-        out_cjtw = dict()
-        for key, dat in zone_cjtw.items():
-            file_name = '%s_cjtw_yr%d_p1_m%d' % (self.model_name.lower(),
-                                                 target_year,
-                                                 key)
-
-            out_cjtw.update({file_name: dat})
-
-        return out_cjtw
+        return zone_cjtw
 
     def _translate_to_model_zoning(self,
                                    msoa_cjtw,
@@ -102,6 +93,13 @@ class CjtwTranslator:
 
         # Init
         # Build iterator for DataFrame
+        except_cols = ['p_zone', 'a_zone', 'demand']
+        df_cols = list(msoa_cjtw)
+        [df_cols.remove(x) for x in except_cols]
+
+        unq_combo = msoa_cjtw.reindex(df_cols, axis=1)
+        unq_combo = unq_combo.drop_duplicates()
+        unq_combo = unq_combo.dropna().reset_index(drop=True)
 
         # Get msoa pop and emp lookups
         index_folder = os.listdir(self.model_folder)
@@ -134,9 +132,26 @@ class CjtwTranslator:
              'overlap_msoa_split_factor'],
             axis=1)
 
+        # Translation placeholder
+        trans_ph = list()
+
         # Into the iterator
-        for key, dat in zonal_cjtw.items():
-            dat_ph = dat.copy()
+        for index, row in unq_combo.iterrows():
+            dat_ph = msoa_cjtw.copy()
+
+            # Define core group cols
+            group_cols = ['p_zone', 'a_zone']
+
+            # Filter down to targets
+            for var, val in row.iteritems():
+                dat_ph = dat_ph[dat_ph[var] == val]
+                # Append dat cols to groups
+                group_cols.append(var)
+
+            # Define core index cols
+            index_cols = group_cols.copy()
+            index_cols.append('demand')
+
             demand_before = dat_ph['demand'].sum()
 
             # Do production end
@@ -150,8 +165,8 @@ class CjtwTranslator:
             dat_ph = dat_ph.rename(
                 columns={self.model_name.lower() + '_zone_id': 'p_zone'})
             dat_ph = dat_ph.reindex(
-                ['p_zone', 'a_zone', 'demand'], axis=1).groupby(
-                ['p_zone', 'a_zone']
+                index_cols, axis=1).groupby(
+                group_cols
             ).sum().reset_index()
 
             # Do attraction end
@@ -165,17 +180,25 @@ class CjtwTranslator:
             dat_ph = dat_ph.rename(
                 columns={self.model_name.lower() + '_zone_id': 'a_zone'})
             dat_ph = dat_ph.reindex(
-                ['p_zone', 'a_zone', 'demand'], axis=1).groupby(
-                ['p_zone', 'a_zone']
+                index_cols, axis=1).groupby(
+                group_cols
             ).sum().reset_index()
             demand_after = dat_ph['demand'].sum()
 
             if verbose:
-                print('Translating mode %d' % key)
+                print('Translating row %d' % index)
                 print('%d before' % demand_before)
                 print('%d after' % demand_after)
 
-            zonal_cjtw.update({key: dat_ph})
+            trans_ph.append(dat_ph)
+
+        zonal_cjtw = pd.concat(trans_ph)
+
+        # Set data types and arrange
+        for g_col in group_cols:
+            zonal_cjtw[g_col] = zonal_cjtw[g_col].astype(int)
+        zonal_cjtw = zonal_cjtw.sort_values(group_cols)
+        zonal_cjtw = zonal_cjtw.reset_index(drop=True)
 
         return zonal_cjtw
 
