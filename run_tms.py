@@ -7,14 +7,119 @@ import pandas as pd
 import importlib as ri
 
 import normits_demand.build.tms_pathing as tms
-import normits_demand.build.project as prj
 import normits_demand.models.production_model as pm
 import normits_demand.models.attraction_model as am
 import normits_demand.models.external_model as em
 import normits_demand.models.distribution_model as dm
 from normits_demand import version
 
+class GetParam:
+    """
+    - get_model_name() module gets the model name from the user and returns model name
+        It also does input validation of the user input
+    - assign_param() module saves the parameters required for model runs based on the model name entered by user
+        It returns a dictionary params
+    """
+    def get_model_name():
+        model_list = {1: 'noham', 2: 'norms'}
+        print(model_list)
+        try:
+            name = int(input('Choose a model name (index): '))
+        except ValueError:
+            print("Enter a valid index")
+        else:
+            if name == 1 or name == 2:
+                model_name = model_list[int(name)]
+                return model_name
+            else:
+                print("Invalid input")
 
+
+    def assign_param():
+
+        if model_name == 'noham':
+            params = {
+                'base_directory': 'Y: /',
+                'iteration': 'iter8c',
+                'segmentation_type': 'tfn',
+                'hb_output_segments': ['p', 'm'],
+                'nhb_output_segments': ['area_type', 'p', 'm', 'ca', 'tp'],
+                'land_use_path': 'Y: / NorMITs Land Use / iter3 / land_use_output_msoa.csv',
+                'control_production_to_ntem': True,
+                'k_factor_path': None,
+                'export_msoa_productions': False,
+                'attraction_segment_type': 'ntem',
+                'cjtw_path': None,
+                ##can be moved
+                'hb_distribution_segments': ['p', 'm'],
+                'nhb_distribution_segments': ['p', 'm', 'tp'],
+                'output_modes': 3,
+                'rail_fusion': False,
+                'compile_pa': False,
+                'compile_od': True,
+                'vehicle_demand': True
+            }
+            return (params)
+        else:
+            params = {
+            'base_directory' :  'I:/NorMITs Synthesiser',
+            'iteration' :  'iter6',
+            'model_zoning' :  'Norms',
+            'land_use_version' : 3,
+            'resi_land_use_path' :  'Y:/NorMITs Land Use/iter3b/outputs/land_use_output_safe_msoa.csv',
+            'non_resi_land_use_path' :  'Y:/NorMITs Land Use/iter3b/outputs/land_use_2018_emp.csv',
+            'land_use_zoning' :  'MSOA',
+            'run_trip_ends' :  True,
+            'hb_trip_rates' :  'tfn_hb_trip_rates_18_0620.csv',
+            'hb_time_split' :  'tfn_hb_time_split_18_0620.csv',
+            'hb_ave_time_split' :  'hb_ave_time_split.csv',
+            'hb_mode_split' :  'tfn_hb_mode_split_18_0620.csv',
+            'nhb_trip_rates' :  'tfn_nhb_ave_wday_trip_rates_18.csv',
+            'nhb_time_split' :  'tfn_nhb_ave_wday_time_split_18.csv',
+            'nhb_mode_split' :  'tfn_nhb_ave_wday_mode_split_18.csv',
+            'hb_trip_end_segmentation' :  ['p, m, area_type, ca, soc, ns, g'],
+            'nhb_trip_end_segmentation' :  ['p, m, area_type, ca, soc, ns, g'],
+            'hb_attraction_weights' :  'hb_attraction_weights.csv',
+            'nhb_attraction_weights' :  'nhb_attraction_weights.csv',
+            'attraction_mode_split' :  'attraction_mode_split.csv',
+            'production_ntem_control' :  True,
+            'attraction_ntem_control' :  True,
+            'ntem_control_path' :  'I:/NorMITs Synthesiser/import/ntem_constraints/ntem_pa_ave_wday_2018.csv',
+            'production_k_factor_control' :  False,
+            'production_k_factor_path' :  False,
+            'attraction_k_factor_control' :  False,
+            'attraction_k_factor_path' :  False,
+            'export_msoa' :  True,
+            'export_uncorrected' :  False,
+            'export_lad' :  False,
+            'export_model_zoning' :  True,
+            'run_external_models' :  True,
+            'external_tlb_area' :  'gb',
+            'external_tlb_name' :  'standard_plus_ca_segments',
+            'external_segmentation' :  ['p','m','ca'],
+            'external_export_modes' : 6,
+            'non_dist_export_modes' :  None,
+            'run_distribution' :  True,
+            'distribution_segmentation' :  ['p','m','ca'],
+            'cjtw_modes' :  None,
+            'intrazonal_modes' :  [1,2],
+            'infill_modes' : 3,
+            'synthetic_modes' : 6,
+            'fusion_modes' : 6,
+            'cost_method' :  'distance',
+            'distribution_tlb_area' :  'north',
+            'distribution_function' :  'ln',
+            'furness_loops' : 2000,
+            'fitting_loops' : 100,
+            'compile_pa' :  True,
+            'pa_compilation_index' :  'pa_compilation_params.csv',
+            'compile_od' :  True,
+            'od_compilation_index' :  'od_compilation_params.csv',
+            'disaggregate_segments' :  True,
+            'segments_to_add' :  ['soc', 'ns'],
+            'vehicle_demand' :  False,
+            }
+            return (params)
 
 if __name__ == '__main__':
     """ 
@@ -26,7 +131,15 @@ if __name__ == '__main__':
     config_path = 'I:/NorMITs Synthesiser/config/'
 
     # Ask user which config file to use
-    params_file = prj.select_params_file(config_path)
+    # params_file = prj.select_params_file(config_path)
+    """
+    Gets model name from the user using the module
+    """
+    model_name = GetParam.get_model_name()
+    """
+    Assigns the various model parameters required based on model_name
+    """
+    params_file = GetParam.assign_param()
 
     # TODO: Building loose folders for External model paths
     tms_run = tms.TMSPathing(config_path,
