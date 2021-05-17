@@ -1,11 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-    Module containing the functions for applying elasticities to the demand
-    matrices.
+Created on: Tue May 11 14:22:12 2021
+Updated on:
+
+Original author: Ben Taylor
+Last update made by:
+Other updates made by:
+
+File purpose:
+Module containing the functions for applying elasticities to demand matrices.
 """
 
-##### IMPORTS #####
-# Standard imports
+
+# Built-in imports
 from pathlib import Path
 from collections import defaultdict
 
@@ -21,7 +28,10 @@ import pandas as pd
 import tqdm
 
 # Local imports
+import normits_demand as nd
 from normits_demand.utils import general as du
+
+from normits_demand.validation import checks
 
 from normits_demand.models import efs_zone_translator as zt
 
@@ -30,9 +40,8 @@ from normits_demand.elasticity import generalised_costs as gc
 from normits_demand.elasticity import constants as ec
 
 
-##### CLASSES #####
 class ElasticityModel:
-    """Class for applying elasticity calculations to EFS demand."""
+    """Class for applying elasticity calculations to demand matrices."""
 
     def __init__(self,
                  input_folders: Dict[str, Path],
@@ -64,6 +73,8 @@ class ElasticityModel:
         output_years : List[int]
             List of years to perform elasticity calculations for.
         """
+        # BACKLOG: Change ElasticityModel constructor. Make arguments explicit
+        #  labels: elasticity
         self._check_paths(
             input_folders,
             (
@@ -95,8 +106,6 @@ class ElasticityModel:
         self.output_folder = output_folders
         self.years = output_years
 
-    # BACKLOG: Move to utils/IO
-    #   labels: demand merge
     @staticmethod
     def _check_paths(paths: Dict[str, Path],
                      expected: List[str],
@@ -166,13 +175,18 @@ class ElasticityModel:
             self.elasticity_folder / ec.SEGMENTS_FILE
         )
         gc_params = gc.read_gc_parameters(
-            self.input_files["gc_parameters"],
-            self.years,
-            list(ec.MODE_ID.keys()),
+            path=self.input_files["gc_parameters"],
+            years=self.years,
+            modes=list(ec.MODE_ID.keys()),
+            purposes=ec.PURPOSES,
         )
+
+        print(gc_params)
+        exit()
         cost_changes = read_cost_changes(
             self.input_files["cost_changes"], self.years
         )
+
         # Redirect stdout and stderr to tqdm allows tqdm to control
         # how print statements are shown and stops the progress bar
         # formatting from breaking. Note: warnings.warn() messages
@@ -573,6 +587,33 @@ class ElasticityModel:
             columns=["mode", "mean_demand_adjustment"],
         )
         du.safe_dataframe_to_csv(df, folder / name, index=False)
+
+
+class CostBuilder:
+    """Builds future year cost dataframes for scenarios."""
+
+    def __init__(self,
+                 # Parameters
+                 years: List[int],
+
+                 # Input files
+                 base_year_costs_path: nd.PathLike,
+                 annual_increases_path: nd.PathLike,
+                 cost_adj_path: nd.PathLike,
+                 ):
+        # Validate inputs
+        try:
+            self.years = [int(x) for x in years]
+        except ValueError:
+            raise ValueError(
+                "Expected a list of integer years. Got %s"
+                % years
+            )
+
+        # Read in files
+        self.base_year_costs = pd.read_csv(base_year_costs_path)
+        self.annual_increases = pd.read_csv(annual_increases_path)
+        self.cost_adj = pd.read_csv(cost_adj_path)
 
 
 ##### FUNCTIONS #####

@@ -7,7 +7,7 @@ rail_costs = I:/NorMITs Demand\import\norms\costs\elasticity_model_format
 car_costs = I:/NorMITs Demand\import\noham\costs\elasticity_model_format
 
 [input_files]
-gc_parameters = I:/NorMITs Demand\import\elasticities\SC04_UZC\gc_parameters-uzc.csv
+gc_parameters = I:/NorMITs Demand\import\elasticities\SC04_UZC\vot_voc_values.csv
 cost_changes = I:/NorMITs Demand\import\elasticities\SC04_UZC\cost_changes-uzc-temp.csv
 
 [output_folders]

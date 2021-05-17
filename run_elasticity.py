@@ -19,6 +19,7 @@ from typing import Tuple, List, Dict
 # Local imports
 import normits_demand as nd
 
+from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
 from normits_demand.utils import file_ops
 
@@ -188,6 +189,22 @@ def initialise():
         config.write(f)
 
 
+def test_cost_builder():
+    from normits_demand.models.elasticity_model import CostBuilder
+
+    base_costs_path = r'I:\NorMITs Demand\import\elasticities\costs'
+    scenario_name = consts.SC04_UZC,
+
+    cost_builder = CostBuilder(
+        years=[2033, 2035, 2050],
+
+        # Input files
+        base_year_costs_path=os.path.join(base_costs_path, '2018_vot_voc.csv'),
+        annual_increases_path=os.path.join(base_costs_path, 'annual_increases.csv'),
+        cost_adj_path=os.path.join(base_costs_path, 'cost_adjustments.csv'),
+    )
+
+
 def main():
     """Runs the elasticity model using parameters from the config file."""
     input_folders, input_files, output_folder, years = get_inputs()
@@ -203,3 +220,4 @@ def main():
 if __name__ == "__main__":
     # initialise()
     main()
+    # test_cost_builder()

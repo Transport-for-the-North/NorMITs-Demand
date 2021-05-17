@@ -404,6 +404,7 @@ class TestReadGCParameters:
         {
             "year": ["2018", "2018", "2030", "2030"],
             "mode": ["car", "rail"] * 2,
+            "purpose": ["commute"] * 4,
             "vot": [16.2, 16.4, 17.2, 17.4],
             "voc": [9.45, np.nan, 10.45, np.nan],
         }
@@ -420,6 +421,7 @@ class TestReadGCParameters:
     }
     YEARS = ["2018", "2030"]
     MODES = ["car", "rail"]
+    PURPOSES = ["commute"]
 
     @pytest.fixture(name="param_path", scope="class")
     def fixture_param_path(self, tmp_path_factory) -> Tuple[Path, Path]:
@@ -452,7 +454,7 @@ class TestReadGCParameters:
         param_path : Tuple[Path, Path]
             Paths to the correct and missing files, respectively.
         """
-        test = gc.read_gc_parameters(param_path[0], self.YEARS, self.MODES)
+        test = gc.read_gc_parameters(param_path[0], self.YEARS, self.MODES, self.PURPOSES)
         assert test == self.PARAMS, "Correct GC params input file"
 
     def test_missing(self, param_path: Tuple[Path, Path]):
@@ -464,7 +466,7 @@ class TestReadGCParameters:
             Paths to the correct and missing files, respectively.
         """
         with pytest.raises(ValueError) as e:
-            gc.read_gc_parameters(param_path[1], self.YEARS, self.MODES)
+            gc.read_gc_parameters(param_path[1], self.YEARS, self.MODES, self.PURPOSES)
         msg = (
             "Years missing: ['2030'] Year - mode pairs missing: "
             "['2018 - rail'] from: missing_gc_params.csv"

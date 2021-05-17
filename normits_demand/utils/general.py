@@ -29,6 +29,7 @@ from typing import List
 from typing import Dict
 from typing import Tuple
 from typing import Union
+from typing import Callable
 from typing import Iterable
 from typing import Iterator
 
@@ -2407,6 +2408,40 @@ def get_zone_translation(import_dir: str,
     translation = dict(translation.itertuples(index=False, name=None))
 
     return translation
+
+
+def nested_dictionary(depth: int = 3,
+                      leaf_default: Callable = None,
+                      ):
+    """
+    Returns nested collections.defaultdicts of depth
+
+    Parameters
+    ----------
+    depth:
+        The number of keys to intantiate by default. e.g.
+        of depth = 3, d[0][0][0] will create a leaf_default
+
+    leaf_default:
+        The function to call for the leaf of the nested dictionary.
+        If list, then an empty list would be created by default
+
+    Returns
+    -------
+    nested_dict:
+        nested collections.defaultdicts of depth with leaf_default at the
+        leaf of all dictionaries
+    """
+    if depth == 0:
+        return leaf_default
+
+    nested_fn = functools.partial(
+        nested_dictionary,
+        depth=depth - 1,
+        leaf_default=leaf_default,
+    )
+
+    return defaultdict(nested_fn)
 
 
 def defaultdict_to_regular(d):
