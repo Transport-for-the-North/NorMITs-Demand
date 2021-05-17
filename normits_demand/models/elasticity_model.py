@@ -174,14 +174,20 @@ class ElasticityModel:
         segments = eu.read_segments_file(
             self.elasticity_folder / ec.SEGMENTS_FILE
         )
-        gc_params = gc.read_gc_parameters(
-            path=self.input_files["gc_parameters"],
+
+        cost_builder = gc.CostBuilder(
             years=self.years,
             modes=list(ec.MODE_ID.keys()),
             purposes=ec.PURPOSES,
+            vot_voc_path=self.input_files["gc_parameters"],
+            cost_adj_path=self.input_files["cost_changes"],
         )
 
+        gc_params = cost_builder.get_vot_voc()
+        cost_changes = cost_builder.get_cost_changes()
+
         print(gc_params)
+        print(cost_changes)
         exit()
         cost_changes = read_cost_changes(
             self.input_files["cost_changes"], self.years
@@ -587,33 +593,6 @@ class ElasticityModel:
             columns=["mode", "mean_demand_adjustment"],
         )
         du.safe_dataframe_to_csv(df, folder / name, index=False)
-
-
-class CostBuilder:
-    """Builds future year cost dataframes for scenarios."""
-
-    def __init__(self,
-                 # Parameters
-                 years: List[int],
-
-                 # Input files
-                 base_year_costs_path: nd.PathLike,
-                 annual_increases_path: nd.PathLike,
-                 cost_adj_path: nd.PathLike,
-                 ):
-        # Validate inputs
-        try:
-            self.years = [int(x) for x in years]
-        except ValueError:
-            raise ValueError(
-                "Expected a list of integer years. Got %s"
-                % years
-            )
-
-        # Read in files
-        self.base_year_costs = pd.read_csv(base_year_costs_path)
-        self.annual_increases = pd.read_csv(annual_increases_path)
-        self.cost_adj = pd.read_csv(cost_adj_path)
 
 
 ##### FUNCTIONS #####

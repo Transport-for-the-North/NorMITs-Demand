@@ -31,19 +31,6 @@ COST_LOOKUP = {
     },
 }
 
-# Column name and dtype lookup for the GC parameters input file
-GC_PARAMETERS_FILE = {
-    "year": ("yr", str),
-    "mode": ("m", str),
-    "purpose": ("p", str),
-    "vot": ("vot", float),
-    "voc": ("voc", float),
-}
-
-GC_PARAMETERS_MODE = {
-    'car': ['vot', 'voc'],
-    'rail': ['vot'],
-}
 
 # Lookup for the elasticity types and what modes/costs they affect
 GC_ELASTICITY_TYPES = {
@@ -55,9 +42,6 @@ GC_ELASTICITY_TYPES = {
     "Bus_IVTT": ("bus", "ride"),
     "Car_RUC": ("car", "gc"),
 }
-
-# Purposes
-PURPOSES = ['commute', 'business', 'other']
 
 # ID and zone system for each mode
 MODE_ID = {"car": 3, "rail": 6}

@@ -8,8 +8,6 @@
 # Standard imports
 import itertools
 
-from collections import defaultdict
-
 from pathlib import Path
 
 from typing import Dict
@@ -17,15 +15,239 @@ from typing import List
 from typing import Union
 
 
-
 # Third party imports
 import numpy as np
 import pandas as pd
 
 # Local imports
+import normits_demand as nd
+
 from normits_demand.utils import general as du
 from normits_demand.models import efs_zone_translator as zt
 from normits_demand.elasticity import constants as ec
+
+
+class CostBuilder:
+    """Builds future year cost dataframes for scenarios."""
+
+    _valid_modes = ['car', 'rail']
+    _valid_purposes = ['commute', 'business', 'other']
+    _valid_e_types = list(ec.GC_ELASTICITY_TYPES.keys())
+
+    _cost_adjustment_dtypes = {
+        "year": str,
+        "elasticity_type": str,
+        "constraint_matrix_name": str,
+        "percentage_change": float,
+    }
+
+    # Column name and dtype lookup for the GC parameters input file
+    _gc_parameters_dtypes = {
+        "yr": str,
+        "m": str,
+        "p": str,
+        "vot": float,
+        "voc": float,
+    }
+
+    _gc_parameters_mode = {
+        'car': ['vot', 'voc'],
+        'rail': ['vot'],
+    }
+
+    def __init__(self,
+                 # Parameters
+                 years: List[int],
+                 modes: List[str],
+                 purposes: List[str],
+
+                 # Input files
+                 vot_voc_path: nd.PathLike,
+                 cost_adj_path: nd.PathLike,
+                 ):
+        # Validate inputs
+        try:
+            valid_years = [int(x) for x in years]
+        except ValueError:
+            raise ValueError(
+                "Expected a list of integer years. Got %s"
+                % years
+            )
+
+        # Validate inputs
+        if not all([x in self._valid_modes for x in modes]):
+            raise ValueError(
+                "Given an invalid mode. Expected only %s\nGot %s"
+                % (self._valid_modes, modes)
+            )
+
+        if not all([x in self._valid_purposes for x in purposes]):
+            raise ValueError(
+                "Given an invalid purpose. Expected only %s\nGot %s"
+                % (self._valid_purposes, purposes)
+            )
+
+        # Parameters
+        self.years = valid_years
+        self.years_str = [str(x) for x in valid_years]
+        self.modes = modes
+        self.purposes = purposes
+
+        # Paths
+        self.vot_voc_path = vot_voc_path
+        self.cost_adj_path = cost_adj_path
+
+        # Read in files
+        self.cost_adj = pd.read_csv(cost_adj_path)
+
+    def get_vot_voc(self,
+                    year_col: str = 'yr',
+                    mode_col: str = 'm',
+                    purpose_col: str = 'p',
+                    vot_col: str = 'vot',
+                    voc_col: str = 'voc',
+                    ) -> Dict[str, Dict[str, Dict[str, Dict[str, float]]]]:
+        """Reads the generalised cost parameters CSV file.
+
+        Returns
+        -------
+        gc_cost_components:
+            Nested dictionary containing the parameters split
+            by years, mode, purpose e.g.
+            {
+                "2018": {
+                    'commute': {
+                        "car": {"vot": 16.2, "voc": 9.45},
+                        "rail": {"vot": 16.4},
+                    },
+                },
+            }
+
+        Raises
+        ------
+        ValueError:
+            If any of the purposes or modes given are not valid
+
+        ValueError:
+            If there are any years, modes, or purposes missing
+            from the file.
+
+        ValueError:
+            If none, or more than one line is found for a combination of
+            year, mode, and purpose.
+        """
+        # Init
+        gc_params = du.nested_dictionary(3, None)
+        rename = {
+            year_col: 'yr',
+            mode_col: 'm',
+            purpose_col: 'p',
+            vot_col: 'vot',
+            voc_col: 'voc',
+        }
+        rev_rename = {v: k for k, v in rename.items()}
+
+        # Read in and rename to standard names
+        dtypes = {rev_rename[k]: v for k, v in self._gc_parameters_dtypes.items()}
+        in_file = pd.read_csv(self.vot_voc_path, usecols=dtypes.keys(), dtype=dtypes)
+        in_file.rename(columns=rename, inplace=True)
+
+        # Find out if any of the wanted values are missing
+        missing_years = [x for x in self.years_str if x not in in_file["year"].unique()]
+        missing_modes = [x for x in self.modes if x not in in_file["mode"].unique()]
+        missing_purposes = [x for x in self.purposes if x not in in_file["purpose"].unique()]
+
+        # If things were missing, build an error message
+        msg = ""
+        if missing_years != list():
+            msg += f"Years missing: {missing_years} "
+        if missing_modes != list():
+            msg += f"Year - mode pairs missing: {missing_modes}"
+        if missing_purposes != list():
+            msg += f"Year - mode - purpose pairs missing: {missing_purposes}"
+        if msg != "":
+            raise ValueError(msg + f" from: {self.vot_voc_path.name}")
+
+        # Grab all the wanted in_file from the file
+        for yr, m, p in itertools.product(self.years_str, self.modes, self.purposes):
+            # Get the rows for these parameters
+            mask = (
+                (in_file["year"] == yr)
+                & (in_file["mode"] == m)
+                & (in_file["purpose"] == p)
+            )
+            data = in_file[mask]
+
+            # Check that we got the right thing
+            if len(data) == 0:
+                raise ValueError(
+                    "No data found for:\nyr: %s\nm: %s\np: %s\n"
+                    % (yr, p, m)
+                )
+
+            if len(data) > 1:
+                raise ValueError(
+                    "Multiple lines found for:\nyr: %s\nm: %s\np: %s\n"
+                    % (yr, p, m)
+                )
+
+            # Grab the data we want!
+            cols = self._gc_parameters_mode[m]
+            gc_params[yr][p][m] = dict(in_file.loc[mask, cols].iloc[0])
+
+        return du.defaultdict_to_regular(gc_params)
+
+    def get_cost_changes(self,
+                         year_col: str = 'yr',
+                         elast_type_col: str = 'elasticity_type',
+                         constraint_mat_col: str = 'constraint_matrix_name',
+                         perc_change_col: str = 'percentage_change',
+                         ) -> pd.DataFrame:
+        """Read the elasticity cost changes file and check for missing data.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing all the cost change data with
+            the following columns: year, elasticity_type,
+            constraint_matrix_name and percentage_change.
+
+        Raises
+        ------
+        KeyError
+            If an elasticity_type is given that is not present
+            in `GC_ELASTICITY_TYPES` lookup.
+        ValueError
+            If no data is present for one, or more, `years`.
+        """
+        rename = {
+            year_col: 'yr',
+            elast_type_col: 'elasticity_type',
+            constraint_mat_col: 'constraint_matrix_name',
+            perc_change_col: 'percentage_change',
+        }
+        rev_rename = {v: k for k, v in rename.items()}
+
+        # Read in and rename to standard names
+        dtypes = {rev_rename[k]: v for k, v in self._cost_adjustment_dtypes.items()}
+        df = pd.read_csv(self.cost_adj_path, usecols=dtypes.keys(), dtype=dtypes)
+        df.rename(columns=rename, inplace=True)
+
+        # Check for unknown elasticity types
+        e_types = df["elasticity_type"].unique()
+        unknown_types = [x for x in e_types if x not in self._valid_e_types]
+        if unknown_types != list():
+            raise KeyError(
+                f"Unknown elasticity_type: {unknown_types}, "
+                f"available types are: {self._valid_e_types}"
+            )
+
+        # Check for missing years
+        missing_years = [x for x in self.years if x not in df['yr'].unique()]
+        if missing_years != list():
+            raise ValueError(f"Cost change not present for years: {missing_years}")
+
+        return df
 
 
 ##### FUNCTIONS #####
@@ -411,12 +633,15 @@ def calculate_gen_costs(
     return gc
 
 
+# TODO(BT): Remove all references to this function
 def read_gc_parameters(path: Path,
                        years: List[str],
                        modes: List[str],
                        purposes: List[str],
-                       ) -> Dict[str, Dict[str, Dict[str, float]]]:
+                       ) -> Dict[str, Dict[str, Dict[str, Dict[str, float]]]]:
     """Reads the generalised cost parameters CSV file.
+
+    Wrapper around the cost builder - deprecated!!
 
     Parameters
     ----------
@@ -459,74 +684,12 @@ def read_gc_parameters(path: Path,
         If none, or more than one line is found for a combination of
         year, mode, and purpose.
     """
-    # Init
-    gc_params = du.nested_dictionary(3, None)
-
-    # TODO(BT): Move these into standard functions
-    # Validate inputs
-    valid_modes = ['car', 'rail']
-    if not all([x in valid_modes for x in modes]):
-        raise ValueError(
-            "Given an invalid mode. Expected only %s\nGot %s"
-            % (valid_modes, modes)
-        )
-
-    valid_purposes = ['commute', 'business', 'other']
-    if not all([x in valid_purposes for x in purposes]):
-        raise ValueError(
-            "Given an invalid purpose. Expected only %s\nGot %s"
-            % (valid_purposes, purposes)
-        )
-
-    # Read in and rename based on constants
-    dtypes = dict(ec.GC_PARAMETERS_FILE.values())
-    in_file = pd.read_csv(path, usecols=dtypes.keys(), dtype=dtypes)
-    in_file.rename(
-        columns={v[0]: k for k, v in ec.GC_PARAMETERS_FILE.items()},
-        inplace=True,
+    cost_builder = CostBuilder(
+        years=years,
+        modes=modes,
+        purposes=purposes,
+        vot_voc_path=path,
+        cost_adj_path=None,
     )
 
-    # Find out if any of the wanted values are missing
-    missing_years = [x for x in years if x not in in_file["year"].unique()]
-    missing_modes = [x for x in modes if x not in in_file["mode"].unique()]
-    missing_purposes = [x for x in purposes if x not in in_file["purpose"].unique()]
-
-    # If things were missing, build an error message
-    msg = ""
-    if missing_years != list():
-        msg += f"Years missing: {missing_years} "
-    if missing_modes != list():
-        msg += f"Year - mode pairs missing: {missing_modes}"
-    if missing_purposes != list():
-        msg += f"Year - mode - purpose pairs missing: {missing_purposes}"
-    if msg != "":
-        raise ValueError(msg + f" from: {path.name}")
-
-    # Grab all the wanted in_file from the file
-    for yr, m, p in itertools.product(years, modes, purposes):
-        # Get the rows for these parameters
-        mask = (
-            (in_file["year"] == yr)
-            & (in_file["mode"] == m)
-            & (in_file["purpose"] == p)
-        )
-        data = in_file[mask]
-
-        # Check that we got the right thing
-        if len(data) == 0:
-            raise ValueError(
-                "No data found for:\nyr: %s\nm: %s\np: %s\n"
-                % (yr, p, m)
-            )
-
-        if len(data) > 1:
-            raise ValueError(
-                "Multiple lines found for:\nyr: %s\nm: %s\np: %s\n"
-                % (yr, p, m)
-            )
-
-        # Grab the data we want!
-        cols = ec.GC_PARAMETERS_MODE[m]
-        gc_params[yr][p][m] = dict(in_file.loc[mask, cols].iloc[0])
-
-    return du.defaultdict_to_regular(gc_params)
+    return cost_builder.get_vot_voc()
