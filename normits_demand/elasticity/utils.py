@@ -37,16 +37,13 @@ def read_segments_file(path: Path) -> pd.DataFrame:
         elasticity calculations.
     """
     dtypes = {
-        "EFS_Seg": "int16",
-        "EFS_PurpBase": str,
-        "EFS_MainPurp": str,
-        "EFS_SubPurp": str,
-        "EFS_SubPurpID": "int8",
-        "EFS_TimePeriod": str,
-        "EFS_SkillLevel": "float16",
-        "EFS_IncLevel": "float16",
-        "Elast_Purp": str,
-        "Elast_MarketShare": str,
+        "trip_origin": str,
+        "p": "int8",
+        "soc": "float16",
+        "ns": "float16",
+        "tp": str,
+        "elast_p": str,
+        "elast_market_share": str,
     }
     return du.safe_read_csv(path, dtype=dtypes, usecols=dtypes.keys())
 

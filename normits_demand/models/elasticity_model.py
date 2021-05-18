@@ -29,9 +29,9 @@ import tqdm
 
 # Local imports
 import normits_demand as nd
-from normits_demand.utils import general as du
+from normits_demand import constants as consts
 
-from normits_demand.validation import checks
+from normits_demand.utils import general as du
 
 from normits_demand.models import efs_zone_translator as zt
 
@@ -187,10 +187,6 @@ class ElasticityModel:
         gc_params = cost_builder.get_vot_voc()
         cost_changes = cost_builder.get_cost_changes()
 
-        print(gc_params)
-        print(cost_changes)
-        exit()
-
         # Redirect stdout and stderr to tqdm allows tqdm to control
         # how print statements are shown and stops the progress bar
         # formatting from breaking. Note: warnings.warn() messages
@@ -205,36 +201,53 @@ class ElasticityModel:
             )
             for _, row in segments.iterrows():
                 for yr in self.years:
+                    # Grab the elasticity params from the file
                     elasticity_params = {
-                        "purpose": str(row["Elast_Purp"]),
-                        "market_share": row["Elast_MarketShare"],
+                        "purpose": str(row["elast_p"]),
+                        "market_share": row["elast_market_share"],
                     }
-                    demand_params = {
-                        "trip_origin": row["EFS_PurpBase"],
+
+                    # Grab the segment params from the file
+                    demand_seg_params = {
+                        "trip_origin": row["trip_origin"],
                         "matrix_format": "pa",
                         "year": yr,
-                        "purpose": str(row["EFS_SubPurpID"]),
+                        "purpose": str(row["p"]),
                     }
-
-                    if not np.isnan(row["EFS_SkillLevel"]):
-                        seg = row["EFS_SkillLevel"]
-
+                    if row["p"] in consts.SOC_P:
+                        demand_seg_params["segment"] = int(row["soc"])
+                    elif row["p"] in consts.NS_P:
+                        demand_seg_params["segment"] = int(row["ns"])
                     else:
-                        seg = row["EFS_IncLevel"]
-                    demand_params["segment"] = f"{seg:.0f}"
-
-                    try:
-                        self.apply_elasticities(
-                            demand_params,
-                            elasticity_params,
-                            gc_params[yr],
-                            cost_changes.loc[cost_changes["year"] == yr],
+                        raise nd.NormitsDemandError(
+                            "purpose '%s' does not seem to be a soc or an "
+                            "ns purpose!" % demand_seg_params['purpose']
                         )
-                    except Exception as e:  # pylint: disable=broad-except
-                        # Catching and printing all errors so program can
-                        # continue with other segments
-                        name = du.get_dist_name(**demand_params)
-                        print(f"{name} - {e.__class__.__name__}: {e}")
+
+                    print(elasticity_params)
+                    print(demand_seg_params)
+                    exit()
+
+                    # TODO(BT): REMOVE THIS!
+                    self.apply_elasticities(
+                        demand_seg_params,
+                        elasticity_params,
+                        gc_params[yr],
+                        cost_changes.loc[cost_changes["yr"] == yr],
+                    )
+
+                    # try:
+                    #     self.apply_elasticities(
+                    #         demand_seg_params,
+                    #         elasticity_params,
+                    #         gc_params[yr],
+                    #         cost_changes.loc[cost_changes["year"] == yr],
+                    #     )
+                    # except Exception as e:  # pylint: disable=broad-except
+                    #     # Catching and printing all errors so program can
+                    #     # continue with other segments
+                    #     name = du.get_dist_name(**demand_seg_params)
+                    #     print(f"{name} - {e.__class__.__name__}: {e}")
                     pbar.update(1)
             pbar.close()
 
