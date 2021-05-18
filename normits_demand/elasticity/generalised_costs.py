@@ -34,11 +34,16 @@ class CostBuilder:
     _valid_purposes = ec.PURPOSES
     _valid_e_types = list(ec.GC_ELASTICITY_TYPES.keys())
 
+    _e_types_dtypes = {
+        'mode': str,
+        'cost_component': str,
+        'elasticity_type': str,
+    }
+
     _cost_adjustment_dtypes = {
-        "yr": str,
-        "e_type": str,
-        "constraint_mat": str,
-        "%_change": float,
+        "mode": str,
+        "cost_component": str,
+        "adj_type": str,
     }
 
     # Column name and dtype lookup for the GC parameters input file
@@ -64,6 +69,9 @@ class CostBuilder:
                  years: List[int],
                  modes: List[str] = None,
                  purposes: List[str] = None,
+
+                 # Optional input files
+                 elasticity_types_path: nd.PathLike = None,
                  ):
         # Validate inputs
         try:
@@ -99,8 +107,32 @@ class CostBuilder:
         self.vot_voc_path = vot_voc_path
         self.cost_adj_path = cost_adj_path
 
+        self.e_types = None
+        if elasticity_types_path is not None:
+            self.set_elasticity_types(elasticity_types_path)
+
         # Read in files
         self.cost_adj = pd.read_csv(cost_adj_path)
+
+    def set_elasticity_types(self,
+                             elasticity_types_path: nd.PathLike,
+                             ) -> None:
+        """
+
+        Parameters
+        ----------
+        elasticity_types_path:
+            Full path to the csv containing the mapping of modes and costs
+            to the elasticities that should be used
+
+        Returns
+        -------
+        None
+        """
+        # Read in the file
+        dtypes = self._e_types_dtypes
+        df = pd.read_csv(elasticity_types_path, usecols=dtypes.keys(), dtype=dtypes)
+        self.e_types = df
 
     def get_vot_voc(self,
                     year_col: str = 'yr',
@@ -200,43 +232,119 @@ class CostBuilder:
         return du.defaultdict_to_regular(gc_params)
 
     def get_cost_changes(self,
-                         year_col: str = 'yr',
-                         elast_type_col: str = 'elasticity_type',
-                         constraint_mat_col: str = 'constraint_matrix_name',
-                         perc_change_col: str = 'percentage_change',
+                         ignore_cols: List[str] = None,
                          ) -> pd.DataFrame:
         """Read the elasticity cost changes file and check for missing data.
 
         Returns
         -------
-        cost_changes:
-            DataFrame containing all the cost change data with
-            columns matching self._cost_adjustment_dtypes:
-            yr, e_type, constraint_mat and %_change.
+        ignore_cols:
+            Any additional cols in self.cost_adj_path that should be ignored
+            when reading in.
 
         Raises
         ------
         KeyError
             If an elasticity_type is given that is not present
             in `GC_ELASTICITY_TYPES` lookup.
-        ValueError
-            If no data is present for one, or more, `years`.
-        """
-        rename = {
-            year_col: 'yr',
-            elast_type_col: 'e_type',
-            constraint_mat_col: 'constraint_mat',
-            perc_change_col: '%_change',
-        }
-        rev_rename = {v: k for k, v in rename.items()}
 
-        # Read in and rename to standard names
-        dtypes = {rev_rename[k]: v for k, v in self._cost_adjustment_dtypes.items()}
-        df = pd.read_csv(self.cost_adj_path, usecols=dtypes.keys(), dtype=dtypes)
-        df.rename(columns=rename, inplace=True)
+        nd.NormitsDemandError:
+            If more than one elasticity type is found for a cost and mode
+            combination
+
+        """
+        # Init
+        dtypes = self._cost_adjustment_dtypes
+        cost_adj = pd.read_csv(self.cost_adj_path, dtype=dtypes)
+
+        # Assume all non-defined columns are years
+        ignore_cols = list() if ignore_cols is None else ignore_cols
+        ignore_cols += dtypes.keys()
+        given_years = du.list_safe_remove(list(cost_adj), ignore_cols)
+
+        # Make sure they are actually numbers left
+        try:
+            given_years = [int(x) for x in given_years]
+        except ValueError:
+            raise ValueError(
+                "Cannot convert all years to integers. Tried to convert %s "
+                "and failed." % given_years
+            )
+
+        # Check we can handle all the years asked for
+        max_given_year = max(given_years)
+        min_given_year = min(given_years)
+        for year in self.years:
+            if not (min_given_year <= year <= max_given_year):
+                raise ValueError(
+                    "Wanted year is out of range to extrapolate. Asked to get "
+                    "year %s, but given data only from %s to %s.\n"
+                    "From file: %s"
+                    % (year, min_given_year, max_given_year, self.cost_adj_path)
+                )
+
+        # ## EXTRAPOLATE VALUES ## #
+        for year in self.years:
+            # Skip if we already have it
+            if year in given_years:
+                continue
+
+            # Find the two numbers this year sits between
+            lower = None
+            upper = None
+            for l, u in zip(given_years[:-1], given_years[1:]):
+                if l < year < u:
+                    lower = l
+                    upper = u
+                    break
+
+            if lower is None or upper is None:
+                raise nd.NormitsDemandError(
+                    "Lower and/or Upper values have not been set. This "
+                    "shouldn't be possible. Perhaps an error check has been "
+                    "missed somewhere?"
+                )
+
+            # Extrapolate!
+            year_diff = upper - lower
+            val_diff = cost_adj[str(upper)] - cost_adj[str(lower)]
+            wanted_year_diff = year - lower
+            wanted_diff = val_diff * wanted_year_diff / year_diff
+            cost_adj[str(year)] = cost_adj[str(upper)] + wanted_diff
+
+        # ## ADD ELASTICITY TYPES ## #
+        def get_e_type(x):
+            m = (
+                (self.e_types['mode'] == x['mode'])
+                & (self.e_types['cost_component'] == x['cost_component'])
+            )
+            e_type = self.e_types[m]
+
+            if len(e_type) > 1:
+                raise nd.NormitsDemandError(
+                    "Found more than one elasticity type for mode '%s' "
+                    "and cost '%s'"
+                    % (x['mode'], x['cost_component'])
+                )
+
+            elif len(e_type) == 1:
+                x['e_type'] = e_type['elasticity_type'].values[0]
+
+            else:
+                # Must have found nothing
+                x['e_type'] = 'none'
+
+            return x
+
+        cost_adj['e_type'] = 'none'
+        cost_adj = cost_adj.apply(get_e_type, axis='columns')
+
+        # Drop any that we don't have an elasticity for
+        mask = (cost_adj['e_type'] == 'none')
+        cost_adj = cost_adj[~mask].copy()
 
         # Check for unknown elasticity types
-        e_types = df["e_type"].unique()
+        e_types = cost_adj["e_type"].unique()
         unknown_types = [x for x in e_types if x not in self._valid_e_types]
         if unknown_types != list():
             raise KeyError(
@@ -244,14 +352,18 @@ class CostBuilder:
                 f"available types are: {self._valid_e_types}"
             )
 
-        # Check for missing years
-        missing_years = [x for x in self.years_str if x not in df['yr'].unique()]
-        if missing_years != list():
-            raise ValueError(f"Cost change not present for years: {missing_years}")
+        # ## CONVERT TO OUTPUT FORMAT ## #
+        id_vars = ['e_type', 'adj_type']
+        cost_adj = cost_adj.reindex(columns=id_vars + self.years_str)
 
-        # Filter down to just the needed years
-        mask = df['yr'].isin(self.years_str)
-        return df[mask].copy()
+        cost_adj = pd.melt(
+            cost_adj,
+            id_vars=id_vars,
+            var_name='yr',
+            value_name='change'
+        )
+
+        return cost_adj
 
 
 ##### FUNCTIONS #####

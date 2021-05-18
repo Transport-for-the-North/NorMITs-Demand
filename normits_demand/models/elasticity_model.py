@@ -91,7 +91,7 @@ class ElasticityModel:
         )
         self.input_files = input_files
 
-        self.elasticity_folder = input_folders["elasticity"]
+        self.import_home = input_folders["elasticity"]
         self.zone_translation_folder = input_folders["translation"]
         self.demand_folders = {
             m: [input_folders[f"{m}_{c}"] for c in ("demand", "costs")]
@@ -172,7 +172,7 @@ class ElasticityModel:
         expected to be found in elasticity folder given.
         """
         segments = eu.read_segments_file(
-            self.elasticity_folder / ec.SEGMENTS_FILE
+            self.import_home / ec.SEGMENTS_FILE
         )
 
         cost_builder = gc.CostBuilder(
@@ -181,6 +181,7 @@ class ElasticityModel:
             purposes=ec.PURPOSES,
             vot_voc_path=self.input_files["gc_parameters"],
             cost_adj_path=self.input_files["cost_changes"],
+            elasticity_types_path=self.import_home / ec.ETYPES_FNAME,
         )
 
         gc_params = cost_builder.get_vot_voc()
@@ -189,9 +190,6 @@ class ElasticityModel:
         print(gc_params)
         print(cost_changes)
         exit()
-        cost_changes = read_cost_changes(
-            self.input_files["cost_changes"], self.years
-        )
 
         # Redirect stdout and stderr to tqdm allows tqdm to control
         # how print statements are shown and stops the progress bar
@@ -285,7 +283,7 @@ class ElasticityModel:
             The adjusted demand for all modes.
         """
         elasticities = eu.read_elasticity_file(
-            self.elasticity_folder / ec.ELASTICITIES_FILE,
+            self.import_home / ec.ELASTICITIES_FILE,
             **elasticity_params,
         )
 
@@ -303,7 +301,7 @@ class ElasticityModel:
             )
 
         constraint_matrices = eu.get_constraint_matrices(
-            self.elasticity_folder / ec.CONSTRAINTS_FOLDER,
+            self.import_home / ec.CONSTRAINTS_FOLDER,
             cost_changes["constraint_matrix_name"].unique().tolist(),
         )
         (

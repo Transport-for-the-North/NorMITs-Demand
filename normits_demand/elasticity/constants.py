@@ -34,16 +34,17 @@ COST_LOOKUP = {
 
 # Lookup for the elasticity types and what modes/costs they affect
 GC_ELASTICITY_TYPES = {
-    "Car_JourneyTime": ("car", "time"),
-    "Car_FuelCost": ("car", "voc"),
-    "Rail_Fare": ("rail", "fare"),
-    "Rail_IVTT": ("rail", "ride"),
-    "Bus_Fare": ("bus", "fare"),
-    "Bus_IVTT": ("bus", "ride"),
-    "Car_RUC": ("car", "gc"),
+    "car_journey_time": ("car", "time"),
+    "car_fuel_cost": ("car", "voc"),     # Is this used anywhere??
+    "rail_fare": ("rail", "fare"),
+    "rail_ivtt": ("rail", "ride"),
+    "bus_fare": ("bus", "fare"),
+    "bus_ivtt": ("bus", "ride"),
+    "car_ruc": ("car", "gc"),
 }
 
 PURPOSES = ['commute', 'business', 'other']
+ETYPES_FNAME = 'elasticity_types.csv'
 
 # ID and zone system for each mode
 MODE_ID = {"car": 3, "rail": 6}
