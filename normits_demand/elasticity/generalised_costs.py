@@ -30,15 +30,15 @@ from normits_demand.elasticity import constants as ec
 class CostBuilder:
     """Builds future year cost dataframes for scenarios."""
 
-    _valid_modes = ['car', 'rail']
-    _valid_purposes = ['commute', 'business', 'other']
+    _valid_modes = list(ec.MODE_ID.keys())
+    _valid_purposes = ec.PURPOSES
     _valid_e_types = list(ec.GC_ELASTICITY_TYPES.keys())
 
     _cost_adjustment_dtypes = {
-        "year": str,
-        "elasticity_type": str,
-        "constraint_matrix_name": str,
-        "percentage_change": float,
+        "yr": str,
+        "e_type": str,
+        "constraint_mat": str,
+        "%_change": float,
     }
 
     # Column name and dtype lookup for the GC parameters input file
@@ -56,14 +56,14 @@ class CostBuilder:
     }
 
     def __init__(self,
-                 # Parameters
-                 years: List[int],
-                 modes: List[str],
-                 purposes: List[str],
-
                  # Input files
                  vot_voc_path: nd.PathLike,
                  cost_adj_path: nd.PathLike,
+
+                 # Parameters
+                 years: List[int],
+                 modes: List[str] = None,
+                 purposes: List[str] = None,
                  ):
         # Validate inputs
         try:
@@ -75,12 +75,14 @@ class CostBuilder:
             )
 
         # Validate inputs
+        modes = self._valid_modes if modes is None else modes
         if not all([x in self._valid_modes for x in modes]):
             raise ValueError(
                 "Given an invalid mode. Expected only %s\nGot %s"
                 % (self._valid_modes, modes)
             )
 
+        purposes = self._valid_purposes if purposes is None else purposes
         if not all([x in self._valid_purposes for x in purposes]):
             raise ValueError(
                 "Given an invalid purpose. Expected only %s\nGot %s"
@@ -153,9 +155,9 @@ class CostBuilder:
         in_file.rename(columns=rename, inplace=True)
 
         # Find out if any of the wanted values are missing
-        missing_years = [x for x in self.years_str if x not in in_file["year"].unique()]
-        missing_modes = [x for x in self.modes if x not in in_file["mode"].unique()]
-        missing_purposes = [x for x in self.purposes if x not in in_file["purpose"].unique()]
+        missing_years = [x for x in self.years_str if x not in in_file["yr"].unique()]
+        missing_modes = [x for x in self.modes if x not in in_file["m"].unique()]
+        missing_purposes = [x for x in self.purposes if x not in in_file["p"].unique()]
 
         # If things were missing, build an error message
         msg = ""
@@ -172,9 +174,9 @@ class CostBuilder:
         for yr, m, p in itertools.product(self.years_str, self.modes, self.purposes):
             # Get the rows for these parameters
             mask = (
-                (in_file["year"] == yr)
-                & (in_file["mode"] == m)
-                & (in_file["purpose"] == p)
+                (in_file["yr"] == yr)
+                & (in_file["m"] == m)
+                & (in_file["p"] == p)
             )
             data = in_file[mask]
 
@@ -207,10 +209,10 @@ class CostBuilder:
 
         Returns
         -------
-        pd.DataFrame
+        cost_changes:
             DataFrame containing all the cost change data with
-            the following columns: year, elasticity_type,
-            constraint_matrix_name and percentage_change.
+            columns matching self._cost_adjustment_dtypes:
+            yr, e_type, constraint_mat and %_change.
 
         Raises
         ------
@@ -222,9 +224,9 @@ class CostBuilder:
         """
         rename = {
             year_col: 'yr',
-            elast_type_col: 'elasticity_type',
-            constraint_mat_col: 'constraint_matrix_name',
-            perc_change_col: 'percentage_change',
+            elast_type_col: 'e_type',
+            constraint_mat_col: 'constraint_mat',
+            perc_change_col: '%_change',
         }
         rev_rename = {v: k for k, v in rename.items()}
 
@@ -234,7 +236,7 @@ class CostBuilder:
         df.rename(columns=rename, inplace=True)
 
         # Check for unknown elasticity types
-        e_types = df["elasticity_type"].unique()
+        e_types = df["e_type"].unique()
         unknown_types = [x for x in e_types if x not in self._valid_e_types]
         if unknown_types != list():
             raise KeyError(
@@ -243,19 +245,20 @@ class CostBuilder:
             )
 
         # Check for missing years
-        missing_years = [x for x in self.years if x not in df['yr'].unique()]
+        missing_years = [x for x in self.years_str if x not in df['yr'].unique()]
         if missing_years != list():
             raise ValueError(f"Cost change not present for years: {missing_years}")
 
-        return df
+        # Filter down to just the needed years
+        mask = df['yr'].isin(self.years_str)
+        return df[mask].copy()
 
 
 ##### FUNCTIONS #####
-def _average_matrices(
-    matrices: Dict[str, np.array],
-    expected: List[str],
-    weights: np.array = None,
-) -> Dict[str, float]:
+def _average_matrices(matrices: Dict[str, np.array],
+                      expected: List[str],
+                      weights: np.array = None,
+                      ) -> Dict[str, float]:
     """Calculate the weighted average of expected matrices.
 
     Parameters
@@ -280,8 +283,8 @@ def _average_matrices(
     KeyError
         If any of the expected matrices aren't provided.
     """
-    averages = {}
-    missing = []
+    averages = dict()
+    missing = list()
     for nm in expected:
         try:
             # If matrix is scalar (for other modes) don't need to calculate average
