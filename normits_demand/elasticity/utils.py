@@ -231,6 +231,11 @@ def std_out_err_redirect_tqdm():
     Code copied from tqdm documentation:
     https://github.com/tqdm/tqdm#redirecting-writing
 
+    Redirect stdout and stderr to tqdm allows tqdm to control
+    how print statements are shown and stops the progress bar
+    formatting from breaking. Note: warnings.warn() messages
+    still cause formatting issues in terminal.
+
     Yields
     -------
     sys.stdout

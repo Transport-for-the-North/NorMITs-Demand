@@ -109,3 +109,17 @@ AGG_AT = {
     'tfn_area_type': [1, 2, 3, 4, 5, 6, 7, 8],
     'nelum_area_type': [1, 1, 1, 2, 2, 2, 3, 3],  # ?? Needs audit
     'agg_tfn_area_type': [1, 1, 2, 2, 3, 3, 4, 4]}
+
+# ## SEGMENTATIONS ## #
+# How do user classes relate to purposes
+USER_CLASS_PURPOSES = {
+    'commute': [1],
+    'business': [2, 12],
+    'other': [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
+}
+
+HB_USER_CLASS_PURPOSES = {
+    'commute': [1],
+    'business': [2],
+    'other': [3, 4, 5, 6, 7, 8]
+}

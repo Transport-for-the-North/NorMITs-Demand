@@ -45,19 +45,6 @@ DEFAULT_ROUNDING = 8
 VDM_TRIP_ORIGINS = ['hb', 'nhb']
 USER_CLASSES = ['commute', 'business', 'other']
 
-# How do user classes relate to purposes
-USER_CLASS_PURPOSES = {
-    'commute': [1],
-    'business': [2, 12],
-    'other': [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
-}
-
-HB_USER_CLASS_PURPOSES = {
-    'commute': [1],
-    'business': [2],
-    'other': [3, 4, 5, 6, 7, 8]
-}
-
 NORMS_SUB_USER_CLASS_SEG = {
     'ca_from':  {'to': ['hb', 'nhb'],   'ca': [2], 'od_ft': ['od_from']},
     'ca_to':    {'to': ['hb'],          'ca': [2], 'od_ft': ['od_to']},

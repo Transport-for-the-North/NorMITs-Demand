@@ -21,6 +21,7 @@ import pandas as pd
 
 # Local imports
 import normits_demand as nd
+from normits_demand import constants as consts
 
 from normits_demand.utils import general as du
 from normits_demand.models import efs_zone_translator as zt
@@ -31,7 +32,7 @@ class CostBuilder:
     """Builds future year cost dataframes for scenarios."""
 
     _valid_modes = list(ec.MODE_ID.keys())
-    _valid_purposes = ec.PURPOSES
+    _valid_purposes = list(consts.USER_CLASS_PURPOSES.keys())
     _valid_e_types = list(ec.GC_ELASTICITY_TYPES.keys())
 
     _e_types_dtypes = {
@@ -456,11 +457,10 @@ def _check_matrices(
     return mats
 
 
-def gen_cost_car_mins(
-    matrices: Dict[str, np.array],
-    vc: float,
-    vt: float,
-) -> np.array:
+def gen_cost_car_mins(matrices: Dict[str, np.array],
+                      vc: float,
+                      vt: float,
+                      ) -> np.array:
     """Calculate the generalised cost for cars in minutes.
 
     Parameters
@@ -494,11 +494,10 @@ def gen_cost_car_mins(
     )
 
 
-def gen_cost_rail_mins(
-    matrices: Dict[str, np.array],
-    vt: float,
-    factors: Dict[str, float] = None,
-) -> np.array:
+def gen_cost_rail_mins(matrices: Dict[str, np.array],
+                       vt: float,
+                       factors: Dict[str, float] = None,
+                       ) -> np.array:
     """Calculate the generalised cost for rail in minutes.
 
     Parameters
@@ -531,7 +530,7 @@ def gen_cost_rail_mins(
         matrices, ["walk", "wait", "ride", "fare", "num_int"]
     )
 
-    # Multply matrices by given (or default) weighting factors
+    # Multiply matrices by given (or default) weighting factors
     factors = ec.RAIL_GC_FACTORS if factors is None else factors
     for nm in ["walk", "wait"]:
         fac = factors.get(nm, ec.RAIL_GC_FACTORS[nm])
@@ -667,9 +666,10 @@ def get_costs(
     return costs.sort_values(["origin", "destination"])
 
 
-def gen_cost_mode(
-    costs: Union[pd.DataFrame, float], mode: str, **kwargs
-) -> Union[np.array, float]:
+def gen_cost_mode(costs: Union[pd.DataFrame, float],
+                  mode: str,
+                  **kwargs
+                  ) -> Union[np.array, float]:
     """Calculate generalised cost (GC) for a single mode using the relevant function.
 
     Parameters

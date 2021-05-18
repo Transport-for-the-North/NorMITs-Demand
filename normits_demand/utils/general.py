@@ -3110,6 +3110,45 @@ def trip_origin_to_purposes(trip_origin: str) -> List[int]:
     return efs_consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
 
 
+def purpose_to_user_class(purpose: Union[int, str]) -> str:
+    """
+    Returns a string of the user class that purpose belongs to
+
+    Parameters
+    ----------
+    purpose:
+        The purpose to convert to user class
+
+    Returns
+    -------
+    user_class:
+        A string defining a user class
+    """
+    # Validate the input
+    if not isinstance(purpose, int):
+        try:
+            purpose = int(purpose)
+        except ValueError:
+            raise ValueError(
+                "Given a non-integer purpose and hit an error while trying "
+                "to convert to and integer. Got %s" % purpose
+            )
+
+    # Convert the purpose
+    user_class = None
+    for uc, ps in consts.USER_CLASS_PURPOSES.items():
+        if purpose in ps:
+            user_class = uc
+
+    if user_class is None:
+        raise ValueError(
+            "No user class exists for purpose '%s' "
+            % purpose
+        )
+
+    return user_class
+
+
 def merge_df_list(df_list, **kwargs):
     """
     Merge all dfs in df_list into a single dataframe

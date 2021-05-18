@@ -106,6 +106,16 @@ class ElasticityModel:
         self.output_folder = output_folders
         self.years = output_years
 
+        # Set up the cost builder
+        self.cost_builder = gc.CostBuilder(
+            years=self.years,
+            modes=list(ec.MODE_ID.keys()),
+            purposes=ec.PURPOSES,
+            vot_voc_path=self.input_files["gc_parameters"],
+            cost_adj_path=self.input_files["cost_changes"],
+            elasticity_types_path=self.import_home / ec.ETYPES_FNAME,
+        )
+
     @staticmethod
     def _check_paths(paths: Dict[str, Path],
                      expected: List[str],
@@ -171,27 +181,18 @@ class ElasticityModel:
         Segment information is read from `SEGMENTS_FILE` which is
         expected to be found in elasticity folder given.
         """
-        segments = eu.read_segments_file(
-            self.import_home / ec.SEGMENTS_FILE
-        )
 
-        cost_builder = gc.CostBuilder(
-            years=self.years,
-            modes=list(ec.MODE_ID.keys()),
-            purposes=ec.PURPOSES,
-            vot_voc_path=self.input_files["gc_parameters"],
-            cost_adj_path=self.input_files["cost_changes"],
-            elasticity_types_path=self.import_home / ec.ETYPES_FNAME,
-        )
+        # Read in the cost changes
+        scalar_costs = self.cost_builder.get_vot_voc()
+        cost_changes = self.cost_builder.get_cost_changes()
 
-        gc_params = cost_builder.get_vot_voc()
-        cost_changes = cost_builder.get_cost_changes()
-
-        # Redirect stdout and stderr to tqdm allows tqdm to control
-        # how print statements are shown and stops the progress bar
-        # formatting from breaking. Note: warnings.warn() messages
-        # still cause formatting issues in terminal.
+        # Redirects the outputs around pbar
         with eu.std_out_err_redirect_tqdm() as orig_stdout:
+
+            # Read in the segments to loop around
+            segments = eu.read_segments_file(self.import_home / ec.SEGMENTS_FILE)
+
+            # Set up pbar
             pbar = tqdm.tqdm(
                 total=len(segments) * len(self.years),
                 desc="Applying elasticities to segments",
@@ -199,6 +200,8 @@ class ElasticityModel:
                 dynamic_ncols=True,
                 unit="segment",
             )
+
+            # Loop through all of the defined segments
             for _, row in segments.iterrows():
                 for yr in self.years:
                     # Grab the elasticity params from the file
@@ -224,23 +227,23 @@ class ElasticityModel:
                             "ns purpose!" % demand_seg_params['purpose']
                         )
 
-                    print(elasticity_params)
-                    print(demand_seg_params)
-                    exit()
+                    # Figure out which vot and voc costs to use
+                    uc = du.purpose_to_user_class(row['p'])
 
                     # TODO(BT): REMOVE THIS!
                     self.apply_elasticities(
                         demand_seg_params,
                         elasticity_params,
-                        gc_params[yr],
+                        scalar_costs[yr][uc],
                         cost_changes.loc[cost_changes["yr"] == yr],
                     )
 
+                    # Try to apply the elasticity
                     # try:
                     #     self.apply_elasticities(
                     #         demand_seg_params,
                     #         elasticity_params,
-                    #         gc_params[yr],
+                    #         scalar_costs[yr][uc],
                     #         cost_changes.loc[cost_changes["year"] == yr],
                     #     )
                     # except Exception as e:  # pylint: disable=broad-except
@@ -271,6 +274,7 @@ class ElasticityModel:
                 "purpose": "1",
                 "segment": "1",
             }
+
         elasticity_params : Dict[str, str]
             Parameters to define what elasticity values to
             use, expected format:
@@ -278,23 +282,28 @@ class ElasticityModel:
                 "purpose": "Commuting",
                 "market_share": "CarToRail_Moderate",
             }
+
         gc_params : Dict[str, Dict[str, float]]
-            Parameters used in the generlised cost calculations,
+            Parameters used in the generalised cost calculations,
             expected format:
             {
                 "car": {"vt": 16.2, "vc": 9.45},
                 "rail": {"vt": 16.4},
             }
+
         cost_changes : pd.DataFrame
             The cost changes to be applied to be applied,
-            expects the following columns: elasticity_type,
-            constraint_matrix_name and percentage_change.
+            expects the following columns: e_type,
+            adj_type and change.
 
         Returns
         -------
         Dict[str, pd.DataFrame]
             The adjusted demand for all modes.
         """
+
+
+
         elasticities = eu.read_elasticity_file(
             self.import_home / ec.ELASTICITIES_FILE,
             **elasticity_params,
