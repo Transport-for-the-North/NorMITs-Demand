@@ -16,6 +16,7 @@ import pandas as pd
 from tqdm import contrib
 
 # Local imports
+import normits_demand as nd
 from normits_demand.utils import general as du
 from normits_demand.models import efs_zone_translator as zt
 from normits_demand.elasticity import constants as ec
@@ -48,12 +49,11 @@ def read_segments_file(path: Path) -> pd.DataFrame:
     return du.safe_read_csv(path, dtype=dtypes, usecols=dtypes.keys())
 
 
-def read_elasticity_file(
-    data: Union[Path, pd.DataFrame],
-    elasticity_type: str = None,
-    purpose: str = None,
-    market_share: str = None,
-) -> pd.DataFrame:
+def read_elasticity_file(data: Union[nd.PathLike, pd.DataFrame],
+                         elasticity_type: str = None,
+                         purpose: str = None,
+                         market_share: str = None,
+                         ) -> pd.DataFrame:
     """Reads and filters the elasticity file.
 
     Can be given a DataFrame instead of a path for just filtering.
@@ -62,12 +62,15 @@ def read_elasticity_file(
     ----------
     data : Union[Path, pd.DataFrame]
         Path to the elasticity file or a DataFrame containing the information.
+
     elasticity_type : str
         Value to filter on the 'ElasticityType' column, if None (default) then
         does not filter on this column.
+
     purpose : str
         Value to filter on the 'Purp' column, if None (default) then
         does not filter on this column.
+
     market_share : str
         Value to filter on the 'MarketShare' column, if None (default) then
         does not filter on this column.
@@ -84,37 +87,32 @@ def read_elasticity_file(
         the DataFrame.
     """
     dtypes = {
-        "ElasticityType": str,
-        "Purp": str,
-        "MarketShare": str,
-        "AffectedMode": str,
-        "ModeCostChg": str,
-        "OwnElast": "float32",
+        "type": str,
+        "p": str,
+        "market_share": str,
+        "affected_mode": str,
+        "changing_mode": str,
+        "elast_value": "float32",
     }
+
     if isinstance(data, pd.DataFrame):
-        df = data.copy()[dtypes.keys()]
+        df = data.reindex(columns=list((dtypes.keys())))
     else:
         df = du.safe_read_csv(data, dtype=dtypes, usecols=dtypes.keys())
 
     # Filter required values
-    filters = [
-        ("ElasticityType", elasticity_type),
-        ("Purp", purpose),
-        ("MarketShare", market_share),
-    ]
-    for col, val in filters:
-        if val is None:
-            continue
-        df = df.loc[df[col] == val]
-        if df.empty:
-            raise ValueError(f"Value '{val}' not found in column '{col}'")
-
+    filters = {
+        "type": elasticity_type,
+        "p": purpose,
+        "market_share": market_share,
+    }
+    df = du.filter_df(df, filters).reset_index(drop=True)
     return df
 
 
-def get_constraint_matrices(
-    folder: Path, get_files: List[str] = None
-) -> Dict[str, Union[Path, np.array]]:
+def get_constraint_mats(folder: nd.PathLike,
+                        get_files: List[str] = None
+                        ) -> Dict[str, np.array]:
     """Search the given folder for any CSV files.
 
     All constraint matrices should be in the `COMMON_ZONE_SYSTEM`.
@@ -123,14 +121,15 @@ def get_constraint_matrices(
     ----------
     folder : Path
         Folder containing the constraint matrices as CSV files.
+
     get_files : List[str], optional
-        The names of the matrices to read, if None (default) then
-        the paths of all CSVs found will be returned.
+        The names of the matrices to read, if None then all CSVs
+        found will be returned.
 
     Returns
     -------
-    Dict[str, Union[Path, np.array]]
-        The lowercase name of the file and the absolute path to it
+    constraint_mats:
+        The name of the file and the absolute path to it
         (if get_files is None). If get_files is a list of names then
         those files will be read and returned.
 
@@ -139,21 +138,19 @@ def get_constraint_matrices(
     FileNotFoundError
         If the folder given doesn't exist or isn't a folder.
     """
-    matrices = {}
+    # Init
     if not folder.is_dir():
         raise FileNotFoundError(f"Not a folder, or doesn't exist: {folder}")
-    get_files = (
-        [i.lower() for i in get_files] if get_files is not None else get_files
-    )
 
-    for path in folder.iterdir():
-        if path.suffix.lower() != ".csv":
-            continue
-        nm = path.stem.lower()
-        if get_files is None:
-            matrices[nm] = path.absolute()
-        elif nm in get_files:
-            matrices[nm] = np.loadtxt(path, delimiter=",")
+    if get_files is None:
+        get_files = du.list_files(folder, ftypes=['.csv'])
+
+    # Load in the matrices
+    matrices = dict()
+    for fname in get_files:
+        path = folder / fname
+        matrices[fname] = np.loadtxt(path, delimiter=",")
+
     return matrices
 
 

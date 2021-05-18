@@ -227,13 +227,9 @@ def _distribute_pa_internal(productions,
         tp_col: calib_params.get('tp')
     }
 
-    productions = du.filter_by_segmentation(productions,
-                                            df_filter=base_filter,
-                                            fit=True)
+    productions = du.filter_df(productions, df_filter=base_filter, fit=True)
 
-    a_weights = du.filter_by_segmentation(a_weights,
-                                          df_filter=base_filter,
-                                          fit=True)
+    a_weights = du.filter_df(a_weights, df_filter=base_filter, fit=True)
 
     # Rename columns for furness
     year = calib_params['yr']

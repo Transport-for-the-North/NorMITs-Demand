@@ -301,31 +301,29 @@ class ElasticityModel:
         Dict[str, pd.DataFrame]
             The adjusted demand for all modes.
         """
-
-
-
+        # Init
         elasticities = eu.read_elasticity_file(
             self.import_home / ec.ELASTICITIES_FILE,
             **elasticity_params,
         )
 
-        # Check if any elasticities aren't provided in ELASTICITIES_FILE
-        missing = np.isin(
-            cost_changes["elasticity_type"].unique(),
-            elasticities["ElasticityType"],
-            invert=True,
-        )
-        if sum(missing) > 0:
-            missing = list(cost_changes["elasticity_type"].unique()[missing])
+        # ## CHECK THE ELASTICITIES WE WANT EXIST ## #
+        to_use = cost_changes["e_type"].unique()
+        available = elasticities["type"].unique()
+        missing = [x for x in to_use if x not in available]
+
+        if missing != list():
             raise ValueError(
                 f"Elasticity values in {ec.ELASTICITIES_FILE} "
                 f"missing for the following types: {missing}"
             )
 
-        constraint_matrices = eu.get_constraint_matrices(
-            self.import_home / ec.CONSTRAINTS_FOLDER,
-            cost_changes["constraint_matrix_name"].unique().tolist(),
-        )
+        path = self.import_home / ec.CONSTRAINTS_FOLDER
+        needed_mats = cost_changes["constraint_matrix_name"].unique().tolist()
+        constraint_mats = eu.get_constraint_mats(path, needed_mats)
+        print(constraint_mats)
+        exit()
+
         (
             base_demand,
             rail_ca_split,
@@ -355,7 +353,7 @@ class ElasticityModel:
                 base_gc,
                 elasticities.loc[elasticities["ElasticityType"] == elast_type],
                 elast_type,
-                constraint_matrices[cstr_name],
+                constraint_mats[cstr_name],
                 change,
                 gc_params,
             )
@@ -616,16 +614,15 @@ class ElasticityModel:
 
 
 ##### FUNCTIONS #####
-def calculate_adjustment(
-    base_demand: Dict[str, pd.DataFrame],
-    base_costs: Dict[str, pd.DataFrame],
-    base_gc: Dict[str, pd.DataFrame],
-    elasticities: pd.DataFrame,
-    elasticity_type: str,
-    cost_constraint: np.array,
-    cost_change: float,
-    gc_params: Dict[str, Dict[str, float]],
-) -> Dict[str, np.array]:
+def calculate_adjustment(base_demand: Dict[str, pd.DataFrame],
+                         base_costs: Dict[str, pd.DataFrame],
+                         base_gc: Dict[str, pd.DataFrame],
+                         elasticities: pd.DataFrame,
+                         elasticity_type: str,
+                         cost_constraint: np.array,
+                         cost_change: float,
+                         gc_params: Dict[str, Dict[str, float]],
+                         ) -> Dict[str, np.array]:
     """Calculate the demand adjustment for a single cost change.
 
     Parameters
@@ -633,21 +630,28 @@ def calculate_adjustment(
     base_demand : Dict[str, pd.DataFrame]
         Base demand for all modes, with key being the
         mode name.
+
     base_costs : Dict[str, pd.DataFrame]
         Base costs for all modes, with key being the
         mode name.
+
     base_gc : Dict[str, pd.DataFrame]
         Base generalised cost for all modes.
+
     elasticities : pd.DataFrame
         Elasticity values for all mode combinations.
+
     elasticity_type : str
         The name of the elasticity cost change being
         applied.
+
     cost_constraint : np.array
         An array to define where the cost is applied,
         should be the same shape as `base_demand`.
+
     cost_change : float
         The percentage cost change being applied.
+
     gc_params : Dict[str, Dict[str, float]]
         The parameters used in the generlised cost
         calculations, there should be one set of

@@ -1246,15 +1246,15 @@ def _gen_base_productions_internal(area_type,
         # We do this to retain segments from productions
 
         # Filter the productions and attractions
-        p_subset = du.filter_by_segmentation(prods, seg_vals, fit=True)
+        p_subset = du.filter_df(prods, seg_vals, fit=True)
 
         # Soc0 is always special - do this to avoid dropping demand
         if seg_vals.get('soc', -1) == '0':
             temp_seg_vals = seg_vals.copy()
             temp_seg_vals.pop('soc')
-            a_subset = du.filter_by_segmentation(attrs, temp_seg_vals, fit=True)
+            a_subset = du.filter_df(attrs, temp_seg_vals, fit=True)
         else:
-            a_subset = du.filter_by_segmentation(attrs, seg_vals, fit=True)
+            a_subset = du.filter_df(attrs, seg_vals, fit=True)
 
         # Remove all segmentation from the attractions
         group_cols = [zone_col]
@@ -1272,8 +1272,7 @@ def _gen_base_productions_internal(area_type,
         # ## APPLY NHB TRIP RATES ## #
         # Subset the trip_rates
         tr_index = [nhb_p_col, trip_rate_col]
-        tr_subset = du.filter_by_segmentation(nhb_trip_rates, seg_vals,
-                                              fit=True)
+        tr_subset = du.filter_df(nhb_trip_rates, seg_vals, fit=True)
         tr_subset = tr_subset.reindex(tr_index, axis='columns')
 
         # Validate

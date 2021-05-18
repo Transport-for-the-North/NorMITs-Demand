@@ -2643,13 +2643,13 @@ def remove_none_like_filter(df_filter: Dict[str, Any]) -> Dict[str, Any]:
     return new_df_filter
 
 
-def filter_by_segmentation(df: pd.DataFrame,
-                           df_filter: Dict[str, Any],
-                           fit: bool = False,
-                           **kwargs
-                           ) -> pd.DataFrame:
+def filter_df(df: pd.DataFrame,
+              df_filter: Dict[str, Any],
+              fit: bool = False,
+              **kwargs,
+              ) -> pd.DataFrame:
     """
-    Filters a dataframe down to a given segmentation
+    Filters a dataframe down to a given filter
 
     Can handle flexible segmentation if fit is set to True - all unnecessary
     columns will be removed, and any 'None like' filters will be removed. This
@@ -3117,7 +3117,7 @@ def purpose_to_user_class(purpose: Union[int, str]) -> str:
     Parameters
     ----------
     purpose:
-        The purpose to convert to user class
+        The purpose to convert to user class.
 
     Returns
     -------

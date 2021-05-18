@@ -108,11 +108,7 @@ def _grow_external_pa_internal(growth_factors,
         tp_col: seg_params.get('tp')
     }
 
-    growth_factors = du.filter_by_segmentation(
-        growth_factors,
-        df_filter=base_filter,
-        fit=True,
-    )
+    growth_factors = du.filter_df(growth_factors, df_filter=base_filter, fit=True)
 
     # ## GROW THE BASE YEAR MATRIX TO FUTURE YEAR ## #
     # Make sure all the rows in the base matrix are in the growth factors
