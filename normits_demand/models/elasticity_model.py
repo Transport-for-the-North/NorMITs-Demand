@@ -13,6 +13,9 @@ Module containing the functions for applying elasticities to demand matrices.
 
 
 # Built-in imports
+import functools
+import operator
+
 from pathlib import Path
 from collections import defaultdict
 
@@ -43,11 +46,18 @@ from normits_demand.elasticity import constants as ec
 class ElasticityModel:
     """Class for applying elasticity calculations to demand matrices."""
 
+    _default_common_zone_system = ec.COMMON_ZONE_SYSTEM
+
+    _valid_ca = consts.VALID_CA
+    _valid_mode_names = list(ec.MODE_ID.keys())
+    _valid_mode_nums = list(ec.MODE_ID.values())
+
     def __init__(self,
                  input_folders: Dict[str, Path],
                  input_files: Dict[str, Path],
                  output_folders: Dict[str, Path],
                  output_years: List[int],
+                 common_zone_system: str = None,
                  ):
         """Check input files and folders exist and create output folders.
 
@@ -93,10 +103,11 @@ class ElasticityModel:
 
         self.import_home = input_folders["elasticity"]
         self.zone_translation_folder = input_folders["translation"]
-        self.demand_folders = {
-            m: [input_folders[f"{m}_{c}"] for c in ("demand", "costs")]
-            for m in ("rail", "car")
-        }
+
+        # Assign demand and cost dirs
+        modes = ['car', 'rail']
+        self.demand_dirs = {m: input_folders[f"{m}_demand"] for m in modes}
+        self.cost_dirs = {m: input_folders[f"{m}_costs"] for m in modes}
 
         self._check_paths(
             output_folders,
@@ -105,6 +116,11 @@ class ElasticityModel:
         )
         self.output_folder = output_folders
         self.years = output_years
+
+        if common_zone_system is None:
+            self.common_zone_system = self._default_common_zone_system
+        else:
+            self.common_zone_system = common_zone_system
 
         # Set up the cost builder
         self.cost_builder = gc.CostBuilder(
@@ -218,9 +234,9 @@ class ElasticityModel:
                         "purpose": str(row["p"]),
                     }
                     if row["p"] in consts.SOC_P:
-                        demand_seg_params["segment"] = int(row["soc"])
+                        demand_seg_params["segment"] = str(int(row["soc"]))
                     elif row["p"] in consts.NS_P:
-                        demand_seg_params["segment"] = int(row["ns"])
+                        demand_seg_params["segment"] = str(int(row["ns"]))
                     else:
                         raise nd.NormitsDemandError(
                             "purpose '%s' does not seem to be a soc or an "
@@ -318,11 +334,10 @@ class ElasticityModel:
                 f"missing for the following types: {missing}"
             )
 
+        # ## LOAD IN THE CONSTRAINT MATRICES ## #
         path = self.import_home / ec.CONSTRAINTS_FOLDER
-        needed_mats = cost_changes["constraint_matrix_name"].unique().tolist()
+        needed_mats = cost_changes["adj_type"].unique().tolist()
         constraint_mats = eu.get_constraint_mats(path, needed_mats)
-        print(constraint_mats)
-        exit()
 
         (
             base_demand,
@@ -330,10 +345,19 @@ class ElasticityModel:
             car_reverse,
             car_original,
         ) = self._get_demand(demand_params)
+        print(base_demand)
+        print(rail_ca_split)
+        print(car_reverse)
+        print(car_original)
+        exit()
+
+
         base_costs = self._get_costs(
             demand_params["purpose"], {"car": car_original}
         )
         del car_original
+
+        # NOT BASE YEAR, base for this forecast year
         base_gc = gc.calculate_gen_costs(base_costs, gc_params)
 
         # Loop setup
@@ -403,6 +427,93 @@ class ElasticityModel:
         self._write_demand(adjusted_demand, demand_params, car_reverse)
         return adjusted_demand
 
+    def _read_demand_matrix(self,
+                            path: Path,
+                            zone_translation_folder: Path,
+                            from_zone: str
+                            ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """Reads demand matrix and converts it to self.common_zone_system.
+
+        Parameters
+        ----------
+        path : Path
+            Path to the demand matrix.
+
+        zone_translation_folder : Path
+            Path to the folder contain zone lookups.
+
+        from_zone : str
+            The current zone system of the matrix, if this
+            isn't self.common_zone_system then the matrix will
+            be converted.
+
+        Returns
+        -------
+        translated_demand:
+            The demand matrix in the self.common_zone_system.
+
+        translation_factors:
+            Splitting factors for converting back to the from_zone
+            zone system.
+
+        original_demand:
+            The demand matrix in the from_zone zone system.
+        """
+        # BACKLOG: Update elasticity to use new zone translations
+        #  labels: elasticity, zone translation
+        # Init
+        demand = pd.read_csv(path, index_col=0)
+        translation_factors = np.ones(demand.shape)
+        orig_mat = demand.copy()
+
+        # Convert column and index names to int
+        demand.columns = pd.to_numeric(demand.columns, downcast="integer")
+        demand.index = pd.to_numeric(demand.index, downcast="integer")
+
+        # Translate if needed
+        if from_zone != self.common_zone_system:
+            # Set read in dtypes
+            dtypes = {
+                f"{from_zone}_zone_id": int,
+                f"{self.common_zone_system}_zone_id": int,
+                "split": float,
+            }
+
+            # Build translation path
+            fname = ec.ZONE_LOOKUP_NAME.format(
+                from_zone=from_zone,
+                to_zone=self.common_zone_system
+            )
+            path = zone_translation_folder / fname
+
+            # Load in the translation file
+            translation = pd.read_csv(path, usecols=dtypes.keys(), dtype=dtypes)
+            cols = [f"{from_zone}_zone_id", f"{self.common_zone_system}_zone_id"]
+
+            # Try to translate!
+            try:
+                demand, translation_factors = zt.translate_matrix(
+                    matrix=demand,
+                    lookup=translation,
+                    lookup_cols=cols,
+                    split_column="split",
+                )
+            except zt.MatrixTotalError as e:
+                # Print the error but continue with the translation to still
+                # process current segment
+                print(f"{path.stem} - {e.__class__.__name__}: {e}")
+                demand, translation_factors = zt.translate_matrix(
+                    matrix=demand,
+                    lookup=translation,
+                    lookup_cols=cols,
+                    split_column="split",
+                    check_total=False,
+                )
+
+        # Put the rows/columns back into order
+        demand = demand.sort_index().sort_index(axis=1)
+        return demand, translation_factors, orig_mat
+
     def _get_demand(self,
                     demand_params: Dict[str, str]
                     ) -> Tuple[Dict[str, pd.DataFrame],
@@ -422,13 +533,16 @@ class ElasticityModel:
         demand : Dict[str, pd.DataFrame]
             The demand data for car and rail modes read from file and
             demand values of 1 for bus, active and no_travel.
-        rail_split : Dict[str, np.array]]
+
+        rail_ca_split_factors : Dict[str, np.array]]
             The ratio of CA and NCA to total rail demand, allowing
             the demand to be split back into CA and NCA once
             elasticities are applied.
+
         car_reverse : pd.DataFrame
             Splitting factors and look for converting the car demand
             back to old zone system after calculations.
+
         car_original : pd.DataFrame
             Demand matrix for car before the zone system conversion.
 
@@ -438,33 +552,45 @@ class ElasticityModel:
             If the CA and NCA demand for rail doesn't have
             the same zone index and columns.
         """
-        demand = {}
-        # Get rail demand and add CA and NCA together
+        # Init
+        demand = dict()
+
+        # ## LOAD THE RAIL DEMAND ## #
         m = "rail"
-        tmp = {}
-        for ca in ("1", "2"):
-            path = self.demand_folders[m][0] / du.get_dist_name(
+
+        # Load in all the ca mats
+        tmp = dict()
+        for ca in self._valid_ca:
+            fname = du.get_dist_name(
                 **demand_params,
                 mode=str(ec.MODE_ID[m]),
-                car_availability=ca,
+                car_availability=str(ca),
                 csv=True,
             )
-            tmp[f"ca{ca}"], _, _ = eu.read_demand_matrix(
-                path, self.zone_translation_folder, ec.MODE_ZONE_SYSTEM[m]
+            path = self.demand_dirs[m] / fname
+            tmp[ca], *_ = self._read_demand_matrix(
+                path,
+                self.zone_translation_folder,
+                ec.MODE_ZONE_SYSTEM[m]
             )
-        if not (
-            tmp["ca1"].index.equals(tmp["ca2"].index)
-            and tmp["ca1"].columns.equals(tmp["ca2"].columns)
-        ):
-            raise KeyError(
-                du.get_dist_name(**demand_params, mode=ec.MODE_ID[m])
-                + " does not have the same index for CA and NCA"
-            )
+
+        # Make sure all mats are the same shape
+        ref_idx = tmp[self._valid_ca[0]].index
+        ref_cols = tmp[self._valid_ca[0]].columns
+        for k, v in tmp.items():
+            match_idx = v.index.equals(ref_idx)
+            match_cols = v.index.equals(ref_cols)
+            if not (match_idx and match_cols):
+                raise KeyError(
+                    du.get_dist_name(**demand_params, mode=ec.MODE_ID[m])
+                    + " does not have the same index for CA and NCA"
+                )
+
         # Get demand for CA + NCA and calculate split for converting back
-        demand[m] = tmp["ca1"] + tmp["ca2"]
-        rail_split = {}
+        demand[m] = functools.reduce(operator.add, tmp.values())
+        rail_ca_split_factors = dict()
         for k, val in tmp.items():
-            rail_split[k] = np.divide(
+            rail_ca_split_factors[k] = np.divide(
                 val.values,
                 demand[m].values,
                 out=np.zeros_like(val, dtype=float),
@@ -472,17 +598,26 @@ class ElasticityModel:
             )
         del tmp
 
-        # Get car demand
+        # ## LOAD THE CAR DEMAND ## #
         m = "car"
-        path = self.demand_folders[m][0] / du.get_dist_name(
-            **demand_params, mode=str(ec.MODE_ID[m]), csv=True
+
+        # Build the path
+        fname = du.get_dist_name(
+            **demand_params,
+            mode=str(ec.MODE_ID[m]),
+            csv=True
         )
-        demand[m], car_reverse, car_original = eu.read_demand_matrix(
-            path, self.zone_translation_folder, ec.MODE_ZONE_SYSTEM[m]
+        path = self.demand_dirs[m] / fname
+
+        # Load in the matrix and translate
+        demand[m], car_reverse, car_original = self._read_demand_matrix(
+            path,
+            self.zone_translation_folder,
+            ec.MODE_ZONE_SYSTEM[m]
         )
 
         demand.update(dict.fromkeys(ec.OTHER_MODES, 1.0))
-        return demand, rail_split, car_reverse, car_original
+        return demand, rail_ca_split_factors, car_reverse, car_original
 
     def _get_costs(
         self, purpose: int, demand: Dict[str, pd.DataFrame]
@@ -496,6 +631,7 @@ class ElasticityModel:
         ----------
         purpose : int
             Purpose ID to get the costs for.
+
         demand : Dict[str, pd.DataFrame]
             Demand to as weights for zone translation.
 
@@ -506,7 +642,7 @@ class ElasticityModel:
         """
         costs = {}
         for m, zone in ec.MODE_ZONE_SYSTEM.items():
-            path = self.demand_folders[m][1] / ec.COST_NAMES.format(
+            path = self.cost_dirs[m] / ec.COST_NAMES.format(
                 mode=m, purpose=purpose
             )
             costs[m] = gc.get_costs(

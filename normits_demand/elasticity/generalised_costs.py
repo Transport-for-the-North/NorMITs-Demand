@@ -467,8 +467,8 @@ def gen_cost_car_mins(matrices: Dict[str, np.array],
     ----------
     matrices : Dict[str, np.array]
         The matrices expected are as follows:
-        - time: time matrix in seconds;
-        - dist: distance matrix in metres; and
+        - time: time matrix in minutes;
+        - dist: distance matrix in kilometres; and
         - toll: toll matrix in pence.
     vc : float
         The vehicle operating cost, in pence per kilometre.
@@ -488,8 +488,8 @@ def gen_cost_car_mins(matrices: Dict[str, np.array],
     matrices = _check_matrices(matrices, ["time", "dist", "toll"])
 
     return (
-        (matrices["time"] / 60)
-        + ((vc / vt) * (matrices["dist"] / 1000))
+        (matrices["time"])
+        + ((vc / vt) * (matrices["dist"]))
         + (matrices["toll"] / vt)
     )
 
@@ -697,9 +697,11 @@ def gen_cost_mode(costs: Union[pd.DataFrame, float],
         or a float if `costs` is a float.
     """
     mode = mode.lower()
+
     cost_to_array = lambda v: costs.pivot(
         index="origin", columns="destination", values=v
     ).values
+
     if mode == "car":
         gc = gen_cost_car_mins(
             {i: cost_to_array(i) for i in ("time", "dist", "toll")}, **kwargs
@@ -731,6 +733,7 @@ def calculate_gen_costs(
     costs : Dict[str, Union[pd.DataFrame, float]]
         Cost DataFrames for rail and car, other modes are optional
         but should be scalar values if given.
+
     gc_params : Dict[str, Dict[str, float]]
         Parameters for Value of time * occupancy and vehicle operating
         costs for car and just value of time for rail.

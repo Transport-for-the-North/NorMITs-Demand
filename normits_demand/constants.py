@@ -111,6 +111,9 @@ AGG_AT = {
     'agg_tfn_area_type': [1, 1, 2, 2, 3, 3, 4, 4]}
 
 # ## SEGMENTATIONS ## #
+# Segmentation values
+VALID_CA = [1, 2]
+
 # How do user classes relate to purposes
 USER_CLASS_PURPOSES = {
     'commute': [1],
