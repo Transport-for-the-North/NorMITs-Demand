@@ -485,7 +485,7 @@ def get_vdm_tour_proportion_seed_values(m: int,
 
     # Get seed values
     seed_values_list = list()
-    for p in efs_consts.HB_USER_CLASS_PURPOSES[uc]:
+    for p in consts.HB_USER_CLASS_PURPOSES[uc]:
         seed_values_list.append(get_tour_proportion_seed_values(
             m=m,
             p=p,
@@ -1518,7 +1518,7 @@ def build_norms_compile_params(import_dir: str,
 
         # Build the iterator
         iterator = itertools.product(
-            efs_consts.USER_CLASS_PURPOSES.items(),
+            consts.USER_CLASS_PURPOSES.items(),
             tp_needed
         )
 
@@ -1689,7 +1689,7 @@ def build_compile_params(import_dir: str,
 
     for year in years_needed:
         out_lines = list()
-        for user_class, purposes in efs_consts.USER_CLASS_PURPOSES.items():
+        for user_class, purposes in consts.USER_CLASS_PURPOSES.items():
             for ca, tp, to, od_ft in product(ca_needed, tp_needed, to_needed, od_from_to):
                 # Init
                 compile_mats = all_od_matrices.copy()
@@ -2612,7 +2612,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
     # BACKLOG: matrices_to_vector() needs checks adding for edge cases
     #  labels: EFS, error checks
     # Init
-    du.print_w_toggle("Generating vectors from %s..." % mat_import_dir, echo=verbose)
+    du.print_w_toggle("Generating vectors from %s..." % mat_import_dir, verbose=verbose)
     mat_names = [x for x in du.list_files(mat_import_dir) if file_ops.is_csv(x)]
 
     # Try to figure out what all the zones are

@@ -1,13 +1,26 @@
 # -*- coding: utf-8 -*-
 """
-    Module containing the functions for applying elasticities to the demand
-    matrices.
+Created on: Tue May 11 14:22:12 2021
+Updated on:
+
+Original author: Ben Taylor
+Last update made by:
+Other updates made by:
+
+File purpose:
+Module containing the functions for applying elasticities to demand matrices.
 """
 
-##### IMPORTS #####
-# Standard imports
+
+# Built-in imports
 from pathlib import Path
-from typing import List, Dict, Tuple, Union
+from collections import defaultdict
+
+from typing import List
+from typing import Dict
+from typing import Tuple
+from typing import Union
+
 
 # Third party imports
 import numpy as np
@@ -15,6 +28,9 @@ import pandas as pd
 import tqdm
 
 # Local imports
+import normits_demand as nd
+from normits_demand import constants as consts
+
 from normits_demand.utils import general as du
 
 from normits_demand.models import efs_zone_translator as zt
@@ -24,17 +40,15 @@ from normits_demand.elasticity import generalised_costs as gc
 from normits_demand.elasticity import constants as ec
 
 
-##### CLASSES #####
 class ElasticityModel:
-    """Class for applying elasticity calculations to EFS demand."""
+    """Class for applying elasticity calculations to demand matrices."""
 
-    def __init__(
-        self,
-        input_folders: Dict[str, Path],
-        input_files: Dict[str, Path],
-        output_folders: Dict[str, Path],
-        output_years: List[int],
-    ):
+    def __init__(self,
+                 input_folders: Dict[str, Path],
+                 input_files: Dict[str, Path],
+                 output_folders: Dict[str, Path],
+                 output_years: List[int],
+                 ):
         """Check input files and folders exist and create output folders.
 
         Parameters
@@ -59,6 +73,8 @@ class ElasticityModel:
         output_years : List[int]
             List of years to perform elasticity calculations for.
         """
+        # BACKLOG: Change ElasticityModel constructor. Make arguments explicit
+        #  labels: elasticity
         self._check_paths(
             input_folders,
             (
@@ -75,7 +91,7 @@ class ElasticityModel:
         )
         self.input_files = input_files
 
-        self.elasticity_folder = input_folders["elasticity"]
+        self.import_home = input_folders["elasticity"]
         self.zone_translation_folder = input_folders["translation"]
         self.demand_folders = {
             m: [input_folders[f"{m}_{c}"] for c in ("demand", "costs")]
@@ -90,15 +106,22 @@ class ElasticityModel:
         self.output_folder = output_folders
         self.years = output_years
 
-    # BACKLOG: Move to utils/IO
-    #   labels: demand merge
+        # Set up the cost builder
+        self.cost_builder = gc.CostBuilder(
+            years=self.years,
+            modes=list(ec.MODE_ID.keys()),
+            purposes=ec.PURPOSES,
+            vot_voc_path=self.input_files["gc_parameters"],
+            cost_adj_path=self.input_files["cost_changes"],
+            elasticity_types_path=self.import_home / ec.ETYPES_FNAME,
+        )
+
     @staticmethod
-    def _check_paths(
-        paths: Dict[str, Path],
-        expected: List[str],
-        path_type: str = "folder",
-        create_folders: bool = False,
-    ):
+    def _check_paths(paths: Dict[str, Path],
+                     expected: List[str],
+                     path_type: str = "folder",
+                     create_folders: bool = False,
+                     ) -> None:
         """Check if expected paths are given and exist.
 
         Parameters
@@ -126,16 +149,16 @@ class ElasticityModel:
         """
         path_type = path_type.lower()
         if path_type == "folder":
-            check = lambda p: p.is_dir()
+            def check(p): return p.is_dir()
         elif path_type == "file":
-            check = lambda p: p.is_file()
+            def check(p): return p.is_file()
         else:
             raise ValueError(
                 f"path_type should be 'folder' or 'file' not '{path_type}'"
             )
 
-        missing = []
-        not_dir = {}
+        missing = list()
+        not_dir = dict()
         for i in expected:
             if i not in paths.keys():
                 missing.append(i)
@@ -158,22 +181,18 @@ class ElasticityModel:
         Segment information is read from `SEGMENTS_FILE` which is
         expected to be found in elasticity folder given.
         """
-        segments = eu.read_segments_file(
-            self.elasticity_folder / ec.SEGMENTS_FILE
-        )
-        gc_params = gc.read_gc_parameters(
-            self.input_files["gc_parameters"],
-            self.years,
-            list(ec.MODE_ID.keys()),
-        )
-        cost_changes = read_cost_changes(
-            self.input_files["cost_changes"], self.years
-        )
-        # Redirect stdout and stderr to tqdm allows tqdm to control
-        # how print statements are shown and stops the progress bar
-        # formatting from breaking. Note: warnings.warn() messages
-        # still cause formatting issues in terminal.
+
+        # Read in the cost changes
+        scalar_costs = self.cost_builder.get_vot_voc()
+        cost_changes = self.cost_builder.get_cost_changes()
+
+        # Redirects the outputs around pbar
         with eu.std_out_err_redirect_tqdm() as orig_stdout:
+
+            # Read in the segments to loop around
+            segments = eu.read_segments_file(self.import_home / ec.SEGMENTS_FILE)
+
+            # Set up pbar
             pbar = tqdm.tqdm(
                 total=len(segments) * len(self.years),
                 desc="Applying elasticities to segments",
@@ -181,45 +200,66 @@ class ElasticityModel:
                 dynamic_ncols=True,
                 unit="segment",
             )
+
+            # Loop through all of the defined segments
             for _, row in segments.iterrows():
                 for yr in self.years:
+                    # Grab the elasticity params from the file
                     elasticity_params = {
-                        "purpose": str(row["Elast_Purp"]),
-                        "market_share": row["Elast_MarketShare"],
+                        "purpose": str(row["elast_p"]),
+                        "market_share": row["elast_market_share"],
                     }
-                    demand_params = {
-                        "trip_origin": row["EFS_PurpBase"],
+
+                    # Grab the segment params from the file
+                    demand_seg_params = {
+                        "trip_origin": row["trip_origin"],
                         "matrix_format": "pa",
                         "year": yr,
-                        "purpose": str(row["EFS_SubPurpID"]),
+                        "purpose": str(row["p"]),
                     }
-                    if not np.isnan(row["EFS_SkillLevel"]):
-                        seg = row["EFS_SkillLevel"]
+                    if row["p"] in consts.SOC_P:
+                        demand_seg_params["segment"] = int(row["soc"])
+                    elif row["p"] in consts.NS_P:
+                        demand_seg_params["segment"] = int(row["ns"])
                     else:
-                        seg = row["EFS_IncLevel"]
-                    demand_params["segment"] = f"{seg:.0f}"
-                    try:
-                        self.apply_elasticities(
-                            demand_params,
-                            elasticity_params,
-                            gc_params[yr],
-                            cost_changes.loc[cost_changes["year"] == yr],
+                        raise nd.NormitsDemandError(
+                            "purpose '%s' does not seem to be a soc or an "
+                            "ns purpose!" % demand_seg_params['purpose']
                         )
-                    except Exception as e:  # pylint: disable=broad-except
-                        # Catching and printing all errors so program can
-                        # continue with other segments
-                        name = du.get_dist_name(**demand_params)
-                        print(f"{name} - {e.__class__.__name__}: {e}")
+
+                    # Figure out which vot and voc costs to use
+                    uc = du.purpose_to_user_class(row['p'])
+
+                    # TODO(BT): REMOVE THIS!
+                    self.apply_elasticities(
+                        demand_seg_params,
+                        elasticity_params,
+                        scalar_costs[yr][uc],
+                        cost_changes.loc[cost_changes["yr"] == yr],
+                    )
+
+                    # Try to apply the elasticity
+                    # try:
+                    #     self.apply_elasticities(
+                    #         demand_seg_params,
+                    #         elasticity_params,
+                    #         scalar_costs[yr][uc],
+                    #         cost_changes.loc[cost_changes["year"] == yr],
+                    #     )
+                    # except Exception as e:  # pylint: disable=broad-except
+                    #     # Catching and printing all errors so program can
+                    #     # continue with other segments
+                    #     name = du.get_dist_name(**demand_seg_params)
+                    #     print(f"{name} - {e.__class__.__name__}: {e}")
                     pbar.update(1)
             pbar.close()
 
-    def apply_elasticities(
-        self,
-        demand_params: Dict[str, str],
-        elasticity_params: Dict[str, str],
-        gc_params: Dict[str, Dict[str, float]],
-        cost_changes: pd.DataFrame,
-    ) -> Dict[str, pd.DataFrame]:
+    def apply_elasticities(self,
+                           demand_params: Dict[str, str],
+                           elasticity_params: Dict[str, str],
+                           gc_params: Dict[str, Dict[str, float]],
+                           cost_changes: pd.DataFrame,
+                           ) -> Dict[str, pd.DataFrame]:
         """Performs elasticity calculation for a single EFS segment.
 
         Parameters
@@ -234,6 +274,7 @@ class ElasticityModel:
                 "purpose": "1",
                 "segment": "1",
             }
+
         elasticity_params : Dict[str, str]
             Parameters to define what elasticity values to
             use, expected format:
@@ -241,43 +282,48 @@ class ElasticityModel:
                 "purpose": "Commuting",
                 "market_share": "CarToRail_Moderate",
             }
+
         gc_params : Dict[str, Dict[str, float]]
-            Parameters used in the generlised cost calculations,
+            Parameters used in the generalised cost calculations,
             expected format:
             {
                 "car": {"vt": 16.2, "vc": 9.45},
                 "rail": {"vt": 16.4},
             }
+
         cost_changes : pd.DataFrame
             The cost changes to be applied to be applied,
-            expects the following columns: elasticity_type,
-            constraint_matrix_name and percentage_change.
+            expects the following columns: e_type,
+            adj_type and change.
 
         Returns
         -------
         Dict[str, pd.DataFrame]
             The adjusted demand for all modes.
         """
+        # Init
         elasticities = eu.read_elasticity_file(
-            self.elasticity_folder / ec.ELASTICITIES_FILE, **elasticity_params
+            self.import_home / ec.ELASTICITIES_FILE,
+            **elasticity_params,
         )
-        # Check if any elasticities aren't provided in ELASTICITIES_FILE
-        missing = np.isin(
-            cost_changes["elasticity_type"].unique(),
-            elasticities["ElasticityType"],
-            invert=True,
-        )
-        if sum(missing) > 0:
-            missing = list(cost_changes["elasticity_type"].unique()[missing])
+
+        # ## CHECK THE ELASTICITIES WE WANT EXIST ## #
+        to_use = cost_changes["e_type"].unique()
+        available = elasticities["type"].unique()
+        missing = [x for x in to_use if x not in available]
+
+        if missing != list():
             raise ValueError(
                 f"Elasticity values in {ec.ELASTICITIES_FILE} "
                 f"missing for the following types: {missing}"
             )
 
-        constraint_matrices = eu.get_constraint_matrices(
-            self.elasticity_folder / ec.CONSTRAINTS_FOLDER,
-            cost_changes["constraint_matrix_name"].unique().tolist(),
-        )
+        path = self.import_home / ec.CONSTRAINTS_FOLDER
+        needed_mats = cost_changes["constraint_matrix_name"].unique().tolist()
+        constraint_mats = eu.get_constraint_mats(path, needed_mats)
+        print(constraint_mats)
+        exit()
+
         (
             base_demand,
             rail_ca_split,
@@ -290,40 +336,46 @@ class ElasticityModel:
         del car_original
         base_gc = gc.calculate_gen_costs(base_costs, gc_params)
 
-        # Loop through cost changes file and calculate demand adjustment
-        demand_adjustment = {k: [v] for k, v in base_demand.items()}
+        # Loop setup
         cols = [
             "elasticity_type",
             "constraint_matrix_name",
             "percentage_change",
         ]
-        for elast_type, cstr_name, change in cost_changes[cols].itertuples(
-            index=False, name=None
-        ):
+        iterator = cost_changes[cols].itertuples(index=False, name=None)
+        demand_adjustment = defaultdict(list)
+
+        # Loop through cost changes file and calculate demand adjustment
+        for elast_type, cstr_name, change in iterator:
             adj_dem = calculate_adjustment(
                 base_demand,
                 base_costs,
                 base_gc,
                 elasticities.loc[elasticities["ElasticityType"] == elast_type],
                 elast_type,
-                constraint_matrices[cstr_name],
+                constraint_mats[cstr_name],
                 change,
                 gc_params,
             )
 
-            for k in demand_adjustment:
-                demand_adjustment[k].append(adj_dem[k])
+            # Store all our adjustments to apply later
+            for mode in adj_dem.keys():
+                demand_adjustment[mode].append(adj_dem[mode])
 
         # Multiply base demand by adjustments for rail and car and convert to dataframe
-        adjusted_demand = {}
-        for m, adjustments in demand_adjustment.items():
-            adjusted_demand[m] = np.prod(adjustments, axis=0)
-            if isinstance(base_demand[m], pd.DataFrame):
-                adjusted_demand[m] = pd.DataFrame(
-                    adjusted_demand[m],
-                    columns=base_demand[m].columns,
-                    index=base_demand[m].index,
+        adjusted_demand = dict()
+        for mode, base_vals in base_demand.items():
+            # Check the adjustments exist!
+            if mode not in demand_adjustment.keys():
+                raise ValueError(
+                    "We haven't calculated any demand adjustments for the "
+                    "base demand in mode '%s'!!" % mode
                 )
+
+            # Adjust our base demand
+            full_adjustment = np.prod(demand_adjustment[mode], axis=0)
+            adjusted_demand[mode] = base_vals * full_adjustment
+
 
         # Split rail demand back into CA/NCA
         for nm, df in rail_ca_split.items():
@@ -337,10 +389,13 @@ class ElasticityModel:
             name = du.get_dist_name(
                 **demand_params, mode=str(ec.MODE_ID["rail"])
             )
-            print(
-                f"{name}: when splitting adjusted rail demand into "
-                "CA and NCA, NCA + CA != Total Rail, there is a "
-                f"maximum difference of {diff:.1E}"
+            verbose = diff > 1e-5
+            du.print_w_toggle(
+                "%s: when splitting adjusted rail demand into CA and NCA, "
+                "NCA + CA != Total Rail, there is a maximum difference "
+                "of %.1e"
+                % (name, diff),
+                verbose=verbose
             )
         adjusted_demand.pop("rail")
 
@@ -348,14 +403,12 @@ class ElasticityModel:
         self._write_demand(adjusted_demand, demand_params, car_reverse)
         return adjusted_demand
 
-    def _get_demand(
-        self, demand_params: Dict[str, str]
-    ) -> Tuple[
-        Dict[str, pd.DataFrame],
-        Dict[str, np.array],
-        pd.DataFrame,
-        pd.DataFrame,
-    ]:
+    def _get_demand(self,
+                    demand_params: Dict[str, str]
+                    ) -> Tuple[Dict[str, pd.DataFrame],
+                               Dict[str, np.array],
+                               pd.DataFrame,
+                               pd.DataFrame]:
         """Read the rail and car demand, aggregating CA and NCA for rail.
 
         Parameters
@@ -463,12 +516,11 @@ class ElasticityModel:
         costs.update(dict.fromkeys(ec.OTHER_MODES, 1.0))
         return costs
 
-    def _write_demand(
-        self,
-        adjusted_demand: Dict[str, pd.DataFrame],
-        demand_params: Dict[str, str],
-        car_reverse: pd.DataFrame,
-    ):
+    def _write_demand(self,
+                      adjusted_demand: Dict[str, pd.DataFrame],
+                      demand_params: Dict[str, str],
+                      car_reverse: pd.DataFrame,
+                      ) -> None:
         """Write the adjusted demand to CSV files.
 
         The outputs are written to mode sub-folders in `self.output_folder`,
@@ -517,7 +569,7 @@ class ElasticityModel:
             original_zs.index.name = adjusted_demand["car"].index.name
             original_zs.columns.name = adjusted_demand["car"].columns.name
             # Check conversion hasn't changed total
-            totals = []
+            totals = list()
             for x in (original_zs, adjusted_demand["car"]):
                 totals.append(np.sum(x.values))
             if abs(totals[0] - totals[1]) > ec.MATRIX_TOTAL_TOLERANCE:
@@ -562,16 +614,15 @@ class ElasticityModel:
 
 
 ##### FUNCTIONS #####
-def calculate_adjustment(
-    base_demand: Dict[str, pd.DataFrame],
-    base_costs: Dict[str, pd.DataFrame],
-    base_gc: Dict[str, pd.DataFrame],
-    elasticities: pd.DataFrame,
-    elasticity_type: str,
-    cost_constraint: np.array,
-    cost_change: float,
-    gc_params: Dict[str, Dict[str, float]],
-) -> Dict[str, np.array]:
+def calculate_adjustment(base_demand: Dict[str, pd.DataFrame],
+                         base_costs: Dict[str, pd.DataFrame],
+                         base_gc: Dict[str, pd.DataFrame],
+                         elasticities: pd.DataFrame,
+                         elasticity_type: str,
+                         cost_constraint: np.array,
+                         cost_change: float,
+                         gc_params: Dict[str, Dict[str, float]],
+                         ) -> Dict[str, np.array]:
     """Calculate the demand adjustment for a single cost change.
 
     Parameters
@@ -579,21 +630,28 @@ def calculate_adjustment(
     base_demand : Dict[str, pd.DataFrame]
         Base demand for all modes, with key being the
         mode name.
+
     base_costs : Dict[str, pd.DataFrame]
         Base costs for all modes, with key being the
         mode name.
+
     base_gc : Dict[str, pd.DataFrame]
         Base generalised cost for all modes.
+
     elasticities : pd.DataFrame
         Elasticity values for all mode combinations.
+
     elasticity_type : str
         The name of the elasticity cost change being
         applied.
+
     cost_constraint : np.array
         An array to define where the cost is applied,
         should be the same shape as `base_demand`.
+
     cost_change : float
         The percentage cost change being applied.
+
     gc_params : Dict[str, Dict[str, float]]
         The parameters used in the generlised cost
         calculations, there should be one set of

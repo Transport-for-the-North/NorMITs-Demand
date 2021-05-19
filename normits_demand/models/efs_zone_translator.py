@@ -203,7 +203,7 @@ def translate_matrix(matrix: pd.DataFrame,
     """Convert a matrix to a new zone system using given lookup.
 
     Based on the `translate_matrices.translate_matrices` function
-    from TMS, simplied for use here.
+    from TMS, simplified for use here.
 
     Parameters
     ----------

@@ -2,8 +2,7 @@
 """
     Unit tests for the elasticity_model module using pytest.
 """
-
-##### IMPORTS #####
+# ## IMPORTS ## #
 # Standard imports
 import shutil
 from pathlib import Path
@@ -20,7 +19,7 @@ from normits_demand.models import elasticity_model as em
 from normits_demand.elasticity import generalised_costs as gc
 
 
-##### CONSTANTS #####
+# ## CONSTANTS ## #
 CAR_ZONES = [1, 2, 3]
 RAIL_ZONES = [1, 2]
 CAR_COSTS = pd.DataFrame(
@@ -86,7 +85,7 @@ COST_CHANGES = pd.DataFrame(
     }
 )
 
-##### CLASSES #####
+# ## CLASSES ## #
 class TestElasticityModel:
     """Tests for the `ElasticityModel` class."""
 
@@ -143,9 +142,12 @@ class TestElasticityModel:
     CHECK_TOLERANCE = 1e-4
 
     @pytest.fixture(name="folders", scope="class")
-    def fixture_folders(
-        self, tmp_path_factory: Path, cost_changes: Path
-    ) -> Tuple[Dict[str, Path], Dict[str, Path], Dict[str, Path]]:
+    def fixture_folders(self,
+                        tmp_path_factory: Path,
+                        cost_changes: Path,
+                        ) -> Tuple[Dict[str, Path],
+                                   Dict[str, Path],
+                                   Dict[str, Path]]:
         """Creates input files in temp folder for testing."""
         folders = [
             "elasticity",
@@ -170,8 +172,7 @@ class TestElasticityModel:
             np.savetxt(constraint_folder / f"{nm}.csv", df, delimiter=",")
         # Demand files
         base_demand = (
-            "{trip_origin}_{matrix_format}_yr{year}"
-            "_p{purpose}_m{mode}_soc{segment}"
+            "{trip_origin}_{matrix_format}_yr{year}_p{purpose}_m{mode}_soc{segment}"
         )
         CAR_DEMAND.to_csv(
             input_folders["car_demand"]
@@ -210,13 +211,15 @@ class TestElasticityModel:
         return input_folders, input_files, output_folders
 
     @pytest.fixture(name="output_demand", scope="class")
-    def fixture_output_demand(
-        self, folders: Tuple[Dict[str, Path], Dict[str, Path], Path]
-    ) -> Dict[str, pd.DataFrame]:
+    def fixture_output_demand(self,
+                              folders: Tuple[Dict[str, Path], Dict[str, Path], Path],
+                              ) -> Dict[str, pd.DataFrame]:
         """Returns outputs from `ElasticityModel.apply_elasticities` for multiple tests."""
         elast_model = em.ElasticityModel(*folders, YEARS)
         gc_params = gc.read_gc_parameters(
-            folders[1]["gc_parameters"], YEARS, ["car", "rail"]
+            folders[1]["gc_parameters"],
+            YEARS,
+            ["car", "rail"]
         )
         return elast_model.apply_elasticities(
             self.DEMAND_PARAMS,
@@ -247,14 +250,13 @@ class TestElasticityModel:
         "mode,answer",
         [("car", CAR_ANSWER), ("rail", RAIL_ANSWER), ("others", OTHER_ANSWER)],
     )
-    def test_apply_elasticities_output(
-        self,
-        folders: Tuple[Path, Path],
-        # Argument required to make sure output_demand fixture produces outputs
-        output_demand,  # pylint: disable=unused-argument
-        mode: str,
-        answer: pd.DataFrame,
-    ):
+    def test_apply_elasticities_output(self,
+                                       folders: Tuple[Path, Path],
+                                       # Argument required to make sure output_demand fixture produces outputs
+                                       output_demand,  # pylint: disable=unused-argument
+                                       mode: str,
+                                       answer: pd.DataFrame,
+                                       ) -> None:
         """Tests if `ElasticityModel.apply_elasticities` produces correct files."""
         _, _, output_folders = folders
         expected = 2 if mode == "rail" else 1
@@ -270,9 +272,9 @@ class TestElasticityModel:
                 answer, out, check_dtype=False, atol=self.CHECK_TOLERANCE
             )
 
-    def test_apply_all(
-        self, folders: Tuple[Dict[str, Path], Dict[str, Path], Path]
-    ):
+    def test_apply_all(self,
+                       folders: Tuple[Dict[str, Path], Dict[str, Path], Dict[str, Path]]
+                       ) -> None:
         """Test `ElasticityModel.apply_all` method with a single segment."""
         elast_model = em.ElasticityModel(*folders, YEARS)
         elast_model.apply_all()
@@ -284,7 +286,13 @@ class TestElasticityModel:
         }
         for m, (num, ans) in output_folders.items():
             out_files = list((folders[2][m]).iterdir())
-            assert len(out_files) == num, f"Wrong number of {m} output files"
+            # Check we got the right number of files back
+            err_msg = (
+                "The wrong number of files for mode %s were returned. "
+                "Expected %d, got %d." % (m, num, len(out_files))
+            )
+            assert len(out_files) == num, err_msg
+
             for i in out_files:
                 col = 0 if m != "others" else None
                 test = pd.read_csv(i, index_col=col)
@@ -299,7 +307,7 @@ class TestElasticityModel:
 
 ##### FUNCTIONS #####
 @pytest.fixture(name="cost_changes", scope="module")
-def fixture_cost_changes(tmp_path_factory: Path) -> Path:
+def fixture_cost_changes(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Write cost changes test file.
 
     Parameters
@@ -320,9 +328,11 @@ def fixture_cost_changes(tmp_path_factory: Path) -> Path:
 
 @pytest.mark.parametrize("years", (["2018"], ["2018", "2019"]))
 @pytest.mark.parametrize("missing_type", (True, False))
-def test_read_cost_changes(
-    monkeypatch, cost_changes: Path, years: List[str], missing_type: bool
-):
+def test_read_cost_changes(monkeypatch,
+                           cost_changes: Path,
+                           years: List[str],
+                           missing_type: bool
+                           ) -> None:
     """Test that `read_cost_changes` reads the file and performs checks."""
     if missing_type:
         monkeypatch.delitem(ec.GC_ELASTICITY_TYPES, "Car_RUC")
