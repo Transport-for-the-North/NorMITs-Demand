@@ -28,7 +28,7 @@ if __name__ == '__main__':
         out_sub = nelum_cjtw.copy()
         # Filter
         out_sub = out_sub[out_sub['TimePeriod'] == tp]
-        out_sub = out_sub[out_sub['mode'] == tp]
+        out_sub = out_sub[out_sub['mode'] == m]
 
         # Path
         path = 'nelum_cjtw_yr2018_p1_m%d_tp%d' % (m, tp)

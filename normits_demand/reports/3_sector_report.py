@@ -20,9 +20,9 @@ pcu_mats = [x for x in os.listdir(od_vehicles) if 'od' in x]
 
 sector_lookup = pd.read_csv(os.path.join(lookups, '3_sector_lookup.csv'))
 
-north_sectors = sector_lookup[sector_lookup['sector']=='north']['unique_id'].values-1
-scotland_sectors = sector_lookup[sector_lookup['sector']=='scotland']['unique_id'].values-1
-south_sectors = sector_lookup[sector_lookup['sector']=='south']['unique_id'].values-1
+north_sectors = sector_lookup[sector_lookup['sector'] == 'north']['unique_id'].values-1
+scotland_sectors = sector_lookup[sector_lookup['sector'] == 'scotland']['unique_id'].values-1
+south_sectors = sector_lookup[sector_lookup['sector'] == 'south']['unique_id'].values-1
 
 import_format = 'long'
 header = None
@@ -30,7 +30,7 @@ header = None
 for mat in pcu_mats:
     print(mat)
     dat = pd.read_csv(os.path.join(od_vehicles,
-                                   mat), header = header)
+                                   mat), header=header)
     dat_cols = list(dat)
     
     # TODO: test input format on list length
@@ -61,14 +61,14 @@ for mat in pcu_mats:
     
     audit_out = row_frame['dat'].sum()
 
-    if round(audit_in,3) == round(audit_out,3):
+    if round(audit_in, 3) == round(audit_out, 3):
         print('Audit in same as audit out')
     else:
         raise Warning('Report total different from in values')
 
     cols = row_frame['name'].str.split('_to_', expand=True)
-    cols = cols.rename(columns={0:'from',
-                                1:'to'})
+    cols = cols.rename(columns={0: 'from',
+                                1: 'to'})
     row_frame['from'] = cols['from']
     row_frame['to'] = cols['to']
     row_frame=row_frame.drop('name', axis=1).reindex(['from', 'to', 'dat'], axis=1)
@@ -77,6 +77,6 @@ for mat in pcu_mats:
     row_frame = row_frame.pivot(index='from', columns='to', values='dat')
     """
 
-    out_name = mat.replace('od','3_sector_report_od') 
+    out_name = mat.replace('od', '3_sector_report_od')
 
-    row_frame.to_csv(os.path.join(export, out_name), index = False)
+    row_frame.to_csv(os.path.join(export, out_name), index=False)
