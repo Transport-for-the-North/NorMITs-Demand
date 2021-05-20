@@ -262,6 +262,7 @@ def translate_matrix(matrix: pd.DataFrame,
             f"'weights' should be 'DataFrame' when 'weighted_average' "
             f"is chosen not '{type(weights).__name__}'"
         )
+
     if aggregation_method not in agg_methods:
         raise ValueError(
             "'aggregation_method' should be one of "
@@ -309,14 +310,17 @@ def translate_matrix(matrix: pd.DataFrame,
             validate="m:1",
         )
         lookup.drop(columns=zone_cols, inplace=True)
+
+        # Total of z2 demand z1
         totals = (
-            lookup[lookup_cols[:2] + ["weights"]]
-            .groupby(lookup_cols[:2], as_index=False)
+            lookup[lookup_cols[2:] + ["weights"]]
+            .groupby(lookup_cols[2:], as_index=False)
             .sum()
         )
+
         lookup = lookup.merge(
             totals,
-            on=lookup_cols[:2],
+            on=lookup_cols[2:],
             how="left",
             validate="m:1",
             suffixes=("", "_total"),

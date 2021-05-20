@@ -358,12 +358,13 @@ class ElasticityModel:
             translation_weights=translation_weights
         )
         del car_original_mat
-
         print(base_costs)
-        exit()
 
         # GC for each mode before any adjustments have been made to components
         base_gc = gc.calculate_gen_costs(base_costs, gc_params)
+
+        print(base_gc)
+        exit()
 
         # Loop setup
         cols = [
@@ -639,7 +640,7 @@ class ElasticityModel:
             Purpose ID to get the costs for.
 
         translation_weights : Dict[str, pd.DataFrame]
-            Demand to as weights for zone translation.
+            Weights for zone translation.
 
         Returns
         -------

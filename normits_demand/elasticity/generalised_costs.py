@@ -458,8 +458,8 @@ def _check_matrices(
 
 
 def gen_cost_car_mins(matrices: Dict[str, np.array],
-                      vc: float,
-                      vt: float,
+                      voc: float,
+                      vot: float,
                       ) -> np.array:
     """Calculate the generalised cost for cars in minutes.
 
@@ -470,9 +470,9 @@ def gen_cost_car_mins(matrices: Dict[str, np.array],
         - time: time matrix in minutes;
         - dist: distance matrix in kilometres; and
         - toll: toll matrix in pence.
-    vc : float
+    voc : float
         The vehicle operating cost, in pence per kilometre.
-    vt : float
+    vot : float
         The value of time * occupancy value, in pence per minute.
 
     Returns
@@ -489,13 +489,13 @@ def gen_cost_car_mins(matrices: Dict[str, np.array],
 
     return (
         (matrices["time"])
-        + ((vc / vt) * (matrices["dist"]))
-        + (matrices["toll"] / vt)
+        + ((voc / vot) * (matrices["dist"]))
+        + (matrices["toll"] / vot)
     )
 
 
 def gen_cost_rail_mins(matrices: Dict[str, np.array],
-                       vt: float,
+                       vot: float,
                        factors: Dict[str, float] = None,
                        ) -> np.array:
     """Calculate the generalised cost for rail in minutes.
@@ -509,7 +509,7 @@ def gen_cost_rail_mins(matrices: Dict[str, np.array],
         - ride: the in-vehicle time, in minutes;
         - fare: the fare, in pence; and
         - num_int: the number of interchanges.
-    vt : float
+    vot : float
         Value of time in pence per minute.
     factors : Dict[str, float], optional
         The weighting factors for walk and wait matrices and the interchange
@@ -542,7 +542,7 @@ def gen_cost_rail_mins(matrices: Dict[str, np.array],
         matrices["walk"]
         + matrices["wait"]
         + matrices["ride"]
-        + (matrices["fare"] / vt)
+        + (matrices["fare"] / vot)
         + (matrices["num_int"] * inter_factor)
     )
 
@@ -645,7 +645,7 @@ def get_costs(cost_file: Path,
     total_zeros = (costs[cost_cols] <= 0).all(axis=1).sum()
     print(
         f"{total_zeros} ({total_zeros / len(costs):.2%}) "
-        "OD pairs have 0 in all cost values"
+        "OD pairs are 0 for {mode} for costs"
     )
 
     # Convert zone system if required
@@ -722,26 +722,20 @@ def gen_cost_mode(costs: Union[pd.DataFrame, float],
     ).values
 
     if mode == "car":
-        gc = gen_cost_car_mins(
-            {i: cost_to_array(i) for i in ("time", "dist", "toll")}, **kwargs
-        )
+        gc = gen_cost_car_mins({i: cost_to_array(i) for i in ("time", "dist", "toll")}, **kwargs)
     elif mode == "rail":
-        gc = gen_cost_rail_mins(
-            {
-                i: cost_to_array(i)
-                for i in ("walk", "wait", "ride", "fare", "num_int")
-            },
-            **kwargs,
-        )
+        gc = gen_cost_rail_mins({
+            i: cost_to_array(i)
+            for i in ("walk", "wait", "ride", "fare", "num_int")
+        }, **kwargs)
     else:
         gc = costs
     return gc
 
 
-def calculate_gen_costs(
-    costs: Dict[str, Union[pd.DataFrame, float]],
-    gc_params: Dict[str, Dict[str, float]],
-) -> Dict[str, Union[np.array, float]]:
+def calculate_gen_costs(costs: Dict[str, Union[pd.DataFrame, float]],
+                        gc_params: Dict[str, Dict[str, float]],
+                        ) -> Dict[str, Union[np.array, float]]:
     """Calculate the generalised costs for rail, car, bus, active and no-travel.
 
     Generalised cost is a scalar for bus, active and no-travel, will be set

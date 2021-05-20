@@ -94,15 +94,11 @@ class TestGenCostCarMins:
     def test_different_shapes(self):
         """Test that the correct error is raised if matrices aren't the same shape. """
         with pytest.raises(ValueError) as e:
-            gc.gen_cost_car_mins(
-                {
-                    "time": self.TIME_MAT,
-                    "dist": self.DIST_MAT,
-                    "toll": np.zeros((3, 3)),
-                },
-                self.VC,
-                self.VT,
-            )
+            gc.gen_cost_car_mins({
+                "time": self.TIME_MAT,
+                "dist": self.DIST_MAT,
+                "toll": np.zeros((3, 3)),
+            }, self.VC, self.VT)
         msg = (
             "Matrices are not all the same shape: "
             "time = (2, 2), dist = (2, 2), toll = (3, 3)"
@@ -111,15 +107,11 @@ class TestGenCostCarMins:
 
     def test_calculation(self):
         """Test that the calculation produces the correct values. """
-        test = gc.gen_cost_car_mins(
-            {
-                "time": self.TIME_MAT,
-                "dist": self.DIST_MAT,
-                "toll": self.TOLL_MAT,
-            },
-            self.VC,
-            self.VT,
-        )
+        test = gc.gen_cost_car_mins({
+            "time": self.TIME_MAT,
+            "dist": self.DIST_MAT,
+            "toll": self.TOLL_MAT,
+        }, self.VC, self.VT)
         answer = np.array(
             [
                 [2.905002543443918, 2.9040025908372824],

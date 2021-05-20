@@ -57,7 +57,7 @@ MODE_ZONE_SYSTEM = {
 OTHER_MODES = ["bus", "active", "no_travel"]
 
 # Default factors for rail GC calculation
-RAIL_GC_FACTORS = {"walk": 1.5, "wait": 2, "interchange_penalty": 5}
+RAIL_GC_FACTORS = {"walk": 2, "wait": 2, "interchange_penalty": 5}
 
 # Expected name of zone system lookup files (found in translation folder)
 ZONE_LOOKUP_NAME = "{from_zone}_to_{to_zone}.csv"
