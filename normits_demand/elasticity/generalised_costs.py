@@ -67,6 +67,7 @@ class CostBuilder:
                  cost_adj_path: nd.PathLike,
 
                  # Parameters
+                 base_year: int,
                  years: List[int],
                  modes: List[str] = None,
                  purposes: List[str] = None,
@@ -99,6 +100,7 @@ class CostBuilder:
             )
 
         # Parameters
+        self.base_year = base_year
         self.years = valid_years
         self.years_str = [str(x) for x in valid_years]
         self.modes = modes
@@ -204,7 +206,8 @@ class CostBuilder:
             raise ValueError(msg + f" from: {self.vot_voc_path.name}")
 
         # Grab all the wanted in_file from the file
-        for yr, m, p in itertools.product(self.years_str, self.modes, self.purposes):
+        years = [str(self.base_year)] + self.years_str
+        for yr, m, p in itertools.product(years, self.modes, self.purposes):
             # Get the rows for these parameters
             mask = (
                 (in_file["yr"] == yr)
@@ -378,9 +381,11 @@ def _average_matrices(matrices: Dict[str, np.array],
     ----------
     matrices : Dict[str, np.array]
         Matrices to calculate averages.
+
     expected : List[str]
         List of names of matrices to expect, will raise KeyError if any
         values in this list aren't present as keys in `matrices`.
+
     weights : np.array, optional
         Array for calculating the weighted average of the input matrices,
         by default None. If None then the mean of the input matrices will
@@ -547,25 +552,28 @@ def gen_cost_rail_mins(matrices: Dict[str, np.array],
     )
 
 
-def gen_cost_elasticity_mins(
-    elasticity: float,
-    gen_cost: np.array,
-    cost: np.array,
-    demand: np.array,
-    cost_factor: float = None,
-) -> float:
+def gen_cost_elasticity_mins(elasticity: float,
+                             gen_cost: np.array,
+                             cost: np.array,
+                             demand: np.array,
+                             cost_factor: float = None,
+                             ) -> float:
     """Calculate the weighted average generalised cost elasticity.
 
     Parameters
     ----------
     elasticity : float
         Implied elasticity value.
+
     gen_cost : np.array
         Generalised cost in minutes.
+
     cost : np.array
         Cost in either minutes or monetary units.
+
     demand : np.array
         Demand for calculating the weighted average.
+
     cost_factor : float, optional
         Factor to convert cost into minutes, if None (default)
         uses a factor of 1.0.
@@ -575,11 +583,16 @@ def gen_cost_elasticity_mins(
     float
         The generalised cost elasticity in minutes.
     """
+    # Calculate the weighted average for gc cost
     averages = _average_matrices(
-        {"gc": gen_cost, "cost": cost}, ["gc", "cost"], weights=demand
+        {"gc": gen_cost, "cost": cost},
+        ["gc", "cost"],
+        weights=demand,
     )
+
     if cost_factor is None:
         cost_factor = 1.0
+
     return elasticity * (averages["gc"] / (averages["cost"] * cost_factor))
 
 
@@ -695,8 +708,10 @@ def gen_cost_mode(costs: Union[pd.DataFrame, float],
     ----------
     costs : Union[pd.DataFrame, float]
         Cost dataframe, or value, for given mode.
+
     mode : str
         Name of the mode GC is being calculated for.
+
     kwargs : Keyword Arguments
         Passed to `gen_cost_car_mins` or `gen_cost_rail_mins`
         functions if `mode` is "car" or "rail", respectively,

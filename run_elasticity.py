@@ -191,12 +191,17 @@ def initialise():
 
 def main():
     """Runs the elasticity model using parameters from the config file."""
+
+    # TODO(BT): Add as a param to the elasticity
+    base_year = 2018
+
     input_folders, input_files, output_folder, years = get_inputs()
     elast_model = nd.ElasticityModel(
-        input_folders,
-        input_files,
-        output_folder,
-        years,
+        input_folders=input_folders,
+        input_files=input_files,
+        output_folders=output_folder,
+        output_years=years,
+        base_year=base_year,
     )
     elast_model.apply_all()
 

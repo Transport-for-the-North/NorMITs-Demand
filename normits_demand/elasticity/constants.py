@@ -36,7 +36,7 @@ COST_LOOKUP = {
 # Lookup for the elasticity types and what modes/costs they affect
 GC_ELASTICITY_TYPES = {
     "car_journey_time": ("car", "time"),
-    "car_fuel_cost": ("car", "voc"),     # Is this used anywhere??
+    "car_fuel_cost": ("car", "voc"),     # Is this used anywhere?? SHOULD NOT BEEE!
     "rail_fare": ("rail", "fare"),
     "rail_ivtt": ("rail", "ride"),
     "bus_fare": ("bus", "fare"),
