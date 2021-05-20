@@ -299,13 +299,7 @@ class TestGetCosts:
         mode : str
             Which mode to test, either car or rail.
         """
-        test = gc.get_costs(
-            costs[0][mode],
-            mode,
-            zone_system,
-            costs[1],
-            self.NOHAM_DEMAND,
-        )
+        test = gc.get_costs(costs[0][mode], mode, zone_system, costs[1], self.NOHAM_DEMAND)
         pd.testing.assert_frame_equal(
             test, self.CONVERTED_COSTS[mode], check_dtype=False
         )

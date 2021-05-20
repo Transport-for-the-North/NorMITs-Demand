@@ -1,6 +1,6 @@
 [input_folders]
 elasticity = I:/NorMITs Demand\import\elasticities
-translation = I:/NorMITs Demand\import\zone_translation\no_overlap
+translation = I:/NorMITs Demand\import\zone_translation\one_to_one
 rail_demand = I:/NorMITs Demand\norms\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices
 car_demand = I:/NorMITs Demand\noham\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices
 rail_costs = I:/NorMITs Demand\import\norms\costs\elasticity_model_format

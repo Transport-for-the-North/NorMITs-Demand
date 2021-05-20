@@ -583,27 +583,30 @@ def gen_cost_elasticity_mins(
     return elasticity * (averages["gc"] / (averages["cost"] * cost_factor))
 
 
-def get_costs(
-    cost_file: Path,
-    mode: str,
-    zone_system: str,
-    zone_translation_folder: Path,
-    demand: pd.DataFrame = None,
-) -> pd.DataFrame:
+def get_costs(cost_file: Path,
+              mode: str,
+              zone_system: str,
+              zone_translation_folder: Path,
+              translation_weights: pd.DataFrame = None,
+              ) -> pd.DataFrame:
     """Reads the given cost file, expected columns are in `COST_LOOKUP`.
 
     Parameters
     ----------
     cost_file : Path
         Path to the CSV file containing cost data.
+
     mode : str
         The mode of the costs, either rail or car.
+
     zone_system : str
         The zone system of the costs, the cost will be translated
         to the `COMMON_ZONE_SYSTEM` if required.
+
     zone_translation_folder : Path
         Path to the folder containing the zone translation lookups.
-    demand : pd.DataFrame, optional
+
+    translation_weights : pd.DataFrame, optional
         Relevant demand matrix (square format) for calculating
         weight average cost when converting between zone systems,
         only required if `zone_system` != `COMMON_ZONE_SYSTEM`.
@@ -618,17 +621,24 @@ def get_costs(
     ValueError
         If any expected columns are missing.
     """
+    # Init
     mode = mode.lower()
+
+    # Try to load costs - let user know which columns are missing if cant
     try:
         costs = pd.read_csv(cost_file, usecols=ec.COST_LOOKUP[mode].values())
     except ValueError as e:
         loc = str(e).find("columns expected")
         e_str = str(e)[loc:] if loc != -1 else str(e)
         raise ValueError(f"Columns missing from {mode} cost, {e_str}") from e
+
+    # Rename columns to standard format across modes
     costs.rename(
         columns={v: k for k, v in ec.COST_LOOKUP[mode].items()},
         inplace=True,
     )
+
+    # Figure out the number of zeroes in the costs
     cost_cols = costs.columns.tolist()
     cost_cols.remove("origin")
     cost_cols.remove("destination")
@@ -640,29 +650,38 @@ def get_costs(
 
     # Convert zone system if required
     if zone_system != ec.COMMON_ZONE_SYSTEM:
+        # Get the translation
         lookup = du.get_zone_translation(
-            zone_translation_folder,
-            zone_system,
-            ec.COMMON_ZONE_SYSTEM,
+            import_dir=zone_translation_folder,
+            from_zone=zone_system,
+            to_zone=ec.COMMON_ZONE_SYSTEM,
             return_dataframe=True,
         )
-        if not isinstance(demand, pd.DataFrame):
+
+        # Check that weights are the right type
+        if not isinstance(translation_weights, pd.DataFrame):
             raise TypeError(
-                f"'demand' is '{type(demand).__name__}', expected 'DataFrame'"
+                "'demand' is '%s', expected 'DataFrame'"
+                % type(translation_weights).__name__
             )
+
+        # Translate with weights!
+        zone_systems = [zone_system, ec.COMMON_ZONE_SYSTEM]
+        zone_cols = ["%s_zone_id" % x for x in zone_systems]
         costs, _ = zt.translate_matrix(
-            costs,
-            lookup,
-            [f"{zone_system}_zone_id", f"{ec.COMMON_ZONE_SYSTEM}_zone_id"],
+            matrix=costs,
+            lookup=lookup,
+            lookup_cols=zone_cols,
             square_format=False,
             zone_cols=["origin", "destination"],
             aggregation_method="weighted_average",
-            weights=zt.square_to_list(demand),
+            weights=zt.square_to_list(translation_weights),
         )
 
     # Convert origin/destination columns to integers
     for c in ("origin", "destination"):
         costs[c] = pd.to_numeric(costs[c], downcast="integer")
+
     return costs.sort_values(["origin", "destination"])
 
 

@@ -339,25 +339,30 @@ class ElasticityModel:
         needed_mats = cost_changes["adj_type"].unique().tolist()
         constraint_mats = eu.get_constraint_mats(path, needed_mats)
 
-        (
-            base_demand,
-            rail_ca_split,
-            car_reverse,
-            car_original,
-        ) = self._get_demand(demand_params)
-        print(base_demand)
-        print(rail_ca_split)
-        print(car_reverse)
-        print(car_original)
+        # ## LOAD IN DEMAND FOR THIS SEGMENT ## #
+        # common format and retain the translations to get back to original formats
+        ret_vals = self._get_demand(demand_params)
+        base_demand = ret_vals[0]
+        rail_ca_split_factors = ret_vals[1]
+        car_reverse_translation = ret_vals[2]
+        car_original_mat = ret_vals[3]
+
+        # ## CALCULATE GC FOR THIS SEGMENT ## #
+        # Load in a common format, weight by demand where translations are needed
+        translation_weights = {
+            "car": car_original_mat,
+            "rail": base_demand['rail'],
+        }
+        base_costs = self._get_costs(
+            purpose=demand_params["purpose"],
+            translation_weights=translation_weights
+        )
+        del car_original_mat
+
+        print(base_costs)
         exit()
 
-
-        base_costs = self._get_costs(
-            demand_params["purpose"], {"car": car_original}
-        )
-        del car_original
-
-        # NOT BASE YEAR, base for this forecast year
+        # GC for each mode before any adjustments have been made to components
         base_gc = gc.calculate_gen_costs(base_costs, gc_params)
 
         # Loop setup
@@ -402,7 +407,7 @@ class ElasticityModel:
 
 
         # Split rail demand back into CA/NCA
-        for nm, df in rail_ca_split.items():
+        for nm, df in rail_ca_split_factors.items():
             adjusted_demand[nm] = adjusted_demand["rail"] * df
         total_rail = adjusted_demand["ca1"] + adjusted_demand["ca2"]
         if not np.array_equal(adjusted_demand["rail"], total_rail):
@@ -424,7 +429,7 @@ class ElasticityModel:
         adjusted_demand.pop("rail")
 
         # Write demand output
-        self._write_demand(adjusted_demand, demand_params, car_reverse)
+        self._write_demand(adjusted_demand, demand_params, car_reverse_translation)
         return adjusted_demand
 
     def _read_demand_matrix(self,
@@ -619,10 +624,11 @@ class ElasticityModel:
         demand.update(dict.fromkeys(ec.OTHER_MODES, 1.0))
         return demand, rail_ca_split_factors, car_reverse, car_original
 
-    def _get_costs(
-        self, purpose: int, demand: Dict[str, pd.DataFrame]
-    ) -> Dict[str, pd.DataFrame]:
-        """Read the cost files for each mode in `MODE_ZONE_SYSTEM`.
+    def _get_costs(self,
+                   purpose: int,
+                   translation_weights: Dict[str, pd.DataFrame],
+                   ) -> Dict[str, pd.DataFrame]:
+        """Read the cost files for each mode in `ec.MODE_ZONE_SYSTEM`.
 
         Doesn't get the costs for Bus, Active or Non-travel modes as these
         are defined as cost change in the elasticity calculations.
@@ -632,7 +638,7 @@ class ElasticityModel:
         purpose : int
             Purpose ID to get the costs for.
 
-        demand : Dict[str, pd.DataFrame]
+        translation_weights : Dict[str, pd.DataFrame]
             Demand to as weights for zone translation.
 
         Returns
@@ -640,16 +646,24 @@ class ElasticityModel:
         Dict[str, pd.DataFrame]
             The costs for each mode which is present in `MODE_ID`.
         """
-        costs = {}
+        costs = dict()
         for m, zone in ec.MODE_ZONE_SYSTEM.items():
-            path = self.cost_dirs[m] / ec.COST_NAMES.format(
-                mode=m, purpose=purpose
-            )
+            # Get the path for this mode and purpose
+            fname = ec.COST_NAMES.format(mode=m, purpose=purpose)
+            path = self.cost_dirs[m] / fname
+
+            # Load in the costs, translate if needed
             costs[m] = gc.get_costs(
-                path, m, zone, self.zone_translation_folder, demand.get(m)
+                path,
+                m,
+                zone,
+                self.zone_translation_folder,
+                translation_weights.get(m)
             )
 
+        # Add in Bus, Active or Non-travel as 1.0 as default
         costs.update(dict.fromkeys(ec.OTHER_MODES, 1.0))
+
         return costs
 
     def _write_demand(self,

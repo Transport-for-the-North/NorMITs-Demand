@@ -11,6 +11,7 @@ CONSTRAINTS_FOLDER = "constraint_matrices"
 
 # Cost file name
 COST_NAMES = "{mode}_costs_p{purpose}.csv"
+
 # Expected columns in the cost files
 COST_LOOKUP = {
     "rail": {
