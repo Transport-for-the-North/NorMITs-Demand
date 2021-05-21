@@ -853,6 +853,10 @@ def calculate_adjustment(demand: Dict[str, pd.DataFrame],
             f"expected one of {list(ec.GC_ELASTICITY_TYPES.keys())}"
         )
 
+    # BACKLOG: REMOVE MEMEEEEEE
+    if elasticity_type != 'car_journey_time':
+        return demand
+
     chg_mode, cost_type = ec.GC_ELASTICITY_TYPES[elasticity_type]
 
     # Filter only elasticities involving the mode that changes
@@ -860,9 +864,7 @@ def calculate_adjustment(demand: Dict[str, pd.DataFrame],
         elasticities["changing_mode"].str.lower() == chg_mode
     ]
 
-    # The cost and cost_factors are dependant on the cost that changes
-    ############################################################
-
+    # Figure out the GC ratio of change
     if cost_type != "gc":
         # Adjust the costs of the changing mode
         adj_cost, _ = adjust_cost(
@@ -874,7 +876,11 @@ def calculate_adjustment(demand: Dict[str, pd.DataFrame],
         )
 
         # calculate the new adjusted GC
-        adj_gc = gc.gen_cost_mode(adj_cost, chg_mode, **future_scalar_costs)
+        adj_gc = gc.gen_cost_mode(
+            adj_cost,
+            chg_mode,
+            **future_scalar_costs.get(chg_mode, {})
+        )
 
         # Set GC ratio to 1 (no demand adjustment) wherever
         # base GC <= 0, as cost shouldn't be 0 (or negative)
@@ -884,6 +890,7 @@ def calculate_adjustment(demand: Dict[str, pd.DataFrame],
             where=base_year_gc[chg_mode] > 0,
             out=np.full_like(adj_gc, 1.0),
         )
+
     else:
         adj_cost = base_costs[chg_mode].copy()
         adj_gc = base_year_gc[chg_mode].copy()
@@ -921,7 +928,11 @@ def calculate_adjustment(demand: Dict[str, pd.DataFrame],
             # using cost constraint to only change certain cells
             gc_elast = elast
 
-        demand_adjustment[aff_mode] *= np.power(
+        # Cannot do *= here as numpy won't broadcast types if we do
+        # SOunds like bad practice. Need to figure out how the return is used!
+        # Problem: when aff mode is scalar and chg mode is array gc_ratio
+        # taking scalar * by array = array. Cannot assign array to scalar space
+        demand_adjustment[aff_mode] = demand_adjustment[aff_mode] * np.power(
             gc_ratio,
             gc_elast,
             out=np.zeros_like(gc_ratio),
