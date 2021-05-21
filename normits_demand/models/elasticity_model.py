@@ -35,6 +35,7 @@ import normits_demand as nd
 from normits_demand import constants as consts
 
 from normits_demand.utils import general as du
+from normits_demand.utils import file_ops
 
 from normits_demand.models import efs_zone_translator as zt
 
@@ -269,6 +270,7 @@ class ElasticityModel:
                         base_year_gc_params=scalar_costs[str(self.base_year)][uc],
                         future_gc_params=scalar_costs[yr][uc],
                         cost_changes=cost_changes.loc[cost_changes["yr"] == yr],
+                        fname_suffix='_int',
                     )
 
                     # Try to apply the elasticity
@@ -286,6 +288,7 @@ class ElasticityModel:
                     #     name = du.get_dist_name(**demand_seg_params)
                     #     print(f"{name} - {e.__class__.__name__}: {e}")
                     pbar.update(1)
+
             pbar.close()
 
     def apply_elasticities(self,
@@ -294,6 +297,7 @@ class ElasticityModel:
                            base_year_gc_params: Dict[str, Dict[str, float]],
                            future_gc_params: Dict[str, Dict[str, float]],
                            cost_changes: pd.DataFrame,
+                           fname_suffix: str = None,
                            ) -> Dict[str, pd.DataFrame]:
         """Performs elasticity calculation for a single EFS segment.
 
@@ -339,6 +343,10 @@ class ElasticityModel:
             expects the following columns: e_type,
             adj_type and change.
 
+        fname_suffix:
+            An optional suffix to add onto the filename when searching for
+            the demand to read in.
+
         Returns
         -------
         Dict[str, pd.DataFrame]
@@ -368,7 +376,7 @@ class ElasticityModel:
 
         # ## LOAD IN DEMAND FOR THIS SEGMENT ## #
         # common format and retain the translations to get back to original formats
-        ret_vals = self._get_demand(demand_params)
+        ret_vals = self._get_demand(demand_params, fname_suffix=fname_suffix)
         base_demand = ret_vals[0]
         rail_ca_split_factors = ret_vals[1]
         car_reverse_translation = ret_vals[2]
@@ -400,7 +408,7 @@ class ElasticityModel:
 
         # Loop through cost changes file and calculate demand adjustment
         for elast_type, cstr_name, change in iterator:
-            adj_dem = calculate_adjustment(
+            adj_dem = calculate_own_cost_adjustment(
                 demand=base_demand,
                 base_costs=base_costs,
                 base_year_gc=base_year_gc,
@@ -415,9 +423,6 @@ class ElasticityModel:
             for mode in adj_dem.keys():
                 demand_adjustment[mode].append(adj_dem[mode])
 
-        print(cost_changes)
-        print(demand_adjustment)
-        exit()
         # Multiply base demand by adjustments for rail and car and convert to dataframe
         adjusted_demand = dict()
         for mode, base_vals in base_demand.items():
@@ -432,11 +437,15 @@ class ElasticityModel:
             full_adjustment = np.prod(demand_adjustment[mode], axis=0)
             adjusted_demand[mode] = base_vals * full_adjustment
 
-
         # Split rail demand back into CA/NCA
         for nm, df in rail_ca_split_factors.items():
             adjusted_demand[nm] = adjusted_demand["rail"] * df
-        total_rail = adjusted_demand["ca1"] + adjusted_demand["ca2"]
+
+        # Check that the split demand is equal to the pre-split demand
+        ca_names = list(rail_ca_split_factors.keys())
+        ca_demand = [adjusted_demand[x] for x in ca_names]
+        total_rail = functools.reduce(operator.add, ca_demand)
+
         if not np.array_equal(adjusted_demand["rail"], total_rail):
             # Need to get maximum twice to get a single float
             diff = np.max(
@@ -456,7 +465,14 @@ class ElasticityModel:
         adjusted_demand.pop("rail")
 
         # Write demand output
-        self._write_demand(adjusted_demand, demand_params, car_reverse_translation)
+        self._write_demand(
+            adjusted_demand=adjusted_demand,
+            demand_params=demand_params,
+            car_keys=['car'],
+            rail_keys=ca_names,
+            car_reverse=car_reverse_translation,
+            fname_suffix=fname_suffix,
+        )
         return adjusted_demand
 
     def _read_demand_matrix(self,
@@ -494,7 +510,7 @@ class ElasticityModel:
         # BACKLOG: Update elasticity to use new zone translations
         #  labels: elasticity, zone translation
         # Init
-        demand = pd.read_csv(path, index_col=0)
+        demand = file_ops.read_df(path, index_col=0, find_similar=True)
         translation_factors = np.ones(demand.shape)
         orig_mat = demand.copy()
 
@@ -547,7 +563,8 @@ class ElasticityModel:
         return demand, translation_factors, orig_mat
 
     def _get_demand(self,
-                    demand_params: Dict[str, str]
+                    demand_params: Dict[str, str],
+                    fname_suffix: str = None,
                     ) -> Tuple[Dict[str, pd.DataFrame],
                                Dict[str, np.array],
                                pd.DataFrame,
@@ -559,6 +576,10 @@ class ElasticityModel:
         demand_params : Dict[str, str]
             Parameters to be passed to `get_dist_name` function
             for getting the demand file name.
+
+        fname_suffix:
+            An optional suffix to add onto the filename when searching for
+            the demand to read in
 
         Returns
         -------
@@ -597,6 +618,7 @@ class ElasticityModel:
                 **demand_params,
                 mode=str(ec.MODE_ID[m]),
                 car_availability=str(ca),
+                suffix=fname_suffix,
                 csv=True,
             )
             path = self.demand_dirs[m] / fname
@@ -637,6 +659,7 @@ class ElasticityModel:
         fname = du.get_dist_name(
             **demand_params,
             mode=str(ec.MODE_ID[m]),
+            suffix=fname_suffix,
             csv=True
         )
         path = self.demand_dirs[m] / fname
@@ -696,7 +719,10 @@ class ElasticityModel:
     def _write_demand(self,
                       adjusted_demand: Dict[str, pd.DataFrame],
                       demand_params: Dict[str, str],
+                      car_keys: List[str],
+                      rail_keys: List[str],
                       car_reverse: pd.DataFrame,
+                      fname_suffix: str = None,
                       ) -> None:
         """Write the adjusted demand to CSV files.
 
@@ -708,15 +734,22 @@ class ElasticityModel:
         ----------
         adjusted_demand : Dict[str, pd.DataFrame]
             Dictionary containing the adjusted demand for each mode.
+
         demand_params : Dict[str, str]
             The demand parameters to be passed to `get_dist_name` for
             creating the output filename.
+
         car_reverse : pd.DataFrame
             The lookup and splitting factors for converting car demand
             back to the original zone system, with the following columns:
             [original zone - origin, original zone - destination,
             common zone system - origin, common zone system
             - destination, splitting factor].
+
+        fname_suffix:
+            An optional suffix to add onto the filename when searching for
+            the demand to read in
+
         """
         if car_reverse is not None:
             # Convert car demand back to original zone system
@@ -762,20 +795,29 @@ class ElasticityModel:
 
         # Write the demand for car and rail for both
         # car availabilities (ca1 and ca2)
-        for m in ("car", "ca1", "ca2"):
-            ca = None
-            mode = m
-            if m != "car":
-                ca = m[2]
-                mode = "rail"
+        for k in car_keys:
+            mode = 'car'
             folder = self.output_folder[mode]
             name = du.get_dist_name(
                 **demand_params,
                 mode=str(ec.MODE_ID[mode]),
-                car_availability=ca,
+                suffix=fname_suffix,
                 csv=True,
             )
-            du.safe_dataframe_to_csv(adjusted_demand[m], folder / name)
+            du.safe_dataframe_to_csv(adjusted_demand[k], folder / name)
+
+        for k in rail_keys:
+            mode = 'rail'
+            ca = k
+            folder = self.output_folder[mode]
+            name = du.get_dist_name(
+                **demand_params,
+                mode=str(ec.MODE_ID[mode]),
+                car_availability=str(ca),
+                suffix=fname_suffix,
+                csv=True,
+            )
+            du.safe_dataframe_to_csv(adjusted_demand[k], folder / name)
 
         # Write other modes to a single file
         folder = self.output_folder["others"]
@@ -791,16 +833,18 @@ class ElasticityModel:
 
 
 ##### FUNCTIONS #####
-def calculate_adjustment(demand: Dict[str, pd.DataFrame],
-                         base_costs: Dict[str, pd.DataFrame],
-                         base_year_gc: Dict[str, pd.DataFrame],
-                         elasticities: pd.DataFrame,
-                         elasticity_type: str,
-                         cost_constraint: np.array,
-                         cost_change: float,
-                         future_scalar_costs: Dict[str, Dict[str, float]],
-                         ) -> Dict[str, np.array]:
+def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
+                                  base_costs: Dict[str, pd.DataFrame],
+                                  base_year_gc: Dict[str, pd.DataFrame],
+                                  elasticities: pd.DataFrame,
+                                  elasticity_type: str,
+                                  cost_constraint: np.array,
+                                  cost_change: float,
+                                  future_scalar_costs: Dict[str, Dict[str, float]],
+                                  ) -> Dict[str, np.array]:
     """Calculate the demand adjustment for a single cost change.
+
+    OWN COST
 
     Parameters
     ----------
@@ -853,10 +897,6 @@ def calculate_adjustment(demand: Dict[str, pd.DataFrame],
             f"expected one of {list(ec.GC_ELASTICITY_TYPES.keys())}"
         )
 
-    # BACKLOG: REMOVE MEMEEEEEE
-    if elasticity_type != 'car_journey_time':
-        return demand
-
     chg_mode, cost_type = ec.GC_ELASTICITY_TYPES[elasticity_type]
 
     # Filter only elasticities involving the mode that changes
@@ -882,14 +922,17 @@ def calculate_adjustment(demand: Dict[str, pd.DataFrame],
             **future_scalar_costs.get(chg_mode, {})
         )
 
-        # Set GC ratio to 1 (no demand adjustment) wherever
-        # base GC <= 0, as cost shouldn't be 0 (or negative)
+        # Calculate the ratio of chance in GC
         gc_ratio = np.divide(
             adj_gc,
             base_year_gc[chg_mode],
             where=base_year_gc[chg_mode] > 0,
             out=np.full_like(adj_gc, 1.0),
         )
+
+        # Set GC ratio to 1 (no demand adjustment) wherever
+        # base GC <= 0, as cost shouldn't be 0 (or negative)
+        gc_ratio = np.where(gc_ratio <= 0, 1, gc_ratio)
 
     else:
         adj_cost = base_costs[chg_mode].copy()
@@ -903,18 +946,18 @@ def calculate_adjustment(demand: Dict[str, pd.DataFrame],
         elasticity_type,
     )
 
-    # Initialise the adjustmmnt matrices for each affected mode
+    # Initialise the adjustment matrices for each affected mode
     cols = ["affected_mode", "elast_value"]
     demand_adjustment = {
         m.lower(): np.full_like(demand[m.lower()], 1.0)
         for m in elasticities[cols[0]].unique()
     }
 
-    # Calculate the elasticity adjustments
+    # Calculate the own cost elasticity adjustments
     for aff_mode, elast in elasticities[cols].itertuples(index=False, name=None):
         aff_mode = aff_mode.lower()
         if cost_type != "gc":
-            # Calculate the generalised cost of the current elasticity
+            # Calculate the demand weighted generalised cost of the elasticity
             gc_elast = gc.gen_cost_elasticity_mins(
                 elast,
                 adj_gc,
@@ -929,7 +972,7 @@ def calculate_adjustment(demand: Dict[str, pd.DataFrame],
             gc_elast = elast
 
         # Cannot do *= here as numpy won't broadcast types if we do
-        # SOunds like bad practice. Need to figure out how the return is used!
+        # Sounds like bad practice. Need to figure out how the return is used!
         # Problem: when aff mode is scalar and chg mode is array gc_ratio
         # taking scalar * by array = array. Cannot assign array to scalar space
         demand_adjustment[aff_mode] = demand_adjustment[aff_mode] * np.power(
@@ -946,6 +989,8 @@ def adjust_cost(base_costs: Union[pd.DataFrame, float],
                 gc_params: Dict[str, float],
                 elasticity_type: str,
                 cost_change: float,
+                base_year: int,
+                future_year: int,
                 constraint_matrix: np.array = None,
                 ) -> Tuple[pd.DataFrame, Dict[str, float]]:
     """Adjust the cost matrices or parameters for given `elasticity_type`.
@@ -994,10 +1039,18 @@ def adjust_cost(base_costs: Union[pd.DataFrame, float],
     # Other modes have scalar costs and no GC params so are just
     # multiplied by change
     if not isinstance(base_costs, pd.DataFrame):
-        return base_costs * cost_change, gc_params
+        return base_costs * cost_change * constraint_matrix, gc_params
 
     # Make sure costs are sorted so that the constraint matrix lines up correctly
     adj_cost = base_costs.copy().sort_values(["origin", "destination"])
+
+    # TODO(BT): THIS IS A TEST!!
+    # BACKLOG: THIS IS A TEST!!
+    # Adjust time to reflect congestion relative to base
+    # Adjust toll in line with inflation
+    if mode == 'car':
+        adj_cost['time'] *= 1.01 ** (future_year - base_year)
+        adj_cost['toll'] *= 1.02 ** (future_year - base_year)
 
     adj_gc_params = gc_params.copy()
     # If cost component

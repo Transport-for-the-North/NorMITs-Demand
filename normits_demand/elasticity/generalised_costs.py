@@ -572,7 +572,7 @@ def gen_cost_elasticity_mins(elasticity: float,
         Cost in either minutes or monetary units.
 
     demand : np.array
-        Demand for calculating the weighted average.
+        Demand for calculating the demand weighted average.
 
     cost_factor : float, optional
         Factor to convert cost into minutes, if None (default)
