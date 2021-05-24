@@ -245,7 +245,8 @@ def _process_pool_wrapper_kwargs_out_order(fn,
                                            kwargs=None,
                                            process_count=os.cpu_count()-1,
                                            pool_maxtasksperchild=4,
-                                           result_timeout=86400):
+                                           result_timeout=86400,
+                                           ):
     """
     See process_pool_wrapper() for full documentation of this function.
     Sister function with _process_pool_wrapper_kwargs_in_order().

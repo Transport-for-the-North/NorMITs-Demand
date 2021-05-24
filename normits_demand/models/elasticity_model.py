@@ -258,6 +258,7 @@ class ElasticityModel:
                     'base_year_gc_params': scalar_costs[str(self.base_year)][uc],
                     'future_gc_params': scalar_costs[yr][uc],
                     'cost_changes': cost_changes.loc[cost_changes["yr"] == yr],
+                    'future_year': int(yr),
                     'fname_suffix': '_int',
                 })
 
@@ -358,6 +359,7 @@ class ElasticityModel:
                            base_year_gc_params: Dict[str, Dict[str, float]],
                            future_gc_params: Dict[str, Dict[str, float]],
                            cost_changes: pd.DataFrame,
+                           future_year: int,
                            fname_suffix: str = None,
                            ) -> Dict[str, pd.DataFrame]:
         """Performs elasticity calculation for a single EFS segment.
@@ -403,6 +405,14 @@ class ElasticityModel:
             The cost changes to be applied to be applied,
             expects the following columns: e_type,
             adj_type and change.
+
+        base_year:
+            The base year that the base_year_gc_params were created for.
+
+        future_year:
+            The future year that the future_gc_params are related to. This is
+            used, along with base_year to add inflation and congestion
+            to car costs.
 
         fname_suffix:
             An optional suffix to add onto the filename when searching for
@@ -477,7 +487,9 @@ class ElasticityModel:
                 elasticity_type=elast_type,
                 cost_constraint=constraint_mats[cstr_name],
                 cost_change=change,
-                future_scalar_costs=future_gc_params
+                future_scalar_costs=future_gc_params,
+                base_year=self.base_year,
+                future_year=future_year,
             )
 
             # Store all our adjustments to apply later
@@ -902,6 +914,8 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
                                   cost_constraint: np.array,
                                   cost_change: float,
                                   future_scalar_costs: Dict[str, Dict[str, float]],
+                                  base_year: int,
+                                  future_year: int,
                                   ) -> Dict[str, np.array]:
     """Calculate the demand adjustment for a single cost change.
 
@@ -940,6 +954,14 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
         calculations, there should be one set of
         values per mode.
 
+    base_year:
+        The base year that the base_costs were created for.
+
+    future_year:
+        The future year that the cost_change and future_scalar_costs
+        is related to. This is used, along with base_year to add inflation
+        and congestion to car costs.
+
     Returns
     -------
     Dict[str, np.array]
@@ -969,11 +991,13 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
     if cost_type != "gc":
         # Adjust the costs of the changing mode
         adj_cost, _ = adjust_cost(
-            base_costs[chg_mode],
-            future_scalar_costs.get(chg_mode, {}),
-            elasticity_type,
-            cost_change,
-            cost_constraint,
+            base_costs=base_costs[chg_mode],
+            gc_params=future_scalar_costs.get(chg_mode, {}),
+            elasticity_type=elasticity_type,
+            cost_change=cost_change,
+            constraint_matrix=cost_constraint,
+            base_year=base_year,
+            future_year=future_year,
         )
 
         # calculate the new adjusted GC
@@ -1074,6 +1098,14 @@ def adjust_cost(base_costs: Union[pd.DataFrame, float],
     cost_change : float
         The cost change value to apply to `base_costs` or
         `gc_params`.
+
+    base_year:
+        The base year that the base_costs were created for.
+
+    future_year:
+        The future year that the cost_change is related to. This is used,
+        along with base_year to add inflation and congestion to
+        car costs.
 
     constraint_matrix : np.array, optional
         Constraint to be used when adjusting `base_costs`, by
