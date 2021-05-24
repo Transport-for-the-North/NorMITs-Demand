@@ -88,17 +88,6 @@ def convert_correspondence_to_wide(long_correspondence: pd.DataFrame,
     return wide_c
 
 
-def convert_correspondence_to_n_matrix_input(long_c):
-
-    """
-    """
-
-    # dict to be: dict({sector_name: indices})
-    n_matrix_dict = dict()
-
-    return n_matrix_dict
-
-
 def _get_correspondence(translation_folder,
                         start_zoning_system,
                         end_zoning_system,
@@ -358,3 +347,40 @@ def translate_matrices(start_zoning_system,
         )
 
     return translation_report, before_tld_report, after_tld_report
+
+
+def matrix_zone_translation(mat: np.ndarray,
+                            sector_trans_mat: np.ndarray) -> np.ndarray:
+
+    """
+    Much needed function to translate demand from a given matrix shape
+    to another - using a weighted translation.
+
+    mat: ndarray of wide matrix of travel demand, function assumes consecutive
+    zero based indices - ie. if you want indexers you'll have to retain them yourself.
+
+    sector_trans_mat: ndarray of wide matrix in standard many:1 many:many format
+    could be built from convert_correspondence_to_wide.
+    """
+
+    n_mat, n_sec = sector_trans_mat.shape
+
+    # Translate rows
+    t_shape = (n_mat, n_mat, n_sec)
+    a = np.broadcast_to(np.expand_dims(mat, axis=2), t_shape)
+    trans_a = np.broadcast_to(
+        np.expand_dims(sector_trans_mat, axis=1), t_shape)
+    temp = a * trans_a
+
+    # mat is transposed, but we need it this way
+    col_mat = temp.sum(axis=0)
+
+    # Translate cols
+    t_shape = (n_mat, n_sec, n_sec)
+    b = np.broadcast_to(np.expand_dims(col_mat, axis=2), t_shape)
+    trans_b = np.broadcast_to(
+        np.expand_dims(sector_trans_mat, axis=1), t_shape)
+    temp = b * trans_b
+    out_mat = temp.sum(axis=0)
+
+    return out_mat

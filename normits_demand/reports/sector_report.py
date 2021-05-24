@@ -8,13 +8,10 @@ Created on Fri Sep 25 11:34:00 2020
 import os
 
 import pandas as pd
-import numpy as np
 
 from typing import List
 
 import normits_demand as nd
-import normits_demand.utils as nup
-from normits_demand.utils import n_matrix_split as ms
 from normits_demand.matrices import translate_matrices
 import normits_demand.utils.file_ops as fo
 
@@ -79,13 +76,10 @@ class SectorReporter:
 
         self.target_file_types = target_file_types
 
-
-
     def sector_report(self,
-                      sector_type: str = 'ca_sector',
                       ca_report: bool = True,
                       three_sector_report: bool = True,
-                      export: bool = False):
+                      ie_report: bool = True):
 
         """
         sector_type: report requested - takes
@@ -116,184 +110,44 @@ class SectorReporter:
 
         # Apply translation
         mat_sector_reports = dict()
-        # TODO: Assumptions galore - needs to be smarter and better integrated
+        # TODO: Assumes square matrices - needs to be smarter and better integrated
         for tm in target_mats:
 
+            matrix_comp = dict()
             print(tm)
             mat = fo.read_df(os.path.join(self.target_folder, tm))
+            mat = mat.set_index(list(mat)[0])
 
-            mat = mat.rename(columns={list(mat)[0]: 'norms_zone_id'})
+            v_mat = mat.values
 
-            if self.input_type == 'wide_matrix':
+            if ca_report:
+                ca_sr = translate_matrices.matrix_zone_translation(
+                    mat=v_mat,
+                    sector_trans_mat=ca_sectors_2d.values)
+                ca_sr = pd.DataFrame(ca_sr,
+                                     index=ca_sectors_2d.columns,
+                                     columns=ca_sectors_2d.columns)
+                matrix_comp.update({'ca_sectors': ca_sr})
 
-                """
-                long_data = pd.melt(mat,
-                                    id_vars=list(mat)[0],
-                                    var_name='a_zone',
-                                    value_name='demand',
-                                    col_level=0)
-                                    
-                sector_report = 
-                """
+            if three_sector_report:
+                three_sr = translate_matrices.matrix_zone_translation(
+                    mat=v_mat,
+                    sector_trans_mat=three_sectors_2d.values)
+                three_sr = pd.DataFrame(three_sr,
+                                        index=three_sectors_2d.columns,
+                                        columns=three_sectors_2d.columns)
+                matrix_comp.update({'three_sectors': three_sr})
 
+            if ie_report:
+                ie_sr = translate_matrices.matrix_zone_translation(
+                    mat=v_mat,
+                    sector_trans_mat=ie_2d.values)
+                ie_sr = pd.DataFrame(ie_sr,
+                                     index=ie_2d.columns,
+                                     columns=ie_2d.columns)
 
+                matrix_comp.update({'ie_sectors': ie_sr})
 
-            elif self.input_type == 'long_matrix':
-                # TODO: Translate to wide, do mat wide trans
-                print('Can\'t do these yet')
-            elif self.input_type == 'vector':
-                # TODO: Do simple vector trans by required subset(s)
-                print('Can\'t do these yet')
+            mat_sector_reports.update({tm: matrix_comp})
 
-
-
-        # Export
-
-        sector_report = ''
-
-        return sector_report
-
-    def _sectors_join_method(self,
-                             long_data):
-
-        """
-        Method for joining sectors length wise
-        Expects format 'p_zone', 'a_zone', 'demand'
-
-        """
-
-        long_data = long_data.merge(self.sectors,
-                                    how='left',
-                                    on=self.zone_id)
-
-        long_data = long_data.reindex(
-            ['ca_sector_2020_zone_id', 'a_zone', 'demand'], axis=1)
-        long_data = long_data.groupby(['ca_sector_2020_zone_id', 'a_zone']).sum().reset_index()
-
-        long_data = long_data.rename(columns={'ca_sector_2020_zone_id': 'sector_p',
-                                              'a_zone': self.zone_id})
-        long_data['norms_zone_id'] = long_data[self.zone_id].astype(int)
-
-        left_only = long_data.copy()
-        left_only_sum = left_only.reindex(
-            ['sector_p', 'demand'], axis=1).groupby('sector_p').sum().reset_index()
-
-        long_data = long_data.merge(self.sectors,
-                                    how='left',
-                                    on=self.zone_id)
-
-        long_data = long_data.reindex(
-            ['sector_p', 'ca_sector_2020_zone_id', 'demand'], axis=1)
-        long_data = long_data.groupby(['sector_p', 'ca_sector_2020_zone_id']).sum().reset_index()
-
-        long_data = long_data.rename(columns={'ca_sector_2020_zone_id': 'sector_a'})
-
-        pivoted_data = pd.pivot(long_data, index='sector_p', columns='sector_a', values='demand')
-
-        return long_data, pivoted_data
-
-    def _matrix_zone_translation(self,
-                                 mat,
-                                 sectors_mat):
-
-        """
-        mat = dataframe of wide matrix, index in first column
-        """
-        mat = mat.set_index(list(mat)[0])
-
-        np_mat = mat.to_numpy()
-        # TODO: do 2d vector trans
-
-        sectors_mat = sectors_mat.values
-
-        zoning_len = sectors_mat.shape[1]
-        sector_len = sectors_mat.shape[-1]
-
-        sectors_cube = np.broadcast_to(
-            sectors_mat, (zoning_len,
-                          zoning_len,
-                          sector_len))
-
-        row_cube = np.zeros(sectors_cube.shape)
-        col_cube = np.zeros(sectors_cube.shape)
-        for i in range(sector_len):
-            multiplier = sectors_cube[:, :, i]
-            # Don't think I need both except to arrive at row totals
-            row_slice = np_mat * multiplier
-            row_cube[:, :, i] = row_slice
-            col_slice = np_mat.T * multiplier
-            col_cube[:, :, i] = col_slice
-
-        row_sum = row_cube.sum(axis=1)  # from
-        row_cols_sum = row_cube.sum(axis=0)
-        rc_test = row_cube*sectors_mat
-
-        col_sum = col_cube.sum(axis=0)  # to
-
-        # Trip end totals
-        row_total = row_sum.sum(axis=0)
-        col_total = col_sum.sum(axis=0)
-
-        for i in range(zoning_len):
-            print(i)
-            sectors_mat
-            row_slice = row_sum[i]
-            col_slice = col_sum[i]
-
-        row_totals = row_sum.sum(axis=0)
-        col_totals = col_sum.sum(axis=0)
-
-"""
-
-for mat in pcu_mats:
-    print(mat)
-    dat = pd.read_csv(os.path.join(od_vehicles,
-                                   mat), header=header)
-    dat_cols = list(dat)
-    
-    # TODO: test input format on list length
-
-    if import_format == 'long':
-        # Make it wide again
-        
-        dat = dat.pivot(index=dat_cols[0], columns=dat_cols[1], values=dat_cols[2]).values
-        
-        audit_in = dat.sum()
-        
-        report = ms.n_matrix_split(dat,
-                                    indices=[north_sectors, scotland_sectors, south_sectors],
-                                    index_names=['1', '2', '3'],
-                                    summarise=True)
-
-    elif import_format == 'wide':
-        dat = dat.drop(list(dat)[0]).values
-
-        report = ms.n_matrix_split(dat,
-                                    indices=[north_sectors,
-                                             scotland_sectors,
-                                             south_sectors],
-                                    index_names=['1', '2', '3'],
-                                    summarise=True)
-
-    row_frame = pd.DataFrame.from_dict(report)
-    
-    audit_out = row_frame['dat'].sum()
-
-    if round(audit_in, 3) == round(audit_out, 3):
-        print('Audit in same as audit out')
-    else:
-        raise Warning('Report total different from in values')
-
-    cols = row_frame['name'].str.split('_to_', expand=True)
-    cols = cols.rename(columns={0: 'from',
-                                1: 'to'})
-    row_frame['from'] = cols['from']
-    row_frame['to'] = cols['to']
-    row_frame=row_frame.drop('name', axis=1).reindex(['from', 'to', 'dat'], axis=1)
-
-    row_frame = row_frame.pivot(index='from', columns='to', values='dat')
-
-    out_name = mat.replace('od', '3_sector_report_od')
-
-    row_frame.to_csv(os.path.join(export, out_name), index=False)
-"""
+        return mat_sector_reports
