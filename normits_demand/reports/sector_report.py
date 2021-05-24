@@ -18,6 +18,7 @@ from normits_demand.utils import n_matrix_split as ms
 from normits_demand.matrices import translate_matrices
 import normits_demand.utils.file_ops as fo
 
+
 class SectorReporter:
     """
     Class to build sector reports from an output demand vector
@@ -224,7 +225,14 @@ class SectorReporter:
             col_cube[:, :, i] = col_slice
 
         row_sum = row_cube.sum(axis=1)  # from
+        row_cols_sum = row_cube.sum(axis=0)
+        rc_test = row_cube*sectors_mat
+
         col_sum = col_cube.sum(axis=0)  # to
+
+        # Trip end totals
+        row_total = row_sum.sum(axis=0)
+        col_total = col_sum.sum(axis=0)
 
         for i in range(zoning_len):
             print(i)
