@@ -266,6 +266,7 @@ class ElasticityModel:
             'total': len(segments) * len(self.years),
             'desc': "Applying elasticities to segments",
             'unit': "segment",
+            'colour': 'green',
         }
 
         # Call the functions

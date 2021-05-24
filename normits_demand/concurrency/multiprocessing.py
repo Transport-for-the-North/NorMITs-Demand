@@ -115,13 +115,18 @@ def wait_for_pool_results(results,  # : List[multiprocessing.pool.AsyncResult],
 
     # Context keeps the pbar tidy
     with du.std_out_err_redirect_tqdm() as orig_stdout:
+        # Additional args for context
+        pbar_kwargs['file'] = orig_stdout
+        pbar_kwargs['dynamic_ncols'] = True
 
-        # Set up an optional progress bar
+        # If no total given, we can add one!
         if 'total' not in pbar_kwargs:
             pbar_kwargs['total'] = n_start_results
 
-        pbar_kwargs['file'] = orig_stdout
-        pbar_kwargs['dynamic_ncols'] = True
+        # Improves time prediction guessing
+        pbar_kwargs['smoothing'] = 0
+
+        # Finally, make to pbar!
         pbar = tqdm.tqdm(**pbar_kwargs)
 
         # Grab all the results as they come in
@@ -173,8 +178,8 @@ def wait_for_pool_results(results,  # : List[multiprocessing.pool.AsyncResult],
             if len(return_results) == n_start_results:
                 got_all_results = True
 
-        # Tidy up before we leave
-        pbar.close()
+    # Tidy up before we leave
+    pbar.close()
 
     return return_results
 
