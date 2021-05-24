@@ -13,6 +13,7 @@ import normits_demand.build.tms_pathing as tms
 
 from normits_demand.reports import reports_audits as ra
 from normits_demand.utils import utils as nup
+from normits_demand.utils import n_matrix_split as ms
 
 # TODO: Object layer
 
@@ -227,7 +228,7 @@ class ExternalModel(tms.TMSPathing):
             external_index = ext_area[ia_name].values - 1
             
             # TODO: Cost direction audit
-            ie_cost = nup.n_matrix_split(
+            ie_cost = ms.n_matrix_split(
                 costs,
                 indices=[internal_index, external_index],
                 index_names=['i', 'e'],
@@ -268,7 +269,7 @@ class ExternalModel(tms.TMSPathing):
             full_pa_a = external_pa_a.copy()
     
             # Do int-ext report
-            ie_report = nup.n_matrix_split(
+            ie_report = ms.n_matrix_split(
                 external_pa_p,
                 indices=[internal_index,
                          external_index],
