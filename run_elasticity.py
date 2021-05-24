@@ -203,9 +203,7 @@ def main():
         output_years=years,
         base_year=base_year,
     )
-    elast_model.apply_all()
-
-
+    elast_model.apply_all_MP()
 
 
 if __name__ == "__main__":

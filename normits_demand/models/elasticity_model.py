@@ -33,12 +33,10 @@ import tqdm
 # Local imports
 import normits_demand as nd
 from normits_demand import constants as consts
-
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
-
 from normits_demand.models import efs_zone_translator as zt
-
+from normits_demand.concurrency import multiprocessing
 from normits_demand.elasticity import utils as eu
 from normits_demand.elasticity import generalised_costs as gc
 from normits_demand.elasticity import constants as ec
@@ -207,6 +205,69 @@ class ElasticityModel:
             raise FileNotFoundError(
                 f"{path_type.capitalize()}s could not be found: {not_dir}"
             )
+
+    def apply_all_MP(self, process_count: int = consts.PROCESS_COUNT):
+        """Performs elasticity calculations for all segments provided.
+
+        Segment information is read from `SEGMENTS_FILE` which is
+        expected to be found in elasticity folder given.
+        """
+        # Read in the cost changes
+        print("Reading in the cost changes...")
+        scalar_costs = self.cost_builder.get_vot_voc()
+        cost_changes = self.cost_builder.get_cost_changes()
+
+        # Read in the segments to loop around
+        segments = eu.read_segments_file(self.import_home / ec.SEGMENTS_FILE)
+
+        # Set up the arguments for each iteration
+        kwarg_list = list()
+        print("Setting up arguments...")
+        for _, row in segments.iterrows():
+            for yr in self.years:
+                # Grab the elasticity params from the file
+                elasticity_params = {
+                    "purpose": str(row["elast_p"]),
+                    "market_share": row["elast_market_share"],
+                }
+
+                # Grab the segment params from the file
+                demand_seg_params = {
+                    "trip_origin": row["trip_origin"],
+                    "matrix_format": "pa",
+                    "year": yr,
+                    "purpose": str(row["p"]),
+                }
+                if row["p"] in consts.SOC_P:
+                    demand_seg_params["segment"] = str(int(row["soc"]))
+                elif row["p"] in consts.NS_P:
+                    demand_seg_params["segment"] = str(int(row["ns"]))
+                else:
+                    raise nd.NormitsDemandError(
+                        "purpose '%s' does not seem to be a soc or an "
+                        "ns purpose!" % demand_seg_params['purpose']
+                    )
+
+                # Figure out which vot and voc costs to use
+                uc = du.purpose_to_user_class(row['p'])
+
+                # TODO(BT): REMOVE THIS!
+                kwarg_list.append({
+                    'demand_params': demand_seg_params,
+                    'elasticity_params': elasticity_params,
+                    'base_year_gc_params': scalar_costs[str(self.base_year)][uc],
+                    'future_gc_params': scalar_costs[yr][uc],
+                    'cost_changes': cost_changes.loc[cost_changes["yr"] == yr],
+                    'fname_suffix': '_int',
+                })
+
+        # Call the functions
+        print("Running!")
+        multiprocessing.multiprocess(
+            fn=self.apply_elasticities,
+            kwargs=kwarg_list,
+            process_count=process_count,
+        )
 
     def apply_all(self):
         """Performs elasticity calculations for all segments provided.
