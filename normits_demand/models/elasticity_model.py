@@ -251,7 +251,6 @@ class ElasticityModel:
                 # Figure out which vot and voc costs to use
                 uc = du.purpose_to_user_class(row['p'])
 
-                # TODO(BT): REMOVE THIS!
                 kwarg_list.append({
                     'demand_params': demand_seg_params,
                     'elasticity_params': elasticity_params,
@@ -262,11 +261,19 @@ class ElasticityModel:
                     'fname_suffix': '_int',
                 })
 
+        # Set up progress bar kwargs to track
+        pbar_kwargs = {
+            'total': len(segments) * len(self.years),
+            'desc': "Applying elasticities to segments",
+            'unit': "segment",
+        }
+
         # Call the functions
         print("Running!")
         multiprocessing.multiprocess(
             fn=self.apply_elasticities,
             kwargs=kwarg_list,
+            pbar_kwargs=pbar_kwargs,
             process_count=process_count,
         )
 
@@ -282,7 +289,7 @@ class ElasticityModel:
         cost_changes = self.cost_builder.get_cost_changes()
 
         # Redirects the outputs around pbar
-        with eu.std_out_err_redirect_tqdm() as orig_stdout:
+        with du.std_out_err_redirect_tqdm() as orig_stdout:
 
             # Read in the segments to loop around
             segments = eu.read_segments_file(self.import_home / ec.SEGMENTS_FILE)

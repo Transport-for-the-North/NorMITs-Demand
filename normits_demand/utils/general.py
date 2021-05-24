@@ -19,7 +19,7 @@ import shutil
 import random
 import inspect
 import operator
-
+import contextlib
 
 import pandas as pd
 import numpy as np
@@ -38,7 +38,7 @@ from pathlib import Path
 from math import isclose
 
 import functools
-from tqdm import tqdm
+import tqdm
 from itertools import product
 from collections import defaultdict
 
@@ -79,6 +79,40 @@ class InitialisationError(NormitsDemandError):
     def __init__(self, message=None):
         self.message = message
         super().__init__(self.message)
+
+
+@contextlib.contextmanager
+def std_out_err_redirect_tqdm():
+    """Redirect stdout and stderr to `tqdm.write`.
+
+    Code copied from tqdm documentation:
+    https://github.com/tqdm/tqdm#redirecting-writing
+
+    Redirect stdout and stderr to tqdm allows tqdm to control
+    how print statements are shown and stops the progress bar
+    formatting from breaking. Note: warnings.warn() messages
+    still cause formatting issues in terminal.
+
+    Yields
+    -------
+    sys.stdout
+        Original stdout.
+    """
+    # Init
+    from tqdm.contrib import DummyTqdmFile
+
+    orig_out_err = sys.stdout, sys.stderr
+    try:
+        sys.stdout, sys.stderr = map(DummyTqdmFile, orig_out_err)
+        yield orig_out_err[0]
+
+    # Relay exceptions
+    except Exception as exc:
+        raise exc
+
+    # Always restore sys.stdout/err if necessary
+    finally:
+        sys.stdout, sys.stderr = orig_out_err
 
 
 def get_seg_level_cols(seg_level: str,
@@ -2247,7 +2281,7 @@ def combine_yearly_dfs(year_dfs: Dict[str, pd.DataFrame],
     # ## SPLIT MATRICES AND JOIN BY PURPOSE ## #
     purpose_ph = list()
     desc = "Merging dataframes by purpose"
-    for p in tqdm(purposes, desc=desc):
+    for p in tqdm.tqdm(purposes, desc=desc):
 
         # Get all the matrices that belong to this purpose
         yr_p_dfs = list()

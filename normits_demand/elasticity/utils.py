@@ -5,21 +5,16 @@
 
 ##### IMPORTS #####
 # Standard imports
-import sys
-import contextlib
 from pathlib import Path
 from typing import Union, Dict, List, Tuple
 
 # Third party imports
 import numpy as np
 import pandas as pd
-from tqdm import contrib
 
 # Local imports
 import normits_demand as nd
 from normits_demand.utils import general as du
-from normits_demand.models import efs_zone_translator as zt
-from normits_demand.elasticity import constants as ec
 
 
 ##### FUNCTIONS #####
@@ -173,32 +168,3 @@ def get_constraint_mats(folder: nd.PathLike,
             matrices[path.stem] = np.loadtxt(path, delimiter=",")
 
     return matrices
-
-
-@contextlib.contextmanager
-def std_out_err_redirect_tqdm():
-    """Redirect stdout and stderr to `tqdm.write`.
-
-    Code copied from tqdm documentation:
-    https://github.com/tqdm/tqdm#redirecting-writing
-
-    Redirect stdout and stderr to tqdm allows tqdm to control
-    how print statements are shown and stops the progress bar
-    formatting from breaking. Note: warnings.warn() messages
-    still cause formatting issues in terminal.
-
-    Yields
-    -------
-    sys.stdout
-        Original stdout.
-    """
-    orig_out_err = sys.stdout, sys.stderr
-    try:
-        sys.stdout, sys.stderr = map(contrib.DummyTqdmFile, orig_out_err)
-        yield orig_out_err[0]
-    # Relay exceptions
-    except Exception as exc:
-        raise exc
-    # Always restore sys.stdout/err if necessary
-    finally:
-        sys.stdout, sys.stderr = orig_out_err
