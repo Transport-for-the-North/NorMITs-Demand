@@ -1,0 +1,4 @@
+TFN_DARK_BLUE = '#0d0f3d'
+TFN_LIGHT_BLUE = '#00dec6'
+TFN_PINK = '#e50080'
+TFN_WHITE = '#ffffff'
