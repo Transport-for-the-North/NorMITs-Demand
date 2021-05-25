@@ -20,7 +20,7 @@ if __name__ == '__main__':
     for sc in scenarios:
         folder_list.append(
             os.path.join(
-                run_folder, 'iter3f/%s/Matrices/Compiled OD Matrices' % sc))
+                run_folder, 'iter3g/%s/Matrices/Compiled OD Matrices' % sc))
 
     # run reporter
     for folder in folder_list:
