@@ -20,6 +20,12 @@ from normits_demand.models.efs_attraction_model import EFSAttractionGenerator
 from normits_demand.models.efs_zone_translator import ZoneTranslator
 from normits_demand.models.elasticity_model import ElasticityModel
 
+# NoTEM Class Layer
+from normits_demand.models.notem import NoTEM
+
+# Core Objects
+from normits_demand.core import DVector
+
 # Audit classes
 from normits_demand.reports.efs_reporting import EfsReporter
 
