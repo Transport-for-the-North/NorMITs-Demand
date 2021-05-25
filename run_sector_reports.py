@@ -30,6 +30,25 @@ if __name__ == '__main__':
                                           output_folder=out_folder)
         reports = sr.sector_report()
 
+        # Unpack and export sector reports
+        # TODO: This dictionary unpacker is not very clean
+        for mat, report_dict in reports.items():
+            print('unpacking reports for %s' % mat)
+            for r_name, dat in report_dict.items():
+                if r_name == 'ca_sectors':
+                    # Hard path to output folder
+                    out_folder = folder.replace(
+                        'Matrices/Compiled OD Matrices',
+                        'Reports/Sector Reports')
+                    report_name = mat.replace('.csv', ('_' + r_name))
+                    report_name += '.csv'
+                    out_folder = os.path.join(out_folder,
+                                              report_name)
+                    print('exporting %s to %s' % (report_name, out_folder))
+
+                    dat.to_csv(out_folder)
+
+
 
 
 
