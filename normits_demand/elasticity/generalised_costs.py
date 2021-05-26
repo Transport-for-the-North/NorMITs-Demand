@@ -658,7 +658,7 @@ def get_costs(cost_file: Path,
     total_zeros = (costs[cost_cols] <= 0).all(axis=1).sum()
     print(
         f"{total_zeros} ({total_zeros / len(costs):.2%}) "
-        "OD pairs are 0 for {mode} for costs"
+        f"OD pairs are 0 for {mode} for costs"
     )
 
     # Convert zone system if required

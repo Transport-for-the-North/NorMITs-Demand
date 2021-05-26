@@ -1052,11 +1052,11 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
         if cost_type != "gc":
             # Calculate the demand weighted generalised cost of the elasticity
             gc_elast = gc.gen_cost_elasticity_mins(
-                elast,
-                adj_gc,
-                cost,
-                demand[chg_mode],
-                cost_factor,
+                elasticity=elast,
+                gen_cost=adj_gc,
+                cost=cost,
+                demand=demand[chg_mode],
+                cost_factor=cost_factor,
             )
         else:
             # If the generalised costs itself is being changed then elasticity given
