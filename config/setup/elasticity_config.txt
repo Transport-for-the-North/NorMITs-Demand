@@ -11,8 +11,8 @@ gc_parameters = I:/NorMITs Demand\import\elasticities\SC04_UZC\vot_voc_values.cs
 cost_changes = I:/NorMITs Demand\import\elasticities\SC04_UZC\cost_adjustments.csv
 
 [output_folders]
-car = I:/NorMITs Demand\noham\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices Elasticity3\internal
-rail = I:/NorMITs Demand\norms\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices Elasticity3\internal
+car = I:/NorMITs Demand\noham\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices Elasticity1\internal
+rail = I:/NorMITs Demand\norms\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices Elasticity1\internal
 others = I:/NorMITs Demand\elasticity\iter3g\SC04_UZC
 
 [other]

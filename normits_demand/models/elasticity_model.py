@@ -266,7 +266,7 @@ class ElasticityModel:
             'total': len(segments) * len(self.years),
             'desc': "Applying elasticities to segments",
             'unit': "segment",
-            'colour': 'green',
+            'colour': 'cyan',
         }
 
         # Call the functions
@@ -1145,13 +1145,13 @@ def adjust_cost(base_costs: Union[pd.DataFrame, float],
     # Make sure costs are sorted so that the constraint matrix lines up correctly
     adj_cost = base_costs.copy().sort_values(["origin", "destination"])
 
-    # TODO(BT): THIS IS A TEST!!
-    # BACKLOG: THIS IS A TEST!!
-    # Adjust time to reflect congestion relative to base
-    # Adjust toll in line with inflation
-    if mode == 'car':
-        adj_cost['time'] *= 1.01 ** (future_year - base_year)
-        adj_cost['toll'] *= 1.02 ** (future_year - base_year)
+    # # TODO(BT): THIS IS A TEST!!
+    # # BACKLOG: THIS IS A TEST!!
+    # # Adjust time to reflect congestion relative to base
+    # # Adjust toll in line with inflation
+    # if mode == 'car':
+    #     adj_cost['time'] *= 1.01 ** (future_year - base_year)
+    #     adj_cost['toll'] *= 1.02 ** (future_year - base_year)
 
     adj_gc_params = gc_params.copy()
     # If cost component

@@ -113,7 +113,7 @@ def wait_for_pool_results(results,  # : List[multiprocessing.pool.AsyncResult],
     return_results = list()
     n_start_results = len(results)
 
-    # Context keeps the pbar tidy
+    # Context is meant to keep the pbar tidy
     with du.std_out_err_redirect_tqdm() as orig_stdout:
         # Additional args for context
         pbar_kwargs['file'] = orig_stdout
@@ -161,7 +161,8 @@ def wait_for_pool_results(results,  # : List[multiprocessing.pool.AsyncResult],
                 res_to_remove.append(i)
 
             # Update the progress bar with the number of results we just got
-            pbar.update(len(res_to_remove))
+            if len(res_to_remove) > 0:
+                pbar.update(len(res_to_remove))
 
             # Remove results we've got
             for i in sorted(res_to_remove, reverse=True):
