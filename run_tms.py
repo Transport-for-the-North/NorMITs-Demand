@@ -13,7 +13,7 @@ import normits_demand.models.external_model as em
 import normits_demand.models.distribution_model as dm
 from normits_demand import version
 
-class GetParam:
+class TmsParameterBuilder():
     """
     - get_model_name() module gets the model name from the user and returns model name
         It also does input validation of the user input
@@ -122,11 +122,7 @@ class GetParam:
             return (params)
 
 if __name__ == '__main__':
-    """ 
-    version control
-    """
 
-    __version__ = version.__version__
 
     config_path = 'I:/NorMITs Synthesiser/config/'
 
@@ -457,7 +453,7 @@ if __name__ == '__main__':
     print("Initialising outputs...")
     write_input_info(
         os.path.join(params['base_directory'], "input_parameters.txt"),
-        __version__,
+        version.__version__,
         params['iteration'],
         params['model_name'],
         params['land_use_zoning']
