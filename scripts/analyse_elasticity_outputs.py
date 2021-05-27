@@ -29,6 +29,8 @@ sys.path.append("..")
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 
+from normits_demand.concurrency import multiprocessing
+
 NOHAM_INPUT = r'I:\NorMITs Demand\noham\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices\internal'
 NORMS_INPUT = r'I:\NorMITs Demand\norms\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices\internal'
 
@@ -90,6 +92,46 @@ def get_mat_totals(path, fnames):
     return mats_sum.sum().sum()
 
 
+def mp_func(year, purpose, model, norms, noham):
+    # Determine paths
+    if model == 'noham':
+        in_path = NOHAM_INPUT
+        out_path = NOHAM_OUTPUT
+        ext_path = NOHAM_EXTERNAL
+        mat_dict = noham
+    elif model == 'norms':
+        in_path = NORMS_INPUT
+        out_path = NORMS_OUTPUT
+        ext_path = NORMS_EXTERNAL
+        mat_dict = norms
+    else:
+        raise ValueError("WHAT?!")
+
+    # Build a list of args
+    paths = [out_path, in_path, ext_path]
+    dict_keys = ['output', 'input', 'external']
+
+    # We don't actually output in 2018!
+    if year == 2018:
+        paths = [in_path, in_path, ext_path]
+        dict_keys = ['input', 'input', 'external']
+
+    args = [(p, mat_dict[k][year][purpose]) for p, k in zip(paths, dict_keys)]
+
+    # Multiprocess
+    res = [get_mat_totals(*a) for a in args]
+
+    # Store results
+    return {
+        'year': year,
+        'model': model,
+        'purpose': purpose,
+        'input': res[1],
+        'output': res[0],
+        'external': res[2],
+    }
+
+
 def main():
 
     # Find the matrices that belong to each UC
@@ -118,56 +160,28 @@ def main():
         noham['external'] = res[5]
 
     # ## Analyse - create df ## #
-    # create_pbar
-    pbar = tqdm.tqdm(
-        total=len(YEARS) * len(UC_TO_P.keys()) * 2,
-        desc="Analysing outputs...",
-        colour='#0d0f3d',
-    )
+    pbar_kwargs = ({
+        'total': len(YEARS) * len(UC_TO_P.keys()) * 2,
+        'desc': "Analysing outputs...",
+        'colour': '#0d0f3d',
+    })
 
-    ph = list()
+    kwarg_list = list()
     for year, purpose, model in itertools.product(YEARS, UC_TO_P.keys(), ['noham', 'norms']):
-        # Determine paths
-        if model == 'noham':
-            in_path = NOHAM_INPUT
-            out_path = NOHAM_OUTPUT
-            ext_path = NOHAM_EXTERNAL
-            mat_dict = noham
-        elif model == 'norms':
-            in_path = NORMS_INPUT
-            out_path = NORMS_OUTPUT
-            ext_path = NORMS_EXTERNAL
-            mat_dict = norms
-        else:
-            raise ValueError("WHAT?!")
+        kwarg_list.append({
+            'year': year,
+            'purpose': purpose,
+            'model': model,
+            'norms': norms,
+            'noham': noham,
+        })
 
-        # Build a list of args
-        paths = [in_path, out_path, ext_path]
-        dict_keys = ['input', 'output', 'external']
-
-        # We don't actually output in 2018!
-        if year == 2018:
-            paths = [in_path, in_path, ext_path]
-            dict_keys = ['input', 'input', 'external']
-
-        args = [(p, mat_dict[k][year][purpose]) for p, k in zip(paths, dict_keys)]
-
-        # Multiprocess
-        with Pool(processes=3) as pool:
-            procs = [pool.apply_async(get_mat_totals, a) for a in args]
-            res = [p.get(timeout=1000) for p in procs]
-
-            # Store results
-            ph.append({
-                'year': year,
-                'model': model,
-                'purpose': purpose,
-                'input': res[0],
-                'output': res[1],
-                'external': res[2],
-            })
-        pbar.update(1)
-    pbar.close()
+    ph = multiprocessing.multiprocess(
+        fn=mp_func,
+        kwargs=kwarg_list,
+        process_count=os.cpu_count()-2,
+        pbar_kwargs=pbar_kwargs,
+    )
 
     pd.DataFrame(ph).to_csv(OUTPUT, index=False)
 

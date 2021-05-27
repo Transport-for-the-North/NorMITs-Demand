@@ -13,7 +13,7 @@ cost_changes = I:/NorMITs Demand\import\elasticities\SC04_UZC\cost_adjustments.c
 [output_folders]
 car = I:/NorMITs Demand\noham\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices Elasticity1\internal
 rail = I:/NorMITs Demand\norms\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices Elasticity1\internal
-others = I:/NorMITs Demand\elasticity\iter3g\SC04_UZC
+others = I:/NorMITs Demand\elasticity\iter3g\SC04_UZC\1
 
 [other]
 years = 2033,2040,2050

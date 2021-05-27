@@ -420,15 +420,16 @@ def _average_matrices(matrices: Dict[str, np.array],
     return averages
 
 
-def _check_matrices(
-    matrices: Dict[str, np.array], expected: List[str]
-) -> Dict[str, float]:
+def _check_matrices(matrices: Dict[str, np.array],
+                    expected: List[str]
+                    ) -> Dict[str, float]:
     """Check if all expected matrices are given and are the same shape.
 
     Parameters
     ----------
     matrices : Dict[str, np.array]
         Matrices to check.
+
     expected : List[str]
         List of names of matrices to expect, will raise KeyError if any
         values in this list aren't present as keys in `matrices`.
@@ -442,23 +443,32 @@ def _check_matrices(
     ------
     KeyError
         If any of the expected matrices aren't provided.
+
     ValueError
         If all the matrices aren't the same shape.
     """
-    mats = {}
-    missing = []
-    shapes = []
+    # Init
+    mats = dict()
+    missing = list()
+    shapes = list()
+
+    # Check if any items are missing
     for nm in expected:
         try:
             mats[nm] = matrices[nm].copy()
             shapes.append(matrices[nm].shape)
         except KeyError:
             missing.append(nm)
+
+    # Raise an error for any missing items
     if missing:
         raise KeyError(f"The following matrices are missing: {missing!s}")
+
+    # Raise an error if any of the items are a different shape
     if not all(s == shapes[0] for s in shapes):
         msg = ", ".join(f"{nm} = {shapes[i]}" for i, nm in enumerate(mats))
         raise ValueError(f"Matrices are not all the same shape: {msg}")
+
     return mats
 
 

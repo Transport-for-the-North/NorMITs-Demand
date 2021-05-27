@@ -500,7 +500,7 @@ class ElasticityModel:
                 future_year=future_year,
             )
 
-            # Store all our adjustments to apply later
+            # Store all our demand by affected mode
             for mode in adj_dem.keys():
                 demand_adjustment[mode].append(adj_dem[mode])
 
@@ -1071,7 +1071,7 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
         demand_adjustment[aff_mode] = demand_adjustment[aff_mode] * np.power(
             gc_ratio,
             gc_elast,
-            out=np.zeros_like(gc_ratio),
+            out=np.ones_like(gc_ratio),
             where=gc_ratio != 0,  # 0^(-x) is undefined and 0^(+x)=0 so leave 0
         )
 
@@ -1145,13 +1145,13 @@ def adjust_cost(base_costs: Union[pd.DataFrame, float],
     # Make sure costs are sorted so that the constraint matrix lines up correctly
     adj_cost = base_costs.copy().sort_values(["origin", "destination"])
 
-    # # TODO(BT): THIS IS A TEST!!
-    # # BACKLOG: THIS IS A TEST!!
-    # # Adjust time to reflect congestion relative to base
-    # # Adjust toll in line with inflation
-    # if mode == 'car':
-    #     adj_cost['time'] *= 1.01 ** (future_year - base_year)
-    #     adj_cost['toll'] *= 1.02 ** (future_year - base_year)
+    # TODO(BT): THIS IS A TEST!!
+    # BACKLOG: THIS IS A TEST!!
+    # Adjust time to reflect congestion relative to base
+    # Adjust toll in line with inflation
+    if mode == 'car':
+        adj_cost['time'] *= 1.01 ** (future_year - base_year)
+        adj_cost['toll'] *= 1.02 ** (future_year - base_year)
 
     adj_gc_params = gc_params.copy()
     # If cost component
