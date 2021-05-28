@@ -25,7 +25,7 @@ from normits_demand import constants as consts
 from normits_demand.utils import compress
 from normits_demand.utils import general as du
 
-from normits_demand.concurrency import multiprocessing as mp
+from normits_demand.concurrency import multiprocessing as multiprocessing
 
 # Imports that need moving into here
 from normits_demand.utils.utils import create_folder
@@ -394,6 +394,48 @@ def write_pickle(obj: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame
         )
 
 
+def filename_in_list(filename: nd.PathLike,
+                     lst: List[nd.PathLike],
+                     ignore_ftype: bool = False,
+                     ) -> bool:
+    """Returns True if filename exists in lst
+
+    Parameters
+    ----------
+    filename:
+        The filename to search for in lst
+
+    lst:
+        The list to search for filename in
+
+    ignore_ftype:
+        Whether to ignore the filetypes in both the filename and lst
+        when searching
+
+    Returns
+    -------
+    boolean:
+        True if filename is in lst, False otherwise
+    """
+    # If we're not ignoring ftype, we can do a simple check
+    if not ignore_ftype:
+        return filename in lst
+
+    # Init
+    filename = cast_to_pathlib_path(filename)
+    lst = [cast_to_pathlib_path(x) for x in lst]
+
+    # Compare the names
+    for item in lst:
+        item_no_ftype = item.parent / item.stem
+        filename_no_ftype = filename.parent / filename.stem
+
+        if item_no_ftype == filename_no_ftype:
+            return True
+
+    return False
+
+
 def find_filename(path: nd.PathLike,
                   alt_types: List[str] = None,
                   return_full_path: bool = True,
@@ -547,7 +589,7 @@ def copy_all_files(import_dir: nd.PathLike,
         kwargs['in_fname'] = in_fname
         kwarg_list.append(kwargs)
 
-    mp.multiprocess(
+    multiprocessing.multiprocess(
         fn=_copy_all_files_internal,
         kwargs=kwarg_list,
         process_count=process_count,
@@ -646,3 +688,38 @@ def add_external_suffix(path: nd.PathLike) -> pathlib.Path:
         path with the external suffix added
     """
     return add_to_fname(path, consts.EXTERNAL_SUFFIX)
+
+
+def copy_files(src_dir: nd.PathLike,
+               dst_dir: nd.PathLike,
+               filenames: List[str],
+               process_count: int = consts.PROCESS_COUNT,
+               ) -> None:
+    """Copy filenames from src_dir to dst_dir
+
+    Parameters
+    ----------
+    src_dir
+    dst_dir
+    filenames
+    process_count
+
+    Returns
+    -------
+
+    """
+
+    # Setup kwargs
+    kwarg_list = list()
+    for fname in filenames:
+        kwarg_list.append({
+            'src': os.path.join(src_dir, fname),
+            'dst': os.path.join(dst_dir, fname),
+        })
+
+    multiprocessing.multiprocess(
+        fn=du.copy_and_rename,
+        kwargs=kwarg_list,
+        process_count=process_count,
+        pbar_kwargs={'disable': False},
+    )

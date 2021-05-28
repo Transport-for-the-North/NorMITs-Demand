@@ -113,6 +113,10 @@ def wait_for_pool_results(results,  # : List[multiprocessing.pool.AsyncResult],
     return_results = list()
     n_start_results = len(results)
 
+    # If not given any kwargs, assume no pbar wanted
+    if pbar_kwargs is None:
+        pbar_kwargs = {'disable': True}
+
     # Context is meant to keep the pbar tidy
     with du.std_out_err_redirect_tqdm() as orig_stdout:
         # Additional args for context

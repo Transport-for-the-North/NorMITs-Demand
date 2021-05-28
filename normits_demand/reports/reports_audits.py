@@ -12,7 +12,7 @@ import geopandas as gpd
 
 from normits_demand.matrices import matrix_processing as mp
 
-# TODO: Delete duplicate functions in mp and dm
+# TODO: Delete duplicate functions in multiprocessing and dm
 
 # TODO: Should find a way to automate this. Put zone in model folder?
 _default_shp_path = 'Y:/Data Strategy/GIS Shapefiles/Norms zones/TfN_Zones_Combined.shp'
@@ -476,7 +476,7 @@ def distribution_report(file_drive='Y:/',
     if report_tp not in ['24hr', 'tp', '12hr']:
         ValueError('Report time period should be \'24hr\' or \'tp\'')
     
-    # Handle difference in mp name
+    # Handle difference in multiprocessing name
     if 'mode' in model_segments:
         mode_col = 'mode'
     elif 'm' in model_segments:

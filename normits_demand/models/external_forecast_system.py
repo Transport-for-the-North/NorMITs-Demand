@@ -1133,7 +1133,8 @@ class ExternalForecastSystem:
                  m_needed: List[int] = efs_consts.MODES_NEEDED,
                  p_needed: List[int] = efs_consts.ALL_P,
                  round_dp: int = efs_consts.DEFAULT_ROUNDING,
-                 use_bespoke_pa: bool= True,
+                 use_bespoke_pa: bool= False,
+                 use_elasticity_pa: bool= True,
                  verbose: bool = True
                  ) -> None:
         """
@@ -1172,6 +1173,7 @@ class ExternalForecastSystem:
         _input_checks(m_needed=m_needed)
         base_zone_col = "%s_zone_id"
         pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24'
+        pa_import = 'pa_24_elast' if use_elasticity_pa else pa_import
         hb_p_needed, nhb_p_needed = du.split_hb_nhb_purposes(p_needed)
 
         # Set up the iterator
@@ -1583,84 +1585,6 @@ class ExternalForecastSystem:
                 "exists for this model to decompile matrices."
                 % self.model_name
             )
-
-    def compile_future_year_od_matrices(self,
-                                        years_needed: List[int] = efs_consts.FUTURE_YEARS,
-                                        hb_p_needed: List[int] = efs_consts.ALL_HB_P,
-                                        m_needed: List[int] = efs_consts.MODES_NEEDED,
-                                        overwrite_aggregated_pa: bool = True,
-                                        overwrite_future_year_od: bool = True
-                                        ) -> None:
-        """
-        Generates future year post-ME OD matrices using the generated tour
-        proportions from decompiling post-ME base year matrices, and the
-        EFS generated future year PA matrices.
-
-        Performs the following actions:
-            - Aggregates EFS future year PA matrices up to the required
-              segmentation level to match the generated tour proportions.
-              (purpose and car_availability as needed).
-            - Uses the base year post-ME tour proportions to convert 24hr PA
-              matrices into time-period split OD matrices - outputting to
-              file.
-
-        Parameters
-        ----------
-        years_needed:
-            The future years that need converting from PA to OD.
-
-        hb_p_needed:
-            The home based purposes to use while converting PA to OD
-
-        m_needed:
-            The mode to use during the conversion. This will be used to
-            determine if car availability needs to be included or not.
-
-        # TODO: Update docs once correct functionality exists
-        overwrite_aggregated_pa:
-            Whether to generate the aggregated pa matrices or not
-
-        overwrite_future_year_od:
-            Whether to convert pa to od or not.
-
-        Returns
-        -------
-        None
-        """
-        # Init
-        _input_checks(m_needed=m_needed)
-
-        if self.model_name == 'norms' or self.model_name == 'norms_2015':
-            ca_needed = efs_consts.CA_NEEDED
-        elif self.model_name == 'noham':
-            ca_needed = [None]
-        else:
-            raise ValueError("Got an unexpected model name. Got %s, expected "
-                             "either 'norms', 'norms_2015' or 'noham'."
-                             % str(self.model_name))
-
-        if overwrite_aggregated_pa:
-            mat_p.aggregate_matrices(
-                import_dir=self.exports['pa_24'],
-                export_dir=self.exports['aggregated_pa_24'],
-                trip_origin='hb',
-                matrix_format='pa',
-                years_needed=years_needed,
-                p_needed=hb_p_needed,
-                ca_needed=ca_needed,
-                m_needed=m_needed
-            )
-
-        if overwrite_future_year_od:
-            pa2od.build_od_from_tour_proportions(
-                pa_import=self.exports['aggregated_pa_24'],
-                od_export=self.exports['post_me']['od'],
-                tour_proportions_dir=self.params['tours'],
-                zone_translate_dir=self.imports['zone_translation'],
-                ca_needed=ca_needed
-            )
-
-        # TODO: Compile to OD/PA when we know the correct format
 
     def _generate_paths(self, base_year: str) -> Tuple[Dict[str, str],
                                                        Dict[str, str],

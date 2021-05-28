@@ -3344,9 +3344,13 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
     return int_split_factors, ext_split_factors
 
 
-def _recombine_internal_external_internal(in_paths, output_path, force_csv_out):
+def _recombine_internal_external_internal(in_paths,
+                                          output_path,
+                                          force_csv_out,
+                                          force_compress_out,
+                                          ) -> None:
     # Read in the matrices and compile
-    partial_mats = [file_ops.read_df(x, index_col=0) for x in in_paths]
+    partial_mats = [file_ops.read_df(x, index_col=0, find_similar=True) for x in in_paths]
     full_mat = functools.reduce(lambda x, y: x.values + y.values, partial_mats)
 
     # Store back in a df
@@ -3360,6 +3364,10 @@ def _recombine_internal_external_internal(in_paths, output_path, force_csv_out):
         output_path = file_ops.cast_to_pathlib_path(output_path)
         output_path = output_path.parent / (output_path.stem + '.csv')
 
+    if force_compress_out:
+        output_path = file_ops.cast_to_pathlib_path(output_path)
+        output_path = output_path.parent / (output_path.stem + consts.COMPRESSION_SUFFIX)
+
     # Write the complete matrix to disk
     file_ops.write_df(full_mat, output_path)
 
@@ -3367,8 +3375,11 @@ def _recombine_internal_external_internal(in_paths, output_path, force_csv_out):
 def recombine_internal_external(internal_import: nd.PathLike,
                                 external_import: nd.PathLike,
                                 full_export: nd.PathLike,
+                                years: List[int],
                                 force_csv_out: bool = False,
+                                force_compress_out: bool = False,
                                 process_count: int = consts.PROCESS_COUNT,
+                                pbar_kwargs: Dict[str, Any] = None,
                                 ) -> None:
     """
     Combines the internal and external split matrices and write out to full_export
@@ -3395,6 +3406,17 @@ def recombine_internal_external(internal_import: nd.PathLike,
     all_internal_fnames = file_ops.list_files(internal_import)
     all_external_fnames = file_ops.list_files(external_import)
 
+    # Filter to just the wanted years
+    internal_fnames = list()
+    external_fnames = list()
+    for year in years:
+        yr_str = '_yr%s_' % year
+        internal_fnames += [x for x in all_internal_fnames if yr_str in x]
+        external_fnames += [x for x in all_external_fnames if yr_str in x]
+
+    all_internal_fnames = internal_fnames
+    all_external_fnames = external_fnames
+
     # ## BUILD DICTIONARY OF MATRICES TO COMBINE ## #
     comp_dict = dict()
     used_external_fnames = list()
@@ -3404,7 +3426,13 @@ def recombine_internal_external(internal_import: nd.PathLike,
         ext_fname = file_ops.add_external_suffix(full_fname)
 
         # Check the external file actually exists
-        if not os.path.exists(os.path.join(external_import, ext_fname)):
+        try:
+            path = file_ops.find_filename(
+                path=os.path.join(external_import, ext_fname),
+                alt_types=['.csv', consts.COMPRESSION_SUFFIX]
+            )
+        except FileNotFoundError as e:
+            print(e)
             raise FileNotFoundError(
                 "No external file exists to match the internal file.\n"
                 "Internal file location: %s\n"
@@ -3425,7 +3453,7 @@ def recombine_internal_external(internal_import: nd.PathLike,
 
     # Make sure we've used all the external matrices
     for ext_fname in all_external_fnames:
-        if ext_fname not in used_external_fnames:
+        if not file_ops.filename_in_list(ext_fname, used_external_fnames, ignore_ftype=True):
             int_fname = ext_fname.replace(consts.EXTERNAL_SUFFIX, consts.INTERNAL_SUFFIX)
             raise FileNotFoundError(
                 "No internal file exists to match the external file.\n"
@@ -3442,11 +3470,13 @@ def recombine_internal_external(internal_import: nd.PathLike,
             'output_path': output_path,
             'in_paths': in_paths,
             'force_csv_out': force_csv_out,
+            'force_compress_out': force_compress_out,
         })
         
     multiprocessing.multiprocess(
         fn=_recombine_internal_external_internal,
         kwargs=kwarg_list,
         process_count=process_count,
+        pbar_kwargs=pbar_kwargs,
     )
 
