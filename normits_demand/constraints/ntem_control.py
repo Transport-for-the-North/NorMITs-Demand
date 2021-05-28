@@ -153,7 +153,7 @@ def new_control_to_ntem(control_df: pd.DataFrame,
     # ## BEGIN CONTROLLING ## #
     # Print starting value
     before = control_df[base_value_name].sum()
-    du.print_w_toggle('Before: ' + str(before), echo=verbose)
+    du.print_w_toggle('Before: ' + str(before), verbose=verbose)
 
     # Build Control DF
     group_cols = ['lad_zone_id'] + constraint_cols
@@ -170,7 +170,7 @@ def new_control_to_ntem(control_df: pd.DataFrame,
         ntem_subset = ntem_subset[subset_mask]
 
     target = ntem_subset[ntem_value_name].sum()
-    du.print_w_toggle('NTEM: ' + str(target), echo=verbose)
+    du.print_w_toggle('NTEM: ' + str(target), verbose=verbose)
 
     # Match the dtypes to the given ones
     for col in constraint_cols:
@@ -234,7 +234,7 @@ def new_control_to_ntem(control_df: pd.DataFrame,
     adj_control_df[base_value_name] *= adj_control_df['adj_fac']
 
     after = adj_control_df[base_value_name].sum()
-    du.print_w_toggle('After: ' + str(after), echo=verbose)
+    du.print_w_toggle('After: ' + str(after), verbose=verbose)
 
     audit = {
         'before': before,

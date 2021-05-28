@@ -2154,7 +2154,7 @@ def nhb_tp_split_via_factors(import_dir: nd.PathLike,
             )
 
     # Read in the splitting factors
-    du.print_w_toggle("Reading in the splitting factors...", echo=verbose)
+    du.print_w_toggle("Reading in the splitting factors...", verbose=verbose)
     fname = consts.POSTME_TP_SPLIT_FACTORS_FNAME
     factor_path = os.path.join(tour_proportions_dir, fname)
     splitting_factors = file_ops.read_pickle(factor_path, find_similar=True)
@@ -2164,7 +2164,7 @@ def nhb_tp_split_via_factors(import_dir: nd.PathLike,
     split_factor_seg_keys = list(du.fname_to_calib_params(check_key).keys())
 
     # Break the splitting factors down into distribution params
-    du.print_w_toggle("Checking the splitting factors...", echo=verbose)
+    du.print_w_toggle("Checking the splitting factors...", verbose=verbose)
     factor_params = dict()
     for key in splitting_factors.keys():
         dist_params = du.fname_to_calib_params(key)

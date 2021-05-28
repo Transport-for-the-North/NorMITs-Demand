@@ -871,7 +871,7 @@ class ExternalForecastSystem:
                 unique_zones_join_fn=operator.and_,
                 p_needed=p_needed,
                 fname_suffix='_int',
-                echo=verbose,
+                verbose=verbose,
                 **kwargs,
             )
 

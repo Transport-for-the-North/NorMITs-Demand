@@ -65,7 +65,7 @@ def _grow_external_pa_internal(growth_factors,
         csv=csv_out,
         compressed=compress_out,
     )
-    du.print_w_toggle("Growing %s ..." % out_dist_name, echo=verbose)
+    du.print_w_toggle("Growing %s ..." % out_dist_name, verbose=verbose)
 
     # ## READ IN THE BASE YEAR EXTERNAL DEMAND ## #
     # Build seg_params for the seed values
