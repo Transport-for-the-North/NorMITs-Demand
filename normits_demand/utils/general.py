@@ -392,7 +392,8 @@ def build_efs_io_paths(import_location: str,
                        scenario_name: str,
                        demand_dir_name: str = 'NorMITs Demand',
                        base_year: str = efs_consts.BASE_YEAR_STR,
-                       land_use_iteration: str = None,
+                       by_land_use_iteration: str = None,
+                       fy_land_use_iteration: str = None,
                        land_use_drive: str = None,
                        verbose: bool = True,
                        ) -> Tuple[dict, dict, dict]:
@@ -506,17 +507,26 @@ def build_efs_io_paths(import_location: str,
     }
 
     # Add Land use import if we have an iteration
-    if land_use_drive is not None and land_use_iteration is not None:
-        land_use_home = os.path.join(
+    if all([x is not None for x in [land_use_drive, by_land_use_iteration, fy_land_use_iteration]]):
+        fy_land_use_home = os.path.join(
             land_use_drive,
             'NorMITs Land Use',
-            land_use_iteration,
+            'future_land_use',
+            fy_land_use_iteration,
             'outputs',
         )
-        land_use_fy = os.path.join(land_use_home, 'scenarios', scenario_name)
+        by_land_use_home = os.path.join(
+            land_use_drive,
+            'NorMITs Land Use',
+            'base_land_use',
+            by_land_use_iteration,
+            'outputs',
+        )
 
-        imports['pop_by'] = os.path.join(land_use_home, consts.BASE_YEAR_POP_FNAME)
-        imports['emp_by'] = os.path.join(land_use_home, consts.BASE_YEAR_EMP_FNAME)
+        land_use_fy = os.path.join(fy_land_use_home, 'scenarios', scenario_name)
+
+        imports['pop_by'] = os.path.join(by_land_use_home, consts.BASE_YEAR_POP_FNAME)
+        imports['emp_by'] = os.path.join(by_land_use_home, consts.BASE_YEAR_EMP_FNAME)
         imports['land_use_fy_dir'] = land_use_fy
 
     # ## EXPORT PATHS ## #

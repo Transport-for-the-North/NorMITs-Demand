@@ -75,7 +75,8 @@ class ExternalForecastSystem:
                  export_home: str = "E:/",
 
                  land_use_drive: str = "Y:/",
-                 land_use_iteration: str = 'iter3b',
+                 by_land_use_iteration: str = 'iter3b',
+                 fy_land_use_iteration: str = 'iter3c',
                  modes_needed: List[int] = None,
                  verbose: bool = True,
                  ):
@@ -99,7 +100,8 @@ class ExternalForecastSystem:
         self.output_location = export_home
         self.verbose = verbose
 
-        self.land_use_iteration = land_use_iteration
+        self.by_land_use_iteration = by_land_use_iteration
+        self.fy_land_use_iteration = fy_land_use_iteration
         self.land_use_drive = land_use_drive
 
         # TODO: Write function to determine if CA is needed for model_names
@@ -416,7 +418,8 @@ class ExternalForecastSystem:
         write_input_info(
             os.path.join(self.exports['home'], "input_parameters.txt"),
             version.__version__,
-            self.land_use_iteration,
+            self.by_land_use_iteration,
+            self.fy_land_use_iteration,
             base_year,
             future_years,
             self.output_zone_system,
@@ -1622,7 +1625,8 @@ class ExternalForecastSystem:
             iter_name=self.iter_name,
             scenario_name=self.scenario_name,
             demand_dir_name=self.out_dir,
-            land_use_iteration=self.land_use_iteration,
+            by_land_use_iteration=self.by_land_use_iteration,
+            fy_land_use_iteration=self.fy_land_use_iteration,
             land_use_drive=self.land_use_drive,
             verbose=self.verbose,
         )
@@ -1660,7 +1664,8 @@ def _input_checks(iter_num: int = None,
 
 def write_input_info(output_path: str,
                      efs_version: str,
-                     land_use_iter: str,
+                     by_land_use_iter: str,
+                     fy_land_use_iter: str,
                      base_year: int,
                      future_years: List[int],
                      output_zone_system: str,
@@ -1676,7 +1681,8 @@ def write_input_info(output_path: str,
 
     out_lines = [
         'EFS version: ' + str(efs_version),
-        'Land Use Iter: ' + str(land_use_iter),
+        'BY Land Use Iter: ' + str(by_land_use_iter),
+        'FY Land Use Iter: ' + str(fy_land_use_iter),
         'Run Date: ' + str(time.strftime('%D').replace('/', '_')),
         'Start Time: ' + str(time.strftime('%T').replace('/', '_')),
         "Base Year: " + str(base_year),

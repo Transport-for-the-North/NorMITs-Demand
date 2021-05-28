@@ -21,23 +21,27 @@ def main():
     verbose = False
 
     # Land Use imports
-    land_use_drive = "Y:/"
-    land_use_iteration = 'iter3b'
+    land_use_drive = "I:/"
+    by_land_use_iteration = 'iter3b'
+    fy_land_use_iteration = 'iter3c'
 
     # Running control
     integrate_dlog = False
     run_pop_emp_comparison = False
 
-    run_base_efs = False
+    # Base EFS
+    run_base_efs = True
     recreate_productions = True
     recreate_attractions = True
     recreate_nhb_productions = True
 
+    # Running options
     run_bespoke_zones = False
     ignore_bespoke_zones = True
     use_elasticity_to_od = True
 
-    run_pa_to_od = True
+    # Compiling matrices
+    run_pa_to_od = False
     run_compile_mats = False
     run_decompile_post_me = False
 
@@ -47,7 +51,7 @@ def main():
 
     # Controls I/O
     scenario = consts.SC04_UZC
-    iter_num = '3g'
+    iter_num = '3h'
     import_home = "I:/"
     export_home = "I:/"
     model_name = consts.MODEL_NAME
@@ -62,7 +66,8 @@ def main():
         import_home=import_home,
         export_home=export_home,
         land_use_drive=land_use_drive,
-        land_use_iteration=land_use_iteration,
+        by_land_use_iteration=by_land_use_iteration,
+        fy_land_use_iteration=fy_land_use_iteration,
         verbose=verbose
     )
 

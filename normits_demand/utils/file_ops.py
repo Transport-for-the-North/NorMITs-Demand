@@ -697,6 +697,8 @@ def copy_files(src_dir: nd.PathLike,
                ) -> None:
     """Copy filenames from src_dir to dst_dir
 
+    # TODO(BT): Write this documentation for copy_files()
+
     Parameters
     ----------
     src_dir

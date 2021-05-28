@@ -75,7 +75,7 @@ def _aggregate(import_dir: str,
         )
 
     for fname in in_fnames:
-        mat = pd.read_csv(os.path.join(import_dir, fname), index_col=0)
+        mat = file_ops.read_df(os.path.join(import_dir, fname), index_col=0)
 
         # Build a matching df of 0s if not done yet
         if aggregated_mat is None:
