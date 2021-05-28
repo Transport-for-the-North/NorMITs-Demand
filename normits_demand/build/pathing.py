@@ -17,7 +17,7 @@ class Pathing:
 
     def __init__(self,
                  config_path='I:/NorMITs Synthesiser/config/',
-                 params_file='norms_params_sheet_i6.xlsx'):
+                 params_file):
         """
         """
         # Set config path
@@ -26,7 +26,8 @@ class Pathing:
         self.input_reqs = pd.read_csv(os.path.join(config_path,
                                                    'input_reqs.csv'),
                                       squeeze=True)
-
+"""
+    Commented as of now but can be removed if not required
         # Import and parse run parameters
         param_path = os.path.join(config_path, params_file)
         self.param_path = param_path
@@ -41,7 +42,9 @@ class Pathing:
                                    index_col='param_index',
                                    engine='openpyxl')
 
-        self.params = self.params_to_dict(params)
+        #self.params = self.params_to_dict(params)
+"""
+        self.params= params_file
         # param_dict = params_to_dict(params)
 
         mlz_folder = 'Model Zone Lookups'

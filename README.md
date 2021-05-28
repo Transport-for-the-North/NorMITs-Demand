@@ -94,3 +94,7 @@ better with TMS output paths.
 
 ### v0.3.5
 
+### v0.3.5
+- Updated run_tms.py to export a text file containing inputs
+- Added versioning to run_tms.py
+- Added versioning to reports_audits.py and updated code to include versioning as part of their file name in distribution reports
