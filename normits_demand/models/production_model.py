@@ -879,7 +879,7 @@ class ProductionModel(demand.Pathing):
         end_time = nup.set_time()
         print(end_time)
 
-        # Call mp.production_report w/ hb param
+        # Call multiprocessing.production_report w/ hb param
         """
         pr = ra.run_production_reports(file_drive='Y:/',
                                        model_name=output_zones.capitalize(),

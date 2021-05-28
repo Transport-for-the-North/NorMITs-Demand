@@ -1015,7 +1015,7 @@ def distribution_report(file_drive='Y:/',
     if report_tp not in ['24hr', 'tp', '12hr']:
         ValueError('Report time period should be \'24hr\' or \'tp\'')
     
-    # Handle difference in mp name
+    # Handle difference in multiprocessing name
     if 'mode' in model_segments:
         mode_col = 'mode'
     elif 'm' in model_segments:

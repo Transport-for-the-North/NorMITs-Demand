@@ -35,11 +35,11 @@ def main():
 
     run_bespoke_zones = False
     ignore_bespoke_zones = True
+    use_elasticity_to_od = True
 
-    run_pa_to_od = False
+    run_pa_to_od = True
     run_compile_mats = False
-    run_decompile_post_me = True
-    run_future_year_compile_od = False
+    run_decompile_post_me = False
 
     # Controls matrix conversion
     output_years = consts.ALL_YEARS
@@ -49,7 +49,7 @@ def main():
     scenario = consts.SC04_UZC
     iter_num = '3g'
     import_home = "I:/"
-    export_home = "F:/"
+    export_home = "I:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
@@ -101,6 +101,7 @@ def main():
         efs.pa_to_od(
             years_needed=output_years,
             use_bespoke_pa=(not ignore_bespoke_zones),
+            use_elasticity_pa=use_elasticity_to_od,
             verbose=verbose
         )
 
@@ -113,14 +114,6 @@ def main():
         efs.decompile_post_me(
             overwrite_decompiled_matrices=True,
             overwrite_tour_proportions=True,
-        )
-
-    if run_future_year_compile_od:
-        # Uses the generated tour proportions to compile Post-ME OD matrices
-        # for future years
-        efs.compile_future_year_od_matrices(
-            overwrite_aggregated_pa=True,
-            overwrite_future_year_od=True
         )
 
 

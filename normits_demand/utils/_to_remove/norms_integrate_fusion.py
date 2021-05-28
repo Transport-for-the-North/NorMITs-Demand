@@ -247,7 +247,7 @@ def build_fusion_tp_matrices(distribution_segments,
 
                 # Split to OD
                 # You can't do them in one go.
-                # TODO: Call this from mp instead of in this script
+                # TODO: Call this from multiprocessing instead of in this script
                 subset_tp_od = dm.pa_to_od(subset_tp_pa)
 
                 # Split from
@@ -851,7 +851,7 @@ def build_gb_matrices(distribution_segments,
                 
                 # If you're doing an HB dist you want to go to OD too.
                 if beta_source == 'hb':
-                    # TODO: Call this from mp instead of in this script
+                    # TODO: Call this from multiprocessing instead of in this script
                     subset_tp_od = dm.pa_to_od(subset_tp_pa, time_period_splits)
 
                     # Split from

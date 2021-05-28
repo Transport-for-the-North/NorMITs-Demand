@@ -23,6 +23,8 @@ from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
 from normits_demand.utils import file_ops
 
+from normits_demand.matrices import matrix_processing as mat_p
+
 
 ##### CONSTANTS #####
 CONFIG_FILE = "config/setup/elasticity_config.txt"
@@ -94,8 +96,8 @@ def _create_input_paths(noham_efs, norms_efs, use_bespoke_zones):
     input_dict = {
         'elasticity': os.path.join(noham_efs.imports['home'], 'elasticities'),
         'translation': noham_efs.imports['zone_translation']['no_overlap'],
-        'rail_demand': rail_demand,
-        'car_demand': car_demand,
+        'rail_demand': os.path.join(rail_demand, 'internal'),
+        'car_demand': os.path.join(car_demand, 'internal'),
         'rail_costs': os.path.join(norms_efs.imports['costs'], 'elasticity_model_format'),
         'car_costs': os.path.join(noham_efs.imports['costs'], 'elasticity_model_format'),
     }
@@ -116,7 +118,6 @@ def _create_input_files(efs, scenario):
 
 
 def _create_output_files(noham_efs, norms_efs, iteration, scenario):
-    mat_dir_name = '24hr PA Matrices Elasticity'
 
     others = os.path.join(
         noham_efs.exports['base'],
@@ -127,10 +128,9 @@ def _create_output_files(noham_efs, norms_efs, iteration, scenario):
 
     # Build the dictionary
     output_dict = {
-        'car': os.path.join(noham_efs.exports['mat_home'], mat_dir_name),
-        'rail': os.path.join(norms_efs.exports['mat_home'], mat_dir_name),
+        'car': os.path.join(noham_efs.exports['pa_24_elast'], 'internal'),
+        'rail': os.path.join(norms_efs.exports['pa_24_elast'], 'internal'),
         'others': others,
-
     }
 
     # Make sure all the paths exits
@@ -144,19 +144,16 @@ def _create_other_args(years):
     return {'years': ','.join([str(x) for x in years])}
 
 
-def initialise():
+def initialise(scenario,
+               iter_num,
+               import_home,
+               export_home,
+               years,
+               use_bespoke_zones,
+               ):
     # Where to write the config file
     fname = 'elasticity_config.txt'
     config_path = os.path.join(os.getcwd(), 'config', 'setup', fname)
-
-    # Controls I/O
-    scenario = efs_consts.SC04_UZC
-    iter_num = '3g'
-    import_home = "I:/"
-    export_home = "I:/"
-
-    years = [2033, 2040, 2050]
-    use_bespoke_zones = False
 
     # ## INITIALISE EFS TO GET PATHS ## #
     efs_params = {
@@ -189,7 +186,7 @@ def initialise():
         config.write(f)
 
 
-def main():
+def run_elasticity():
     """Runs the elasticity model using parameters from the config file."""
 
     # TODO(BT): Add as a param to the elasticity
@@ -206,6 +203,101 @@ def main():
     elast_model.apply_all_MP()
 
 
+def merge_internal_external(scenario,
+                            iter_num,
+                            import_home,
+                            export_home,
+                            base_year,
+                            future_years,
+                            use_bespoke_zones,
+                            ):
+    # Init
+    valid_ftypes = ['.csv', consts.COMPRESSION_SUFFIX]
+
+    # Set up some paths
+    if use_bespoke_zones:
+        external_key = 'pa_24_bespoke'
+    else:
+        external_key = 'pa_24'
+
+    # ## INITIALISE EFS TO GET PATHS ## #
+    efs_params = {
+        'iter_num': iter_num,
+        'scenario_name': scenario,
+        'import_home': import_home,
+        'export_home': export_home,
+        'verbose': False,
+    }
+
+    noham_efs = nd.ExternalForecastSystem(model_name='noham', **efs_params)
+    norms_efs = nd.ExternalForecastSystem(model_name='norms', **efs_params)
+
+    # Combine the internal and external trips
+    for name, mode_efs in zip(['noham', 'norms'], [noham_efs, norms_efs]):
+        # ## COPY OVER 2018 INTERNAL ## #
+        by_str = '_yr%s_' % base_year
+
+        # Get paths for just base_year matrices
+        pre_elast_internal = os.path.join(mode_efs.exports[external_key], 'internal')
+        internal_by = file_ops.list_files(pre_elast_internal, ftypes=valid_ftypes)
+        internal_by = [x for x in internal_by if by_str in x]
+
+        file_ops.copy_files(
+            src_dir=pre_elast_internal,
+            dst_dir=os.path.join(mode_efs.exports['pa_24_elast'], 'internal'),
+            filenames=internal_by,
+        )
+
+        # Set up the pbar
+        pbar_kwargs = {
+            'desc': f"Recombining {name} int/ext matrices",
+            'colour': 'cyan',
+        }
+
+        # Recombine internal and external
+        mat_p.recombine_internal_external(
+            internal_import=os.path.join(mode_efs.exports['pa_24_elast'], 'internal'),
+            external_import=os.path.join(mode_efs.exports[external_key], 'external'),
+            full_export=mode_efs.exports['pa_24_elast'],
+            years=[base_year] + future_years,
+            force_compress_out=True,
+            pbar_kwargs=pbar_kwargs
+        )
+
+
+def main():
+    # Controls I/O
+    scenario = efs_consts.SC04_UZC
+    iter_num = '3g'
+    import_home = "I:/"
+    export_home = "I:/"
+
+    base_year = 2018
+    years = [2033, 2040, 2050]
+    use_bespoke_zones = False
+
+    # NOTE THAT THIS DOESN'T WORK AT THE MOMENT!
+    # initialise(
+    #     scenario=scenario,
+    #     iter_num=iter_num,
+    #     import_home=import_home,
+    #     export_home=export_home,
+    #     years=years,
+    #     use_bespoke_zones=use_bespoke_zones,
+    # )
+
+    # run_elasticity()
+
+    merge_internal_external(
+        scenario=scenario,
+        iter_num=iter_num,
+        import_home=import_home,
+        export_home=export_home,
+        base_year=base_year,
+        future_years=years,
+        use_bespoke_zones=use_bespoke_zones,
+    )
+
+
 if __name__ == "__main__":
-    # initialise()
     main()

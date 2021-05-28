@@ -542,6 +542,7 @@ def build_efs_io_paths(import_location: str,
     compiled = 'Compiled'
     aggregated = 'Aggregated'
     pa_24_bespoke = '24hr PA Matrices - Bespoke Zones'
+    pa_24_elasticity = '24hr PA Matrices - Elasticity'
     pcu = 'PCU'
 
     exports = {
@@ -570,11 +571,12 @@ def build_efs_io_paths(import_location: str,
         'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
         'aggregated_pa': os.path.join(matrices_home, ' '.join([aggregated, pa])),
 
-        'pa_24_bespoke': os.path.join(matrices_home, pa_24_bespoke)
+        'pa_24_bespoke': os.path.join(matrices_home, pa_24_bespoke),
+        'pa_24_elast': os.path.join(matrices_home, pa_24_elasticity),
     }
 
     for _, path in exports.items():
-        create_folder(path, chDir=False, verbose=verbose)
+        create_folder(path, chDir=False, verbose=True)
 
     # Post-ME
     compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
