@@ -44,6 +44,8 @@ def convert_correspondence_to_wide(long_correspondence: pd.DataFrame,
     placeholder_value:
         Integer for infilling non corresponded unique zones
     """
+    # TODO: Repeat and tile with numpy???
+
 
     # Init
     lc = long_correspondence.copy()
@@ -368,8 +370,7 @@ def matrix_zone_translation(mat: np.ndarray,
     # Translate rows
     t_shape = (n_mat, n_mat, n_sec)
     a = np.broadcast_to(np.expand_dims(mat, axis=2), t_shape)
-    trans_a = np.broadcast_to(
-        np.expand_dims(sector_trans_mat, axis=1), t_shape)
+    trans_a = np.broadcast_to(np.expand_dims(sector_trans_mat, axis=1), t_shape)
     temp = a * trans_a
 
     # mat is transposed, but we need it this way
@@ -378,8 +379,7 @@ def matrix_zone_translation(mat: np.ndarray,
     # Translate cols
     t_shape = (n_mat, n_sec, n_sec)
     b = np.broadcast_to(np.expand_dims(col_mat, axis=2), t_shape)
-    trans_b = np.broadcast_to(
-        np.expand_dims(sector_trans_mat, axis=1), t_shape)
+    trans_b = np.broadcast_to(np.expand_dims(sector_trans_mat, axis=1), t_shape)
     temp = b * trans_b
     out_mat = temp.sum(axis=0)
 

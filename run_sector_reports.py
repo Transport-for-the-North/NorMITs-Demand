@@ -9,18 +9,21 @@ import os
 # local imports
 from normits_demand.reports import sector_report
 
+import pathlib
+
 if __name__ == '__main__':
 
     model_name = 'noham'
     run_folder = 'I:/NorMITs Demand/%s/EFS' % model_name
-    scenarios = ['SC01_JAM', 'SC02_PP', 'SC03_DD', 'SC04_UZC']
-    out_folder = 'C:/Users/%s/Documents' % os.getlogin()
+    # scenarios = ['SC01_JAM', 'SC02_PP', 'SC03_DD', 'SC04_UZC']
+    scenarios = ['SC04_UZC']
+    out_folder = 'E:/'
 
     folder_list = list()
     for sc in scenarios:
         folder_list.append(
             os.path.join(
-                run_folder, 'iter3g/%s/Matrices/Compiled OD Matrices' % sc))
+                run_folder, 'iter3g/%s/Matrices/Aggregated PA Matrices' % sc))
 
     # run reporter
     for folder in folder_list:
@@ -37,14 +40,14 @@ if __name__ == '__main__':
             for r_name, dat in report_dict.items():
                 if r_name == 'ca_sectors':
                     # Hard path to output folder
-                    out_folder = folder.replace(
-                        'Matrices/Compiled OD Matrices',
-                        'Reports/Sector Reports')
-                    report_name = mat.replace('.csv', ('_' + r_name))
-                    report_name += '.csv'
+                    # out_folder = folder.replace(
+                    #     'Matrices/Compiled OD Matrices',
+                    #     'Reports/Sector Reports')
+                    fname = pathlib.Path(mat)
+                    fname = fname.parent / (fname.stem + '_ca_sectors' + fname.suffix)
                     out_folder = os.path.join(out_folder,
-                                              report_name)
-                    print('exporting %s to %s' % (report_name, out_folder))
+                                              fname)
+                    print('exporting %s to %s' % (fname, out_folder))
 
                     dat.to_csv(out_folder)
 

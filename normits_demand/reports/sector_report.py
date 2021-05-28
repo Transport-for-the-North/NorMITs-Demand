@@ -98,15 +98,18 @@ class SectorReporter:
         ca_sectors_2d = translate_matrices.convert_correspondence_to_wide(
             long_correspondence=self.sectors,
             primary_key=self.zone_id,
-            secondary_key='ca_sector_2020_zone_id')
+            secondary_key='ca_sector_2020_zone_id',
+        )
         three_sectors_2d = translate_matrices.convert_correspondence_to_wide(
             long_correspondence=self.sectors,
             primary_key=self.zone_id,
-            secondary_key='three_sector_id')
+            secondary_key='three_sector_id',
+        )
         ie_2d = translate_matrices.convert_correspondence_to_wide(
             long_correspondence=self.sectors,
             primary_key=self.zone_id,
-            secondary_key='ie_id')
+            secondary_key='ie_id',
+        )
 
         # Apply translation
         mat_sector_reports = dict()
@@ -115,8 +118,7 @@ class SectorReporter:
 
             matrix_comp = dict()
             print(tm)
-            mat = fo.read_df(os.path.join(self.target_folder, tm))
-            mat = mat.set_index(list(mat)[0])
+            mat = fo.read_df(os.path.join(self.target_folder, tm), index_col=0)
 
             v_mat = mat.values
 
