@@ -17,13 +17,13 @@ if __name__ == '__main__':
     run_folder = 'I:/NorMITs Demand/%s/EFS' % model_name
     # scenarios = ['SC01_JAM', 'SC02_PP', 'SC03_DD', 'SC04_UZC']
     scenarios = ['SC04_UZC']
-    out_folder = 'E:/'
+    out_folder = 'C:/Users/genie/Documents/Sector Reports'
 
     folder_list = list()
     for sc in scenarios:
         folder_list.append(
             os.path.join(
-                run_folder, 'iter3g/%s/Matrices/Aggregated PA Matrices' % sc))
+                run_folder, 'iter3g/%s/Matrices/Compiled OD Matrices' % sc))
 
     # run reporter
     for folder in folder_list:
@@ -45,11 +45,11 @@ if __name__ == '__main__':
                     #     'Reports/Sector Reports')
                     fname = pathlib.Path(mat)
                     fname = fname.parent / (fname.stem + '_ca_sectors' + fname.suffix)
-                    out_folder = os.path.join(out_folder,
-                                              fname)
-                    print('exporting %s to %s' % (fname, out_folder))
+                    write_folder = os.path.join(out_folder,
+                                                fname)
+                    print('exporting %s to %s' % (fname, write_folder))
 
-                    dat.to_csv(out_folder)
+                    dat.to_csv(write_folder)
 
 
 
