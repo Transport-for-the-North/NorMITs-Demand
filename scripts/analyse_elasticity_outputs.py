@@ -34,13 +34,13 @@ from normits_demand.concurrency import multiprocessing
 NOHAM_INPUT = r'I:\NorMITs Demand\noham\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices\internal'
 NORMS_INPUT = r'I:\NorMITs Demand\norms\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices\internal'
 
-NOHAM_OUTPUT = r'I:\NorMITs Demand\noham\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices Elasticity1\internal'
-NORMS_OUTPUT = r'I:\NorMITs Demand\norms\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices Elasticity1\internal'
+NOHAM_OUTPUT = r'I:\NorMITs Demand\noham\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices - Elasticity\internal'
+NORMS_OUTPUT = r'I:\NorMITs Demand\norms\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices - Elasticity\internal'
 
 NOHAM_EXTERNAL = r'I:\NorMITs Demand\noham\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices\external'
 NORMS_EXTERNAL = r'I:\NorMITs Demand\norms\EFS\iter3g\SC04_UZC\Matrices\24hr PA Matrices\external'
 
-OUTPUT = r'E:\elasticity1.csv'
+OUTPUT = r'E:\elasticity.csv'
 
 YEARS = [2018, 2033, 2040, 2050]
 
