@@ -22,7 +22,7 @@ def main():
 
     # Land Use imports
     land_use_drive = "Y:/"
-    land_use_iteration = 'iter3b'
+    land_use_iteration = 'iter3c'
 
     # Running control
     integrate_dlog = False
@@ -46,10 +46,10 @@ def main():
     output_years = consts.FUTURE_YEARS
 
     # Controls I/O
-    scenario = consts.SC04_UZC
-    iter_num = '3g'
+    scenario = consts.SC01_JAM
+    iter_num = '3i'
     import_home = "I:/"
-    export_home = "F:/"
+    export_home = "I:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
