@@ -31,9 +31,9 @@ def main():
 
     # Base EFS
     run_base_efs = True
-    recreate_productions = True
-    recreate_attractions = True
-    recreate_nhb_productions = True
+    recreate_productions = False
+    recreate_attractions = False
+    recreate_nhb_productions = False
 
     # Running options
     run_bespoke_zones = False
@@ -47,13 +47,13 @@ def main():
 
     # Controls matrix conversion
     output_years = consts.ALL_YEARS
-    output_years = consts.FUTURE_YEARS
+    # output_years = consts.FUTURE_YEARS
 
     # Controls I/O
-    scenario = consts.SC01_JAM
+    scenario = consts.SC03_DD
     iter_num = '3i'
     import_home = "I:/"
-    export_home = "I:/"
+    export_home = "E:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
