@@ -308,6 +308,7 @@ class ExternalForecastSystem:
             recreate_productions: bool = True,
             recreate_attractions: bool = True,
             recreate_nhb_productions: bool = True,
+            combine_internal_external: bool = False,
             outputting_files: bool = True,
             output_location: str = None,
             echo_distribution: bool = True
@@ -776,6 +777,10 @@ class ExternalForecastSystem:
             current_time = time.time()
             print("WFH adjustments applied! Took: %.2f seconds" %
                   (current_time - last_time))
+
+        # If we're not combining, we need to exit here!
+        if not combine_internal_external:
+            return
 
         # Combine the internal and external trips
         print("Recombining internal and external matrices...")

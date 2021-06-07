@@ -35,6 +35,7 @@ def main():
     recreate_productions = False
     recreate_attractions = False
     recreate_nhb_productions = False
+    combine_internal_external = False
 
     # Running options
     run_bespoke_zones = False
@@ -81,6 +82,7 @@ def main():
             recreate_productions=recreate_productions,
             recreate_attractions=recreate_attractions,
             recreate_nhb_productions=recreate_nhb_productions,
+            combine_internal_external=combine_internal_external,
             echo_distribution=verbose,
         )
 
