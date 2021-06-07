@@ -28,6 +28,7 @@ def main():
     # Running control
     integrate_dlog = False
     run_pop_emp_comparison = False
+    apply_wfh_adjustments = True
 
     # Base EFS
     run_base_efs = True
@@ -62,6 +63,7 @@ def main():
         model_name=model_name,
         integrate_dlog=integrate_dlog,
         run_pop_emp_comparison=run_pop_emp_comparison,
+        apply_wfh_adjustments=apply_wfh_adjustments,
         scenario_name=scenario,
         import_home=import_home,
         export_home=export_home,

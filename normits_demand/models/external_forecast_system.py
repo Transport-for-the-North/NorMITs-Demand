@@ -29,6 +29,8 @@ from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
 from normits_demand.models import efs_production_model as pm
 
+from normits_demand.concurrency import multiprocessing
+
 from normits_demand.matrices import decompilation
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.matrices import matrix_processing as mat_p
@@ -67,6 +69,7 @@ class ExternalForecastSystem:
 
                  integrate_dlog: bool = False,
                  run_pop_emp_comparison: bool = True,
+                 apply_wfh_adjustments: bool = True,
 
                  dlog_pop_path: str = None,
                  dlog_emp_path: str = None,
@@ -96,6 +99,7 @@ class ExternalForecastSystem:
         self.scenario_name = du.validate_scenario_name(scenario_name)
         self.integrate_dlog = integrate_dlog
         self.run_pop_emp_comparison = run_pop_emp_comparison
+        self.apply_wfh_adjustments = apply_wfh_adjustments
         self.import_location = import_home
         self.output_location = export_home
         self.verbose = verbose
@@ -739,7 +743,42 @@ class ExternalForecastSystem:
         #     verbose=True,
         # )
 
+        last_time = current_time
+        current_time = time.time()
+        print("Distribution generation took: %.2f seconds" %
+              (current_time - last_time))
+
+        # ## WFH ADJUSTMENTS ## #
+        if self.apply_wfh_adjustments:
+            print("Applying WFH adjustments...")
+
+            # Create the temporary output folders
+            dist_out_wfh = self.exports['pa_24_wfh']
+            int_dir_wfh = os.path.join(dist_out_wfh, 'internal')
+            ext_dir_wfh = os.path.join(dist_out_wfh, 'external')
+
+            for path in [int_dir_wfh, ext_dir_wfh]:
+                du.create_folder(path, verbose=False)
+
+            # Apply WFH adjustment to the internal and external mats
+            for in_dir, out_dir in zip([int_dir, ext_dir], [int_dir_wfh, ext_dir_wfh]):
+                self._apply_wfh_adjustments(
+                    import_dir=in_dir,
+                    export_dir=out_dir,
+                    years=future_years,
+                )
+
+            int_dir = int_dir_wfh
+            ext_dir = ext_dir_wfh
+            dist_out = dist_out_wfh
+
+            last_time = current_time
+            current_time = time.time()
+            print("WFH adjustments applied! Took: %.2f seconds" %
+                  (current_time - last_time))
+
         # Combine the internal and external trips
+        print("Recombining internal and external matrices...")
         mat_p.recombine_internal_external(
             internal_import=int_dir,
             external_import=ext_dir,
@@ -750,7 +789,7 @@ class ExternalForecastSystem:
 
         last_time = current_time
         current_time = time.time()
-        print("Distribution generation took: %.2f seconds" %
+        print("Recombining internal and external matrices took: %.2f seconds" %
               (current_time - last_time))
 
         # ## SECTOR TOTALS ## #
@@ -821,6 +860,101 @@ class ExternalForecastSystem:
                   + "future usage.")
             self.sector_totals = sector_totals
             # TODO: Store output files into local storage (class storage)
+
+    def _apply_wfh_adjustments_worker(self,
+                                      import_path: nd.PathLike,
+                                      export_path: nd.PathLike,
+                                      adjustment: nd.PathLike,
+                                      ) -> None:
+        # Read in, adjust, write out
+        mat = file_ops.read_df(import_path, index_col=0)
+        mat = mat * adjustment
+        file_ops.write_df(mat, export_path)
+
+    def _apply_wfh_adjustments(self,
+                               import_dir: nd.PathLike,
+                               export_dir: nd.PathLike,
+                               years: List[int],
+                               ) -> None:
+        """
+        Applies a WFH adjustment to import_dir mats and writes out to export_dir
+        """
+        # TODO(BT): This is a quick write - revisit when we have time
+        # Init
+        all_mats = file_ops.list_files(import_dir, consts.VALID_MATRIX_FORMATS)
+        wfh_adj = pd.read_csv(self.imports['wfh_adj'])
+        unq_soc = wfh_adj['soc'].unique()
+
+        # Filter the adjustment
+        mask = (wfh_adj['scenario'] == self.scenario_name)
+        wfh_adj = wfh_adj[mask]
+
+        # Only apply to commute matrices
+        p_str = "_p%s_" % 1
+        commute_mats = [x for x in all_mats if p_str in x]
+
+        # Figure out the adjustments to apply to each matrix
+        adjusted_mats = list()
+        kwarg_list = list()
+        for year in years:
+            # Get the mats and adjustments
+            yr_str = "_yr%s_" % year
+            yr_mats = [x for x in commute_mats if yr_str in x]
+
+            mask = (wfh_adj['year'] == year)
+            yr_adj = wfh_adj[mask]
+
+            for soc in unq_soc:
+                # Filter the mats
+                soc_str = "_soc%s" % soc
+                soc_mats = [x for x in yr_mats if soc_str in x]
+
+                # Keep track of all matrices being adjusted
+                adjusted_mats += soc_mats
+
+                # Figure out the adjustment to apply
+                mask = (yr_adj['soc'] == soc)
+                soc_adj = yr_adj[mask]
+
+                if len(soc_adj) > 1:
+                    raise ValueError(
+                        "There seems to be more than one WFH adjustment for:\n"
+                        "scenario: %s, year: %s, soc: %s"
+                        % (self.scenario_name, year, soc)
+                    )
+
+                if len(soc_adj) < 1:
+                    raise ValueError(
+                        "There seems to be no WFH adjustment for:\n"
+                        "scenario: %s, year: %s, soc: %s"
+                        % (self.scenario_name, year, soc)
+                    )
+
+                adjustment = soc_adj['commute_correction'].squeeze()
+
+                # Update the multiprocessing kwargs
+                for fname in soc_mats:
+                    kwarg_list.append({
+                        'import_path': os.path.join(import_dir, fname),
+                        'export_path': os.path.join(export_dir, fname),
+                        'adjustment': adjustment,
+                    })
+
+        # Adjust all the matrices at once
+        multiprocessing.multiprocess(
+            fn=self._apply_wfh_adjustments_worker,
+            kwargs=kwarg_list,
+            process_count=consts.PROCESS_COUNT,
+        )
+
+        # Copy over all the non-adjusted mats
+        copy_mats = [x for x in all_mats if x not in adjusted_mats]
+        file_ops.copy_files(
+            src_dir=import_dir,
+            dst_dir=export_dir,
+            filenames=copy_mats,
+            process_count=consts.PROCESS_COUNT,
+        )
 
     def _distribute_internal_demand(self,
                                     p_vector: pd.DataFrame,

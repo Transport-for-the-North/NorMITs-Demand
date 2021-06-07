@@ -21,6 +21,7 @@ POSTME_TP_SPLIT_FACTORS_FNAME = "post_me_nhb_tp_splitting_factors.pkl"
 POSTME_FROM_TO_FACTORS_FNAME = "post_me_from_to_factors.pkl"
 
 COMPRESSION_SUFFIX = '.pbz2'
+VALID_MAT_FTYPES = ['.csv', COMPRESSION_SUFFIX]
 
 
 # TODO: Parse norms input names in a function to generate this!!!
