@@ -935,15 +935,12 @@ class ExternalForecastSystem:
                         % (self.scenario_name, year, soc)
                     )
 
-                # Need to add 1 to the adjustment to make it relative
-                adjustment = 1 + soc_adj['commute_correction'].squeeze()
-
                 # Update the multiprocessing kwargs
                 for fname in soc_mats:
                     kwarg_list.append({
                         'import_path': os.path.join(import_dir, fname),
                         'export_path': os.path.join(export_dir, fname),
-                        'adjustment': adjustment,
+                        'adjustment': soc_adj['commute_correction'].squeeze(),
                     })
 
         # Adjust all the matrices at once
