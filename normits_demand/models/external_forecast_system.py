@@ -935,7 +935,8 @@ class ExternalForecastSystem:
                         % (self.scenario_name, year, soc)
                     )
 
-                adjustment = soc_adj['commute_correction'].squeeze()
+                # Need to add 1 to the adjustment to make it relative
+                adjustment = 1 + soc_adj['commute_correction'].squeeze()
 
                 # Update the multiprocessing kwargs
                 for fname in soc_mats:
