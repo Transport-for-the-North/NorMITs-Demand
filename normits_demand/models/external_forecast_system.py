@@ -697,52 +697,52 @@ class ExternalForecastSystem:
         for path in [int_dir, ext_dir]:
             du.create_folder(path, verbose=False)
 
-        # # Distribute the internal trips, write to disk
-        # self._distribute_internal_demand(
-        #     p_vector=model_p_vector,
-        #     nhb_p_vector=model_nhb_p_vector,
-        #     a_vector=model_a_vector,
-        #     nhb_a_vector=model_nhb_a_vector,
-        #     years_needed=year_list,
-        #     hb_p_needed=hb_purposes_needed,
-        #     nhb_p_needed=nhb_purposes_needed,
-        #     m_needed=modes_needed,
-        #     soc_needed=soc_needed,
-        #     ns_needed=ns_needed,
-        #     ca_needed=car_availabilities_needed,
-        #     zone_col=model_zone_col,
-        #     internal_zones_path=self.imports['internal_zones'],
-        #     seed_dist_dir=self.imports['decomp_post_me'],
-        #     seed_infill=0,
-        #     normalise_seeds=False,
-        #     dist_out=int_dir,
-        #     report_out=self.exports['dist_reports'],
-        #     csv_out=False,
-        #     compress_out=True,
-        #     verbose=echo_distribution
-        # )
-        #
-        # # Distribute the external trips, write to disk
-        # # DO NOT INCLUDE EG in external
-        # self._distribute_external_demand(
-        #     p_vector=pre_eg_model_p_vector,
-        #     nhb_p_vector=pre_eg_model_nhb_p_vector,
-        #     zone_col=model_zone_col,
-        #     years_needed=year_list,
-        #     hb_p_needed=hb_purposes_needed,
-        #     nhb_p_needed=nhb_purposes_needed,
-        #     m_needed=modes_needed,
-        #     soc_needed=soc_needed,
-        #     ns_needed=ns_needed,
-        #     ca_needed=car_availabilities_needed,
-        #     external_zones_path=self.imports['external_zones'],
-        #     post_me_dir=self.imports['decomp_post_me'],
-        #     dist_out=ext_dir,
-        #     report_out=self.exports['dist_reports'],
-        #     csv_out=False,
-        #     compress_out=True,
-        #     verbose=True,
-        # )
+        # Distribute the internal trips, write to disk
+        self._distribute_internal_demand(
+            p_vector=model_p_vector,
+            nhb_p_vector=model_nhb_p_vector,
+            a_vector=model_a_vector,
+            nhb_a_vector=model_nhb_a_vector,
+            years_needed=year_list,
+            hb_p_needed=hb_purposes_needed,
+            nhb_p_needed=nhb_purposes_needed,
+            m_needed=modes_needed,
+            soc_needed=soc_needed,
+            ns_needed=ns_needed,
+            ca_needed=car_availabilities_needed,
+            zone_col=model_zone_col,
+            internal_zones_path=self.imports['internal_zones'],
+            seed_dist_dir=self.imports['decomp_post_me'],
+            seed_infill=0,
+            normalise_seeds=False,
+            dist_out=int_dir,
+            report_out=self.exports['dist_reports'],
+            csv_out=False,
+            compress_out=True,
+            verbose=echo_distribution
+        )
+
+        # Distribute the external trips, write to disk
+        # DO NOT INCLUDE EG in external
+        self._distribute_external_demand(
+            p_vector=pre_eg_model_p_vector,
+            nhb_p_vector=pre_eg_model_nhb_p_vector,
+            zone_col=model_zone_col,
+            years_needed=year_list,
+            hb_p_needed=hb_purposes_needed,
+            nhb_p_needed=nhb_purposes_needed,
+            m_needed=modes_needed,
+            soc_needed=soc_needed,
+            ns_needed=ns_needed,
+            ca_needed=car_availabilities_needed,
+            external_zones_path=self.imports['external_zones'],
+            post_me_dir=self.imports['decomp_post_me'],
+            dist_out=ext_dir,
+            report_out=self.exports['dist_reports'],
+            csv_out=False,
+            compress_out=True,
+            verbose=True,
+        )
 
         last_time = current_time
         current_time = time.time()
