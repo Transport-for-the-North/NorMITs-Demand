@@ -83,11 +83,19 @@ def get_inputs() -> Tuple[Dict[str, Path],
     return input_folders, input_files, output_folders, years
 
 
-def _create_input_paths(noham_efs, norms_efs, use_bespoke_zones):
+def _create_input_paths(noham_efs, norms_efs, use_bespoke_zones, use_wfh_adj):
+    if use_wfh_adj and use_bespoke_zones:
+        raise ValueError(
+            "Cannot use both WFH adjustments and bespoke zone outputs!"
+        )
+
     # Set up some paths
     if use_bespoke_zones:
         rail_demand = norms_efs.exports['pa_24_bespoke']
         car_demand = noham_efs.exports['pa_24_bespoke']
+    elif use_wfh_adj:
+        rail_demand = norms_efs.exports['pa_24_wfh']
+        car_demand = noham_efs.exports['pa_24_wfh']
     else:
         rail_demand = norms_efs.exports['pa_24']
         car_demand = noham_efs.exports['pa_24']
@@ -95,7 +103,7 @@ def _create_input_paths(noham_efs, norms_efs, use_bespoke_zones):
     # Build the dictionary
     input_dict = {
         'elasticity': os.path.join(noham_efs.imports['home'], 'elasticities'),
-        'translation': noham_efs.imports['zone_translation']['no_overlap'],
+        'translation': noham_efs.imports['zone_translation']['one_to_one'],
         'rail_demand': os.path.join(rail_demand, 'internal'),
         'car_demand': os.path.join(car_demand, 'internal'),
         'rail_costs': os.path.join(norms_efs.imports['costs'], 'elasticity_model_format'),
@@ -110,8 +118,8 @@ def _create_input_files(efs, scenario):
 
     # Build the dictionary
     input_dict = {
-        'gc_parameters': os.path.join(scenario_cost_home, 'gc_parameters-uzc.csv'),
-        'cost_changes': os.path.join(scenario_cost_home, 'cost_changes-uzc-temp.csv'),
+        'gc_parameters': os.path.join(scenario_cost_home, 'vot_voc_values.csv'),
+        'cost_changes': os.path.join(scenario_cost_home, 'cost_changes.csv'),
     }
 
     return input_dict
@@ -122,7 +130,7 @@ def _create_output_files(noham_efs, norms_efs, iteration, scenario):
     others = os.path.join(
         noham_efs.exports['base'],
         'elasticity',
-        iteration,
+        'iter%s' % iteration,
         scenario,
     )
 
@@ -150,6 +158,7 @@ def initialise(scenario,
                export_home,
                years,
                use_bespoke_zones,
+               use_wfh_adj,
                ):
     # Where to write the config file
     fname = 'elasticity_config.txt'
@@ -168,7 +177,7 @@ def initialise(scenario,
     norms_efs = nd.ExternalForecastSystem(model_name='norms', **efs_params)
 
     # Build the output paths
-    input_paths = _create_input_paths(noham_efs, norms_efs, use_bespoke_zones)
+    input_paths = _create_input_paths(noham_efs, norms_efs, use_bespoke_zones, use_wfh_adj)
     input_files = _create_input_files(noham_efs, scenario)
     output_paths = _create_output_files(noham_efs, norms_efs, iter_num, scenario)
     other_args = _create_other_args(years)
@@ -267,36 +276,37 @@ def merge_internal_external(scenario,
 
 def main():
     # Controls I/O
-    scenario = efs_consts.SC04_UZC
-    iter_num = '3g'
+    scenario = efs_consts.SC03_DD
+    iter_num = '3i'
     import_home = "I:/"
     export_home = "I:/"
 
     base_year = 2018
     years = [2033, 2040, 2050]
     use_bespoke_zones = False
+    use_wfh_adj = True
 
-    # NOTE THAT THIS DOESN'T WORK AT THE MOMENT!
-    # initialise(
-    #     scenario=scenario,
-    #     iter_num=iter_num,
-    #     import_home=import_home,
-    #     export_home=export_home,
-    #     years=years,
-    #     use_bespoke_zones=use_bespoke_zones,
-    # )
-
-    # run_elasticity()
-
-    merge_internal_external(
+    initialise(
         scenario=scenario,
         iter_num=iter_num,
         import_home=import_home,
         export_home=export_home,
-        base_year=base_year,
-        future_years=years,
+        years=years,
         use_bespoke_zones=use_bespoke_zones,
+        use_wfh_adj=use_wfh_adj,
     )
+
+    # run_elasticity()
+
+    # merge_internal_external(
+    #     scenario=scenario,
+    #     iter_num=iter_num,
+    #     import_home=import_home,
+    #     export_home=export_home,
+    #     base_year=base_year,
+    #     future_years=years,
+    #     use_bespoke_zones=use_bespoke_zones,
+    # )
 
 
 if __name__ == "__main__":
