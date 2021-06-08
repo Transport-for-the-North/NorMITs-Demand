@@ -119,7 +119,7 @@ def _create_input_files(efs, scenario):
     # Build the dictionary
     input_dict = {
         'gc_parameters': os.path.join(scenario_cost_home, 'vot_voc_values.csv'),
-        'cost_changes': os.path.join(scenario_cost_home, 'cost_changes.csv'),
+        'cost_changes': os.path.join(scenario_cost_home, 'cost_adjustments.csv'),
     }
 
     return input_dict
@@ -296,17 +296,17 @@ def main():
         use_wfh_adj=use_wfh_adj,
     )
 
-    # run_elasticity()
+    run_elasticity()
 
-    # merge_internal_external(
-    #     scenario=scenario,
-    #     iter_num=iter_num,
-    #     import_home=import_home,
-    #     export_home=export_home,
-    #     base_year=base_year,
-    #     future_years=years,
-    #     use_bespoke_zones=use_bespoke_zones,
-    # )
+    merge_internal_external(
+        scenario=scenario,
+        iter_num=iter_num,
+        import_home=import_home,
+        export_home=export_home,
+        base_year=base_year,
+        future_years=years,
+        use_bespoke_zones=use_bespoke_zones,
+    )
 
 
 if __name__ == "__main__":

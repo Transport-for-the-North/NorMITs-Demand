@@ -31,7 +31,7 @@ def main():
     apply_wfh_adjustments = True
 
     # Base EFS
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = False
     recreate_attractions = False
     recreate_nhb_productions = False
@@ -43,13 +43,16 @@ def main():
     use_elasticity_to_od = True
 
     # Compiling matrices
-    run_pa_to_od = False
-    run_compile_mats = False
+    run_pa_to_od = True
+    run_compile_mats = True
     run_decompile_post_me = False
 
     # Controls matrix conversion
     output_years = consts.ALL_YEARS
-    # output_years = consts.FUTURE_YEARS
+    output_years = consts.FUTURE_YEARS
+    output_years = [2018]
+    output_years = [2033, 2040]
+    # output_years = [2050]
 
     # Controls I/O
     scenario = consts.SC03_DD
