@@ -43,22 +43,19 @@ def main():
     use_elasticity_to_od = True
 
     # Compiling matrices
-    run_pa_to_od = True
+    run_pa_to_od = False
     run_compile_mats = True
     run_decompile_post_me = False
 
     # Controls matrix conversion
     output_years = consts.ALL_YEARS
     output_years = consts.FUTURE_YEARS
-    output_years = [2018]
-    output_years = [2033, 2040]
-    # output_years = [2050]
 
     # Controls I/O
     scenario = consts.SC03_DD
     iter_num = '3i'
     import_home = "I:/"
-    export_home = "I:/"
+    export_home = "F:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
@@ -119,7 +116,11 @@ def main():
 
     if run_compile_mats:
         for year in output_years:
-            efs.compile_matrices(year=year)
+            efs.compile_matrices(
+                year=year,
+                use_bespoke_pa=(not ignore_bespoke_zones),
+                use_elasticity_pa=use_elasticity_to_od,
+            )
 
     if run_decompile_post_me:
         # Decompiles post-me base year matrices

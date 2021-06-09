@@ -3159,7 +3159,7 @@ def _split_int_ext(mat_import,
         csv=True,
     )
     path = os.path.join(mat_import, fname)
-    full_mat = pd.read_csv(path, index_col=0)
+    full_mat = file_ops.read_df(path, index_col=0, find_similar=True)
 
     # Build an iterator to go through internal and external
     iterator = zip(

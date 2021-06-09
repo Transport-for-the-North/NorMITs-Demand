@@ -1519,6 +1519,8 @@ class ExternalForecastSystem:
                          m_needed: List[int] = efs_consts.MODES_NEEDED,
                          tp_needed: List[int] = efs_consts.TIME_PERIODS,
                          round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                         use_bespoke_pa: bool = False,
+                         use_elasticity_pa: bool = False,
                          ) -> None:
         """
         Compiles pre-ME OD matrices produced by EFS into User Class format
@@ -1553,6 +1555,8 @@ class ExternalForecastSystem:
         """
         # Init
         _input_checks(m_needed=m_needed)
+        pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24'
+        pa_import = 'pa_24_elast' if use_elasticity_pa else pa_import
 
         if self.is_ca_needed:
             ca_needed = efs_consts.CA_NEEDED
@@ -1597,7 +1601,7 @@ class ExternalForecastSystem:
 
             # Compile
             mat_p.compile_norms_to_vdm(
-                mat_import=self.exports['pa_24'],
+                mat_import=self.exports[pa_import],
                 mat_export=self.exports['compiled_pa'],
                 params_export=self.params['compile'],
                 year=year,

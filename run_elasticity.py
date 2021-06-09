@@ -276,7 +276,7 @@ def merge_internal_external(scenario,
 
 def main():
     # Controls I/O
-    scenario = efs_consts.SC03_DD
+    scenario = efs_consts.SC04_UZC
     iter_num = '3i'
     import_home = "I:/"
     export_home = "I:/"
