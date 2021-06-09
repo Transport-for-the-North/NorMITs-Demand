@@ -2322,7 +2322,58 @@ def copy_nhb_matrices(import_dir: str,
             src=os.path.join(import_dir, mat_fname),
             dst=os.path.join(export_dir, out_mat_fname),
         )
-        
+
+
+def _compile_matrices_internal(mat_import,
+                               mat_export,
+                               compile_params,
+                               comp_name,
+                               round_dp,
+                               factor_pickle_path,
+                               avoid_zero_splits,
+                               ) -> None:
+    """
+    The internal function of compile_matrices
+    """
+    # ## COMPILE THE MATRICES ## #
+    # Get the input matrices
+    mask = (compile_params['compilation'] == comp_name)
+    subset = compile_params[mask].copy()
+    input_mat_names = subset['distribution_name'].unique()
+
+    # Read in all the matrices
+    in_mats = list()
+    for mat_name in input_mat_names:
+        in_path = os.path.join(mat_import, mat_name)
+        in_mats.append(file_ops.read_df(in_path, index_col=0))
+
+    # Combine all matrices together
+    full_mat = functools.reduce(operator.add, in_mats)
+
+    # Output to file
+    output_path = os.path.join(mat_export, comp_name)
+    full_mat = full_mat.round(decimals=round_dp)
+    file_ops.write_df(full_mat, output_path)
+
+    # Go to the next iteration if we don't need the factors
+    if factor_pickle_path is None:
+        return None
+
+    # ## CALCULATE THE DECOMPILE FACTORS ## #
+    # Infill all zeroes with a small number - ensures no 0 splits
+    if avoid_zero_splits:
+        in_mats = [x.where(x != 0, 1e-8) for x in in_mats]
+        full_mat = functools.reduce(operator.add, in_mats)
+
+    decompile_factors = dict()
+    for part_mat, mat_name in zip(in_mats, input_mat_names):
+        # Avoid divide by zero
+        full_mat = np.where(full_mat == 0, 0.0001, full_mat)
+        # decompile_factors[comp_name][mat_name] = part_mat / full_mat
+        decompile_factors[mat_name] = part_mat / full_mat
+
+    return decompile_factors
+
 
 def compile_matrices(mat_import: str,
                      mat_export: str,
@@ -2331,6 +2382,7 @@ def compile_matrices(mat_import: str,
                      round_dp: int = efs_consts.DEFAULT_ROUNDING,
                      factors_fname: str = 'od_compilation_factors.pickle',
                      avoid_zero_splits: bool = False,
+                     process_count: int = consts.PROCESS_COUNT,
                      ) -> nd.PathLike:
     """
     Compiles the matrices in mat_import, writes to mat_export
@@ -2401,42 +2453,39 @@ def compile_matrices(mat_import: str,
     # Use function to initialise defaultdict
     decompile_factors = defaultdict(lambda: defaultdict(empty_factors))
 
-    desc = 'Compiling Matrices'
-    for comp_name in tqdm(compiled_names, desc=desc):
-        # ## COMPILE THE MATRICES ## #
-        # Get the input matrices
-        mask = (compile_params['compilation'] == comp_name)
-        subset = compile_params[mask].copy()
-        input_mat_names = subset['distribution_name'].unique()
+    # ## MP Matrix compilation ## #
+    unchanging_kwargs = {
+        'mat_import': mat_import,
+        'mat_export': mat_export,
+        'compile_params': compile_params,
+        'round_dp': round_dp,
+        'factor_pickle_path': factor_pickle_path,
+        'avoid_zero_splits': avoid_zero_splits,
+    }
 
-        # Read in all the matrices
-        in_mats = list()
-        for mat_name in input_mat_names:
-            in_path = os.path.join(mat_import, mat_name)
-            in_mats.append(file_ops.read_df(in_path, index_col=0))
+    pbar_kwargs = {
+        'desc': 'Compiling Matrices',
+        'unit': 'matrices',
+        'colour': 'cyan',
+    }
 
-        # Combine all matrices together
-        full_mat = functools.reduce(operator.add, in_mats)
+    kwarg_list = list()
+    for comp_name in compiled_names:
+        kwargs = unchanging_kwargs.copy()
+        kwargs['comp_name'] = comp_name
+        kwarg_list.append(kwargs)
 
-        # Output to file
-        output_path = os.path.join(mat_export, comp_name)
-        full_mat = full_mat.round(decimals=round_dp)
-        file_ops.write_df(full_mat, output_path)
+    # Compile all the matrices and get the decompile factors back
+    factors = multiprocessing.multiprocess(
+        fn=_compile_matrices_internal,
+        kwargs=kwarg_list,
+        process_count=process_count,
+        in_order=True,
+        pbar_kwargs=pbar_kwargs,
+    )
 
-        # Go to the next iteration if we don't need the factors
-        if factor_pickle_path is None:
-            continue
-
-        # ## CALCULATE THE DECOMPILE FACTORS ## #
-        # Infill all zeroes with a small number - ensures no 0 splits
-        if avoid_zero_splits:
-            in_mats = [x.where(x != 0, 1e-8) for x in in_mats]
-            full_mat = functools.reduce(operator.add, in_mats)
-
-        for part_mat, mat_name in zip(in_mats, input_mat_names):
-            # Avoid divide by zero
-            full_mat = np.where(full_mat == 0, 0.0001, full_mat)
-            decompile_factors[comp_name][mat_name] = part_mat / full_mat
+    # Assign the return values
+    decompile_factors = {c: f for c, f in zip(compiled_names, factors)}
 
     # Write factors to disk if we made them
     if factor_pickle_path is not None:

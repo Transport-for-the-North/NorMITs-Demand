@@ -16,6 +16,55 @@ from tqdm import tqdm
 # Local imports
 from normits_demand import efs_constants as consts
 
+from normits_demand.concurrency import multiprocessing
+
+
+def _people_vehicle_conversion_internal(mat_import,
+                                        mat_export,
+                                        mat_fname,
+                                        method,
+                                        factor,
+                                        hourly_average,
+                                        p_factor,
+                                        out_format,
+                                        write,
+                                        round_dp,
+                                        header,
+                                        ):
+    """
+    Internal function of people_vehicle_conversion
+    """
+    in_path = os.path.join(mat_import, mat_fname)
+    ph_mat = pd.read_csv(in_path, index_col=0)
+
+    # For converting from people to vehicles hourly average refers
+    # to the output matrix
+    if method == 'to_vehicles':
+        ph_mat /= factor
+        if hourly_average:
+            ph_mat /= p_factor
+
+    # For converting from vehicles to people hourly average refers
+    # to the input OD matrix
+    elif method == 'to_people':
+        ph_mat *= factor
+        if hourly_average:
+            ph_mat *= p_factor
+
+    if out_format == 'long':
+        ph_mat = pd.melt(
+            ph_mat,
+            id_vars='o_zone',
+            var_name='d_zone',
+            value_name='dt',
+            col_level=0
+        )
+
+    if write:
+        ph_mat = ph_mat.round(decimals=round_dp)
+        export_path = os.path.join(mat_export, mat_fname)
+        ph_mat.to_csv(export_path, header=header)
+
 
 def people_vehicle_conversion(mat_import: str,
                               mat_export: str,
@@ -26,7 +75,8 @@ def people_vehicle_conversion(mat_import: str,
                               out_format: str = 'long',
                               hourly_average: bool = True,
                               header: bool = True,
-                              write: bool = True
+                              write: bool = True,
+                              process_count: int = consts.PROCESS_COUNT,
                               ) -> None:
     # TODO: Write people_vehicle_conversion() docs
 
@@ -59,8 +109,26 @@ def people_vehicle_conversion(mat_import: str,
 
     # If people to vehicles, export to vehicle export
 
-    desc = 'converting matrices by purpose'
-    for pl in tqdm(purpose_lookup, desc=desc):
+    # ## MULTIPROCESS THE CONVERSION ## #
+    unchanging_kwargs = {
+        'mat_import': mat_import,
+        'mat_export': mat_export,
+        'method': method,
+        'hourly_average': hourly_average,
+        'out_format': out_format,
+        'write': write,
+        'round_dp': round_dp,
+        'header': header,
+    }
+
+    pbar_kwargs = {
+        'desc': f'converting matrices {method}',
+        'unit': 'matrix',
+    }
+
+    # Build the kwargs list
+    kwarg_list = list()
+    for pl in purpose_lookup:
 
         # Do commute business and other separately
         mats = [x for x in internal_file if pl[0] in x]
@@ -77,33 +145,17 @@ def people_vehicle_conversion(mat_import: str,
             p_factor = period_hours[tp_int]
 
             for mat_fname in tp_mat:
-                in_path = os.path.join(mat_import, mat_fname)
-                ph_mat = pd.read_csv(in_path, index_col=0)
+                kwargs = unchanging_kwargs.copy()
+                kwargs.update({
+                    'mat_fname': mat_fname,
+                    'factor': factor,
+                    'p_factor': p_factor,
+                })
+                kwarg_list.append(kwargs)
 
-                # For converting from people to vehicles hourly average refers
-                # to the output matrix
-                if method == 'to_vehicles':
-                    ph_mat /= factor
-                    if hourly_average:
-                        ph_mat /= p_factor
-
-                # For converting from vehicles to people hourly average refers
-                # to the input OD matrix
-                elif method == 'to_people':
-                    ph_mat *= factor
-                    if hourly_average:
-                        ph_mat *= p_factor
-
-                if out_format == 'long':
-                    ph_mat = pd.melt(
-                        ph_mat,
-                        id_vars='o_zone',
-                        var_name='d_zone',
-                        value_name='dt',
-                        col_level=0
-                    )
-
-                if write:
-                    ph_mat = ph_mat.round(decimals=round_dp)
-                    export_path = os.path.join(mat_export, mat_fname)
-                    ph_mat.to_csv(export_path, header=header)
+    multiprocessing.multiprocess(
+        fn=_people_vehicle_conversion_internal,
+        kwargs=kwarg_list,
+        pbar_kwargs=pbar_kwargs,
+        process_count=process_count,
+    )
