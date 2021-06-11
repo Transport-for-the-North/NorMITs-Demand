@@ -3383,6 +3383,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
         return int_split_factors, ext_split_factors
 
     # ## CONVERT TO THE NORMS POST-ME FORMAT ## #
+    print("Converting matrices into NoRMS format...")
     mat_comp.convert_efs_to_norms_matrices(
         mat_import=compiled_dir,
         mat_export=mat_export,

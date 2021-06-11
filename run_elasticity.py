@@ -114,7 +114,12 @@ def _create_input_paths(noham_efs, norms_efs, use_bespoke_zones, use_wfh_adj):
 
 
 def _create_input_files(efs, scenario):
-    scenario_cost_home = os.path.join(efs.imports['home'], 'elasticities', scenario)
+    scenario_cost_home = os.path.join(
+        efs.imports['home'],
+        'scenarios',
+        scenario,
+        'elasticity',
+    )
 
     # Build the dictionary
     input_dict = {
@@ -276,10 +281,10 @@ def merge_internal_external(scenario,
 
 def main():
     # Controls I/O
-    scenario = efs_consts.SC03_DD
+    scenario = efs_consts.SC01_JAM
     iter_num = '3i'
     import_home = "I:/"
-    export_home = "C:/"
+    export_home = "E:/"
 
     base_year = 2018
     years = [2033, 2040, 2050]
