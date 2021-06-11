@@ -14,7 +14,7 @@ print("Starting to read files =", current_time)
 
 population = pd.read_csv(r"C:\Data\NorMITS\land_use_output_tfn_msoa1.csv")
 trip_rate = pd.read_csv(r"C:\Data\NorMITS\hb_trip_rates_normalised.csv")
-#to be moved to efs_constants
+#to be moved to efs_constants later
 target_cols = {
     'land_use': ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people'],
     'trip_rate': ['tfn_traveller_type', 'area_type', 'p', 'trip_rate']
