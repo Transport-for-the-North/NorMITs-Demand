@@ -21,7 +21,13 @@ import pandas as pd
 import tqdm
 
 # Local Imports
+from normits_demand import constants as consts
 from normits_demand import core
+
+from normits_demand.utils import general as du
+from normits_demand.utils import pandas_utils as pd_utils
+
+from normits_demand.concurrency import multiprocessing
 
 
 # ## CLASSES ## #
@@ -30,6 +36,7 @@ class DVector:
     _zone_col = 'zone_col'
     _segment_col = 'segment'
     _val_col = 'val'
+    _chunk_size = 100000
 
     def __init__(self,
                  zoning_system: core.ZoningSystem,
@@ -38,16 +45,20 @@ class DVector:
                  zone_col: str = None,
                  segment_col: str = None,
                  val_col: str = None,
+                 chunk_size: int = None,
+                 process_count: int = consts.PROCESS_COUNT,
                  verbose: bool = False,
                  ):
         # Init
         self.zoning_system = zoning_system
         self.segmentation = segmentation
+        self.process_count = process_count
 
         # Set defaults if args not set
         zone_col = self._zone_col if zone_col is None else zone_col
         segment_col = self._segment_col if segment_col is None else segment_col
         val_col = self._val_col if val_col is None else val_col
+        chunk_size = self._chunk_size if chunk_size is None else chunk_size
 
         # Try to convert the given data into DVector format
         if isinstance(import_data, pd.DataFrame):
@@ -56,6 +67,7 @@ class DVector:
                 zone_col,
                 segment_col,
                 val_col,
+                chunk_size,
                 verbose,
             )
         else:
@@ -63,35 +75,18 @@ class DVector:
                 "Don't know how to deal with anything other than a pandas DF"
             )
 
-    def _dataframe_to_dvec(self,
-                           df: pd.DataFrame,
-                           zone_col: str,
-                           segment_col: str,
-                           val_col: str,
-                           verbose: bool = False,
-                           ) -> Dict[str, np.ndarray]:
+    def _dataframe_to_dvec_internal(self,
+                                    df_chunk,
+                                    needed_cols,
+                                    zone_col,
+                                    segment_col,
+                                    val_col,
+                                    ):
         """
-        Converts a pandas dataframe into dvec.data internal structure
+        The internal function of _dataframe_to_dvec - for multiprocessing
         """
-        # Init
-        needed_cols = [zone_col, segment_col, val_col]
-
-        # TODO(BT): Once the segmentation object is properly implemented this
-        #  iterator should be determined from that object!
-        unique_segments = df['segment'].unique()
-
         # ## VALIDATE AND CONVERT THE GIVEN DATAFRAME ## #
-        # TODO(BT): Make this an error throwing utils function!
-        # Check that all the given columns actually exist in the data
-        for col in needed_cols:
-            if col not in df:
-                raise ValueError(
-                    "No columns named '%s' in the given dataframe.\n"
-                    "Only found the following columns: %s"
-                    % (col, list(df))
-                )
-
-        df = df.reindex(columns=needed_cols)
+        df_chunk = pd_utils.reindex_cols(df_chunk, needed_cols)
 
         # Rename import_data columns to internal names
         rename_dict = {
@@ -99,21 +94,13 @@ class DVector:
             segment_col: self._segment_col,
             val_col: self._val_col
         }
-        df = df.rename(columns=rename_dict)
-
-        # ## CONVERT THE DATAFRAME INTO A DVEC DATA ## #
-        # setup a pbar
-        pbar_kwargs = {
-            'desc': "Converting df to dvec",
-            'unit': "segment",
-            'disable': (not verbose),
-        }
+        df_chunk = df_chunk.rename(columns=rename_dict)
 
         # Generate the data on a per segment basis
-        dvec_data = dict()
-        for segment in tqdm.tqdm(unique_segments, **pbar_kwargs):
+        dvec_chunk = dict()
+        for segment in df_chunk['segment'].unique():
             # Get all available pop for this segment
-            seg_data = df[df[self._segment_col] == segment].copy()
+            seg_data = df_chunk[df_chunk[self._segment_col] == segment].copy()
 
             # Filter down to just data as values, and zoning system as the index
             seg_data = seg_data.reindex(columns=[self._zone_col, self._val_col])
@@ -123,8 +110,57 @@ class DVector:
             seg_data = seg_data.reindex(self.zoning_system.unique_zones, fill_value=0)
 
             # Assign to dict for storage
-            dvec_data[segment] = seg_data.values
+            dvec_chunk[segment] = seg_data.values
 
-        return dvec_data
+        return dvec_chunk
+
+    def _dataframe_to_dvec(self,
+                           df: pd.DataFrame,
+                           zone_col: str,
+                           segment_col: str,
+                           val_col: str,
+                           chunk_size: int,
+                           verbose: bool = False,
+                           ) -> Dict[str, np.ndarray]:
+        """
+        Converts a pandas dataframe into dvec.data internal structure
+        """
+        # Init
+        needed_cols = [zone_col, segment_col, val_col]
+
+        # TODO(BT): Once the segmentation object is properly implemented
+        #  some validation needs adding to make sure every value in the
+        #  segment column is a valid segment.
+
+        # setup a pbar
+        pbar_kwargs = {
+            'desc': "Converting df to dvec",
+            'unit': "segment",
+            'disable': (not verbose),
+            'total': round(len(df) / chunk_size)
+        }
+
+        # ## MULTIPROCESS THE DATA CONVERSION ## #
+        # Build a list of arguments
+        kwarg_list = list()
+        for df_chunk in pd_utils.chunk_df(df, chunk_size):
+            kwarg_list.append({
+                'df_chunk': df_chunk,
+                'needed_cols': needed_cols,
+                'zone_col': zone_col,
+                'segment_col': segment_col,
+                'val_col': val_col,
+            })
+
+        # Call across multiple threads
+        data_chunks = multiprocessing.multiprocess(
+            fn=self._dataframe_to_dvec_internal,
+            kwargs=kwarg_list,
+            process_count=self.process_count,
+            # NEED TO PULL IN CHANGES
+            # pbar_kwargs=pbar_kwargs,
+        )
+
+        return du.sum_dict_list(data_chunks)
 
 # ## FUNCTIONS ## #

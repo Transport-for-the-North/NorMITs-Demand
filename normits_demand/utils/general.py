@@ -3406,7 +3406,7 @@ def concat_df_dict(dict_list: List[Dict[Any, pd.DataFrame]],
                    non_sum_cols: List[str],
                    concat_keys: List[Any] = None,
                    sort: bool = False
-                ) -> Dict[Any, pd.DataFrame]:
+                   ) -> Dict[Any, pd.DataFrame]:
     """
     Sums the dataframes in dict_list on matching keys
 
@@ -3453,3 +3453,28 @@ def concat_df_dict(dict_list: List[Dict[Any, pd.DataFrame]],
         ret_dict[k] = concat_df
 
     return ret_dict
+
+
+def sum_dict_list(dict_list: List[Dict[Any, Any]]) -> Dict[Any, Any]:
+    """
+    Sums all dictionaries in dict_list together.
+
+    Parameters
+    ----------
+    dict_list:
+        A list of dictionaries to sum together.
+
+    Returns
+    -------
+    summed_dict:
+        A single dictionary of all the dicts in dict_list summed together.
+    """
+    # Define the accumulator function to call in functools.reduce
+    def reducer(accumulator, item):
+        for key, value in item.items():
+            accumulator[key] = accumulator.get(key, 0) + value
+        return accumulator
+
+    return functools.reduce(reducer, dict_list, {})
+
+
