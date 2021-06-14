@@ -104,6 +104,8 @@ def dvec_obj_main():
         verbose=True,
     )
 
+    print("hi")
+
 
 if __name__ == '__main__':
     # main()
