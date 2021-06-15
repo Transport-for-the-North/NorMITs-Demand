@@ -20,6 +20,7 @@ from typing import Generator
 import pandas as pd
 
 # Local
+from normits_demand.utils import general as du
 
 
 def reindex_cols(df: pd.DataFrame,
@@ -67,6 +68,53 @@ def reindex_cols(df: pd.DataFrame,
                 )
 
     return df.reindex(columns=columns, **kwargs)
+
+
+def reindex_and_groupby(df: pd.DataFrame,
+                        index_cols: List[str],
+                        value_cols: List[str],
+                        throw_error: bool = True,
+                        **kwargs,
+                        ) -> pd.DataFrame:
+    """
+    # TODO(BT): Properly document this function!
+    Wrapper around df.reindex() and df.groupby(). Will throw error if
+    index_cols aren't in df.
+
+    Parameters
+    ----------
+    df
+    index_cols
+    value_cols
+    throw_error
+    kwargs
+
+    Returns
+    -------
+
+    """
+    # ## VALIDATE INPUTS ## #
+    for col in index_cols:
+        if col not in df:
+            raise ValueError(
+                "No columns named '%s' in the given dataframe.\n"
+                "Only found the following columns: %s"
+                % (col, list(df))
+            )
+
+    for col in value_cols:
+        if col not in index_cols:
+            raise ValueError(
+                "Value '%s' from value_cols is not in index_cols."
+                "Can only accept value_cols that are in index_cols."
+                % col
+            )
+    
+    # Generate the group cols
+    group_cols = du.list_safe_remove(index_cols, value_cols, throw_error)
+
+    df = df.reindex(columns=index_cols, **kwargs)
+    return df.groupby(group_cols).sum().reset_index()
 
 
 def str_join_cols(df: pd.DataFrame,

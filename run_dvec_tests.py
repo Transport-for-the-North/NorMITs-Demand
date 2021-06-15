@@ -14,6 +14,8 @@ import tqdm
 # local imports
 import normits_demand as nd
 
+from normits_demand.utils import pandas_utils as pd_utils
+
 # GLOBAL VARIABLES
 # I Drive Path locations
 POPULATION_PATH = r"I:\NorMITs Land Use\base_land_use\iter3b\outputs\land_use_output_tfn_msoa1.csv"
@@ -73,6 +75,12 @@ def main():
 
 def dvec_obj_main():
 
+    # Define the zoning and segmentations we want to use
+    import_drive = "I:/"
+    msoa_zoning = nd.get_zoning_system(name='msoa', import_drive=import_drive)
+    pop_seg = nd.get_segmentation_level(name='lu_pop', import_drive=import_drive)
+    trip_rates_seg = nd.get_segmentation_level(name='hb_trip_rates', import_drive=import_drive)
+
     # Define wanted columns
     target_cols = {
         'land_use': ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people'],
@@ -82,29 +90,73 @@ def dvec_obj_main():
     # Read in pop and trip rates
     print("Reading in files...")
     pop = pd.read_csv(POPULATION_PATH, usecols=target_cols['land_use'])
-    # trip_rates = pd.read_csv(TRIP_RATES_PATH, usecols=target_cols['trip_rate'])
+    trip_rates = pd.read_csv(TRIP_RATES_PATH, usecols=target_cols['trip_rate'])
+
+    # ## CREATE THE POP DVEC ## #
+    print("Creating pop DVec...")
 
     # Add a segment column
-    # TODO(BT): Once the Segmentation object is properly implemented, that
-    #  should have a function to add this new col automatically?
-    pop['segment'] = pop['tfn_traveller_type'].astype(str) + "_" + pop['area_type'].astype(str)
+    naming_conversion = {
+        'tfn_tt': 'tfn_traveller_type',
+        'tfn_at': 'area_type',
+    }
+    pop['segment'] = pop_seg.create_segment_col(pop, naming_conversion)
 
     # Filter pop down ready for import into Dvec
-    group_cols = ['segment', 'msoa_zone_id']
-    index_cols = group_cols.copy() + ['people']
+    pop = pd_utils.reindex_and_groupby(
+        df=pop,
+        index_cols=['segment', 'msoa_zone_id', 'people'],
+        value_cols=['people'],
+    )
 
-    pop = pop.reindex(columns=index_cols)
-    pop = pop.groupby(group_cols).sum().reset_index()
-
-    print("Creating pop DVec...")
+    # Instantiate
     pop_dvec = nd.DVector(
-        zoning_system=nd.get_zoning_system(name='msoa', import_drive="I:/"),
-        segmentation=nd.get_segmentation_level(name='lu_pop', import_drive="I:/"),
+        zoning_system=msoa_zoning,
+        segmentation=pop_seg,
         import_data=pop,
         zone_col="msoa_zone_id",
         segment_col="segment",
         val_col="people",
         verbose=True,
+    )
+
+    # ## CREATE THE TRIP RATES DVEC ## #
+    print("Creating trip rates DVec...")
+
+    # Add a segment column
+    naming_conversion = {
+        'p': 'p',
+        'tfn_tt': 'tfn_traveller_type',
+        'tfn_at': 'area_type',
+    }
+    trip_rates['segment'] = trip_rates_seg.create_segment_col(trip_rates, naming_conversion)
+
+    # Filter pop down ready for import into Dvec
+    trip_rates = pd_utils.reindex_and_groupby(
+        df=trip_rates,
+        index_cols=['segment', 'trip_rate'],
+        value_cols=['trip_rate'],
+    )
+
+    # Instantiate
+    trip_rates_dvec = nd.DVector(
+        zoning_system=None,
+        segmentation=trip_rates_seg,
+        import_data=trip_rates,
+        zone_col=None,
+        segment_col="segment",
+        val_col="trip_rate",
+        verbose=True,
+    )
+
+    # ## MULTIPLY TOGETHER ## #
+    # TODO(BT): Need to implement this - example calling structure?
+    #  Need to think about how this will work in more detail
+    #  Specifically, how to generalise properly!
+    nd.core.multiply_dvecs(
+        a=pop_dvec,
+        b=trip_rates_dvec,
+        join_on=['tfn_tt', 'tfn_at']
     )
 
 

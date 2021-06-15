@@ -11,7 +11,10 @@ File purpose:
 Holds custom normits_demand objects, such as DVector and its functions
 """
 # Builtins
+import os
+import math
 
+from typing import List
 from typing import Dict
 
 # Third Party
@@ -21,6 +24,7 @@ import pandas as pd
 import tqdm
 
 # Local Imports
+import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand import core
 
@@ -52,6 +56,9 @@ class DVector:
         # Init
         self.zoning_system = zoning_system
         self.segmentation = segmentation
+
+        if process_count < 0:
+            process_count = os.cpu_count() + process_count
         self.process_count = process_count
 
         # Set defaults if args not set
@@ -77,7 +84,6 @@ class DVector:
 
     def _dataframe_to_dvec_internal(self,
                                     df_chunk,
-                                    needed_cols,
                                     zone_col,
                                     segment_col,
                                     val_col,
@@ -86,6 +92,10 @@ class DVector:
         The internal function of _dataframe_to_dvec - for multiprocessing
         """
         # ## VALIDATE AND CONVERT THE GIVEN DATAFRAME ## #
+        if self.zoning_system is None:
+            needed_cols = [segment_col, val_col]
+        else:
+            needed_cols = [zone_col, segment_col, val_col]
         df_chunk = pd_utils.reindex_cols(df_chunk, needed_cols)
 
         # Rename import_data columns to internal names
@@ -102,15 +112,28 @@ class DVector:
             # Get all available pop for this segment
             seg_data = df_chunk[df_chunk[self._segment_col] == segment].copy()
 
-            # Filter down to just data as values, and zoning system as the index
-            seg_data = seg_data.reindex(columns=[self._zone_col, self._val_col])
-            seg_data = seg_data.set_index(self._zone_col)
+            # Normalise the values depending on the zoning system
+            if self.zoning_system is None:
+                # No zoning system, should only have a single value
+                if len(seg_data) > 1:
+                    raise nd.NormitsDemandError(
+                        "While instantiating a DVec object without a "
+                        "zoning system, found more than one value for segment "
+                        "'%s'. Should only be one value per segment if "
+                        "zoning_system is set to None"
+                        % segment
+                    )
 
-            # Infill any missing zones as 0
-            seg_data = seg_data.reindex(self.zoning_system.unique_zones, fill_value=0)
+                dvec_chunk[segment] = seg_data[self._val_col].squeeze()
 
-            # Assign to dict for storage
-            dvec_chunk[segment] = seg_data.values
+            else:
+                # Filter down to just data as values, and zoning system as the index
+                seg_data = seg_data.reindex(columns=[self._zone_col, self._val_col])
+                seg_data = seg_data.set_index(self._zone_col)
+
+                # Infill any missing zones as 0
+                seg_data = seg_data.reindex(self.zoning_system.unique_zones, fill_value=0)
+                dvec_chunk[segment] = seg_data.values
 
         return dvec_chunk
 
@@ -126,7 +149,6 @@ class DVector:
         Converts a pandas dataframe into dvec.data internal structure
         """
         # Init
-        needed_cols = [zone_col, segment_col, val_col]
 
         # TODO(BT): Once the segmentation object is properly implemented
         #  some validation needs adding to make sure every value in the
@@ -140,13 +162,16 @@ class DVector:
             'total': round(len(df) / chunk_size)
         }
 
+        # If the dataframe is smaller than the chunk size, evenly split across cores
+        if len(df) < chunk_size * self.process_count:
+            chunk_size = math.ceil(len(df) / self.process_count)
+
         # ## MULTIPROCESS THE DATA CONVERSION ## #
         # Build a list of arguments
         kwarg_list = list()
         for df_chunk in pd_utils.chunk_df(df, chunk_size):
             kwarg_list.append({
                 'df_chunk': df_chunk,
-                'needed_cols': needed_cols,
                 'zone_col': zone_col,
                 'segment_col': segment_col,
                 'val_col': val_col,
@@ -163,4 +188,10 @@ class DVector:
 
         return du.sum_dict_list(data_chunks)
 
+
 # ## FUNCTIONS ## #
+def multiply_dvecs(a: DVector,
+                   b: DVector,
+                   join_on: List[str],
+                   ) -> DVector:
+    raise NotImplementedError()

@@ -12,9 +12,9 @@ Holds the SegmentationLevel Class which stores all information on segmentations
 """
 # Builtins
 import os
-import functools
 
 from typing import List
+from typing import Dict
 
 # Third Party
 import pandas as pd
@@ -65,6 +65,51 @@ class SegmentationLevel:
         )
         self.segments_and_names = segments_and_names
         self.segment_names = segments_and_names['name']
+
+    def create_segment_col(self,
+                           df: pd.DataFrame,
+                           naming_conversion: Dict[str, str] = None,
+                           ) -> pd.Series:
+        """
+        TODO(BT): Properly document this function!!
+
+        Parameters
+        ----------
+        df:
+        naming_conversion:
+
+        Returns
+        -------
+
+        """
+        # Init
+        if naming_conversion is None:
+            naming_conversion = {x: x for x in self.naming_order}
+
+        # ## VALIDATE ARGS ## #
+        # Check the keys are valid segments
+        for key in naming_conversion.keys():
+            if key not in self.naming_order:
+                raise ValueError(
+                    "Key '%s' in naming conversion is not a valid segment "
+                    "name for this segmentation. Expecting one of: %s"
+                    % (key, self.naming_order)
+                )
+
+        # Check that the values given are in df
+        for value in naming_conversion.values():
+            if value not in df:
+                raise ValueError(
+                    "No column named '%s' in the given dataframe."
+                    "Found columns: %s"
+                    % (value, list(df))
+                )
+
+        # Rename columns as needed
+        df = df.rename(columns={v: k for k, v in naming_conversion.items()})
+
+        # Generate the naming column, and return
+        return pd_utils.str_join_cols(df, self.naming_order)
 
 
 # ## FUNCTIONS ## #
