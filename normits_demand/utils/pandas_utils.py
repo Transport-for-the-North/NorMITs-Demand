@@ -11,6 +11,7 @@ File purpose:
 Collection of utility functions specifically for manipulating pandas
 """
 # Builtins
+import functools
 
 from typing import List
 from typing import Generator
@@ -66,6 +67,41 @@ def reindex_cols(df: pd.DataFrame,
                 )
 
     return df.reindex(columns=columns, **kwargs)
+
+
+def str_join_cols(df: pd.DataFrame,
+                  columns: List[str],
+                  separator: str = '_',
+                  ) -> pd.Series:
+    """
+    Equivalent to separator.join(columns) for all rows of df
+
+    Joins the given columns together using separator. Returns a pandas Series
+    with the return value in.
+
+    Parameters
+    ----------
+    df:
+        The dataframe containing the columns to join
+
+    columns:
+        The columns in df to concatenate together
+
+    separator:
+        The separator to use when joining columns together.
+
+    Returns
+    -------
+    joined_column:
+        a Pandas.Series containing all columns joined together using separator
+    """
+    # Define the accumulator function
+    def reducer(accumulator, item):
+        return accumulator + separator + item
+
+    # Join the cols together
+    join_cols = [df[x].astype(str) for x in columns]
+    return functools.reduce(reducer, join_cols)
 
 
 def chunk_df(df: pd.DataFrame,

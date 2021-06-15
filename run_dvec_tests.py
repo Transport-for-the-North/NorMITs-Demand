@@ -18,10 +18,12 @@ import normits_demand as nd
 # I Drive Path locations
 POPULATION_PATH = r"I:\NorMITs Land Use\base_land_use\iter3b\outputs\land_use_output_tfn_msoa1.csv"
 TRIP_RATES_PATH = r"I:\Data\NTS\outputs\hb\hb_trip_rates\hb_trip_rates_normalised.csv"
+MODE_TIME_SPLITS_PATH = r"I:\Data\NTS\outputs\hb\hb_time_mode_split_long.csv"
 
 # # Nirmal C Drive locations
 # POPULATION_PATH = r"C:\Data\NorMITS\land_use_output_tfn_msoa1.csv"
 # TRIP_RATES_PATH = r"C:\Data\NorMITS\hb_trip_rates_normalised.csv"
+
 
 def main():
 
@@ -80,7 +82,7 @@ def dvec_obj_main():
     # Read in pop and trip rates
     print("Reading in files...")
     pop = pd.read_csv(POPULATION_PATH, usecols=target_cols['land_use'])
-    trip_rates = pd.read_csv(TRIP_RATES_PATH, usecols=target_cols['trip_rate'])
+    # trip_rates = pd.read_csv(TRIP_RATES_PATH, usecols=target_cols['trip_rate'])
 
     # Add a segment column
     # TODO(BT): Once the Segmentation object is properly implemented, that
@@ -94,17 +96,16 @@ def dvec_obj_main():
     pop = pop.reindex(columns=index_cols)
     pop = pop.groupby(group_cols).sum().reset_index()
 
+    print("Creating pop DVec...")
     pop_dvec = nd.DVector(
         zoning_system=nd.get_zoning_system(name='msoa', import_drive="I:/"),
-        segmentation=None,  # Not implemented yet
+        segmentation=nd.get_segmentation_level(name='lu_pop', import_drive="I:/"),
         import_data=pop,
         zone_col="msoa_zone_id",
         segment_col="segment",
         val_col="people",
         verbose=True,
     )
-
-    print("hi")
 
 
 if __name__ == '__main__':

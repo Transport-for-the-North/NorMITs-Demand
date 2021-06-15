@@ -28,6 +28,7 @@ from normits_demand.core import DVector
 
 # Core Object Getters
 from normits_demand.core import get_zoning_system
+from normits_demand.core import get_segmentation_level
 
 # Audit classes
 from normits_demand.reports.efs_reporting import EfsReporter

@@ -25,6 +25,7 @@ import normits_demand as nd
 class ZoningSystem:
 
     _normits_demand_name = "NorMITs Demand"
+    _core_subpath = os.path.join("import", "core_dtypes")
     _zoning_system_import_fname = "zoning_systems"
     _zones_fname = "zones.csv"
 
@@ -46,7 +47,7 @@ def _get_unique_zones(name: str, import_drive: nd.PathLike) -> np.ndarray:
     import_home = os.path.join(
         import_drive,
         ZoningSystem._normits_demand_name,
-        "import",
+        ZoningSystem._core_subpath,
         ZoningSystem._zoning_system_import_fname,
         name,
     )
@@ -82,6 +83,7 @@ def _get_unique_zones(name: str, import_drive: nd.PathLike) -> np.ndarray:
 def get_zoning_system(name: str, import_drive: nd.PathLike) -> ZoningSystem:
     # TODO(BT): Write docs!
     # TODO(BT): Add some validation on the zone name
+    # TODO(BT): Instantiate import drive for these on module import!
     # TODO(BT): Add some caching to this function!
 
     # Create the ZoningSystem object and return
