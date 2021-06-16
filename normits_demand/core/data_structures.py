@@ -194,4 +194,30 @@ def multiply_dvecs(a: DVector,
                    b: DVector,
                    join_on: List[str],
                    ) -> DVector:
-    raise NotImplementedError()
+    mult_dvec = dict()
+
+    for k in b:
+        k1 = str(k).split("_", 1)[1]
+        for l in a:
+            if k1 == l:
+                mult_dvec[k] = np.multiply(a[l], b[k])
+    """
+    dvec_trips = dict()
+    c = 1
+    needed_cols = ['p', 'tfn_tt']
+    p_tfntt = pd_utils.str_join_cols(b, needed_cols)
+    
+    for m in p_tfntt:
+        for o in mult_dvec:
+            o1 = o.rsplit("_", 1)[0]
+            if o1 == m and c == 1:
+                dvec_trips[m] = mult_dvec[o]
+                c += 1
+            elif o1 == m and c > 1:
+                dvec_trips[m] = np.add(dvec_trips[m], mult_dvec[o])
+        c = 1
+    """
+    return mult_dvec
+
+
+
