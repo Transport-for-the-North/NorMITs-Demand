@@ -1,15 +1,14 @@
 from .version import __version__
 
 # Custom types
-from normits_demand.types import PathLike
-from normits_demand.types import SegmentAggregationDict
-from normits_demand.types import FactorsDict
+from normits_demand.types import *
 
 # NorMITs Demand Errors
 from normits_demand.utils.general import NormitsDemandError
 from normits_demand.utils.general import ExternalForecastSystemError
 from normits_demand.utils.general import InitialisationError
 from normits_demand.audits.audits import AuditError
+from normits_demand.core import ZoningError
 
 # ## EXPOSE CLASS LAYER ## #
 # EFS Class Layer

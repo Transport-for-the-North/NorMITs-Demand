@@ -38,6 +38,15 @@ class ZoningSystem:
         self.unique_zones = np.sort(unique_zones)
 
 
+class ZoningError(nd.NormitsDemandError):
+    """
+    Exception for all errors that occur around zone management
+    """
+    def __init__(self, message=None):
+        self.message = message
+        super().__init__(self.message)
+
+
 # ## FUNCTIONS ##
 def _get_unique_zones(name: str, import_drive: nd.PathLike) -> np.ndarray:
     """

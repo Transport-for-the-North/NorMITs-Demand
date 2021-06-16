@@ -10,12 +10,17 @@ Other updates made by:
 File purpose:
 Holds custom normits_demand objects, such as DVector and its functions
 """
+# Allow class self type hinting
+from __future__ import annotations
+
 # Builtins
 import os
 import math
 
 from typing import List
 from typing import Dict
+from typing import Tuple
+from typing import Union
 
 # Third Party
 import numpy as np
@@ -45,17 +50,20 @@ class DVector:
     def __init__(self,
                  zoning_system: core.ZoningSystem,
                  segmentation: core.SegmentationLevel,
-                 import_data: pd.DataFrame,
+                 import_data: Union[pd.DataFrame, nd.DVectorData],
                  zone_col: str = None,
                  segment_col: str = None,
                  val_col: str = None,
                  chunk_size: int = None,
                  process_count: int = consts.PROCESS_COUNT,
                  verbose: bool = False,
-                 ):
+                 ) -> DVector:
         # Init
         self.zoning_system = zoning_system
         self.segmentation = segmentation
+        self.chunk_size = chunk_size
+        self.verbose = verbose
+        self.chunk_size = self._chunk_size if chunk_size is None else chunk_size
 
         if process_count < 0:
             process_count = os.cpu_count() + process_count
@@ -65,7 +73,6 @@ class DVector:
         zone_col = self._zone_col if zone_col is None else zone_col
         segment_col = self._segment_col if segment_col is None else segment_col
         val_col = self._val_col if val_col is None else val_col
-        chunk_size = self._chunk_size if chunk_size is None else chunk_size
 
         # Try to convert the given data into DVector format
         if isinstance(import_data, pd.DataFrame):
@@ -74,20 +81,26 @@ class DVector:
                 zone_col,
                 segment_col,
                 val_col,
-                chunk_size,
-                verbose,
             )
+        elif isinstance(import_data, dict):
+            self.data = self._dict_to_dvec(import_data)
         else:
             raise NotImplementedError(
-                "Don't know how to deal with anything other than a pandas DF"
+                "Don't know how to deal with anything other than: "
+                "pandas DF, or dict"
             )
+
+    def _dict_to_dvec(self, import_data) -> nd.DVectorData:
+        # TODO(BT): Add some error checking to make sure this is
+        #  actually a valid dict
+        return import_data
 
     def _dataframe_to_dvec_internal(self,
                                     df_chunk,
                                     zone_col,
                                     segment_col,
                                     val_col,
-                                    ):
+                                    ) -> nd.DVectorData:
         """
         The internal function of _dataframe_to_dvec - for multiprocessing
         """
@@ -142,9 +155,7 @@ class DVector:
                            zone_col: str,
                            segment_col: str,
                            val_col: str,
-                           chunk_size: int,
-                           verbose: bool = False,
-                           ) -> Dict[str, np.ndarray]:
+                           ) -> nd.DVectorData:
         """
         Converts a pandas dataframe into dvec.data internal structure
         """
@@ -158,13 +169,15 @@ class DVector:
         pbar_kwargs = {
             'desc': "Converting df to dvec",
             'unit': "segment",
-            'disable': (not verbose),
-            'total': round(len(df) / chunk_size)
+            'disable': (not self.verbose),
+            'total': round(len(df) / self.chunk_size)
         }
 
         # If the dataframe is smaller than the chunk size, evenly split across cores
-        if len(df) < chunk_size * self.process_count:
+        if len(df) < self.chunk_size * self.process_count:
             chunk_size = math.ceil(len(df) / self.process_count)
+        else:
+            chunk_size = self.chunk_size
 
         # ## MULTIPROCESS THE DATA CONVERSION ## #
         # Build a list of arguments
@@ -188,12 +201,90 @@ class DVector:
 
         return du.sum_dict_list(data_chunks)
 
+    @staticmethod
+    def _multiply(a: DVector,
+                  b: DVector,
+                  ) -> DVector:
+        """
+        Builds a new Dvec by multiplying a and b together.
+
+        How to join the two Dvectors is defined by the segmentation of each
+        Dvector.
+
+        Retains process_count, chunk_size, and verbose params from a.
+
+        Parameters
+        ----------
+        a:
+            The first DVector to multiply
+        b:
+            The second DVector to multiply
+
+        Returns
+        -------
+        c:
+            A new DVector which is the product of multiplying a and b.
+        """
+        # ## CHECK WE CAN MULTIPLY a AND b ## #
+        if a.zoning_system == b.zoning_system:
+            return_zoning_system = a.zoning_system
+        elif a.zoning_system is None:
+            return_zoning_system = b.zoning_system
+        elif b.zoning_system is None:
+            return_zoning_system = a.zoning_system
+        else:
+            raise nd.ZoningError(
+                "Cannot multiply two Dvectors using different zoning systems.\n"
+                "zoning system of a: %s\n"
+                "zoning system of b: %s\n"
+                % (a.zoning_system.name, b.zoning_system.name)
+            )
+
+        # ## DO MULTIPLICATION ## #
+        # Use the segmentations to figure out what to multiply
+        multiply_dict, return_segmentation = a.segmentation * b.segmentation
+
+        # Build the dvec data here with multiplication
+        # TODO(NK): Translate your multiplication code to build the dvec_data
+        #  here, using the multiply_dict above. The multiply_dict defines
+        #  How the multiplication of the Dvecs should be done.
+        #  Key = Returning Dvec segment name
+        #  Values = Tuple[a_segment_name, b_segment_name]
+        dvec_data = dict()
+
+        return DVector(
+            zoning_system=return_zoning_system,
+            segmentation=return_segmentation,
+            import_data=dvec_data,
+            process_count=a.process_count,
+            verbose=a.verbose,
+        )
+
 
 # ## FUNCTIONS ## #
 def multiply_dvecs(a: DVector,
                    b: DVector,
-                   join_on: List[str],
                    ) -> DVector:
+    """
+    Builds a new Dvec by multiplying a and b together.
+
+    How to join the two Dvectors is defined by the segmentation of each
+    Dvector.
+
+    Parameters
+    ----------
+    a:
+        The first DVector to multiply
+    b:
+        The second DVector to multiply
+
+    Returns
+    -------
+    c:
+        A new DVector which is the product of multiplying a and b.
+    """
+    return DVector._multiply(a, b)
+
     mult_dvec = dict()
 
     for k in b:

@@ -79,7 +79,7 @@ def dvec_obj_main():
     import_drive = "I:/"
     msoa_zoning = nd.get_zoning_system(name='msoa', import_drive=import_drive)
     pop_seg = nd.get_segmentation_level(name='lu_pop', import_drive=import_drive)
-    trip_rates_seg = nd.get_segmentation_level(name='hb_trip_rates', import_drive=import_drive)
+    pure_demand_seg = nd.get_segmentation_level(name='pure_demand', import_drive=import_drive)
 
     # Define wanted columns
     target_cols = {
@@ -124,12 +124,13 @@ def dvec_obj_main():
     print("Creating trip rates DVec...")
 
     # Add a segment column
+    # Create inside DVec!!!
     naming_conversion = {
         'p': 'p',
         'tfn_tt': 'tfn_traveller_type',
         'tfn_at': 'area_type',
     }
-    trip_rates['segment'] = trip_rates_seg.create_segment_col(trip_rates, naming_conversion)
+    trip_rates['segment'] = pure_demand_seg.create_segment_col(trip_rates, naming_conversion)
 
     # Filter pop down ready for import into Dvec
     trip_rates = pd_utils.reindex_and_groupby(
@@ -141,7 +142,7 @@ def dvec_obj_main():
     # Instantiate
     trip_rates_dvec = nd.DVector(
         zoning_system=None,
-        segmentation=trip_rates_seg,
+        segmentation=pure_demand_seg,
         import_data=trip_rates,
         zone_col=None,
         segment_col="segment",
@@ -156,7 +157,6 @@ def dvec_obj_main():
     nd.core.multiply_dvecs(
         a=pop_dvec,
         b=trip_rates_dvec,
-        join_on=['tfn_tt', 'tfn_at']
     )
 
 

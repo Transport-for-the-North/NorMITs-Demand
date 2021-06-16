@@ -2720,6 +2720,7 @@ def filter_df(df: pd.DataFrame,
     kwargs:
         Any additional kwargs that should be passed to fit_filter() if fit is
         set to True.
+
     Returns
     -------
     filtered_df:

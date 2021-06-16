@@ -13,6 +13,8 @@ Collection of utility functions specifically for manipulating pandas
 # Builtins
 import functools
 
+from typing import Any
+from typing import Dict
 from typing import List
 from typing import Generator
 
@@ -115,6 +117,30 @@ def reindex_and_groupby(df: pd.DataFrame,
 
     df = df.reindex(columns=index_cols, **kwargs)
     return df.groupby(group_cols).sum().reset_index()
+
+
+def filter_df(df: pd.DataFrame,
+              df_filter: Dict[str, Any],
+              ) -> pd.DataFrame:
+    """
+    TODO(BT): Write Docs
+    Parameters
+    ----------
+    df
+    df_filter
+
+    Returns
+    -------
+
+    """
+    # Wrap each item if a list to avoid errors
+    for k, v in df_filter.items():
+        if not pd.api.types.is_list_like(v):
+            df_filter[k] = [v]
+
+    needed_cols = list(df_filter.keys())
+    mask = df[needed_cols].isin(df_filter).all(axis='columns')
+    return df[mask]
 
 
 def str_join_cols(df: pd.DataFrame,

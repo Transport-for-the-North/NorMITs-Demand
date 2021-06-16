@@ -10,3 +10,6 @@ from normits_demand.core.segments import get_segmentation_level
 
 # ## EXPOSE USEFUL FUNCTIONALITY ## #
 from normits_demand.core.data_structures import multiply_dvecs
+
+# ## EXPOSE ERRORS ## #
+from normits_demand.core.zoning import ZoningError
