@@ -87,7 +87,6 @@ better with TMS output paths.
 - Fixed issue in Production/Attraction models dropping population and employment
 - Updated NoRMS I/O to decompile post-ME and compile outputs correctly for NoRMS
     - Fixed an issue with demand being dropped - issue added to backlog for a full fix 
-
 - CS - Write updates to TMS since last merge
 - Added Mobile Network Data LOT 2 segmentor and privacy masker
 - Future years changed - 2035 has been swapped for 2040
@@ -107,8 +106,7 @@ better with TMS output paths.
     - Elasticity now operates on internal demand only
     - Reads in new land use data, split by future years
     - Added in WFH adjustments after matrix distribution
-
-### v0.3.5
 - Updated run_tms.py to export a text file containing inputs
 - Added versioning to run_tms.py
-- Added versioning to reports_audits.py and updated code to include versioning as part of their file name in distribution reports
+- Added versioning to reports_audits.py and updated code to include versioning 
+as part of their file name in distribution reports
