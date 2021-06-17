@@ -21,6 +21,7 @@ POSTME_TP_SPLIT_FACTORS_FNAME = "post_me_nhb_tp_splitting_factors.pkl"
 POSTME_FROM_TO_FACTORS_FNAME = "post_me_from_to_factors.pkl"
 
 COMPRESSION_SUFFIX = '.pbz2'
+VALID_MAT_FTYPES = ['.csv', COMPRESSION_SUFFIX]
 
 
 # TODO: Parse norms input names in a function to generate this!!!
@@ -109,3 +110,20 @@ AGG_AT = {
     'tfn_area_type': [1, 2, 3, 4, 5, 6, 7, 8],
     'nelum_area_type': [1, 1, 1, 2, 2, 2, 3, 3],  # ?? Needs audit
     'agg_tfn_area_type': [1, 1, 2, 2, 3, 3, 4, 4]}
+
+# ## SEGMENTATIONS ## #
+# Segmentation values
+VALID_CA = [1, 2]
+
+# How do user classes relate to purposes
+USER_CLASS_PURPOSES = {
+    'commute': [1],
+    'business': [2, 12],
+    'other': [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
+}
+
+HB_USER_CLASS_PURPOSES = {
+    'commute': [1],
+    'business': [2],
+    'other': [3, 4, 5, 6, 7, 8]
+}

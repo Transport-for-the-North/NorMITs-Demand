@@ -109,8 +109,7 @@ class PopEmpComparator:
             )
 
         du.print_w_toggle("Initialising %s comparisons:"
-                          % self.data_type.capitalize(),
-                          echo=verbose)
+                          % self.data_type.capitalize(), verbose=verbose)
 
         # Read the output data and extract years columns
         self.output, self.years = self._read_output(output_csv)
@@ -230,7 +229,7 @@ class PopEmpComparator:
             path = by_pop_path
 
             # Read base year data
-            du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
+            du.print_w_toggle(f'\tReading "{path}"', verbose=self.verbose, end="")
 
             input_data = pm.get_pop_data_from_land_use(path, base_year=base_year)
             input_data = input_data.reindex(columns=index_cols)
@@ -241,7 +240,7 @@ class PopEmpComparator:
             path = by_emp_path
 
             # Read in base year data
-            du.print_w_toggle(f'\tReading "{path}"', end="", echo=self.verbose)
+            du.print_w_toggle(f'\tReading "{path}"', verbose=self.verbose, end="")
             input_data = am.get_emp_data_from_land_use(path, base_year=base_year)
             input_data = input_data.reindex(columns=index_cols)
             input_data = input_data.groupby(group_cols, as_index=False).sum()
@@ -252,8 +251,7 @@ class PopEmpComparator:
                              "able to get here!" % str(self.data_type))
 
         input_data.rename(columns={base_yr_col: str(self.base_year)}, inplace=True)
-        du.print_w_toggle(f" - Done in {time.perf_counter() - start:,.1f}s",
-                          echo=self.verbose)
+        du.print_w_toggle(f" - Done in {time.perf_counter() - start:,.1f}s", verbose=self.verbose)
 
         # Read constraint data for required years
         cols = [self.ZONE_COL, *self.years]

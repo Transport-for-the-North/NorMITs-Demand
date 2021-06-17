@@ -94,15 +94,11 @@ class TestGenCostCarMins:
     def test_different_shapes(self):
         """Test that the correct error is raised if matrices aren't the same shape. """
         with pytest.raises(ValueError) as e:
-            gc.gen_cost_car_mins(
-                {
-                    "time": self.TIME_MAT,
-                    "dist": self.DIST_MAT,
-                    "toll": np.zeros((3, 3)),
-                },
-                self.VC,
-                self.VT,
-            )
+            gc.gen_cost_car_mins({
+                "time": self.TIME_MAT,
+                "dist": self.DIST_MAT,
+                "toll": np.zeros((3, 3)),
+            }, self.VC, self.VT)
         msg = (
             "Matrices are not all the same shape: "
             "time = (2, 2), dist = (2, 2), toll = (3, 3)"
@@ -111,15 +107,11 @@ class TestGenCostCarMins:
 
     def test_calculation(self):
         """Test that the calculation produces the correct values. """
-        test = gc.gen_cost_car_mins(
-            {
-                "time": self.TIME_MAT,
-                "dist": self.DIST_MAT,
-                "toll": self.TOLL_MAT,
-            },
-            self.VC,
-            self.VT,
-        )
+        test = gc.gen_cost_car_mins({
+            "time": self.TIME_MAT,
+            "dist": self.DIST_MAT,
+            "toll": self.TOLL_MAT,
+        }, self.VC, self.VT)
         answer = np.array(
             [
                 [2.905002543443918, 2.9040025908372824],
@@ -285,9 +277,11 @@ class TestGetCosts:
     @pytest.mark.parametrize(
         "mode, zone_system", [("car", "noham"), ("rail", "norms")]
     )
-    def test_read(
-        self, costs: Tuple[Dict[str, Path], Path], mode: str, zone_system: str
-    ):
+    def test_read(self,
+                  costs: Tuple[Dict[str, Path], Path],
+                  mode: str,
+                  zone_system: str
+                  ) -> None:
         """Test that the function reads the costs correctly.
 
         Parameters
@@ -297,13 +291,7 @@ class TestGetCosts:
         mode : str
             Which mode to test, either car or rail.
         """
-        test = gc.get_costs(
-            costs[0][mode],
-            mode,
-            zone_system,
-            costs[1],
-            self.NOHAM_DEMAND,
-        )
+        test = gc.get_costs(costs[0][mode], mode, zone_system, costs[1], self.NOHAM_DEMAND)
         pd.testing.assert_frame_equal(
             test, self.CONVERTED_COSTS[mode], check_dtype=False
         )
@@ -402,6 +390,7 @@ class TestReadGCParameters:
         {
             "year": ["2018", "2018", "2030", "2030"],
             "mode": ["car", "rail"] * 2,
+            "purpose": ["commute"] * 4,
             "vot": [16.2, 16.4, 17.2, 17.4],
             "voc": [9.45, np.nan, 10.45, np.nan],
         }
@@ -418,6 +407,7 @@ class TestReadGCParameters:
     }
     YEARS = ["2018", "2030"]
     MODES = ["car", "rail"]
+    PURPOSES = ["commute"]
 
     @pytest.fixture(name="param_path", scope="class")
     def fixture_param_path(self, tmp_path_factory) -> Tuple[Path, Path]:
@@ -450,7 +440,7 @@ class TestReadGCParameters:
         param_path : Tuple[Path, Path]
             Paths to the correct and missing files, respectively.
         """
-        test = gc.read_gc_parameters(param_path[0], self.YEARS, self.MODES)
+        test = gc.read_gc_parameters(param_path[0], self.YEARS, self.MODES, self.PURPOSES)
         assert test == self.PARAMS, "Correct GC params input file"
 
     def test_missing(self, param_path: Tuple[Path, Path]):
@@ -462,7 +452,7 @@ class TestReadGCParameters:
             Paths to the correct and missing files, respectively.
         """
         with pytest.raises(ValueError) as e:
-            gc.read_gc_parameters(param_path[1], self.YEARS, self.MODES)
+            gc.read_gc_parameters(param_path[1], self.YEARS, self.MODES, self.PURPOSES)
         msg = (
             "Years missing: ['2030'] Year - mode pairs missing: "
             "['2018 - rail'] from: missing_gc_params.csv"

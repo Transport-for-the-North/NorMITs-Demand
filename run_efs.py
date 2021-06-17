@@ -21,25 +21,31 @@ def main():
     verbose = False
 
     # Land Use imports
-    land_use_drive = "Y:/"
-    land_use_iteration = 'iter3b'
+    land_use_drive = "I:/"
+    by_land_use_iteration = 'iter3b'
+    fy_land_use_iteration = 'iter3c'
 
     # Running control
     integrate_dlog = False
     run_pop_emp_comparison = False
+    apply_wfh_adjustments = True
 
+    # Base EFS
     run_base_efs = False
-    recreate_productions = True
-    recreate_attractions = True
-    recreate_nhb_productions = True
+    recreate_productions = False
+    recreate_attractions = False
+    recreate_nhb_productions = False
+    combine_internal_external = False
 
+    # Running options
     run_bespoke_zones = False
     ignore_bespoke_zones = True
+    use_elasticity_to_od = True
 
+    # Compiling matrices
     run_pa_to_od = False
-    run_compile_mats = False
-    run_decompile_post_me = True
-    run_future_year_compile_od = False
+    run_compile_mats = True
+    run_decompile_post_me = False
 
     # Controls matrix conversion
     output_years = consts.ALL_YEARS
@@ -47,9 +53,9 @@ def main():
 
     # Controls I/O
     scenario = consts.SC04_UZC
-    iter_num = '3g'
+    iter_num = '3i'
     import_home = "I:/"
-    export_home = "F:/"
+    export_home = "I:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
@@ -58,11 +64,13 @@ def main():
         model_name=model_name,
         integrate_dlog=integrate_dlog,
         run_pop_emp_comparison=run_pop_emp_comparison,
+        apply_wfh_adjustments=apply_wfh_adjustments,
         scenario_name=scenario,
         import_home=import_home,
         export_home=export_home,
         land_use_drive=land_use_drive,
-        land_use_iteration=land_use_iteration,
+        by_land_use_iteration=by_land_use_iteration,
+        fy_land_use_iteration=fy_land_use_iteration,
         verbose=verbose
     )
 
@@ -74,6 +82,7 @@ def main():
             recreate_productions=recreate_productions,
             recreate_attractions=recreate_attractions,
             recreate_nhb_productions=recreate_nhb_productions,
+            combine_internal_external=combine_internal_external,
             echo_distribution=verbose,
         )
 
@@ -101,26 +110,23 @@ def main():
         efs.pa_to_od(
             years_needed=output_years,
             use_bespoke_pa=(not ignore_bespoke_zones),
+            use_elasticity_pa=use_elasticity_to_od,
             verbose=verbose
         )
 
     if run_compile_mats:
         for year in output_years:
-            efs.compile_matrices(year=year)
+            efs.compile_matrices(
+                year=year,
+                use_bespoke_pa=(not ignore_bespoke_zones),
+                use_elasticity_pa=use_elasticity_to_od,
+            )
 
     if run_decompile_post_me:
         # Decompiles post-me base year matrices
         efs.decompile_post_me(
             overwrite_decompiled_matrices=True,
             overwrite_tour_proportions=True,
-        )
-
-    if run_future_year_compile_od:
-        # Uses the generated tour proportions to compile Post-ME OD matrices
-        # for future years
-        efs.compile_future_year_od_matrices(
-            overwrite_aggregated_pa=True,
-            overwrite_future_year_od=True
         )
 
 

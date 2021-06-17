@@ -11,6 +11,7 @@ CONSTRAINTS_FOLDER = "constraint_matrices"
 
 # Cost file name
 COST_NAMES = "{mode}_costs_p{purpose}.csv"
+
 # Expected columns in the cost files
 COST_LOOKUP = {
     "rail": {
@@ -31,24 +32,20 @@ COST_LOOKUP = {
     },
 }
 
-# Column name and dtype lookup for the GC parameters input file
-GC_PARAMETERS_FILE = {
-    "year": ("year", str),
-    "mode": ("mode", str),
-    "vt": ("vot", float),
-    "vc": ("voc", float),
-}
 
 # Lookup for the elasticity types and what modes/costs they affect
 GC_ELASTICITY_TYPES = {
-    "Car_JourneyTime": ("car", "time"),
-    "Car_FuelCost": ("car", "vc"),
-    "Rail_Fare": ("rail", "fare"),
-    "Rail_IVTT": ("rail", "ride"),
-    "Bus_Fare": ("bus", "fare"),
-    "Bus_IVTT": ("bus", "ride"),
-    "Car_RUC": ("car", "gc"),
+    "car_journey_time": ("car", "time"),
+    "car_fuel_cost": ("car", "voc"),     # Is this used anywhere?? SHOULD NOT BEEE!
+    "rail_fare": ("rail", "fare"),
+    "rail_ivtt": ("rail", "ride"),
+    "bus_fare": ("bus", "fare"),
+    "bus_ivtt": ("bus", "ride"),
+    "car_ruc": ("car", "gc"),
 }
+
+PURPOSES = ['commute', 'business', 'other']
+ETYPES_FNAME = 'elasticity_types.csv'
 
 # ID and zone system for each mode
 MODE_ID = {"car": 3, "rail": 6}
@@ -60,7 +57,7 @@ MODE_ZONE_SYSTEM = {
 OTHER_MODES = ["bus", "active", "no_travel"]
 
 # Default factors for rail GC calculation
-RAIL_GC_FACTORS = {"walk": 1.5, "wait": 2, "interchange_penalty": 5}
+RAIL_GC_FACTORS = {"walk": 2, "wait": 2, "interchange_penalty": 5}
 
 # Expected name of zone system lookup files (found in translation folder)
 ZONE_LOOKUP_NAME = "{from_zone}_to_{to_zone}.csv"

@@ -116,7 +116,7 @@ class TestGetConstraintMatrices:
             Folder containing the testing contraint matrices and a list of
             all the expected paths.
         """
-        matrices = eu.get_constraint_matrices(constraint_folder[0])
+        matrices = eu.get_constraint_mats(constraint_folder[0])
         # Check non_csv files aren't present
         for path in self.NON_CSV_FILES:
             assert path.stem.lower() not in matrices
@@ -137,7 +137,7 @@ class TestGetConstraintMatrices:
             all the expected paths.
         """
         names = [i.stem for i in self.CSV_FILES[:2]]
-        matrices = eu.get_constraint_matrices(constraint_folder[0], names)
+        matrices = eu.get_constraint_mats(constraint_folder[0], names)
         assert names == list(matrices.keys())
         for i, n in enumerate(names):
             np.testing.assert_array_equal(matrices[n], self.MATRICES[i])
@@ -161,7 +161,7 @@ class TestGetConstraintMatrices:
         else:
             path = tmp_path / "folder"
         with pytest.raises(FileNotFoundError):
-            eu.get_constraint_matrices(path)
+            eu.get_constraint_mats(path)
 
 
 class TestReadDemandMatrix:
