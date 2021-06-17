@@ -11,11 +11,14 @@ import numpy as np
 import geopandas as gpd
 
 from normits_demand.matrices import matrix_processing as mp
+from normits_demand import version
 
 # TODO: Delete duplicate functions in multiprocessing and dm
 
 # TODO: Should find a way to automate this. Put zone in model folder?
 _default_shp_path = 'Y:/Data Strategy/GIS Shapefiles/Norms zones/TfN_Zones_Combined.shp'
+
+
 
 def get_average_trip_length(model_lookup_path,
                             distribution,
@@ -763,31 +766,28 @@ def distribution_report(file_drive='Y:/',
 
             if write:
                 print('Writing internal summary report')
-                internal_segment_report.to_csv((w_d +
-                                                '/' +
-                                                export_name +
-                                                '_internal_segment_report.csv'),
-                index = False)
+                fname = '%s_internal_segment_report_%s_.csv' % (export_name, version.__version__)
+                path = os.path.join(w_d, fname)
+                internal_segment_report.to_csv(path, index=False)
+
+
     else:
         zone_internal_segment_report = None
 
     if write:
         print('Writing summary reports')
+        summary_fname = '%s_summary_report_%s_.csv' % (export_name, version.__version__)
+        summary_path = os.path.join(w_d, summary_fname)
+        summary_report.to_csv(summary_path, index=False)
 
-        summary_report.to_csv((w_d +
-                               '/' +
-                               export_name +
-                               '_summary_report.csv'), index=False)
+        origin_fname = '%s_origin_report_%s_.csv' % (export_name, version.__version__)
+        origin_path = os.path.join(w_d, origin_fname)
+        origin_report.to_csv(origin_path, index=False)
 
-        origin_report.to_csv((w_d +
-                               '/' +
-                               export_name +
-                               '_origin_report.csv'), index=False)
+        segment_fname = '%s_segment_report_%s_.csv' % (export_name, version.__version__)
+        segment_path = os.path.join(w_d, segment_fname)
+        segment_report.to_csv(segment_path, index=False)
 
-        segment_report.to_csv((w_d +
-                               '/' +
-                               export_name +
-                               '_segment_report.csv'), index = False)
 
     return(summary_report,
            origin_report,
