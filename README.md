@@ -93,4 +93,18 @@ better with TMS output paths.
 - Future years changed - 2035 has been swapped for 2040
 
 ### v0.3.5
+- Updates to the elasticity model:
+    -  Renamed some variables for readability
+    - Add in inter/intra sector cost adjustments
+    - Added a new front end to allow easy calling per scenario
+    - Optimised the model
+        - Multiprocessed the elasticity
+        - Able to read in / write out compressed matrices 
+        - Multiprocessed matrix compilation
+    - Added script to analyse the elasticity outputs
+    - Added progress bar to multiprocessing
+    - Started off a cost builder class for handling all costs
+    - Elasticity now operates on internal demand only
+    - Reads in new land use data, split by future years
+    - Added in WFH adjustments after matrix distribution
 
