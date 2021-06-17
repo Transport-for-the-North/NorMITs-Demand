@@ -284,11 +284,10 @@ def main():
     scenario = efs_consts.SC01_JAM
     iter_num = '3i'
     import_home = "I:/"
-    export_home = "E:/"
+    export_home = "I:/"
 
     base_year = 2018
     years = [2033, 2040, 2050]
-    years = [2050]
     use_bespoke_zones = False
     use_wfh_adj = True
 
@@ -304,15 +303,15 @@ def main():
 
     run_elasticity()
 
-    # merge_internal_external(
-    #     scenario=scenario,
-    #     iter_num=iter_num,
-    #     import_home=import_home,
-    #     export_home=export_home,
-    #     base_year=base_year,
-    #     future_years=years,
-    #     use_bespoke_zones=use_bespoke_zones,
-    # )
+    merge_internal_external(
+        scenario=scenario,
+        iter_num=iter_num,
+        import_home=import_home,
+        export_home=export_home,
+        base_year=base_year,
+        future_years=years,
+        use_bespoke_zones=use_bespoke_zones,
+    )
 
 
 if __name__ == "__main__":
