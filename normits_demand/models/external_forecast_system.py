@@ -29,6 +29,8 @@ from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
 from normits_demand.models import efs_production_model as pm
 
+from normits_demand.concurrency import multiprocessing
+
 from normits_demand.matrices import decompilation
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.matrices import matrix_processing as mat_p
@@ -67,6 +69,7 @@ class ExternalForecastSystem:
 
                  integrate_dlog: bool = False,
                  run_pop_emp_comparison: bool = True,
+                 apply_wfh_adjustments: bool = True,
 
                  dlog_pop_path: str = None,
                  dlog_emp_path: str = None,
@@ -75,7 +78,9 @@ class ExternalForecastSystem:
                  export_home: str = "E:/",
 
                  land_use_drive: str = "Y:/",
-                 land_use_iteration: str = 'iter3b',
+                 by_land_use_iteration: str = 'iter3b',
+                 fy_land_use_iteration: str = 'iter3c',
+                 modes_needed: List[int] = None,
                  verbose: bool = True,
                  ):
         # TODO: Write EFS constructor docs
@@ -84,18 +89,23 @@ class ExternalForecastSystem:
         current_time = begin_time
         print("Initiating External Forecast System...")
 
+        if modes_needed is None:
+            modes_needed = consts.MODEL_MODES[model_name]
+
         # Initialise
-        du.validate_model_name_and_mode(model_name, efs_consts.MODES_NEEDED)
+        du.validate_model_name_and_mode(model_name, modes_needed)
         self.model_name = du.validate_model_name(model_name)
         self.iter_name = du.create_iter_name(iter_num)
         self.scenario_name = du.validate_scenario_name(scenario_name)
         self.integrate_dlog = integrate_dlog
         self.run_pop_emp_comparison = run_pop_emp_comparison
+        self.apply_wfh_adjustments = apply_wfh_adjustments
         self.import_location = import_home
         self.output_location = export_home
         self.verbose = verbose
 
-        self.land_use_iteration = land_use_iteration
+        self.by_land_use_iteration = by_land_use_iteration
+        self.fy_land_use_iteration = fy_land_use_iteration
         self.land_use_drive = land_use_drive
 
         # TODO: Write function to determine if CA is needed for model_names
@@ -298,6 +308,7 @@ class ExternalForecastSystem:
             recreate_productions: bool = True,
             recreate_attractions: bool = True,
             recreate_nhb_productions: bool = True,
+            combine_internal_external: bool = False,
             outputting_files: bool = True,
             output_location: str = None,
             echo_distribution: bool = True
@@ -412,7 +423,8 @@ class ExternalForecastSystem:
         write_input_info(
             os.path.join(self.exports['home'], "input_parameters.txt"),
             version.__version__,
-            self.land_use_iteration,
+            self.by_land_use_iteration,
+            self.fy_land_use_iteration,
             base_year,
             future_years,
             self.output_zone_system,
@@ -732,17 +744,57 @@ class ExternalForecastSystem:
             verbose=True,
         )
 
+        last_time = current_time
+        current_time = time.time()
+        print("Distribution generation took: %.2f seconds" %
+              (current_time - last_time))
+
+        # ## WFH ADJUSTMENTS ## #
+        if self.apply_wfh_adjustments:
+            print("Applying WFH adjustments...")
+
+            # Create the temporary output folders
+            dist_out_wfh = self.exports['pa_24_wfh']
+            int_dir_wfh = os.path.join(dist_out_wfh, 'internal')
+            ext_dir_wfh = os.path.join(dist_out_wfh, 'external')
+
+            for path in [int_dir_wfh, ext_dir_wfh]:
+                du.create_folder(path, verbose=False)
+
+            # Apply WFH adjustment to the internal and external mats
+            for in_dir, out_dir in zip([int_dir, ext_dir], [int_dir_wfh, ext_dir_wfh]):
+                self._apply_wfh_adjustments(
+                    import_dir=in_dir,
+                    export_dir=out_dir,
+                    years=future_years,
+                )
+
+            int_dir = int_dir_wfh
+            ext_dir = ext_dir_wfh
+            dist_out = dist_out_wfh
+
+            last_time = current_time
+            current_time = time.time()
+            print("WFH adjustments applied! Took: %.2f seconds" %
+                  (current_time - last_time))
+
+        # If we're not combining, we need to exit here!
+        if not combine_internal_external:
+            return
+
         # Combine the internal and external trips
+        print("Recombining internal and external matrices...")
         mat_p.recombine_internal_external(
             internal_import=int_dir,
             external_import=ext_dir,
             full_export=dist_out,
             force_csv_out=True,
+            years=year_list,
         )
 
         last_time = current_time
         current_time = time.time()
-        print("Distribution generation took: %.2f seconds" %
+        print("Recombining internal and external matrices took: %.2f seconds" %
               (current_time - last_time))
 
         # ## SECTOR TOTALS ## #
@@ -814,6 +866,99 @@ class ExternalForecastSystem:
             self.sector_totals = sector_totals
             # TODO: Store output files into local storage (class storage)
 
+    def _apply_wfh_adjustments_worker(self,
+                                      import_path: nd.PathLike,
+                                      export_path: nd.PathLike,
+                                      adjustment: nd.PathLike,
+                                      ) -> None:
+        # Read in, adjust, write out
+        mat = file_ops.read_df(import_path, index_col=0)
+        mat = mat * adjustment
+        file_ops.write_df(mat, export_path)
+
+    def _apply_wfh_adjustments(self,
+                               import_dir: nd.PathLike,
+                               export_dir: nd.PathLike,
+                               years: List[int],
+                               ) -> None:
+        """
+        Applies a WFH adjustment to import_dir mats and writes out to export_dir
+        """
+        # TODO(BT): This is a quick write - revisit when we have time
+        # Init
+        all_mats = file_ops.list_files(import_dir, consts.VALID_MATRIX_FORMATS)
+        wfh_adj = pd.read_csv(self.imports['wfh_adj'])
+        unq_soc = wfh_adj['soc'].unique()
+
+        # Filter the adjustment
+        mask = (wfh_adj['scenario'] == self.scenario_name)
+        wfh_adj = wfh_adj[mask]
+
+        # Only apply to commute matrices
+        p_str = "_p%s_" % 1
+        commute_mats = [x for x in all_mats if p_str in x]
+
+        # Figure out the adjustments to apply to each matrix
+        adjusted_mats = list()
+        kwarg_list = list()
+        for year in years:
+            # Get the mats and adjustments
+            yr_str = "_yr%s_" % year
+            yr_mats = [x for x in commute_mats if yr_str in x]
+
+            mask = (wfh_adj['year'] == year)
+            yr_adj = wfh_adj[mask]
+
+            for soc in unq_soc:
+                # Filter the mats
+                soc_str = "_soc%s" % soc
+                soc_mats = [x for x in yr_mats if soc_str in x]
+
+                # Keep track of all matrices being adjusted
+                adjusted_mats += soc_mats
+
+                # Figure out the adjustment to apply
+                mask = (yr_adj['soc'] == soc)
+                soc_adj = yr_adj[mask]
+
+                if len(soc_adj) > 1:
+                    raise ValueError(
+                        "There seems to be more than one WFH adjustment for:\n"
+                        "scenario: %s, year: %s, soc: %s"
+                        % (self.scenario_name, year, soc)
+                    )
+
+                if len(soc_adj) < 1:
+                    raise ValueError(
+                        "There seems to be no WFH adjustment for:\n"
+                        "scenario: %s, year: %s, soc: %s"
+                        % (self.scenario_name, year, soc)
+                    )
+
+                # Update the multiprocessing kwargs
+                for fname in soc_mats:
+                    kwarg_list.append({
+                        'import_path': os.path.join(import_dir, fname),
+                        'export_path': os.path.join(export_dir, fname),
+                        'adjustment': soc_adj['commute_correction'].squeeze(),
+                    })
+
+        # Adjust all the matrices at once
+        multiprocessing.multiprocess(
+            fn=self._apply_wfh_adjustments_worker,
+            kwargs=kwarg_list,
+            process_count=consts.PROCESS_COUNT,
+        )
+
+        # Copy over all the non-adjusted mats
+        copy_mats = [x for x in all_mats if x not in adjusted_mats]
+        file_ops.copy_files(
+            src_dir=import_dir,
+            dst_dir=export_dir,
+            filenames=copy_mats,
+            process_count=consts.PROCESS_COUNT,
+        )
+
     def _distribute_internal_demand(self,
                                     p_vector: pd.DataFrame,
                                     nhb_p_vector: pd.DataFrame,
@@ -864,8 +1009,6 @@ class ExternalForecastSystem:
                 unique_zones_join_fn=operator.and_,
                 p_needed=p_needed,
                 fname_suffix='_int',
-                echo=verbose,
-                # process_count=0,
                 **kwargs,
             )
 
@@ -1130,7 +1273,8 @@ class ExternalForecastSystem:
                  m_needed: List[int] = efs_consts.MODES_NEEDED,
                  p_needed: List[int] = efs_consts.ALL_P,
                  round_dp: int = efs_consts.DEFAULT_ROUNDING,
-                 use_bespoke_pa: bool= True,
+                 use_bespoke_pa: bool= False,
+                 use_elasticity_pa: bool= True,
                  verbose: bool = True
                  ) -> None:
         """
@@ -1169,6 +1313,7 @@ class ExternalForecastSystem:
         _input_checks(m_needed=m_needed)
         base_zone_col = "%s_zone_id"
         pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24'
+        pa_import = 'pa_24_elast' if use_elasticity_pa else pa_import
         hb_p_needed, nhb_p_needed = du.split_hb_nhb_purposes(p_needed)
 
         # Set up the iterator
@@ -1190,7 +1335,7 @@ class ExternalForecastSystem:
                 round_dp=round_dp,
             )
 
-        # # Set up the segmentation params
+        # Set up the segmentation params
         seg_level = 'tms'
         seg_params = {
             'p_needed': hb_p_needed,
@@ -1374,6 +1519,8 @@ class ExternalForecastSystem:
                          m_needed: List[int] = efs_consts.MODES_NEEDED,
                          tp_needed: List[int] = efs_consts.TIME_PERIODS,
                          round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                         use_bespoke_pa: bool = False,
+                         use_elasticity_pa: bool = False,
                          ) -> None:
         """
         Compiles pre-ME OD matrices produced by EFS into User Class format
@@ -1408,6 +1555,8 @@ class ExternalForecastSystem:
         """
         # Init
         _input_checks(m_needed=m_needed)
+        pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24'
+        pa_import = 'pa_24_elast' if use_elasticity_pa else pa_import
 
         if self.is_ca_needed:
             ca_needed = efs_consts.CA_NEEDED
@@ -1447,12 +1596,12 @@ class ExternalForecastSystem:
         elif self.model_name == 'norms':
             # Load in the splitting factors
             fname = consts.POSTME_FROM_TO_FACTORS_FNAME
-            path = os.path.join(self.params['home'], fname)
+            path = os.path.join(self.imports['params'], fname)
             from_to_split_factors = pd.read_pickle(path)
 
             # Compile
             mat_p.compile_norms_to_vdm(
-                mat_import=self.exports['pa_24'],
+                mat_import=self.exports[pa_import],
                 mat_export=self.exports['compiled_pa'],
                 params_export=self.params['compile'],
                 year=year,
@@ -1581,84 +1730,6 @@ class ExternalForecastSystem:
                 % self.model_name
             )
 
-    def compile_future_year_od_matrices(self,
-                                        years_needed: List[int] = efs_consts.FUTURE_YEARS,
-                                        hb_p_needed: List[int] = efs_consts.ALL_HB_P,
-                                        m_needed: List[int] = efs_consts.MODES_NEEDED,
-                                        overwrite_aggregated_pa: bool = True,
-                                        overwrite_future_year_od: bool = True
-                                        ) -> None:
-        """
-        Generates future year post-ME OD matrices using the generated tour
-        proportions from decompiling post-ME base year matrices, and the
-        EFS generated future year PA matrices.
-
-        Performs the following actions:
-            - Aggregates EFS future year PA matrices up to the required
-              segmentation level to match the generated tour proportions.
-              (purpose and car_availability as needed).
-            - Uses the base year post-ME tour proportions to convert 24hr PA
-              matrices into time-period split OD matrices - outputting to
-              file.
-
-        Parameters
-        ----------
-        years_needed:
-            The future years that need converting from PA to OD.
-
-        hb_p_needed:
-            The home based purposes to use while converting PA to OD
-
-        m_needed:
-            The mode to use during the conversion. This will be used to
-            determine if car availability needs to be included or not.
-
-        # TODO: Update docs once correct functionality exists
-        overwrite_aggregated_pa:
-            Whether to generate the aggregated pa matrices or not
-
-        overwrite_future_year_od:
-            Whether to convert pa to od or not.
-
-        Returns
-        -------
-        None
-        """
-        # Init
-        _input_checks(m_needed=m_needed)
-
-        if self.model_name == 'norms' or self.model_name == 'norms_2015':
-            ca_needed = efs_consts.CA_NEEDED
-        elif self.model_name == 'noham':
-            ca_needed = [None]
-        else:
-            raise ValueError("Got an unexpected model name. Got %s, expected "
-                             "either 'norms', 'norms_2015' or 'noham'."
-                             % str(self.model_name))
-
-        if overwrite_aggregated_pa:
-            mat_p.aggregate_matrices(
-                import_dir=self.exports['pa_24'],
-                export_dir=self.exports['aggregated_pa_24'],
-                trip_origin='hb',
-                matrix_format='pa',
-                years_needed=years_needed,
-                p_needed=hb_p_needed,
-                ca_needed=ca_needed,
-                m_needed=m_needed
-            )
-
-        if overwrite_future_year_od:
-            pa2od.build_od_from_tour_proportions(
-                pa_import=self.exports['aggregated_pa_24'],
-                od_export=self.exports['post_me']['od'],
-                tour_proportions_dir=self.params['tours'],
-                zone_translate_dir=self.imports['zone_translation'],
-                ca_needed=ca_needed
-            )
-
-        # TODO: Compile to OD/PA when we know the correct format
-
     def _generate_paths(self, base_year: str) -> Tuple[Dict[str, str],
                                                        Dict[str, str],
                                                        Dict[str, str]]:
@@ -1695,8 +1766,10 @@ class ExternalForecastSystem:
             iter_name=self.iter_name,
             scenario_name=self.scenario_name,
             demand_dir_name=self.out_dir,
-            land_use_iteration=self.land_use_iteration,
+            by_land_use_iteration=self.by_land_use_iteration,
+            fy_land_use_iteration=self.fy_land_use_iteration,
             land_use_drive=self.land_use_drive,
+            verbose=self.verbose,
         )
 
 
@@ -1732,7 +1805,8 @@ def _input_checks(iter_num: int = None,
 
 def write_input_info(output_path: str,
                      efs_version: str,
-                     land_use_iter: str,
+                     by_land_use_iter: str,
+                     fy_land_use_iter: str,
                      base_year: int,
                      future_years: List[int],
                      output_zone_system: str,
@@ -1748,7 +1822,8 @@ def write_input_info(output_path: str,
 
     out_lines = [
         'EFS version: ' + str(efs_version),
-        'Land Use Iter: ' + str(land_use_iter),
+        'BY Land Use Iter: ' + str(by_land_use_iter),
+        'FY Land Use Iter: ' + str(fy_land_use_iter),
         'Run Date: ' + str(time.strftime('%D').replace('/', '_')),
         'Start Time: ' + str(time.strftime('%T').replace('/', '_')),
         "Base Year: " + str(base_year),

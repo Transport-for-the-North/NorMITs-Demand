@@ -105,13 +105,10 @@ class ZoneTranslator:
         zone_cols = [from_zone_col, to_zone_col]
         non_split_cols = du.list_safe_remove(non_split_cols, zone_cols)
         split_cols = du.list_safe_remove(split_cols, zone_cols)
-        # TODO: Remove echo
-        print(split_cols)
 
         # Get total for the splitting columns
         split_totals = dict()
         for col in split_cols:
-            print(col)
             split_totals[col] = dataframe[col].sum()
 
         if needs_zone_id_rename:
@@ -193,21 +190,20 @@ class MatrixTotalError(ValueError):
 
 
 ##### FUNCTIONS #####
-def translate_matrix(
-    matrix: pd.DataFrame,
-    lookup: pd.DataFrame,
-    lookup_cols: Tuple[str, str],
-    square_format: bool = True,
-    zone_cols: Tuple[str, str] = None,
-    split_column: str = None,
-    aggregation_method: str = "sum",
-    weights: pd.DataFrame = None,
-    check_total: bool = True,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def translate_matrix(matrix: pd.DataFrame,
+                     lookup: pd.DataFrame,
+                     lookup_cols: Tuple[str, str],
+                     square_format: bool = True,
+                     zone_cols: Tuple[str, str] = None,
+                     split_column: str = None,
+                     aggregation_method: str = "sum",
+                     weights: pd.DataFrame = None,
+                     check_total: bool = True,
+                     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Convert a matrix to a new zone system using given lookup.
 
     Based on the `translate_matrices.translate_matrices` function
-    from TMS, simplied for use here.
+    from TMS, simplified for use here.
 
     Parameters
     ----------
@@ -215,26 +211,34 @@ def translate_matrix(
         Matrix DataFrame in either square format or list format.
         - square: zones should be defined in the index and column headers.
         - list: should contain 2 zone columns and a column with the values.
+
     lookup : pd.DataFrame
         Lookup between the desired zone systems, with optional splitting
         factor column.
+
     lookup_cols : Tuple[str, str]
         Names of the lookup columns containing the current zone system then
         the new zone system.
+
     square_format : bool, optional
         Whether the provided matrix is in square (True) or list format
         (False), by default True
+
     zone_cols : Tuple[str, str], optional
         The names of the zone columns in the matrix only required for list
         format matrices, by default None
+
     split_column : str, optional
         Name of the split column in the lookup, by default None
+
     aggregation_method : str, optional
         Name of the aggregation method to use, default "sum".
+
     weights : pd.DataFrame, optional
         Weights for "weighted_average" aggregation method,
         default None. The format should be [o, d, value]
         or square format if `square_format` is true.
+
     check_total : bool, optional
         Whether or not the matrix total before and after the translation
         should be checked. If True (default) ValueError will be raised
@@ -245,6 +249,7 @@ def translate_matrix(
     -------
     pd.DataFrame
         Matrix with the new zone system.
+
     pd.DataFrame
         Matrix of splitting factors for converting back to the old zone
         system.
@@ -252,13 +257,12 @@ def translate_matrix(
     avg_method = "weighted_average"
     agg_methods = ["sum", "mean", avg_method]
     check_total = False if aggregation_method == avg_method else check_total
-    if aggregation_method == avg_method and not isinstance(
-        weights, pd.DataFrame
-    ):
+    if aggregation_method == avg_method and not isinstance(weights, pd.DataFrame):
         raise ValueError(
             f"'weights' should be 'DataFrame' when 'weighted_average' "
             f"is chosen not '{type(weights).__name__}'"
         )
+
     if aggregation_method not in agg_methods:
         raise ValueError(
             "'aggregation_method' should be one of "
@@ -292,6 +296,11 @@ def translate_matrix(
         )
         if len(weights) != len(matrix):
             raise ValueError("'weights' and 'matrix' are not the same lengths")
+
+        # TODO(BT): Figure out why these are changing to the wrong types
+        for col in ['o', 'd']:
+            weights[col] = weights[col].astype(int)
+
         # Calculate splitting factor based on weights
         lookup = lookup.merge(
             weights,
@@ -301,14 +310,17 @@ def translate_matrix(
             validate="m:1",
         )
         lookup.drop(columns=zone_cols, inplace=True)
+
+        # Total of z2 demand z1
         totals = (
-            lookup[lookup_cols[:2] + ["weights"]]
-            .groupby(lookup_cols[:2], as_index=False)
+            lookup[lookup_cols[2:] + ["weights"]]
+            .groupby(lookup_cols[2:], as_index=False)
             .sum()
         )
+
         lookup = lookup.merge(
             totals,
-            on=lookup_cols[:2],
+            on=lookup_cols[2:],
             how="left",
             validate="m:1",
             suffixes=("", "_total"),
@@ -318,6 +330,9 @@ def translate_matrix(
         lookup.drop(columns=["weights", "weights_total"], inplace=True)
 
     # Check missing zones in lookup
+    for col in zone_cols:
+        matrix[col] = matrix[col].astype(int)
+
     missing = np.isin(
         np.unique(matrix[zone_cols].values),
         np.unique(lookup[lookup_cols[:2]].values),
@@ -338,9 +353,11 @@ def translate_matrix(
         how="left",
         validate="1:m",
     ).drop(columns=zone_cols)
+
     for s in splitting_cols:
         matrix[s] = matrix[s] * matrix[split_column]
     reverse = matrix.copy()
+
     if aggregation_method == avg_method:
         aggregation_method = "sum"
     matrix = (
@@ -383,9 +400,10 @@ def translate_matrix(
     return matrix, reverse[lookup_cols + ["split"]]
 
 
-def _lookup_matrix(
-    lookup: pd.DataFrame, lookup_cols: List[str], split: str
-) -> Tuple[pd.DataFrame, List[str]]:
+def _lookup_matrix(lookup: pd.DataFrame,
+                   lookup_cols: List[str],
+                   split: str,
+                   ) -> Tuple[pd.DataFrame, List[str]]:
     """Convert a zone corrsepondence lookup to an OD pair lookup.
 
     Convert from format [old zone, new zone, splitting factor] to

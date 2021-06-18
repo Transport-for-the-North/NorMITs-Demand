@@ -24,9 +24,12 @@ from typing import Dict
 from typing import Iterable
 from typing import Callable
 
+import multiprocessing
 from multiprocessing import Event
 from multiprocessing import TimeoutError
 from multiprocessing import Pool as ProcessPool
+
+import tqdm
 
 # Local imports
 from normits_demand.utils import general as du
@@ -73,7 +76,11 @@ def create_kill_pool_fn(pool,
     return kill_pool
 
 
-def wait_for_pool_results(results, terminate_process_event, result_timeout):
+def wait_for_pool_results(results,  # : List[multiprocessing.pool.AsyncResult],
+                          terminate_process_event: multiprocessing.Event,
+                          result_timeout: int,
+                          pbar_kwargs: Dict[str, Any] = None,
+                          ) -> List[Any]:
     """
     Returns the result when they arrive. Throws an error if event is set,
     or result_timeout is reached.
@@ -89,7 +96,10 @@ def wait_for_pool_results(results, terminate_process_event, result_timeout):
         and the processpool is trying to terminate.
 
     result_timeout:
-        Int. How long to wait before throwing an error.
+        How long to wait before throwing an error.
+
+    pbar_kwargs:
+        A dictionary of keyword arguments to pass into a progress bar.
 
     Returns
     -------
@@ -103,48 +113,78 @@ def wait_for_pool_results(results, terminate_process_event, result_timeout):
     return_results = list()
     n_start_results = len(results)
 
-    while not got_all_results:
-        # Wait for a little bit to avoid intensive looping
-        time.sleep(0.05)
+    # If not given any kwargs, assume no pbar wanted
+    if pbar_kwargs is None:
+        pbar_kwargs = {'disable': True}
 
-        # Check for an event
-        if terminate_process_event.is_set():
-            raise MultiprocessingError(
-                "While getting results terminate_process_event was set.")
+    # Context is meant to keep the pbar tidy
+    with du.std_out_err_redirect_tqdm() as orig_stdout:
+        # Additional args for context
+        pbar_kwargs['file'] = orig_stdout
+        pbar_kwargs['dynamic_ncols'] = True
 
-        # Check if we've ran out of time
-        if (time.time() - start_time) > result_timeout:
-            raise TimeoutError("Ran out of time while waiting for results.")
+        # If no total given, we can add one!
+        if 'total' not in pbar_kwargs:
+            pbar_kwargs['total'] = n_start_results
 
-        # Check if we have any results
-        res_to_remove = list()
-        for i, res in enumerate(results):
-            if not res.ready():
-                continue
+        # Improves time prediction guessing
+        pbar_kwargs['smoothing'] = 0
 
-            if not res.successful():
+        # Finally, make to pbar!
+        pbar = tqdm.tqdm(**pbar_kwargs)
+
+        # Grab all the results as they come in
+        while not got_all_results:
+            # Wait for a little bit to avoid intensive looping
+            time.sleep(0.05)
+
+            # Check for an event
+            if terminate_process_event.is_set():
                 raise MultiprocessingError(
-                    "An error occurred in one of the processes.")
+                    "While getting results terminate_process_event was set."
+                )
 
-            # Give a minute to get the result
-            # Shouldn't take this long as we know the result is ready
-            return_results.append(res.get(60))
-            res_to_remove.append(i)
+            # Check if we've ran out of time
+            if (time.time() - start_time) > result_timeout:
+                raise TimeoutError("Ran out of time while waiting for results.")
 
-        # Remove results we've got
-        for i in sorted(res_to_remove, reverse=True):
-            del results[i]
+            # Check if we have any results
+            res_to_remove = list()
+            for i, res in enumerate(results):
+                if not res.ready():
+                    continue
 
-        # Quick sanity check
-        if not len(results) + len(return_results) == n_start_results:
-            raise MultiprocessingError(
-                "While getting the multiprocessing results an error occurred." +
-                "Lost one or more results. Started with %d, now have %d." %
-                (n_start_results, len(results)+len(return_results)))
+                if not res.successful():
+                    raise MultiprocessingError(
+                        "An error occurred in one of the processes."
+                    )
 
-        # Check if we have all results
-        if len(return_results) == n_start_results:
-            got_all_results = True
+                # Give a minute to get the result
+                # Shouldn't take this long as we know the result is ready
+                return_results.append(res.get(60))
+                res_to_remove.append(i)
+
+            # Update the progress bar with the number of results we just got
+            if len(res_to_remove) > 0:
+                pbar.update(len(res_to_remove))
+
+            # Remove results we've got
+            for i in sorted(res_to_remove, reverse=True):
+                del results[i]
+
+            # Quick sanity check
+            if not len(results) + len(return_results) == n_start_results:
+                raise MultiprocessingError(
+                    "While getting the multiprocessing results an error occurred." +
+                    "Lost one or more results. Started with %d, now have %d." %
+                    (n_start_results, len(results)+len(return_results)))
+
+            # Check if we have all results
+            if len(return_results) == n_start_results:
+                got_all_results = True
+
+    # Tidy up before we leave
+    pbar.close()
 
     return return_results
 
@@ -198,7 +238,9 @@ def _process_pool_wrapper_kwargs_in_order(fn,
                                           kwargs=None,
                                           process_count=os.cpu_count()-1,
                                           pool_maxtasksperchild=4,
-                                          result_timeout=86400):
+                                          result_timeout=86400,
+                                          pbar_kwargs: Dict[str, Any] = None,
+                                          ) -> List[Any]:
     """
     See process_pool_wrapper() for full documentation of this function.
     Sister function with _process_pool_wrapper_kwargs_out_order().
@@ -217,15 +259,20 @@ def _process_pool_wrapper_kwargs_in_order(fn,
             for i, (a, k) in enumerate(zip(args, kwargs)):
                 # Set up ready to use _call_order_wrapper()
                 new_args = (i, fn, *a)
-                results.append(pool.apply_async(_call_order_wrapper,
-                                                args=new_args,
-                                                kwds=k,
-                                                error_callback=kill_pool))
+                results.append(pool.apply_async(
+                    func=_call_order_wrapper,
+                    args=new_args,
+                    kwds=k,
+                    error_callback=kill_pool
+                ))
 
             result_timeout *= max(len(results), 1)
-            results = wait_for_pool_results(results,
-                                            terminate_processes_event,
-                                            result_timeout)
+            results = wait_for_pool_results(
+                results=results,
+                terminate_process_event=terminate_processes_event,
+                result_timeout=result_timeout,
+                pbar_kwargs=pbar_kwargs,
+            )
 
         except BaseException:
             # If any exception, clean up and exit to be safe
@@ -245,7 +292,9 @@ def _process_pool_wrapper_kwargs_out_order(fn,
                                            kwargs=None,
                                            process_count=os.cpu_count()-1,
                                            pool_maxtasksperchild=4,
-                                           result_timeout=86400):
+                                           result_timeout=86400,
+                                           pbar_kwargs: Dict[str, Any] = None,
+                                           ):
     """
     See process_pool_wrapper() for full documentation of this function.
     Sister function with _process_pool_wrapper_kwargs_in_order().
@@ -269,9 +318,12 @@ def _process_pool_wrapper_kwargs_out_order(fn,
                                                 error_callback=kill_pool))
 
             result_timeout *= max(len(results), 1)
-            results = wait_for_pool_results(results,
-                                            terminate_process_event,
-                                            result_timeout)
+            results = wait_for_pool_results(
+                results=results,
+                terminate_process_event=terminate_process_event,
+                result_timeout=result_timeout,
+                pbar_kwargs=pbar_kwargs,
+            )
 
         except BaseException:
             # If any exception, clean up and exit to be safe
@@ -290,8 +342,9 @@ def multiprocess(fn: Callable,
                  process_count: int = os.cpu_count()-1,
                  pool_maxtasksperchild: int = 4,
                  in_order: bool = False,
-                 result_timeout: int = 86400
-                 ) -> Any:
+                 result_timeout: int = 86400,
+                 pbar_kwargs: Dict[str, Any] = None,
+                 ) -> List[Any]:
     """
     Runs the given function with the arguments given in a multiprocessing.Pool,
     returning the function output.
@@ -343,6 +396,9 @@ def multiprocess(fn: Callable,
         Int. How long to wait for each process before throwing an exception
         because the results have taken too long to return
         Defaults to 86400 seconds, (24 hours).
+
+    pbar_kwargs:
+        A dictionary of keyword arguments to pass into a progress bar.
 
     Examples
     --------
@@ -396,7 +452,10 @@ def multiprocess(fn: Callable,
 
     # If the process count is 0, run as a normal for loop
     if process_count == 0:
-        return [fn(*a, **k) for a, k in zip(args, kwargs)]
+        if pbar_kwargs is not None:
+            return [fn(*a, **k) for a, k in tqdm.tqdm(zip(args, kwargs), **pbar_kwargs)]
+        else:
+            return [fn(*a, **k) for a, k in zip(args, kwargs)]
 
     # If we get here, the process count must be > 0 and valid
     return process_pool_wrapper(
@@ -406,7 +465,8 @@ def multiprocess(fn: Callable,
         process_count=process_count,
         pool_maxtasksperchild=pool_maxtasksperchild,
         in_order=in_order,
-        result_timeout=result_timeout
+        result_timeout=result_timeout,
+        pbar_kwargs=pbar_kwargs,
     )
 
 
@@ -416,7 +476,9 @@ def process_pool_wrapper(fn,
                          process_count=os.cpu_count()-1,
                          pool_maxtasksperchild=4,
                          in_order=False,
-                         result_timeout=86400):
+                         result_timeout=86400,
+                         pbar_kwargs: Dict[str, Any] = None
+                         ) -> List[Any]:
     """
     Runs the given function with the arguments given in a multiprocessing.Pool,
     returning the function output.
@@ -462,6 +524,9 @@ def process_pool_wrapper(fn,
         because the results have taken too long to return
         Defaults to 86400 seconds, (24 hours).
 
+    pbar_kwargs:
+        A dictionary of keyword arguments to pass into a progress bar.
+
     Examples
     --------
     The following three function calls:
@@ -497,7 +562,8 @@ def process_pool_wrapper(fn,
             kwargs,
             process_count=process_count,
             pool_maxtasksperchild=pool_maxtasksperchild,
-            result_timeout=result_timeout
+            result_timeout=result_timeout,
+            pbar_kwargs=pbar_kwargs
         )
     else:
         return _process_pool_wrapper_kwargs_out_order(
@@ -506,7 +572,8 @@ def process_pool_wrapper(fn,
             kwargs,
             process_count=process_count,
             pool_maxtasksperchild=pool_maxtasksperchild,
-            result_timeout=result_timeout
+            result_timeout=result_timeout,
+            pbar_kwargs=pbar_kwargs
         )
 
 

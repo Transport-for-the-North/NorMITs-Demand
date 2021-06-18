@@ -41,11 +41,11 @@ def create_folder(folder, chDir=False, verbose=True):
         os.makedirs(folder)
         if chDir:
             os.chdir(folder)
-        print_w_toggle("New project folder created in " + folder, echo=verbose)
+        print_w_toggle("New project folder created in " + folder, verbose=verbose)
     else:
         if chDir:
             os.chdir(folder)
-        print_w_toggle('Folder already exists', echo=verbose)
+        print_w_toggle('Folder already exists', verbose=verbose)
 
 
 def set_time():
@@ -845,7 +845,7 @@ def get_attraction_type(calib_params,
     return(a_t)
 
 
-def print_w_toggle(*args, echo):
+def print_w_toggle(*args, verbose):
     """
     Small wrapper to only print when echo=True
 
@@ -858,7 +858,7 @@ def print_w_toggle(*args, echo):
     echo:
         Whether to print the text or not
     """
-    if echo:
+    if verbose:
         print(*args)
 
 
@@ -2364,6 +2364,7 @@ def get_compilation_params(lookup_folder,
 
     return out_dict
 
+
 def parse_mat_output(list_dir,
                      sep = '_',
                      mat_type = 'dat',
@@ -2371,7 +2372,6 @@ def parse_mat_output(list_dir,
                      file_name = 'file'):
     """
     """
-    list_dir = os.listdir(list_dir)
 
     # Define UC format
     uc = ['commute','business','other',

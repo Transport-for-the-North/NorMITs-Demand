@@ -31,6 +31,10 @@ NORMS2TFN_FNAME = 'tfn_sector_norms_pop_weighted_lookup.csv '
 
 MSOA2TFN_FNAME = 'tfn_sector_msoa_pop_weighted_lookup.csv'
 
+MSOA2NORMS_POP_FNAME = 'msoa_norms_pop_weighted_lookup.csv'
+MSOA2NORMS_EMP_FNAME = 'msoa_norms_emp_weighted_lookup.csv'
+
+
 # No longer used - got newer translation files
 def noham_to_tfn_via_msoa(in_dir, out_path):
     noham2msoa = pd.read_csv(os.path.join(in_dir, NOHAM2MSOA_FNAME))
@@ -215,6 +219,48 @@ def noham_to_lad(in_dir, out_path):
     )
 
 
+def msoa_to_norms_pop(in_dir, out_path):
+    # Min overlap = 0.5104
+    file = pd.read_csv(os.path.join(in_dir, MSOA2NORMS_POP_FNAME))
+
+    # get just the needed columns
+    msoa_col = 'msoa_zone_id'
+    norms_col = 'norms_zone_id'
+    overlap_col = 'msoa_to_norms'
+    needed_cols = [msoa_col, norms_col, overlap_col]
+    file = file.reindex(needed_cols, axis='columns')
+
+    # Output to file
+    create_translation_dataframe(
+        file=file,
+        model_col=msoa_col,
+        aggregate_col=norms_col,
+        overlap_col=overlap_col,
+        out_path=out_path
+    )
+
+
+def msoa_to_norms_emp(in_dir, out_path):
+    # Min overlap = 0.5132
+    file = pd.read_csv(os.path.join(in_dir, MSOA2NORMS_EMP_FNAME))
+
+    # get just the needed columns
+    msoa_col = 'msoa_zone_id'
+    norms_col = 'norms_zone_id'
+    overlap_col = 'msoa_to_norms'
+    needed_cols = [msoa_col, norms_col, overlap_col]
+    file = file.reindex(needed_cols, axis='columns')
+
+    # Output to file
+    create_translation_dataframe(
+        file=file,
+        model_col=msoa_col,
+        aggregate_col=norms_col,
+        overlap_col=overlap_col,
+        out_path=out_path
+    )
+
+
 def create_translation_dataframe(file,
                                  model_col,
                                  aggregate_col,
@@ -263,28 +309,38 @@ def create_translation_dataframe(file,
 
 
 def main():
-    out_dir = r'Y:\NorMITs Demand\import\zone_translation'
-    in_dir = r'Y:\NorMITs Demand\import\zone_translation\src'
+    out_dir = r'I:\NorMITs Demand\import\zone_translation\one_to_one\out'
+    in_dir = r'I:\NorMITs Demand\import\zone_translation\src'
 
     base_fname = '%s_to_%s.csv'
 
     # Create all translation files
-    noham_to_lad(
+    # noham_to_lad(
+    #     in_dir=in_dir,
+    #     out_path=os.path.join(out_dir, base_fname % ('noham', 'lad')),
+    # )
+    # noham_to_tfn(
+    #     in_dir=in_dir,
+    #     out_path=os.path.join(out_dir, base_fname % ('noham', 'tfn_sectors')),
+    # )
+    #
+    # norms_to_lad(
+    #     in_dir=in_dir,
+    #     out_path=os.path.join(out_dir, base_fname % ('norms', 'lad')),
+    # )
+    # norms_to_tfn(
+    #     in_dir=in_dir,
+    #     out_path=os.path.join(out_dir, base_fname % ('norms', 'tfn_sectors')),
+    # )
+
+    msoa_to_norms_pop(
         in_dir=in_dir,
-        out_path=os.path.join(out_dir, base_fname % ('noham', 'lad')),
-    )
-    noham_to_tfn(
-        in_dir=in_dir,
-        out_path=os.path.join(out_dir, base_fname % ('noham', 'tfn_sectors')),
+        out_path=os.path.join(out_dir, base_fname % ('msoa', 'norms_pop')),
     )
 
-    norms_to_lad(
+    msoa_to_norms_emp(
         in_dir=in_dir,
-        out_path=os.path.join(out_dir, base_fname % ('norms', 'lad')),
-    )
-    norms_to_tfn(
-        in_dir=in_dir,
-        out_path=os.path.join(out_dir, base_fname % ('norms', 'tfn_sectors')),
+        out_path=os.path.join(out_dir, base_fname % ('msoa', 'norms_emp')),
     )
 
 

@@ -45,19 +45,6 @@ DEFAULT_ROUNDING = 8
 VDM_TRIP_ORIGINS = ['hb', 'nhb']
 USER_CLASSES = ['commute', 'business', 'other']
 
-# How do user classes relate to purposes
-USER_CLASS_PURPOSES = {
-    'commute': [1],
-    'business': [2, 12],
-    'other': [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
-}
-
-HB_USER_CLASS_PURPOSES = {
-    'commute': [1],
-    'business': [2],
-    'other': [3, 4, 5, 6, 7, 8]
-}
-
 NORMS_SUB_USER_CLASS_SEG = {
     'ca_from':  {'to': ['hb', 'nhb'],   'ca': [2], 'od_ft': ['od_from']},
     'ca_to':    {'to': ['hb'],          'ca': [2], 'od_ft': ['od_to']},
@@ -131,7 +118,6 @@ SC03_DD = 'SC03_DD'
 SC04_UZC = 'SC04_UZC'
 
 TFN_SCENARIOS = [
-    SC00_NTEM,
     SC01_JAM,
     SC02_PP,
     SC03_DD,
@@ -274,7 +260,7 @@ MODEL_NAME = 'norms'
 
 # YEARS
 BASE_YEAR = 2018
-FUTURE_YEARS = [2033, 2035, 2050]
+FUTURE_YEARS = [2033, 2040, 2050]
 
 # HB efs_consts
 HB_PURPOSES_NEEDED = ALL_HB_P
