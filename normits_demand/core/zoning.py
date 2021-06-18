@@ -11,6 +11,9 @@ File purpose:
 Holds the ZoningSystem Class which stores all information on different zoning
 systems
 """
+# Allow class self hinting
+from __future__ import annotations
+
 # Builtins
 import os
 
@@ -32,10 +35,22 @@ class ZoningSystem:
     def __init__(self,
                  name: str,
                  unique_zones: np.ndarray,
-                 ):
+                 ) -> ZoningSystem:
         # Init
         self.name = name
         self.unique_zones = np.sort(unique_zones)
+        self.n_zones = len(self.unique_zones)
+
+    def __eq__(self, other) -> bool:
+        """Overrides the default implementation"""
+        # May need to update in future, but assume they are equal if names match
+        if isinstance(other, ZoningSystem):
+            return self.name == other.name
+        return False
+
+    def __ne__(self, other) -> bool:
+        """Overrides the default implementation"""
+        return not self.__eq__(other)
 
 
 class ZoningError(nd.NormitsDemandError):

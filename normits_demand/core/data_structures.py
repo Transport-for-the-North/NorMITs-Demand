@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import math
 
+from typing import Any
 from typing import List
 from typing import Dict
 from typing import Tuple
@@ -54,6 +55,7 @@ class DVector:
                  zone_col: str = None,
                  segment_col: str = None,
                  val_col: str = None,
+                 infill: Any = 0,
                  chunk_size: int = None,
                  process_count: int = consts.PROCESS_COUNT,
                  verbose: bool = False,
@@ -81,6 +83,7 @@ class DVector:
                 zone_col,
                 segment_col,
                 val_col,
+                infill,
             )
         elif isinstance(import_data, dict):
             self.data = self._dict_to_dvec(import_data)
@@ -89,6 +92,68 @@ class DVector:
                 "Don't know how to deal with anything other than: "
                 "pandas DF, or dict"
             )
+
+    def __mul__(self: DVector, other: DVector) -> DVector:
+        """
+        Builds a new Dvec by multiplying a and b together.
+
+        How to join the two Dvectors is defined by the segmentation of each
+        Dvector.
+
+        Retains process_count, chunk_size, and verbose params from a.
+
+        Parameters
+        ----------
+        self:
+            The first DVector to multiply
+
+        other:
+            The second DVector to multiply
+
+        Returns
+        -------
+        c:
+            A new DVector which is the product of multiplying a and b.
+        """
+        # We can only multiply against other DVectors
+        if not isinstance(other, DVector):
+            raise nd.NormitsDemandError(
+                "The __mul__ operator can only be used with."
+                "a DVector objects on each side. Got %s and %s."
+                % (type(self), type(other))
+            )
+
+        # ## CHECK WE CAN MULTIPLY a AND b ## #
+        if self.zoning_system == other.zoning_system:
+            return_zoning_system = self.zoning_system
+        elif self.zoning_system is None:
+            return_zoning_system = other.zoning_system
+        elif other.zoning_system is None:
+            return_zoning_system = self.zoning_system
+        else:
+            raise nd.ZoningError(
+                "Cannot multiply two Dvectors using different zoning systems.\n"
+                "zoning system of a: %s\n"
+                "zoning system of b: %s\n"
+                % (self.zoning_system.name, other.zoning_system.name)
+            )
+
+        # ## DO MULTIPLICATION ## #
+        # Use the segmentations to figure out what to multiply
+        multiply_dict, return_segmentation = self.segmentation * other.segmentation
+
+        # Build the dvec data here with multiplication
+        dvec_data = dict()
+        for final_seg, (self_key, other_key) in multiply_dict.items():
+            dvec_data[final_seg] = self.data[self_key] * other.data[other_key]
+
+        return DVector(
+            zoning_system=return_zoning_system,
+            segmentation=return_segmentation,
+            import_data=dvec_data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
 
     def _dict_to_dvec(self, import_data) -> nd.DVectorData:
         # TODO(BT): Add some error checking to make sure this is
@@ -122,6 +187,13 @@ class DVector:
         # Generate the data on a per segment basis
         dvec_chunk = dict()
         for segment in df_chunk['segment'].unique():
+            # Check that it's a valid segment_name
+            if segment not in self.segmentation.segment_names:
+                raise ValueError(
+                    "%s is not a valid segment name for a Dvector using %s "
+                    "segmentation" % (segment, self.segmentation.name)
+                )
+
             # Get all available pop for this segment
             seg_data = df_chunk[df_chunk[self._segment_col] == segment].copy()
 
@@ -155,29 +227,26 @@ class DVector:
                            zone_col: str,
                            segment_col: str,
                            val_col: str,
+                           infill: Any,
                            ) -> nd.DVectorData:
         """
         Converts a pandas dataframe into dvec.data internal structure
         """
         # Init
 
-        # TODO(BT): Once the segmentation object is properly implemented
-        #  some validation needs adding to make sure every value in the
-        #  segment column is a valid segment.
+        # If the dataframe is smaller than the chunk size, evenly split across cores
+        if len(df) < self.chunk_size * self.process_count:
+            chunk_size = math.ceil(len(df) / self.process_count)
+        else:
+            chunk_size = self.chunk_size
 
         # setup a pbar
         pbar_kwargs = {
             'desc': "Converting df to dvec",
             'unit': "segment",
             'disable': (not self.verbose),
-            'total': round(len(df) / self.chunk_size)
+            'total': math.ceil(len(df) / chunk_size)
         }
-
-        # If the dataframe is smaller than the chunk size, evenly split across cores
-        if len(df) < self.chunk_size * self.process_count:
-            chunk_size = math.ceil(len(df) / self.process_count)
-        else:
-            chunk_size = self.chunk_size
 
         # ## MULTIPROCESS THE DATA CONVERSION ## #
         # Build a list of arguments
@@ -195,120 +264,78 @@ class DVector:
             fn=self._dataframe_to_dvec_internal,
             kwargs=kwarg_list,
             process_count=self.process_count,
-            # NEED TO PULL IN CHANGES
-            # pbar_kwargs=pbar_kwargs,
+            pbar_kwargs=pbar_kwargs,
         )
+        data = du.sum_dict_list(data_chunks)
 
-        return du.sum_dict_list(data_chunks)
+        # ## MAKE SURE DATA CONTAINS ALL SEGMENTS ##
+        # find the segments which arent in there
+        not_in = set(self.segmentation.segment_names) - data.keys()
 
-    @staticmethod
-    def _multiply(a: DVector,
-                  b: DVector,
-                  ) -> DVector:
+        # Figure out what the default value should be
+        if self.zoning_system is None:
+            default_val = infill
+        else:
+            default_val = np.array([infill] * self.zoning_system.n_zones)
+
+        # Infill the missing segments
+        for name in not_in:
+            data[name] = default_val.copy()
+
+        return data
+
+    def get_segment_data(self,
+                         segment_name: str = None,
+                         segment_dict: Dict[str, Any] = None,
+                         ) -> Union[np.array, int, float]:
         """
-        Builds a new Dvec by multiplying a and b together.
+        Gets the data for the given segment from the Dvector
 
-        How to join the two Dvectors is defined by the segmentation of each
-        Dvector.
-
-        Retains process_count, chunk_size, and verbose params from a.
+        If no data for the given segment exists, then returns a np.array
+        of the length of this DVectors zoning system.
 
         Parameters
         ----------
-        a:
-            The first DVector to multiply
-        b:
-            The second DVector to multiply
+        segment_name:
+            The name of the segment to get. Can only set either this or
+            segment_dict. 
+        
+        segment_dict:
+            A dictionary of a segment to get. Should be as
+            {segment_name: segment_value} pairs.
+            Can only set this or segment_name. If this value is set, it will
+            internally be converted into a segment_name.
 
         Returns
         -------
-        c:
-            A new DVector which is the product of multiplying a and b.
+        segment_data:
+            The data for segment_name
+
         """
-        # ## CHECK WE CAN MULTIPLY a AND b ## #
-        if a.zoning_system == b.zoning_system:
-            return_zoning_system = a.zoning_system
-        elif a.zoning_system is None:
-            return_zoning_system = b.zoning_system
-        elif b.zoning_system is None:
-            return_zoning_system = a.zoning_system
-        else:
-            raise nd.ZoningError(
-                "Cannot multiply two Dvectors using different zoning systems.\n"
-                "zoning system of a: %s\n"
-                "zoning system of b: %s\n"
-                % (a.zoning_system.name, b.zoning_system.name)
+        # Make sure only one argument is set
+        if not du.xor(segment_name is None, segment_dict is None):
+            raise ValueError(
+                "Need to set either segment_name or segment_dict in order to "
+                "get the data of a segment.\n"
+                "Both values cannot be set, neither can both be left as None."
             )
 
-        # ## DO MULTIPLICATION ## #
-        # Use the segmentations to figure out what to multiply
-        multiply_dict, return_segmentation = a.segmentation * b.segmentation
+        # Build the segment_name if we don't have it
+        if segment_dict is not None:
+            segment_name = None
+            raise NotImplemented(
+                "Need to write code to convert a segment_dict into a valid "
+                "segment_name"
+            )
 
-        # Build the dvec data here with multiplication
-        # TODO(NK): Translate your multiplication code to build the dvec_data
-        #  here, using the multiply_dict above. The multiply_dict defines
-        #  How the multiplication of the Dvecs should be done.
-        #  Key = Returning Dvec segment name
-        #  Values = Tuple[a_segment_name, b_segment_name]
-        dvec_data = dict()
+        if segment_name not in self.segmentation.segment_names:
+            raise ValueError(
+                "%s is not a valid segment name for a Dvector using %s "
+                "segmentation." % self.segmentation.name
+            )
 
-        return DVector(
-            zoning_system=return_zoning_system,
-            segmentation=return_segmentation,
-            import_data=dvec_data,
-            process_count=a.process_count,
-            verbose=a.verbose,
-        )
+        # Get data and covert to zoning system
+        return self.data[segment_name]
 
 
 # ## FUNCTIONS ## #
-def multiply_dvecs(a: DVector,
-                   b: DVector,
-                   ) -> DVector:
-    """
-    Builds a new Dvec by multiplying a and b together.
-
-    How to join the two Dvectors is defined by the segmentation of each
-    Dvector.
-
-    Parameters
-    ----------
-    a:
-        The first DVector to multiply
-    b:
-        The second DVector to multiply
-
-    Returns
-    -------
-    c:
-        A new DVector which is the product of multiplying a and b.
-    """
-    return DVector._multiply(a, b)
-
-    mult_dvec = dict()
-
-    for k in b:
-        k1 = str(k).split("_", 1)[1]
-        for l in a:
-            if k1 == l:
-                mult_dvec[k] = np.multiply(a[l], b[k])
-    """
-    dvec_trips = dict()
-    c = 1
-    needed_cols = ['p', 'tfn_tt']
-    p_tfntt = pd_utils.str_join_cols(b, needed_cols)
-    
-    for m in p_tfntt:
-        for o in mult_dvec:
-            o1 = o.rsplit("_", 1)[0]
-            if o1 == m and c == 1:
-                dvec_trips[m] = mult_dvec[o]
-                c += 1
-            elif o1 == m and c > 1:
-                dvec_trips[m] = np.add(dvec_trips[m], mult_dvec[o])
-        c = 1
-    """
-    return mult_dvec
-
-
-

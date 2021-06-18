@@ -76,7 +76,7 @@ class SegmentationLevel:
             columns=self.naming_order,
         )
         self.segments_and_names = segments_and_names
-        self.segment_names = segments_and_names['name']
+        self.segment_names = segments_and_names['name'].to_list()
 
     def __eq__(self, other) -> bool:
         """Overrides the default implementation"""
@@ -245,6 +245,13 @@ class SegmentationLevel:
 
         # Generate the naming column, and return
         return pd_utils.str_join_cols(df, self.naming_order)
+
+    def is_valid_segment_name(self, segment_name: str) -> bool:
+        """
+        Checks whether the given segment_name is a valid name for this
+        SegmentationLevel
+        """
+        return segment_name in self.segment_names
 
 
 class SegmentationError(nd.NormitsDemandError):

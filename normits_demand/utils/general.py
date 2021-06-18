@@ -2765,6 +2765,13 @@ def intersection(l1: List[Any], l2: List[Any]) -> List[Any]:
     return [x for x in small if x in temp]
 
 
+def xor(a: bool, b: bool) -> bool:
+    """
+    Returns the exclusive or of a and b.
+    """
+    return bool(a ^ b)
+
+
 def ensure_index(df: pd.DataFrame,
                  index: List[Any],
                  index_col: str,
@@ -3476,6 +3483,6 @@ def sum_dict_list(dict_list: List[Dict[Any, Any]]) -> Dict[Any, Any]:
             accumulator[key] = accumulator.get(key, 0) + value
         return accumulator
 
-    return functools.reduce(reducer, dict_list, {})
+    return functools.reduce(reducer, dict_list)
 
 

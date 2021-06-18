@@ -154,10 +154,7 @@ def dvec_obj_main():
     # TODO(BT): Need to implement this - example calling structure?
     #  Need to think about how this will work in more detail
     #  Specifically, how to generalise properly!
-    nd.core.multiply_dvecs(
-        a=pop_dvec,
-        b=trip_rates_dvec,
-    )
+    pure_demand = pop_dvec * trip_rates_dvec
 
 
 if __name__ == '__main__':
