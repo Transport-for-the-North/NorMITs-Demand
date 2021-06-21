@@ -19,7 +19,7 @@ import shutil
 import random
 import inspect
 import operator
-
+import contextlib
 
 import pandas as pd
 import numpy as np
@@ -29,6 +29,7 @@ from typing import List
 from typing import Dict
 from typing import Tuple
 from typing import Union
+from typing import Callable
 from typing import Iterable
 from typing import Iterator
 
@@ -37,7 +38,7 @@ from pathlib import Path
 from math import isclose
 
 import functools
-from tqdm import tqdm
+import tqdm
 from itertools import product
 from collections import defaultdict
 
@@ -78,6 +79,40 @@ class InitialisationError(NormitsDemandError):
     def __init__(self, message=None):
         self.message = message
         super().__init__(self.message)
+
+
+@contextlib.contextmanager
+def std_out_err_redirect_tqdm():
+    """Redirect stdout and stderr to `tqdm.write`.
+
+    Code copied from tqdm documentation:
+    https://github.com/tqdm/tqdm#redirecting-writing
+
+    Redirect stdout and stderr to tqdm allows tqdm to control
+    how print statements are shown and stops the progress bar
+    formatting from breaking. Note: warnings.warn() messages
+    still cause formatting issues in terminal.
+
+    Yields
+    -------
+    sys.stdout
+        Original stdout.
+    """
+    # Init
+    from tqdm.contrib import DummyTqdmFile
+
+    orig_out_err = sys.stdout, sys.stderr
+    try:
+        sys.stdout, sys.stderr = map(DummyTqdmFile, orig_out_err)
+        yield orig_out_err[0]
+
+    # Relay exceptions
+    except Exception as exc:
+        raise exc
+
+    # Always restore sys.stdout/err if necessary
+    finally:
+        sys.stdout, sys.stderr = orig_out_err
 
 
 def get_seg_level_cols(seg_level: str,
@@ -330,9 +365,9 @@ def validate_vdm_seg_params(seg_params: Dict[str, Any]) -> Dict[str, Any]:
     return seg_params
 
 
-def print_w_toggle(*args, echo, **kwargs):
+def print_w_toggle(*args, verbose, **kwargs):
     """
-    Small wrapper to only print when echo=True
+    Small wrapper to only print when verbose=True
 
     Parameters
     ----------
@@ -340,13 +375,13 @@ def print_w_toggle(*args, echo, **kwargs):
         The text to print - can be passed in the same format as a usual
         print function
 
-    echo:
+    verbose:
         Whether to print the text or not
 
     **kwargs:
         Any other kwargs to pass directly to the print function call
     """
-    if echo:
+    if verbose:
         print(*args, **kwargs)
 
 
@@ -357,8 +392,10 @@ def build_efs_io_paths(import_location: str,
                        scenario_name: str,
                        demand_dir_name: str = 'NorMITs Demand',
                        base_year: str = efs_consts.BASE_YEAR_STR,
-                       land_use_iteration: str = None,
+                       by_land_use_iteration: str = None,
+                       fy_land_use_iteration: str = None,
                        land_use_drive: str = None,
+                       verbose: bool = True,
                        ) -> Tuple[dict, dict, dict]:
     """
     Builds three dictionaries of paths to the locations of all inputs and
@@ -417,8 +454,8 @@ def build_efs_io_paths(import_location: str,
 
     # ## IMPORT PATHS ## #
     # Generate general import paths
-    model_home = os.path.join(import_location, demand_dir_name)
-    import_home = os.path.join(model_home, 'import')
+    demand_home = os.path.join(import_location, demand_dir_name)
+    import_home = os.path.join(demand_home, 'import')
     input_home = os.path.join(import_home, 'default')
 
     # Build the longer paths
@@ -440,17 +477,20 @@ def build_efs_io_paths(import_location: str,
     #  labels: demand merge, EFS
 
     # Build model specific paths
-    model_schema_home = os.path.join(import_home, model_name, 'model schema')
-    model_param_home = os.path.join(import_home, model_name, 'params')
-    model_tour_prop_home = os.path.join(import_home, model_name, 'post_me_tour_proportions')
+    efs_model_home = os.path.join(import_home, model_name)
+    model_schema_home = os.path.join(efs_model_home, 'model schema')
+    model_param_home = os.path.join(efs_model_home, 'params')
+    model_tour_prop_home = os.path.join(efs_model_home, 'post_me_tour_proportions')
 
     imports = {
         'home': import_home,
         'default_inputs': input_home,
         'zone_translation': zone_translation,
         'tp_splits': os.path.join(import_home, 'tp_splits'),
-        'lookups': os.path.join(model_home, 'lookup'),
+        'lookups': os.path.join(demand_home, 'lookup'),
+        'costs': os.path.join(efs_model_home, 'costs'),
         'scenarios': os.path.join(import_home, 'scenarios'),
+        'wfh_adj': os.path.join(import_home, 'scenarios', 'WfH Adjustments', 'wfh_adj.csv'),
         'a_weights': os.path.join(import_home, 'attractions', 'hb_attraction_weights.csv'),
         'soc_weights': soc_weights_path,
         'ntem_control': os.path.join(import_home, 'ntem_constraints'),
@@ -468,17 +508,26 @@ def build_efs_io_paths(import_location: str,
     }
 
     # Add Land use import if we have an iteration
-    if land_use_drive is not None and land_use_iteration is not None:
-        land_use_home = os.path.join(
+    if all([x is not None for x in [land_use_drive, by_land_use_iteration, fy_land_use_iteration]]):
+        fy_land_use_home = os.path.join(
             land_use_drive,
             'NorMITs Land Use',
-            land_use_iteration,
+            'future_land_use',
+            fy_land_use_iteration,
             'outputs',
         )
-        land_use_fy = os.path.join(land_use_home, 'scenarios', scenario_name)
+        by_land_use_home = os.path.join(
+            land_use_drive,
+            'NorMITs Land Use',
+            'base_land_use',
+            by_land_use_iteration,
+            'outputs',
+        )
 
-        imports['pop_by'] = os.path.join(land_use_home, consts.BASE_YEAR_POP_FNAME)
-        imports['emp_by'] = os.path.join(land_use_home, consts.BASE_YEAR_EMP_FNAME)
+        land_use_fy = os.path.join(fy_land_use_home, 'scenarios', scenario_name)
+
+        imports['pop_by'] = os.path.join(by_land_use_home, consts.BASE_YEAR_POP_FNAME)
+        imports['emp_by'] = os.path.join(by_land_use_home, consts.BASE_YEAR_EMP_FNAME)
         imports['land_use_fy_dir'] = land_use_fy
 
     # ## EXPORT PATHS ## #
@@ -504,9 +553,11 @@ def build_efs_io_paths(import_location: str,
     compiled = 'Compiled'
     aggregated = 'Aggregated'
     pa_24_bespoke = '24hr PA Matrices - Bespoke Zones'
+    pa_24_elasticity = '24hr PA Matrices - Elasticity'
     pcu = 'PCU'
 
     exports = {
+        'base': os.path.join(export_location, demand_dir_name),
         'home': export_home,
         'productions': os.path.join(export_home, 'Productions'),
         'attractions': os.path.join(export_home, 'Attractions'),
@@ -516,8 +567,10 @@ def build_efs_io_paths(import_location: str,
         'dist_reports': os.path.join(export_home, 'Reports', 'Matrices'),
 
         # Pre-ME
+        'mat_home': matrices_home,
         'pa': os.path.join(matrices_home, pa),
         'pa_24': os.path.join(matrices_home, pa_24),
+        'pa_24_wfh': os.path.join(matrices_home, pa_24 + " WFH"),
         'vdm_pa_24': os.path.join(matrices_home, vdm_pa_24),
         'od': os.path.join(matrices_home, od),
         'od_24': os.path.join(matrices_home, od_24),
@@ -530,11 +583,12 @@ def build_efs_io_paths(import_location: str,
         'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
         'aggregated_pa': os.path.join(matrices_home, ' '.join([aggregated, pa])),
 
-        'pa_24_bespoke': os.path.join(matrices_home, pa_24_bespoke)
+        'pa_24_bespoke': os.path.join(matrices_home, pa_24_bespoke),
+        'pa_24_elast': os.path.join(matrices_home, pa_24_elasticity),
     }
 
     for _, path in exports.items():
-        create_folder(path, chDir=False)
+        create_folder(path, chDir=False, verbose=True)
 
     # Post-ME
     compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
@@ -551,7 +605,7 @@ def build_efs_io_paths(import_location: str,
     }
 
     for _, path in post_me_exports.items():
-        create_folder(path, chDir=False)
+        create_folder(path, chDir=False, verbose=verbose)
 
     # Combine into full export dict
     exports['post_me'] = post_me_exports
@@ -565,7 +619,7 @@ def build_efs_io_paths(import_location: str,
         'tours': os.path.join(param_home, 'Tour Proportions')
     }
     for _, path in params.items():
-        create_folder(path, chDir=False)
+        create_folder(path, chDir=False, verbose=verbose)
 
     return imports, exports, params
 
@@ -2241,7 +2295,7 @@ def combine_yearly_dfs(year_dfs: Dict[str, pd.DataFrame],
     # ## SPLIT MATRICES AND JOIN BY PURPOSE ## #
     purpose_ph = list()
     desc = "Merging dataframes by purpose"
-    for p in tqdm(purposes, desc=desc):
+    for p in tqdm.tqdm(purposes, desc=desc):
 
         # Get all the matrices that belong to this purpose
         yr_p_dfs = list()
@@ -2402,6 +2456,40 @@ def get_zone_translation(import_dir: str,
     translation = dict(translation.itertuples(index=False, name=None))
 
     return translation
+
+
+def nested_dictionary(depth: int = 3,
+                      leaf_default: Callable = None,
+                      ):
+    """
+    Returns nested collections.defaultdicts of depth
+
+    Parameters
+    ----------
+    depth:
+        The number of keys to intantiate by default. e.g.
+        of depth = 3, d[0][0][0] will create a leaf_default
+
+    leaf_default:
+        The function to call for the leaf of the nested dictionary.
+        If list, then an empty list would be created by default
+
+    Returns
+    -------
+    nested_dict:
+        nested collections.defaultdicts of depth with leaf_default at the
+        leaf of all dictionaries
+    """
+    if depth == 0:
+        return leaf_default
+
+    nested_fn = functools.partial(
+        nested_dictionary,
+        depth=depth - 1,
+        leaf_default=leaf_default,
+    )
+
+    return defaultdict(nested_fn)
 
 
 def defaultdict_to_regular(d):
@@ -2603,13 +2691,13 @@ def remove_none_like_filter(df_filter: Dict[str, Any]) -> Dict[str, Any]:
     return new_df_filter
 
 
-def filter_by_segmentation(df: pd.DataFrame,
-                           df_filter: Dict[str, Any],
-                           fit: bool = False,
-                           **kwargs
-                           ) -> pd.DataFrame:
+def filter_df(df: pd.DataFrame,
+              df_filter: Dict[str, Any],
+              fit: bool = False,
+              **kwargs,
+              ) -> pd.DataFrame:
     """
-    Filters a dataframe down to a given segmentation
+    Filters a dataframe down to a given filter
 
     Can handle flexible segmentation if fit is set to True - all unnecessary
     columns will be removed, and any 'None like' filters will be removed. This
@@ -3068,6 +3156,45 @@ def trip_origin_to_purposes(trip_origin: str) -> List[int]:
     """
     # TODO Validate trip origin
     return efs_consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
+
+
+def purpose_to_user_class(purpose: Union[int, str]) -> str:
+    """
+    Returns a string of the user class that purpose belongs to
+
+    Parameters
+    ----------
+    purpose:
+        The purpose to convert to user class.
+
+    Returns
+    -------
+    user_class:
+        A string defining a user class
+    """
+    # Validate the input
+    if not isinstance(purpose, int):
+        try:
+            purpose = int(purpose)
+        except ValueError:
+            raise ValueError(
+                "Given a non-integer purpose and hit an error while trying "
+                "to convert to and integer. Got %s" % purpose
+            )
+
+    # Convert the purpose
+    user_class = None
+    for uc, ps in consts.USER_CLASS_PURPOSES.items():
+        if purpose in ps:
+            user_class = uc
+
+    if user_class is None:
+        raise ValueError(
+            "No user class exists for purpose '%s' "
+            % purpose
+        )
+
+    return user_class
 
 
 def merge_df_list(df_list, **kwargs):

@@ -227,13 +227,9 @@ def _distribute_pa_internal(productions,
         tp_col: calib_params.get('tp')
     }
 
-    productions = du.filter_by_segmentation(productions,
-                                            df_filter=base_filter,
-                                            fit=True)
+    productions = du.filter_df(productions, df_filter=base_filter, fit=True)
 
-    a_weights = du.filter_by_segmentation(a_weights,
-                                          df_filter=base_filter,
-                                          fit=True)
+    a_weights = du.filter_df(a_weights, df_filter=base_filter, fit=True)
 
     # Rename columns for furness
     year = calib_params['yr']
@@ -268,7 +264,7 @@ def _distribute_pa_internal(productions,
 
     # ## BALANCE P/A FORECASTS ## #
     if productions[unique_col].sum() != a_weights[unique_col].sum():
-        du.print_w_toggle("Row and Column targets do not match. Balancing...", echo=echo)
+        du.print_w_toggle("Row and Column targets do not match. Balancing...", verbose=echo)
         bal_fac = productions[unique_col].sum() / a_weights[unique_col].sum()
         a_weights[unique_col] *= bal_fac
 
