@@ -87,6 +87,12 @@ def dvec_obj_main():
         'trip_rate': ['tfn_traveller_type', 'area_type', 'p', 'trip_rate']
     }
 
+    # Define segment renames needed
+    seg_rename = {
+        'tfn_traveller_type': 'tfn_tt',
+        'area_type': 'tfn_at',
+    }
+
     # Read in pop and trip rates
     print("Reading in files...")
     pop = pd.read_csv(POPULATION_PATH, usecols=target_cols['land_use'])
@@ -95,27 +101,12 @@ def dvec_obj_main():
     # ## CREATE THE POP DVEC ## #
     print("Creating pop DVec...")
 
-    # Add a segment column
-    naming_conversion = {
-        'tfn_tt': 'tfn_traveller_type',
-        'tfn_at': 'area_type',
-    }
-    pop['segment'] = pop_seg.create_segment_col(pop, naming_conversion)
-
-    # Filter pop down ready for import into Dvec
-    pop = pd_utils.reindex_and_groupby(
-        df=pop,
-        index_cols=['segment', 'msoa_zone_id', 'people'],
-        value_cols=['people'],
-    )
-
     # Instantiate
     pop_dvec = nd.DVector(
         zoning_system=msoa_zoning,
         segmentation=pop_seg,
-        import_data=pop,
+        import_data= pop.rename(columns=seg_rename),
         zone_col="msoa_zone_id",
-        segment_col="segment",
         val_col="people",
         verbose=True,
     )
@@ -123,37 +114,17 @@ def dvec_obj_main():
     # ## CREATE THE TRIP RATES DVEC ## #
     print("Creating trip rates DVec...")
 
-    # Add a segment column
-    # Create inside DVec!!!
-    naming_conversion = {
-        'p': 'p',
-        'tfn_tt': 'tfn_traveller_type',
-        'tfn_at': 'area_type',
-    }
-    trip_rates['segment'] = pure_demand_seg.create_segment_col(trip_rates, naming_conversion)
-
-    # Filter pop down ready for import into Dvec
-    trip_rates = pd_utils.reindex_and_groupby(
-        df=trip_rates,
-        index_cols=['segment', 'trip_rate'],
-        value_cols=['trip_rate'],
-    )
-
     # Instantiate
     trip_rates_dvec = nd.DVector(
         zoning_system=None,
         segmentation=pure_demand_seg,
-        import_data=trip_rates,
+        import_data=trip_rates.rename(columns=seg_rename),
         zone_col=None,
-        segment_col="segment",
         val_col="trip_rate",
         verbose=True,
     )
 
     # ## MULTIPLY TOGETHER ## #
-    # TODO(BT): Need to implement this - example calling structure?
-    #  Need to think about how this will work in more detail
-    #  Specifically, how to generalise properly!
     pure_demand = pop_dvec * trip_rates_dvec
 
 

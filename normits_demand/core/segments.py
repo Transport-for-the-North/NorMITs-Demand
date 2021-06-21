@@ -206,16 +206,43 @@ class SegmentationLevel:
                            naming_conversion: Dict[str, str] = None,
                            ) -> pd.Series:
         """
-        TODO(BT): Properly document this function!!
+        Creates a pd.Series of segment names based on columns in df
+
+        Expects to find self.naming_order column names in df and builds
+        the segment name based off of that. If these columns do not exist,
+        then naming_conversion needs to be supplied in order to convert
+        the current df columns into naming_conversion names.
 
         Parameters
         ----------
         df:
+            The dataframe containing the segmentation columns to use when
+            generating the segmentation names.
+
         naming_conversion:
+            A dictionary mapping segment names in self.naming order into
+            df columns names. e.g.
+            {segment_name: column_name}
 
         Returns
         -------
+        segment_col:
+            A pandas.Series containing segment names, indexed the same as
+            df. i.e. it can be added to df as an extra column and it will be
+            in the correct order.
 
+        Raises
+        ------
+        ValueError:
+            If any of keys of naming_conversion are not a valid segment_name.
+
+        ValueError:
+            If any of values of naming_conversion are not a valid column
+            name in df.
+
+        ValueError:
+            If naming_conversion is not given, and all segment names cannot
+            be found in df.
         """
         # Init
         if naming_conversion is None:

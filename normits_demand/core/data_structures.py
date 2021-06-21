@@ -43,7 +43,7 @@ from normits_demand.concurrency import multiprocessing
 # ## CLASSES ## #
 class DVector:
 
-    _zone_col = 'zone_col'
+    _zone_col = 'zone'
     _segment_col = 'segment'
     _val_col = 'val'
     _chunk_size = 100000
@@ -53,8 +53,8 @@ class DVector:
                  segmentation: core.SegmentationLevel,
                  import_data: Union[pd.DataFrame, nd.DVectorData],
                  zone_col: str = None,
-                 segment_col: str = None,
                  val_col: str = None,
+                 df_naming_conversion: str = None,
                  infill: Any = 0,
                  chunk_size: int = None,
                  process_count: int = consts.PROCESS_COUNT,
@@ -73,17 +73,16 @@ class DVector:
 
         # Set defaults if args not set
         zone_col = self._zone_col if zone_col is None else zone_col
-        segment_col = self._segment_col if segment_col is None else segment_col
         val_col = self._val_col if val_col is None else val_col
 
         # Try to convert the given data into DVector format
         if isinstance(import_data, pd.DataFrame):
             self.data = self._dataframe_to_dvec(
-                import_data,
-                zone_col,
-                segment_col,
-                val_col,
-                infill,
+                df=import_data,
+                zone_col=zone_col,
+                val_col=val_col,
+                segment_naming_conversion=df_naming_conversion,
+                infill=infill,
             )
         elif isinstance(import_data, dict):
             self.data = self._dict_to_dvec(import_data)
@@ -162,28 +161,10 @@ class DVector:
 
     def _dataframe_to_dvec_internal(self,
                                     df_chunk,
-                                    zone_col,
-                                    segment_col,
-                                    val_col,
                                     ) -> nd.DVectorData:
         """
         The internal function of _dataframe_to_dvec - for multiprocessing
         """
-        # ## VALIDATE AND CONVERT THE GIVEN DATAFRAME ## #
-        if self.zoning_system is None:
-            needed_cols = [segment_col, val_col]
-        else:
-            needed_cols = [zone_col, segment_col, val_col]
-        df_chunk = pd_utils.reindex_cols(df_chunk, needed_cols)
-
-        # Rename import_data columns to internal names
-        rename_dict = {
-            zone_col: self._zone_col,
-            segment_col: self._segment_col,
-            val_col: self._val_col
-        }
-        df_chunk = df_chunk.rename(columns=rename_dict)
-
         # Generate the data on a per segment basis
         dvec_chunk = dict()
         for segment in df_chunk['segment'].unique():
@@ -225,15 +206,36 @@ class DVector:
     def _dataframe_to_dvec(self,
                            df: pd.DataFrame,
                            zone_col: str,
-                           segment_col: str,
                            val_col: str,
+                           segment_naming_conversion: str,
                            infill: Any,
                            ) -> nd.DVectorData:
         """
         Converts a pandas dataframe into dvec.data internal structure
         """
-        # Init
+        # ## VALIDATE AND CONVERT THE GIVEN DATAFRAME ## #
+        # Rename import_data columns to internal names
+        rename_dict = {zone_col: self._zone_col, val_col: self._val_col}
+        df = df.rename(columns=rename_dict)
 
+        # Add the segment column
+        df[self._segment_col] = self.segmentation.create_segment_col(
+            df=df,
+            naming_conversion=segment_naming_conversion
+        )
+
+        # Remove anything else that isn't needed
+        if self.zoning_system is None:
+            needed_cols = [self._segment_col, self._val_col]
+        else:
+            needed_cols = [self._segment_col, self._zone_col, self._val_col]
+        df = pd_utils.reindex_and_groupby(
+            df=df,
+            index_cols=needed_cols,
+            value_cols=[self._val_col],
+        )
+
+        # ## MULTIPROCESSING SETUP ## #
         # If the dataframe is smaller than the chunk size, evenly split across cores
         if len(df) < self.chunk_size * self.process_count:
             chunk_size = math.ceil(len(df) / self.process_count)
@@ -252,12 +254,7 @@ class DVector:
         # Build a list of arguments
         kwarg_list = list()
         for df_chunk in pd_utils.chunk_df(df, chunk_size):
-            kwarg_list.append({
-                'df_chunk': df_chunk,
-                'zone_col': zone_col,
-                'segment_col': segment_col,
-                'val_col': val_col,
-            })
+            kwarg_list.append({'df_chunk': df_chunk})
 
         # Call across multiple threads
         data_chunks = multiprocessing.multiprocess(
