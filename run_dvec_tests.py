@@ -82,8 +82,6 @@ def dvec_obj_main():
     pure_demand_seg = nd.get_segmentation_level('pure_demand')
     m_tp_seg = nd.get_segmentation_level('mode_time_splits')
 
-    exit()
-
     # Define wanted columns
     target_cols = {
         'land_use': ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people'],
