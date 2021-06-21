@@ -77,9 +77,12 @@ def dvec_obj_main():
 
     # Define the zoning and segmentations we want to use
     import_drive = "I:/"
-    msoa_zoning = nd.get_zoning_system(name='msoa', import_drive=import_drive)
-    pop_seg = nd.get_segmentation_level(name='lu_pop', import_drive=import_drive)
-    pure_demand_seg = nd.get_segmentation_level(name='pure_demand', import_drive=import_drive)
+    msoa_zoning = nd.get_zoning_system('msoa')
+    pop_seg = nd.get_segmentation_level('lu_pop')
+    pure_demand_seg = nd.get_segmentation_level('pure_demand')
+    m_tp_seg = nd.get_segmentation_level('mode_time_splits')
+
+    exit()
 
     # Define wanted columns
     target_cols = {
@@ -105,7 +108,7 @@ def dvec_obj_main():
     pop_dvec = nd.DVector(
         zoning_system=msoa_zoning,
         segmentation=pop_seg,
-        import_data= pop.rename(columns=seg_rename),
+        import_data=pop.rename(columns=seg_rename),
         zone_col="msoa_zone_id",
         val_col="people",
         verbose=True,
@@ -126,6 +129,8 @@ def dvec_obj_main():
 
     # ## MULTIPLY TOGETHER ## #
     pure_demand = pop_dvec * trip_rates_dvec
+
+    # ## CREATE MODE_TIME SPLITS DVEC ## #
 
 
 if __name__ == '__main__':

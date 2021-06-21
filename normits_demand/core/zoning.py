@@ -27,10 +27,14 @@ import normits_demand as nd
 
 class ZoningSystem:
 
-    _normits_demand_name = "NorMITs Demand"
-    _core_subpath = os.path.join("import", "core_dtypes")
     _zoning_system_import_fname = "zoning_systems"
     _zones_fname = "zones.csv"
+
+    _zoning_definitions_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "definitions",
+        "zoning_systems",
+    )
 
     def __init__(self,
                  name: str,
@@ -63,18 +67,12 @@ class ZoningError(nd.NormitsDemandError):
 
 
 # ## FUNCTIONS ##
-def _get_unique_zones(name: str, import_drive: nd.PathLike) -> np.ndarray:
+def _get_unique_zones(name: str) -> np.ndarray:
     """
     Finds and reads in the unique zone data for zoning system with name
     """
     # ## DETERMINE THE IMPORT LOCATION ## #
-    import_home = os.path.join(
-        import_drive,
-        ZoningSystem._normits_demand_name,
-        ZoningSystem._core_subpath,
-        ZoningSystem._zoning_system_import_fname,
-        name,
-    )
+    import_home = os.path.join(ZoningSystem._zoning_definitions_path, name)
 
     # Make sure the import location exists
     if not os.path.exists(import_home):
@@ -104,7 +102,7 @@ def _get_unique_zones(name: str, import_drive: nd.PathLike) -> np.ndarray:
     return np.sort(df['zone_name'].values)
 
 
-def get_zoning_system(name: str, import_drive: nd.PathLike) -> ZoningSystem:
+def get_zoning_system(name: str) -> ZoningSystem:
     # TODO(BT): Write docs!
     # TODO(BT): Add some validation on the zone name
     # TODO(BT): Instantiate import drive for these on module import!
@@ -113,5 +111,5 @@ def get_zoning_system(name: str, import_drive: nd.PathLike) -> ZoningSystem:
     # Create the ZoningSystem object and return
     return ZoningSystem(
         name=name,
-        unique_zones=_get_unique_zones(name, import_drive)
+        unique_zones=_get_unique_zones(name)
     )

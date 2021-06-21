@@ -32,19 +32,20 @@ from normits_demand.utils import pandas_utils as pd_utils
 # ## CLASSES ## #
 class SegmentationLevel:
 
-    # TODO(BT): Move some of these into constants. Maybe core consts?
-    _normits_demand_name = "NorMITs Demand"
-    _core_subpath = os.path.join("import", "core_dtypes")
     _segmentation_import_fname = "segmentations"
     _unique_segments_fname = "unique_segments.csv"
     _naming_order_fname = "naming_order.csv"
 
-    _multiply_definitions_path = os.path.join(
+    _segment_definitions_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
         "definitions",
         "segmentations",
+    )
+    _multiply_definitions_path = os.path.join(
+        _segment_definitions_path,
         "multiply.csv",
     )
+
     _join_separator = ';'
 
     def __init__(self,
@@ -329,20 +330,12 @@ def _read_in_and_validate_naming_order(path: nd.PathLike, name: str) -> List[str
     return order
 
 
-def _get_valid_segments(name: str,
-                        import_drive: nd.PathLike,
-                        ) -> pd.DataFrame:
+def _get_valid_segments(name: str) -> pd.DataFrame:
     """
     Finds and reads in the valid segments data for segmentation with name
     """
     # ## DETERMINE THE IMPORT LOCATION ## #
-    import_home = os.path.join(
-        import_drive,
-        SegmentationLevel._normits_demand_name,
-        SegmentationLevel._core_subpath,
-        SegmentationLevel._segmentation_import_fname,
-        name,
-    )
+    import_home = os.path.join(SegmentationLevel._segment_definitions_path,  name)
 
     # Make sure the import location exists
     if not os.path.exists(import_home):
@@ -381,13 +374,13 @@ def _get_valid_segments(name: str,
     return df, naming_order
 
 
-def get_segmentation_level(name: str, import_drive: nd.PathLike) -> SegmentationLevel:
+def get_segmentation_level(name: str) -> SegmentationLevel:
     # TODO(BT): Write docs!
     # TODO(BT): Add some validation on the segmentation name
     # TODO(BT): Instantiate import drive for these on module import!
     # TODO(BT): Add some caching to this function!
 
-    valid_segments, naming_order = _get_valid_segments(name, import_drive)
+    valid_segments, naming_order = _get_valid_segments(name)
 
     # Create the ZoningSystem object and return
     return SegmentationLevel(
