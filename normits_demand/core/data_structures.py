@@ -333,7 +333,7 @@ class DVector:
         """
         # Init
         concat_ph = list()
-        col_names = self.segmentation.get_seg_dict(list(self.data.keys())[0]).keys()
+        col_names = list(self.segmentation.get_seg_dict(list(self.data.keys())[0]).keys())
         col_names = [self._zone_col] + col_names + [self._val_col]
 
         # TODO(BT): Multiprocess
