@@ -83,8 +83,16 @@ def main():
     pure_demand = pop_dvec * trip_rates_dvec
 
     # COMPRESS OUT HERE
-    # output_path = "DEFINE ME"
-    # pure_demand.compress_out(output_path)
+    from normits_demand.utils import timing
+
+    print("Writing out... %s" % timing.get_datetime())
+    output_path = "E:/test.csv"
+    path = pure_demand.compress_out(output_path)
+    print(path)
+
+    print("Reading in... %s" % timing.get_datetime())
+    thing = nd.read_compressed_dvector(path)
+    print("Done... %s" % timing.get_datetime())
 
     # ## CREATE MODE_TIME SPLITS DVEC ## #
     print("Creating mode time splits DVec...")
@@ -103,7 +111,6 @@ def main():
         mode_time_splits_dvec,
         notem_seg,
     )
-
 
     # print(final.to_df())
 

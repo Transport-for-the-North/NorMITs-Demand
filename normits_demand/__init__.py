@@ -25,6 +25,9 @@ from normits_demand.models.notem import NoTEM
 # Core Objects
 from normits_demand.core import DVector
 
+# Core functionality
+from normits_demand.core import read_compressed_dvector
+
 # Core Object Getters
 from normits_demand.core import get_zoning_system
 from normits_demand.core import get_segmentation_level

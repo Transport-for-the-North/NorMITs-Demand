@@ -16,6 +16,7 @@ from __future__ import annotations
 # Builtins
 import os
 import math
+import pathlib
 import itertools
 
 from typing import Any
@@ -34,6 +35,9 @@ from normits_demand import core
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
+from normits_demand.utils import file_ops
+from normits_demand.utils import compress
+
 from normits_demand.concurrency import multiprocessing
 
 
@@ -44,6 +48,8 @@ class DVector:
     _segment_col = 'segment'
     _val_col = 'val'
     _chunk_size = 100000
+
+    _compress_suffix = '.dvec_%s' % consts.COMPRESSION_SUFFIX.split('.')[-1]
 
     def __init__(self,
                  zoning_system: core.ZoningSystem,
@@ -361,7 +367,7 @@ class DVector:
 
         return pd.concat(concat_ph).reset_index(drop=True)
 
-    def compress_out(self, path: nd.PathLike) -> nd.PathLike:
+    def compress_out(self, path: nd.PathLike) -> pathlib.Path:
         """
         Writes this DVector to disk at path.
 
@@ -369,18 +375,29 @@ class DVector:
         ----------
         path:
             The path to write this object out to.
-            Conventionally should end in .pbz2.
+            Conventionally should end in .dvec.pbz2.
+            If it does not, the suffix will be added, and the new
+            path returned.
 
         Returns
         -------
-        None
+        path:
+            The path that this object was written out to. If path ended in the
+            correct suffix, then this will be exactly the same as input path.
 
         Raises
         ------
         IOError:
             If the path cannot be found.
         """
-        raise NotImplementedError
+        # Init
+        path = file_ops.cast_to_pathlib_path(path)
+
+        if path.suffix != self._compress_suffix:
+            path = path.parent / (path.stem + self._compress_suffix)
+
+        compress.write_out(self, path, overwrite_suffix=False)
+        return path
 
     @staticmethod
     def _multiply_and_aggregate_internal(aggregation_keys_chunk,
@@ -549,6 +566,20 @@ def multiply_and_aggregate_dvectors(a: DVector,
 
     return a.multiply_and_aggregate(other=b, out_segmentation=out_segmentation)
 
+
+def read_compressed_dvector(path: nd.PathLike) -> DVector:
+    """
+
+    Parameters
+    ----------
+    path
+
+    Returns
+    -------
+
+    """
+    # TODO(BT): VALIDATE PATH
+    return compress.read_in(path)
 
 
 

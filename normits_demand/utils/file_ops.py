@@ -274,7 +274,7 @@ def read_df(path: nd.PathLike,
 
 def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
     """
-    Reads in the dataframe at path. Decompresses the df if needed.
+    Writes the dataframe at path. Decompresses the df if needed.
 
     Parameters
     ----------
