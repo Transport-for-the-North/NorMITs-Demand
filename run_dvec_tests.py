@@ -104,7 +104,8 @@ def main():
         notem_seg,
     )
 
-    print(final.to_df())
+
+    # print(final.to_df())
 
 
 if __name__ == '__main__':

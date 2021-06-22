@@ -16,18 +16,15 @@ from __future__ import annotations
 # Builtins
 import os
 import math
+import itertools
 
 from typing import Any
-from typing import List
 from typing import Dict
-from typing import Tuple
 from typing import Union
 
 # Third Party
 import numpy as np
 import pandas as pd
-
-import tqdm
 
 # Local Imports
 import normits_demand as nd
@@ -67,9 +64,15 @@ class DVector:
         self.verbose = verbose
         self.chunk_size = self._chunk_size if chunk_size is None else chunk_size
 
+        # Define multiprocessing arguments
         if process_count < 0:
             process_count = os.cpu_count() + process_count
         self.process_count = process_count
+
+        if process_count == 0:
+            self.chunk_divider = 1
+        else:
+            self.chunk_divider = self.process_count * 3
 
         # Set defaults if args not set
         zone_col = self._zone_col if zone_col is None else zone_col
@@ -252,7 +255,7 @@ class DVector:
         data_chunks = multiprocessing.multiprocess(
             fn=self._dataframe_to_dvec_internal,
             kwargs=kwarg_list,
-            process_count=0,
+            process_count=self.process_count,
             pbar_kwargs=pbar_kwargs,
         )
         data = du.sum_dict_list(data_chunks)
@@ -379,6 +382,33 @@ class DVector:
         """
         raise NotImplementedError
 
+    @staticmethod
+    def _multiply_and_aggregate_internal(aggregation_keys_chunk,
+                                         aggregation_dict,
+                                         multiply_dict,
+                                         self_data,
+                                         other_data,
+                                         ):
+        """
+        Internal function of self.multiply_and_aggregate. For multiprocessing
+        """
+        # Init
+        dvec_data = dict.fromkeys(aggregation_keys_chunk)
+
+        # Multiply and aggregate in chunks
+        for out_seg_name in aggregation_keys_chunk:
+            # Calculate all the segments to aggregate
+            inter_segs = list()
+            for segment_name in aggregation_dict[out_seg_name]:
+                self_key, other_key = multiply_dict[segment_name]
+                result = (self_data[self_key] * other_data[other_key]).flatten()
+                inter_segs.append(result)
+
+            # Aggregate!
+            dvec_data[out_seg_name] = np.sum(inter_segs, axis=0)
+
+        return dvec_data
+
     def multiply_and_aggregate(self: DVector,
                                other: DVector,
                                out_segmentation: core.SegmentationLevel,
@@ -421,21 +451,51 @@ class DVector:
         multiply_dict, mult_return_seg = self.segmentation * other.segmentation
         aggregation_dict = mult_return_seg.aggregate(out_segmentation)
 
-        # Chunk agg_dict for MP??
+        # ## MULTIPROCESS ## #
+        # Define the chunk size
+        total = len(aggregation_dict)
+        chunk_size = math.ceil(total / self.chunk_divider)
 
-        # Aggregate as we go!
-        from tqdm import tqdm
+        # Define the kwargs
+        kwarg_list = list()
+        for keys_chunk in du.chunk_list(aggregation_dict.keys(), chunk_size):
+            # Calculate subsets of keys to avoid copying
+            agg_dict_subset = {k: aggregation_dict[k] for k in keys_chunk}
+            
+            key_subset = itertools.chain.from_iterable(agg_dict_subset.values())
+            mult_dict_subset = {k: multiply_dict[k] for k in key_subset}
+
+            self_keys, other_keys = zip(*mult_dict_subset.values())
+            self_data = {k: self.data[k] for k in self_keys}
+            other_data = {k: other.data[k] for k in other_keys}
+
+            # Assign to a process
+            kwarg_list.append({
+                'aggregation_keys_chunk': keys_chunk,
+                'aggregation_dict': agg_dict_subset,
+                'multiply_dict': mult_dict_subset,
+                'self_data': self_data,
+                'other_data': other_data,
+            })
+
+        # Define pbar
+        pbar_kwargs = {
+            'desc': "Multiplying and aggregating",
+            'disable': not self.verbose,
+        }
+
+        # Run across processes
+        data_chunks = multiprocessing.multiprocess(
+            fn=self._multiply_and_aggregate_internal,
+            kwargs=kwarg_list,
+            process_count=self.process_count,
+            pbar_kwargs=pbar_kwargs,
+        )
+
+        # Combine all computation chunks into one
         dvec_data = dict.fromkeys(aggregation_dict.keys())
-        for out_seg_name, in_seg_names in tqdm(aggregation_dict.items()):
-            # Calculate all the segments to aggregate
-            inter_segs = list()
-            for segment_name in in_seg_names:
-                self_key, other_key = multiply_dict[segment_name]
-                result = (self.data[self_key] * other.data[other_key]).flatten()
-                inter_segs.append(result)
-
-            # Aggregate!
-            dvec_data[out_seg_name] = np.sum(inter_segs, axis=0)
+        for chunk in data_chunks:
+            dvec_data.update(chunk)
 
         return DVector(
             zoning_system=self.zoning_system,
@@ -452,16 +512,27 @@ def multiply_and_aggregate_dvectors(a: DVector,
                                     out_segmentation: core.SegmentationLevel,
                                     ) -> DVector:
     """
+    Multiplies a with b, and aggregates as it goes.
+
+    Useful when the output segmentation of multiplying a and b
+    would be massive. Multiplication is done in chunks, and aggregated in
+    out_segmentation periodically.
 
     Parameters
     ----------
-    a
-    b
-    out_segmentation
+    a:
+        The first DVector to multiply.
+
+    b:
+        The second DVector to multiply.
+
+    out_segmentation:
+        The segmentation to use in the outputs DVector
 
     Returns
     -------
-
+    DVector:
+        The result of (a * b).aggregate(out_segmentation)
     """
     # Validate arguments
     if not isinstance(a, DVector):

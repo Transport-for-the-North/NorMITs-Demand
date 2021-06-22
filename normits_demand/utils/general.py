@@ -3487,7 +3487,7 @@ def sum_dict_list(dict_list: List[Dict[Any, Any]]) -> Dict[Any, Any]:
     return functools.reduce(reducer, dict_list)
 
 
-def chunk_list(lst: pd.DataFrame,
+def chunk_list(lst: Iterable,
                chunk_size: int,
                ) -> Generator[pd.DataFrame, None, None]:
     """
@@ -3507,6 +3507,8 @@ def chunk_list(lst: pd.DataFrame,
         A chunk of the given lst of size chunk_size
 
     """
+    lst = list(lst)
+
     for i in range(0, len(lst), chunk_size):
         chunk_end = i + chunk_size
         yield lst[i:chunk_end]
