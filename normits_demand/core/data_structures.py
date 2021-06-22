@@ -165,34 +165,26 @@ class DVector:
         """
         The internal function of _dataframe_to_dvec - for multiprocessing
         """
-        # Generate the data on a per segment basis
-        dvec_chunk = dict()
-        for segment in df_chunk['segment'].unique():
-            # Check that it's a valid segment_name
-            if segment not in self.segmentation.segment_names:
-                raise ValueError(
-                    "%s is not a valid segment name for a Dvector using %s "
-                    "segmentation" % (segment, self.segmentation.name)
-                )
+        if self.zoning_system is None:
+            # Can use 1 to 1 connection to speed this up
+            segments = df_chunk[self._segment_col].tolist()
+            vals = df_chunk[self._val_col].to_list()
+            dvec_chunk = {s: v for s, v, in zip(segments, vals)}
 
-            # Get all available pop for this segment
-            seg_data = df_chunk[df_chunk[self._segment_col] == segment].copy()
-
-            # Normalise the values depending on the zoning system
-            if self.zoning_system is None:
-                # No zoning system, should only have a single value
-                if len(seg_data) > 1:
-                    raise nd.NormitsDemandError(
-                        "While instantiating a DVec object without a "
-                        "zoning system, found more than one value for segment "
-                        "'%s'. Should only be one value per segment if "
-                        "zoning_system is set to None"
-                        % segment
+        else:
+            # Generate the data on a per segment basis
+            dvec_chunk = dict()
+            for segment in df_chunk['segment'].unique():
+                # Check that it's a valid segment_name
+                if segment not in self.segmentation.segment_names:
+                    raise ValueError(
+                        "%s is not a valid segment name for a Dvector using %s "
+                        "segmentation" % (segment, self.segmentation.name)
                     )
 
-                dvec_chunk[segment] = seg_data[self._val_col].squeeze()
+                # Get all available pop for this segment
+                seg_data = df_chunk[df_chunk[self._segment_col] == segment].copy()
 
-            else:
                 # Filter down to just data as values, and zoning system as the index
                 seg_data = seg_data.reindex(columns=[self._zone_col, self._val_col])
                 seg_data = seg_data.set_index(self._zone_col)
@@ -260,7 +252,7 @@ class DVector:
         data_chunks = multiprocessing.multiprocess(
             fn=self._dataframe_to_dvec_internal,
             kwargs=kwarg_list,
-            process_count=self.process_count,
+            process_count=0,
             pbar_kwargs=pbar_kwargs,
         )
         data = du.sum_dict_list(data_chunks)
@@ -334,5 +326,57 @@ class DVector:
         # Get data and covert to zoning system
         return self.data[segment_name]
 
+    def to_df(self) -> pd.DataFrame:
+        """
+        Convert this DVector into a pandas dataframe with the segmentation
+        as the index
+        """
+        # Init
+        concat_ph = list()
+        col_names = self.segmentation.get_seg_dict(list(self.data.keys())[0]).keys()
+        col_names = [self._zone_col] + col_names + [self._val_col]
+
+        # TODO(BT): Multiprocess
+        # Convert each segment into a part of the df
+        for segment_name, data in self.data.items():
+            # Add the zoning system back in
+            if self.zoning_system is None:
+                df = pd.DataFrame([{self._val_col: data}])
+            else:
+                index = pd.Index(self.zoning_system.unique_zones, name=self._zone_col)
+                data = {self._val_col: data.flatten()}
+                df = pd.DataFrame(index=index, data=data).reset_index()
+
+            # Add all segments into the df
+            seg_dict = self.segmentation.get_seg_dict(segment_name)
+            for col_name, col_val in seg_dict.items():
+                df[col_name] = col_val
+
+            # Make sure all dfs are in the same format
+            df = df.reindex(columns=col_names)
+            concat_ph.append(df)
+
+        return pd.concat(concat_ph).reset_index(drop=True)
+
+    def compress_out(self, path: nd.PathLike) -> nd.PathLike:
+        """
+        Writes this DVector to disk at path.
+
+        Parameters
+        ----------
+        path:
+            The path to write this object out to.
+            Conventionally should end in .pbz2.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        IOError:
+            If the path cannot be found.
+        """
+        raise NotImplementedError
 
 # ## FUNCTIONS ## #

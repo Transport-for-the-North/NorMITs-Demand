@@ -16,6 +16,7 @@ from __future__ import annotations
 # Builtins
 import os
 
+from typing import Any
 from typing import List
 from typing import Dict
 from typing import Tuple
@@ -47,6 +48,7 @@ class SegmentationLevel:
     )
 
     _join_separator = ';'
+    _segment_name_separator = '_'
 
     def __init__(self,
                  name: str,
@@ -128,7 +130,7 @@ class SegmentationLevel:
             return_seg = other
         else:
             # TODO(BT): Move definitions into codebase
-            return_seg = get_segmentation_level(return_seg_name, "I:/")
+            return_seg = get_segmentation_level(return_seg_name)
 
         # ## FIGURE OUT HOW TO MULTIPLY BASED ON DEFINITION ## #
         # Merge, so we know how these segments combine
@@ -273,6 +275,19 @@ class SegmentationLevel:
 
         # Generate the naming column, and return
         return pd_utils.str_join_cols(df, self.naming_order)
+
+    def get_seg_dict(self, segment_name: str) -> Dict[str, Any]:
+        """
+        Converts the given segment_name into a {seg_name: seg_val} dict
+        """
+        if not self.is_valid_segment_name(segment_name):
+            raise ValueError(
+                "'%s' is not a valid segment name for segmentation level %s."
+                % (segment_name, self.name)
+            )
+
+        name_parts = segment_name.split(self._segment_name_separator)
+        return {n: s for n, s in zip(self.naming_order, name_parts)}
 
     def is_valid_segment_name(self, segment_name: str) -> bool:
         """
