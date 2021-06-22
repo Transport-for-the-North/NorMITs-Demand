@@ -379,4 +379,105 @@ class DVector:
         """
         raise NotImplementedError
 
+    def multiply_and_aggregate(self: DVector,
+                               other: DVector,
+                               out_segmentation: core.SegmentationLevel,
+                               ) -> DVector:
+        """
+        Multiply with other DVector, and aggregates as it goes.
+
+        Useful when the output segmentation of multiplying self and other
+        would be massive. Multiplication is done in chunks, and aggregated in
+        out_segmentation periodically.
+
+        Parameters
+        ----------
+        other:
+            The DVector to multiply self with.
+
+        out_segmentation:
+            The segmentation to use in the outputs DVector
+
+        Returns
+        -------
+        DVector:
+            The result of (self * other).aggregate(out_segmentation)
+        """
+        # Validate inputs
+        if not isinstance(other, DVector):
+            raise ValueError(
+                "b is not the correct type. Expected Dvector, got %s"
+                % type(other)
+            )
+
+        if not isinstance(out_segmentation, core.SegmentationLevel):
+            raise ValueError(
+                "out_segmentation is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(out_segmentation)
+            )
+
+        # Get the aggregation and multiplication dictionaries
+        multiply_dict, mult_return_seg = self.segmentation * other.segmentation
+        aggregation_dict = mult_return_seg.aggregate(out_segmentation)
+
+        # Chunk agg_dict for MP??
+
+        # Aggregate as we go!
+        from tqdm import tqdm
+        dvec_data = dict.fromkeys(aggregation_dict.keys())
+        for out_seg_name, in_seg_names in tqdm(aggregation_dict.items()):
+            # Calculate all the segments to aggregate
+            inter_segs = list()
+            for segment_name in in_seg_names:
+                self_key, other_key = multiply_dict[segment_name]
+                result = (self.data[self_key] * other.data[other_key]).flatten()
+                inter_segs.append(result)
+
+            # Aggregate!
+            dvec_data[out_seg_name] = np.sum(inter_segs, axis=0)
+
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=out_segmentation,
+            import_data=dvec_data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
+
+
 # ## FUNCTIONS ## #
+def multiply_and_aggregate_dvectors(a: DVector,
+                                    b: DVector,
+                                    out_segmentation: core.SegmentationLevel,
+                                    ) -> DVector:
+    """
+
+    Parameters
+    ----------
+    a
+    b
+    out_segmentation
+
+    Returns
+    -------
+
+    """
+    # Validate arguments
+    if not isinstance(a, DVector):
+        raise ValueError(
+            "a is not the correct type. Expected Dvector, got %s"
+            % type(a)
+        )
+
+    if not isinstance(b, DVector):
+        raise ValueError(
+            "b is not the correct type. Expected Dvector, got %s"
+            % type(b)
+        )
+
+    return a.multiply_and_aggregate(other=b, out_segmentation=out_segmentation)
+
+
+
+

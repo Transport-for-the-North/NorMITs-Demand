@@ -14,7 +14,7 @@ import tqdm
 # local imports
 import normits_demand as nd
 
-from normits_demand.utils import pandas_utils as pd_utils
+from normits_demand import core
 
 # GLOBAL VARIABLES
 # I Drive Path locations
@@ -33,7 +33,8 @@ def main():
     msoa_zoning = nd.get_zoning_system('msoa')
     pop_seg = nd.get_segmentation_level('lu_pop')
     pure_demand_seg = nd.get_segmentation_level('pure_demand')
-    full_tt_seg = nd.get_segmentation_level('full_tfn_tt_seg')
+    m_tp_pure_demand_seg = nd.get_segmentation_level('notem_tfnat')
+    notem_seg = nd.get_segmentation_level('notem')
 
     # Define wanted columns
     target_cols = {
@@ -82,10 +83,8 @@ def main():
     pure_demand = pop_dvec * trip_rates_dvec
 
     # COMPRESS OUT HERE
-    df = pure_demand.to_df()
-    print(df)
-    output_path = "DEFINE ME"
-    pure_demand.compress_out(output_path)
+    # output_path = "DEFINE ME"
+    # pure_demand.compress_out(output_path)
 
     # ## CREATE MODE_TIME SPLITS DVEC ## #
     print("Creating mode time splits DVec...")
@@ -93,19 +92,19 @@ def main():
     # Instantiate
     mode_time_splits_dvec = nd.DVector(
         zoning_system=None,
-        segmentation=full_tt_seg,
+        segmentation=m_tp_pure_demand_seg,
         import_data=mode_time_splits,
         val_col="split",
     )
 
     print("Multiplying...")
-    full_seg_demand = pure_demand * mode_time_splits_dvec
+    final = core.multiply_and_aggregate_dvectors(
+        pure_demand,
+        mode_time_splits_dvec,
+        notem_seg,
+    )
 
-    # TODO(BT): Multiplication above runs out of memory with 64GB of it.
-    #  Need to write a new function which aggregates as it goes. Will follow
-    #  a similar convention to below...
-    # output_seg = production_out_Segmentation # Define globally
-    # DVec.multipy_and_aggregate(pure_demand, mode_time_splits, output_seg)
+    print(final.to_df())
 
 
 if __name__ == '__main__':

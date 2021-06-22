@@ -15,6 +15,7 @@ from __future__ import annotations
 
 # Builtins
 import os
+import collections
 
 from typing import Any
 from typing import List
@@ -45,6 +46,10 @@ class SegmentationLevel:
     _multiply_definitions_path = os.path.join(
         _segment_definitions_path,
         "multiply.csv",
+    )
+    _aggregation_definitions_path = os.path.join(
+        _segment_definitions_path,
+        "aggregate.csv",
     )
 
     _join_separator = ';'
@@ -153,7 +158,7 @@ class SegmentationLevel:
 
         return multiply_dict, return_seg
 
-    def _get_multiply_definitions(self) -> pd.DataFrame:
+    def _read_multiply_definitions(self) -> pd.DataFrame:
         """
         Returns the multiplication definitions for segments as a pd.DataFrame
         """
@@ -167,7 +172,7 @@ class SegmentationLevel:
         self and other
         """
         # Init
-        mult_def = self._get_multiply_definitions()
+        mult_def = self._read_multiply_definitions()
 
         # Try find a definition
         df_filter = {
@@ -197,6 +202,39 @@ class SegmentationLevel:
             definition['out'].squeeze(),
             self._parse_join_cols(definition['join'].squeeze())
         )
+
+    def _read_aggregation_definitions(self) -> pd.DataFrame:
+        """
+        Returns the multiplication definitions for segments as a pd.DataFrame
+        """
+        return pd.read_csv(self._aggregation_definitions_path)
+
+    def _get_aggregation_definition(self,
+                                    other: SegmentationLevel,
+                                    ) -> Tuple[str, List[str]]:
+        """
+        Returns the common cols for aggregating self into other
+        """
+        # Init
+        mult_def = self._read_aggregation_definitions()
+
+        # Try find a definition
+        df_filter = {
+            'in': self.name,
+            'out': other.name,
+        }
+        definition = pd_utils.filter_df(mult_def, df_filter)
+
+        # If empty, we don't know what to do
+        if definition.empty:
+            raise SegmentationError(
+                "Got no definition for aggregating '%s' into '%s'.\n"
+                "If there should be a definition, please add one in "
+                "at: %s"
+                % (self.name, other.name, self._aggregation_definitions_path)
+            )
+
+        return self._parse_join_cols(definition['common'].squeeze())
 
     def _parse_join_cols(self, join_cols: str) -> List[str]:
         """
@@ -295,6 +333,55 @@ class SegmentationLevel:
         SegmentationLevel
         """
         return segment_name in self.segment_names
+
+    def aggregate(self,
+                  other: SegmentationLevel
+                  ) -> Dict[str, List[str]]:
+        """
+        Generates a dict defining how to aggregate this segmentation into other.
+
+        Parameters
+        ----------
+        other:
+            The SegmentationLevel to aggregate this segmentation into.
+
+        Returns
+        -------
+        aggregation_dict:
+            A dictionary defining how to aggregate self into out_segmentation.
+            Will be in the form of {out_seg: [in_seg]}.
+            Where out seg is a segment name of out_segmentation, and in_seg
+            is a list of segment names from self that should be summed to
+            generate out_seg.
+        """
+        # Validate input
+        if not isinstance(other, SegmentationLevel):
+            raise ValueError(
+                "out_segmentation is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(other)
+            )
+        
+        join_cols = self._get_aggregation_definition(other)
+
+        # ## FIGURE OUT HOW TO AGGREGATE ## #
+        # Merge, so we know how these segments combine
+        seg_agg = pd.merge(
+            left=self.segments,
+            right=other.segments,
+            on=join_cols
+        )
+
+        # Extract the segment names for self and other
+        seg_agg['self_name'] = self.create_segment_col(seg_agg)
+        seg_agg['other_name'] = other.create_segment_col(seg_agg)
+
+        # Convert into the aggregation dict
+        agg_dict = collections.defaultdict(list)
+        for o, s in zip(seg_agg['other_name'], seg_agg['self_name']):
+            agg_dict[o].append(s)
+
+        return agg_dict
 
 
 class SegmentationError(nd.NormitsDemandError):
