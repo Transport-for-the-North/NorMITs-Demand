@@ -32,6 +32,7 @@ from typing import Union
 from typing import Callable
 from typing import Iterable
 from typing import Iterator
+from typing import Generator
 
 from pathlib import Path
 
@@ -3484,5 +3485,30 @@ def sum_dict_list(dict_list: List[Dict[Any, Any]]) -> Dict[Any, Any]:
         return accumulator
 
     return functools.reduce(reducer, dict_list)
+
+
+def chunk_list(lst: pd.DataFrame,
+               chunk_size: int,
+               ) -> Generator[pd.DataFrame, None, None]:
+    """
+    Yields chunk_size chunks of list
+
+    Parameters
+    ----------
+    lst:
+        The list to chunk.
+
+    chunk_size:
+        The size of the chunks to use
+
+    Yields
+    ------
+    lst_chunk:
+        A chunk of the given lst of size chunk_size
+
+    """
+    for i in range(0, len(lst), chunk_size):
+        chunk_end = i + chunk_size
+        yield lst[i:chunk_end]
 
 

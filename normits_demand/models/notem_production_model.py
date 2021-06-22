@@ -3,13 +3,11 @@ Created on: 19/06/2021
 
 File purpose: Production Model for NoTEM
 
-
-
-
 """
 # Third party imports
 import os
 import warnings
+
 from typing import List
 
 import numpy as np
@@ -26,24 +24,29 @@ from normits_demand.utils import timing
 from normits_demand.concurrency import multiprocessing
 
 
-
 class NoTEM_HBProductionModel:
-    def _init_(self,
-              land_use_path:dict,
-              trip_rates_path:str,
-              mode_time_splits_path: str,
-              constraints_path:dict,
-              export_path:str
-              ):
-        #Validate inputs
 
-        #Assign
-        self.land_use_path=land_use_path
+    _trip_origin = 'hb'
+    _zoning_system = 'msoa'
+
+    def _init_(self,
+               land_use_paths:dict,
+               trip_rates_path:str,
+               mode_time_splits_path: str,
+               constraints_path:dict,
+               export_path:str
+               ):
+        # Validate inputs
+
+        # Assign
+        self.land_use_paths=land_use_paths
         self.trip_rates_path=trip_rates_path
         self.mode_time_splits_path=mode_time_splits_path
         self.constraints_path=constraints_path
         self.export_path=export_path
         self.process_count=consts.PROCESS_COUNT
+
+        self.years = list(self.land_use_paths.keys())
 
     def run(self,
             output_raw: bool = True,
@@ -74,7 +77,7 @@ class NoTEM_HBProductionModel:
         """
         # Return previously created productions if we can
         # TODO(NK): Need to way to figure out how self.zoning_system can be replaced
-        fname = consts.PRODS_FNAME % (self.zoning_system, 'hb')
+        fname = consts.PRODS_FNAME % (self._zoning_system, self._trip_origin)
         final_output_path = os.path.join(self.export_path, fname)
 
         if not recreate_productions and os.path.isfile(final_output_path):
@@ -86,28 +89,35 @@ class NoTEM_HBProductionModel:
         du.print_w_toggle("Starting HB Production Model at: %s" % timing.get_datetime(),
                           verbose=verbose)
 
-        target_cols = ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people']
-        # # ## READ IN POPULATION DATA ## #
-        print("Loading the population data...")
-        population = _read_land_use_data(year)
+        for year in self.years:
 
-        # ## CREATE PRODUCTIONS ## #
-        print("Population generated. Converting to productions...")
-        hb_prods = generate_productions(
-            population=population,
-            trip_rates_path=self.trip_rates_path,
-            verbose=verbose
-        )
-        # ## SPLIT PRODUCTIONS BY MODE AND TIME ## #
-        print("Splitting HB productions by mode and time...")
-        hb_prods = self._split_by_tp_and_mode(hb_prods, verbose=verbose)
+            target_cols = ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people']
+            # # ## READ IN POPULATION DATA ## #
+            print("Loading the population data...")
+            population = _read_land_use_data(land_use_paths[year])
 
-        
-        # Write productions to file
-        print("Writing productions to file...")
-        fname = consts.PRODS_FNAME % (self.zoning_system, 'hb')
-        path = os.path.join(self.export_path, fname)
-        hb_prods.to_csv(path, index=False)
+            # ## CREATE PRODUCTIONS ## #
+            print("Population generated. Converting to productions...")
+            pure_demand = generate_productions(
+                population=population,
+                trip_rates_path=self.trip_rates_path,
+                verbose=verbose
+            )
+
+            if export_pure_demand:
+                pure_demand.compress_out(path)
+
+
+            # ## SPLIT PRODUCTIONS BY MODE AND TIME ## #
+            print("Splitting HB productions by mode and time...")
+            hb_prods = self._split_by_tp_and_mode(hb_prods, verbose=verbose)
+
+
+            # Write productions to file
+            print("Writing productions to file...")
+            fname = consts.PRODS_FNAME % (self.zoning_system, 'hb')
+            path = os.path.join(self.export_path, fname)
+            hb_prods.to_csv(path, index=False)
 
 
     def _read_land_use_data(self,year:int):
@@ -196,11 +206,7 @@ class NoTEM_HBProductionModel:
             verbose=True,
         )
 
-        # ## MULTIPLY TOGETHER ## #
-        # TODO(BT): Need to implement this - example calling structure?
-        #  Need to think about how this will work in more detail
-        #  Specifically, how to generalise properly!
-        pure_demand = ds.__mul__(pop_dvec, trip_rates_dvec)
+        return pop_dvec * trip_rates_dvec
     
     def _split_by_tp_and_mode(self,
                               hb_prods,

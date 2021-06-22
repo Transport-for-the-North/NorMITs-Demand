@@ -30,7 +30,6 @@ MODE_TIME_SPLITS_PATH = r"I:\Data\NTS\outputs\hb\hb_time_mode_split_tfn_long.csv
 def main():
 
     # Define the zoning and segmentations we want to use
-    import_drive = "I:/"
     msoa_zoning = nd.get_zoning_system('msoa')
     pop_seg = nd.get_segmentation_level('lu_pop')
     pure_demand_seg = nd.get_segmentation_level('pure_demand')
