@@ -3513,4 +3513,26 @@ def chunk_list(lst: Iterable,
         chunk_end = i + chunk_size
         yield lst[i:chunk_end]
 
+def check_csv_exists(file_path: str,
+                  ) -> nd.PathLike:
+    """
+    Checks the existence of file in the file_path
+
+    Parameters
+    ----------
+    file_path:
+        Path to the file to read in
+
+    Returns
+    -------
+    File path:
+        The data from file_path
+    """
+
+    # TODO: Add any more error checks here
+    # Check file exists
+    if not os.path.exists(file_path):
+        raise IOError("No file exists at %s" % file_path)
+
+    return file_path
 
