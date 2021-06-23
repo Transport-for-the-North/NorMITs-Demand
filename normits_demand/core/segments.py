@@ -28,6 +28,7 @@ import pandas as pd
 # Local Imports
 import normits_demand as nd
 
+from normits_demand.utils import file_ops
 from normits_demand.utils import pandas_utils as pd_utils
 
 
@@ -35,7 +36,8 @@ from normits_demand.utils import pandas_utils as pd_utils
 class SegmentationLevel:
 
     _segmentation_import_fname = "segmentations"
-    _unique_segments_fname = "unique_segments.csv"
+    _unique_segments_csv_fname = "unique_segments.csv"
+    _unique_segments_compress_fname = "unique_segments.pbz2"
     _naming_order_fname = "naming_order.csv"
 
     _segment_definitions_path = os.path.join(
@@ -452,27 +454,35 @@ def _get_valid_segments(name: str) -> pd.DataFrame:
     naming_order = _read_in_and_validate_naming_order(file_path, name)
 
     # ## READ IN THE UNIQUE SEGMENTS ## #
-    # Init
-    file_path = os.path.join(import_home, SegmentationLevel._unique_segments_fname)
+    # Build the two possible paths
+    compress_fname = SegmentationLevel._unique_segments_compress_fname
+    csv_fname = SegmentationLevel._unique_segments_csv_fname
 
-    # Check the file exists
-    if not os.path.isfile(file_path):
-        raise nd.NormitsDemandError(
-            "We don't seem to have any valid segment data for the segmentation %s.\n"
-            "Tried looking for the data here: %s"
-            % (name, file_path)
-        )
+    compress_path = os.path.join(import_home, compress_fname)
+    csv_path = os.path.join(import_home, csv_fname)
+
+    # Determine which path to use
+    file_path = compress_path
+    if not os.path.isfile(compress_path):
+        file_path = csv_path
+        if not os.path.isfile(csv_path):
+            # Can't find either!
+            raise nd.NormitsDemandError(
+                "We don't seem to have any valid segment data for the segmentation %s.\n"
+                "Tried looking for the data here:"
+                "%s\n"
+                "%s"
+                % (name, compress_path, csv_path)
+            )
 
     # Read in the file
-    # TODO(BT): Might need some more error checking on this read in
-    df = pd.read_csv(file_path)
+    df = file_ops.read_df(file_path, find_similar=True)
 
     # Tidy up the column names to match the naming_order
     rename_cols = {c: c.lower() for c in list(df)}
     df = df.rename(columns=rename_cols)
     df = pd_utils.reindex_cols(df, naming_order)
 
-    # Sort the return to make sure it's always the same order
     return df, naming_order
 
 

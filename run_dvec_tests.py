@@ -36,6 +36,9 @@ def main():
     m_tp_pure_demand_seg = nd.get_segmentation_level('notem_tfnat')
     notem_seg = nd.get_segmentation_level('notem')
 
+    print(m_tp_pure_demand_seg.segments)
+    exit()
+
     # Define wanted columns
     target_cols = {
         'land_use': ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people'],
