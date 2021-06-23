@@ -24,11 +24,15 @@ import pandas as pd
 # Local Imports
 import normits_demand as nd
 
+from normits_demand.utils import file_ops
+from normits_demand.utils import pandas_utils as pd_utils
+
 
 class ZoningSystem:
 
     _zoning_system_import_fname = "zoning_systems"
-    _zones_fname = "zones.csv"
+    _zones_csv_fname = "zones.csv"
+    _zones_compress_fname = "zones.pbz2"
 
     _zoning_definitions_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
@@ -83,20 +87,30 @@ def _get_unique_zones(name: str) -> np.ndarray:
         )
 
     # ## READ IN THE UNIQUE ZONES ## #
-    # Init
-    file_path = os.path.join(import_home, ZoningSystem._zones_fname)
+    # Build the two possible paths
+    compress_fname = ZoningSystem._zones_compress_fname
+    csv_fname = ZoningSystem._zones_csv_fname
 
-    # Check the file exists
-    if not os.path.isfile(file_path):
-        raise nd.NormitsDemandError(
-            "We don't seem to have any zone data for the zoning system %s.\n"
-            "Tried looking for the data here: %s"
-            % (name, file_path)
-        )
+    compress_path = os.path.join(import_home, compress_fname)
+    csv_path = os.path.join(import_home, csv_fname)
+
+    # Determine which path to use
+    file_path = compress_path
+    if not os.path.isfile(compress_path):
+        file_path = csv_path
+        if not os.path.isfile(csv_path):
+            # Can't find either!
+            raise nd.NormitsDemandError(
+                "We don't seem to have any zone data for the zoning system %s.\n"
+                "Tried looking for the data here:"
+                "%s\n"
+                "%s"
+                % (name, compress_path, csv_path)
+            )
 
     # Read in the file
-    # TODO(BT): Might need some more error checking on this read in
-    df = pd.read_csv(file_path, usecols=['zone_name'])
+    df = file_ops.read_df(file_path)
+    df = pd_utils.reindex_cols(df, columns=['zone_name'])
 
     # Sort the return to make sure it's always the same order
     return np.sort(df['zone_name'].values)
