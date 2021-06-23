@@ -49,7 +49,7 @@ class DVector:
     _val_col = 'val'
     _chunk_size = 100000
 
-    _compress_suffix = '.dvec_%s' % consts.COMPRESSION_SUFFIX.split('.')[-1]
+    _dvec_suffix = '_dvec%s' % consts.COMPRESSION_SUFFIX
 
     def __init__(self,
                  zoning_system: core.ZoningSystem,
@@ -393,11 +393,10 @@ class DVector:
         # Init
         path = file_ops.cast_to_pathlib_path(path)
 
-        if path.suffix != self._compress_suffix:
-            path = path.parent / (path.stem + self._compress_suffix)
+        if path.suffix != self._dvec_suffix:
+            path = path.parent / (path.stem + self._dvec_suffix)
 
-        compress.write_out(self, path, overwrite_suffix=False)
-        return path
+        return compress.write_out(self, path, overwrite_suffix=False)
 
     @staticmethod
     def _multiply_and_aggregate_internal(aggregation_keys_chunk,
