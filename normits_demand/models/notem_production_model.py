@@ -4,15 +4,23 @@ Created on: 19/06/2021
 File purpose: Production Model for NoTEM
 
 """
-# Third party imports
+# Allow class self type hinting
+from __future__ import annotations
+
+# Builtins
 import os
+
 from typing import Dict
+
+# Third party imports
 import pandas as pd
 
 # local imports
 import normits_demand as nd
+
 from normits_demand import core
 from normits_demand import efs_constants as consts
+
 from normits_demand.utils import compress
 from normits_demand.utils import general as du
 from normits_demand.utils import timing
@@ -35,7 +43,7 @@ class NoTEM_HBProductionModel:
                mode_time_splits_path: str,
                constraint_paths: Dict[int, nd.PathLike],
                export_path: str,
-               process_count: int = None
+               process_count: int = consts.PROCESS_COUNT
                ):
         # Validate inputs
         [du.check_csv_exists(x) for x in land_use_paths.values()]
@@ -50,35 +58,35 @@ class NoTEM_HBProductionModel:
         self.mode_time_splits_path = mode_time_splits_path
         self.constraint_paths = constraint_paths
         self.export_path = export_path
-        self.process_count = consts.PROCESS_COUNT if process_count is None else process_count
+        self.process_count = process_count
 
         self.years = list(self.land_use_paths.keys())
 
     def run(self,
-            output_raw: bool = True,
             recreate_productions: bool = True,
+            export_pure_demand: bool = True,
+            output_raw: bool = True,
             verbose: bool = True,
-            export_pure_demand: bool = True
             ):
         """
         Runs the HB Production model
 
         Parameters
         ----------
-        output_raw:
-            Whether to output the raw hb productions before aggregating to
-            the required segmentation and mode.
-
         recreate_productions:
             Whether to recreate the hb productions or not. If False, it will
             look in export_path for previously produced productions and return
             them. If none can be found, they will be generated.
 
-        verbose:
-            Whether to print progress bars during processing or not.
-
         export_pure_demand:
             Whether to output the pure demand
+
+        output_raw:
+            Whether to output the raw hb productions before aggregating to
+            the required segmentation and mode.
+
+        verbose:
+            Whether to print progress bars during processing or not.
 
         Returns
         -------
@@ -94,16 +102,15 @@ class NoTEM_HBProductionModel:
             return pd.read_csv(final_output_path)
 
         # Initialise timing
+        # TODO(BT): Properly integrate logging
         start_time = timing.current_milli_time()
         du.print_w_toggle("Starting HB Production Model at: %s" % timing.get_datetime(),
                           verbose=verbose)
 
         for year in self.years:
-            # # ## READ IN POPULATION DATA ## #
             print("Loading the population data...")
             population = self._read_land_use_data(year)
 
-            # ## CREATE PRODUCTIONS ## #
             print("Population generated. Converting to productions...")
             pure_demand = self.generate_productions(
                 population=population,
