@@ -37,7 +37,7 @@ class NoTEM_HBProductionModel:
         'm_tp': ['p', 'tfn_tt', 'tfn_at', 'm', 'tp', 'split'],
     }
 
-    def _init_(self,
+    def __init__(self,
                land_use_paths: Dict[int, nd.PathLike],
                trip_rates_path: str,
                mode_time_splits_path: str,
@@ -122,26 +122,34 @@ class NoTEM_HBProductionModel:
                 output_path = os.path.join(self.export_path, fname)
                 path = pure_demand.compress_out(output_path)
 
+            # TODO: Write out audits of pure_demand
+            #  Need audit output path
+            #  Output some audits of what demand was before and after control
+            #  By segment.
+
             # ## SPLIT PRODUCTIONS BY MODE AND TIME ## #
             print("Splitting HB productions by mode and time...")
             hb_prods = self._split_by_tp_and_mode(pure_demand, verbose=verbose)
 
-            # TODO: Bring in constraints
-
             # Output productions before any aggregation
-            if output_raw:
+            if output_raw:  # output_fully_segmented
                 print("Writing raw HB Productions to disk...")
                 fname = consts.PRODS_FNAME_YEAR % (self._zoning_system, 'raw_hb', year)
                 path = os.path.join(self.export_path, fname)
                 hb_prods.compress_out(path)
 
-            # TODO: Aggregate segments
+            if output_aggregated:
+                # TODO: Aggregate segments
+                agg_hb_prods = hb_prods.aggreagte(optional_segmentation)
+                print("Writing productions to file...")
+                fname = consts.PRODS_FNAME_YEAR % (self._zoning_system, self._trip_origin, year)
+                path = os.path.join(self.export_path, fname)
+                agg_hb_prods.compress_out(path)
+                pass
 
-            # Write productions to file
-            print("Writing productions to file...")
-            fname = consts.PRODS_FNAME_YEAR % (self._zoning_system, self._trip_origin, year)
-            path = os.path.join(self.export_path, fname)
-            hb_prods.compress_out(path)
+            # TODO: Bring in constraints (Validation)
+            #  Output some audits of what demand was before and after control
+            #  By segment.
 
             # End timing
             end_time = timing.current_milli_time()
