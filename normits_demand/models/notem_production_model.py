@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 
 from typing import Dict
+from typing import List
 
 # Third party imports
 import pandas as pd
@@ -21,15 +22,18 @@ import normits_demand as nd
 from normits_demand import core
 from normits_demand import efs_constants as consts
 
-from normits_demand.utils import compress
 from normits_demand.utils import general as du
+from normits_demand.utils import file_ops as ops
 from normits_demand.utils import timing
 
 
-class NoTEM_HBProductionModel:
+class HBProductionModel:
     _trip_origin = 'hb'
     _zoning_system = 'msoa'
-    _pure_demand = 'pure_demand_hb'
+    _pure_demand = 'pure_demand'
+    _fully_segmented = 'fully_segmented'
+    _aggregated = 'aggregated'
+
     # Define wanted columns
     _target_cols = {
         'land_use': ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people'],
@@ -37,20 +41,26 @@ class NoTEM_HBProductionModel:
         'm_tp': ['p', 'tfn_tt', 'tfn_at', 'm', 'tp', 'split'],
     }
 
+    # Define segment renames needed
+    seg_rename = {
+        'tfn_traveller_type': 'tfn_tt',
+        'area_type': 'tfn_at',
+    }
+
     def __init__(self,
-               land_use_paths: Dict[int, nd.PathLike],
-               trip_rates_path: str,
-               mode_time_splits_path: str,
-               constraint_paths: Dict[int, nd.PathLike],
-               export_path: str,
-               process_count: int = consts.PROCESS_COUNT
-               ):
+                 land_use_paths: Dict[int, nd.PathLike],
+                 trip_rates_path: str,
+                 mode_time_splits_path: str,
+                 constraint_paths: Dict[int, nd.PathLike],
+                 export_path: str,
+                 process_count: int = consts.PROCESS_COUNT
+                 ):
         # Validate inputs
-        [du.check_csv_exists(x) for x in land_use_paths.values()]
-        [du.check_csv_exists(x) for x in constraint_paths.values()]
-        du.check_csv_exists(trip_rates_path)
-        du.check_csv_exists(mode_time_splits_path)
-        du.check_csv_exists(export_path)
+        [ops.check_file_exists(x) for x in land_use_paths.values()]
+        [ops.check_file_exists(x) for x in constraint_paths.values()]
+        ops.check_file_exists(trip_rates_path)
+        ops.check_file_exists(mode_time_splits_path)
+        ops.check_path_exists(export_path)
 
         # Assign
         self.land_use_paths = land_use_paths
@@ -59,13 +69,18 @@ class NoTEM_HBProductionModel:
         self.constraint_paths = constraint_paths
         self.export_path = export_path
         self.process_count = process_count
-
         self.years = list(self.land_use_paths.keys())
 
+        # Initialise Output paths
+        self.pure_demand_out, self.fully_segmented_out, self.aggregated_out = self.create_output_paths(
+            self.export_path, self._trip_origin, self._zoning_system, self._pure_demand, self._fully_segmented,
+            self._aggregated, self.years)
+
     def run(self,
-            recreate_productions: bool = True,
             export_pure_demand: bool = True,
-            output_raw: bool = True,
+            audits: bool = True,
+            output_fully_segmented: bool = True,
+            output_aggregated: bool = True,
             verbose: bool = True,
             ):
         """
@@ -73,17 +88,20 @@ class NoTEM_HBProductionModel:
 
         Parameters
         ----------
-        recreate_productions:
-            Whether to recreate the hb productions or not. If False, it will
-            look in export_path for previously produced productions and return
-            them. If none can be found, they will be generated.
-
         export_pure_demand:
             Whether to output the pure demand
 
-        output_raw:
-            Whether to output the raw hb productions before aggregating to
+        audits:
+            Whether to output print_audits to the terminal during running. This can
+            be used to monitor the population and production numbers being
+            generated and constrained.
+
+        output_fully_segmented:
+            Whether to output the fully segmented hb productions before aggregating to
             the required segmentation and mode.
+
+        output_aggregated:
+            Whether to output the aggregated hb productions
 
         verbose:
             Whether to print progress bars during processing or not.
@@ -93,13 +111,6 @@ class NoTEM_HBProductionModel:
         HB_Productions:
             HB productions for the mode and segmentation needed
         """
-        # Return previously created productions if we can
-        fname = consts.PRODS_FNAME % (self._zoning_system, self._trip_origin)
-        final_output_path = os.path.join(self.export_path, fname)
-
-        if not recreate_productions and os.path.isfile(final_output_path):
-            print("Found some already produced productions. Using them!")
-            return pd.read_csv(final_output_path)
 
         # Initialise timing
         # TODO(BT): Properly integrate logging
@@ -108,19 +119,25 @@ class NoTEM_HBProductionModel:
                           verbose=verbose)
 
         for year in self.years:
-            print("Loading the population data...")
-            population = self._read_land_use_data(year)
+            du.print_w_toggle("Loading the population data...", verbose=verbose)
+            pop_dvec = self._read_land_use_data(year, verbose=verbose)
 
-            print("Population generated. Converting to productions...")
+            du.print_w_toggle("Population generated. Converting to productions...", verbose=verbose)
             pure_demand = self.generate_productions(
-                population=population,
-                verbose=verbose
-            )
+                pop_dvec=pop_dvec,
+                verbose=verbose)
 
             if export_pure_demand:
-                fname = consts.PRODS_FNAME % (self._zoning_system, self._pure_demand)
-                output_path = os.path.join(self.export_path, fname)
-                path = pure_demand.compress_out(output_path)
+                path = pure_demand.compress_out(self.pure_demand_out[year])
+
+            # TODO:Check with BT
+            #
+            # # Population Audit
+            # if audits:
+            #     print('\n', '-' * 15, 'HB Production Audit before constraining', '-' * 15)
+            #     print('. Total population for year %s is: %.4f'
+            #               %)
+            #     print('\n')
 
             # TODO: Write out audits of pure_demand
             #  Need audit output path
@@ -128,24 +145,19 @@ class NoTEM_HBProductionModel:
             #  By segment.
 
             # ## SPLIT PRODUCTIONS BY MODE AND TIME ## #
-            print("Splitting HB productions by mode and time...")
+            du.print_w_toggle("Splitting HB productions by mode and time...", verbose=verbose)
             hb_prods = self._split_by_tp_and_mode(pure_demand, verbose=verbose)
 
             # Output productions before any aggregation
-            if output_raw:  # output_fully_segmented
-                print("Writing raw HB Productions to disk...")
-                fname = consts.PRODS_FNAME_YEAR % (self._zoning_system, 'raw_hb', year)
-                path = os.path.join(self.export_path, fname)
-                hb_prods.compress_out(path)
+            if output_fully_segmented:  # output_fully_segmented
+                du.print_w_toggle("Writing raw HB Productions to disk...", verbose=verbose)
+                hb_prods.compress_out(self.fully_segmented_out[year])
 
             if output_aggregated:
                 # TODO: Aggregate segments
-                agg_hb_prods = hb_prods.aggreagte(optional_segmentation)
-                print("Writing productions to file...")
-                fname = consts.PRODS_FNAME_YEAR % (self._zoning_system, self._trip_origin, year)
-                path = os.path.join(self.export_path, fname)
-                agg_hb_prods.compress_out(path)
-                pass
+                agg_hb_prods = hb_prods  # aggregate(optional_segmentation)
+                du.print_w_toggle("Writing productions to file...", verbose=verbose)
+                agg_hb_prods.compress_out(self.aggregated_out[year])
 
             # TODO: Bring in constraints (Validation)
             #  Output some audits of what demand was before and after control
@@ -158,54 +170,81 @@ class NoTEM_HBProductionModel:
             du.print_w_toggle("HB Production Model took: %s"
                               % timing.time_taken(start_time, end_time), verbose=verbose)
 
-    def _read_land_use_data(self, year: int):
-        # Read the land use data corresponding to the year
-        population = du.safe_read_csv(self.land_use_paths[year], usecols=self._target_cols['land_use'])
-        fname = consts.POP_FNAME % (str(year))
-        compress.write_out(fname, self.export_path)
-        return population
+    def _read_land_use_data(self, year: int,
+                            verbose: bool = True
+                            ) -> nd.DVector:
+        """
+        Reads land use data and creates population Dvector
 
-    def generate_productions(self,
-                             population: pd.DataFrame,
-                             verbose: bool = True,
-                             ):
+        Parameters
+        ----------
+        year:
+            The year for which the population data has to be read.
+
+        verbose:
+            Whether to print a progress bar while applying the splits or not
+
+        Returns
+        -------
+        pop_dvec:
+            Returns the population Dvector
+        """
+
+        # Read the land use data corresponding to the year
+        pop = du.safe_read_csv(self.land_use_paths[year], usecols=self._target_cols['land_use'])
 
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
         pop_seg = nd.get_segmentation_level('lu_pop')
-        pure_demand_seg = nd.get_segmentation_level('pure_demand')
-
-        # Define segment renames needed
-        seg_rename = {
-            'tfn_traveller_type': 'tfn_tt',
-            'area_type': 'tfn_at',
-        }
-        # Read in pop and trip rates
-        print("Reading in files...")
-        pop = population
-        trip_rates = du.safe_read_csv(self.trip_rates_path, usecols=self._target_cols['trip_rate'])
-
-        # ## CREATE THE POP DVEC ## #
-        print("Creating pop DVec...")
 
         # Instantiate
         pop_dvec = nd.DVector(
             zoning_system=msoa_zoning,
             segmentation=pop_seg,
-            import_data=pop.rename(columns=seg_rename),
+            import_data=pop.rename(columns=self.seg_rename),
             zone_col="msoa_zone_id",
             val_col="people",
             verbose=verbose,
         )
+        return pop_dvec
+
+    def generate_productions(self,
+                             pop_dvec: nd.DVector,
+                             verbose: bool = True,
+                             ) -> nd.DVector:
+        """
+        Applies trip rate split on the given HB productions
+
+        Parameters
+        ----------
+        pop_dvec:
+            Dvector containing the population.
+
+        verbose:
+            Whether to print a progress bar while applying the splits or not
+
+        Returns
+        -------
+        pure_demand:
+            Returns the product of population and trip rate Dvector
+            ie., pure demand
+        """
+
+        # Define the zoning and segmentations we want to use
+        pure_demand_seg = nd.get_segmentation_level('pure_demand')
+
+        # Reading trip rates
+        du.print_w_toggle("Reading in files...", verbose=verbose)
+        trip_rates = du.safe_read_csv(self.trip_rates_path, usecols=self._target_cols['trip_rate'])
 
         # ## CREATE THE TRIP RATES DVEC ## #
-        print("Creating trip rates DVec...")
+        du.print_w_toggle("Creating trip rates DVec...", verbose=verbose)
 
         # Instantiate
         trip_rates_dvec = nd.DVector(
             zoning_system=None,
             segmentation=pure_demand_seg,
-            import_data=trip_rates.rename(columns=seg_rename),
+            import_data=trip_rates.rename(columns=self.seg_rename),
             val_col="trip_rate",
             verbose=verbose,
         )
@@ -214,15 +253,15 @@ class NoTEM_HBProductionModel:
 
     def _split_by_tp_and_mode(self,
                               pure_demand,
-                              verbose: bool = True):
-
+                              verbose: bool = True
+                              ) -> nd.DVector:
         """
         Applies time period and mode splits on the given HB productions
 
         Parameters
         ----------
         pure_demand:
-            Dataframe containing the HB productions to split.
+            Dvector containing the HB productions to split.
 
         verbose:
             Whether to print a progress bar while applying the splits or not
@@ -232,6 +271,7 @@ class NoTEM_HBProductionModel:
         full_seg_demand:
             The given hb_prods additionally split by tp and mode
         """
+
         # Define the segmentation we want to use
         m_tp_pure_demand_seg = nd.get_segmentation_level('notem_tfnat')
         notem_seg = nd.get_segmentation_level('notem')
@@ -240,7 +280,7 @@ class NoTEM_HBProductionModel:
         mode_time_splits = pd.read_csv(self.mode_time_splits_path, usecols=self._target_cols['m_tp'])
 
         # ## CREATE MODE_TIME SPLITS DVEC ## #
-        print("Creating mode time splits DVec...")
+        du.print_w_toggle("Creating mode time splits DVec...", verbose=verbose)
 
         # Instantiate
         mode_time_splits_dvec = nd.DVector(
@@ -251,7 +291,7 @@ class NoTEM_HBProductionModel:
             verbose=verbose,
         )
 
-        print("Multiplying...")
+        du.print_w_toggle("Multiplying...", verbose=verbose)
         full_seg_demand = core.multiply_and_aggregate_dvectors(
             pure_demand,
             mode_time_splits_dvec,
@@ -259,3 +299,23 @@ class NoTEM_HBProductionModel:
         )
 
         return full_seg_demand
+
+    def create_output_paths(self,
+                            export_path: nd.PathLike,
+                            trip_origin: str,
+                            zoning_system: str,
+                            pure_demand: str,
+                            fully_segmented: str,
+                            aggregated: str,
+                            years: List[int], ):
+
+        pure_demand_out = fully_segmented_out = aggregated_out = dict()
+        for year in years:
+            pure_demand_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pbz2" % (
+                trip_origin, zoning_system, pure_demand, year))
+            fully_segmented_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pbz2" % (
+                trip_origin, zoning_system, fully_segmented, year))
+            aggregated_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pbz2" % (
+                trip_origin, zoning_system, aggregated, year))
+
+        return pure_demand_out, fully_segmented_out, aggregated_out

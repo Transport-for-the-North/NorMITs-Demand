@@ -51,6 +51,7 @@ from normits_demand import efs_constants as efs_consts
 # Can call tms utils.py functions from here
 from normits_demand.utils.utils import *
 
+
 # TODO: Utils is getting big. Refactor into smaller, more specific modules
 
 
@@ -68,6 +69,7 @@ class ExternalForecastSystemError(NormitsDemandError):
     """
     Base Exception for all custom EFS errors
     """
+
     def __init__(self, message=None):
         self.message = message
         super().__init__(self.message)
@@ -77,6 +79,7 @@ class InitialisationError(NormitsDemandError):
     """
     Exception for all errors that occur during normits_demand initialisation
     """
+
     def __init__(self, message=None):
         self.message = message
         super().__init__(self.message)
@@ -705,7 +708,6 @@ def convert_msoa_naming(df: pd.DataFrame,
     df = df.rename(columns={keep_col: msoa_col_name})
 
     return df.reindex(column_order, axis='columns')
-
 
 
 def copy_and_rename(src: str, dst: str) -> None:
@@ -1536,7 +1538,7 @@ def ensure_segmentation(df: pd.DataFrame,
                 "No column exists in the given dataframe for %s segmentation."
                 % col
             )
-        
+
     return df
 
 
@@ -1566,7 +1568,7 @@ def vdm_segment_loop_generator(to_list: Iterable[str],
                 )
             else:
                 for time_period in tp_list:
-                    yield(
+                    yield (
                         trip_origin,
                         user_class,
                         mode,
@@ -1982,7 +1984,7 @@ def long_to_wide_out(df: pd.DataFrame,
     # Get the unique column names
     if unq_zones is None:
         unq_zones = df[v_heading].drop_duplicates().reset_index(drop=True).copy()
-        unq_zones = list(range(1, max(unq_zones)+1))
+        unq_zones = list(range(1, max(unq_zones) + 1))
 
     # Make sure all unq_zones exists in v_heading and h_heading
     df = ensure_multi_index(
@@ -2122,7 +2124,6 @@ def get_compiled_matrix_name(matrix_format: str,
                              compress: bool = False,
                              suffix: str = None,
                              ) -> str:
-
     """
     Generates the compiled matrix name
     """
@@ -2514,7 +2515,7 @@ def defaultdict_to_regular(d):
     return d
 
 
-def file_write_check(path: Union[str, Path], wait: bool=True) -> Path:
+def file_write_check(path: Union[str, Path], wait: bool = True) -> Path:
     """Attempts to write to given path to see if file is in use.
 
     Will either wait for the file to be closed or it will append numbers
@@ -3142,9 +3143,9 @@ def convert_to_weights(df: pd.DataFrame,
         mask = (df[weight_by_col] == val)
         for year in year_cols:
             df.loc[mask, year] = (
-                df.loc[mask, year]
-                /
-                df.loc[mask, year].sum()
+                    df.loc[mask, year]
+                    /
+                    df.loc[mask, year].sum()
             )
     return df
 
@@ -3478,6 +3479,7 @@ def sum_dict_list(dict_list: List[Dict[Any, Any]]) -> Dict[Any, Any]:
     summed_dict:
         A single dictionary of all the dicts in dict_list summed together.
     """
+
     # Define the accumulator function to call in functools.reduce
     def reducer(accumulator, item):
         for key, value in item.items():
@@ -3512,27 +3514,3 @@ def chunk_list(lst: Iterable,
     for i in range(0, len(lst), chunk_size):
         chunk_end = i + chunk_size
         yield lst[i:chunk_end]
-
-def check_csv_exists(file_path: str,
-                  ) -> nd.PathLike:
-    """
-    Checks the existence of file in the file_path
-
-    Parameters
-    ----------
-    file_path:
-        Path to the file to read in
-
-    Returns
-    -------
-    File path:
-        The data from file_path
-    """
-
-    # TODO: Add any more error checks here
-    # Check file exists
-    if not os.path.exists(file_path):
-        raise IOError("No file exists at %s" % file_path)
-
-    return file_path
-
