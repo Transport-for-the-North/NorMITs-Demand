@@ -307,7 +307,8 @@ class HBProductionModel:
                             pure_demand: str,
                             fully_segmented: str,
                             aggregated: str,
-                            years: List[int], ):
+                            years: List[int],
+                            ):
 
         pure_demand_out = fully_segmented_out = aggregated_out = dict()
         for year in years:

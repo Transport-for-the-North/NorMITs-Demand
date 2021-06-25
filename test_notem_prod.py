@@ -22,6 +22,19 @@ TRIP_RATES_PATH = r"I:\Data\NTS\outputs\hb\hb_trip_rates\hb_trip_rates_normalise
 MODE_TIME_SPLITS_PATH = r"I:\Data\NTS\outputs\hb\hb_time_mode_split_tfn_long.csv"
 constraint_PATH = {2018: r"I:\NorMITs Land Use\base_land_use\iter3b\outputs\land_use_output_tfn_msoa1.csv"}
 export_path = r"C:\Data\Nirmal_Atkins"
+# export_path = "E:/"
 
-hb_prod = notem.HBProductionModel(POPULATION_PATH,TRIP_RATES_PATH,MODE_TIME_SPLITS_PATH,constraint_PATH,export_path)
-hb = hb_prod.run()
+
+def main():
+    hb_prod = notem.HBProductionModel(
+        POPULATION_PATH,
+        TRIP_RATES_PATH,
+        MODE_TIME_SPLITS_PATH,
+        constraint_PATH,
+        export_path
+    )
+    hb = hb_prod.run()
+
+
+if __name__ == '__main__':
+    main()
