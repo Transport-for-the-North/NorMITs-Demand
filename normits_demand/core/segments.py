@@ -29,6 +29,7 @@ import pandas as pd
 import normits_demand as nd
 
 from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
 
@@ -54,7 +55,13 @@ class SegmentationLevel:
         "aggregate.csv",
     )
 
-    _join_separator = ';'
+    _segment_translation_dir = os.path.join(
+        _segment_definitions_path,
+        '_translations'
+    )
+
+    _list_separator = ';'
+    _translate_separator = ':'
     _segment_name_separator = '_'
 
     def __init__(self,
@@ -215,7 +222,8 @@ class SegmentationLevel:
                                     other: SegmentationLevel,
                                     ) -> Tuple[str, List[str]]:
         """
-        Returns the common cols for aggregating self into other
+        Returns the common cols and any translations that are needed
+        for aggregating self into other
         """
         # Init
         mult_def = self._read_aggregation_definitions()
@@ -236,13 +244,67 @@ class SegmentationLevel:
                 % (self.name, other.name, self._aggregation_definitions_path)
             )
 
-        return self._parse_join_cols(definition['common'].squeeze())
+        return (
+            self._parse_join_cols(definition['common'].squeeze()),
+            self._parse_translate_cols(definition['translate'].squeeze())
+        )
+
+    def _get_segment_translation(self, col1: str, col2: str) -> pd.DataFrame:
+        """
+        Returns the dataframe defining how to translate col1 into col2
+        """
+        # Init
+        home_dir = self._segment_translation_dir
+        base_fname = '%s_to_%s.csv'
+
+        # Try find a translation
+        fname = base_fname % (col1, col2)
+        try:
+            file_path = file_ops.find_filename(os.path.join(home_dir, fname))
+        except FileNotFoundError:
+            file_path = None
+
+        # If not found yet, try flipping columns
+        if file_path is None:
+            fname = base_fname % (col2, col1)
+            try:
+                file_path = file_ops.find_filename(os.path.join(home_dir, fname))
+            except FileNotFoundError:
+                file_path = None
+
+        # If not found again, we don't know what to do
+        if file_path is None:
+            raise SegmentationError(
+                "Cannot translate '%s' into '%s' as no definition for the "
+                "translation exists."
+                % (col1, col2)
+            )
+
+        # Must exist if we are here, read in and validate
+        df = file_ops.read_df(file_path)
+        return pd_utils.reindex_cols(df, [col1, col2])
 
     def _parse_join_cols(self, join_cols: str) -> List[str]:
         """
-        Parses join cols (from multiply_definitions) into a list.
+        Parses join cols (from multiply/aggregate.csv) into a list.
         """
-        return [x.strip() for x in join_cols.split(self._join_separator)]
+        lst = [x.strip() for x in join_cols.split(self._list_separator)]
+        lst = du.list_safe_remove(lst, [''])
+        return lst
+
+    def _parse_translate_cols(self, translate_cols: str) -> List[Tuple[str, str]]:
+        """
+        Parses the translate col (from aggregate.csv) into a list.
+        """
+        # If not string, assume no value given
+        if not isinstance(translate_cols, str):
+            return None
+
+        # Otherwise, parse
+        translate_cols = str(translate_cols)
+        translate_pairs = [x.strip() for x in translate_cols.split(self._list_separator)]
+        translate_pairs = du.list_safe_remove(translate_pairs, [''])
+        return [tuple(x.split(self._translate_separator)) for x in translate_pairs]
 
     def create_segment_col(self,
                            df: pd.DataFrame,
@@ -364,12 +426,29 @@ class SegmentationLevel:
                 % type(other)
             )
         
-        join_cols = self._get_aggregation_definition(other)
+        join_cols, translate_cols = self._get_aggregation_definition(other)
+
+        # Translate any columns we need to in order to join
+        self_segments = self.segments.copy()
+        if translate_cols is not None:
+            for in_col, out_col in translate_cols:
+                translation = self._get_segment_translation(in_col, out_col)
+
+                # Translate
+                self_segments = pd.merge(
+                    self_segments,
+                    translation,
+                    how='left',
+                    on=[in_col],
+                )
+
+                # We now need to join on this translated column
+                join_cols += [out_col]
 
         # ## FIGURE OUT HOW TO AGGREGATE ## #
         # Merge, so we know how these segments combine
         seg_agg = pd.merge(
-            left=self.segments,
+            left=self_segments,
             right=other.segments,
             on=join_cols
         )

@@ -425,6 +425,51 @@ class DVector:
 
         return dvec_data
 
+    def aggregate(self, out_segmentation: core.SegmentationLevel) -> DVector:
+        """
+        Aggregates (by summing) this Dvector into out_segmentation.
+
+        A definition of how to aggregate from self.segmentation to
+        out_segmentation must exist, otherwise a SegmentationError will be
+        thrown
+
+        Parameters
+        ----------
+        out_segmentation:
+            The segmentation to aggregate into.
+
+        Returns
+        -------
+        aggregated_DVector:
+            a new dvector containing the same data, but aggregated to
+            out_segmentation.
+        """
+        # Validate inputs
+        if not isinstance(out_segmentation, core.SegmentationLevel):
+            raise ValueError(
+                "out_segmentation is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(out_segmentation)
+            )
+
+        # Get the aggregation dict
+        aggregation_dict = self.segmentation.aggregate(out_segmentation)
+
+        # Aggregate!
+        # TODO(BT): Add optional multiprocessing if aggregation_dict is big enough
+        dvec_data = dict()
+        for out_seg_name, in_seg_names in aggregation_dict.items():
+            in_lst = [self.data[x].flatten() for x in in_seg_names]
+            dvec_data[out_seg_name] = np.sum(in_lst, axis=0)
+
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=out_segmentation,
+            import_data=dvec_data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
+
     def multiply_and_aggregate(self: DVector,
                                other: DVector,
                                out_segmentation: core.SegmentationLevel,

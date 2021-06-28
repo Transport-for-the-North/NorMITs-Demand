@@ -15,6 +15,7 @@ import tqdm
 import normits_demand as nd
 
 from normits_demand import core
+from normits_demand.utils import timing
 
 # GLOBAL VARIABLES
 # I Drive Path locations
@@ -86,7 +87,7 @@ def main():
     from normits_demand.utils import timing
 
     print("Writing out... %s" % timing.get_datetime())
-    output_path = "E:/test.csv"
+    output_path = "E:/pure_demand_dvec.pbz2"
     path = pure_demand.compress_out(output_path)
     print(path)
 
@@ -112,8 +113,26 @@ def main():
         notem_seg,
     )
 
+    path = "E:/final_dvec.pbz2"
+    final.compress_out(path)
+
     # print(final.to_df())
 
 
+def aggregate_test():
+
+    path = "E:/pure_demand_dvec_dvec.pbz2"
+    print("Reading in... %s" % timing.get_datetime())
+    pure_demand_vec = nd.read_compressed_dvector(path)
+    tfn_agg_at_seg = nd.get_segmentation_level('pure_demand_reporting')
+
+    print("Aggregating... %s" % timing.get_datetime())
+    pure_demand_vec = pure_demand_vec.aggregate(tfn_agg_at_seg)
+
+    # Need tfn_tt and p cols
+    # out_vec = notem_vec.split_tfntt_segmentation(output_segmentation)
+
+
 if __name__ == '__main__':
-    main()
+    # main()
+    aggregate_test()

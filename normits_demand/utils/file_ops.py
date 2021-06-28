@@ -463,6 +463,12 @@ def find_filename(path: nd.PathLike,
     path:
         The path to a matching, or closely matching (differing only on
         filetype extension) file.
+
+    Raises
+    ------
+    FileNotFoundError:
+        If the file cannot be found under any of the given alt_types file
+        extensions.
     """
     # Init
     path = cast_to_pathlib_path(path)
@@ -497,7 +503,7 @@ def find_filename(path: nd.PathLike,
         if os.path.exists(path):
             return return_fn(path)
 
-    # If here, not paths were found!
+    # If here, no paths were found!
     raise FileNotFoundError(
         "Cannot find any similar files. Tried all of the following paths: %s"
         % str(attempted_paths)
