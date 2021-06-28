@@ -40,6 +40,23 @@ class ZoningSystem:
         "zoning_systems",
     )
 
+    _translation_dir = os.path.join(
+        _zoning_definitions_path,
+        '_translations'
+    )
+
+    _translate_infill = 0
+    _translate_base_zone_col = "%s_zone_id"
+    _translate_base_trans_col = "%s_to_%s"
+
+    _default_weighting_suffix = 'correspondence'
+    _weighting_suffix = {
+        'population': 'lsoa_population_weight',
+        'employment': 'lsoa_employment_weight',
+    }
+
+    possible_weightings = list(_weighting_suffix.keys()) + [None]
+
     def __init__(self,
                  name: str,
                  unique_zones: np.ndarray,
@@ -59,6 +76,115 @@ class ZoningSystem:
     def __ne__(self, other) -> bool:
         """Overrides the default implementation"""
         return not self.__eq__(other)
+
+    def _get_weighting_suffix(self, weighting: str) -> str:
+        """
+        Takes a weighting name and converts it into a file suffix
+        """
+        if weighting is None:
+            return self._default_weighting_suffix
+        return self._weighting_suffix[weighting]
+
+    def _get_translation_definition(self,
+                                    other: ZoningSystem,
+                                    weighting: str = None,
+                                    ) -> pd.DataFrame:
+        """
+        Returns a long dataframe defining how to translate from self to other.
+        """
+        # Init
+        home_dir = self._translation_dir
+        base_fname = '%s_to_%s_%s.csv'
+        weight_name = self._get_weighting_suffix(weighting)
+
+        # Try find a translation
+        fname = base_fname % (self.name, other.name, weight_name)
+        try:
+            file_path = file_ops.find_filename(os.path.join(home_dir, fname))
+        except FileNotFoundError:
+            file_path = None
+
+        # If not found yet, try flipping columns
+        if file_path is None:
+            fname = base_fname % (other.name, self.name, weight_name)
+            try:
+                file_path = file_ops.find_filename(os.path.join(home_dir, fname))
+            except FileNotFoundError:
+                file_path = None
+
+        # If not found again, we don't know what to do
+        if file_path is None:
+            raise ZoningError(
+                "Cannot translate '%s' into '%s' as no definition for the "
+                "translation exists."
+                % (self.name, other.name)
+            )
+
+        # Must exist if we are here, read in and validate
+        df = file_ops.read_df(file_path)
+        index_cols = [
+            self._translate_base_zone_col % self.name,
+            self._translate_base_zone_col % other.name,
+            self._translate_base_trans_col % (self.name, other.name)
+        ]
+        return pd_utils.reindex_cols(df, index_cols)
+
+    def translate(self,
+                  other: ZoningSystem,
+                  weighting: str = None,
+                  ) -> np.array:
+        """
+        Returns a numpy array defining the translation of self to other
+
+        Parameters
+        ----------
+        other:
+            The zoning system to translate this zoning system into
+
+        weighting:
+            The weighting to use when building the translation. Must be None,
+            or one of ZoningSystem.possible_weightings
+
+        Returns
+        -------
+        translations_array:
+            A numpy array defining the weights to use for the translation.
+            The rows correspond to self.unique_zones
+            The columns correspond to other.unique_zones
+
+        Raises
+        ------
+        ZoningError:
+            If a translation definition between self and other cannot be found
+        """
+        # Validate input
+        if not isinstance(other, ZoningSystem):
+            raise ValueError(
+                "other is not the correct type. "
+                "Expected ZoningSystem, got %s"
+                % type(other)
+            )
+
+        if weighting not in self.possible_weightings:
+            raise ValueError(
+                "%s is not a valid weighting for a translation. "
+                "Expected one of: %s"
+                % (weighting, self.possible_weightings)
+            )
+
+        # Get a numpy array to define the translation
+        translation_df = self._get_translation_definition(other, weighting)
+        translation = pd_utils.long_to_wide_infill(
+            df=translation_df,
+            index_col=self._translate_base_zone_col % self.name,
+            columns_col=self._translate_base_zone_col % other.name,
+            values_col=self._translate_base_trans_col % (self.name, other.name),
+            index_vals=self.unique_zones,
+            column_vals=other.unique_zones,
+            infill=self._translate_infill
+        )
+
+        return translation.values
 
 
 class ZoningError(nd.NormitsDemandError):

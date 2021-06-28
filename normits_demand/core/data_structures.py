@@ -520,7 +520,7 @@ class DVector:
         # Define the kwargs
         kwarg_list = list()
         for keys_chunk in du.chunk_list(aggregation_dict.keys(), chunk_size):
-            # Calculate subsets of keys to avoid copying
+            # Calculate subsets of keys to avoid locks between processes
             agg_dict_subset = {k: aggregation_dict[k] for k in keys_chunk}
             
             key_subset = itertools.chain.from_iterable(agg_dict_subset.values())
@@ -561,6 +561,73 @@ class DVector:
         return DVector(
             zoning_system=self.zoning_system,
             segmentation=out_segmentation,
+            import_data=dvec_data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
+
+    def sum(self) -> float:
+        """
+        Sums all values within the Dvector and returns the total
+
+        Returns
+        -------
+        sum:
+            The total sum of all values
+        """
+        return np.sum([x.flatten() for x in self.data.values()])
+
+    def translate_zoning(self,
+                         new_zoning: core.ZoningSystem,
+                         weighting: str = None,
+                         ) -> DVector:
+        """
+        Translates this DVector into another zoning system and returns a new
+        DVector.
+
+        Parameters
+        ----------
+        new_zoning:
+            The zoning system to translate into.
+
+        weighting:
+            The weighting to use when building the translation. Must be None,
+            or one of ZoningSystem.possible_weightings
+
+        Returns
+        -------
+        translated_dvector:
+            This DVector translated into new_new_zoning zoning system
+
+        """
+        # Validate inputs
+        if not isinstance(new_zoning, core.ZoningSystem):
+            raise ValueError(
+                "new_zoning is not the correct type. "
+                "Expected ZoningSystem, got %s"
+                % type(new_zoning)
+            )
+
+        if self.zoning_system.name is None:
+            raise nd.NormitsDemandError(
+                "Cannot translate the zoning system of a DVector that does "
+                "not have a zoning system to begin with."
+            )
+
+        # Get translation
+        translation = self.zoning_system.translate(new_zoning, weighting)
+
+        # Do the translation per value
+        dvec_data = dict()
+        from tqdm import tqdm
+        for key, value in tqdm(self.data.items(), "translating"):
+            temp = np.broadcast_to(np.expand_dims(value, axis=1), translation.shape)
+            temp = temp * translation
+            dvec_data[key] = temp.sum(axis=0)
+
+        return DVector(
+            zoning_system=new_zoning,
+            segmentation=self.segmentation,
             import_data=dvec_data,
             process_count=self.process_count,
             verbose=self.verbose,

@@ -201,3 +201,51 @@ def chunk_df(df: pd.DataFrame,
     for i in range(0, len(df), chunk_size):
         chunk_end = i + chunk_size
         yield df[i:chunk_end]
+
+
+def long_to_wide_infill(df: pd.DataFrame,
+                        index_col: str,
+                        columns_col: str,
+                        values_col: str,
+                        index_vals: List[str] = None,
+                        column_vals: List[str] = None,
+                        infill: Any = 0,
+                        ) -> pd.DataFrame:
+    """
+    TODO(BT): Write long_to_wide_infill() docs
+    Parameters
+    ----------
+    df
+    infill
+    index_col
+    columns_col
+    values_col
+    index_vals
+    column_vals
+
+    Returns
+    -------
+
+    """
+    # Init
+    index_vals = df[index_col].unique() if index_vals is None else index_vals
+    column_vals = df[columns_col].unique() if column_vals is None else column_vals
+    df = reindex_cols(df, [index_col, columns_col, values_col])
+
+    # Make sure every possible combination exists
+    new_index = pd.MultiIndex.from_product(
+        [index_vals, column_vals],
+        names=[index_col, columns_col]
+    )
+
+    df = df.set_index([index_col, columns_col])
+    df = df.reindex(new_index, fill_value=infill).reset_index()
+
+    # Convert to wide
+    df = df.pivot(
+        index=index_col,
+        columns=columns_col,
+        values=values_col,
+    )
+
+    return df
