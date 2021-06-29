@@ -166,6 +166,14 @@ class DVector:
     def _dict_to_dvec(self, import_data) -> nd.DVectorData:
         # TODO(BT): Add some error checking to make sure this is
         #  actually a valid dict
+
+        # Check that all segments exist
+        # Check that all keys are valid segemnts
+        # Make sure all values are the correct shape?
+        # Probably want to multiprocess this for large values!
+        # Is it worth adding an option to skip some of these steps if
+        #  the dictionary is given from a internal DVector build?
+        #  We can trust these conditions are met in this environment.
         return import_data
 
     def _dataframe_to_dvec_internal(self,
@@ -617,10 +625,10 @@ class DVector:
         # Get translation
         translation = self.zoning_system.translate(new_zoning, weighting)
 
+        # TODO(BT): Add Multiprocessing
         # Do the translation per value
         dvec_data = dict()
-        from tqdm import tqdm
-        for key, value in tqdm(self.data.items(), "translating"):
+        for key, value in self.data.items():
             temp = np.broadcast_to(np.expand_dims(value, axis=1), translation.shape)
             temp = temp * translation
             dvec_data[key] = temp.sum(axis=0)
