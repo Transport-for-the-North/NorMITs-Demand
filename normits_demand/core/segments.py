@@ -57,7 +57,12 @@ class SegmentationLevel:
 
     _segment_translation_dir = os.path.join(
         _segment_definitions_path,
-        '_translations'
+        '_translations',
+    )
+
+    _tfn_tt_expansion_path = os.path.join(
+        _segment_translation_dir,
+        'tfn_tt_splits.pbz2',
     )
 
     _list_separator = ';'
@@ -217,6 +222,12 @@ class SegmentationLevel:
         Returns the multiplication definitions for segments as a pd.DataFrame
         """
         return pd.read_csv(self._aggregation_definitions_path)
+
+    def _get_tfn_tt_expansion(self) -> pd.DataFrame:
+        """
+        Returns the definition for expanding tfn_tt into its components.
+        """
+        return file_ops.read_df(self._tfn_tt_expansion_path)
 
     def _get_aggregation_definition(self,
                                     other: SegmentationLevel,
@@ -463,6 +474,70 @@ class SegmentationLevel:
             agg_dict[o].append(s)
 
         return agg_dict
+
+    def split_tfntt_segmentation(self,
+                                 other: SegmentationLevel
+                                 ) -> Dict[str, List[str]]:
+        """
+        Generates a dict defining how to aggregate this segmentation into other.
+
+        Splits the tfn_tt segment into it's components and aggregates up to
+        out_segmentation. The DVector needs to be using a segmentation that
+        contains tfn_tt and p in order for this to work.
+
+        Parameters
+        ----------
+        other:
+            The segmentation level the output vector should be in.
+
+        Returns
+        -------
+        new_dvector:
+            A new DVector containing the same data but in using
+            out_segmentation as its segmentation level.
+
+        Raises
+        ------
+        SegmentationError:
+            If the DVector does not contain both tfn_tt and p segments.
+        """
+        # Validate inputs
+        if not isinstance(other, SegmentationLevel):
+            raise ValueError(
+                "out_segmentation is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(other)
+            )
+
+        if 'tfn_tt' not in self.naming_order:
+            raise nd.SegmentationError(
+                "This Dvector is not using a segmentation which contains "
+                "'tfn_tt'. Need to be using a segmentation using both 'tfn_tt' "
+                "and 'p' segments in order to split tfn_tt."
+                "Current segmentation uses: %s"
+                % self.naming_order
+            )
+
+        if 'p' not in self.naming_order:
+            raise nd.SegmentationError(
+                "This Dvector is not using a segmentation which contains "
+                "'p'. Need to be using a segmentation using both 'tfn_tt' "
+                "and 'p' segments in order to split tfn_tt."
+                "Current segmentation uses: %s"
+                % self.naming_order
+            )
+
+        # Expand tfn_tt
+        tfn_tt_expansion = self._get_tfn_tt_expansion()
+        full_segmentation = pd.merge(
+            self.segments,
+            tfn_tt_expansion,
+            how='left',
+            on='tfn_tt',
+        )
+
+        print(full_segmentation)
+        exit()
 
 
 class SegmentationError(nd.NormitsDemandError):

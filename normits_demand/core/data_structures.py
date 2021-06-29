@@ -447,7 +447,10 @@ class DVector:
 
         return dvec_data
 
-    def aggregate(self, out_segmentation: core.SegmentationLevel) -> DVector:
+    def aggregate(self,
+                  out_segmentation: core.SegmentationLevel,
+                  split_tfntt_segmentation: bool = False,
+                  ) -> DVector:
         """
         Aggregates (by summing) this Dvector into out_segmentation.
 
@@ -459,6 +462,11 @@ class DVector:
         ----------
         out_segmentation:
             The segmentation to aggregate into.
+
+        split_tfntt_segmentation:
+            If converting from the current segmentation to out_segmentation
+            requires the splitting of the tfn_tt segmentation, mark this as
+            True - a special type of aggregation is needed underneath.
 
         Returns
         -------
@@ -475,7 +483,10 @@ class DVector:
             )
 
         # Get the aggregation dict
-        aggregation_dict = self.segmentation.aggregate(out_segmentation)
+        if split_tfntt_segmentation:
+            aggregation_dict = self.segmentation.split_tfntt_segmentation(out_segmentation)
+        else:
+            aggregation_dict = self.segmentation.aggregate(out_segmentation)
 
         # Aggregate!
         # TODO(BT): Add optional multiprocessing if aggregation_dict is big enough
@@ -650,6 +661,76 @@ class DVector:
         return DVector(
             zoning_system=new_zoning,
             segmentation=self.segmentation,
+            import_data=dvec_data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
+
+    def split_tfntt_segmentation(self,
+                                 out_segmentation: core.SegmentationLevel
+                                 ) -> DVector:
+        """
+        Converts a DVector with p and tfn_tt segmentation in out_segmentation
+
+        Splits the tfn_tt segment into it's components and aggregates up to
+        out_segmentation. The DVector needs to be using a segmentation that
+        contains tfn_tt and p in order for this to work.
+
+        Parameters
+        ----------
+        out_segmentation:
+            The segmentation level the output vector should be in.
+
+        Returns
+        -------
+        new_dvector:
+            A new DVector containing the same data but in using
+            out_segmentation as its segmentation level.
+
+        Raises
+        ------
+        SegmentationError:
+            If the DVector does not contain both tfn_tt and p segments.
+        """
+        # Validate inputs
+        if not isinstance(out_segmentation, core.SegmentationLevel):
+            raise ValueError(
+                "out_segmentation is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(out_segmentation)
+            )
+
+        if 'tfn_tt' not in self.segmentation.naming_order:
+            raise nd.SegmentationError(
+                "This Dvector is not using a segmentation which contains "
+                "'tfn_tt'. Need to be using a segmentation using both 'tfn_tt' "
+                "and 'p' segments in order to split tfn_tt."
+                "Current segmentation uses: %s"
+                % self.segmentation.naming_order
+            )
+
+        if 'p' not in self.segmentation.naming_order:
+            raise nd.SegmentationError(
+                "This Dvector is not using a segmentation which contains "
+                "'p'. Need to be using a segmentation using both 'tfn_tt' "
+                "and 'p' segments in order to split tfn_tt."
+                "Current segmentation uses: %s"
+                % self.segmentation.naming_order
+            )
+
+        # Get the aggregation dict
+        aggregation_dict = self.segmentation.split_tfntt_segmentation(out_segmentation)
+
+        # Aggregate!
+        # TODO(BT): Add optional multiprocessing if aggregation_dict is big enough
+        dvec_data = dict()
+        for out_seg_name, in_seg_names in aggregation_dict.items():
+            in_lst = [self.data[x].flatten() for x in in_seg_names]
+            dvec_data[out_seg_name] = np.sum(in_lst, axis=0)
+
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=out_segmentation,
             import_data=dvec_data,
             process_count=self.process_count,
             verbose=self.verbose,

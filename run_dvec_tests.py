@@ -153,7 +153,7 @@ def tfn_tt_translate_test():
 
     print("Aggregating to full_tfn... %s" % timing.get_datetime())
     # Need tfn_tt and p cols
-    out_vec = notem_seg_vec.split_tfntt_segmentation(notem_full_tfn)
+    out_vec = notem_seg_vec.aggregate(notem_full_tfn, split_tfntt_segmentation=True)
 
 
 if __name__ == '__main__':
