@@ -16,6 +16,7 @@ from __future__ import annotations
 # Builtins
 import os
 import math
+import pickle
 import pathlib
 import itertools
 
@@ -406,6 +407,19 @@ class DVector:
 
         return compress.write_out(self, path, overwrite_suffix=False)
 
+    def to_pickle(self, path: nd.PathLike) -> None:
+        """
+        Pickle (serialize) object to file.
+
+        Parameters
+        ----------
+        path:
+            Filepath to store the pickled object
+
+        """
+        with open(path, 'wb') as f:
+            pickle.dump(self, f)
+
     @staticmethod
     def _multiply_and_aggregate_internal(aggregation_keys_chunk,
                                          aggregation_dict,
@@ -699,6 +713,26 @@ def read_compressed_dvector(path: nd.PathLike) -> DVector:
     """
     # TODO(BT): VALIDATE PATH
     return compress.read_in(path)
+
+
+def from_pickle(path: nd.PathLike) -> DVector:
+    """
+    Load pickled DVector object (or any object) from file.
+
+    Parameters
+    ----------
+    path:
+        Filepath to the object to read in and unpickle
+
+    Returns
+    -------
+    unpickled:
+        Same type as object stored in file
+    """
+    # TODO(BT): VALIDATE PATH
+    with open(path, 'rb') as f:
+        obj = pickle.load(f)
+    return obj
 
 
 

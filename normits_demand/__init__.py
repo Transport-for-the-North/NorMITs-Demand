@@ -27,6 +27,7 @@ from normits_demand.core import DVector
 
 # Core functionality
 from normits_demand.core import read_compressed_dvector
+from normits_demand.core import from_pickle
 
 # Core Object Getters
 from normits_demand.core import get_zoning_system

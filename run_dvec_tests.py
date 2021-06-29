@@ -87,12 +87,11 @@ def main():
     from normits_demand.utils import timing
 
     print("Writing out... %s" % timing.get_datetime())
-    output_path = "E:/pure_demand_dvec.pbz2"
-    path = pure_demand.compress_out(output_path)
-    print(path)
+    output_path = "E:/pure_demand_dvec.pkl"
+    pure_demand.to_pickle(output_path)
 
     print("Reading in... %s" % timing.get_datetime())
-    thing = nd.read_compressed_dvector(path)
+    thing = nd.from_pickle(output_path)
     print("Done... %s" % timing.get_datetime())
 
     # ## CREATE MODE_TIME SPLITS DVEC ## #
@@ -113,8 +112,8 @@ def main():
         notem_seg,
     )
 
-    path = "E:/final_dvec.pbz2"
-    final.compress_out(path)
+    path = "E:/final_dvec.pkl"
+    final.to_pickle(path)
 
     # print(final.to_df())
 
@@ -144,10 +143,20 @@ def aggregate_test():
     print("Total: ", pure_demand_3.sum())
     print("Done! %s" % timing.get_datetime())
 
+
+def tfn_tt_translate_test():
+
+    path = 'E:/final_dvec.pkl'
+    print("Reading in... %s" % timing.get_datetime())
+    notem_seg_vec = nd.from_pickle(path)
+    notem_full_tfn = nd.get_segmentation_level('hb_notem_full_tfn')
+
+    print("Aggregating to full_tfn... %s" % timing.get_datetime())
     # Need tfn_tt and p cols
-    # out_vec = notem_vec.split_tfntt_segmentation(output_segmentation)
+    out_vec = notem_seg_vec.split_tfntt_segmentation(notem_full_tfn)
 
 
 if __name__ == '__main__':
     # main()
-    aggregate_test()
+    # aggregate_test()
+    tfn_tt_translate_test()
