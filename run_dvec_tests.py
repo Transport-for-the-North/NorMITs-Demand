@@ -125,7 +125,7 @@ def aggregate_test():
     print("Reading in... %s" % timing.get_datetime())
     pure_demand_vec = nd.read_compressed_dvector(path)
     tfn_agg_at_seg = nd.get_segmentation_level('pure_demand_reporting')
-    tfn_ca_sectors = nd.get_zoning_system('tfn_ca_sectors')
+    tfn_ca_sectors = nd.get_zoning_system('ca_sectors_2020')
 
     print("Total: ", pure_demand_vec.sum())
     print("Aggregating... %s" % timing.get_datetime())
