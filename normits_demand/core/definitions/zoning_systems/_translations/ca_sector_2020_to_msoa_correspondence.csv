@@ -1,4 +1,4 @@
-ca_sectors_2020_zone_id,msoa_zone_id,ca_sectors_2020_to_msoa,msoa_to_ca_sectors_2020
+ca_sector_2020_zone_id,msoa_zone_id,ca_sector_2020_to_msoa,msoa_to_ca_sector_2020
 1,E02000984,0.006190212,1
 1,E02000985,0.002898043,1
 1,E02000986,0.001507034,1

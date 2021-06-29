@@ -125,7 +125,10 @@ def aggregate_test():
     print("Reading in... %s" % timing.get_datetime())
     pure_demand_vec = nd.read_compressed_dvector(path)
     tfn_agg_at_seg = nd.get_segmentation_level('pure_demand_reporting')
-    tfn_ca_sectors = nd.get_zoning_system('ca_sectors_2020')
+
+    tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
+    ie_sectors = nd.get_zoning_system('ie_sector')
+    three_sectors = nd.get_zoning_system('3_sector')
 
     print("Total: ", pure_demand_vec.sum())
     print("Aggregating... %s" % timing.get_datetime())
@@ -133,8 +136,12 @@ def aggregate_test():
 
     print("Total: ", pure_demand_vec.sum())
     print("Translating... %s" % timing.get_datetime())
-    pure_demand_vec = pure_demand_vec.translate_zoning(tfn_ca_sectors)
-    print("Total: ", pure_demand_vec.sum())
+    pure_demand_ca = pure_demand_vec.translate_zoning(tfn_ca_sectors)
+    print("Total: ", pure_demand_ca.sum())
+    pure_demand_ie = pure_demand_vec.translate_zoning(ie_sectors)
+    print("Total: ", pure_demand_ie.sum())
+    pure_demand_3 = pure_demand_vec.translate_zoning(three_sectors)
+    print("Total: ", pure_demand_3.sum())
     print("Done! %s" % timing.get_datetime())
 
     # Need tfn_tt and p cols
