@@ -150,7 +150,6 @@ class SegmentationLevel:
         elif return_seg_name == other.name:
             return_seg = other
         else:
-            # TODO(BT): Move definitions into codebase
             return_seg = get_segmentation_level(return_seg_name)
 
         # ## FIGURE OUT HOW TO MULTIPLY BASED ON DEFINITION ## #
@@ -608,7 +607,7 @@ class SegmentationLevel:
         names = set(lst)
 
         # Return False if not all names are valid
-        if not all([x in self.segment_names for x in names]):
+        if len(names - set(self.segment_names)) > 0:
             return False
 
         # If the lists are the same length, we can imply all names are contained

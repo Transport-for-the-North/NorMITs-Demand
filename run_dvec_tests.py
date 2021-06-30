@@ -20,8 +20,8 @@ from normits_demand.utils import timing
 # GLOBAL VARIABLES
 # I Drive Path locations
 POPULATION_PATH = r"I:\NorMITs Land Use\base_land_use\iter3b\outputs\land_use_output_tfn_msoa1.csv"
-TRIP_RATES_PATH = r"I:\Data\NTS\outputs\hb\hb_trip_rates\hb_trip_rates_normalised.csv"
-MODE_TIME_SPLITS_PATH = r"I:\Data\NTS\outputs\hb\hb_time_mode_split_tfn_long.csv"
+TRIP_RATES_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_trip_rates_v1.9.csv"
+MODE_TIME_SPLITS_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_mode_time_split_v1.9.csv"
 
 # # Nirmal C Drive locations
 # POPULATION_PATH = r"C:\Data\NorMITS\land_use_output_tfn_msoa1.csv"
@@ -40,7 +40,7 @@ def main():
     # Define wanted columns
     target_cols = {
         'land_use': ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people'],
-        'trip_rate': ['tfn_traveller_type', 'area_type', 'p', 'trip_rate'],
+        'trip_rate': ['tfn_tt', 'tfn_at', 'p', 'trip_rate'],
         'm_tp': ['p', 'tfn_tt', 'tfn_at', 'm', 'tp', 'split'],
     }
 
