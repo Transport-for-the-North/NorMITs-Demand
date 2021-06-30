@@ -147,13 +147,28 @@ def aggregate_test():
 def tfn_tt_translate_test():
 
     path = 'E:/final_dvec.pkl'
+
+    notem_full_tfn = nd.get_segmentation_level('hb_notem_full_tfn')
+    tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
+    ie_sectors = nd.get_zoning_system('ie_sector')
+    three_sectors = nd.get_zoning_system('3_sector')
+
     print("Reading in... %s" % timing.get_datetime())
     notem_seg_vec = nd.from_pickle(path)
-    notem_full_tfn = nd.get_segmentation_level('hb_notem_full_tfn')
+    print("Total: ", notem_seg_vec.sum())
 
     print("Aggregating to full_tfn... %s" % timing.get_datetime())
-    # Need tfn_tt and p cols
     out_vec = notem_seg_vec.aggregate(notem_full_tfn, split_tfntt_segmentation=True)
+    print("Total: ", out_vec.sum())
+
+    print("Translating... %s" % timing.get_datetime())
+    out_vec_ca = out_vec.translate_zoning(tfn_ca_sectors)
+    print("Total: ", out_vec_ca.sum())
+    out_vec_ie = out_vec.translate_zoning(ie_sectors)
+    print("Total: ", out_vec_ie.sum())
+    out_vec_3 = out_vec.translate_zoning(three_sectors)
+    print("Total: ", out_vec_3.sum())
+    print("Done! %s" % timing.get_datetime())
 
 
 if __name__ == '__main__':
