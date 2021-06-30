@@ -95,7 +95,10 @@ class DVector:
                 infill=infill,
             )
         elif isinstance(import_data, dict):
-            self.data = self._dict_to_dvec(import_data)
+            self.data = self._dict_to_dvec(
+                import_data=import_data,
+                infill=infill,
+            )
         else:
             raise NotImplementedError(
                 "Don't know how to deal with anything other than: "
@@ -164,12 +167,34 @@ class DVector:
             verbose=self.verbose,
         )
 
-    def _dict_to_dvec(self, import_data) -> nd.DVectorData:
+    def _dict_to_dvec(self,
+                      import_data: nd.DVectorData,
+                      infill: Any
+                      ) -> nd.DVectorData:
         # TODO(BT): Add some error checking to make sure this is
         #  actually a valid dict
+        # Init
 
-        # Check that all segments exist
-        # Check that all keys are valid segemnts
+        # ## MAKE SURE DATA CONTAINS ALL SEGMENTS ##
+        # Figure out what the default value should be
+        if self.zoning_system is None:
+            default_val = infill
+        else:
+            default_val = np.array([infill] * self.zoning_system.n_zones)
+
+        # Find the segments wand infill
+        not_in = set(self.segmentation.segment_names) - import_data.keys()
+        for name in not_in:
+            import_data[name] = default_val.copy()
+
+        # Double check that all segment names are valid
+        if not self.segmentation.is_correct_naming(list(import_data.keys())):
+            raise core.SegmentationError(
+                "There are additional segment names in the given DVector data "
+                "dictionary. Additional names: %s"
+                % (set(import_data.keys()) - self.segmentation.segment_names)
+            )
+
         # Make sure all values are the correct shape?
         # Probably want to multiprocess this for large values!
         # Is it worth adding an option to skip some of these steps if
