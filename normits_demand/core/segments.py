@@ -28,6 +28,8 @@ import pandas as pd
 # Local Imports
 import normits_demand as nd
 
+from normits_demand import constants as consts
+
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
@@ -169,6 +171,16 @@ class SegmentationLevel:
         s = seg_mult['self_name']
         o = seg_mult['other_name']
         multiply_dict = dict(zip(r, zip(s, o)))
+
+        # Check that the output segmentation has been created properly
+        if not other.is_correct_naming(list(multiply_dict.keys())):
+            raise SegmentationError(
+                "Some segment names seem to have gone missing during"
+                "multiplication.\n"
+                "Expected %s segments.\n"
+                "Found %s segments."
+                % (len(other.segment_names), len(set(multiply_dict.keys())))
+            )
 
         return multiply_dict, return_seg
 
@@ -473,6 +485,16 @@ class SegmentationLevel:
         for o, s in zip(seg_agg['other_name'], seg_agg['self_name']):
             agg_dict[o].append(s)
 
+        # Check that the output segmentation has been created properly
+        if not other.is_correct_naming(list(agg_dict.keys())):
+            raise SegmentationError(
+                "Some segment names seem to have gone missing during"
+                "aggregation.\n"
+                "Expected %s segments.\n"
+                "Found %s segments."
+                % (len(other.segment_names), len(set(agg_dict.keys())))
+            )
+
         return agg_dict
 
     def split_tfntt_segmentation(self,
@@ -535,9 +557,66 @@ class SegmentationLevel:
             how='left',
             on='tfn_tt',
         )
+        full_segmentation['self_name'] = self.create_segment_col(full_segmentation)
 
-        print(full_segmentation)
-        exit()
+        # Aggregate soc and ns depending on p segment
+        soc_mask = full_segmentation['p'].isin(consts.SOC_P)
+        soc_df = full_segmentation[soc_mask]
+        ns_df = full_segmentation[~soc_mask]
+        del full_segmentation
+
+        soc_df['ns'] = 0
+        ns_df['soc'] = 0
+        seg_agg = pd.concat([soc_df, ns_df])
+
+        # Create the new segment names
+        seg_agg['other_name'] = other.create_segment_col(seg_agg)
+
+        # Convert into the aggregation dict
+        agg_dict = collections.defaultdict(list)
+        for o, s in zip(seg_agg['other_name'], seg_agg['self_name']):
+            agg_dict[o].append(s)
+
+        # Check that the output segmentation has been created properly
+        if not other.is_correct_naming(list(agg_dict.keys())):
+            raise SegmentationError(
+                "Some segment names seem to have gone missing during"
+                "aggregation.\n"
+                "Expected %s segments.\n"
+                "Found %s segments."
+                % (len(other.segment_names), len(set(agg_dict.keys())))
+            )
+
+        return agg_dict
+
+    def is_correct_naming(self, lst: List[str]) -> bool:
+        """
+        Checks whether lst is a complete list of all names of this segmentation.
+
+        Parameters
+        ----------
+        lst:
+            A list of segment names to check
+
+        Returns
+        -------
+        is_correct_naming:
+            True if all names in lst are valid, and lst contains all segment
+            names. Otherwise False.
+        """
+        # Init
+        names = set(lst)
+
+        # Return False if not all names are valid
+        if not all([x in self.segment_names for x in names]):
+            return False
+
+        # If the lists are the same length, we can imply all names are contained
+        if not len(names) == len(self.segment_names):
+            return False
+
+        # If we are here, then must be True
+        return True
 
 
 class SegmentationError(nd.NormitsDemandError):

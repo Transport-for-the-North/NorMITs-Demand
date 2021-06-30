@@ -491,6 +491,7 @@ class DVector:
         # Aggregate!
         # TODO(BT): Add optional multiprocessing if aggregation_dict is big enough
         dvec_data = dict()
+        from tqdm import tqdm
         for out_seg_name, in_seg_names in aggregation_dict.items():
             in_lst = [self.data[x].flatten() for x in in_seg_names]
             dvec_data[out_seg_name] = np.sum(in_lst, axis=0)
