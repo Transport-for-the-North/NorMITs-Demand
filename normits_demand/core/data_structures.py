@@ -23,6 +23,7 @@ import itertools
 from typing import Any
 from typing import Dict
 from typing import Union
+from typing import Callable
 
 # Third Party
 import numpy as np
@@ -762,8 +763,56 @@ class DVector:
             verbose=self.verbose,
         )
 
-    def sum_zoning(self):
-        raise NotImplementedError
+    def sum_zoning(self) -> DVector:
+        """
+        Sums all the zone values in DVector into a single value.
+
+        Returns a copy of Dvector. This function is equivalent to calling:
+        self.remove_zoning(fn=np.sum)
+
+        Returns
+        -------
+        summed_dvector:
+            A copy of DVector, without any zoning.
+        """
+        return self.remove_zoning(fn=np.sum)
+
+    def remove_zoning(self, fn: Callable) -> DVector:
+        """
+        Aggregates all the zone values in DVector into a single value using fn.
+
+        Returns a copy of Dvector.
+
+        Parameters
+        ----------
+        fn:
+            The function to use when aggregating all zone values. fn must
+            be able to take a np.array of values and return a single value
+            in order for this to work.
+
+        Returns
+        -------
+        summed_dvector:
+            A copy of DVector, without any zoning.
+        """
+        # Validate fn
+        if not callable(fn):
+            raise ValueError(
+                "fn is not callable. fn must be a function that "
+                "takes an np.array of values and return a single value."
+            )
+
+        # Aggregate all the data
+        keys = self.data.keys()
+        values = [fn(x) for x in self.data.values()]
+
+        return DVector(
+            zoning_system=None,
+            segmentation=self.segmentation,
+            import_data=dict(zip(keys, values)),
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
 
 
 # ## FUNCTIONS ## #

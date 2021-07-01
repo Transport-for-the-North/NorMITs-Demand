@@ -7,6 +7,7 @@ Temporary file for testing DVec - should be moved over to proper tests when ther
 #  labels: core, testing
 
 # Third party imports
+import numpy as np
 import pandas as pd
 
 import tqdm
@@ -168,10 +169,15 @@ def tfn_tt_translate_test():
     print("Total: ", out_vec_ie.sum())
     out_vec_3 = out_vec.translate_zoning(three_sectors)
     print("Total: ", out_vec_3.sum())
+
+    print("Removing Zoning... %s" % timing.get_datetime())
+    out_vec_sans_zone = out_vec.remove_zoning(np.sum)
+    print("Total: ", out_vec_sans_zone.sum())
+
     print("Done! %s" % timing.get_datetime())
 
 
 if __name__ == '__main__':
-    # main()
+    main()
     # aggregate_test()
     tfn_tt_translate_test()
