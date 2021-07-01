@@ -36,16 +36,16 @@ class HBProductionModel:
 
     # Define wanted columns
     _target_cols = {
-        'land_use': ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people'],
-        'trip_rate': ['tfn_tt', 'tfn_at', 'p', 'trip_rate'],
-        'm_tp': ['p', 'tfn_tt', 'tfn_at', 'm', 'tp', 'split'],
-    }
+                    'land_use': ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people'],
+                    'trip_rate': ['tfn_tt', 'tfn_at', 'p', 'trip_rate'],
+                    'm_tp': ['p', 'tfn_tt', 'tfn_at', 'm', 'tp', 'split'],
+                    }
 
     # Define segment renames needed
     seg_rename = {
-        'tfn_traveller_type': 'tfn_tt',
-        'area_type': 'tfn_at',
-    }
+                  'tfn_traveller_type': 'tfn_tt',
+                  'area_type': 'tfn_at',
+                  }
 
     def __init__(self,
                  land_use_paths: Dict[int, nd.PathLike],
@@ -76,14 +76,14 @@ class HBProductionModel:
         du.create_folder(self.report_path, verbose=False)
 
         # Initialise Output paths
-        paths = self.create_output_paths(self.export_path, self.years)
-        self.pure_demand_out, self.fully_segmented_out, self.aggregated_out = paths
+        out_paths = self.create_output_paths(self.export_path, self.years)
+        self.pure_demand_out, self.fully_segmented_out, self.aggregated_out = out_paths
 
-        self.pure_demand_totals_out, self.pure_demand_sec_totals_out, \
-            self.pure_demand_ie_totals_out = self.create_pure_dem_report_paths(self.report_path, self.years)
+        pure_demand_paths = self.create_pure_dem_report_paths(self.report_path, self.years)
+        self.pure_demand_totals_out, self.pure_demand_sec_totals_out, self.pure_demand_ie_totals_out = pure_demand_paths
 
-        self.fully_seg_totals_out, self.fully_seg_sec_totals_out, \
-            self.fully_seg_ie_totals_out = self.create_fully_seg_report_paths(self.report_path, self.years)
+        fully_seg_paths = self.create_fully_seg_report_paths(self.report_path, self.years)
+        self.fully_seg_totals_out, self.fully_seg_sec_totals_out, self.fully_seg_ie_totals_out = fully_seg_paths
 
     def run(self,
             export_pure_demand: bool = False,
@@ -123,7 +123,8 @@ class HBProductionModel:
         # TODO(BT): Properly integrate logging
         start_time = timing.current_milli_time()
         du.print_w_toggle("Starting HB Production Model at: %s" % timing.get_datetime(),
-                          verbose=verbose)
+                          verbose=verbose
+                          )
 
         for year in self.years:
             du.print_w_toggle("Loading the population data...", verbose=verbose)
@@ -131,9 +132,9 @@ class HBProductionModel:
 
             du.print_w_toggle("Population generated. Converting to productions...", verbose=verbose)
             pure_demand = self.generate_productions(
-                pop_dvec=pop_dvec,
-                verbose=verbose,
-            )
+                                                    pop_dvec=pop_dvec,
+                                                    verbose=verbose,
+                                                    )
 
             if export_pure_demand:
                 du.print_w_toggle("Writing pure demand productions to disk...", verbose=verbose)
@@ -147,14 +148,16 @@ class HBProductionModel:
                 tfn_agg_at_seg = nd.get_segmentation_level('pure_demand_reporting')
 
                 pure_demand_vec = pure_demand.aggregate(tfn_agg_at_seg)
-                # pure_demand_vec = pure_demand_vec.sum_zoning()
-                pure_demand_vec_df = pure_demand_vec.to_df()
+                pure_demand_vec_sum = pure_demand_vec.sum_zoning()
+                pure_demand_vec_df = pure_demand_vec_sum.to_df()
                 pure_demand_vec_df.to_csv(self.pure_demand_totals_out[year], index=False)
+
                 # sector level output
                 tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
                 pure_demand_ca = pure_demand_vec.translate_zoning(tfn_ca_sectors)
                 pure_demand_ca = pure_demand_ca.to_df()
                 pure_demand_ca.to_csv(self.pure_demand_sec_totals_out[year], index=False)
+
                 # ie level output
                 ie_sectors = nd.get_zoning_system('ie_sector')
                 pure_demand_ie = pure_demand_vec.translate_zoning(ie_sectors)
@@ -178,13 +181,16 @@ class HBProductionModel:
 
                 fully_seg_vec = hb_prods.aggregate(notem_full_tfn, split_tfntt_segmentation=True)
                 print("Total Productions for year %d: %.4f" % (year, fully_seg_vec.sum()))
-                fully_seg_vec_df = fully_seg_vec.to_df()
+                fully_seg_vec_sum=fully_seg_vec.sum_zoning()
+                fully_seg_vec_df = fully_seg_vec_sum.to_df()
                 fully_seg_vec_df.to_csv(self.fully_seg_totals_out[year], index=False)
+
                 # sector level output
                 tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
                 fully_seg_ca = fully_seg_vec.translate_zoning(tfn_ca_sectors)
                 fully_seg_ca = fully_seg_ca.to_df()
                 fully_seg_ca.to_csv(self.fully_seg_sec_totals_out[year], index=False)
+                
                 # ie level output
                 ie_sectors = nd.get_zoning_system('ie_sector')
                 fully_seg_ie = fully_seg_vec.translate_zoning(ie_sectors)
@@ -237,13 +243,13 @@ class HBProductionModel:
 
         # Instantiate
         pop_dvec = nd.DVector(
-            zoning_system=msoa_zoning,
-            segmentation=pop_seg,
-            import_data=pop.rename(columns=self.seg_rename),
-            zone_col="msoa_zone_id",
-            val_col="people",
-            verbose=verbose,
-        )
+                              zoning_system=msoa_zoning,
+                              segmentation=pop_seg,
+                              import_data=pop.rename(columns=self.seg_rename),
+                              zone_col="msoa_zone_id",
+                              val_col="people",
+                              verbose=verbose,
+                              )
         return pop_dvec
 
     def generate_productions(self,
@@ -280,12 +286,12 @@ class HBProductionModel:
 
         # Instantiate
         trip_rates_dvec = nd.DVector(
-            zoning_system=None,
-            segmentation=pure_demand_seg,
-            import_data=trip_rates.rename(columns=self.seg_rename),
-            val_col="trip_rate",
-            verbose=verbose,
-        )
+                                     zoning_system=None,
+                                     segmentation=pure_demand_seg,
+                                     import_data=trip_rates.rename(columns=self.seg_rename),
+                                     val_col="trip_rate",
+                                     verbose=verbose,
+                                     )
         # ## MULTIPLY TOGETHER ## #
         return pop_dvec * trip_rates_dvec
 
@@ -322,19 +328,19 @@ class HBProductionModel:
 
         # Instantiate
         mode_time_splits_dvec = nd.DVector(
-            zoning_system=None,
-            segmentation=m_tp_pure_demand_seg,
-            import_data=mode_time_splits,
-            val_col="split",
-            verbose=verbose,
-        )
+                                           zoning_system=None,
+                                           segmentation=m_tp_pure_demand_seg,
+                                           import_data=mode_time_splits,
+                                           val_col="split",
+                                           verbose=verbose,
+                                           )
 
         du.print_w_toggle("Multiplying...", verbose=verbose)
         full_seg_demand = core.multiply_and_aggregate_dvectors(
-            pure_demand,
-            mode_time_splits_dvec,
-            notem_seg,
-        )
+                                                               pure_demand,
+                                                               mode_time_splits_dvec,
+                                                               notem_seg,
+                                                               )
 
         return full_seg_demand
 
@@ -365,17 +371,33 @@ class HBProductionModel:
         aggregated_out:
             Dictionary containing file names for aggregated outputs with year as key
         """
+
         pure_demand_out = dict()
         fully_segmented_out = dict()
         aggregated_out = dict()
+
         for year in years:
-            pure_demand_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pkl" % (
-                HBProductionModel._trip_origin, HBProductionModel._zoning_system, HBProductionModel._pure_demand, year))
-            fully_segmented_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pkl" % (
-                HBProductionModel._trip_origin, HBProductionModel._zoning_system, HBProductionModel._fully_segmented,
-                year))
-            aggregated_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pkl" % (
-                HBProductionModel._trip_origin, HBProductionModel._zoning_system, HBProductionModel._aggregated, year))
+            pure_demand_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pkl" %
+                                                 (HBProductionModel._trip_origin,
+                                                  HBProductionModel._zoning_system,
+                                                  HBProductionModel._pure_demand,
+                                                  year
+                                                  )
+                                                 )
+            fully_segmented_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pkl" %
+                                                     (HBProductionModel._trip_origin,
+                                                      HBProductionModel._zoning_system,
+                                                      HBProductionModel._fully_segmented,
+                                                      year
+                                                      )
+                                                     )
+            aggregated_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pkl" %
+                                                (HBProductionModel._trip_origin,
+                                                 HBProductionModel._zoning_system,
+                                                 HBProductionModel._aggregated,
+                                                 year
+                                                 )
+                                                )
 
         return pure_demand_out, fully_segmented_out, aggregated_out
 
@@ -412,12 +434,21 @@ class HBProductionModel:
         pure_demand_ie_totals_out = dict()
 
         for year in years:
-            pure_demand_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" % (
-                HBProductionModel._pure_demand, year, "totals"))
-            pure_demand_sec_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" % (
-                HBProductionModel._pure_demand, year, "sector_totals"))
-            pure_demand_ie_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" % (
-                HBProductionModel._pure_demand, year, "ie_totals"))
+            pure_demand_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" %
+                                                        (HBProductionModel._pure_demand,
+                                                         year, "totals"
+                                                         )
+                                                        )
+            pure_demand_sec_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" %
+                                                            (HBProductionModel._pure_demand,
+                                                             year, "sector_totals"
+                                                             )
+                                                            )
+            pure_demand_ie_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" %
+                                                           (HBProductionModel._pure_demand,
+                                                            year, "ie_totals"
+                                                            )
+                                                           )
 
         return pure_demand_totals_out, pure_demand_sec_totals_out, pure_demand_ie_totals_out
 
@@ -454,11 +485,20 @@ class HBProductionModel:
         fully_seg_ie_totals_out = dict()
 
         for year in years:
-            fully_seg_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" % (
-                HBProductionModel._fully_segmented, year, "totals"))
-            fully_seg_sec_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" % (
-                HBProductionModel._fully_segmented, year, "sector_totals"))
-            fully_seg_ie_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" % (
-                HBProductionModel._fully_segmented, year, "ie_totals"))
+            fully_seg_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" %
+                                                      (HBProductionModel._fully_segmented,
+                                                       year, "totals"
+                                                       )
+                                                      )
+            fully_seg_sec_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" %
+                                                          (HBProductionModel._fully_segmented,
+                                                           year, "sector_totals"
+                                                           )
+                                                          )
+            fully_seg_ie_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" %
+                                                         (HBProductionModel._fully_segmented,
+                                                          year, "ie_totals"
+                                                          )
+                                                         )
 
         return fully_seg_totals_out, fully_seg_sec_totals_out, fully_seg_ie_totals_out
