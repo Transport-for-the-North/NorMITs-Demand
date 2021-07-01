@@ -72,9 +72,12 @@ class HBProductionModel:
         self.process_count = process_count
         self.years = list(self.land_use_paths.keys())
 
+        # Create paths
+        du.create_folder(self.report_path, verbose=False)
+
         # Initialise Output paths
-        self.pure_demand_out, self.fully_segmented_out, \
-            self.aggregated_out = self.create_output_paths(self.export_path, self.years)
+        paths = self.create_output_paths(self.export_path, self.years)
+        self.pure_demand_out, self.fully_segmented_out, self.aggregated_out = paths
 
         self.pure_demand_totals_out, self.pure_demand_sec_totals_out, \
             self.pure_demand_ie_totals_out = self.create_pure_dem_report_paths(self.report_path, self.years)
@@ -129,7 +132,8 @@ class HBProductionModel:
             du.print_w_toggle("Population generated. Converting to productions...", verbose=verbose)
             pure_demand = self.generate_productions(
                 pop_dvec=pop_dvec,
-                verbose=verbose)
+                verbose=verbose,
+            )
 
             if export_pure_demand:
                 du.print_w_toggle("Writing pure demand productions to disk...", verbose=verbose)
@@ -137,13 +141,13 @@ class HBProductionModel:
 
             # Reporting pure demand
             if reports:
-                print('\n', '-' * 15, 'Writing reports before full segmentation', '-' * 15)
+                print('\n', '-' * 15, 'Writing reports at pure demand', '-' * 15)
                 print("Total Productions for year %d: %.4f" % (year, pure_demand.sum()))
                 # msoa level output
                 tfn_agg_at_seg = nd.get_segmentation_level('pure_demand_reporting')
 
-                three_sectors = nd.get_zoning_system('3_sector')
                 pure_demand_vec = pure_demand.aggregate(tfn_agg_at_seg)
+                # pure_demand_vec = pure_demand_vec.sum_zoning()
                 pure_demand_vec_df = pure_demand_vec.to_df()
                 pure_demand_vec_df.to_csv(self.pure_demand_totals_out[year], index=False)
                 # sector level output
@@ -172,7 +176,6 @@ class HBProductionModel:
                 # msoa level output
                 notem_full_tfn = nd.get_segmentation_level('hb_notem_full_tfn')
 
-                three_sectors = nd.get_zoning_system('3_sector')
                 fully_seg_vec = hb_prods.aggregate(notem_full_tfn, split_tfntt_segmentation=True)
                 print("Total Productions for year %d: %.4f" % (year, fully_seg_vec.sum()))
                 fully_seg_vec_df = fully_seg_vec.to_df()

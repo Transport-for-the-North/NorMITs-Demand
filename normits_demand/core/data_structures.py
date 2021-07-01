@@ -762,6 +762,9 @@ class DVector:
             verbose=self.verbose,
         )
 
+    def sum_zoning(self):
+        raise NotImplementedError
+
 
 # ## FUNCTIONS ## #
 def multiply_and_aggregate_dvectors(a: DVector,
