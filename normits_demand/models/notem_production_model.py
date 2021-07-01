@@ -37,7 +37,7 @@ class HBProductionModel:
     # Define wanted columns
     _target_cols = {
         'land_use': ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people'],
-        'trip_rate': ['tfn_traveller_type', 'area_type', 'p', 'trip_rate'],
+        'trip_rate': ['tfn_tt', 'tfn_at', 'p', 'trip_rate'],
         'm_tp': ['p', 'tfn_tt', 'tfn_at', 'm', 'tp', 'split'],
     }
 
@@ -68,19 +68,25 @@ class HBProductionModel:
         self.mode_time_splits_path = mode_time_splits_path
         self.constraint_paths = constraint_paths
         self.export_path = export_path
+        self.report_path = os.path.join(export_path, "Reports")
         self.process_count = process_count
         self.years = list(self.land_use_paths.keys())
 
         # Initialise Output paths
-        self.pure_demand_out, self.fully_segmented_out, self.aggregated_out = self.create_output_paths(
-            self.export_path, self._trip_origin, self._zoning_system, self._pure_demand, self._fully_segmented,
-            self._aggregated, self.years)
+        self.pure_demand_out, self.fully_segmented_out, \
+            self.aggregated_out = self.create_output_paths(self.export_path, self.years)
+
+        self.pure_demand_totals_out, self.pure_demand_sec_totals_out, \
+            self.pure_demand_ie_totals_out = self.create_pure_dem_report_paths(self.report_path, self.years)
+
+        self.fully_seg_totals_out, self.fully_seg_sec_totals_out, \
+            self.fully_seg_ie_totals_out = self.create_fully_seg_report_paths(self.report_path, self.years)
 
     def run(self,
-            export_pure_demand: bool = True,
-            audits: bool = True,
-            output_fully_segmented: bool = True,
-            output_aggregated: bool = True,
+            export_pure_demand: bool = False,
+            reports: bool = True,
+            output_fully_segmented: bool = False,
+            output_aggregated: bool = False,
             verbose: bool = True,
             ):
         """
@@ -91,10 +97,8 @@ class HBProductionModel:
         export_pure_demand:
             Whether to output the pure demand
 
-        audits:
-            Whether to output print_audits to the terminal during running. This can
-            be used to monitor the population and production numbers being
-            generated and constrained.
+        reports:
+            Whether to output reports while running.
 
         output_fully_segmented:
             Whether to output the fully segmented hb productions before aggregating to
@@ -128,36 +132,67 @@ class HBProductionModel:
                 verbose=verbose)
 
             if export_pure_demand:
-                path = pure_demand.compress_out(self.pure_demand_out[year])
+                du.print_w_toggle("Writing pure demand productions to disk...", verbose=verbose)
+                pure_demand.to_pickle(self.pure_demand_out[year])
 
-            # TODO:Check with BT
-            #
-            # # Population Audit
-            # if audits:
-            #     print('\n', '-' * 15, 'HB Production Audit before constraining', '-' * 15)
-            #     print('. Total population for year %s is: %.4f'
-            #               %)
-            #     print('\n')
+            # Reporting pure demand
+            if reports:
+                print('\n', '-' * 15, 'Writing reports before full segmentation', '-' * 15)
+                print("Total Productions for year %d: %.4f" % (year, pure_demand.sum()))
+                # msoa level output
+                tfn_agg_at_seg = nd.get_segmentation_level('pure_demand_reporting')
 
-            # TODO: Write out audits of pure_demand
-            #  Need audit output path
-            #  Output some audits of what demand was before and after control
-            #  By segment.
+                three_sectors = nd.get_zoning_system('3_sector')
+                pure_demand_vec = pure_demand.aggregate(tfn_agg_at_seg)
+                pure_demand_vec_df = pure_demand_vec.to_df()
+                pure_demand_vec_df.to_csv(self.pure_demand_totals_out[year], index=False)
+                # sector level output
+                tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
+                pure_demand_ca = pure_demand_vec.translate_zoning(tfn_ca_sectors)
+                pure_demand_ca = pure_demand_ca.to_df()
+                pure_demand_ca.to_csv(self.pure_demand_sec_totals_out[year], index=False)
+                # ie level output
+                ie_sectors = nd.get_zoning_system('ie_sector')
+                pure_demand_ie = pure_demand_vec.translate_zoning(ie_sectors)
+                pure_demand_ie = pure_demand_ie.to_df()
+                pure_demand_ie.to_csv(self.pure_demand_ie_totals_out[year], index=False)
 
-            # ## SPLIT PRODUCTIONS BY MODE AND TIME ## #
+            # SPLIT PRODUCTIONS BY MODE AND TIME ## #
             du.print_w_toggle("Splitting HB productions by mode and time...", verbose=verbose)
             hb_prods = self._split_by_tp_and_mode(pure_demand, verbose=verbose)
 
             # Output productions before any aggregation
-            if output_fully_segmented:  # output_fully_segmented
-                du.print_w_toggle("Writing raw HB Productions to disk...", verbose=verbose)
-                hb_prods.compress_out(self.fully_segmented_out[year])
+            if output_fully_segmented:
+                du.print_w_toggle("Writing fully segmented productions to disk...", verbose=verbose)
+                hb_prods.to_pickle(self.fully_segmented_out[year])
+
+            # Reporting fully segmented productions
+            if reports:
+                print('\n', '-' * 15, 'Writing reports after full segmentation', '-' * 15)
+                # msoa level output
+                notem_full_tfn = nd.get_segmentation_level('hb_notem_full_tfn')
+
+                three_sectors = nd.get_zoning_system('3_sector')
+                fully_seg_vec = hb_prods.aggregate(notem_full_tfn, split_tfntt_segmentation=True)
+                print("Total Productions for year %d: %.4f" % (year, fully_seg_vec.sum()))
+                fully_seg_vec_df = fully_seg_vec.to_df()
+                fully_seg_vec_df.to_csv(self.fully_seg_totals_out[year], index=False)
+                # sector level output
+                tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
+                fully_seg_ca = fully_seg_vec.translate_zoning(tfn_ca_sectors)
+                fully_seg_ca = fully_seg_ca.to_df()
+                fully_seg_ca.to_csv(self.fully_seg_sec_totals_out[year], index=False)
+                # ie level output
+                ie_sectors = nd.get_zoning_system('ie_sector')
+                fully_seg_ie = fully_seg_vec.translate_zoning(ie_sectors)
+                fully_seg_ie = fully_seg_ie.to_df()
+                fully_seg_ie.to_csv(self.fully_seg_ie_totals_out[year], index=False)
 
             if output_aggregated:
                 # TODO: Aggregate segments
                 agg_hb_prods = hb_prods  # aggregate(optional_segmentation)
-                du.print_w_toggle("Writing productions to file...", verbose=verbose)
-                agg_hb_prods.compress_out(self.aggregated_out[year])
+                du.print_w_toggle("Writing aggregated productions to file...", verbose=verbose)
+                agg_hb_prods.to_pickle(self.aggregated_out[year])
 
             # TODO: Bring in constraints (Validation)
             #  Output some audits of what demand was before and after control
@@ -302,21 +337,125 @@ class HBProductionModel:
 
     def create_output_paths(self,
                             export_path: nd.PathLike,
-                            trip_origin: str,
-                            zoning_system: str,
-                            pure_demand: str,
-                            fully_segmented: str,
-                            aggregated: str,
                             years: List[int],
                             ):
+        """
+        Creates output file names for pure demand, fully segmented and aggregated
+        HB production outputs for the list of years
 
-        pure_demand_out = fully_segmented_out = aggregated_out = dict()
+        Parameters
+        ----------
+        export_path:
+            Location where the output files are to be created.
+
+        years:
+            Contains the list of years for which the production model is run.
+
+        Returns
+        -------
+        pure_demand_out:
+            Dictionary containing file names for pure demand outputs with year as key
+
+        fully_segmented_out:
+            Dictionary containing file names for fully segmented outputs with year as key
+
+        aggregated_out:
+            Dictionary containing file names for aggregated outputs with year as key
+        """
+        pure_demand_out = dict()
+        fully_segmented_out = dict()
+        aggregated_out = dict()
         for year in years:
-            pure_demand_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pbz2" % (
-                trip_origin, zoning_system, pure_demand, year))
-            fully_segmented_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pbz2" % (
-                trip_origin, zoning_system, fully_segmented, year))
-            aggregated_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pbz2" % (
-                trip_origin, zoning_system, aggregated, year))
+            pure_demand_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pkl" % (
+                HBProductionModel._trip_origin, HBProductionModel._zoning_system, HBProductionModel._pure_demand, year))
+            fully_segmented_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pkl" % (
+                HBProductionModel._trip_origin, HBProductionModel._zoning_system, HBProductionModel._fully_segmented,
+                year))
+            aggregated_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pkl" % (
+                HBProductionModel._trip_origin, HBProductionModel._zoning_system, HBProductionModel._aggregated, year))
 
         return pure_demand_out, fully_segmented_out, aggregated_out
+
+    def create_pure_dem_report_paths(self,
+                                     report_path: nd.PathLike,
+                                     years: List[int],
+                                     ):
+        """
+        Creates output file names for pure demand
+        HB production reports for the list of years
+
+        Parameters
+        ----------
+        report_path:
+            Location where the pure demand report files are to be created.
+
+        years:
+            Contains the list of years for which the production model is run.
+
+        Returns
+        -------
+        pure_demand_totals_out:
+            Dictionary containing file names for pure demand msoa level outputs with year as key
+
+        pure_demand_sec_totals_out:
+            Dictionary containing file names for pure demand sector level outputs with year as key
+
+        pure_demand_ie_totals_out:
+            Dictionary containing file names for pure demand IE level outputs with year as key
+        """
+
+        pure_demand_totals_out = dict()
+        pure_demand_sec_totals_out = dict()
+        pure_demand_ie_totals_out = dict()
+
+        for year in years:
+            pure_demand_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" % (
+                HBProductionModel._pure_demand, year, "totals"))
+            pure_demand_sec_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" % (
+                HBProductionModel._pure_demand, year, "sector_totals"))
+            pure_demand_ie_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" % (
+                HBProductionModel._pure_demand, year, "ie_totals"))
+
+        return pure_demand_totals_out, pure_demand_sec_totals_out, pure_demand_ie_totals_out
+
+    def create_fully_seg_report_paths(self,
+                                      report_path: nd.PathLike,
+                                      years: List[int],
+                                      ):
+        """
+        Creates output file names for fully segmented
+        HB production reports for the list of years
+
+        Parameters
+        ----------
+        report_path:
+            Location where the fully segmented report files are to be created.
+
+        years:
+            Contains the list of years for which the production model is run.
+
+        Returns
+        -------
+        fully_seg_totals_out:
+            Dictionary containing file names for fully segmented msoa level outputs with year as key
+
+        fully_seg_sec_totals_out:
+            Dictionary containing file names for fully segmented sector level outputs with year as key
+
+        fully_seg_ie_totals_out:
+            Dictionary containing file names for fully segmented IE level outputs with year as key
+        """
+
+        fully_seg_totals_out = dict()
+        fully_seg_sec_totals_out = dict()
+        fully_seg_ie_totals_out = dict()
+
+        for year in years:
+            fully_seg_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" % (
+                HBProductionModel._fully_segmented, year, "totals"))
+            fully_seg_sec_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" % (
+                HBProductionModel._fully_segmented, year, "sector_totals"))
+            fully_seg_ie_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" % (
+                HBProductionModel._fully_segmented, year, "ie_totals"))
+
+        return fully_seg_totals_out, fully_seg_sec_totals_out, fully_seg_ie_totals_out
