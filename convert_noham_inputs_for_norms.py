@@ -126,8 +126,77 @@ def main():
             oc.convert_wide_to_long(
                 import_dir=dir_name,
                 export_dir=out_path,
+                matrix_format='pa'
             )
 
 
+def future_year():
+    # Running params
+    future_years = [2033, 2040, 2050]
+
+    compile_future_years = False
+    convert_matrices = True
+
+    # Build and EFS instance for the paths
+    scenario = consts.SC01_JAM
+    iter_num = '3i'
+    import_home = "I:/"
+    export_home = "I:/"
+    model_name = 'noham'
+
+    efs = nd.ExternalForecastSystem(
+        iter_num=iter_num,
+        model_name=model_name,
+        scenario_name=scenario,
+        import_home=import_home,
+        export_home=export_home,
+    )
+
+    # Set up segmentation vals
+    # seg_level = 'vdm'
+    # hb_seg_params = {
+    #     'to_needed': ['hb'],
+    #     'uc_needed': consts.USER_CLASSES,
+    #     'm_needed': consts.MODEL_MODES[model_name],
+    #     'ca_needed': efs.ca_needed,
+    #     'tp_needed': consts.TIME_PERIODS
+    # }
+    # nhb_seg_params = hb_seg_params.copy()
+    # nhb_seg_params['to_needed'] = ['nhb']
+
+    if compile_future_years:
+        compile_params_paths = mat_p.build_compile_params(
+            import_dir=efs.exports['pa_24_elast'],
+            export_dir=efs.params['compile'],
+            matrix_format='pa',
+            split_hb_nhb=True,
+            years_needed=future_years,
+            m_needed=consts.MODEL_MODES[model_name],
+            ca_needed=efs.ca_needed,
+            tp_needed=None,
+        )
+
+        for path in compile_params_paths:
+            mat_p.compile_matrices(
+                mat_import=efs.exports['pa_24_elast'],
+                mat_export=efs.exports['vdm_pa_24'],
+                compile_params_path=path,
+                round_dp=consts.DEFAULT_ROUNDING,
+            )
+
+    # Convert matrices to long format
+    if convert_matrices:
+        in_path = efs.exports['vdm_pa_24']
+        out_path = os.path.join(in_path, 'Long Format')
+        du.create_folder(out_path)
+
+        oc.convert_wide_to_long(
+            import_dir=in_path,
+            export_dir=out_path,
+            matrix_format='pa',
+        )
+
+
 if __name__ == '__main__':
-    main()
+    # main()
+    future_year()
