@@ -124,7 +124,7 @@ def wait_for_pool_results(results,  # : List[multiprocessing.pool.AsyncResult],
         pbar_kwargs['dynamic_ncols'] = True
 
         # If no total given, we can add one!
-        if 'total' not in pbar_kwargs:
+        if 'total' not in pbar_kwargs or pbar_kwargs['total'] == 0:
             pbar_kwargs['total'] = n_start_results
 
         # Improves time prediction guessing

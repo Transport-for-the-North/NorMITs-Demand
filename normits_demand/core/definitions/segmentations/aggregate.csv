@@ -1,0 +1,3 @@
+in,out,common,translate
+full_tfntt_tfnat,full_tfntt,p;tfn_tt;m;tp,
+pure_demand,pure_demand_reporting,p;tfn_tt,tfn_at:tfn_agg_at;
