@@ -1,7 +1,7 @@
 """
-Created on: 19/06/2021
+Created on: 02/07/2021
 
-File purpose: Production Model for NoTEM
+File purpose: Attraction Model for NoTEM
 
 """
 # Allow class self type hinting
@@ -27,7 +27,7 @@ from normits_demand.utils import file_ops as ops
 from normits_demand.utils import timing
 
 
-class HBProductionModel:
+class HBAttractionModel:
     _trip_origin = 'hb'
     _zoning_system = 'msoa'
     _pure_demand = 'pure_demand'
@@ -36,21 +36,24 @@ class HBProductionModel:
 
     # Define wanted columns
     _target_cols = {
-                    'land_use': ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people'],
+                    # TODO: Check with BT on how to deal with year in column name
+                    'land_use': ['msoa_zone_id', 'employment_cat', 'soc', '2018'],
                     'trip_rate': ['tfn_tt', 'tfn_at', 'p', 'trip_rate'],
                     'm_tp': ['p', 'tfn_tt', 'tfn_at', 'm', 'tp', 'split'],
                     }
 
     # Define segment renames needed
     seg_rename = {
-                  'tfn_traveller_type': 'tfn_tt',
+                  'employment_cat': 'emp_cat',
+                  '2018': 'emp',
                   'area_type': 'tfn_at',
                   }
 
     def __init__(self,
                  land_use_paths: Dict[int, nd.PathLike],
-                 trip_rates_path: str,
-                 mode_time_splits_path: str,
+                 pure_demand_production: str,
+                 trip_attraction_rates_path: str,
+                 mode_time_vol_controls_path: str,
                  constraint_paths: Dict[int, nd.PathLike],
                  export_path: str,
                  process_count: int = consts.PROCESS_COUNT
@@ -58,17 +61,18 @@ class HBProductionModel:
         # Validate inputs
         [ops.check_file_exists(x) for x in land_use_paths.values()]
         [ops.check_file_exists(x) for x in constraint_paths.values()]
-        ops.check_file_exists(trip_rates_path)
-        ops.check_file_exists(mode_time_splits_path)
+        ops.check_file_exists(pure_demand_production)
+        ops.check_file_exists(trip_attraction_rates_path)
+        ops.check_file_exists(mode_time_vol_controls_path)
         ops.check_path_exists(export_path)
 
         # Assign
         self.land_use_paths = land_use_paths
-        self.trip_rates_path = trip_rates_path
-        self.mode_time_splits_path = mode_time_splits_path
+        self.trip_att_rates_path = trip_attraction_rates_path
+        self.mode_time_vol_controls_path = mode_time_vol_controls_path
         self.constraint_paths = constraint_paths
         self.export_path = export_path
-        self.report_path = os.path.join(export_path, "Reports")
+        self.report_path = os.path.join(export_path, "Reports_attr")
         self.process_count = process_count
         self.years = list(self.land_use_paths.keys())
 
@@ -76,14 +80,14 @@ class HBProductionModel:
         du.create_folder(self.report_path, verbose=False)
 
         # Initialise Output paths
-        out_paths = self.create_output_paths(self.export_path, self.years)
-        self.pure_demand_out, self.fully_segmented_out, self.aggregated_out = out_paths
-
-        pure_demand_paths = self.create_pure_dem_report_paths(self.report_path, self.years)
-        self.pure_demand_totals_out, self.pure_demand_sec_totals_out, self.pure_demand_ie_totals_out = pure_demand_paths
-
-        fully_seg_paths = self.create_fully_seg_report_paths(self.report_path, self.years)
-        self.fully_seg_totals_out, self.fully_seg_sec_totals_out, self.fully_seg_ie_totals_out = fully_seg_paths
+        # out_paths = self.create_output_paths(self.export_path, self.years)
+        # self.pure_demand_out, self.fully_segmented_out, self.aggregated_out = out_paths
+        #
+        # pure_demand_paths = self.create_pure_dem_report_paths(self.report_path, self.years)
+        # self.pure_demand_totals_out, self.pure_demand_sec_totals_out, self.pure_demand_ie_totals_out = pure_demand_paths
+        #
+        # fully_seg_paths = self.create_fully_seg_report_paths(self.report_path, self.years)
+        # self.fully_seg_totals_out, self.fully_seg_sec_totals_out, self.fully_seg_ie_totals_out = fully_seg_paths
 
     def run(self,
             export_pure_demand: bool = False,
@@ -93,7 +97,7 @@ class HBProductionModel:
             verbose: bool = True,
             ):
         """
-        Runs the HB Production model
+        Runs the HB Attraction model
 
         Parameters
         ----------
@@ -104,35 +108,35 @@ class HBProductionModel:
             Whether to output reports while running.
 
         output_fully_segmented:
-            Whether to output the fully segmented hb productions before aggregating to
+            Whether to output the fully segmented hb attractions before aggregating to
             the required segmentation and mode.
 
         output_aggregated:
-            Whether to output the aggregated hb productions
+            Whether to output the aggregated hb attractions
 
         verbose:
             Whether to print progress bars during processing or not.
 
         Returns
         -------
-        HB_Productions:
-            HB productions for the mode and segmentation needed
+        HB_Attractions:
+            HB attractions for the mode and segmentation needed
         """
 
         # Initialise timing
         # TODO(BT): Properly integrate logging
         start_time = timing.current_milli_time()
-        du.print_w_toggle("Starting HB Production Model at: %s" % timing.get_datetime(),
+        du.print_w_toggle("Starting HB Attraction Model at: %s" % timing.get_datetime(),
                           verbose=verbose
                           )
 
         for year in self.years:
-            du.print_w_toggle("Loading the population data...", verbose=verbose)
-            pop_dvec = self._read_land_use_data(year, verbose=verbose)
+            du.print_w_toggle("Loading the employment data...", verbose=verbose)
+            emp_dvec = self._read_land_use_data(year, verbose=verbose)
 
             du.print_w_toggle("Population generated. Converting to productions...", verbose=verbose)
             pure_demand = self.generate_productions(
-                                                    pop_dvec=pop_dvec,
+                                                    pop_dvec=emp_dvec,
                                                     verbose=verbose,
                                                     )
 
@@ -190,7 +194,7 @@ class HBProductionModel:
                 fully_seg_ca = fully_seg_vec.translate_zoning(tfn_ca_sectors)
                 fully_seg_ca = fully_seg_ca.to_df()
                 fully_seg_ca.to_csv(self.fully_seg_sec_totals_out[year], index=False)
-
+                
                 # ie level output
                 ie_sectors = nd.get_zoning_system('ie_sector')
                 fully_seg_ie = fully_seg_vec.translate_zoning(ie_sectors)
@@ -218,51 +222,51 @@ class HBProductionModel:
                             verbose: bool = True
                             ) -> nd.DVector:
         """
-        Reads land use data and creates population Dvector
+        Reads land use data and creates attraction Dvector
 
         Parameters
         ----------
         year:
-            The year for which the population data has to be read.
+            The year for which the employment data has to be read.
 
         verbose:
             Whether to print a progress bar while applying the splits or not
 
         Returns
         -------
-        pop_dvec:
-            Returns the population Dvector
+        emp_dvec:
+            Returns the employment Dvector
         """
 
         # Read the land use data corresponding to the year
-        pop = du.safe_read_csv(self.land_use_paths[year], usecols=self._target_cols['land_use'])
+        emp = du.safe_read_csv(self.land_use_paths[year], usecols=self._target_cols['land_use'])
 
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
-        pop_seg = nd.get_segmentation_level('lu_pop')
+        emp_seg = nd.get_segmentation_level('lu_emp')
 
         # Instantiate
-        pop_dvec = nd.DVector(
+        emp_dvec = nd.DVector(
                               zoning_system=msoa_zoning,
-                              segmentation=pop_seg,
-                              import_data=pop.rename(columns=self.seg_rename),
+                              segmentation=emp_seg,
+                              import_data=emp.rename(columns=self.seg_rename),
                               zone_col="msoa_zone_id",
-                              val_col="people",
+                              val_col="emp",
                               verbose=verbose,
                               )
-        return pop_dvec
+        return emp_dvec
 
-    def generate_productions(self,
-                             pop_dvec: nd.DVector,
+    def generate_attractions(self,
+                             emp_dvec: nd.DVector,
                              verbose: bool = True,
                              ) -> nd.DVector:
         """
-        Applies trip rate split on the given HB productions
+        Applies trip rate split on the given HB attraction
 
         Parameters
         ----------
-        pop_dvec:
-            Dvector containing the population.
+        emp_dvec:
+            Dvector containing the employment.
 
         verbose:
             Whether to print a progress bar while applying the splits or not
@@ -270,7 +274,7 @@ class HBProductionModel:
         Returns
         -------
         pure_demand:
-            Returns the product of population and trip rate Dvector
+            Returns the product of employment and trip rate Dvector
             ie., pure demand
         """
 
