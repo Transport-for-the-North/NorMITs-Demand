@@ -696,6 +696,24 @@ class DVector:
         """
         return np.sum([x.flatten() for x in self.data.values()])
 
+    @staticmethod
+    def _translate_zoning_internal(self_data: nd.DVectorData,
+                                   translation: np.array,
+                                   ) -> nd.DVectorData:
+        """
+        Internal function of self.translate_zoning. For multiprocessing
+        """
+        # Init
+        dvec_data = dict.fromkeys(self_data.keys())
+
+        # Translate zoning in chunks
+        for key, value in self_data.items():
+            temp = np.broadcast_to(np.expand_dims(value, axis=1), translation.shape)
+            temp = temp * translation
+            dvec_data[key] = temp.sum(axis=0)
+
+        return dvec_data
+
     def translate_zoning(self,
                          new_zoning: core.ZoningSystem,
                          weighting: str = None,
@@ -737,12 +755,41 @@ class DVector:
         translation = self.zoning_system.translate(new_zoning, weighting)
 
         # TODO(BT): Add Multiprocessing
-        # Do the translation per value
-        dvec_data = dict()
-        for key, value in self.data.items():
-            temp = np.broadcast_to(np.expand_dims(value, axis=1), translation.shape)
-            temp = temp * translation
-            dvec_data[key] = temp.sum(axis=0)
+        # ## MULTIPROCESS ## #
+        # Define the chunk size
+        total = len(self.data)
+        chunk_size = math.ceil(total / self.chunk_divider)
+
+        # Define the kwargs
+        kwarg_list = list()
+        for keys_chunk in du.chunk_list(self.data.keys(), chunk_size):
+            # Calculate subsets of self.data to avoid locks between processes
+            self_data_subset = {k: self.data[k] for k in keys_chunk}
+
+            # Assign to a process
+            kwarg_list.append({
+                'self_data': self_data_subset,
+                'translation': translation.copy(),
+            })
+
+        # Define pbar
+        pbar_kwargs = {
+            'desc': "Translating",
+            'disable': not self.verbose,
+        }
+
+        # Run across processes
+        data_chunks = multiprocessing.multiprocess(
+            fn=self._translate_zoning_internal,
+            kwargs=kwarg_list,
+            process_count=self.process_count,
+            pbar_kwargs=pbar_kwargs,
+        )
+
+        # Combine all computation chunks into one
+        dvec_data = dict.fromkeys(self.data.keys())
+        for chunk in data_chunks:
+            dvec_data.update(chunk)
 
         return DVector(
             zoning_system=new_zoning,
