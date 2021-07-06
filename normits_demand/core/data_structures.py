@@ -56,7 +56,7 @@ class DVector:
     # Default chunk sizes for multiprocessing
     # Chosen through best guesses and tests
     _chunk_size = 100000
-    _to_df_min_chunk_size = 300
+    _to_df_min_chunk_size = 400
     _translate_zoning_min_chunk_size = 700
 
     # Use for getting a bunch of progress bars for mp code
