@@ -80,6 +80,9 @@ class SegmentationLevel:
         self.name = name
         self.naming_order = naming_order
 
+        # Retain this for copying later
+        self._valid_segments = valid_segments
+
         # Validate that naming order is in df
         for col in self.naming_order:
             if col not in valid_segments:
@@ -101,6 +104,10 @@ class SegmentationLevel:
         )
         self.segments_and_names = segments_and_names
         self.segment_names = segments_and_names['name'].to_list()
+
+    def __copy__(self):
+        """Returns a copy of this class"""
+        return self.copy()
 
     def __eq__(self, other) -> bool:
         """Overrides the default implementation"""
@@ -327,6 +334,14 @@ class SegmentationLevel:
         translate_pairs = [x.strip() for x in translate_cols.split(self._list_separator)]
         translate_pairs = du.list_safe_remove(translate_pairs, [''])
         return [tuple(x.split(self._translate_separator)) for x in translate_pairs]
+
+    def copy(self):
+        """Returns a copy of this class"""
+        return SegmentationLevel(
+            name=self.name,
+            naming_order=self.naming_order.copy(),
+            valid_segments=self._valid_segments.copy()
+        )
 
     def create_segment_col(self,
                            df: pd.DataFrame,

@@ -22,6 +22,7 @@ import itertools
 
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Union
 from typing import Callable
 
@@ -370,29 +371,33 @@ class DVector:
         # Get data and covert to zoning system
         return self.data[segment_name]
 
-    def to_df(self) -> pd.DataFrame:
+    @staticmethod
+    def _to_df_internal(self_data: nd.DVectorData,
+                        self_zoning_system: core.ZoningSystem,
+                        self_segmentation: core.SegmentationLevel,
+                        col_names: List[str],
+                        val_col: str,
+                        zone_col: str,
+                        ) -> pd.DataFrame:
         """
-        Convert this DVector into a pandas dataframe with the segmentation
-        as the index
+        Internal function of self.to_df(). For multiprocessing
         """
         # Init
+        index_cols = du.list_safe_remove(col_names, [val_col])
         concat_ph = list()
-        col_names = list(self.segmentation.get_seg_dict(list(self.data.keys())[0]).keys())
-        col_names = [self._zone_col] + col_names + [self._val_col]
 
-        # TODO(BT): Multiprocess
-        # Convert each segment into a part of the df
-        for segment_name, data in self.data.items():
+        # Convert all given data into dataframes
+        for segment_name, data in self_data.items():
             # Add the zoning system back in
-            if self.zoning_system is None:
-                df = pd.DataFrame([{self._val_col: data}])
+            if self_zoning_system is None:
+                df = pd.DataFrame([{val_col: data}])
             else:
-                index = pd.Index(self.zoning_system.unique_zones, name=self._zone_col)
-                data = {self._val_col: data.flatten()}
+                index = pd.Index(self_zoning_system.unique_zones, name=zone_col)
+                data = {val_col: data.flatten()}
                 df = pd.DataFrame(index=index, data=data).reset_index()
 
             # Add all segments into the df
-            seg_dict = self.segmentation.get_seg_dict(segment_name)
+            seg_dict = self_segmentation.get_seg_dict(segment_name)
             for col_name, col_val in seg_dict.items():
                 df[col_name] = col_val
 
@@ -400,7 +405,61 @@ class DVector:
             df = df.reindex(columns=col_names)
             concat_ph.append(df)
 
-        return pd.concat(concat_ph).reset_index(drop=True)
+        return pd.concat(concat_ph, ignore_index=True)
+
+    def to_df(self) -> pd.DataFrame:
+        """
+        Convert this DVector into a pandas dataframe with the segmentation
+        as the index
+        """
+        # Init
+        col_names = list(self.segmentation.get_seg_dict(list(self.data.keys())[0]).keys())
+        col_names = col_names + [self._val_col]
+        if self.zoning_system is not None:
+            col_names = [self._zone_col] + col_names
+
+        # ## MULTIPROCESS ## #
+        # Define chunk size
+        total = len(self.data)
+        chunk_size = math.ceil(total / self.chunk_divider)
+
+        # Define the kwargs
+        kwarg_list = list()
+        for keys_chunk in du.chunk_list(self.data.keys(), chunk_size):
+            # Calculate subsets of self.data to avoid locks between processes
+            self_data_subset = {k: self.data[k] for k in keys_chunk}
+
+            if self.zoning_system is not None:
+                self_zoning_system = self.zoning_system.copy()
+            else:
+                self_zoning_system = None
+
+            # Assign to a process
+            kwarg_list.append({
+                'self_data': self_data_subset,
+                'self_zoning_system': self_zoning_system,
+                'self_segmentation': self.segmentation.copy(),
+                'col_names': col_names.copy(),
+                'val_col': self._val_col,
+                'zone_col': self._zone_col,
+            })
+
+        # Define pbar
+        pbar_kwargs = {
+            'desc': "Converting DVector to dataframe",
+            'disable': not self.verbose,
+        }
+
+        # Run across processes
+        dataframe_chunks = multiprocessing.multiprocess(
+            fn=self._to_df_internal,
+            kwargs=kwarg_list,
+            process_count=self.process_count,
+            pbar_kwargs=pbar_kwargs,
+        )
+
+        # Join all the dataframe chunks together
+        return pd.concat(dataframe_chunks, ignore_index=True)
 
     def compress_out(self, path: nd.PathLike) -> pathlib.Path:
         """

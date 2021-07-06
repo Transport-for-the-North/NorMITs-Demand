@@ -66,6 +66,10 @@ class ZoningSystem:
         self.unique_zones = np.sort(unique_zones)
         self.n_zones = len(self.unique_zones)
 
+    def __copy__(self):
+        """Returns a copy of this class"""
+        return self.copy()
+
     def __eq__(self, other) -> bool:
         """Overrides the default implementation"""
         # May need to update in future, but assume they are equal if names match
@@ -128,6 +132,13 @@ class ZoningSystem:
             self._translate_base_trans_col % (self.name, other.name)
         ]
         return pd_utils.reindex_cols(df, index_cols)
+
+    def copy(self):
+        """Returns a copy of this class"""
+        return ZoningSystem(
+            name=self.name,
+            unique_zones=self.unique_zones.copy(),
+        )
 
     def translate(self,
                   other: ZoningSystem,
