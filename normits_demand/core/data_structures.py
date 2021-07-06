@@ -50,9 +50,17 @@ class DVector:
     _zone_col = 'zone'
     _segment_col = 'segment'
     _val_col = 'val'
-    _chunk_size = 100000
 
     _dvec_suffix = '_dvec%s' % consts.COMPRESSION_SUFFIX
+
+    # Default chunk sizes for multiprocessing
+    # Chosen through best guesses and tests
+    _chunk_size = 100000
+    _to_df_min_chunk_size = 300
+    _translate_zoning_min_chunk_size = 700
+
+    # Use for getting a bunch of progress bars for mp code
+    _debugging_mp_code = True
 
     def __init__(self,
                  zoning_system: core.ZoningSystem,
@@ -356,7 +364,6 @@ class DVector:
 
         # Build the segment_name if we don't have it
         if segment_dict is not None:
-            segment_name = None
             raise NotImplemented(
                 "Need to write code to convert a segment_dict into a valid "
                 "segment_name"
@@ -423,6 +430,10 @@ class DVector:
         total = len(self.data)
         chunk_size = math.ceil(total / self.chunk_divider)
 
+        # Make sure the chunks aren't too small
+        if chunk_size < self._to_df_min_chunk_size:
+            chunk_size = self._to_df_min_chunk_size
+
         # Define the kwargs
         kwarg_list = list()
         for keys_chunk in du.chunk_list(self.data.keys(), chunk_size):
@@ -447,7 +458,7 @@ class DVector:
         # Define pbar
         pbar_kwargs = {
             'desc': "Converting DVector to dataframe",
-            'disable': not self.verbose,
+            'disable': not self._debugging_mp_code,
         }
 
         # Run across processes
@@ -576,7 +587,6 @@ class DVector:
         # Aggregate!
         # TODO(BT): Add optional multiprocessing if aggregation_dict is big enough
         dvec_data = dict()
-        from tqdm import tqdm
         for out_seg_name, in_seg_names in aggregation_dict.items():
             in_lst = [self.data[x].flatten() for x in in_seg_names]
             dvec_data[out_seg_name] = np.sum(in_lst, axis=0)
@@ -661,7 +671,7 @@ class DVector:
         # Define pbar
         pbar_kwargs = {
             'desc': "Multiplying and aggregating",
-            'disable': not self.verbose,
+            'disable': not self._debugging_mp_code,
         }
 
         # Run across processes
@@ -754,11 +764,14 @@ class DVector:
         # Get translation
         translation = self.zoning_system.translate(new_zoning, weighting)
 
-        # TODO(BT): Add Multiprocessing
         # ## MULTIPROCESS ## #
         # Define the chunk size
         total = len(self.data)
         chunk_size = math.ceil(total / self.chunk_divider)
+
+        # Make sure the chunks aren't too small
+        if chunk_size < self._translate_zoning_min_chunk_size:
+            chunk_size = self._translate_zoning_min_chunk_size
 
         # Define the kwargs
         kwarg_list = list()
@@ -775,7 +788,7 @@ class DVector:
         # Define pbar
         pbar_kwargs = {
             'desc': "Translating",
-            'disable': not self.verbose,
+            'disable': not self._debugging_mp_code,
         }
 
         # Run across processes
