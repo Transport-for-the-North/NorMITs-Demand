@@ -60,7 +60,7 @@ class DVector:
     _translate_zoning_min_chunk_size = 700
 
     # Use for getting a bunch of progress bars for mp code
-    _debugging_mp_code = True
+    _debugging_mp_code = False
 
     def __init__(self,
                  zoning_system: core.ZoningSystem,
@@ -192,7 +192,7 @@ class DVector:
         else:
             default_val = np.array([infill] * self.zoning_system.n_zones)
 
-        # Find the segments wand infill
+        # Find the missing segments and infill
         not_in = set(self.segmentation.segment_names) - import_data.keys()
         for name in not_in:
             import_data[name] = default_val.copy()
