@@ -51,8 +51,8 @@ class ZoningSystem:
 
     _default_weighting_suffix = 'correspondence'
     _weighting_suffix = {
-        'population': 'lsoa_population_weight',
-        'employment': 'lsoa_employment_weight',
+        'population': 'population_weight',
+        'employment': 'employment_weight',
     }
 
     possible_weightings = list(_weighting_suffix.keys()) + [None]
