@@ -218,6 +218,7 @@ class DVector:
         else:
             # Generate the data on a per segment basis
             dvec_chunk = dict()
+
             for segment in df_chunk['segment'].unique():
                 # Check that it's a valid segment_name
                 if segment not in self.segmentation.segment_names:

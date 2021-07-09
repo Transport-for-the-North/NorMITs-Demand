@@ -1,4 +1,5 @@
 a,b,join,out
 pure_demand,lu_pop,tfn_tt;tfn_at,pure_demand
 pure_demand,full_tfntt_tfnat,tfn_tt;tfn_at;p,full_tfntt_tfnat
-pure_demand,lu_emp,emp_cat;soc,pure_demand
+pure_attractions,lu_emp,e_cat;soc,pure_attractions
+pure_attractions,attr_m,p,attr_full_seg

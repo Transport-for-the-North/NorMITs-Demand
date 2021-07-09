@@ -12,6 +12,7 @@ import os
 
 from typing import Dict
 from typing import List
+from typing import Tuple
 
 # Third party imports
 import pandas as pd
@@ -19,7 +20,6 @@ import pandas as pd
 # local imports
 import normits_demand as nd
 
-from normits_demand import core
 from normits_demand import efs_constants as consts
 
 from normits_demand.utils import general as du
@@ -28,48 +28,60 @@ from normits_demand.utils import timing
 
 
 class HBAttractionModel:
+    # Constants
     _trip_origin = 'hb'
     _zoning_system = 'msoa'
-    _pure_demand = 'pure_demand'
+    _return_segmentation_name = 'hb_notem_full_tfn'
+
+    # Segmentation names
+    _pure_attractions = 'pure_attractions'
     _fully_segmented = 'fully_segmented'
-    _aggregated = 'aggregated'
+    _notem_segmented = 'notem_segmented'
 
     # Define wanted columns
     _target_cols = {
-                    # TODO: Check with BT on how to deal with year in column name
-                    'land_use': ['msoa_zone_id', 'employment_cat', 'soc', '2018'],
-                    'trip_rate': ['tfn_tt', 'tfn_at', 'p', 'trip_rate'],
-                    'm_tp': ['p', 'tfn_tt', 'tfn_at', 'm', 'tp', 'split'],
-                    }
+        # TODO: Check with BT on how to deal with year in column name
+        'land_use': ['msoa_zone_id', 'employment_cat', 'soc', '2018'],
+        'trip_rate': ['msoa_zone_id', 'Employment_cat', 'purpose', 'soc', 'trip_rate'],
+        'mode_split': ['msoa_zone_id', 'p', 'm', 'mode_share'],
+    }
 
     # Define segment renames needed
     seg_rename = {
-                  'employment_cat': 'emp_cat',
-                  '2018': 'emp',
-                  'area_type': 'tfn_at',
-                  }
+        'employment_cat': 'e_cat',
+        'Employment_cat': 'e_cat',
+        '2018': 'emp',
+        'area_type': 'tfn_at',
+        'purpose': 'p',
+        'mode_share': 'split'
+    }
+
+    # Define output fnames
+    _base_output_fname = '%s_%s_%s_%d_dvec.pkl'
+    _base_report_fname = '%s_%s_%d_%s.csv'
 
     def __init__(self,
                  land_use_paths: Dict[int, nd.PathLike],
                  pure_demand_production: str,
                  trip_attraction_rates_path: str,
-                 mode_time_vol_controls_path: str,
+                 mode_controls_path: str,
                  constraint_paths: Dict[int, nd.PathLike],
                  export_path: str,
                  process_count: int = consts.PROCESS_COUNT
                  ):
+        # TODO(BT): Document attributes
         # Validate inputs
         [ops.check_file_exists(x) for x in land_use_paths.values()]
         [ops.check_file_exists(x) for x in constraint_paths.values()]
         ops.check_file_exists(pure_demand_production)
         ops.check_file_exists(trip_attraction_rates_path)
-        ops.check_file_exists(mode_time_vol_controls_path)
+        ops.check_file_exists(mode_controls_path)
         ops.check_path_exists(export_path)
 
         # Assign
         self.land_use_paths = land_use_paths
         self.trip_att_rates_path = trip_attraction_rates_path
-        self.mode_time_vol_controls_path = mode_time_vol_controls_path
+        self.mode_controls_path = mode_controls_path
         self.constraint_paths = constraint_paths
         self.export_path = export_path
         self.report_path = os.path.join(export_path, "Reports_attr")
@@ -80,188 +92,217 @@ class HBAttractionModel:
         du.create_folder(self.report_path, verbose=False)
 
         # Initialise Output paths
-        # out_paths = self.create_output_paths(self.export_path, self.years)
-        # self.pure_demand_out, self.fully_segmented_out, self.aggregated_out = out_paths
-        #
-        # pure_demand_paths = self.create_pure_dem_report_paths(self.report_path, self.years)
-        # self.pure_demand_totals_out, self.pure_demand_sec_totals_out, self.pure_demand_ie_totals_out = pure_demand_paths
-        #
-        # fully_seg_paths = self.create_fully_seg_report_paths(self.report_path, self.years)
-        # self.fully_seg_totals_out, self.fully_seg_sec_totals_out, self.fully_seg_ie_totals_out = fully_seg_paths
+        # TODO(BT): Convert output paths into dictionaries
+        #  something like: self.reports['pure_attractions'][year]
+        self._create_output_paths(self.export_path, self.years)
+        self._create_pure_attractions_report_paths(self.report_path, self.years)
+        self._create_notem_segmented_report_paths(self.report_path, self.years)
 
     def run(self,
-            export_pure_demand: bool = False,
-            reports: bool = True,
-            output_fully_segmented: bool = False,
-            output_aggregated: bool = False,
-            verbose: bool = True,
-            ):
+            export_pure_attractions: bool = False,
+            export_fully_segmented: bool = False,
+            export_notem_segmentation: bool = False,
+            export_reports: bool = False,
+            verbose: bool = False,
+            ) -> None:
+
         """
-        Runs the HB Attraction model
+        Runs the HB Attraction model.
+
+        Completes the following steps for each year:
+            - Reads in the land use employment data given in the constructor.
+            - Reads in the trip rates data given in the constructor.
+            - Multiplies the employment and trip rates on relevant segments,
+              producing "pure attractions".
+            - Optionally writes out a pickled DVector of "pure attractions" at
+              self.pure_attractions_out[year]
+            - Optionally writes out a number of "pure attractions" reports, if
+              reports is True.
+            - Reads in the mode-time splits given in the constructor.
+            - Multiplies the "pure attractions" and mode splits on relevant
+              segments, producing "fully segmented attractions".
+            - Optionally writes out a pickled DVector of "fully segmented attractions"
+              at self.fully_segmented_paths[year] if export_fully_segmented
+              is True.
+            - Aggregates this attractions into hb_notem_full_tfn segmentation,
+              producing "notem segmented attractions".
+            - Optionally writes out a number of "notem segmented attractions"
+              reports, if reports is True.
+            - Optionally writes out a pickled DVector of "notem segmented attractions"
+              at self.notem_segmented_paths[year] if export_notem_segmentation
+              is True.
+            - Finally, returns "notem segmented attractions" as a DVector.
 
         Parameters
         ----------
-        export_pure_demand:
-            Whether to output the pure demand
+        export_pure_attractions:
+            Whether to export the pure attractions to disk or not.
+            Will be written out to: self.pure_attractions_out[year]
 
-        reports:
-            Whether to output reports while running.
+        export_fully_segmented:
+            Whether to export the fully segmented attractions to disk or not.
+            Will be written out to: self.fully_segmented_paths[year]
 
-        output_fully_segmented:
-            Whether to output the fully segmented hb attractions before aggregating to
-            the required segmentation and mode.
+        export_notem_segmentation:
+            Whether to export the notem segmented attractions to disk or not.
+            Will be written out to: self.notem_segmented_paths[year]
 
-        output_aggregated:
-            Whether to output the aggregated hb attractions
+        export_reports:
+            Whether to output reports while running. All reports will be
+            written out to self.report_path.
 
         verbose:
             Whether to print progress bars during processing or not.
 
         Returns
         -------
-        HB_Attractions:
-            HB attractions for the mode and segmentation needed
+        None
         """
 
         # Initialise timing
         # TODO(BT): Properly integrate logging
         start_time = timing.current_milli_time()
-        du.print_w_toggle("Starting HB Attraction Model at: %s" % timing.get_datetime(),
-                          verbose=verbose
-                          )
+        du.print_w_toggle(
+            "Starting HB Attraction Model at: %s" % timing.get_datetime(),
+            verbose=verbose
+        )
 
+        # Generate the attractions for each year
         for year in self.years:
+            # ## GENERATE PURE ATTRACTIONS ## #
             du.print_w_toggle("Loading the employment data...", verbose=verbose)
             emp_dvec = self._read_land_use_data(year, verbose=verbose)
 
-            du.print_w_toggle("Population generated. Converting to productions...", verbose=verbose)
-            pure_demand = self.generate_productions(
-                                                    pop_dvec=emp_dvec,
-                                                    verbose=verbose,
-                                                    )
+            du.print_w_toggle("Applying trip rates...", verbose=verbose)
+            pure_attractions = self._generate_attractions(
+                emp_dvec=emp_dvec,
+                verbose=verbose,
+            )
 
-            if export_pure_demand:
-                du.print_w_toggle("Writing pure demand productions to disk...", verbose=verbose)
-                pure_demand.to_pickle(self.pure_demand_out[year])
+            if export_pure_attractions:
+                du.print_w_toggle("Exporting pure attractions to disk...", verbose=verbose)
+                pure_attractions.to_pickle(self.pure_attractions_paths[year])
+                #k = pure_attractions.to_df()
+                #k.to_csv(r"C:\Data\Nirmal_Atkins\Attractions\hb_msoa_pure_attractions_2018_dvec.csv", index=False)
 
-            # Reporting pure demand
-            if reports:
-                print('\n', '-' * 15, 'Writing reports at pure demand', '-' * 15)
-                print("Total Productions for year %d: %.4f" % (year, pure_demand.sum()))
-                # msoa level output
-                tfn_agg_at_seg = nd.get_segmentation_level('pure_demand_reporting')
+            if export_reports:
+                du.print_w_toggle(
+                    "Exporting pure attractions reports disk...\n"
+                    "Total Attractions for year %d: %.4f"
+                    % (year, pure_attractions.sum()),
+                    verbose=verbose
+                )
 
-                pure_demand_vec = pure_demand.aggregate(tfn_agg_at_seg)
-                pure_demand_vec_sum = pure_demand_vec.sum_zoning()
-                pure_demand_vec_df = pure_demand_vec_sum.to_df()
-                pure_demand_vec_df.to_csv(self.pure_demand_totals_out[year], index=False)
+                self._write_reports(
+                    dvec=pure_attractions,
+                    segment_totals_path=self.pd_report_segment_paths[year],
+                    ca_sector_path=self.pd_report_ca_sector_paths[year],
+                    ie_sector_path=self.pd_report_ie_sector_paths[year],
+                )
 
-                # sector level output
-                tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-                pure_demand_ca = pure_demand_vec.translate_zoning(tfn_ca_sectors)
-                pure_demand_ca = pure_demand_ca.to_df()
-                pure_demand_ca.to_csv(self.pure_demand_sec_totals_out[year], index=False)
+            # TODO: Balance pure attractions
+            bal_pure_attractions = pure_attractions  # Function to balance pure attractions with pure demand
 
-                # ie level output
-                ie_sectors = nd.get_zoning_system('ie_sector')
-                pure_demand_ie = pure_demand_vec.translate_zoning(ie_sectors)
-                pure_demand_ie = pure_demand_ie.to_df()
-                pure_demand_ie.to_csv(self.pure_demand_ie_totals_out[year], index=False)
+            # ## SPLIT PURE ATTRACTIONS BY MODE ## #
+            du.print_w_toggle("Splitting by mode...", verbose=verbose)
+            fully_segmented_attr = self._split_by_mode(bal_pure_attractions)
 
-            # SPLIT PRODUCTIONS BY MODE AND TIME ## #
-            du.print_w_toggle("Splitting HB productions by mode and time...", verbose=verbose)
-            hb_prods = self._split_by_tp_and_mode(pure_demand, verbose=verbose)
+            # Output attractions before any aggregation
+            if export_fully_segmented:
+                du.print_w_toggle(
+                    "Exporting fully segmented attractions to disk...",
+                    verbose=verbose,
+                )
+                fully_segmented_attr.to_pickle(self.fully_segmented_paths[year])
+                # lu = fully_segmented_attr.to_df()
+                # lu.to_csv(r"C:\Data\Nirmal_Atkins\Attractions\hb_msoa_fully_seg_attractions_2018_dvec.csv", index=False)
+            """
+            # ## AGGREGATE INTO RETURN SEGMENTATION ## #
+            return_seg = nd.get_segmentation_level(self._return_segmentation_name)
+            attractions = fully_segmented_attr.aggregate(
+                out_segmentation=return_seg,
+                split_tfntt_segmentation=True
+            )
+            """
+            if export_notem_segmentation:
+                du.print_w_toggle(
+                    "Exporting notem segmented attractions to disk...",
+                    verbose=verbose
+                )
+                fully_segmented_attr.to_pickle(self.pure_attractions_paths[year])
 
-            # Output productions before any aggregation
-            if output_fully_segmented:
-                du.print_w_toggle("Writing fully segmented productions to disk...", verbose=verbose)
-                hb_prods.to_pickle(self.fully_segmented_out[year])
+            if export_reports:
+                du.print_w_toggle(
+                    "Exporting notem segmented reports disk...\n"
+                    "Total Attractions for year %d: %.4f"
+                    % (year, fully_segmented_attr.sum()),
+                    verbose=verbose
+                )
 
-            # Reporting fully segmented productions
-            if reports:
-                print('\n', '-' * 15, 'Writing reports after full segmentation', '-' * 15)
-                # msoa level output
-                notem_full_tfn = nd.get_segmentation_level('hb_notem_full_tfn')
-
-                fully_seg_vec = hb_prods.aggregate(notem_full_tfn, split_tfntt_segmentation=True)
-                print("Total Productions for year %d: %.4f" % (year, fully_seg_vec.sum()))
-                fully_seg_vec_sum=fully_seg_vec.sum_zoning()
-                fully_seg_vec_df = fully_seg_vec_sum.to_df()
-                fully_seg_vec_df.to_csv(self.fully_seg_totals_out[year], index=False)
-
-                # sector level output
-                tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-                fully_seg_ca = fully_seg_vec.translate_zoning(tfn_ca_sectors)
-                fully_seg_ca = fully_seg_ca.to_df()
-                fully_seg_ca.to_csv(self.fully_seg_sec_totals_out[year], index=False)
-                
-                # ie level output
-                ie_sectors = nd.get_zoning_system('ie_sector')
-                fully_seg_ie = fully_seg_vec.translate_zoning(ie_sectors)
-                fully_seg_ie = fully_seg_ie.to_df()
-                fully_seg_ie.to_csv(self.fully_seg_ie_totals_out[year], index=False)
-
-            if output_aggregated:
-                # TODO: Aggregate segments
-                agg_hb_prods = hb_prods  # aggregate(optional_segmentation)
-                du.print_w_toggle("Writing aggregated productions to file...", verbose=verbose)
-                agg_hb_prods.to_pickle(self.aggregated_out[year])
+                self._write_reports(
+                    dvec=fully_segmented_attr,
+                    segment_totals_path=self.notem_report_segment_paths[year],
+                    ca_sector_path=self.notem_report_ca_sector_paths[year],
+                    ie_sector_path=self.notem_report_ie_sector_paths[year],
+                )
 
             # TODO: Bring in constraints (Validation)
-            #  Output some audits of what demand was before and after control
+            #  Output some audits of what attractions was before and after control
             #  By segment.
 
             # End timing
             end_time = timing.current_milli_time()
-            du.print_w_toggle("Finished HB Production Model at: %s" % timing.get_datetime(),
+            du.print_w_toggle("Finished HB Attraction Model at: %s" % timing.get_datetime(),
                               verbose=verbose)
-            du.print_w_toggle("HB Production Model took: %s"
+            du.print_w_toggle("HB Attraction Model took: %s"
                               % timing.time_taken(start_time, end_time), verbose=verbose)
 
-    def _read_land_use_data(self, year: int,
-                            verbose: bool = True
+    def _read_land_use_data(self,
+                            year: int,
+                            verbose: bool,
                             ) -> nd.DVector:
         """
-        Reads land use data and creates attraction Dvector
+        Reads in the land use data for year and converts it to Dvector
 
         Parameters
         ----------
         year:
-            The year for which the employment data has to be read.
+            The year to get attraction data for.
 
         verbose:
-            Whether to print a progress bar while applying the splits or not
+            Passed into the DVector
 
         Returns
         -------
         emp_dvec:
             Returns the employment Dvector
         """
-
-        # Read the land use data corresponding to the year
-        emp = du.safe_read_csv(self.land_use_paths[year], usecols=self._target_cols['land_use'])
-
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
         emp_seg = nd.get_segmentation_level('lu_emp')
 
-        # Instantiate
-        emp_dvec = nd.DVector(
-                              zoning_system=msoa_zoning,
-                              segmentation=emp_seg,
-                              import_data=emp.rename(columns=self.seg_rename),
-                              zone_col="msoa_zone_id",
-                              val_col="emp",
-                              verbose=verbose,
-                              )
-        return emp_dvec
+        # Read the land use data corresponding to the year
+        emp = du.safe_read_csv(
+            file_path=self.land_use_paths[year],
+            usecols=self._target_cols['land_use']
+        )
 
-    def generate_attractions(self,
-                             emp_dvec: nd.DVector,
-                             verbose: bool = True,
-                             ) -> nd.DVector:
+        # Instantiate
+        return nd.DVector(
+            zoning_system=msoa_zoning,
+            segmentation=emp_seg,
+            import_data=emp.rename(columns=self.seg_rename),
+            zone_col="msoa_zone_id",
+            val_col="emp",
+            verbose=verbose,
+        )
+
+    def _generate_attractions(self,
+                              emp_dvec: nd.DVector,
+                              verbose: bool = True,
+                              ) -> nd.DVector:
         """
-        Applies trip rate split on the given HB attraction
+        Applies trip rate split on the given HB employment
 
         Parameters
         ----------
@@ -273,88 +314,119 @@ class HBAttractionModel:
 
         Returns
         -------
-        pure_demand:
-            Returns the product of employment and trip rate Dvector
-            ie., pure demand
+        pure_attraction:
+            Returns the product of employment and attraction trip rate Dvector
+            ie., pure attraction
         """
 
         # Define the zoning and segmentations we want to use
-        pure_demand_seg = nd.get_segmentation_level('pure_demand')
+        msoa_zoning = nd.get_zoning_system('msoa')
+        pure_attractions_seg = nd.get_segmentation_level('pure_attractions')
 
         # Reading trip rates
         du.print_w_toggle("Reading in files...", verbose=verbose)
-        trip_rates = du.safe_read_csv(self.trip_rates_path, usecols=self._target_cols['trip_rate'])
+        trip_rates = du.safe_read_csv(self.trip_att_rates_path, usecols=self._target_cols['trip_rate'])
 
         # ## CREATE THE TRIP RATES DVEC ## #
         du.print_w_toggle("Creating trip rates DVec...", verbose=verbose)
 
         # Instantiate
         trip_rates_dvec = nd.DVector(
-                                     zoning_system=None,
-                                     segmentation=pure_demand_seg,
-                                     import_data=trip_rates.rename(columns=self.seg_rename),
-                                     val_col="trip_rate",
-                                     verbose=verbose,
-                                     )
+            zoning_system=msoa_zoning,
+            segmentation=pure_attractions_seg,
+            import_data=trip_rates.rename(columns=self.seg_rename),
+            zone_col="msoa_zone_id",
+            val_col="trip_rate",
+            verbose=verbose,
+        )
         # ## MULTIPLY TOGETHER ## #
-        return pop_dvec * trip_rates_dvec
+        return emp_dvec * trip_rates_dvec
 
-    def _split_by_tp_and_mode(self,
-                              pure_demand,
-                              verbose: bool = True
-                              ) -> nd.DVector:
+    @staticmethod
+    def _write_reports(dvec: nd.DVector,
+                       segment_totals_path: nd.PathLike,
+                       ca_sector_path: nd.PathLike,
+                       ie_sector_path: nd.PathLike,
+                       ) -> None:
         """
-        Applies time period and mode splits on the given HB productions
+        Writes segment, CA sector, and IE sector reports to disk
 
         Parameters
         ----------
-        pure_demand:
-            Dvector containing the HB productions to split.
+        dvec:
+            The Dvector to write the reports for
 
-        verbose:
-            Whether to print a progress bar while applying the splits or not
+        segment_totals_path:
+            Path to write the segment totals report to
+
+        ca_sector_path:
+            Path to write the CA sector report to
+
+        ie_sector_path:
+            Path to write the IE sector report to
 
         Returns
         -------
-        full_seg_demand:
-            The given hb_prods additionally split by tp and mode
+        None
         """
+        # Segment totals report
+        df = dvec.sum_zoning().to_df()
+        df.to_csv(segment_totals_path, index=False)
 
+        # Segment by CA Sector total reports
+        tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
+        df = dvec.translate_zoning(tfn_ca_sectors)
+        df.to_df().to_csv(ca_sector_path, index=False)
+
+        # Segment by IE Sector total reports
+        ie_sectors = nd.get_zoning_system('ie_sector')
+        df = dvec.translate_zoning(ie_sectors).to_df()
+        df.to_csv(ie_sector_path, index=False)
+
+    def _split_by_mode(self,
+                       bal_pure_attractions: nd.DVector,
+                       ) -> nd.DVector:
+        """
+        Applies mode splits to the given balanced pure attractions.
+
+        Parameters
+        ----------
+        bal_pure_attractions:
+            Dvector containing the balanced pure attractions to split.
+
+        Returns
+        -------
+        full_segmented_attractions:
+            A DVector containing pure_attractions split by mode.
+        """
         # Define the segmentation we want to use
-        m_tp_pure_demand_seg = nd.get_segmentation_level('notem_tfnat')
-        notem_seg = nd.get_segmentation_level('notem')
+        m_pure_attractions_seg = nd.get_segmentation_level('attr_m')
+        attr_full_seg = nd.get_segmentation_level('attr_full_seg')
+        msoa_zoning = nd.get_zoning_system('msoa')
 
-        # Read in mode time splits
-        mode_time_splits = pd.read_csv(self.mode_time_splits_path, usecols=self._target_cols['m_tp'])
+        # Create the mode-time splits DVector
+        mode_splits = pd.read_csv(
+            self.mode_controls_path,
+            usecols=self._target_cols['mode_split']
+        )
+        print(mode_splits)
+        mode_splits_dvec = nd.DVector(
+            zoning_system=msoa_zoning,
+            segmentation=m_pure_attractions_seg,
+            import_data=mode_splits.rename(columns=self.seg_rename),
+            val_col="split",
+            zone_col="msoa_zone_id",
+        )
+        print(mode_splits_dvec.to_df())
+        return bal_pure_attractions * mode_splits_dvec
 
-        # ## CREATE MODE_TIME SPLITS DVEC ## #
-        du.print_w_toggle("Creating mode time splits DVec...", verbose=verbose)
-
-        # Instantiate
-        mode_time_splits_dvec = nd.DVector(
-                                           zoning_system=None,
-                                           segmentation=m_tp_pure_demand_seg,
-                                           import_data=mode_time_splits,
-                                           val_col="split",
-                                           verbose=verbose,
-                                           )
-
-        du.print_w_toggle("Multiplying...", verbose=verbose)
-        full_seg_demand = core.multiply_and_aggregate_dvectors(
-                                                               pure_demand,
-                                                               mode_time_splits_dvec,
-                                                               notem_seg,
-                                                               )
-
-        return full_seg_demand
-
-    def create_output_paths(self,
-                            export_path: nd.PathLike,
-                            years: List[int],
-                            ):
+    def _create_output_paths(self,
+                             export_path: nd.PathLike,
+                             years: List[int],
+                             ) -> None:
         """
-        Creates output file names for pure demand, fully segmented and aggregated
-        HB production outputs for the list of years
+        Creates output file names for pure attractions, fully segmented and aggregated
+        HB attraction outputs for the list of years
 
         Parameters
         ----------
@@ -362,147 +434,134 @@ class HBAttractionModel:
             Location where the output files are to be created.
 
         years:
-            Contains the list of years for which the production model is run.
+            Contains the list of years for which the attraction model is run.
 
         Returns
         -------
-        pure_demand_out:
-            Dictionary containing file names for pure demand outputs with year as key
-
-        fully_segmented_out:
-            Dictionary containing file names for fully segmented outputs with year as key
-
-        aggregated_out:
-            Dictionary containing file names for aggregated outputs with year as key
+        None
         """
+        # Init
+        base_fname = self._base_output_fname
+        fname_parts = [self._trip_origin, self._zoning_system]
 
-        pure_demand_out = dict()
-        fully_segmented_out = dict()
-        aggregated_out = dict()
+        self.pure_attractions_paths = dict()
+        self.fully_segmented_paths = dict()
+        self.notem_segmented_paths = dict()
 
         for year in years:
-            pure_demand_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pkl" %
-                                                 (HBProductionModel._trip_origin,
-                                                  HBProductionModel._zoning_system,
-                                                  HBProductionModel._pure_demand,
-                                                  year
-                                                  )
-                                                 )
-            fully_segmented_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pkl" %
-                                                     (HBProductionModel._trip_origin,
-                                                      HBProductionModel._zoning_system,
-                                                      HBProductionModel._fully_segmented,
-                                                      year
-                                                      )
-                                                     )
-            aggregated_out[year] = os.path.join(export_path, "%s_%s_%s_%d_dvec.pkl" %
-                                                (HBProductionModel._trip_origin,
-                                                 HBProductionModel._zoning_system,
-                                                 HBProductionModel._aggregated,
-                                                 year
-                                                 )
-                                                )
+            # Pure attractions path
+            fname = base_fname % (*fname_parts, self._pure_attractions, year)
+            self.pure_attractions_paths[year] = os.path.join(export_path, fname)
 
-        return pure_demand_out, fully_segmented_out, aggregated_out
+            # Fully Segmented path
+            fname = base_fname % (*fname_parts, self._fully_segmented, year)
+            self.fully_segmented_paths[year] = os.path.join(export_path, fname)
 
-    def create_pure_dem_report_paths(self,
-                                     report_path: nd.PathLike,
-                                     years: List[int],
-                                     ):
+            # NoTEM Segmented path
+            fname = base_fname % (*fname_parts, self._notem_segmented, year)
+            self.notem_segmented_paths[year] = os.path.join(export_path, fname)
+
+    def _create_report_paths(self,
+                             report_path: nd.PathLike,
+                             years: List[int],
+                             report_name: str,
+                             ) -> Tuple[Dict[int, str], Dict[int, str], Dict[int, str]]:
         """
-        Creates output file names for pure demand
-        HB production reports for the list of years
+        Creates report file paths for each of years
 
         Parameters
         ----------
         report_path:
-            Location where the pure demand report files are to be created.
+           The home path (directory) where all the reports should go
 
         years:
-            Contains the list of years for which the production model is run.
+           A list of years to generate report paths for
+
+        report_name:
+            The name to use in the report filename. Filenames will be named
+            as: [report_name, year, report_type], joined with '_'.
 
         Returns
         -------
-        pure_demand_totals_out:
-            Dictionary containing file names for pure demand msoa level outputs with year as key
+        segment_total_paths:
+            A dictionary of paths where the key is the year and the value is
+            the path to the segment total reports for year.
 
-        pure_demand_sec_totals_out:
-            Dictionary containing file names for pure demand sector level outputs with year as key
+        ca_sector_total_paths:
+            A dictionary of paths where the key is the year and the value is
+            the path to the ca sector segment total reports for year.
 
-        pure_demand_ie_totals_out:
-            Dictionary containing file names for pure demand IE level outputs with year as key
+        ie_sector_total_paths:
+            A dictionary of paths where the key is the year and the value is
+            the path to the IE sector segment total reports for year.
         """
+        # Init
+        base_fname = self._base_report_fname
+        fname_parts = [self._trip_origin, report_name]
 
-        pure_demand_totals_out = dict()
-        pure_demand_sec_totals_out = dict()
-        pure_demand_ie_totals_out = dict()
+        segment_total_paths = dict()
+        ca_sector_paths = dict()
+        ie_sector_paths = dict()
 
         for year in years:
-            pure_demand_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" %
-                                                        (HBProductionModel._pure_demand,
-                                                         year, "totals"
-                                                         )
-                                                        )
-            pure_demand_sec_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" %
-                                                            (HBProductionModel._pure_demand,
-                                                             year, "sector_totals"
-                                                             )
-                                                            )
-            pure_demand_ie_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" %
-                                                           (HBProductionModel._pure_demand,
-                                                            year, "ie_totals"
-                                                            )
-                                                           )
+            # Segment totals
+            fname = base_fname % (*fname_parts, year, "segment_totals")
+            segment_total_paths[year] = os.path.join(report_path, fname)
 
-        return pure_demand_totals_out, pure_demand_sec_totals_out, pure_demand_ie_totals_out
+            # CA sector totals
+            fname = base_fname % (*fname_parts, year, "ca_sector_totals")
+            ca_sector_paths[year] = os.path.join(report_path, fname)
 
-    def create_fully_seg_report_paths(self,
-                                      report_path: nd.PathLike,
-                                      years: List[int],
-                                      ):
+            # IE sector totals
+            fname = base_fname % (*fname_parts, year, "ie_sector_totals")
+            ie_sector_paths[year] = os.path.join(report_path, fname)
+
+        return segment_total_paths, ca_sector_paths, ie_sector_paths
+
+    def _create_pure_attractions_report_paths(self,
+                                              report_path: nd.PathLike,
+                                              years: List[int],
+                                              ) -> None:
         """
-        Creates output file names for fully segmented
-        HB production reports for the list of years
+        Creates pure attractions report file paths for each of years
 
         Parameters
         ----------
         report_path:
-            Location where the fully segmented report files are to be created.
+            The home path (directory) where all the reports should go
 
         years:
-            Contains the list of years for which the production model is run.
+            A list of years to generate report paths for
 
         Returns
         -------
-        fully_seg_totals_out:
-            Dictionary containing file names for fully segmented msoa level outputs with year as key
-
-        fully_seg_sec_totals_out:
-            Dictionary containing file names for fully segmented sector level outputs with year as key
-
-        fully_seg_ie_totals_out:
-            Dictionary containing file names for fully segmented IE level outputs with year as key
+        None
         """
+        paths = self._create_report_paths(report_path, years, self._pure_attractions)
+        self.pd_report_segment_paths = paths[0]
+        self.pd_report_ca_sector_paths = paths[1]
+        self.pd_report_ie_sector_paths = paths[2]
 
-        fully_seg_totals_out = dict()
-        fully_seg_sec_totals_out = dict()
-        fully_seg_ie_totals_out = dict()
+    def _create_notem_segmented_report_paths(self,
+                                             report_path: nd.PathLike,
+                                             years: List[int],
+                                             ) -> None:
+        """
+        Creates fully_segmented report file paths for each of years
 
-        for year in years:
-            fully_seg_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" %
-                                                      (HBProductionModel._fully_segmented,
-                                                       year, "totals"
-                                                       )
-                                                      )
-            fully_seg_sec_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" %
-                                                          (HBProductionModel._fully_segmented,
-                                                           year, "sector_totals"
-                                                           )
-                                                          )
-            fully_seg_ie_totals_out[year] = os.path.join(report_path, "%s_%d_%s.csv" %
-                                                         (HBProductionModel._fully_segmented,
-                                                          year, "ie_totals"
-                                                          )
-                                                         )
+        Parameters
+        ----------
+        report_path:
+            The home path (directory) where all the reports should go
 
-        return fully_seg_totals_out, fully_seg_sec_totals_out, fully_seg_ie_totals_out
+        years:
+            A list of years to generate report paths for
+
+        Returns
+        -------
+        None
+        """
+        paths = self._create_report_paths(report_path, years, self._fully_segmented)
+        self.notem_report_segment_paths = paths[0]
+        self.notem_report_ca_sector_paths = paths[1]
+        self.notem_report_ie_sector_paths = paths[2]

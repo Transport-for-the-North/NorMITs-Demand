@@ -14,6 +14,7 @@ import tqdm
 import normits_demand as nd
 
 from normits_demand.models import notem_production_model as notem
+from normits_demand.models import notem_attraction_model as notem_attr
 
 # GLOBAL VARIABLES
 # I Drive Path locations
@@ -26,8 +27,17 @@ POPULATION_PATH = {
 TRIP_RATES_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_trip_rates_v1.9.csv"
 MODE_TIME_SPLITS_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_mode_time_split_v1.9.csv"
 constraint_PATH = POPULATION_PATH.copy()
-# export_path = r"C:\Data\Nirmal_Atkins"
-export_path = "E:/Productions"
+export_path = r"C:\Data\Nirmal_Atkins"
+# export_path = "E:/Productions"
+
+attraction_path = {
+    2018: r"I:\NorMITs Land Use\base_land_use\iter3b\outputs\land_use_2018_emp.csv"
+}
+pure_demand_production = r"C:\Data\Nirmal_Atkins\hb_msoa_pure_demand_2018_dvec.pkl"
+attr_trip_rates_path = r"I:\NorMITs Demand\NoTEM\sample_attraction_trip_rate.csv"
+attr_mode_splits_path = r"I:\NorMITs Demand\import\attractions\attraction_mode_split.csv"
+attr_constraint_path = attraction_path.copy()
+attr_export_path = r"C:\Data\Nirmal_Atkins\Attractions"
 
 
 def main():
@@ -40,13 +50,34 @@ def main():
     )
 
     hb_prod.run(
-        export_pure_demand=True,
+        export_pure_demand=False,
         export_fully_segmented=False,
-        export_notem_segmentation=True,
+        export_notem_segmentation=False,
+        export_reports=True,
+        verbose=True,
+    )
+
+
+def main_attr():
+    hb_attr = notem_attr.HBAttractionModel(
+        attraction_path,
+        pure_demand_production,
+        attr_trip_rates_path,
+        attr_mode_splits_path,
+        attr_constraint_path,
+        attr_export_path
+
+    )
+
+    hb_attr.run(
+        export_pure_attractions=False,
+        export_fully_segmented=False,
+        export_notem_segmentation=False,
         export_reports=True,
         verbose=True,
     )
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    main_attr()
