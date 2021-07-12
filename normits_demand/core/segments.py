@@ -172,16 +172,15 @@ class SegmentationLevel:
         multiply_dict = dict(zip(r, zip(s, o)))
 
         # Check that the output segmentation has been created properly
-        """
-        if not other.is_correct_naming(list(multiply_dict.keys())):
+        if not return_seg.is_correct_naming(list(multiply_dict.keys())):
             raise SegmentationError(
                 "Some segment names seem to have gone missing during"
                 "multiplication.\n"
                 "Expected %s segments.\n"
                 "Found %s segments."
-                % (len(other.segment_names), len(set(multiply_dict.keys())))
+                % (len(return_seg.segment_names), len(set(multiply_dict.keys())))
             )
-        """
+
         return multiply_dict, return_seg
 
     def _read_multiply_definitions(self) -> pd.DataFrame:

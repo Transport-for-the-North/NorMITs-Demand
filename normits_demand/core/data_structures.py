@@ -682,6 +682,7 @@ class DVector:
         # Do the translation per value
         dvec_data = dict()
         for key, value in self.data.items():
+            value = value.flatten()
             temp = np.broadcast_to(np.expand_dims(value, axis=1), translation.shape)
             temp = temp * translation
             dvec_data[key] = temp.sum(axis=0)

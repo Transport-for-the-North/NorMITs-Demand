@@ -27,7 +27,7 @@ POPULATION_PATH = {
 TRIP_RATES_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_trip_rates_v1.9.csv"
 MODE_TIME_SPLITS_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_mode_time_split_v1.9.csv"
 constraint_PATH = POPULATION_PATH.copy()
-export_path = r"C:\Data\Nirmal_Atkins"
+export_path = r"C:\Data\Nirmal_Atkins\ss"
 # export_path = "E:/Productions"
 
 attraction_path = {
@@ -70,9 +70,8 @@ def main_attr():
     )
 
     hb_attr.run(
-        export_pure_attractions=False,
-        export_fully_segmented=False,
-        export_notem_segmentation=False,
+        export_pure_attractions=True,
+        export_fully_segmented=True,
         export_reports=True,
         verbose=True,
     )
