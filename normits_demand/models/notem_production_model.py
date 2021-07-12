@@ -31,7 +31,7 @@ class HBProductionModel:
     # Constants
     _trip_origin = 'hb'
     _zoning_system = 'msoa'
-    _return_segmentation_name = 'hb_notem_full_tfn'
+    _return_segmentation_name = 'hb_notem_output'
 
     # Segmentation names
     _pure_demand = 'pure_demand'
