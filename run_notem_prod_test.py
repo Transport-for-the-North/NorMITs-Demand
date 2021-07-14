@@ -18,7 +18,7 @@ from normits_demand.models import notem_production_model as notem
 # GLOBAL VARIABLES
 # I Drive Path locations
 POPULATION_PATH = {
-    2018: r"I:\NorMITs Land Use\base_land_use\iter3b\outputs\land_use_output_tfn_msoa1.csv",
+    2018: r"I:\NorMITs Land Use\base_land_use\iter3d\outputs\land_use_output_tfn_msoa1.csv",
     # 2033: r"I:\NorMITs Land Use\future_land_use\iter3b\scenarios\NTEM\land_use_2033_pop.csv",
     # 2040: r"I:\NorMITs Land Use\future_land_use\iter3b\scenarios\NTEM\land_use_2040_pop.csv",
     # 2050: r"I:\NorMITs Land Use\future_land_use\iter3b\scenarios\NTEM\land_use_2050_pop.csv",
