@@ -328,6 +328,69 @@ class SegmentationLevel:
         translate_pairs = du.list_safe_remove(translate_pairs, [''])
         return [tuple(x.split(self._translate_separator)) for x in translate_pairs]
 
+    def rename_segment_cols(self,
+                            df: pd.DataFrame,
+                            naming_conversion: Dict[str, str],
+                            inplace: bool = False,
+                            ) -> pd.DataFrame:
+        """
+        Renames the columns of df to the correct segment names.
+
+        Similar to doing a rename on df, however there is added error
+        checking in this function to make sure the columns we're renaming
+        actually exist, and all the names we're renaming too are actually
+        valid segments for this segmentation.
+
+        Parameters
+        ----------
+        df:
+            The dataframe to convert
+
+        naming_conversion:
+            A dictionary mapping segment names in self.naming order into
+            df columns names. e.g.
+            {segment_name: column_name}
+
+        inplace:
+            Whether to return a new DataFrame.
+
+        Returns
+        -------
+        DataFrame or None:
+            DataFrame with the renamed columns or None if inplace=True.
+
+        Raises
+        ------
+        ValueError:
+            If any of keys of naming_conversion are not a valid segment_name.
+
+        ValueError:
+            If any of values of naming_conversion are not a valid column
+            name in df.
+        """
+        # ## VALIDATE ARGS ## #
+        # Check the keys are valid segments
+        for key in naming_conversion.keys():
+            if key not in self.naming_order:
+                raise ValueError(
+                    "Key '%s' in naming conversion is not a valid segment "
+                    "name for this segmentation. Expecting one of: %s"
+                    % (key, self.naming_order)
+                )
+
+        # Check that the values given are in df
+        for value in naming_conversion.values():
+            if value not in df:
+                raise ValueError(
+                    "No column named '%s' in the given dataframe."
+                    "Found columns: %s"
+                    % (value, list(df))
+                )
+
+        # Rename columns as needed
+        rename_dict = {v: k for k, v in naming_conversion.items()}
+        return df.rename(columns=rename_dict, inplace=inplace)
+
     def create_segment_col(self,
                            df: pd.DataFrame,
                            naming_conversion: Dict[str, str] = None,
@@ -375,27 +438,8 @@ class SegmentationLevel:
         if naming_conversion is None:
             naming_conversion = {x: x for x in self.naming_order}
 
-        # ## VALIDATE ARGS ## #
-        # Check the keys are valid segments
-        for key in naming_conversion.keys():
-            if key not in self.naming_order:
-                raise ValueError(
-                    "Key '%s' in naming conversion is not a valid segment "
-                    "name for this segmentation. Expecting one of: %s"
-                    % (key, self.naming_order)
-                )
-
-        # Check that the values given are in df
-        for value in naming_conversion.values():
-            if value not in df:
-                raise ValueError(
-                    "No column named '%s' in the given dataframe."
-                    "Found columns: %s"
-                    % (value, list(df))
-                )
-
         # Rename columns as needed
-        df = df.rename(columns={v: k for k, v in naming_conversion.items()})
+        df = self.rename_segment_cols(df, naming_conversion, inplace=False)
 
         # Generate the naming column, and return
         return pd_utils.str_join_cols(df, self.naming_order)

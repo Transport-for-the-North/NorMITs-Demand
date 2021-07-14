@@ -19,7 +19,7 @@ from normits_demand.models import notem_attraction_model as notem_attr
 # ## GLOBAL VARIABLES ## #
 # PRODUCTIONS
 POPULATION_PATH = {
-    2018: r"I:\NorMITs Land Use\base_land_use\iter3b\outputs\land_use_output_tfn_msoa1.csv",
+    2018: r"I:\NorMITs Land Use\base_land_use\iter3d\outputs\land_use_output_tfn_msoa1.csv",
     # 2033: r"I:\NorMITs Land Use\future_land_use\iter3b\scenarios\NTEM\land_use_2033_pop.csv",
     # 2040: r"I:\NorMITs Land Use\future_land_use\iter3b\scenarios\NTEM\land_use_2040_pop.csv",
     # 2050: r"I:\NorMITs Land Use\future_land_use\iter3b\scenarios\NTEM\land_use_2050_pop.csv",
@@ -28,15 +28,15 @@ TRIP_RATES_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_trip_rates_
 MODE_TIME_SPLITS_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_mode_time_split_v1.9.csv"
 constraint_PATH = POPULATION_PATH.copy()
 
-p_export_path = r"C:\Data\Nirmal_Atkins\ss"
-# p_export_path = "E:/Productions"
+# p_export_path = r"C:\Data\Nirmal_Atkins\ss"
+p_export_path = "E:/Productions"
 
 # ATTRACTIONS
 attraction_path = {
     2018: r"I:\NorMITs Land Use\base_land_use\iter3b\outputs\land_use_2018_emp.csv"
 }
-attr_trip_rates_path = r"I:\NorMITs Demand\NoTEM\sample_attraction_trip_rate.csv"
-attr_mode_splits_path = r"I:\NorMITs Demand\import\attractions\attraction_mode_split.csv"
+attr_trip_rates_path = r"I:\NorMITs Demand\import\NoTEM\Attractions\sample_attraction_trip_rate.csv"
+attr_mode_splits_path = r"I:\NorMITs Demand\import\NoTEM\Attractions\attraction_mode_split.csv"
 attr_constraint_path = attraction_path.copy()
 
 # pure_demand_production = r"C:\Data\Nirmal_Atkins\hb_msoa_pure_demand_2018_dvec.pkl"

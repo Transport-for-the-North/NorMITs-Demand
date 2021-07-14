@@ -210,8 +210,18 @@ class DVector:
         The internal function of _dataframe_to_dvec - for multiprocessing
         """
         if self.zoning_system is None:
-            # Can use 1 to 1 connection to speed this up
+            # Make sure only one value exists for each segment
             segments = df_chunk[self._segment_col].tolist()
+            segment_set = set(segments)
+            if len(segment_set) != len(segments):
+                raise ValueError(
+                    "The given DataFrame has one or more repeated values "
+                    "for some of the segments. Found %s segments, but only "
+                    "%s of them are unique."
+                    % (len(segments), len(segment_set))
+                )
+
+            # Can use 1 to 1 connection to speed this up
             vals = df_chunk[self._val_col].to_list()
             dvec_chunk = {s: v for s, v, in zip(segments, vals)}
 
@@ -229,6 +239,31 @@ class DVector:
 
                 # Get all available pop for this segment
                 seg_data = df_chunk[df_chunk[self._segment_col] == segment].copy()
+
+                # TODO(BT): There's a VERY slight chance that duplicate zones
+                #  could be split across processes. Need to add a check for
+                #  this on the calling function.
+                # Make sure there are no duplicate zones
+                seg_zones = seg_data[self._zone_col].tolist()
+                seg_zones_set = set(seg_zones)
+                if len(seg_zones_set) != len(seg_zones):
+                    raise ValueError(
+                        "The given DataFrame has one or more repeated values "
+                        "for some of the zones in segment %s. Found %s "
+                        "segments, but only %s of them are unique."
+                        % (segment, len(seg_zones), len(seg_zones_set))
+                    )
+
+                # Make sure zones that don't exist in this zoning system are found
+                zoning_system_zones = set(self.zoning_system.unique_zones)
+                extra_zones = seg_zones_set - zoning_system_zones
+                if len(extra_zones) > 0:
+                    raise ValueError(
+                        "Found zones that don't exist in %s zoning in the "
+                        "given DataFrame. For segment %s, the following "
+                        "zones do not belong to this zoning system:\n%s"
+                        % (self.zoning_system.name, segment, extra_zones)
+                    )
 
                 # Filter down to just data as values, and zoning system as the index
                 seg_data = seg_data.reindex(columns=[self._zone_col, self._val_col])
@@ -250,27 +285,44 @@ class DVector:
         """
         Converts a pandas dataframe into dvec.data internal structure
         """
+        # Init columns depending on if we have zones
+        required_cols = self.segmentation.naming_order + [self._val_col]
+        sort_cols = [self._segment_col]
+
+        # Add zoning if we need it
+        if self.zoning_system is not None:
+            required_cols += [self._zone_col]
+            sort_cols += [self._zone_col]
+
         # ## VALIDATE AND CONVERT THE GIVEN DATAFRAME ## #
         # Rename import_data columns to internal names
         rename_dict = {zone_col: self._zone_col, val_col: self._val_col}
         df = df.rename(columns=rename_dict)
 
-        # Add the segment column
+        # Rename the segment columns if needed
+        if segment_naming_conversion is not None:
+            df = self.segmentation.rename_segment_cols(df, segment_naming_conversion)
+
+        # Make sure we don't have any extra columns
+        extra_cols = set(list(df)) - set(required_cols)
+        if len(extra_cols) > 0:
+            raise ValueError(
+                "Found extra columns in the given DataFrame than needed. The "
+                "given DataFrame should only contain val_col, "
+                "segmentation_cols, and the zone_col (where applicable). "
+                "Found the following extra columns: %s"
+                % extra_cols
+            )
+
+        # Add the segment column - drop the individual cols
         df[self._segment_col] = self.segmentation.create_segment_col(
             df=df,
             naming_conversion=segment_naming_conversion
         )
+        df = df.drop(columns=self.segmentation.naming_order)
 
-        # Remove anything else that isn't needed
-        if self.zoning_system is None:
-            needed_cols = [self._segment_col, self._val_col]
-        else:
-            needed_cols = [self._segment_col, self._zone_col, self._val_col]
-        df = pd_utils.reindex_and_groupby(
-            df=df,
-            index_cols=needed_cols,
-            value_cols=[self._val_col],
-        )
+        # Sort by the segment columns for MP speed
+        df = df.sort_values(by=sort_cols)
 
         # ## MULTIPROCESSING SETUP ## #
         # If the dataframe is smaller than the chunk size, evenly split across cores
