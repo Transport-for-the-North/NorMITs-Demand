@@ -65,9 +65,9 @@ class HBAttractionModel:
                  constraint_paths: Dict[int, nd.PathLike],
                  export_path: str,
                  process_count: int = consts.PROCESS_COUNT
-                 ):
+                 ) -> HBAttractionModel:
         """
-                Validates and assigns the attributes needed for NoTEM Attraction model.
+        Validates and assigns the attributes needed for NoTEM Attraction model.
 
         Parameters
         ----------
@@ -171,7 +171,6 @@ class HBAttractionModel:
         -------
         None
         """
-
         # Initialise timing
         # TODO(BT): Properly integrate logging
         start_time = timing.current_milli_time()
@@ -187,10 +186,7 @@ class HBAttractionModel:
             emp_dvec = self._read_land_use_data(year, verbose=verbose)
 
             du.print_w_toggle("Applying trip rates...", verbose=verbose)
-            pure_attractions = self._generate_attractions(
-                emp_dvec=emp_dvec,
-                verbose=verbose,
-            )
+            pure_attractions = self._generate_attractions(emp_dvec, verbose=verbose)
 
             if export_pure_attractions:
                 du.print_w_toggle("Exporting pure attractions to disk...", verbose=verbose)
@@ -270,7 +266,7 @@ class HBAttractionModel:
         Returns
         -------
         emp_dvec:
-            Returns the employment Dvector
+            Returns employment as a Dvector
         """
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
@@ -297,7 +293,7 @@ class HBAttractionModel:
                               verbose: bool = True,
                               ) -> nd.DVector:
         """
-        Applies trip rate split on the given HB employment
+        Applies trip rates to the given HB employment
 
         Parameters
         ----------
@@ -313,7 +309,6 @@ class HBAttractionModel:
             Returns the product of employment and attraction trip rate Dvector
             ie., pure attraction
         """
-
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
         pure_attractions_seg = nd.get_segmentation_level('pure_attractions')
