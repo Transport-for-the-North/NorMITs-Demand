@@ -40,6 +40,9 @@ from normits_demand.utils import pandas_utils as pd_utils
 # ## CLASSES ## #
 class SegmentationLevel:
 
+    _weekday_time_periods = [1, 2, 3, 4]
+    _weekend_time_periods = [5, 6]
+
     _segmentation_import_fname = "segmentations"
     _unique_segments_csv_fname = "unique_segments.csv"
     _unique_segments_compress_fname = "unique_segments.pbz2"
@@ -742,6 +745,92 @@ class SegmentationLevel:
 
         # If we are here, then must be True
         return True
+
+    def get_grouped_weekday_segments(self) -> List[List[str]]:
+        """
+        Get a nested list of segments, grouped by weekday time periods
+
+        Returns
+        -------
+        nested_list:
+            A nested list, where each nested list is a group of
+            segments that only differ on the time period segment. All
+            time periods will be weekday only.
+
+        Raises
+        ------
+        ValueError:
+            If this segmentation does not have a time period segment
+        """
+        # Validate arguments
+        if 'tp' not in self.naming_order:
+            raise ValueError(
+                "SegmentationLevel does not have a time period segment (tp). "
+                "Cannot get segments by weekday without a time period"
+                "segment."
+            )
+
+        # Init
+        no_tp_naming = self.naming_order.copy()
+        no_tp_naming.remove('tp')
+
+        # Filter down to just the weekday time periods
+        segments = self.segments_and_names.copy()
+        segments = segments[segments['tp'].isin(self._weekday_time_periods)]
+
+        # Generate no tp segment name
+        segments['no_tp_name'] = pd_utils.str_join_cols(segments, no_tp_naming)
+
+        # Group names with a dict
+        temp_dict = collections.defaultdict(list)
+        for tp_name, no_tp_name in zip(segments['name'], segments['no_tp_name']):
+            temp_dict[no_tp_name].append(tp_name)
+
+        # Grab just the values for returning
+        return list(temp_dict.values())
+
+    def get_grouped_weekend_segments(self) -> List[List[str]]:
+        """
+        Get a nested list of segments, grouped by weekend time periods
+
+        Returns
+        -------
+        nested_list:
+            A nested list, where each nested list is a group of
+            segments that only differ on the time period segment. All
+            time periods will be weekend only.
+
+        Raises
+        ------
+        ValueError:
+            If this segmentation does not have a time period segment
+        """
+        # Validate arguments
+        if 'tp' not in self.naming_order:
+            raise ValueError(
+                "SegmentationLevel does not have a time period segment (tp). "
+                "Cannot get segments by weekday without a time period"
+                "segment."
+            )
+
+        # Init
+        no_tp_naming = self.naming_order.copy()
+        no_tp_naming.remove('tp')
+
+        # Filter down to just the weekday time periods
+        segments = self.segments_and_names.copy()
+        segments = segments[segments['tp'].isin(self._weekend_time_periods)]
+
+        # Generate no tp segment name
+        segments['no_tp_name'] = pd_utils.str_join_cols(segments, no_tp_naming)
+
+        # Group names with a dict
+        temp_dict = collections.defaultdict(list)
+        for tp_name, no_tp_name in zip(segments['name'], segments['no_tp_name']):
+            temp_dict[no_tp_name].append(tp_name)
+
+        # Grab just the values for returning
+        return list(temp_dict.values())
 
 
 class SegmentationError(nd.NormitsDemandError):

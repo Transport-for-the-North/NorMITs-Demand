@@ -93,19 +93,13 @@ def attractions_balance_test():
         a_dvec = a_dvec.aggregate(seg)
 
     # Split a_dvec into p_dvec segments
-    print("Prods:", p_dvec.segmentation.naming_order)
-    print("Attrs:", a_dvec.segmentation.naming_order)
     print("Attrs:", a_dvec.sum())
-
     a_dvec = a_dvec.split_segmentation_like(p_dvec)
-
-    print("Prods:", p_dvec.segmentation.naming_order)
-    print("Attrs:", a_dvec.segmentation.naming_order)
     print("Attrs:", a_dvec.sum())
 
     # Control across segments
-    a_dvec = a_dvec.balance_at_segments(p_dvec)
-
+    a_dvec = a_dvec.balance_at_segments(p_dvec, split_weekday_weekend=True)
+    print()
     print("Prods:", p_dvec.sum())
     print("Attrs:", a_dvec.sum())
 

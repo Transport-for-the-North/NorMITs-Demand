@@ -18,8 +18,6 @@ import os
 import math
 import pickle
 import pathlib
-import operator
-import functools
 import itertools
 
 from typing import Any
@@ -52,6 +50,7 @@ class DVector:
     _segment_col = 'segment'
     _val_col = 'val'
     _chunk_size = 100000
+    _zero_infill = 1e-10
 
     _dvec_suffix = '_dvec%s' % consts.COMPRESSION_SUFFIX
 
@@ -886,7 +885,10 @@ class DVector:
             verbose=self.verbose,
         )
 
-    def balance_at_segments(self, other) -> DVector:
+    def balance_at_segments(self,
+                            other: DVector,
+                            split_weekday_weekend: bool = False,
+                            ) -> DVector:
         """
         Balance segment totals to other, ignoring zoning splits.
 
@@ -896,12 +898,106 @@ class DVector:
 
         Parameters
         ----------
-        other
+        other:
+            The DVector to control this one to. Must have the same segmentation
+            as this DVector
+
+        split_weekday_weekend:
+            Whether to control the time periods as weekday and weekend splits
+            instead of each individual time period. If set to True,
+            each DVector must be at a segmentation with a 'tp' segment.
 
         Returns
         -------
+        controlled_dvector:
+            A copy of this DVector, controlled to other. The total of each
+            segment should be equal across self and other.
 
+        Raises
+        ------
+        ValueError:
+            If the given parameters are not the correct types.
+
+        ValueError:
+            If self and other do not have the same segmentation.
         """
+        # Init
+        infill = self._zero_infill
+
+        # Validate inputs
+        if not isinstance(other, DVector):
+            raise ValueError(
+                "other is not the correct type. "
+                "Expected DVector, got %s"
+                % type(other)
+            )
+
+        if self.segmentation.name != other.segmentation.name:
+            raise ValueError(
+                "Segmentation of both DVectors does not match! "
+                "Perhaps you need to call "
+                "self.split_segmentation_like(other) to bring them into "
+                "alignment?\n"
+                "self segmentation: %s\n"
+                "other segmentation: %s"
+                % (self.segmentation.name, other.segmentation.name)
+            )
+
+        # Loop through each segment and control
+        dvec_data = dict.fromkeys(self.segmentation.segment_names)
+
+        if split_weekday_weekend:
+            # Get the grouped segment lists
+            wk_day_segs = self.segmentation.get_grouped_weekday_segments()
+            wk_end_segs = self.segmentation.get_grouped_weekend_segments()
+
+            # Control by weekday and weekend separately
+            for split_wk_segs in [wk_day_segs, wk_end_segs]:
+                for segment_group in split_wk_segs:
+                    # Get data and infill zeros
+                    self_data_lst = list()
+                    other_data_lst = list()
+                    for segment in segment_group:
+                        # Get data
+                        self_data = self.data[segment]
+                        other_data = other.data[segment]
+
+                        # Infill zeros
+                        self_data = np.where(self_data <= 0, infill, self_data)
+                        other_data = np.where(other_data <= 0, infill, other_data)
+
+                        # Append
+                        self_data_lst.append(self_data)
+                        other_data_lst.append(other_data)
+
+                    # Get the control factor
+                    factor = np.sum(other_data_lst) / np.sum(self_data_lst)
+
+                    # Balance each segment
+                    for segment, self_data in zip(segment_group, self_data_lst):
+                        dvec_data[segment] = self_data * factor
+
+        else:
+            # Control all segments as normal
+            for segment in self.segmentation.segment_names:
+                # Get data
+                self_data = self.data[segment]
+                other_data = other.data[segment]
+
+                # Infill zeros
+                self_data = np.where(self_data <= 0, infill, self_data)
+                other_data = np.where(other_data <= 0, infill, other_data)
+
+                # Balance
+                dvec_data[segment] = self_data * (np.sum(other_data) / np.sum(self_data))
+
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=other.segmentation,
+            import_data=dvec_data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
 
     def sum_zoning(self) -> DVector:
         """
