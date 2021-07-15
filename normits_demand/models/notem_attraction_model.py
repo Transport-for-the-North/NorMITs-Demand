@@ -134,7 +134,6 @@ class HBAttractionModel:
             export_reports: bool = False,
             verbose: bool = False,
             ) -> None:
-
         """
         Runs the HB Attraction model.
 
@@ -212,12 +211,14 @@ class HBAttractionModel:
                     ie_sector_path=self.pd_report_ie_sector_paths[year],
                 )
 
-            # TODO: Balance pure attractions
-            bal_pure_attractions = pure_attractions  # Function to balance pure attractions with pure demand
-
             # ## SPLIT PURE ATTRACTIONS BY MODE ## #
             du.print_w_toggle("Splitting by mode...", verbose=verbose)
-            fully_segmented_attr = self._split_by_mode(bal_pure_attractions)
+            mode_split = self._split_by_mode(pure_attractions)
+
+            self._attractions_total_check(
+                pure_attractions=pure_attractions,
+                fully_segmented_attractions=mode_split,
+            )
 
             # Output attractions before any aggregation
             if export_fully_segmented:
@@ -225,23 +226,21 @@ class HBAttractionModel:
                     "Exporting fully segmented attractions to disk...",
                     verbose=verbose,
                 )
-                fully_segmented_attr.to_pickle(self.fully_segmented_paths[year])
+                mode_split.to_pickle(self.fully_segmented_paths[year])
 
-            self._attractions_total_check(
-                pure_attractions=pure_attractions,
-                fully_segmented_attractions=fully_segmented_attr,
-            )
+            # TODO: Balance pure attractions - report on the balanced
+            controlled = pure_attractions  # Function to balance pure attractions with pure demand
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting fully segmented reports disk...\n"
+                    "Exporting controlled attractions reports disk...\n"
                     "Total Attractions for year %d: %.4f"
-                    % (year, fully_segmented_attr.sum()),
+                    % (year, controlled.sum()),
                     verbose=verbose
                 )
 
                 self._write_reports(
-                    dvec=fully_segmented_attr,
+                    dvec=controlled,
                     segment_totals_path=self.full_report_segment_paths[year],
                     ca_sector_path=self.full_report_ca_sector_paths[year],
                     ie_sector_path=self.full_report_ie_sector_paths[year],
@@ -391,15 +390,15 @@ class HBAttractionModel:
         df.to_csv(ie_sector_path, index=False)
 
     def _split_by_mode(self,
-                       bal_pure_attractions: nd.DVector,
+                       attractions: nd.DVector,
                        ) -> nd.DVector:
         """
         Applies mode splits to the given balanced pure attractions.
 
         Parameters
         ----------
-        bal_pure_attractions:
-            Dvector containing the balanced pure attractions to split.
+        attractions:
+            Dvector containing the attractions to split.
 
         Returns
         -------
@@ -424,7 +423,7 @@ class HBAttractionModel:
             zone_col="msoa_zone_id",
         )
 
-        return bal_pure_attractions * mode_splits_dvec
+        return attractions * mode_splits_dvec
 
     def _attractions_total_check(self,
                                  pure_attractions: nd.DVector,
@@ -441,13 +440,13 @@ class HBAttractionModel:
 
         fully_segmented_attractions:
             Dvector containing attractions after mode split.
-
         """
         if round(pure_attractions.sum()) != round(fully_segmented_attractions.sum()):
             raise ValueError(
-                "The attraction totals before and after mode split are not same"
-                "Expected %f but got %f"
-                % (round(pure_attractions.sum()), round(fully_segmented_attractions.sum()))
+                "The attraction totals before and after mode split are not same.\n"
+                "Expected %f\n"
+                "Got %f"
+                % (pure_attractions.sum(), fully_segmented_attractions.sum())
             )
 
     def _create_output_paths(self,

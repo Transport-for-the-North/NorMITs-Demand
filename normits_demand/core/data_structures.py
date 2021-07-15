@@ -157,7 +157,7 @@ class DVector:
         multiply_dict, return_segmentation = self.segmentation * other.segmentation
 
         # Build the dvec data here with multiplication
-        dvec_data = dict()
+        dvec_data = dict.fromkeys(multiply_dict.keys())
         for final_seg, (self_key, other_key) in multiply_dict.items():
             dvec_data[final_seg] = self.data[self_key] * other.data[other_key]
 
@@ -272,7 +272,7 @@ class DVector:
 
                 # Infill any missing zones as 0
                 seg_data = seg_data.reindex(self.zoning_system.unique_zones, fill_value=0)
-                dvec_chunk[segment] = seg_data.values
+                dvec_chunk[segment] = seg_data.values.flatten()
 
         return dvec_chunk
 
@@ -571,7 +571,6 @@ class DVector:
         # Aggregate!
         # TODO(BT): Add optional multiprocessing if aggregation_dict is big enough
         dvec_data = dict()
-        from tqdm import tqdm
         for out_seg_name, in_seg_names in aggregation_dict.items():
             in_lst = [self.data[x].flatten() for x in in_seg_names]
             dvec_data[out_seg_name] = np.sum(in_lst, axis=0)
