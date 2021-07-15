@@ -45,7 +45,7 @@ class HBAttractionModel:
     }
 
     # Define segment renames needed
-    seg_rename = {
+    _seg_rename = {
         'employment_cat': 'e_cat',
         '2018': 'emp',
         'area_type': 'tfn_at',
@@ -71,26 +71,31 @@ class HBAttractionModel:
 
         Parameters
         ----------
+        land_use_paths:
+            Dictionary containing different years and the corresponding
+            employment path as key and value respectively.
 
-        land_use_paths: Dictionary containing different years and the corresponding employment path as key and value
-            respectively
+        pure_production_demand:
+            Contains path to the pickled pure production demand which
+            is used for balancing attraction.
 
-        pure_production_demand: Contains path to the pickled pure production demand which is used for balancing
-            attraction
+        trip_attraction_rates_path:
+            Contains path to attraction trip rate.
 
-        trip_attraction_rates_path: Contains path to attraction trip rate
+        mode_controls_path:
+            Contains path to mode split.
 
-        mode_controls_path: Contains path to mode split
+        constraint_paths:
+            Dictionary containing different years and the corresponding
+            constraint path as key and value respectively.
 
-        constraint_paths: Dictionary containing different years and the corresponding constraint path as key and value
-            respectively
-
-        export_path: Path to export attraction outputs
+        export_path:
+            Path to export attraction outputs.
 
         process_count:
-        The number of processes to create in the Pool. Typically this
-        should not exceed the number of cores available.
-        Defaults to consts.PROCESS_COUNT.
+            The number of processes to create in the Pool. Typically this
+            should not exceed the number of cores available.
+            Defaults to consts.PROCESS_COUNT.
 
         """
         # TODO(BT): Document attributes (partially done by NK)
@@ -109,7 +114,7 @@ class HBAttractionModel:
         self.mode_controls_path = mode_controls_path
         self.constraint_paths = constraint_paths
         self.export_path = export_path
-        self.report_path = os.path.join(export_path, "Reports_attr")
+        self.report_path = os.path.join(export_path, "Reports")
         self.process_count = process_count
         self.years = list(self.land_use_paths.keys())
 
@@ -222,6 +227,11 @@ class HBAttractionModel:
                 )
                 fully_segmented_attr.to_pickle(self.fully_segmented_paths[year])
 
+            self._attractions_total_check(
+                pure_attractions=pure_attractions,
+                fully_segmented_attractions=fully_segmented_attr,
+            )
+
             if export_reports:
                 du.print_w_toggle(
                     "Exporting fully segmented reports disk...\n"
@@ -253,7 +263,7 @@ class HBAttractionModel:
                             verbose: bool,
                             ) -> nd.DVector:
         """
-        Reads in the land use data for year and converts it to Dvector
+        Reads in the land use data for year and converts it to Dvector.
 
         Parameters
         ----------
@@ -261,7 +271,7 @@ class HBAttractionModel:
             The year to get attraction data for.
 
         verbose:
-            Passed into the DVector
+            Passed into the DVector.
 
         Returns
         -------
@@ -282,7 +292,7 @@ class HBAttractionModel:
         return nd.DVector(
             zoning_system=msoa_zoning,
             segmentation=emp_seg,
-            import_data=emp.rename(columns=self.seg_rename),
+            import_data=emp.rename(columns=self._seg_rename),
             zone_col="msoa_zone_id",
             val_col="emp",
             verbose=verbose,
@@ -293,7 +303,7 @@ class HBAttractionModel:
                               verbose: bool = True,
                               ) -> nd.DVector:
         """
-        Applies trip rates to the given HB employment
+        Applies trip rates to the given HB employment.
 
         Parameters
         ----------
@@ -301,16 +311,17 @@ class HBAttractionModel:
             Dvector containing the employment.
 
         verbose:
-            Whether to print a progress bar while applying the splits or not
+            Whether to print a progress bar while applying the splits or not.
 
         Returns
         -------
         pure_attraction:
-            Returns the product of employment and attraction trip rate Dvector
+            Returns the product of employment and attraction trip rate Dvector.
             ie., pure attraction
         """
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
+        pure_attractions_ecat_seg = nd.get_segmentation_level('pure_attractions_ecat')
         pure_attractions_seg = nd.get_segmentation_level('pure_attractions')
 
         # Reading trip rates
@@ -323,15 +334,19 @@ class HBAttractionModel:
         # Instantiate
         trip_rates_dvec = nd.DVector(
             zoning_system=msoa_zoning,
-            segmentation=pure_attractions_seg,
-            import_data=trip_rates.rename(columns=self.seg_rename),
+            segmentation=pure_attractions_ecat_seg,
+            import_data=trip_rates.rename(columns=self._seg_rename),
             zone_col="msoa_zone_id",
             val_col="trip_rate",
             verbose=verbose,
         )
 
         # ## MULTIPLY TOGETHER ## #
-        return emp_dvec * trip_rates_dvec
+        pure_attractions_ecat = emp_dvec * trip_rates_dvec
+
+        pure_attractions = pure_attractions_ecat.aggregate(pure_attractions_seg)
+
+        return pure_attractions
 
     # TODO: module _write_reports is common for both production and attraction models, so it can be grouped elsewhere
     @staticmethod
@@ -341,21 +356,21 @@ class HBAttractionModel:
                        ie_sector_path: nd.PathLike,
                        ) -> None:
         """
-        Writes segment, CA sector, and IE sector reports to disk
+        Writes segment, CA sector, and IE sector reports to disk.
 
         Parameters
         ----------
         dvec:
-            The Dvector to write the reports for
+            The Dvector to write the reports for.
 
         segment_totals_path:
-            Path to write the segment totals report to
+            Path to write the segment totals report to.
 
         ca_sector_path:
-            Path to write the CA sector report to
+            Path to write the CA sector report to.
 
         ie_sector_path:
-            Path to write the IE sector report to
+            Path to write the IE sector report to.
 
         Returns
         -------
@@ -392,7 +407,7 @@ class HBAttractionModel:
             A DVector containing pure_attractions split by mode.
         """
         # Define the segmentation we want to use
-        m_pure_attractions_seg = nd.get_segmentation_level('attr_m')
+        m_pure_attractions_seg = nd.get_segmentation_level('p_m')
         msoa_zoning = nd.get_zoning_system('msoa')
 
         # Create the mode-time splits DVector
@@ -404,12 +419,36 @@ class HBAttractionModel:
         mode_splits_dvec = nd.DVector(
             zoning_system=msoa_zoning,
             segmentation=m_pure_attractions_seg,
-            import_data=mode_splits.rename(columns=self.seg_rename),
+            import_data=mode_splits.rename(columns=self._seg_rename),
             val_col="split",
             zone_col="msoa_zone_id",
         )
 
         return bal_pure_attractions * mode_splits_dvec
+
+    def _attractions_total_check(self,
+                                 pure_attractions: nd.DVector,
+                                 fully_segmented_attractions: nd.DVector,
+                                 ) -> None:
+        """
+        Checks if the attraction totals are matching before and
+        after mode split and returns error message if they are unequal.
+
+        Parameters
+        -----------
+        pure_attractions:
+            Dvector containing pure attractions.
+
+        fully_segmented_attractions:
+            Dvector containing attractions after mode split.
+
+        """
+        if round(pure_attractions.sum()) != round(fully_segmented_attractions.sum()):
+            raise ValueError(
+                "The attraction totals before and after mode split are not same"
+                "Expected %f but got %f"
+                % (round(pure_attractions.sum()), round(fully_segmented_attractions.sum()))
+            )
 
     def _create_output_paths(self,
                              export_path: nd.PathLike,
