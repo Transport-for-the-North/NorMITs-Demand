@@ -31,7 +31,7 @@ class HBProductionModel:
     # Constants
     _trip_origin = 'hb'
     _zoning_system = 'msoa'
-    _return_segmentation_name = 'hb_notem_full_tfn'
+    _return_segmentation_name = 'hb_notem_output'
 
     # Segmentation names
     _pure_demand = 'pure_demand'
@@ -211,7 +211,7 @@ class HBProductionModel:
                     "Exporting notem segmented demand to disk...",
                     verbose=verbose
                 )
-                productions.to_pickle(self.pure_demand_paths[year])
+                productions.to_pickle(self.notem_segmented_paths[year])
 
             if export_reports:
                 du.print_w_toggle(

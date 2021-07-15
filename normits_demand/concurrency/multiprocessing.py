@@ -453,6 +453,9 @@ def multiprocess(fn: Callable,
     # If the process count is 0, run as a normal for loop
     if process_count == 0:
         if pbar_kwargs is not None:
+            # If no total given, we can add one!
+            if 'total' not in pbar_kwargs or pbar_kwargs['total'] == 0:
+                pbar_kwargs['total'] = len(kwargs)
             return [fn(*a, **k) for a, k in tqdm.tqdm(zip(args, kwargs), **pbar_kwargs)]
         else:
             return [fn(*a, **k) for a, k in zip(args, kwargs)]
