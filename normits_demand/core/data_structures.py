@@ -18,6 +18,8 @@ import os
 import math
 import pickle
 import pathlib
+import operator
+import functools
 import itertools
 
 from typing import Any
@@ -816,6 +818,90 @@ class DVector:
             process_count=self.process_count,
             verbose=self.verbose,
         )
+
+    def split_segmentation_like(self,
+                                other: DVector,
+                                ) -> DVector:
+        """
+        Splits this DVector segmentation into other.segmentation
+
+        Using other to derive the splitting factors, this DVector is split
+        into the same segmentation as other.segmentation. Splits are derived
+        as an average across all zones for each segment in other, resulting in
+        a single splitting factor for each segment. The splitting factor is
+        then applied to this DVector, equally across all zones.
+
+        Parameters
+        ----------
+        other:
+            The DVector to use to determine the segmentation to split in to,
+            as well as the weights to use for the splits.
+
+        Returns
+        -------
+        new_dvector:
+            A new DVector containing the same total as values, but split
+            into other.segmentation segmentation.
+
+        Raises
+        ------
+        ValueError:
+            If the given parameters are not the correct types
+
+        SegmentationError:
+            If the segmentation cannot be split. This DVector must be
+            in a segmentation that is a subset of other.segmentation.
+        """
+        # Validate inputs
+        if not isinstance(other, DVector):
+            raise ValueError(
+                "other is not the correct type. "
+                "Expected DVector, got %s"
+                % type(other)
+            )
+
+        # Get the dictionary defining how to split
+        split_dict = self.segmentation.split(other.segmentation)
+
+        # Split!
+        # TODO(BT): Add optional multiprocessing if split_dict is big enough
+        dvec_data = dict.fromkeys(other.segmentation.segment_names)
+        for in_seg_name, out_seg_names in split_dict.items():
+            # Calculate the splitting factors
+            other_segs = [np.mean(other.data[s]) for s in out_seg_names]
+            split_factors = other_segs / np.sum(other_segs)
+
+            # Get the original value
+            self_seg = self.data[in_seg_name]
+
+            # Split
+            for name, factor in zip(out_seg_names, split_factors):
+                dvec_data[name] = self_seg * factor
+
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=other.segmentation,
+            import_data=dvec_data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
+
+    def balance_at_segments(self, other) -> DVector:
+        """
+        Balance segment totals to other, ignoring zoning splits.
+
+        Essentially does
+        self[segment] *= other[segment].sum() / self[segment].sum()
+        for all segments.
+
+        Parameters
+        ----------
+        other
+
+        Returns
+        -------
+
+        """
 
     def sum_zoning(self) -> DVector:
         """

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 # Builtins
 import os
+import itertools
 import collections
 
 from typing import Any
@@ -24,6 +25,7 @@ from typing import Tuple
 
 # Third Party
 import pandas as pd
+import numpy as np
 
 # Local Imports
 import normits_demand as nd
@@ -631,6 +633,86 @@ class SegmentationLevel:
             )
 
         return agg_dict
+
+    def split(self, other: SegmentationLevel) -> Dict[str, List[str]]:
+        """
+        Generates a dict defining how to split this segmentation into other.
+
+        Splits the tfn_tt segment into it's components and aggregates up to
+        out_segmentation. The DVector needs to be using a segmentation that
+        contains tfn_tt and p in order for this to work.
+
+        Parameters
+        ----------
+        other:
+            The segmentation level to split into.
+
+        Returns
+        -------
+        split_dict:
+            A dictionary defining how to split into other segmentation.
+            Keys will be names of this segmentation, and values will be a
+            list of the segments in other that it breaks into.
+
+        Raises
+        ------
+        ValueError:
+            If the given parameters are not the correct types
+
+        SegmentationError:
+            If the segmentation cannot be split. This DVector must be
+            in a segmentation that is a subset of other.segmentation.
+        """
+        # Validate inputs
+        if not isinstance(other, SegmentationLevel):
+            raise ValueError(
+                "other is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(other)
+            )
+
+        # ## MAKE SURE SEGMENTATION IS SUBSET ## #
+        # Format self segmentation for comparison
+        self_cols = self.naming_order
+        self_segs = self.segments
+        self_segs = self_segs.sort_values(self_cols)
+
+        # Format self segmentation for comparison
+        other_segs = other.segments
+        other_segs = other_segs.reindex(columns=self_cols).drop_duplicates()
+        other_segs = other_segs.sort_values(self_cols)
+
+        # Check if self is subset of other
+        if not np.all(self_segs.values == other_segs.values):
+            raise nd.SegmentationError(
+                "Cannot split this Segmentation. "
+                "%s is not a subset segmentation of %s"
+                % (self.name, other.name)
+            )
+
+        # ## GENERATE THE SPLITTING DICT ## #
+        # Generate the segment names
+        split_df = other.segments.copy()
+        split_df['self_name'] = self.create_segment_col(split_df)
+        split_df['other_name'] = other.create_segment_col(split_df)
+
+        # Convert into the splitting dict
+        split_dict = collections.defaultdict(list)
+        for s, o in zip(split_df['self_name'], split_df['other_name']):
+            split_dict[s].append(o)
+
+        # Check that the output segmentation has been created properly
+        other_segments = itertools.chain.from_iterable(split_dict.values())
+        if not other.is_correct_naming(other_segments):
+            raise SegmentationError(
+                "Some segment names seem to have gone missing during"
+                "aggregation.\n"
+                "Expected %s segments.\n"
+                "Found %s segments."
+                % (len(other.segment_names), len(set(other_segments)))
+            )
+
+        return split_dict
 
     def is_correct_naming(self, lst: List[str]) -> bool:
         """
