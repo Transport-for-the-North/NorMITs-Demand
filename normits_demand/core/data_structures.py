@@ -1214,19 +1214,20 @@ def multiply_and_aggregate_dvectors(a: DVector,
     return a.multiply_and_aggregate(other=b, out_segmentation=out_segmentation)
 
 
-def read_compressed_dvector(path: nd.PathLike) -> DVector:
+def read_compressed_dvector(path: nd.PathLike) -> Union[DVector, Any]:
     """
-    Reads the dvector at path, decompresses, and returns the object.
+    Load pickled and compressed DVector object (or any object) from file.
 
     Parameters
     ----------
     path:
-        The full path to the object to read
+        The full path to the object to read.
 
     Returns
     -------
     object:
-        The object that was read in from disk.
+        The object that was read in from disk. Will be the
+        same type as object stored in file.
     """
     # File validation
     file_ops.check_file_exists(path)
@@ -1234,7 +1235,7 @@ def read_compressed_dvector(path: nd.PathLike) -> DVector:
     return compress.read_in(path)
 
 
-def from_pickle(path: nd.PathLike) -> DVector:
+def from_pickle(path: nd.PathLike) -> Union[DVector, Any]:
     """
     Load pickled DVector object (or any object) from file.
 
@@ -1246,7 +1247,7 @@ def from_pickle(path: nd.PathLike) -> DVector:
     Returns
     -------
     unpickled:
-        Same type as object stored in file
+        Same type as object stored in file.
     """
     # TODO(BT): VALIDATE PATH
     with open(path, 'rb') as f:

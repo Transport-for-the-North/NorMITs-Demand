@@ -560,18 +560,33 @@ class SegmentationLevel:
 
         return agg_dict
 
-    def aggregate_soc_ns_by_tp(self,
-                               other: SegmentationLevel,
-                               ) -> Dict[str, List[str]]:
+    def aggregate_soc_ns_by_p(self,
+                              other: SegmentationLevel,
+                              ) -> Dict[str, List[str]]:
         """
-        TODO(BT): WRite aggregate_soc_ns_by_tp() docs
+        Returns an aggregation dictionary, defining how to aggregate soc/ns by
+        purpose.
+
+        Soc and Ns are only relevant for certain purposes when distributing
+        demand.
+        Purposes 1, 2, 12 should all have soc segments, but no ns segments.
+        Purposes 3-8, 13-18 should all have ns segments, but no soc segments.
+        Where full soc/ns segments exist for all purposes, this function
+        aggregates the unneeded segmentation away.
+
         Parameters
         ----------
-        other
+        other:
+            The SegmentationLevel to aggregate to.
 
         Returns
         -------
-
+        aggregation_dict:
+            A dictionary defining how to aggregate self into other.
+            Will be in the form of {out_seg: [in_seg]}.
+            Where out seg is a segment name of out_segmentation, and in_seg
+            is a list of segment names from self that should be summed to
+            generate out_seg.
         """
         # Init
         error_message = (
@@ -994,23 +1009,21 @@ def _get_valid_segments(name: str) -> pd.DataFrame:
 
 
 def get_segmentation_level(name: str) -> SegmentationLevel:
-    # TODO(BT): Write docs!
-    # TODO(BT): Add some validation on the segmentation name
-    # TODO(BT): Instantiate import drive for these on module import!
-    # TODO(BT): Add some caching to this function!
     """
-    Creates the SegmentationLevel object and the returns the corresponding parameters
+    Creates a SegmentationLevel for segmentation with name.
 
     Parameters
     ----------
     name:
-        Name used for SegmentationLevel object.
+        The name of the segmentation to get a SegmentationLevel for.
 
     Returns
     -------
-    The SegmentationLevel parameters corresponding to the name provided.
+    segmentation_level:
+        A SegmentationLevel object for segmentation with name
     """
-
+    # TODO(BT): Add some validation on the segmentation name
+    # TODO(BT): Add some caching to this function!
     valid_segments, naming_order = _get_valid_segments(name)
 
     # Create the SegmentationLevel object and return

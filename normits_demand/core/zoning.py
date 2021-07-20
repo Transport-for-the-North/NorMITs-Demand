@@ -254,23 +254,21 @@ def _get_unique_zones(name: str) -> np.ndarray:
 
 
 def get_zoning_system(name: str) -> ZoningSystem:
-    # TODO(BT): Write docs!
-    # TODO(BT): Add some validation on the zone name
-    # TODO(BT): Instantiate import drive for these on module import!
-    # TODO(BT): Add some caching to this function!
     """
-    Creates the ZoningSystem object and the returns the corresponding parameters
+    Creates a ZoningSystem for zoning with name.
 
     Parameters
     ----------
     name:
-        Name used for ZoningSystem object.
+        The name of the zoning system to get a ZoningSystem object for.
 
     Returns
     -------
-    The ZoningSystem parameters corresponding to the name provided.
+    zoning_system:
+        A ZoningSystem object for zoning system with name
     """
-
+    # TODO(BT): Add some validation on the zone name
+    # TODO(BT): Add some caching to this function!
     # Create the ZoningSystem object and return
     return ZoningSystem(
         name=name,
