@@ -9,6 +9,7 @@ from __future__ import annotations
 
 # Builtins
 import os
+import math
 
 from typing import Dict
 from typing import List
@@ -37,11 +38,27 @@ class HBAttractionModel:
     _fully_segmented = 'fully_segmented'
 
     # Define wanted columns
-    _target_cols = {
+    _target_col_dtypes = {
         # TODO: Check with BT on how to deal with year in column name
-        'land_use': ['msoa_zone_id', 'employment_cat', 'soc', '2018'],
-        'trip_rate': ['msoa_zone_id', 'employment_cat', 'purpose', 'soc', 'trip_rate'],
-        'mode_split': ['msoa_zone_id', 'p', 'm', 'mode_share'],
+        'land_use': {
+            'msoa_zone_id': str,
+            'employment_cat': str,
+            'soc': int,
+            '2018': float
+        },
+        'trip_rate': {
+            'msoa_zone_id': str,
+            'employment_cat': str,
+            'purpose': int,
+            'soc': int,
+            'trip_rate': float
+        },
+        'mode_split': {
+            'msoa_zone_id': str,
+            'p': int,
+            'm': int,
+            'mode_share': float
+        },
     }
 
     # Define segment renames needed
@@ -191,8 +208,8 @@ class HBAttractionModel:
 
             du.print_w_toggle("Applying trip rates...", verbose=verbose)
             pure_attractions = self._generate_attractions(emp_dvec, verbose=verbose)
-            pu=pure_attractions.to_df()
-            pu.to_csv(r"C:\Data\Nirmal_Atkins\pure_attractions_new.csv",index=False)
+            # pu=pure_attractions.to_df()
+            # pu.to_csv(r"C:\Data\Nirmal_Atkins\pure_attractions_new.csv",index=False)
 
             if export_pure_attractions:
                 du.print_w_toggle("Exporting pure attractions to disk...", verbose=verbose)
@@ -289,7 +306,8 @@ class HBAttractionModel:
         # Read the land use data corresponding to the year
         emp = du.safe_read_csv(
             file_path=self.land_use_paths[year],
-            usecols=self._target_cols['land_use']
+            usecols=self._target_col_dtypes['land_use'].keys(),
+            dtype=self._target_col_dtypes['land_use'],
         )
 
         # Instantiate
@@ -330,7 +348,11 @@ class HBAttractionModel:
 
         # Reading trip rates
         du.print_w_toggle("Reading in files...", verbose=verbose)
-        trip_rates = du.safe_read_csv(self.trip_att_rates_path, usecols=self._target_cols['trip_rate'])
+        trip_rates = du.safe_read_csv(
+            self.trip_att_rates_path,
+            usecols=self._target_col_dtypes['trip_rate'].keys(),
+            dtype=self._target_col_dtypes['trip_rate'],
+        )
 
         # ## CREATE THE TRIP RATES DVEC ## #
         du.print_w_toggle("Creating trip rates DVec...", verbose=verbose)
@@ -346,11 +368,9 @@ class HBAttractionModel:
         )
 
         # ## MULTIPLY TOGETHER ## #
+        # Remove un-needed ecat column too
         pure_attractions_ecat = emp_dvec * trip_rates_dvec
-
-        pure_attractions = pure_attractions_ecat.aggregate(pure_attractions_seg)
-
-        return pure_attractions
+        return pure_attractions_ecat.aggregate(pure_attractions_seg)
 
     # TODO: module _write_reports is common for both production and attraction models, so it can be grouped elsewhere
     @staticmethod
@@ -417,7 +437,8 @@ class HBAttractionModel:
         # Create the mode-time splits DVector
         mode_splits = pd.read_csv(
             self.mode_controls_path,
-            usecols=self._target_cols['mode_split']
+            usecols=self._target_col_dtypes['mode_split'].keys(),
+            dtype=self._target_col_dtypes['mode_split'],
         )
 
         mode_splits_dvec = nd.DVector(
@@ -430,9 +451,10 @@ class HBAttractionModel:
 
         return attractions * mode_splits_dvec
 
-    def _attractions_total_check(self,
-                                 pure_attractions: nd.DVector,
+    @staticmethod
+    def _attractions_total_check(pure_attractions: nd.DVector,
                                  fully_segmented_attractions: nd.DVector,
+                                 rel_tol: float = 0.0001,
                                  ) -> None:
         """
         Checks if the attraction totals are matching before and
@@ -445,13 +467,25 @@ class HBAttractionModel:
 
         fully_segmented_attractions:
             Dvector containing attractions after mode split.
+
+        rel_tol:
+            the relative tolerance – it is the maximum allowed difference
+            between the sum of pure_attractions and fully_segmented_attractions,
+            relative to the larger absolute value of pure_attractions or
+            fully_segmented_attractions. By default, this is set to 0.0001,
+            meaning the values must be within 0.01% of each other.
         """
-        if round(pure_attractions.sum()) != round(fully_segmented_attractions.sum()):
+        # Init
+        pa_sum = pure_attractions.sum()
+        fsa_sum = fully_segmented_attractions.sum()
+
+        # check
+        if not math.isclose(pa_sum, fsa_sum, rel_tol=rel_tol):
             raise ValueError(
                 "The attraction totals before and after mode split are not same.\n"
                 "Expected %f\n"
                 "Got %f"
-                % (pure_attractions.sum(), fully_segmented_attractions.sum())
+                % (pa_sum, fsa_sum)
             )
 
     def _create_output_paths(self,
