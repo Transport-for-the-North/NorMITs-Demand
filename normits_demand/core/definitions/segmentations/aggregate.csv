@@ -1,5 +1,6 @@
 in,out,common,translate
 full_tfntt_tfnat,full_tfntt,p;tfn_tt;m;tp,
 pure_demand,pure_demand_reporting,p;tfn_tt,tfn_at:tfn_agg_at;
+hb_notem_full_tfn,hb_tms_tp_week,p;m;tp,
 pure_attractions_ecat,pure_attractions,p;soc,
 attr_full,p_m_soc,p;m;soc,

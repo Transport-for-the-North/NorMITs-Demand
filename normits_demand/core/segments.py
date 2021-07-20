@@ -85,6 +85,9 @@ class SegmentationLevel:
         self.name = name
         self.naming_order = naming_order
 
+        # Retain this for copying later
+        self._valid_segments = valid_segments
+
         # Validate that naming order is in df
         for col in self.naming_order:
             if col not in valid_segments:
@@ -106,6 +109,10 @@ class SegmentationLevel:
         )
         self.segments_and_names = segments_and_names
         self.segment_names = segments_and_names['name'].to_list()
+
+    def __copy__(self):
+        """Returns a copy of this class"""
+        return self.copy()
 
     def __eq__(self, other) -> bool:
         """Overrides the default implementation"""
@@ -396,6 +403,14 @@ class SegmentationLevel:
         rename_dict = {v: k for k, v in naming_conversion.items()}
         return df.rename(columns=rename_dict, inplace=inplace)
 
+    def copy(self):
+        """Returns a copy of this class"""
+        return SegmentationLevel(
+            name=self.name,
+            naming_order=self.naming_order.copy(),
+            valid_segments=self._valid_segments.copy()
+        )
+
     def create_segment_col(self,
                            df: pd.DataFrame,
                            naming_conversion: Dict[str, str] = None,
@@ -545,6 +560,70 @@ class SegmentationLevel:
 
         return agg_dict
 
+    def aggregate_soc_ns_by_tp(self,
+                               other: SegmentationLevel,
+                               ) -> Dict[str, List[str]]:
+        """
+        TODO(BT): WRite aggregate_soc_ns_by_tp() docs
+        Parameters
+        ----------
+        other
+
+        Returns
+        -------
+
+        """
+        # Init
+        error_message = (
+            "This segmentation does not contain %s. "
+            "Need to be using a segmentation using 'p', 'soc', and 'ns' "
+            "in order to aggregate soc and ns by tp."
+            "Current segmentation uses: %s"
+        )
+
+        # Validate input
+        if 'p' not in self.naming_order:
+            raise nd.SegmentationError(error_message % ('p', self.naming_order))
+
+        if 'soc' not in self.naming_order:
+            raise nd.SegmentationError(error_message % ('soc', self.naming_order))
+
+        if 'ns' not in self.naming_order:
+            raise nd.SegmentationError(error_message % ('ns', self.naming_order))
+
+        # Add in the names of the original segmentation
+        full_segmentation = self.segments.copy()
+        full_segmentation['self_name'] = self.create_segment_col(full_segmentation)
+
+        # Aggregate soc and ns depending on p segment
+        soc_mask = full_segmentation['p'].isin(consts.SOC_P)
+        soc_df = full_segmentation[soc_mask]
+        ns_df = full_segmentation[~soc_mask]
+
+        soc_df['ns'] = 0
+        ns_df['soc'] = 0
+        seg_agg = pd.concat([soc_df, ns_df])
+
+        # Create the new segment names
+        seg_agg['other_name'] = other.create_segment_col(seg_agg)
+
+        # Convert into the aggregation dict
+        agg_dict = collections.defaultdict(list)
+        for o, s in zip(seg_agg['other_name'], seg_agg['self_name']):
+            agg_dict[o].append(s)
+
+        # Check that the output segmentation has been created properly
+        if not other.is_correct_naming(list(agg_dict.keys())):
+            raise SegmentationError(
+                "Some segment names seem to have gone missing during"
+                "aggregation.\n"
+                "Expected %s segments.\n"
+                "Found %s segments."
+                % (len(other.segment_names), len(set(agg_dict.keys())))
+            )
+
+        return agg_dict
+
     def split_tfntt_segmentation(self,
                                  other: SegmentationLevel
                                  ) -> Dict[str, List[str]]:
@@ -553,7 +632,7 @@ class SegmentationLevel:
 
         Splits the tfn_tt segment into it's components and aggregates up to
         out_segmentation. The DVector needs to be using a segmentation that
-        contains tfn_tt and p in order for this to work.
+        contains tfn_tt in order for this to work.
 
         Parameters
         ----------
@@ -588,36 +667,17 @@ class SegmentationLevel:
                 % self.naming_order
             )
 
-        if 'p' not in self.naming_order:
-            raise nd.SegmentationError(
-                "This Dvector is not using a segmentation which contains "
-                "'p'. Need to be using a segmentation using both 'tfn_tt' "
-                "and 'p' segments in order to split tfn_tt."
-                "Current segmentation uses: %s"
-                % self.naming_order
-            )
-
         # Expand tfn_tt
         tfn_tt_expansion = self._get_tfn_tt_expansion()
-        full_segmentation = pd.merge(
+        seg_agg = pd.merge(
             self.segments,
             tfn_tt_expansion,
             how='left',
             on='tfn_tt',
         )
-        full_segmentation['self_name'] = self.create_segment_col(full_segmentation)
-
-        # Aggregate soc and ns depending on p segment
-        soc_mask = full_segmentation['p'].isin(consts.SOC_P)
-        soc_df = full_segmentation[soc_mask]
-        ns_df = full_segmentation[~soc_mask]
-        del full_segmentation
-
-        soc_df['ns'] = 0
-        ns_df['soc'] = 0
-        seg_agg = pd.concat([soc_df, ns_df])
 
         # Create the new segment names
+        seg_agg['self_name'] = self.create_segment_col(seg_agg)
         seg_agg['other_name'] = other.create_segment_col(seg_agg)
 
         # Convert into the aggregation dict

@@ -22,6 +22,7 @@ import itertools
 
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Union
 from typing import Callable
 
@@ -49,10 +50,18 @@ class DVector:
     _zone_col = 'zone'
     _segment_col = 'segment'
     _val_col = 'val'
-    _chunk_size = 100000
     _zero_infill = 1e-10
 
     _dvec_suffix = '_dvec%s' % consts.COMPRESSION_SUFFIX
+
+    # Default chunk sizes for multiprocessing
+    # Chosen through best guesses and tests
+    _chunk_size = 100000
+    _to_df_min_chunk_size = 400
+    _translate_zoning_min_chunk_size = 700
+
+    # Use for getting a bunch of progress bars for mp code
+    _debugging_mp_code = False
 
     def __init__(self,
                  zoning_system: core.ZoningSystem,
@@ -184,7 +193,7 @@ class DVector:
         else:
             default_val = np.array([infill] * self.zoning_system.n_zones)
 
-        # Find the segments wand infill
+        # Find the missing segments and infill
         not_in = set(self.segmentation.segment_names) - import_data.keys()
         for name in not_in:
             import_data[name] = default_val.copy()
@@ -409,7 +418,6 @@ class DVector:
 
         # Build the segment_name if we don't have it
         if segment_dict is not None:
-            segment_name = None
             raise NotImplemented(
                 "Need to write code to convert a segment_dict into a valid "
                 "segment_name"
@@ -424,29 +432,33 @@ class DVector:
         # Get data and covert to zoning system
         return self.data[segment_name]
 
-    def to_df(self) -> pd.DataFrame:
+    @staticmethod
+    def _to_df_internal(self_data: nd.DVectorData,
+                        self_zoning_system: core.ZoningSystem,
+                        self_segmentation: core.SegmentationLevel,
+                        col_names: List[str],
+                        val_col: str,
+                        zone_col: str,
+                        ) -> pd.DataFrame:
         """
-        Convert this DVector into a pandas dataframe with the segmentation
-        as the index
+        Internal function of self.to_df(). For multiprocessing
         """
         # Init
+        index_cols = du.list_safe_remove(col_names, [val_col])
         concat_ph = list()
-        col_names = list(self.segmentation.get_seg_dict(list(self.data.keys())[0]).keys())
-        col_names = [self._zone_col] + col_names + [self._val_col]
 
-        # TODO(BT): Multiprocess
-        # Convert each segment into a part of the df
-        for segment_name, data in self.data.items():
+        # Convert all given data into dataframes
+        for segment_name, data in self_data.items():
             # Add the zoning system back in
-            if self.zoning_system is None:
-                df = pd.DataFrame([{self._val_col: data}])
+            if self_zoning_system is None:
+                df = pd.DataFrame([{val_col: data}])
             else:
-                index = pd.Index(self.zoning_system.unique_zones, name=self._zone_col)
-                data = {self._val_col: data.flatten()}
+                index = pd.Index(self_zoning_system.unique_zones, name=zone_col)
+                data = {val_col: data.flatten()}
                 df = pd.DataFrame(index=index, data=data).reset_index()
 
             # Add all segments into the df
-            seg_dict = self.segmentation.get_seg_dict(segment_name)
+            seg_dict = self_segmentation.get_seg_dict(segment_name)
             for col_name, col_val in seg_dict.items():
                 df[col_name] = col_val
 
@@ -454,7 +466,65 @@ class DVector:
             df = df.reindex(columns=col_names)
             concat_ph.append(df)
 
-        return pd.concat(concat_ph).reset_index(drop=True)
+        return pd.concat(concat_ph, ignore_index=True)
+
+    def to_df(self) -> pd.DataFrame:
+        """
+        Convert this DVector into a pandas dataframe with the segmentation
+        as the index
+        """
+        # Init
+        col_names = list(self.segmentation.get_seg_dict(list(self.data.keys())[0]).keys())
+        col_names = col_names + [self._val_col]
+        if self.zoning_system is not None:
+            col_names = [self._zone_col] + col_names
+
+        # ## MULTIPROCESS ## #
+        # Define chunk size
+        total = len(self.data)
+        chunk_size = math.ceil(total / self.chunk_divider)
+
+        # Make sure the chunks aren't too small
+        if chunk_size < self._to_df_min_chunk_size:
+            chunk_size = self._to_df_min_chunk_size
+
+        # Define the kwargs
+        kwarg_list = list()
+        for keys_chunk in du.chunk_list(self.data.keys(), chunk_size):
+            # Calculate subsets of self.data to avoid locks between processes
+            self_data_subset = {k: self.data[k] for k in keys_chunk}
+
+            if self.zoning_system is not None:
+                self_zoning_system = self.zoning_system.copy()
+            else:
+                self_zoning_system = None
+
+            # Assign to a process
+            kwarg_list.append({
+                'self_data': self_data_subset,
+                'self_zoning_system': self_zoning_system,
+                'self_segmentation': self.segmentation.copy(),
+                'col_names': col_names.copy(),
+                'val_col': self._val_col,
+                'zone_col': self._zone_col,
+            })
+
+        # Define pbar
+        pbar_kwargs = {
+            'desc': "Converting DVector to dataframe",
+            'disable': not self._debugging_mp_code,
+        }
+
+        # Run across processes
+        dataframe_chunks = multiprocessing.multiprocess(
+            fn=self._to_df_internal,
+            kwargs=kwarg_list,
+            process_count=self.process_count,
+            pbar_kwargs=pbar_kwargs,
+        )
+
+        # Join all the dataframe chunks together
+        return pd.concat(dataframe_chunks, ignore_index=True)
 
     def compress_out(self, path: nd.PathLike) -> pathlib.Path:
         """
@@ -655,7 +725,7 @@ class DVector:
         # Define pbar
         pbar_kwargs = {
             'desc': "Multiplying and aggregating",
-            'disable': not self.verbose,
+            'disable': not self._debugging_mp_code,
         }
 
         # Run across processes
@@ -689,6 +759,25 @@ class DVector:
             The total sum of all values
         """
         return np.sum([x.flatten() for x in self.data.values()])
+
+    @staticmethod
+    def _translate_zoning_internal(self_data: nd.DVectorData,
+                                   translation: np.array,
+                                   ) -> nd.DVectorData:
+        """
+        Internal function of self.translate_zoning. For multiprocessing
+        """
+        # Init
+        dvec_data = dict.fromkeys(self_data.keys())
+
+        # Translate zoning in chunks
+        for key, value in self_data.items():
+            value = value.flatten()
+            temp = np.broadcast_to(np.expand_dims(value, axis=1), translation.shape)
+            temp = temp * translation
+            dvec_data[key] = temp.sum(axis=0)
+
+        return dvec_data
 
     def translate_zoning(self,
                          new_zoning: core.ZoningSystem,
@@ -730,14 +819,45 @@ class DVector:
         # Get translation
         translation = self.zoning_system.translate(new_zoning, weighting)
 
-        # TODO(BT): Add Multiprocessing
-        # Do the translation per value
-        dvec_data = dict()
-        for key, value in self.data.items():
-            value = value.flatten()
-            temp = np.broadcast_to(np.expand_dims(value, axis=1), translation.shape)
-            temp = temp * translation
-            dvec_data[key] = temp.sum(axis=0)
+        # ## MULTIPROCESS ## #
+        # Define the chunk size
+        total = len(self.data)
+        chunk_size = math.ceil(total / self.chunk_divider)
+
+        # Make sure the chunks aren't too small
+        if chunk_size < self._translate_zoning_min_chunk_size:
+            chunk_size = self._translate_zoning_min_chunk_size
+
+        # Define the kwargs
+        kwarg_list = list()
+        for keys_chunk in du.chunk_list(self.data.keys(), chunk_size):
+            # Calculate subsets of self.data to avoid locks between processes
+            self_data_subset = {k: self.data[k] for k in keys_chunk}
+
+            # Assign to a process
+            kwarg_list.append({
+                'self_data': self_data_subset,
+                'translation': translation.copy(),
+            })
+
+        # Define pbar
+        pbar_kwargs = {
+            'desc': "Translating",
+            'disable': not self._debugging_mp_code,
+        }
+
+        # Run across processes
+        data_chunks = multiprocessing.multiprocess(
+            fn=self._translate_zoning_internal,
+            kwargs=kwarg_list,
+            process_count=self.process_count,
+            pbar_kwargs=pbar_kwargs,
+        )
+
+        # Combine all computation chunks into one
+        dvec_data = dict.fromkeys(self.data.keys())
+        for chunk in data_chunks:
+            dvec_data.update(chunk)
 
         return DVector(
             zoning_system=new_zoning,
