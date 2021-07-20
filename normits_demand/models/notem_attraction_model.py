@@ -59,7 +59,7 @@ class HBAttractionModel:
 
     def __init__(self,
                  land_use_paths: Dict[int, nd.PathLike],
-                 pure_production_demand: str,
+                 notem_segmented_productions: str,
                  trip_attraction_rates_path: str,
                  mode_controls_path: str,
                  constraint_paths: Dict[int, nd.PathLike],
@@ -75,8 +75,8 @@ class HBAttractionModel:
             Dictionary containing different years and the corresponding
             employment path as key and value respectively.
 
-        pure_production_demand:
-            Contains path to the pickled pure production demand which
+        notem_segmented_productions:
+            Contains path to the pickled notem segmented productions which
             is used for balancing attraction.
 
         trip_attraction_rates_path:
@@ -102,14 +102,14 @@ class HBAttractionModel:
         # Validate inputs
         [ops.check_file_exists(x) for x in land_use_paths.values()]
         [ops.check_file_exists(x) for x in constraint_paths.values()]
-        ops.check_file_exists(pure_production_demand)
+        ops.check_file_exists(notem_segmented_productions)
         ops.check_file_exists(trip_attraction_rates_path)
         ops.check_file_exists(mode_controls_path)
         ops.check_path_exists(export_path)
 
         # Assign
         self.land_use_paths = land_use_paths
-        self.pure_production_demand = pure_production_demand
+        self.notem_segmented_productions = notem_segmented_productions
         self.trip_att_rates_path = trip_attraction_rates_path
         self.mode_controls_path = mode_controls_path
         self.constraint_paths = constraint_paths
@@ -191,6 +191,8 @@ class HBAttractionModel:
 
             du.print_w_toggle("Applying trip rates...", verbose=verbose)
             pure_attractions = self._generate_attractions(emp_dvec, verbose=verbose)
+            pu=pure_attractions.to_df()
+            pu.to_csv(r"C:\Data\Nirmal_Atkins\pure_attractions_new.csv",index=False)
 
             if export_pure_attractions:
                 du.print_w_toggle("Exporting pure attractions to disk...", verbose=verbose)
@@ -229,7 +231,10 @@ class HBAttractionModel:
                 mode_split.to_pickle(self.fully_segmented_paths[year])
 
             # TODO: Balance pure attractions - report on the balanced
-            controlled = pure_attractions  # Function to balance pure attractions with pure demand
+            controlled = self._attractions_balance(
+                p_dvec=self.notem_segmented_productions,
+                a_dvec=mode_split,
+            )
 
             if export_reports:
                 du.print_w_toggle(
@@ -592,3 +597,26 @@ class HBAttractionModel:
         self.full_report_segment_paths = paths[0]
         self.full_report_ca_sector_paths = paths[1]
         self.full_report_ie_sector_paths = paths[2]
+
+    def _attractions_balance(self,
+                             p_dvec: str,
+                             a_dvec: nd.DVector,
+                             ) -> nd.DVector:
+
+        p_dvec = nd.from_pickle(p_dvec)
+
+        if a_dvec.segmentation.name != 'p_m_soc':
+            seg = nd.get_segmentation_level('p_m_soc')
+            a_dvec = a_dvec.aggregate(seg)
+
+        # Split a_dvec into p_dvec segments
+        print("Attrs:", a_dvec.sum())
+        a_dvec = a_dvec.split_segmentation_like(p_dvec)
+        print("Attrs:", a_dvec.sum())
+
+        # Control across segments
+        a_dvec = a_dvec.balance_at_segments(p_dvec, split_weekday_weekend=True)
+        print("Prods:", p_dvec.sum())
+        print("Attrs:", a_dvec.sum())
+
+        return a_dvec

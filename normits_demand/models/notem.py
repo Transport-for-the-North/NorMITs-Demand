@@ -138,21 +138,21 @@ class NoTEM:
         )
 
         hb_prod.run(
-            export_pure_demand=False,
-            export_fully_segmented=False,
-            export_notem_segmentation=False,
+            export_pure_demand=True,
+            export_fully_segmented=True,
+            export_notem_segmentation=True,
             export_reports=False,
             verbose=True,
         )
         """
         # Path to read pure demand productions
-        pure_demand_fname = "hb_msoa_pure_demand_2018_dvec.pkl"
-        pure_demand_production = os.path.join(imports_hb_prod['export_path'], pure_demand_fname)
+        notem_seg_prod_fname = "hb_msoa_notem_segmented_2018_dvec.pkl"
+        notem_seg_production = os.path.join(imports_hb_prod['export_path'], notem_seg_prod_fname)
 
         # Runs the home based attraction model
         hb_attr = notem_attr.HBAttractionModel(
             land_use_paths=self.emp_land_use_path,
-            pure_production_demand=pure_demand_production,
+            notem_segmented_productions=notem_seg_production,
             trip_attraction_rates_path=imports_hb_attr['trip_rate'],
             mode_controls_path=imports_hb_attr['mode_split'],
             constraint_paths=self.emp_land_use_path,
@@ -160,8 +160,8 @@ class NoTEM:
         )
 
         hb_attr.run(
-            export_pure_attractions=False,
-            export_fully_segmented=False,
+            export_pure_attractions=True,
+            export_fully_segmented=True,
             export_reports=False,
             verbose=True,
         )

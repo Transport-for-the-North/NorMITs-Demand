@@ -1096,16 +1096,21 @@ def multiply_and_aggregate_dvectors(a: DVector,
 
 def read_compressed_dvector(path: nd.PathLike) -> DVector:
     """
+    Reads the dvector at path, decompresses, and returns the object.
 
     Parameters
     ----------
-    path
+    path:
+        The full path to the object to read
 
     Returns
     -------
-
+    object:
+        The object that was read in from disk.
     """
-    # TODO(BT): VALIDATE PATH
+    # File validation
+    file_ops.check_file_exists(path)
+
     return compress.read_in(path)
 
 

@@ -2,4 +2,4 @@ in,out,common,translate
 full_tfntt_tfnat,full_tfntt,p;tfn_tt;m;tp,
 pure_demand,pure_demand_reporting,p;tfn_tt,tfn_at:tfn_agg_at;
 pure_attractions_ecat,pure_attractions,p;soc,
-attr_full_seg,p_m_soc,p;m;soc,
+attr_full,p_m_soc,p;m;soc,

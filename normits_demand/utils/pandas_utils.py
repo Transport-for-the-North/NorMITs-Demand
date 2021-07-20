@@ -79,20 +79,30 @@ def reindex_and_groupby(df: pd.DataFrame,
                         **kwargs,
                         ) -> pd.DataFrame:
     """
-    # TODO(BT): Properly document this function!
     Wrapper around df.reindex() and df.groupby(). Will throw error if
     index_cols aren't in df.
 
     Parameters
     ----------
-    df
-    index_cols
-    value_cols
-    throw_error
-    kwargs
+    df:
+        The pandas.DataFrame that should be reindexed and grouped.
+
+    index_cols:
+        Column names that are required for reindexing.
+
+    value_cols:
+        Column name that contains values.
+
+    throw_error:
+        Whether to raise an error or not when value_cols is not contained in
+        index_cols.
+
+    kwargs:
+        Other keyword arguments.
 
     Returns
     -------
+    The pandas.Dataframe that is reindexed and grouped.
 
     """
     # ## VALIDATE INPUTS ## #
@@ -123,14 +133,19 @@ def filter_df(df: pd.DataFrame,
               df_filter: Dict[str, Any],
               ) -> pd.DataFrame:
     """
-    TODO(BT): Write Docs
+    Filters the dataframe df to the required columns in df_filter.
+
     Parameters
     ----------
-    df
-    df_filter
+    df:
+        The pandas.Dataframe that is to be filtered.
+
+    df_filter:
+        Dictionary containing the columns to be filtered as keys.
 
     Returns
     -------
+    The pandas.Dataframe that the filtered to the columns in df_filter
 
     """
     # Wrap each item if a list to avoid errors

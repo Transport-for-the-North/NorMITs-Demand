@@ -211,7 +211,7 @@ class HBProductionModel:
                     "Exporting notem segmented demand to disk...",
                     verbose=verbose
                 )
-                productions.to_pickle(self.pure_demand_paths[year])
+                productions.to_pickle(self.notem_segmented_paths[year])
             if export_reports:
                 du.print_w_toggle(
                     "Exporting notem segmented reports disk...\n"

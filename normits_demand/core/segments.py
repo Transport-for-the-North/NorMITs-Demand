@@ -179,7 +179,7 @@ class SegmentationLevel:
         # Check that the output segmentation has been created properly
         if not return_seg.is_correct_naming(list(multiply_dict.keys())):
             raise SegmentationError(
-                "Some segment names seem to have gone missing during"
+                "Some segment names seem to have gone missing during "
                 "multiplication.\n"
                 "Expected %s segments.\n"
                 "Found %s segments."
@@ -938,10 +938,22 @@ def get_segmentation_level(name: str) -> SegmentationLevel:
     # TODO(BT): Add some validation on the segmentation name
     # TODO(BT): Instantiate import drive for these on module import!
     # TODO(BT): Add some caching to this function!
+    """
+    Creates the SegmentationLevel object and the returns the corresponding parameters
+
+    Parameters
+    ----------
+    name:
+        Name used for SegmentationLevel object.
+
+    Returns
+    -------
+    The SegmentationLevel parameters corresponding to the name provided.
+    """
 
     valid_segments, naming_order = _get_valid_segments(name)
 
-    # Create the ZoningSystem object and return
+    # Create the SegmentationLevel object and return
     return SegmentationLevel(
         name=name,
         naming_order=naming_order,

@@ -247,6 +247,18 @@ def get_zoning_system(name: str) -> ZoningSystem:
     # TODO(BT): Add some validation on the zone name
     # TODO(BT): Instantiate import drive for these on module import!
     # TODO(BT): Add some caching to this function!
+    """
+    Creates the ZoningSystem object and the returns the corresponding parameters
+
+    Parameters
+    ----------
+    name:
+        Name used for ZoningSystem object.
+
+    Returns
+    -------
+    The ZoningSystem parameters corresponding to the name provided.
+    """
 
     # Create the ZoningSystem object and return
     return ZoningSystem(
