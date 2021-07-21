@@ -83,29 +83,6 @@ def main_attr():
     )
 
 
-def attractions_balance_test():
-
-    p_dvec = nd.from_pickle(r"E:\Productions\hb_msoa_notem_segmented_2018_dvec.pkl")
-    a_dvec = nd.from_pickle(r"E:\Attractions\hb_msoa_fully_segmented_2018_dvec.pkl")
-    
-    if a_dvec.segmentation.name != 'p_m_soc':
-        seg = nd.get_segmentation_level('p_m_soc')
-        a_dvec = a_dvec.aggregate(seg)
-
-    # Split a_dvec into p_dvec segments
-    print("Attrs:", a_dvec.sum())
-    a_dvec = a_dvec.split_segmentation_like(p_dvec)
-    print("Attrs:", a_dvec.sum())
-
-    # Control across segments
-    a_dvec = a_dvec.balance_at_segments(p_dvec, split_weekday_weekend=True)
-    print()
-    print("Prods:", p_dvec.sum())
-    print("Attrs:", a_dvec.sum())
-
-
 if __name__ == '__main__':
     # main()
     main_attr()
-
-    # attractions_balance_test()

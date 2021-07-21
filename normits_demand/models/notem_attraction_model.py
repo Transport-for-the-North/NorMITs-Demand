@@ -282,7 +282,7 @@ class HBAttractionModel:
                             verbose: bool,
                             ) -> nd.DVector:
         """
-        Reads in the land use data for year and converts it to Dvector.
+        Reads in the land use data for year and converts it into a Dvector.
 
         Parameters
         ----------
@@ -429,7 +429,7 @@ class HBAttractionModel:
             A DVector containing pure_attractions split by mode.
         """
         # Define the segmentation we want to use
-        m_pure_attractions_seg = nd.get_segmentation_level('p_m')
+        m_pure_attractions_seg = nd.get_segmentation_level('hb_p_m')
         msoa_zoning = nd.get_zoning_system('msoa')
 
         # Create the mode-time splits DVector
@@ -634,39 +634,25 @@ class HBAttractionModel:
     def _attractions_balance(p_dvec: str,
                              a_dvec: nd.DVector,
                              ) -> nd.DVector:
-        # TODO: Check with BT whether these prints are required or can be removed
         """
         Balances attractions to production segmentation
 
         Parameters
         ----------
         p_dvec:
-            The notem segmented production Dvector to which
-            attractions are to be balanced.
+            The production Dvector to balance the attraction DVector to.
 
         a_dvec:
-            The attractions Dvector after mode split.
+            The attractions Dvector to control.
 
         Returns
         -------
-        balanced a_dvec:
-            The attractions Dvector balanced to notem segmentation.
+        balanced_a_dvec:
+            a_dvec controlled to p_dvec
         """
-        # Read pickle
+        # Read in the productions DVec from disk
         p_dvec = nd.from_pickle(p_dvec)
 
-        if a_dvec.segmentation.name != 'p_m_soc':
-            seg = nd.get_segmentation_level('p_m_soc')
-            a_dvec = a_dvec.aggregate(seg)
-
-        # Split a_dvec into p_dvec segments
-        print("Attrs:", a_dvec.sum())
+        # Split a_dvec into p_dvec segments and balance
         a_dvec = a_dvec.split_segmentation_like(p_dvec)
-        print("Attrs:", a_dvec.sum())
-
-        # Control across segments
-        a_dvec = a_dvec.balance_at_segments(p_dvec, split_weekday_weekend=True)
-        print("Prods:", p_dvec.sum())
-        print("Attrs:", a_dvec.sum())
-
-        return a_dvec
+        return a_dvec.balance_at_segments(p_dvec, split_weekday_weekend=True)
