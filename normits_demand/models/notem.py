@@ -27,7 +27,7 @@ from normits_demand.models import notem_attraction_model as notem_attr
 
 class NoTEM:
     # Constants
-    _by_pop_file_name = "land_use_output_tfn_msoa1.csv"
+    _by_pop_file_name = "land_use_output_msoa.csv"
     _lu_pop_file_name = "land_use_%s_pop.csv"
     _lu_emp_file_name = "land_use_%s_emp.csv"
     _base_year = 2018
@@ -127,7 +127,7 @@ class NoTEM:
         # Runs the module to create import dictionary
         imports_hb_prod = self.create_pop_imports("HB_Productions")
         imports_hb_attr = self.create_pop_imports("HB_Attractions")
-        """
+
         # Runs the home based Production model
         hb_prod = notem.HBProductionModel(
             land_use_paths=self.pop_land_use_path,
@@ -144,7 +144,7 @@ class NoTEM:
             export_reports=False,
             verbose=True,
         )
-        """
+
         # Path to read pure demand productions
         notem_seg_prod_fname = "hb_msoa_notem_segmented_2018_dvec.pkl"
         notem_seg_production = os.path.join(imports_hb_prod['export_path'], notem_seg_prod_fname)
@@ -282,7 +282,7 @@ class NoTEM:
             trip_rate_fname = "sample_attraction_trip_rate.csv"
             trip_rates_path = os.path.join(self._import_home, trip_end, trip_rate_fname)
 
-            mode_split_fname = "attraction_mode_split_new.csv"
+            mode_split_fname = "attraction_mode_split_new_infill.csv"
             mode_split_path = os.path.join(self._import_home, trip_end, mode_split_fname)
 
             export_path = os.path.join(self._export_home, trip_end)

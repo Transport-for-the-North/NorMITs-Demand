@@ -115,7 +115,7 @@ class HBAttractionModel:
             Defaults to consts.PROCESS_COUNT.
 
         """
-        # TODO(BT): Document attributes (partially done by NK)
+        # TODO(BT): Documentation done by NK have to be checked by BT
         # Validate inputs
         [ops.check_file_exists(x) for x in land_use_paths.values()]
         [ops.check_file_exists(x) for x in constraint_paths.values()]
@@ -208,8 +208,6 @@ class HBAttractionModel:
 
             du.print_w_toggle("Applying trip rates...", verbose=verbose)
             pure_attractions = self._generate_attractions(emp_dvec, verbose=verbose)
-            # pu=pure_attractions.to_df()
-            # pu.to_csv(r"C:\Data\Nirmal_Atkins\pure_attractions_new.csv",index=False)
 
             if export_pure_attractions:
                 du.print_w_toggle("Exporting pure attractions to disk...", verbose=verbose)
@@ -632,11 +630,29 @@ class HBAttractionModel:
         self.full_report_ca_sector_paths = paths[1]
         self.full_report_ie_sector_paths = paths[2]
 
-    def _attractions_balance(self,
-                             p_dvec: str,
+    @staticmethod
+    def _attractions_balance(p_dvec: str,
                              a_dvec: nd.DVector,
                              ) -> nd.DVector:
+        # TODO: Check with BT whether these prints are required or can be removed
+        """
+        Balances attractions to production segmentation
 
+        Parameters
+        ----------
+        p_dvec:
+            The notem segmented production Dvector to which
+            attractions are to be balanced.
+
+        a_dvec:
+            The attractions Dvector after mode split.
+
+        Returns
+        -------
+        balanced a_dvec:
+            The attractions Dvector balanced to notem segmentation.
+        """
+        # Read pickle
         p_dvec = nd.from_pickle(p_dvec)
 
         if a_dvec.segmentation.name != 'p_m_soc':
