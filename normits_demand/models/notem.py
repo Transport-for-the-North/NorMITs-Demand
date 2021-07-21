@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Created on: Mon July 12th 2021
+Created on: Tues May 25th 2021
 Updated on:
 
-Original author: Nirmal Kumar
-Last update made by:
-Other updates made by:
+Original author: Ben Taylor
+Last update made by: Nirmal Kumar
+Other updates made by: Nirmal Kumar
 
 File purpose:
-Holds the NoTEM Class for calling all production and attraction models
+NoTEM Class Frontend for calling all production and attraction models
 """
 # Builtins
 import os.path

@@ -1,9 +1,16 @@
+# -*- coding: utf-8 -*-
 """
-Created on: 02/07/2021
+Created on: Friday July 2nd 2021
+Updated on: Wednesday July 21st 2021
 
-File purpose: Attraction Model for NoTEM
+Original author: Nirmal Kumar
+Last update made by: Ben Taylor
+Other updates made by: Ben Taylor
 
+File purpose:
+Attraction Models for NoTEM
 """
+
 # Allow class self type hinting
 from __future__ import annotations
 
@@ -36,6 +43,7 @@ class HBAttractionModel:
     # Segmentation names
     _pure_attractions = 'pure_attractions'
     _fully_segmented = 'fully_segmented'
+    _notem_segmented = 'notem_segmented'
 
     # Define wanted columns
     _target_col_dtypes = {
@@ -77,10 +85,10 @@ class HBAttractionModel:
     def __init__(self,
                  land_use_paths: Dict[int, nd.PathLike],
                  notem_segmented_productions: str,
-                 trip_attraction_rates_path: str,
-                 mode_controls_path: str,
-                 constraint_paths: Dict[int, nd.PathLike],
+                 attraction_trip_rates_path: str,
+                 mode_splits_path: str,
                  export_path: str,
+                 constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
                  ) -> HBAttractionModel:
         """
@@ -89,22 +97,27 @@ class HBAttractionModel:
         Parameters
         ----------
         land_use_paths:
-            Dictionary containing different years and the corresponding
-            employment path as key and value respectively.
+            Dictionary of {year: land_use_employment_data} pairs.
 
         notem_segmented_productions:
-            Contains path to the pickled notem segmented productions which
-            is used for balancing attraction.
+            Dictionary of {year: path_to_production_to_control_to} pairs.
+            These paths should be gotten from nd.HBProduction model.
+            Must contain the same keys as land_use_paths, but it can contain
+            more (any extras will be ignored).
+            These productions will be used to control the produced attractions.
 
-        trip_attraction_rates_path:
-            Contains path to attraction trip rate.
+        attraction_trip_rates_path:
+            The path to the attraction trip rates.
 
-        mode_controls_path:
-            Contains path to mode split.
+        mode_splits_path:
+            The path to attraction mode split.
 
         constraint_paths:
-            Dictionary containing different years and the corresponding
-            constraint path as key and value respectively.
+            Dictionary of {year: constraint_path} pairs.
+            Must contain the same keys as land_use_paths, but it can contain
+            more (any extras will be ignored).
+            If set - will be used to constrain the attractions - a report will
+            be written before and after.
 
         export_path:
             Path to export attraction outputs.
@@ -113,22 +126,22 @@ class HBAttractionModel:
             The number of processes to create in the Pool. Typically this
             should not exceed the number of cores available.
             Defaults to consts.PROCESS_COUNT.
-
         """
-        # TODO(BT): Documentation done by NK have to be checked by BT
         # Validate inputs
         [ops.check_file_exists(x) for x in land_use_paths.values()]
-        [ops.check_file_exists(x) for x in constraint_paths.values()]
         ops.check_file_exists(notem_segmented_productions)
-        ops.check_file_exists(trip_attraction_rates_path)
-        ops.check_file_exists(mode_controls_path)
+        ops.check_file_exists(attraction_trip_rates_path)
+        ops.check_file_exists(mode_splits_path)
         ops.check_path_exists(export_path)
+
+        if constraint_paths is not None:
+            [ops.check_file_exists(x) for x in constraint_paths.values()]
 
         # Assign
         self.land_use_paths = land_use_paths
         self.notem_segmented_productions = notem_segmented_productions
-        self.trip_att_rates_path = trip_attraction_rates_path
-        self.mode_controls_path = mode_controls_path
+        self.attraction_trip_rates_path = attraction_trip_rates_path
+        self.mode_splits_path = mode_splits_path
         self.constraint_paths = constraint_paths
         self.export_path = export_path
         self.report_path = os.path.join(export_path, "Reports")
@@ -143,12 +156,13 @@ class HBAttractionModel:
         #  something like: self.reports['pure_attractions'][year]
         self._create_output_paths(self.export_path, self.years)
         self._create_pure_attractions_report_paths(self.report_path, self.years)
-        self._create_full_segmented_report_paths(self.report_path, self.years)
+        self._create_notem_segmented_report_paths(self.report_path, self.years)
 
     def run(self,
-            export_pure_attractions: bool = False,
+            export_pure_attractions: bool = True,
             export_fully_segmented: bool = False,
-            export_reports: bool = False,
+            export_notem_segmentation: bool = True,
+            export_reports: bool = True,
             verbose: bool = False,
             ) -> None:
         """
@@ -170,7 +184,6 @@ class HBAttractionModel:
               at self.fully_segmented_paths[year] if export_fully_segmented
               is True.
 
-
         Parameters
         ----------
         export_pure_attractions:
@@ -180,6 +193,10 @@ class HBAttractionModel:
         export_fully_segmented:
             Whether to export the fully segmented attractions to disk or not.
             Will be written out to: self.fully_segmented_paths[year]
+
+        export_notem_segmentation:
+            Whether to export the notem segmented demand to disk or not.
+            Will be written out to: self.notem_segmented_paths[year]
 
         export_reports:
             Whether to output reports while running. All reports will be
@@ -245,30 +262,35 @@ class HBAttractionModel:
                 )
                 mode_split.to_pickle(self.fully_segmented_paths[year])
 
-            # TODO: Balance pure attractions - report on the balanced
-            controlled = self._attractions_balance(
-                p_dvec=self.notem_segmented_productions,
+            # Control the attractions to the productions - this also adds in
+            # some segmentation to bring it in line with the productions
+            notem_segmented = self._attractions_balance(
                 a_dvec=mode_split,
+                p_dvec_path=self.notem_segmented_productions,
             )
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting controlled attractions reports disk...\n"
+                    "Exporting notem segmented attractions reports disk...\n"
                     "Total Attractions for year %d: %.4f"
-                    % (year, controlled.sum()),
+                    % (year, notem_segmented.sum()),
                     verbose=verbose
                 )
 
                 self._write_reports(
-                    dvec=controlled,
-                    segment_totals_path=self.full_report_segment_paths[year],
-                    ca_sector_path=self.full_report_ca_sector_paths[year],
-                    ie_sector_path=self.full_report_ie_sector_paths[year],
+                    dvec=notem_segmented,
+                    segment_totals_path=self.notem_report_segment_paths[year],
+                    ca_sector_path=self.notem_report_ca_sector_paths[year],
+                    ie_sector_path=self.notem_report_ie_sector_paths[year],
                 )
 
             # TODO: Bring in constraints (Validation)
             #  Output some audits of what attractions was before and after control
             #  By segment.
+            if self.constraint_paths is not None:
+                raise NotImplemented(
+                    "No code implemented to constrain attractions."
+                )
 
             # End timing
             end_time = timing.current_milli_time()
@@ -347,7 +369,7 @@ class HBAttractionModel:
         # Reading trip rates
         du.print_w_toggle("Reading in files...", verbose=verbose)
         trip_rates = du.safe_read_csv(
-            self.trip_att_rates_path,
+            self.attraction_trip_rates_path,
             usecols=self._target_col_dtypes['trip_rate'].keys(),
             dtype=self._target_col_dtypes['trip_rate'],
         )
@@ -434,7 +456,7 @@ class HBAttractionModel:
 
         # Create the mode-time splits DVector
         mode_splits = pd.read_csv(
-            self.mode_controls_path,
+            self.mode_splits_path,
             usecols=self._target_col_dtypes['mode_split'].keys(),
             dtype=self._target_col_dtypes['mode_split'],
         )
@@ -606,12 +628,12 @@ class HBAttractionModel:
         self.pd_report_ca_sector_paths = paths[1]
         self.pd_report_ie_sector_paths = paths[2]
 
-    def _create_full_segmented_report_paths(self,
-                                            report_path: nd.PathLike,
-                                            years: List[int],
-                                            ) -> None:
+    def _create_notem_segmented_report_paths(self,
+                                             report_path: nd.PathLike,
+                                             years: List[int],
+                                             ) -> None:
         """
-        Creates fully_segmented report file paths for each of years
+        Creates notem_segmented report file paths for each of years
 
         Parameters
         ----------
@@ -625,25 +647,26 @@ class HBAttractionModel:
         -------
         None
         """
-        paths = self._create_report_paths(report_path, years, self._fully_segmented)
-        self.full_report_segment_paths = paths[0]
-        self.full_report_ca_sector_paths = paths[1]
-        self.full_report_ie_sector_paths = paths[2]
+        paths = self._create_report_paths(report_path, years, self._notem_segmented)
+        self.notem_report_segment_paths = paths[0]
+        self.notem_report_ca_sector_paths = paths[1]
+        self.notem_report_ie_sector_paths = paths[2]
 
     @staticmethod
-    def _attractions_balance(p_dvec: str,
-                             a_dvec: nd.DVector,
+    def _attractions_balance(a_dvec: nd.DVector,
+                             p_dvec_path: str,
                              ) -> nd.DVector:
         """
         Balances attractions to production segmentation
 
         Parameters
         ----------
-        p_dvec:
-            The production Dvector to balance the attraction DVector to.
-
         a_dvec:
             The attractions Dvector to control.
+
+        p_dvec_path:
+            The path to the production Dvector to balance the attraction
+            DVector to.
 
         Returns
         -------
@@ -651,7 +674,7 @@ class HBAttractionModel:
             a_dvec controlled to p_dvec
         """
         # Read in the productions DVec from disk
-        p_dvec = nd.from_pickle(p_dvec)
+        p_dvec = nd.from_pickle(p_dvec_path)
 
         # Split a_dvec into p_dvec segments and balance
         a_dvec = a_dvec.split_segmentation_like(p_dvec)

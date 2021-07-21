@@ -1,8 +1,14 @@
+# -*- coding: utf-8 -*-
 """
-Created on: 19/06/2021
+Created on: Friday June 18th 2021
+Updated on: Wednesday July 21st 2021
 
-File purpose: Production Model for NoTEM
+Original author: Nirmal Kumar
+Last update made by: Ben Taylor
+Other updates made by: Ben Taylor
 
+File purpose:
+Production Models for NoTEM
 """
 # Allow class self type hinting
 from __future__ import annotations
@@ -59,8 +65,8 @@ class HBProductionModel:
                  land_use_paths: Dict[int, nd.PathLike],
                  trip_rates_path: str,
                  mode_time_splits_path: str,
-                 constraint_paths: Dict[int, nd.PathLike],
                  export_path: str,
+                 constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
                  ):
         # TODO(BT): Document attributes
@@ -230,6 +236,10 @@ class HBProductionModel:
             # TODO: Bring in constraints (Validation)
             #  Output some audits of what demand was before and after control
             #  By segment.
+            if self.constraint_paths is not None:
+                raise NotImplemented(
+                    "No code implemented to constrain productions."
+                )
 
             # End timing
             end_time = timing.current_milli_time()
@@ -527,7 +537,7 @@ class HBProductionModel:
                                              years: List[int],
                                              ) -> None:
         """
-        Creates fully_segmented report file paths for each of years
+        Creates notem_segmented report file paths for each of years
 
         Parameters
         ----------
@@ -541,7 +551,7 @@ class HBProductionModel:
         -------
         None
         """
-        paths = self._create_report_paths(report_path, years, self._fully_segmented)
+        paths = self._create_report_paths(report_path, years, self._notem_segmented)
         self.notem_report_segment_paths = paths[0]
         self.notem_report_ca_sector_paths = paths[1]
         self.notem_report_ie_sector_paths = paths[2]

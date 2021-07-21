@@ -26,7 +26,6 @@ POPULATION_PATH = {
 }
 TRIP_RATES_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_trip_rates_v1.9.csv"
 MODE_TIME_SPLITS_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_mode_time_split_v1.9.csv"
-constraint_PATH = POPULATION_PATH.copy()
 
 # p_export_path = r"C:\Data\Nirmal_Atkins\ss"
 p_export_path = "E:/Productions"
@@ -37,7 +36,6 @@ attraction_path = {
 }
 attr_trip_rates_path = r"I:\NorMITs Demand\import\NoTEM\Attractions\sample_attraction_trip_rate.csv"
 attr_mode_splits_path = r"I:\NorMITs Demand\import\NoTEM\Attractions\attraction_mode_split_new_infill.csv"
-attr_constraint_path = attraction_path.copy()
 
 # pure_demand_production = r"C:\Data\Nirmal_Atkins\hb_msoa_pure_demand_2018_dvec.pkl"
 pure_demand_production = r"E:\Productions\hb_msoa_notem_segmented_2018_dvec.pkl"
@@ -51,7 +49,6 @@ def main():
         POPULATION_PATH,
         TRIP_RATES_PATH,
         MODE_TIME_SPLITS_PATH,
-        constraint_PATH,
         p_export_path
     )
 
@@ -66,12 +63,11 @@ def main():
 
 def main_attr():
     hb_attr = notem_attr.HBAttractionModel(
-        attraction_path,
-        pure_demand_production,
-        attr_trip_rates_path,
-        attr_mode_splits_path,
-        attr_constraint_path,
-        attr_export_path
+        land_use_paths=attraction_path,
+        notem_segmented_productions=pure_demand_production,
+        attraction_trip_rates_path=attr_trip_rates_path,
+        mode_splits_path=attr_mode_splits_path,
+        export_path=attr_export_path,
 
     )
 
