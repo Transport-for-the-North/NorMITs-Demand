@@ -47,19 +47,21 @@ class NoTEM:
         Parameters
         ----------
         years:
-            List containing years for which the notem model is to be run.
+            List of years to run NoTEM for. Will assume that the smallest
+            year is the base year for the purposes of reading in Land Use
+            data.
 
         scenario:
-            String containing the scenario to run.
+            The name of the scenario to run for.
 
         land_use_import_drive:
-            Directory containing landuse outputs.
+            Path to the base directory of land use outputs.
 
         by_land_use_iter:
-            String containing base year landuse iteration Eg: 'iter3b'.
+            String containing base year land use iteration Eg: 'iter3b'.
 
         fy_land_use_iter:
-            String containing future year landuse iteration Eg: 'iter3b'.
+            String containing future year land use iteration Eg: 'iter3b'.
         """
         # Init
         self.years = years
@@ -189,12 +191,12 @@ class NoTEM:
         Returns
         -------
         pop_land_use_path:
-        A dictionary containing year and the corresponding land use
-        file path for population data {year:path}
+            A dictionary containing year and the corresponding land use
+            file path for population data {year:path}
 
         emp_land_use_path:
-        A dictionary containing year and the corresponding land use
-        file path for employment data {year:path}
+            A dictionary containing year and the corresponding land use
+            file path for employment data {year:path}
         """
         # Create base year land use home path
         by_land_use_home = os.path.join(
