@@ -16,8 +16,9 @@ class Pathing:
     """
 
     def __init__(self,
+                 params_file,
                  config_path='I:/NorMITs Synthesiser/config/',
-                 params_file):
+                 ):
         """
         """
         # Set config path
@@ -26,8 +27,8 @@ class Pathing:
         self.input_reqs = pd.read_csv(os.path.join(config_path,
                                                    'input_reqs.csv'),
                                       squeeze=True)
-"""
-    Commented as of now but can be removed if not required
+        """
+        Commented as of now but can be removed if not required
         # Import and parse run parameters
         param_path = os.path.join(config_path, params_file)
         self.param_path = param_path
@@ -43,7 +44,7 @@ class Pathing:
                                    engine='openpyxl')
 
         #self.params = self.params_to_dict(params)
-"""
+        """
         self.params= params_file
         # param_dict = params_to_dict(params)
 
