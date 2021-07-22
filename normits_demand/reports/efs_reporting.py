@@ -490,6 +490,29 @@ class EfsReporter:
 
         return tlb
 
+    def _get_hb_mile_trip_length_bands(self):
+        cut_off = 150
+        max_miles = 9999
+        min = range(0, cut_off + 1)
+        max = list(range(1, cut_off + 1)) + [max_miles]
+
+        df = pd.DataFrame({'min': min, 'max': max})
+        df['ave_km'] = 0
+        df['band_share'] = 1 / (cut_off + 1)
+
+        return df
+
+    def _get_trip_length_bands_from_list(self, lst):
+        min = lst[:-1]
+        max = lst[1:]
+
+        df = pd.DataFrame({'min': min, 'max': max})
+        df['ave_km'] = 0
+        df['band_share'] = 1 / len(lst-1)
+
+        return df
+
+
     def run(self,
             run_raw_vector_report: bool = True,
             compare_trip_lengths: bool = True,
@@ -563,6 +586,7 @@ class EfsReporter:
             total=len(years_needed) * len(distance_dict.keys()),
             desc="Generating TLB reports"
         )
+
         avg_trip_lengths = list()
         for year in years_needed:
             for p, distance in distance_dict.items():
@@ -595,7 +619,9 @@ class EfsReporter:
                 internal_pa = int_mask * df
 
                 # Read in the trip length bands
-                trip_len_bands = self._get_hb_trip_length_bands(p)
+                # trip_len_bands = self._get_hb_trip_length_bands(p)
+                trip_len_bands = self._get_hb_mile_trip_length_bands()
+                # trip_len_bands = self._get_trip_length_bands_from_list()
 
                 # Generate trip length data
                 reports = tms_reports.get_trip_length_by_band(
@@ -673,11 +699,11 @@ class EfsReporter:
 
     def compare_trip_lengths(self) -> None:
         """
-        Generates a report comparing post-me trip lengths to the
-        trip lengths being returned in the furness (24hr PA)
+        Generates a report comparing post-me trip length band shares to
+        pre and post elasticity band shares
         """
         # Init
-        atl_name = "average_trip_lengths.csv"
+        atl_name = "average_trip_lengths_%s.csv"
 
         # Make sure the files we need exist
         path_dict = self.imports['post_me_pa']
@@ -685,11 +711,14 @@ class EfsReporter:
 
         # Build a dictionary of distances
         print("Reading distances...")
-        distances = {p: self._get_distance(p) for p in consts.ALL_HB_P}
+        # Distance is the same no matter the purpose
+        distances = self._get_distance(1)
+        hb_distance_dict = {p: distances.copy() for p in consts.ALL_HB_P}
+        nhb_distance_dict = {p: distances.copy() for p in consts.ALL_NHB_P}
 
-        # Generate post-me reports
+        # Generate hb post-me reports
         avg_trip_lengths = self._generate_trip_band_report_by_purpose(
-            distance_dict=distances,
+            distance_dict=hb_distance_dict,
             raw_mat_import=self.imports['post_me_pa'],
             cache_export=self.exports['cache']['post_me_tlb'],
             report_export=self.exports['tlb']['post_me'],
@@ -698,12 +727,27 @@ class EfsReporter:
             matrix_format='pa',
             mode=consts.MODEL_MODES[self.model_name][0],
         )
-        atl_path = os.path.join(self.exports['tlb']['post_me'], atl_name)
+        atl_path = os.path.join(self.exports['tlb']['post_me'], atl_name % 'hb')
         pd.DataFrame(avg_trip_lengths).to_csv(atl_path, index=False)
+
+        # Generate nhb post-me reports
+        avg_trip_lengths = self._generate_trip_band_report_by_purpose(
+            distance_dict=nhb_distance_dict,
+            raw_mat_import=self.imports['post_me_pa'],
+            cache_export=self.exports['cache']['post_me_tlb'],
+            report_export=self.exports['tlb']['post_me'],
+            years_needed=[self.base_year],
+            trip_origin='nhb',
+            matrix_format='pa',
+            mode=consts.MODEL_MODES[self.model_name][0],
+        )
+        atl_path = os.path.join(self.exports['tlb']['post_me'], atl_name % 'hb')
+        pd.DataFrame(avg_trip_lengths).to_csv(atl_path, index=False)
+
 
         # Generate post-furness reports
         avg_trip_lengths = self._generate_trip_band_report_by_purpose(
-            distance_dict=distances,
+            distance_dict=hb_distance_dict,
             raw_mat_import=self.imports['matrices']['pa_24'],
             cache_export=self.exports['cache']['pa_24_tlb'],
             report_export=self.exports['tlb']['pa_24'],
@@ -715,6 +759,7 @@ class EfsReporter:
         atl_path = os.path.join(self.exports['tlb']['post_me'], atl_name)
         pd.DataFrame(avg_trip_lengths).to_csv(atl_path, index=False)
 
+        exit()
         # ## GENERATE SUMMARY REPORTS ## #
 
         # Make the base report

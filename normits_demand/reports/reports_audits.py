@@ -1159,15 +1159,21 @@ def get_trip_length_by_band(band_atl,
     dist_mat = []
     bs_mat = []
 
+
     # Loop over rows in band_atl
     for index, row in band_atl.iterrows():
 
+        band_mask = (
+            (distance >= float(row['min']))
+            & (distance < float(row['max']))
+        )
+
         # Get total distance
-        band_mat = np.where((distance >= float(row['min'])) & (distance < float(row['max'])), distance, 0)
-        total_distance = (internal_pa * band_mat).sum()
+        band_distance = np.where(band_mask, distance, 0)
+        total_distance = (internal_pa * band_distance).sum()
 
         # Get subset matrix for distance
-        distance_bool = np.where(band_mat==0, band_mat, 1)
+        distance_bool = np.where(band_mask, 1, 0)
         band_trips = internal_pa * distance_bool
 
         # Get output parameters

@@ -20,8 +20,8 @@ def main():
 
     # ## SETUP ## #
     # Controls I/O
-    scenario = consts.SC04_UZC
-    iter_num = '3g'
+    scenario = consts.SC01_JAM
+    iter_num = '3i'
     import_home = "I:/"
     export_home = "I:/"
     model_name = consts.MODEL_NAME
@@ -38,7 +38,8 @@ def main():
 
     auditor.run(
         run_raw_vector_report=False,
-        compare_trip_lengths=False,
+        compare_trip_lengths=True,
+        compare_to_ntem=False,
         compare_to_scenario=False,
     )
 
