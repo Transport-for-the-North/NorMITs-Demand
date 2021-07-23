@@ -84,13 +84,13 @@ class HBAttractionModel:
 
     def __init__(self,
                  land_use_paths: Dict[int, nd.PathLike],
-                 notem_segmented_productions: str,
+                 control_production_paths: Dict[int, nd.PathLike],
                  attraction_trip_rates_path: str,
                  mode_splits_path: str,
                  export_path: str,
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
-                 ) -> HBAttractionModel:
+                 ) -> None:
         """
         Validates and assigns the attributes needed for NoTEM Attraction model.
 
@@ -99,7 +99,7 @@ class HBAttractionModel:
         land_use_paths:
             Dictionary of {year: land_use_employment_data} pairs.
 
-        notem_segmented_productions:
+        control_production_paths:
             Dictionary of {year: path_to_production_to_control_to} pairs.
             These paths should be gotten from nd.HBProduction model.
             Must contain the same keys as land_use_paths, but it can contain
@@ -129,7 +129,7 @@ class HBAttractionModel:
         """
         # Validate inputs
         [ops.check_file_exists(x) for x in land_use_paths.values()]
-        ops.check_file_exists(notem_segmented_productions)
+        [ops.check_file_exists(x) for x in control_production_paths.values()]
         ops.check_file_exists(attraction_trip_rates_path)
         ops.check_file_exists(mode_splits_path)
         ops.check_path_exists(export_path)
@@ -137,9 +137,24 @@ class HBAttractionModel:
         if constraint_paths is not None:
             [ops.check_file_exists(x) for x in constraint_paths.values()]
 
+        for year in land_use_paths.keys():
+            if year not in control_production_paths.keys():
+                raise ValueError(
+                    "Year %d found in land_use_paths\n"
+                    "But not found in control_production_paths"
+                    % year
+                )
+            if constraint_paths is not None:
+                if year not in constraint_paths.keys():
+                    raise ValueError(
+                        "Year %d found in land_use_paths\n"
+                        "But not found in constraint_paths"
+                        % year
+                    )
+
         # Assign
         self.land_use_paths = land_use_paths
-        self.notem_segmented_productions = notem_segmented_productions
+        self.control_production_paths = control_production_paths
         self.attraction_trip_rates_path = attraction_trip_rates_path
         self.mode_splits_path = mode_splits_path
         self.constraint_paths = constraint_paths
@@ -180,9 +195,16 @@ class HBAttractionModel:
             - Reads in the mode splits given in the constructor.
             - Multiplies the "pure attractions" and mode splits on relevant
               segments, producing "fully segmented attractions".
+            - Checks the attraction totals before and after mode split and throws
+              error if they don't match.
             - Optionally writes out a pickled DVector of "fully segmented attractions"
-              at self.fully_segmented_paths[year] if export_fully_segmented
-              is True.
+              at self.fully_segmented_paths[year].
+            - Balances "fully segmented attractions" to production notem segmentation,
+              producing "notem segmented" attractions.
+            - Optionally writes out a pickled DVector of "notem segmented attractions"
+              at self.notem_segmented_paths[year].
+            - Optionally writes out a number of "notem segmented" reports, if
+              reports is True.
 
         Parameters
         ----------
@@ -247,11 +269,11 @@ class HBAttractionModel:
 
             # ## SPLIT PURE ATTRACTIONS BY MODE ## #
             du.print_w_toggle("Splitting by mode...", verbose=verbose)
-            mode_split = self._split_by_mode(pure_attractions)
+            fully_segmented = self._split_by_mode(pure_attractions)
 
             self._attractions_total_check(
                 pure_attractions=pure_attractions,
-                fully_segmented_attractions=mode_split,
+                fully_segmented_attractions=fully_segmented,
             )
 
             # Output attractions before any aggregation
@@ -260,14 +282,18 @@ class HBAttractionModel:
                     "Exporting fully segmented attractions to disk...",
                     verbose=verbose,
                 )
-                mode_split.to_pickle(self.fully_segmented_paths[year])
+                fully_segmented.to_pickle(self.fully_segmented_paths[year])
 
             # Control the attractions to the productions - this also adds in
             # some segmentation to bring it in line with the productions
             notem_segmented = self._attractions_balance(
-                a_dvec=mode_split,
-                p_dvec_path=self.notem_segmented_productions,
+                a_dvec=fully_segmented,
+                p_dvec_path=self.control_production_paths[year],
             )
+
+            if export_notem_segmentation:
+                du.print_w_toggle("Exporting notem segmented attractions to disk...", verbose=verbose)
+                notem_segmented.to_pickle(self.notem_segmented_paths[year])
 
             if export_reports:
                 du.print_w_toggle(
@@ -477,6 +503,8 @@ class HBAttractionModel:
                                  rel_tol: float = 0.0001,
                                  ) -> None:
         """
+        Checks if totals match
+
         Checks if the attraction totals are matching before and
         after mode split and returns error message if they are unequal.
 
@@ -513,8 +541,10 @@ class HBAttractionModel:
                              years: List[int],
                              ) -> None:
         """
-        Creates output file names for pure attractions, fully segmented and aggregated
-        HB attraction outputs for the list of years
+        Creates output file paths for different segmentations.
+
+        Creates output file names for pure attractions, fully segmented
+        and notem segmented HB attraction outputs for the list of years.
 
         Parameters
         ----------
@@ -544,6 +574,10 @@ class HBAttractionModel:
             # Fully Segmented path
             fname = base_fname % (*fname_parts, self._fully_segmented, year)
             self.fully_segmented_paths[year] = os.path.join(export_path, fname)
+
+            # Notem Segmented path
+            fname = base_fname % (*fname_parts, self._notem_segmented, year)
+            self.notem_segmented_paths[year] = os.path.join(export_path, fname)
 
     # TODO: module _create_report_paths is common for both production and attraction models,
     #  so it can be grouped elsewhere

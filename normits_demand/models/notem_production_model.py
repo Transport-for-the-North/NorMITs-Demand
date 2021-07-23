@@ -72,7 +72,8 @@ class HBProductionModel:
         # TODO(BT): Document attributes
         # Validate inputs
         [ops.check_file_exists(x) for x in land_use_paths.values()]
-        [ops.check_file_exists(x) for x in constraint_paths.values()]
+        if constraint_paths is not None:
+            [ops.check_file_exists(x) for x in constraint_paths.values()]
         ops.check_file_exists(trip_rates_path)
         ops.check_file_exists(mode_time_splits_path)
         ops.check_path_exists(export_path)
@@ -218,6 +219,7 @@ class HBProductionModel:
                     verbose=verbose
                 )
                 productions.to_pickle(self.notem_segmented_paths[year])
+
             if export_reports:
                 du.print_w_toggle(
                     "Exporting notem segmented reports disk...\n"
