@@ -50,6 +50,7 @@ class DVector:
     _zone_col = 'zone'
     _segment_col = 'segment'
     _val_col = 'val'
+    _zero_infill = 1e-10
 
     _dvec_suffix = '_dvec%s' % consts.COMPRESSION_SUFFIX
 
@@ -69,17 +70,83 @@ class DVector:
                  zone_col: str = None,
                  val_col: str = None,
                  df_naming_conversion: str = None,
+                 df_chunk_size: int = None,
                  infill: Any = 0,
-                 chunk_size: int = None,
                  process_count: int = consts.PROCESS_COUNT,
                  verbose: bool = False,
                  ) -> DVector:
+        """
+        Validates the input arguments and creates a DVector
+
+        Parameters
+        ----------
+        zoning_system:
+            An nd.core.ZoningSystem object defining the zoning system this
+            DVector is using.
+
+        segmentation:
+            An nd.core.ZoningSystem object defining the zoning system this
+            DVector is using.
+
+        import_data:
+            The data to become the DVector data. Can take either a
+            dictionary in the DVector.data format (usually used internally),
+            or a pandas DataFrame.
+
+        zone_col:
+            Only used when import_data is a pandas.DataFrame. This is the name
+            of the column in import_data containing the zones names.
+
+        val_col:
+            Only used when import_data is a pandas.DataFrame. This is the name
+            of the column in import_data containing the data values.
+
+        df_naming_conversion:
+            Only used when import_data is a pandas.DataFrame.
+            A dictionary mapping segment names in segmentation.naming_order
+            into df columns names. e.g.
+            {segment_name: column_name}
+
+        df_chunk_size:
+            Only used when import_data is a pandas.DataFrame.
+            The size of each chunk when processing a large pandas.DataFrame
+            into a DVector. Often, the size of the DataFrame can be the
+            primary cause of slowdown. By processing in chunks, the conversion
+            runs much faster. By default, set to DVector._chunk_size. Play
+            with different values to get speedup.
+
+        infill:
+            If there are any missing segmentation/zone combinations this value
+            will be used to infill. By default, set to 0.
+
+        process_count:
+            The number of processes to create in the Pool. Typically this
+            should not exceed the number of cores available.
+            Negative numbers mean that amount less than all cores e.g. -2
+            would be os.cpu_count() - 2. If set to zero, multiprocessing
+            will not be used.
+            Defaults to consts.PROCESS_COUNT.
+
+        verbose:
+            How chatty to be while processing things. Mostly used in debugging
+            and should be set to False usually.
+        """
+        # Validate arguments
+        if not isinstance(zoning_system, nd.core.ZoningSystem):
+            raise ValueError(
+                "Given zoning_system is not a nd.core.ZoningSystem object."
+            )
+
+        if not isinstance(segmentation, nd.core.SegmentationLevel):
+            raise ValueError(
+                "Given segmentation is not a nd.core.SegmentationLevel object."
+            )
+
         # Init
         self.zoning_system = zoning_system
         self.segmentation = segmentation
-        self.chunk_size = chunk_size
         self.verbose = verbose
-        self.chunk_size = self._chunk_size if chunk_size is None else chunk_size
+        self.df_chunk_size = self._chunk_size if df_chunk_size is None else df_chunk_size
 
         # Define multiprocessing arguments
         if process_count < 0:
@@ -122,7 +189,7 @@ class DVector:
         How to join the two Dvectors is defined by the segmentation of each
         Dvector.
 
-        Retains process_count, chunk_size, and verbose params from a.
+        Retains process_count, df_chunk_size, and verbose params from a.
 
         Parameters
         ----------
@@ -165,7 +232,7 @@ class DVector:
         multiply_dict, return_segmentation = self.segmentation * other.segmentation
 
         # Build the dvec data here with multiplication
-        dvec_data = dict()
+        dvec_data = dict.fromkeys(multiply_dict.keys())
         for final_seg, (self_key, other_key) in multiply_dict.items():
             dvec_data[final_seg] = self.data[self_key] * other.data[other_key]
 
@@ -181,8 +248,20 @@ class DVector:
                       import_data: nd.DVectorData,
                       infill: Any
                       ) -> nd.DVectorData:
-        # TODO(BT): Add some error checking to make sure this is
-        #  actually a valid dict
+        """
+        Validates a given DVector.data dictionary.
+
+        This function should only really be used by the __init__ when
+        class functions are creating new DVector dictionaries.
+
+        While converting, will:
+        - Makes sure that all segments in the dictionary are valid segments
+          for this DVector's segmentation
+        - Makes sure that the given dictionary contains ONLY valid segments.
+          An error is raised if any extra segments are in the dictionary.
+        """
+        # TODO(BT): Make sure all values are the correct size of the zoning
+        #  system
         # Init
 
         # ## MAKE SURE DATA CONTAINS ALL SEGMENTS ##
@@ -219,14 +298,25 @@ class DVector:
         The internal function of _dataframe_to_dvec - for multiprocessing
         """
         if self.zoning_system is None:
-            # Can use 1 to 1 connection to speed this up
+            # Make sure only one value exists for each segment
             segments = df_chunk[self._segment_col].tolist()
+            segment_set = set(segments)
+            if len(segment_set) != len(segments):
+                raise ValueError(
+                    "The given DataFrame has one or more repeated values "
+                    "for some of the segments. Found %s segments, but only "
+                    "%s of them are unique."
+                    % (len(segments), len(segment_set))
+                )
+
+            # Can use 1 to 1 connection to speed this up
             vals = df_chunk[self._val_col].to_list()
             dvec_chunk = {s: v for s, v, in zip(segments, vals)}
 
         else:
             # Generate the data on a per segment basis
             dvec_chunk = dict()
+
             for segment in df_chunk['segment'].unique():
                 # Check that it's a valid segment_name
                 if segment not in self.segmentation.segment_names:
@@ -238,13 +328,38 @@ class DVector:
                 # Get all available pop for this segment
                 seg_data = df_chunk[df_chunk[self._segment_col] == segment].copy()
 
+                # TODO(BT): There's a VERY slight chance that duplicate zones
+                #  could be split across processes. Need to add a check for
+                #  this on the calling function.
+                # Make sure there are no duplicate zones
+                seg_zones = seg_data[self._zone_col].tolist()
+                seg_zones_set = set(seg_zones)
+                if len(seg_zones_set) != len(seg_zones):
+                    raise ValueError(
+                        "The given DataFrame has one or more repeated values "
+                        "for some of the zones in segment %s. Found %s "
+                        "segments, but only %s of them are unique."
+                        % (segment, len(seg_zones), len(seg_zones_set))
+                    )
+
+                # Make sure zones that don't exist in this zoning system are found
+                zoning_system_zones = set(self.zoning_system.unique_zones)
+                extra_zones = seg_zones_set - zoning_system_zones
+                if len(extra_zones) > 0:
+                    raise ValueError(
+                        "Found zones that don't exist in %s zoning in the "
+                        "given DataFrame. For segment %s, the following "
+                        "zones do not belong to this zoning system:\n%s"
+                        % (self.zoning_system.name, segment, extra_zones)
+                    )
+
                 # Filter down to just data as values, and zoning system as the index
                 seg_data = seg_data.reindex(columns=[self._zone_col, self._val_col])
                 seg_data = seg_data.set_index(self._zone_col)
 
                 # Infill any missing zones as 0
                 seg_data = seg_data.reindex(self.zoning_system.unique_zones, fill_value=0)
-                dvec_chunk[segment] = seg_data.values
+                dvec_chunk[segment] = seg_data.values.flatten()
 
         return dvec_chunk
 
@@ -257,35 +372,57 @@ class DVector:
                            ) -> nd.DVectorData:
         """
         Converts a pandas dataframe into dvec.data internal structure
+
+        While converting, will:
+        - Make sure that any missing segment/zone combinations are infilled
+          with infill
+        - Make sure only one value exist for each segment/zone combination
         """
+        # Init columns depending on if we have zones
+        required_cols = self.segmentation.naming_order + [self._val_col]
+        sort_cols = [self._segment_col]
+
+        # Add zoning if we need it
+        if self.zoning_system is not None:
+            required_cols += [self._zone_col]
+            sort_cols += [self._zone_col]
+
         # ## VALIDATE AND CONVERT THE GIVEN DATAFRAME ## #
         # Rename import_data columns to internal names
         rename_dict = {zone_col: self._zone_col, val_col: self._val_col}
         df = df.rename(columns=rename_dict)
 
-        # Add the segment column
+        # Rename the segment columns if needed
+        if segment_naming_conversion is not None:
+            df = self.segmentation.rename_segment_cols(df, segment_naming_conversion)
+
+        # Make sure we don't have any extra columns
+        extra_cols = set(list(df)) - set(required_cols)
+        if len(extra_cols) > 0:
+            raise ValueError(
+                "Found extra columns in the given DataFrame than needed. The "
+                "given DataFrame should only contain val_col, "
+                "segmentation_cols, and the zone_col (where applicable). "
+                "Found the following extra columns: %s"
+                % extra_cols
+            )
+
+        # Add the segment column - drop the individual cols
         df[self._segment_col] = self.segmentation.create_segment_col(
             df=df,
             naming_conversion=segment_naming_conversion
         )
+        df = df.drop(columns=self.segmentation.naming_order)
 
-        # Remove anything else that isn't needed
-        if self.zoning_system is None:
-            needed_cols = [self._segment_col, self._val_col]
-        else:
-            needed_cols = [self._segment_col, self._zone_col, self._val_col]
-        df = pd_utils.reindex_and_groupby(
-            df=df,
-            index_cols=needed_cols,
-            value_cols=[self._val_col],
-        )
+        # Sort by the segment columns for MP speed
+        df = df.sort_values(by=sort_cols)
 
         # ## MULTIPROCESSING SETUP ## #
         # If the dataframe is smaller than the chunk size, evenly split across cores
-        if len(df) < self.chunk_size * self.process_count:
+        if len(df) < self.df_chunk_size * self.process_count:
             chunk_size = math.ceil(len(df) / self.process_count)
         else:
-            chunk_size = self.chunk_size
+            chunk_size = self.df_chunk_size
 
         # setup a pbar
         pbar_kwargs = {
@@ -718,6 +855,7 @@ class DVector:
 
         # Translate zoning in chunks
         for key, value in self_data.items():
+            value = value.flatten()
             temp = np.broadcast_to(np.expand_dims(value, axis=1), translation.shape)
             temp = temp * translation
             dvec_data[key] = temp.sum(axis=0)
@@ -882,6 +1020,187 @@ class DVector:
             verbose=self.verbose,
         )
 
+    def split_segmentation_like(self,
+                                other: DVector,
+                                ) -> DVector:
+        """
+        Splits this DVector segmentation into other.segmentation
+
+        Using other to derive the splitting factors, this DVector is split
+        into the same segmentation as other.segmentation. Splits are derived
+        as an average across all zones for each segment in other, resulting in
+        a single splitting factor for each segment. The splitting factor is
+        then applied to this DVector, equally across all zones.
+
+        Parameters
+        ----------
+        other:
+            The DVector to use to determine the segmentation to split in to,
+            as well as the weights to use for the splits.
+
+        Returns
+        -------
+        new_dvector:
+            A new DVector containing the same total as values, but split
+            into other.segmentation segmentation.
+
+        Raises
+        ------
+        ValueError:
+            If the given parameters are not the correct types
+
+        SegmentationError:
+            If the segmentation cannot be split. This DVector must be
+            in a segmentation that is a subset of other.segmentation.
+        """
+        # Validate inputs
+        if not isinstance(other, DVector):
+            raise ValueError(
+                "other is not the correct type. "
+                "Expected DVector, got %s"
+                % type(other)
+            )
+
+        # Get the dictionary defining how to split
+        split_dict = self.segmentation.split(other.segmentation)
+
+        # Split!
+        # TODO(BT): Add optional multiprocessing if split_dict is big enough
+        dvec_data = dict.fromkeys(other.segmentation.segment_names)
+        for in_seg_name, out_seg_names in split_dict.items():
+            # Calculate the splitting factors
+            other_segs = [np.mean(other.data[s]) for s in out_seg_names]
+            split_factors = other_segs / np.sum(other_segs)
+
+            # Get the original value
+            self_seg = self.data[in_seg_name]
+
+            # Split
+            for name, factor in zip(out_seg_names, split_factors):
+                dvec_data[name] = self_seg * factor
+
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=other.segmentation,
+            import_data=dvec_data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
+
+    def balance_at_segments(self,
+                            other: DVector,
+                            split_weekday_weekend: bool = False,
+                            ) -> DVector:
+        """
+        Balance segment totals to other, ignoring zoning splits.
+
+        Essentially does
+        self[segment] *= other[segment].sum() / self[segment].sum()
+        for all segments.
+
+        Parameters
+        ----------
+        other:
+            The DVector to control this one to. Must have the same segmentation
+            as this DVector
+
+        split_weekday_weekend:
+            Whether to control the time periods as weekday and weekend splits
+            instead of each individual time period. If set to True,
+            each DVector must be at a segmentation with a 'tp' segment.
+
+        Returns
+        -------
+        controlled_dvector:
+            A copy of this DVector, controlled to other. The total of each
+            segment should be equal across self and other.
+
+        Raises
+        ------
+        ValueError:
+            If the given parameters are not the correct types.
+
+        ValueError:
+            If self and other do not have the same segmentation.
+        """
+        # Init
+        infill = self._zero_infill
+
+        # Validate inputs
+        if not isinstance(other, DVector):
+            raise ValueError(
+                "other is not the correct type. "
+                "Expected DVector, got %s"
+                % type(other)
+            )
+
+        if self.segmentation.name != other.segmentation.name:
+            raise ValueError(
+                "Segmentation of both DVectors does not match! "
+                "Perhaps you need to call "
+                "self.split_segmentation_like(other) to bring them into "
+                "alignment?\n"
+                "self segmentation: %s\n"
+                "other segmentation: %s"
+                % (self.segmentation.name, other.segmentation.name)
+            )
+
+        # Loop through each segment and control
+        dvec_data = dict.fromkeys(self.segmentation.segment_names)
+
+        if split_weekday_weekend:
+            # Get the grouped segment lists
+            wk_day_segs = self.segmentation.get_grouped_weekday_segments()
+            wk_end_segs = self.segmentation.get_grouped_weekend_segments()
+
+            # Control by weekday and weekend separately
+            for split_wk_segs in [wk_day_segs, wk_end_segs]:
+                for segment_group in split_wk_segs:
+                    # Get data and infill zeros
+                    self_data_lst = list()
+                    other_data_lst = list()
+                    for segment in segment_group:
+                        # Get data
+                        self_data = self.data[segment]
+                        other_data = other.data[segment]
+
+                        # Infill zeros
+                        self_data = np.where(self_data <= 0, infill, self_data)
+                        other_data = np.where(other_data <= 0, infill, other_data)
+
+                        # Append
+                        self_data_lst.append(self_data)
+                        other_data_lst.append(other_data)
+
+                    # Get the control factor
+                    factor = np.sum(other_data_lst) / np.sum(self_data_lst)
+
+                    # Balance each segment
+                    for segment, self_data in zip(segment_group, self_data_lst):
+                        dvec_data[segment] = self_data * factor
+
+        else:
+            # Control all segments as normal
+            for segment in self.segmentation.segment_names:
+                # Get data
+                self_data = self.data[segment]
+                other_data = other.data[segment]
+
+                # Infill zeros
+                self_data = np.where(self_data <= 0, infill, self_data)
+                other_data = np.where(other_data <= 0, infill, other_data)
+
+                # Balance
+                dvec_data[segment] = self_data * (np.sum(other_data) / np.sum(self_data))
+
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=other.segmentation,
+            import_data=dvec_data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
+
     def sum_zoning(self) -> DVector:
         """
         Sums all the zone values in DVector into a single value.
@@ -934,6 +1253,15 @@ class DVector:
         )
 
 
+class DVectorError(nd.NormitsDemandError):
+    """
+    Exception for all errors that occur around DVector management
+    """
+    def __init__(self, message=None):
+        self.message = message
+        super().__init__(self.message)
+
+
 # ## FUNCTIONS ## #
 def multiply_and_aggregate_dvectors(a: DVector,
                                     b: DVector,
@@ -978,22 +1306,28 @@ def multiply_and_aggregate_dvectors(a: DVector,
     return a.multiply_and_aggregate(other=b, out_segmentation=out_segmentation)
 
 
-def read_compressed_dvector(path: nd.PathLike) -> DVector:
+def read_compressed_dvector(path: nd.PathLike) -> Union[DVector, Any]:
     """
+    Load pickled and compressed DVector object (or any object) from file.
 
     Parameters
     ----------
-    path
+    path:
+        The full path to the object to read.
 
     Returns
     -------
-
+    object:
+        The object that was read in from disk. Will be the
+        same type as object stored in file.
     """
-    # TODO(BT): VALIDATE PATH
+    # File validation
+    file_ops.check_file_exists(path)
+
     return compress.read_in(path)
 
 
-def from_pickle(path: nd.PathLike) -> DVector:
+def from_pickle(path: nd.PathLike) -> Union[DVector, Any]:
     """
     Load pickled DVector object (or any object) from file.
 
@@ -1005,7 +1339,7 @@ def from_pickle(path: nd.PathLike) -> DVector:
     Returns
     -------
     unpickled:
-        Same type as object stored in file
+        Same type as object stored in file.
     """
     # TODO(BT): VALIDATE PATH
     with open(path, 'rb') as f:

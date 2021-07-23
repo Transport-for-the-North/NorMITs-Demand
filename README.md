@@ -111,10 +111,15 @@ better with TMS output paths.
 - Added versioning to reports_audits.py and updated code to include versioning 
 as part of their file name in distribution reports
 
-### v0.3.6 (NoTEM Development)
+### v0.4.0 (NoTEM Development)
 - Added the SegmentationLevel Class
 - Added the ZoningSystem Class
 - Added the DVector class (built on two previous classes)
 - Added the new NoTEM Production model - built on top of DVec
     - Uses new, more disaggregate segmentation.
-    - Optimised for run times using numpy. 
+    - Optimised for run times using numpy.
+- Added the new NoTEM Attraction model - built on top of DVec
+    - Uses new, more disaggregate segmentation.
+    - Optimised for run times using numpy.
+    
+- Added a new NoTEM wrapper around the new production and attraction models 
