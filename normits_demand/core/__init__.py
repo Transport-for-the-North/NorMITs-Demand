@@ -16,3 +16,4 @@ from normits_demand.core.data_structures import from_pickle
 # ## EXPOSE ERRORS ## #
 from normits_demand.core.zoning import ZoningError
 from normits_demand.core.segments import SegmentationError
+from normits_demand.core.data_structures import DVectorError

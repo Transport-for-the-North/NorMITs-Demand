@@ -3493,7 +3493,7 @@ def chunk_list(lst: Iterable,
                chunk_size: int,
                ) -> Generator[pd.DataFrame, None, None]:
     """
-    Yields chunk_size chunks of list
+    Yields df_chunk_size chunks of list
 
     Parameters
     ----------
@@ -3506,7 +3506,7 @@ def chunk_list(lst: Iterable,
     Yields
     ------
     lst_chunk:
-        A chunk of the given lst of size chunk_size
+        A chunk of the given lst of size df_chunk_size
 
     """
     lst = list(lst)

@@ -92,7 +92,7 @@ class HBAttractionModel:
                  process_count: int = consts.PROCESS_COUNT
                  ) -> None:
         """
-        Validates and assigns the attributes needed for NoTEM Attraction model.
+        Sets up and validates arguments for the Attraction model.
 
         Parameters
         ----------
@@ -108,9 +108,16 @@ class HBAttractionModel:
 
         attraction_trip_rates_path:
             The path to the attraction trip rates.
+            Should have the columns as defined in:
+            HBAttractionModel._target_cols['trip_rate']
 
         mode_splits_path:
             The path to attraction mode split.
+            Should have the columns as defined in:
+            HBAttractionModel._target_cols['mode_split']
+
+        export_path:
+            Path to export attraction outputs.
 
         constraint_paths:
             Dictionary of {year: constraint_path} pairs.
@@ -118,9 +125,6 @@ class HBAttractionModel:
             more (any extras will be ignored).
             If set - will be used to constrain the attractions - a report will
             be written before and after.
-
-        export_path:
-            Path to export attraction outputs.
 
         process_count:
             The number of processes to create in the Pool. Typically this

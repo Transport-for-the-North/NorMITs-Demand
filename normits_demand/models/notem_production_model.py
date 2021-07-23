@@ -69,7 +69,39 @@ class HBProductionModel:
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
                  ):
-        # TODO(BT): Document attributes
+        """
+        Sets up and validates arguments for the Production model.
+
+        Parameters
+        ----------
+        land_use_paths:
+            Dictionary of {year: land_use_employment_data} pairs.
+
+        trip_rates_path:
+            The path to the production trip rates.
+            Should have the columns as defined in:
+            HBProductionModel._target_cols['trip_rate']
+
+        mode_time_splits_path:
+            The path to production mode-time splits.
+            Should have the columns as defined in:
+            HBProductionModel._target_cols['m_tp']
+
+        export_path:
+            Path to export attraction outputs.
+
+        constraint_paths:
+            Dictionary of {year: constraint_path} pairs.
+            Must contain the same keys as land_use_paths, but it can contain
+            more (any extras will be ignored).
+            If set - will be used to constrain the productions - a report will
+            be written before and after.
+
+        process_count:
+            The number of processes to create in the Pool. Typically this
+            should not exceed the number of cores available.
+            Defaults to consts.PROCESS_COUNT.
+        """
         # Validate inputs
         [ops.check_file_exists(x) for x in land_use_paths.values()]
         if constraint_paths is not None:

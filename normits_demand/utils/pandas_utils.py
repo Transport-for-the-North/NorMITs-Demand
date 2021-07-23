@@ -199,7 +199,7 @@ def chunk_df(df: pd.DataFrame,
              chunk_size: int,
              ) -> Generator[pd.DataFrame, None, None]:
     """
-    Yields chunk_size chunks of df
+    Yields df_chunk_size chunks of df
 
     Parameters
     ----------
@@ -212,7 +212,7 @@ def chunk_df(df: pd.DataFrame,
     Yields
     ------
     df_chunk:
-        A chunk of the given df of size chunk_size
+        A chunk of the given df of size df_chunk_size
     """
     for i in range(0, len(df), chunk_size):
         chunk_end = i + chunk_size

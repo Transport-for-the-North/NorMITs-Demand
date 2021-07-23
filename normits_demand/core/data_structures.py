@@ -70,17 +70,83 @@ class DVector:
                  zone_col: str = None,
                  val_col: str = None,
                  df_naming_conversion: str = None,
+                 df_chunk_size: int = None,
                  infill: Any = 0,
-                 chunk_size: int = None,
                  process_count: int = consts.PROCESS_COUNT,
                  verbose: bool = False,
                  ) -> DVector:
+        """
+        Validates the input arguments and creates a DVector
+
+        Parameters
+        ----------
+        zoning_system:
+            An nd.core.ZoningSystem object defining the zoning system this
+            DVector is using.
+
+        segmentation:
+            An nd.core.ZoningSystem object defining the zoning system this
+            DVector is using.
+
+        import_data:
+            The data to become the DVector data. Can take either a
+            dictionary in the DVector.data format (usually used internally),
+            or a pandas DataFrame.
+
+        zone_col:
+            Only used when import_data is a pandas.DataFrame. This is the name
+            of the column in import_data containing the zones names.
+
+        val_col:
+            Only used when import_data is a pandas.DataFrame. This is the name
+            of the column in import_data containing the data values.
+
+        df_naming_conversion:
+            Only used when import_data is a pandas.DataFrame.
+            A dictionary mapping segment names in segmentation.naming_order
+            into df columns names. e.g.
+            {segment_name: column_name}
+
+        df_chunk_size:
+            Only used when import_data is a pandas.DataFrame.
+            The size of each chunk when processing a large pandas.DataFrame
+            into a DVector. Often, the size of the DataFrame can be the
+            primary cause of slowdown. By processing in chunks, the conversion
+            runs much faster. By default, set to DVector._chunk_size. Play
+            with different values to get speedup.
+
+        infill:
+            If there are any missing segmentation/zone combinations this value
+            will be used to infill. By default, set to 0.
+
+        process_count:
+            The number of processes to create in the Pool. Typically this
+            should not exceed the number of cores available.
+            Negative numbers mean that amount less than all cores e.g. -2
+            would be os.cpu_count() - 2. If set to zero, multiprocessing
+            will not be used.
+            Defaults to consts.PROCESS_COUNT.
+
+        verbose:
+            How chatty to be while processing things. Mostly used in debugging
+            and should be set to False usually.
+        """
+        # Validate arguments
+        if not isinstance(zoning_system, nd.core.ZoningSystem):
+            raise ValueError(
+                "Given zoning_system is not a nd.core.ZoningSystem object."
+            )
+
+        if not isinstance(segmentation, nd.core.SegmentationLevel):
+            raise ValueError(
+                "Given segmentation is not a nd.core.SegmentationLevel object."
+            )
+
         # Init
         self.zoning_system = zoning_system
         self.segmentation = segmentation
-        self.chunk_size = chunk_size
         self.verbose = verbose
-        self.chunk_size = self._chunk_size if chunk_size is None else chunk_size
+        self.df_chunk_size = self._chunk_size if df_chunk_size is None else df_chunk_size
 
         # Define multiprocessing arguments
         if process_count < 0:
@@ -123,7 +189,7 @@ class DVector:
         How to join the two Dvectors is defined by the segmentation of each
         Dvector.
 
-        Retains process_count, chunk_size, and verbose params from a.
+        Retains process_count, df_chunk_size, and verbose params from a.
 
         Parameters
         ----------
@@ -182,8 +248,20 @@ class DVector:
                       import_data: nd.DVectorData,
                       infill: Any
                       ) -> nd.DVectorData:
-        # TODO(BT): Add some error checking to make sure this is
-        #  actually a valid dict
+        """
+        Validates a given DVector.data dictionary.
+
+        This function should only really be used by the __init__ when
+        class functions are creating new DVector dictionaries.
+
+        While converting, will:
+        - Makes sure that all segments in the dictionary are valid segments
+          for this DVector's segmentation
+        - Makes sure that the given dictionary contains ONLY valid segments.
+          An error is raised if any extra segments are in the dictionary.
+        """
+        # TODO(BT): Make sure all values are the correct size of the zoning
+        #  system
         # Init
 
         # ## MAKE SURE DATA CONTAINS ALL SEGMENTS ##
@@ -294,6 +372,11 @@ class DVector:
                            ) -> nd.DVectorData:
         """
         Converts a pandas dataframe into dvec.data internal structure
+
+        While converting, will:
+        - Make sure that any missing segment/zone combinations are infilled
+          with infill
+        - Make sure only one value exist for each segment/zone combination
         """
         # Init columns depending on if we have zones
         required_cols = self.segmentation.naming_order + [self._val_col]
@@ -336,10 +419,10 @@ class DVector:
 
         # ## MULTIPROCESSING SETUP ## #
         # If the dataframe is smaller than the chunk size, evenly split across cores
-        if len(df) < self.chunk_size * self.process_count:
+        if len(df) < self.df_chunk_size * self.process_count:
             chunk_size = math.ceil(len(df) / self.process_count)
         else:
-            chunk_size = self.chunk_size
+            chunk_size = self.df_chunk_size
 
         # setup a pbar
         pbar_kwargs = {
@@ -1168,6 +1251,15 @@ class DVector:
             process_count=self.process_count,
             verbose=self.verbose,
         )
+
+
+class DVectorError(nd.NormitsDemandError):
+    """
+    Exception for all errors that occur around DVector management
+    """
+    def __init__(self, message=None):
+        self.message = message
+        super().__init__(self.message)
 
 
 # ## FUNCTIONS ## #
