@@ -79,30 +79,40 @@ def reindex_and_groupby(df: pd.DataFrame,
                         **kwargs,
                         ) -> pd.DataFrame:
     """
-    # TODO(BT): Properly document this function!
-    Wrapper around df.reindex() and df.groupby(). Will throw error if
-    index_cols aren't in df.
+    Wrapper around df.reindex() and df.groupby().
+
+    Optionally throws an error if index_cols aren't in df. Will throw an
+    error by default
 
     Parameters
     ----------
-    df
-    index_cols
-    value_cols
-    throw_error
-    kwargs
+    df:
+        The pandas.DataFrame that should be reindexed and grouped.
+
+    index_cols:
+        List of column names to reindex to.
+
+    value_cols:
+        List of column names that contain values. Groupby will be performed
+        on any columns that are in value_cols, but not index_cols.
+
+    throw_error:
+        Whether to throw an error if not all index_cols are in the df.
 
     Returns
     -------
-
+    new_df:
+        A copy of df that has been reindexed and grouped.
     """
     # ## VALIDATE INPUTS ## #
-    for col in index_cols:
-        if col not in df:
-            raise ValueError(
-                "No columns named '%s' in the given dataframe.\n"
-                "Only found the following columns: %s"
-                % (col, list(df))
-            )
+    if throw_error:
+        for col in index_cols:
+            if col not in df:
+                raise ValueError(
+                    "No columns named '%s' in the given dataframe.\n"
+                    "Only found the following columns: %s"
+                    % (col, list(df))
+                )
 
     for col in value_cols:
         if col not in index_cols:
@@ -113,7 +123,7 @@ def reindex_and_groupby(df: pd.DataFrame,
             )
     
     # Generate the group cols
-    group_cols = du.list_safe_remove(index_cols, value_cols, throw_error)
+    group_cols = du.list_safe_remove(index_cols, value_cols)
 
     df = df.reindex(columns=index_cols, **kwargs)
     return df.groupby(group_cols).sum().reset_index()
@@ -123,14 +133,21 @@ def filter_df(df: pd.DataFrame,
               df_filter: Dict[str, Any],
               ) -> pd.DataFrame:
     """
-    TODO(BT): Write Docs
+    Filters a DataFrame by df_filter.
+
     Parameters
     ----------
-    df
-    df_filter
+    df:
+        The pandas.Dataframe to filter.
+
+    df_filter:
+        Dictionary of {column: valid_value} pairs to define the filter to be
+        applied. Will return only where all column conditions are met.
 
     Returns
     -------
+    filtered_df:
+        A copy of df, filtered down to df_filter.
 
     """
     # Wrap each item if a list to avoid errors
@@ -182,7 +199,7 @@ def chunk_df(df: pd.DataFrame,
              chunk_size: int,
              ) -> Generator[pd.DataFrame, None, None]:
     """
-    Yields chunk_size chunks of df
+    Yields df_chunk_size chunks of df
 
     Parameters
     ----------
@@ -195,8 +212,7 @@ def chunk_df(df: pd.DataFrame,
     Yields
     ------
     df_chunk:
-        A chunk of the given df of size chunk_size
-
+        A chunk of the given df of size df_chunk_size
     """
     for i in range(0, len(df), chunk_size):
         chunk_end = i + chunk_size
@@ -212,20 +228,38 @@ def long_to_wide_infill(df: pd.DataFrame,
                         infill: Any = 0,
                         ) -> pd.DataFrame:
     """
-    TODO(BT): Write long_to_wide_infill() docs
+    Converts a DataFrame from long to wide format, infilling missing values.
+
     Parameters
     ----------
-    df
-    infill
-    index_col
-    columns_col
-    values_col
-    index_vals
-    column_vals
+    df:
+        The dataframe, in long format, to convert to wide.
+
+    index_col:
+        The column of df to use as the index of the wide return DataFrame
+
+    columns_col:
+        The column of df to use as the columns of the wide return DataFrame
+
+    values_col:
+        The column of df to use as the values of the wide return DataFrame
+
+    index_vals:
+        The unique values to use as the index of the wide return DataFrame.
+        If left as None, df[index_col].unique() will be used.
+
+    column_vals:
+        The unique values to use as the columns of the wide return DataFrame.
+        If left as None, df[columns_col].unique() will be used.
+
+    infill:
+        The value to use to infill any missing cells in the wide DataFrame.
 
     Returns
     -------
-
+    wide_df:
+        A copy of df, in wide format, with index_col as the index,
+        columns_col as the column names, and values_col as the values.
     """
     # Init
     index_vals = df[index_col].unique() if index_vals is None else index_vals

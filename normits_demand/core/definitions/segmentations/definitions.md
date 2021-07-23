@@ -36,8 +36,43 @@ A simplified reporting version of pure_demand segmentation.
 
 ## NoTEM Attractions
 
+### lu_emp
+Equivalent to the segmentation the Land Use employment data is received in.
+
+| Segment Name | Description                                           | Values        | Notes |
+|--------------|-------------------------------------------------------|---------------|-------|
+| `e_cat`      | TfN Traveller Type - Extension of NTEM Traveller Type | E01, E03-E14  | E07 is split into 4. E07A-E07D. 16 values in total. |
+| `soc`        | Skill Level Proxy                                     | 1-3           |      |
+
+### pure_attractions_ecat
+Equivalent to the segmentation the attractions trip rates come in at. Similar to pure attractions,
+but with e_category too
+
+| Segment Name | Description                                           | Values        | Notes |
+|--------------|-------------------------------------------------------|---------------|-------|
+| `p`          | NTEM Purpose                                          | 1-8           |       |
+| `e_cat`      | TfN Traveller Type - Extension of NTEM Traveller Type | E01, E03-E14  | E07 is split into 4. E07A-E07D. 16 values in total. |
+| `soc`        | Skill Level Proxy                                     | 1-3           |      |
+
+
+### pure_attractions
+The segmentation of NoTEM Attraction model pure_attractions output.
+
+| Segment Name | Description                                           | Values        | Notes |
+|--------------|-------------------------------------------------------|---------------|-------|
+| `p`          | NTEM Purpose                                          | 1-8           |       |
+| `soc`        | Skill Level Proxy                                     | 1-3           |      |
+
 
 ## General
+
+### hb_p_m
+Segmentation containing just home based NTEM purposes and modes.
+
+| Segment Name   | Description                                           | Values   | Notes |
+|----------------|-------------------------------------------------------|----------|-------|
+| `p`            | NTEM Purpose                                          | 1-8      |       |
+| `m`            | NTEM Mode. Modes 3 and 4 are combined to make mode 3  | 1-3, 5-6 |       |
 
 ### full_tfntt_tfnat
 The segmentation of the production mode-time splits. This is the most detailed segmentation

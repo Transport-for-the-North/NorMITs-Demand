@@ -15,6 +15,7 @@ from __future__ import annotations
 
 # Builtins
 import os
+import itertools
 import collections
 
 from typing import Any
@@ -24,6 +25,7 @@ from typing import Tuple
 
 # Third Party
 import pandas as pd
+import numpy as np
 
 # Local Imports
 import normits_demand as nd
@@ -37,6 +39,9 @@ from normits_demand.utils import pandas_utils as pd_utils
 
 # ## CLASSES ## #
 class SegmentationLevel:
+
+    _weekday_time_periods = [1, 2, 3, 4]
+    _weekend_time_periods = [5, 6]
 
     _segmentation_import_fname = "segmentations"
     _unique_segments_csv_fname = "unique_segments.csv"
@@ -179,13 +184,13 @@ class SegmentationLevel:
         multiply_dict = dict(zip(r, zip(s, o)))
 
         # Check that the output segmentation has been created properly
-        if not other.is_correct_naming(list(multiply_dict.keys())):
+        if not return_seg.is_correct_naming(list(multiply_dict.keys())):
             raise SegmentationError(
-                "Some segment names seem to have gone missing during"
+                "Some segment names seem to have gone missing during "
                 "multiplication.\n"
                 "Expected %s segments.\n"
                 "Found %s segments."
-                % (len(other.segment_names), len(set(multiply_dict.keys())))
+                % (len(return_seg.segment_names), len(set(multiply_dict.keys())))
             )
 
         return multiply_dict, return_seg
@@ -335,6 +340,69 @@ class SegmentationLevel:
         translate_pairs = du.list_safe_remove(translate_pairs, [''])
         return [tuple(x.split(self._translate_separator)) for x in translate_pairs]
 
+    def rename_segment_cols(self,
+                            df: pd.DataFrame,
+                            naming_conversion: Dict[str, str],
+                            inplace: bool = False,
+                            ) -> pd.DataFrame:
+        """
+        Renames the columns of df to the correct segment names.
+
+        Similar to doing a rename on df, however there is added error
+        checking in this function to make sure the columns we're renaming
+        actually exist, and all the names we're renaming too are actually
+        valid segments for this segmentation.
+
+        Parameters
+        ----------
+        df:
+            The dataframe to convert
+
+        naming_conversion:
+            A dictionary mapping segment names in self.naming order into
+            df columns names. e.g.
+            {segment_name: column_name}
+
+        inplace:
+            Whether to return a new DataFrame.
+
+        Returns
+        -------
+        DataFrame or None:
+            DataFrame with the renamed columns or None if inplace=True.
+
+        Raises
+        ------
+        ValueError:
+            If any of keys of naming_conversion are not a valid segment_name.
+
+        ValueError:
+            If any of values of naming_conversion are not a valid column
+            name in df.
+        """
+        # ## VALIDATE ARGS ## #
+        # Check the keys are valid segments
+        for key in naming_conversion.keys():
+            if key not in self.naming_order:
+                raise ValueError(
+                    "Key '%s' in naming conversion is not a valid segment "
+                    "name for this segmentation. Expecting one of: %s"
+                    % (key, self.naming_order)
+                )
+
+        # Check that the values given are in df
+        for value in naming_conversion.values():
+            if value not in df:
+                raise ValueError(
+                    "No column named '%s' in the given dataframe."
+                    "Found columns: %s"
+                    % (value, list(df))
+                )
+
+        # Rename columns as needed
+        rename_dict = {v: k for k, v in naming_conversion.items()}
+        return df.rename(columns=rename_dict, inplace=inplace)
+
     def copy(self):
         """Returns a copy of this class"""
         return SegmentationLevel(
@@ -390,27 +458,8 @@ class SegmentationLevel:
         if naming_conversion is None:
             naming_conversion = {x: x for x in self.naming_order}
 
-        # ## VALIDATE ARGS ## #
-        # Check the keys are valid segments
-        for key in naming_conversion.keys():
-            if key not in self.naming_order:
-                raise ValueError(
-                    "Key '%s' in naming conversion is not a valid segment "
-                    "name for this segmentation. Expecting one of: %s"
-                    % (key, self.naming_order)
-                )
-
-        # Check that the values given are in df
-        for value in naming_conversion.values():
-            if value not in df:
-                raise ValueError(
-                    "No column named '%s' in the given dataframe."
-                    "Found columns: %s"
-                    % (value, list(df))
-                )
-
         # Rename columns as needed
-        df = df.rename(columns={v: k for k, v in naming_conversion.items()})
+        df = self.rename_segment_cols(df, naming_conversion, inplace=False)
 
         # Generate the naming column, and return
         return pd_utils.str_join_cols(df, self.naming_order)
@@ -511,18 +560,33 @@ class SegmentationLevel:
 
         return agg_dict
 
-    def aggregate_soc_ns_by_tp(self,
-                               other: SegmentationLevel,
-                               ) -> Dict[str, List[str]]:
+    def aggregate_soc_ns_by_p(self,
+                              other: SegmentationLevel,
+                              ) -> Dict[str, List[str]]:
         """
-        TODO(BT): WRite aggregate_soc_ns_by_tp() docs
+        Returns an aggregation dictionary, defining how to aggregate soc/ns by
+        purpose.
+
+        Soc and Ns are only relevant for certain purposes when distributing
+        demand.
+        Purposes 1, 2, 12 should all have soc segments, but no ns segments.
+        Purposes 3-8, 13-18 should all have ns segments, but no soc segments.
+        Where full soc/ns segments exist for all purposes, this function
+        aggregates the unneeded segmentation away.
+
         Parameters
         ----------
-        other
+        other:
+            The SegmentationLevel to aggregate to.
 
         Returns
         -------
-
+        aggregation_dict:
+            A dictionary defining how to aggregate self into other.
+            Will be in the form of {out_seg: [in_seg]}.
+            Where out seg is a segment name of out_segmentation, and in_seg
+            is a list of segment names from self that should be summed to
+            generate out_seg.
         """
         # Init
         error_message = (
@@ -648,6 +712,86 @@ class SegmentationLevel:
 
         return agg_dict
 
+    def split(self, other: SegmentationLevel) -> Dict[str, List[str]]:
+        """
+        Generates a dict defining how to split this segmentation into other.
+
+        Splits the tfn_tt segment into it's components and aggregates up to
+        out_segmentation. The DVector needs to be using a segmentation that
+        contains tfn_tt and p in order for this to work.
+
+        Parameters
+        ----------
+        other:
+            The segmentation level to split into.
+
+        Returns
+        -------
+        split_dict:
+            A dictionary defining how to split into other segmentation.
+            Keys will be names of this segmentation, and values will be a
+            list of the segments in other that it breaks into.
+
+        Raises
+        ------
+        ValueError:
+            If the given parameters are not the correct types
+
+        SegmentationError:
+            If the segmentation cannot be split. This DVector must be
+            in a segmentation that is a subset of other.segmentation.
+        """
+        # Validate inputs
+        if not isinstance(other, SegmentationLevel):
+            raise ValueError(
+                "other is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(other)
+            )
+
+        # ## MAKE SURE SEGMENTATION IS SUBSET ## #
+        # Format self segmentation for comparison
+        self_cols = self.naming_order
+        self_segs = self.segments
+        self_segs = self_segs.sort_values(self_cols)
+
+        # Format self segmentation for comparison
+        other_segs = other.segments
+        other_segs = other_segs.reindex(columns=self_cols).drop_duplicates()
+        other_segs = other_segs.sort_values(self_cols)
+
+        # Check if self is subset of other
+        if not np.all(self_segs.values == other_segs.values):
+            raise nd.SegmentationError(
+                "Cannot split this Segmentation. "
+                "%s is not a subset segmentation of %s"
+                % (self.name, other.name)
+            )
+
+        # ## GENERATE THE SPLITTING DICT ## #
+        # Generate the segment names
+        split_df = other.segments.copy()
+        split_df['self_name'] = self.create_segment_col(split_df)
+        split_df['other_name'] = other.create_segment_col(split_df)
+
+        # Convert into the splitting dict
+        split_dict = collections.defaultdict(list)
+        for s, o in zip(split_df['self_name'], split_df['other_name']):
+            split_dict[s].append(o)
+
+        # Check that the output segmentation has been created properly
+        other_segments = itertools.chain.from_iterable(split_dict.values())
+        if not other.is_correct_naming(other_segments):
+            raise SegmentationError(
+                "Some segment names seem to have gone missing during"
+                "aggregation.\n"
+                "Expected %s segments.\n"
+                "Found %s segments."
+                % (len(other.segment_names), len(set(other_segments)))
+            )
+
+        return split_dict
+
     def is_correct_naming(self, lst: List[str]) -> bool:
         """
         Checks whether lst is a complete list of all names of this segmentation.
@@ -676,6 +820,92 @@ class SegmentationLevel:
 
         # If we are here, then must be True
         return True
+
+    def get_grouped_weekday_segments(self) -> List[List[str]]:
+        """
+        Get a nested list of segments, grouped by weekday time periods
+
+        Returns
+        -------
+        nested_list:
+            A nested list, where each nested list is a group of
+            segments that only differ on the time period segment. All
+            time periods will be weekday only.
+
+        Raises
+        ------
+        ValueError:
+            If this segmentation does not have a time period segment
+        """
+        # Validate arguments
+        if 'tp' not in self.naming_order:
+            raise ValueError(
+                "SegmentationLevel does not have a time period segment (tp). "
+                "Cannot get segments by weekday without a time period"
+                "segment."
+            )
+
+        # Init
+        no_tp_naming = self.naming_order.copy()
+        no_tp_naming.remove('tp')
+
+        # Filter down to just the weekday time periods
+        segments = self.segments_and_names.copy()
+        segments = segments[segments['tp'].isin(self._weekday_time_periods)]
+
+        # Generate no tp segment name
+        segments['no_tp_name'] = pd_utils.str_join_cols(segments, no_tp_naming)
+
+        # Group names with a dict
+        temp_dict = collections.defaultdict(list)
+        for tp_name, no_tp_name in zip(segments['name'], segments['no_tp_name']):
+            temp_dict[no_tp_name].append(tp_name)
+
+        # Grab just the values for returning
+        return list(temp_dict.values())
+
+    def get_grouped_weekend_segments(self) -> List[List[str]]:
+        """
+        Get a nested list of segments, grouped by weekend time periods
+
+        Returns
+        -------
+        nested_list:
+            A nested list, where each nested list is a group of
+            segments that only differ on the time period segment. All
+            time periods will be weekend only.
+
+        Raises
+        ------
+        ValueError:
+            If this segmentation does not have a time period segment
+        """
+        # Validate arguments
+        if 'tp' not in self.naming_order:
+            raise ValueError(
+                "SegmentationLevel does not have a time period segment (tp). "
+                "Cannot get segments by weekday without a time period"
+                "segment."
+            )
+
+        # Init
+        no_tp_naming = self.naming_order.copy()
+        no_tp_naming.remove('tp')
+
+        # Filter down to just the weekday time periods
+        segments = self.segments_and_names.copy()
+        segments = segments[segments['tp'].isin(self._weekend_time_periods)]
+
+        # Generate no tp segment name
+        segments['no_tp_name'] = pd_utils.str_join_cols(segments, no_tp_naming)
+
+        # Group names with a dict
+        temp_dict = collections.defaultdict(list)
+        for tp_name, no_tp_name in zip(segments['name'], segments['no_tp_name']):
+            temp_dict[no_tp_name].append(tp_name)
+
+        # Grab just the values for returning
+        return list(temp_dict.values())
 
 
 class SegmentationError(nd.NormitsDemandError):
@@ -779,14 +1009,24 @@ def _get_valid_segments(name: str) -> pd.DataFrame:
 
 
 def get_segmentation_level(name: str) -> SegmentationLevel:
-    # TODO(BT): Write docs!
-    # TODO(BT): Add some validation on the segmentation name
-    # TODO(BT): Instantiate import drive for these on module import!
-    # TODO(BT): Add some caching to this function!
+    """
+    Creates a SegmentationLevel for segmentation with name.
 
+    Parameters
+    ----------
+    name:
+        The name of the segmentation to get a SegmentationLevel for.
+
+    Returns
+    -------
+    segmentation_level:
+        A SegmentationLevel object for segmentation with name
+    """
+    # TODO(BT): Add some validation on the segmentation name
+    # TODO(BT): Add some caching to this function!
     valid_segments, naming_order = _get_valid_segments(name)
 
-    # Create the ZoningSystem object and return
+    # Create the SegmentationLevel object and return
     return SegmentationLevel(
         name=name,
         naming_order=naming_order,
