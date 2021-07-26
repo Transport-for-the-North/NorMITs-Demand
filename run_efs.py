@@ -52,10 +52,10 @@ def main():
     output_years = consts.FUTURE_YEARS
 
     # Controls I/O
-    scenario = consts.SC04_UZC
+    scenario = consts.SC01_JAM
     iter_num = '3j'
-    import_home = "E:/"
-    export_home = "I:/"
+    import_home = "I:/"
+    export_home = "E:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
