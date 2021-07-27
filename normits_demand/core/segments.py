@@ -516,6 +516,7 @@ class SegmentationLevel:
 
         # Translate any columns we need to in order to join
         self_segments = self.segments.copy()
+
         if translate_cols is not None:
             for in_col, out_col in translate_cols:
                 translation = self._get_segment_translation(in_col, out_col)
@@ -536,7 +537,7 @@ class SegmentationLevel:
         seg_agg = pd.merge(
             left=self_segments,
             right=other.segments,
-            on=join_cols
+            on=join_cols,
         )
 
         # Extract the segment names for self and other

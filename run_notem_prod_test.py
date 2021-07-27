@@ -19,7 +19,7 @@ from normits_demand.models import notem_attraction_model as notem_attr
 # ## GLOBAL VARIABLES ## #
 # PRODUCTIONS
 POPULATION_PATH = {
-    2018: r"I:\NorMITs Land Use\base_land_use\iter3d\outputs\land_use_output_tfn_msoa1.csv",
+    2018: r"I:\NorMITs Land Use\base_land_use\iter3d\outputs\land_use_output_msoa.csv",
     # 2033: r"I:\NorMITs Land Use\future_land_use\iter3b\scenarios\NTEM\land_use_2033_pop.csv",
     # 2040: r"I:\NorMITs Land Use\future_land_use\iter3b\scenarios\NTEM\land_use_2040_pop.csv",
     # 2050: r"I:\NorMITs Land Use\future_land_use\iter3b\scenarios\NTEM\land_use_2050_pop.csv",
@@ -42,6 +42,33 @@ pure_demand_production = r"E:\Productions\hb_msoa_notem_segmented_2018_dvec.pkl"
 
 # attr_export_path = r"C:\Data\Nirmal_Atkins\Attractions"
 attr_export_path = "E:/Attractions"
+nhbp_export_path = r"C:\Data\Nirmal_Atkins\NHB_Productions"
+
+hb_attractions = {
+    2018: r"C:\Data\Nirmal_Atkins\Attractions\hb_msoa_notem_segmented_2018_dvec.pkl"
+}
+
+nhb_prod_trip_rates = r"I:\NorMITs Demand\import\NoTEM\NHB_Productions\nhb_ave_wday_enh_trip_rates_v1.5.csv"
+nhb_prod_time_splits = r"I:\NorMITs Demand\import\NoTEM\NHB_Productions\tfn_nhb_ave_week_time_split_18_v1.5.csv"
+
+
+def nhb_main():
+    nhb_prod = notem.NHBProductionModel(
+        hb_attractions,
+        POPULATION_PATH,
+        nhb_prod_trip_rates,
+        nhb_prod_time_splits,
+        nhbp_export_path,
+        None
+    )
+
+    nhb_prod.run(
+        export_pure_demand=True,
+        export_fully_segmented=True,
+        export_notem_segmentation=True,
+        export_reports=True,
+        verbose=True,
+    )
 
 
 def main():
@@ -53,9 +80,9 @@ def main():
     )
 
     hb_prod.run(
-        export_pure_demand=False,
-        export_fully_segmented=False,
-        export_notem_segmentation=False,
+        export_pure_demand=True,
+        export_fully_segmented=True,
+        export_notem_segmentation=True,
         export_reports=True,
         verbose=True,
     )
@@ -81,4 +108,5 @@ def main_attr():
 
 if __name__ == '__main__':
     # main()
-    main_attr()
+    # main_attr()
+    nhb_main()
