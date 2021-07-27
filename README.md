@@ -116,3 +116,11 @@ as part of their file name in distribution reports
     - Note that this is no longer backwards compatible. If old (pre iter3d)
       land use inputs are needed, you need to revert to an older version of 
       NorMITs Demand.
+      
+      
+### v0.3.7
+- Updates to the elasticity model
+    - Fix Access/Egress costs changes
+    - Update parameters as we are now benchmarking OD matrices against
+      NELUM
+    - Hopefully find some time to optimise the PA2OD process 
