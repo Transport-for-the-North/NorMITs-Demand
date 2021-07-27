@@ -546,17 +546,34 @@ def handle_exceptional_growth(synth_future: pd.DataFrame,
         on=merge_cols
     )
 
-    # Fill synthetic vectors with where 0 or Nan
+    # Fill synthetic vectors with 0 where Nan
     for col in ['s_b', 's_f']:
-        forecast_vector[col] = forecast_vector[col].fillna(1)
-        zero_mask = forecast_vector[col] > 0
-        forecast_vector[col] = forecast_vector[col].where(zero_mask, 1)
+        forecast_vector[col] = forecast_vector[col].fillna(0)
 
-    # Normal Zones Growth Calculation
-    growth_factors = forecast_vector["s_f"] / forecast_vector["s_b"]
+    # ## DEFAULT GROWTH ## #
+    # Infill 0's with 1s to avoid / 0
+    gf_vector = forecast_vector.copy()
+    for col in ['s_b', 's_f']:
+        gf_vector[col] = gf_vector[col].mask(gf_vector[col] <= 0, 1)
+
+    # Apply growth factors
+    growth_factors = gf_vector["s_f"] / gf_vector["s_b"]
     forecast_vector[value_column] = forecast_vector["b_c"] * growth_factors
 
-    # If no expceptional zones, leave
+    # ## EDGE CASE HANDLING ## #
+    # Set forecast to 0 where future is 0, but synth base isn't
+    forecast_vector[value_column] = forecast_vector[value_column].mask(
+        cond=(forecast_vector['s_b'] > 0) & (forecast_vector['s_f'] <= 0),
+        other=0,
+    )
+
+    # Set to observed + forecast where synth base is 0, but synth future is not
+    forecast_vector[value_column] = forecast_vector[value_column].mask(
+        cond=(forecast_vector['s_b'] <= 0) & (forecast_vector['s_f'] > 0),
+        other=forecast_vector['b_c'] + forecast_vector['s_f'],
+    )
+
+    # If no exceptional zones, leave
     if exceptional_zones is None:
         # Tidy up the forecast vector
         group_cols = [zone_column] + segment_columns

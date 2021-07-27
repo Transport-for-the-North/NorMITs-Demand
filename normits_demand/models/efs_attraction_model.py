@@ -21,6 +21,7 @@ from tqdm import tqdm
 import normits_demand as nd
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
+from normits_demand.utils import file_ops
 
 from normits_demand.constraints import ntem_control as ntem
 
@@ -1474,7 +1475,8 @@ def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
     all_years = [base_year] + future_years
 
     if dtype is None:
-        dtype = {'soc': int, 'ns': int}
+        # dtype = {'soc': int, 'ns': int}
+        dtype = {'soc': int}
 
     if segmentation_cols is None:
         segmentation_cols = ['employment_cat']
@@ -1487,14 +1489,18 @@ def get_emp_data_from_land_use(by_emp_import_path: nd.PathLike,
 
         # Read in the dataframe - different if base year
         if year == base_year:
-            year_emp = pd.read_csv(by_emp_import_path, dtype=dtype)
+            year_emp = file_ops.read_df(by_emp_import_path, find_similar=True)
             year_emp = year_emp.rename(columns={base_year_data_col: base_year})
 
         else:
             # Build the path to this years data
             fname = consts.LU_EMP_FNAME % str(year)
             lu_path = os.path.join(fy_emp_import_dir, fname)
-            year_emp = pd.read_csv(lu_path, dtype=dtype)
+            year_emp = file_ops.read_df(lu_path, find_similar=True)
+
+        # Make sure the data types are correct
+        for col, data_type in dtype.items():
+            year_emp[col] = year_emp[col].astype(data_type)
 
         # ## CHECK IF WE SHOULD IGNORE SOC ## #
         if soc_col in segmentation_cols and soc_col not in list(year_emp):

@@ -32,6 +32,7 @@ from normits_demand import efs_constants as consts
 
 from normits_demand.utils import general as du
 from normits_demand.utils import timing
+from normits_demand.utils import file_ops
 
 
 from normits_demand.d_log import processor as dlog_p
@@ -1560,13 +1561,17 @@ def get_pop_data_from_land_use(by_pop_import_path: nd.PathLike,
 
         # Read in the dataframe - different if base year
         if year == base_year:
-            year_pop = pd.read_csv(by_pop_import_path, dtype=dtype)
+            year_pop = file_ops.read_df(by_pop_import_path, find_similar=True)
             year_pop = year_pop.rename(columns={base_year_data_col: base_year})
         else:
             # Build the path to this years data
             fname = consts.LU_POP_FNAME % str(year)
             lu_path = os.path.join(fy_pop_import_dir, fname)
-            year_pop = pd.read_csv(lu_path, dtype=dtype)
+            year_pop = file_ops.read_df(lu_path, find_similar=True)
+
+        # Make sure the data types are correct
+        for col, data_type in dtype.items():
+            year_pop[col] = year_pop[col].astype(data_type)
 
         # ## FILTER TO JUST THE DATA WE NEED ## #
         # Set up the columns to keep
