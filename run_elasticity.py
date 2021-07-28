@@ -221,6 +221,7 @@ def merge_internal_external(scenario,
                             base_year,
                             future_years,
                             use_bespoke_zones,
+                            use_wfh_adj,
                             ):
     # Init
     valid_ftypes = ['.csv', consts.COMPRESSION_SUFFIX]
@@ -228,6 +229,8 @@ def merge_internal_external(scenario,
     # Set up some paths
     if use_bespoke_zones:
         external_key = 'pa_24_bespoke'
+    elif use_wfh_adj:
+        external_key = 'pa_24_wfh'
     else:
         external_key = 'pa_24'
 
@@ -300,7 +303,7 @@ def main():
     #     use_wfh_adj=use_wfh_adj,
     # )
 
-    run_elasticity(base_year)
+    # run_elasticity(base_year)
 
     merge_internal_external(
         scenario=scenario,
@@ -310,6 +313,7 @@ def main():
         base_year=base_year,
         future_years=years,
         use_bespoke_zones=use_bespoke_zones,
+        use_wfh_adj=use_wfh_adj,
     )
 
 

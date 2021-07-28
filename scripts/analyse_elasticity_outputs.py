@@ -31,16 +31,16 @@ from normits_demand.utils import file_ops
 
 from normits_demand.concurrency import multiprocessing
 
-NOHAM_INPUT = r'I:\NorMITs Demand\noham\EFS\iter3i\SC02_PP\Matrices\24hr PA Matrices WFH\internal'
-NORMS_INPUT = r'I:\NorMITs Demand\norms\EFS\iter3i\SC02_PP\Matrices\24hr PA Matrices WFH\internal'
+NOHAM_INPUT = r'E:\NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\internal'
+NORMS_INPUT = r'E:\NorMITs Demand\norms\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\internal'
 
-NOHAM_OUTPUT = r'I:\NorMITs Demand\noham\EFS\iter3i\SC02_PP\Matrices\24hr PA Matrices - Elasticity\internal'
-NORMS_OUTPUT = r'I:\NorMITs Demand\norms\EFS\iter3i\SC02_PP\Matrices\24hr PA Matrices - Elasticity\internal'
+NOHAM_OUTPUT = r'E:\NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices - Elasticity\internal'
+NORMS_OUTPUT = r'E:\NorMITs Demand\norms\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices - Elasticity\internal'
 
-NOHAM_EXTERNAL = r'I:\NorMITs Demand\noham\EFS\iter3i\SC02_PP\Matrices\24hr PA Matrices WFH\external'
-NORMS_EXTERNAL = r'I:\NorMITs Demand\norms\EFS\iter3i\SC02_PP\Matrices\24hr PA Matrices WFH\external'
+NOHAM_EXTERNAL = r'E:\NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\external'
+NORMS_EXTERNAL = r'E:\NorMITs Demand\norms\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\external'
 
-OUTPUT = r'F:\elasticity.csv'
+OUTPUT = r'E:\elasticity.csv'
 
 YEARS = [2018, 2033, 2040, 2050]
 YEARS = [2050]

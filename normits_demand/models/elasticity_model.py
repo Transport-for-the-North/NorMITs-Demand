@@ -276,8 +276,8 @@ class ElasticityModel:
             fn=self.apply_elasticities,
             kwargs=kwarg_list,
             pbar_kwargs=pbar_kwargs,
-            # process_count=process_count,
-            process_count=0,
+            process_count=process_count,
+            # process_count=0,
         )
 
     def apply_all(self):
@@ -438,8 +438,6 @@ class ElasticityModel:
             self.import_home / ec.ELASTICITIES_FILE,
             **elasticity_params,
         )
-
-        print(cost_changes)
 
         # ## CHECK THE ELASTICITIES WE WANT EXIST ## #
         to_use = cost_changes["e_type"].unique()
@@ -1007,7 +1005,6 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
         ]
 
     # Figure out the GC ratio of change
-    print(changing_cost)
     if changing_cost != "gc":
         # Adjust the costs of the changing mode
         adj_cost, _ = adjust_cost(
@@ -1047,9 +1044,10 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
 
     # Grab the cost that we are changing as a square matrix
     cost, cost_factor = _elasticity_gc_factors(
-        adj_cost,
-        future_scalar_costs.get(changing_mode, {}),
-        elasticity_type,
+        base_costs=adj_cost,
+        gc_params=future_scalar_costs.get(changing_mode, {}),
+        changing_mode=changing_mode,
+        changing_cost=changing_cost,
     )
 
     # Initialise the adjustment matrices for each affected mode
@@ -1112,10 +1110,6 @@ def adjust_cost(base_costs: Union[pd.DataFrame, float],
 
     gc_params : Dict[str, float]
         Generalised cost parameters to be adjusted.
-
-    elasticity_type : str
-        Elasticity type used with `GC_ELASTICITY_TYPES` lookup to
-        determine the type of cost changes being applied.
 
     changing_mode:
         The changing_mode that changing_cost is being applied to. This must be a valid
@@ -1186,7 +1180,6 @@ def adjust_cost(base_costs: Union[pd.DataFrame, float],
             casting="unsafe",
         )
 
-    # if vot/voc
     elif changing_cost in ['vot', 'voc']:
         # WE SHOULD NEVER ADJUST THESE OTHERWISE DOUBLE COUNTING LATER ON!
         raise nd.ElasticityError(
@@ -1204,7 +1197,8 @@ def adjust_cost(base_costs: Union[pd.DataFrame, float],
 
 def _elasticity_gc_factors(base_costs: pd.DataFrame,
                            gc_params: Dict[str, float],
-                           elasticity_type: str,
+                           changing_mode: str,
+                           changing_cost: str,
                            ) -> Tuple[np.array, float]:
     """Return cost and cost_factor values for use in `gen_cost_elasticity_mins`.
 
@@ -1214,13 +1208,18 @@ def _elasticity_gc_factors(base_costs: pd.DataFrame,
     Parameters
     ----------
     base_costs : pd.DataFrame
-        Base costs data for single mode.
+        Base costs data for single changing_mode.
 
     gc_params : Dict[str, float]
-        Generalised cost calculation parameters for single mode.
+        Generalised cost calculation parameters for single changing_mode.
 
-    elasticity_type : str
-        The name of the elasticity type.
+    changing_mode:
+        The changing_mode that changing_cost is being applied to. This must be a valid
+        cost component for that changing_mode!
+
+    changing_cost:
+        The cost that we are changing. This cost change must be a valid
+        component of changing_mode.
 
 
     Returns
@@ -1237,8 +1236,8 @@ def _elasticity_gc_factors(base_costs: pd.DataFrame,
     Raises
     ------
     ValueError
-        If the elasticitytype given leads to an unknown combination
-        of cost_type and mode.
+        If the elasticity type given leads to an unknown combination
+        of changing_cost and changing_mode.
     """
 
     def square_matrix(values_col: str) -> pd.DataFrame:
@@ -1249,33 +1248,42 @@ def _elasticity_gc_factors(base_costs: pd.DataFrame,
             values=values_col,
         )
 
-    mode, cost_type = ec.GC_ELASTICITY_TYPES[elasticity_type]
     cost, factor = None, None
-    if cost_type == "gc":
+    if changing_cost == "gc":
         cost = 1.0
 
-    elif mode == "car":
-        if cost_type == "time":
-            cost = square_matrix(cost_type)
+    elif changing_cost in ['vot', 'voc']:
+        # WE SHOULD NEVER ADJUST THESE OTHERWISE DOUBLE COUNTING LATER ON!
+        raise nd.ElasticityError(
+            "Scalar generalised cost parameters (vot/voc) should not be "
+            "adjusted in the elasticity! DOUBLE COUNTING!!!"
+        )
+
+    elif changing_mode == "car":
+        if changing_cost == "time":
+            cost = square_matrix(changing_cost)
             factor = 1
-        elif cost_type == "voc":
+        elif changing_cost == "voc":
             cost = square_matrix("dist")
             factor = (gc_params["voc"] / gc_params["vot"])
 
-    elif mode == "rail":
-        if cost_type == "ride":
-            cost = square_matrix(cost_type)
-        elif cost_type == "fare":
-            cost = square_matrix(cost_type)
+    elif changing_mode == "rail":
+        if changing_cost == "ride":
+            cost = square_matrix(changing_cost)
+        elif changing_cost == "fare":
+            cost = square_matrix(changing_cost)
             factor = 1 / gc_params["vot"]
+        elif changing_cost == "walk":
+            cost = square_matrix(changing_cost)
 
-    elif mode in ec.OTHER_MODES:
+    elif changing_mode in ec.OTHER_MODES:
         cost = 1.0
 
     if cost is None:
         raise ValueError(
-            f"Unknown cost_type/mode combination: {cost_type}, {mode} not "
-            "sure what factors are required for GC elasticity calculation"
+            f"Unknown changing_cost/changing_mode combination: {changing_cost}, "
+            f"{changing_mode} not sure what factors are required for GC "
+            f"elasticity calculation"
         )
     return cost, factor
 
@@ -1299,9 +1307,6 @@ def read_cost_changes(path: Path, years: List[str]) -> pd.DataFrame:
 
     Raises
     ------
-    KeyError
-        If an elasticity_type is given that is not present
-        in `GC_ELASTICITY_TYPES` lookup.
     ValueError
         If no data is present for one, or more, `years`.
     """
@@ -1313,15 +1318,6 @@ def read_cost_changes(path: Path, years: List[str]) -> pd.DataFrame:
     }
     df = pd.read_csv(path, usecols=dtypes.keys(), dtype=dtypes)
 
-    unknown_types = []
-    for i in df["elasticity_type"].unique():
-        if i not in ec.GC_ELASTICITY_TYPES.keys():
-            unknown_types.append(i)
-    if unknown_types:
-        raise KeyError(
-            f"Unknown elasticity_type: {unknown_types}, "
-            f"available types are: {list(ec.GC_ELASTICITY_TYPES.keys())}"
-        )
     missing_years = [i for i in years if i not in df["year"].unique().tolist()]
     if missing_years:
         raise ValueError(f"Cost change not present for years: {missing_years}")
