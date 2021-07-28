@@ -664,11 +664,11 @@ def get_costs(cost_file: Path,
     cost_cols = costs.columns.tolist()
     cost_cols.remove("origin")
     cost_cols.remove("destination")
-    total_zeros = (costs[cost_cols] <= 0).all(axis=1).sum()
-    print(
-        f"{total_zeros} ({total_zeros / len(costs):.2%}) "
-        f"OD pairs are 0 for {mode} for costs"
-    )
+    # total_zeros = (costs[cost_cols] <= 0).all(axis=1).sum()
+    # print(
+    #     f"{total_zeros} ({total_zeros / len(costs):.2%}) "
+    #     f"OD pairs are 0 for {mode} for costs"
+    # )
 
     # Convert zone system if required
     if zone_system != ec.COMMON_ZONE_SYSTEM:
