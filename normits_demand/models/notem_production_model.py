@@ -614,11 +614,6 @@ class NHBProductionModel:
         'area_type': 'tfn_at',
     }
 
-    _col_rename = {
-        'nhb_p': 'p',
-        'nhb_m': 'm',
-    }
-
     # Define output fnames
     _base_output_fname = '%s_%s_%s_%d_dvec.pkl'
     _base_report_fname = '%s_%s_%d_%s.csv'
@@ -632,7 +627,44 @@ class NHBProductionModel:
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
                  ):
-        # TODO(BT): Document attributes
+        """
+        Sets up and validates arguments for the NHB Production model.
+
+        Parameters
+        ----------
+        hb_attractions:
+            Dictionary of {year: notem_segmented_HB_attractions_data} pairs.
+            These paths should be gotten from nd.HBAttraction model and should
+            be pickled Dvector paths.
+
+        land_use_paths:
+            Dictionary of {year: land use population data} pairs.
+
+        nhb_trip_rates_path:
+            The path to the nhb production trip rates.
+            Should have the columns as defined in:
+            NHBProductionModel._target_cols['nhb_trip_rate']
+
+        nhb_time_splits_path:
+            The path to NHB production time split.
+            Should have the columns as defined in:
+            NHBProductionModel._target_cols['tp']
+
+        export_path:
+            Path to export NHB Production outputs.
+
+        constraint_paths:
+            Dictionary of {year: constraint_path} pairs.
+            Must contain the same keys as land_use_paths, but it can contain
+            more (any extras will be ignored).
+            If set - will be used to constrain the attractions - a report will
+            be written before and after.
+
+        process_count:
+            The number of processes to create in the Pool. Typically this
+            should not exceed the number of cores available.
+            Defaults to consts.PROCESS_COUNT.
+        """
         # Validate inputs
         [ops.check_file_exists(x) for x in hb_attractions.values()]
         [ops.check_file_exists(x) for x in land_use_paths.values()]
@@ -691,6 +723,11 @@ class NHBProductionModel:
             - Reads in the time splits given in the constructor.
             - Multiplies the "pure NHB demand" and time splits on relevant
               segments, producing "fully segmented demand".
+            - Optionally writes out a number of "fully segmented demand"
+              reports, if reports is True.
+            - Optionally writes out a pickled DVector of "fully segmented demand"
+              at self.fully_segmented_paths[year] if export_fully_segmented
+              is True.
             - Renames nhb_p and nhb_m as p and m respectively,
               producing "notem segmented demand".
             - Optionally writes out a number of "notem segmented demand"
@@ -764,7 +801,6 @@ class NHBProductionModel:
             # ## SPLIT NHB PURE DEMAND BY TIME ## #
             du.print_w_toggle("Splitting by time...", verbose=verbose)
             fully_segmented = self._split_by_tp(pure_nhb_demand, verbose)
-            # print("Total Productions for year: %.4f" % (fully_segmented.sum()))
 
             if export_fully_segmented:
                 du.print_w_toggle(
@@ -823,9 +859,9 @@ class NHBProductionModel:
 
             # End timing
             end_time = timing.current_milli_time()
-            du.print_w_toggle("Finished HB Production Model at: %s" % timing.get_datetime(),
+            du.print_w_toggle("Finished NHB Production Model at: %s" % timing.get_datetime(),
                               verbose=verbose)
-            du.print_w_toggle("HB Production Model took: %s"
+            du.print_w_toggle("NHB Production Model took: %s"
                               % timing.time_taken(start_time, end_time), verbose=verbose)
 
     def _transform_attractions(self,
@@ -994,6 +1030,9 @@ class NHBProductionModel:
         pure_nhb_demand:
             Dvector containing the pure nhb demand to split.
 
+        verbose:
+            Whether to print messages while applying the splits or not
+
         Returns
         -------
         full_segmented_demand:
@@ -1001,6 +1040,7 @@ class NHBProductionModel:
         """
         # Define the segmentation we want to use
         tp_pure_nhb_demand_seg = nd.get_segmentation_level('nhb_tp')
+        fully_seg = nd.get_segmentation_level('full_nhb')
 
         du.print_w_toggle("Creating time splits DVec...", verbose=verbose)
 
@@ -1019,12 +1059,31 @@ class NHBProductionModel:
         )
 
         # Multiply together #
-        return pure_nhb_demand * time_splits_dvec
+        return pure_nhb_demand.multiply_and_aggregate(
+            other=time_splits_dvec,
+            out_segmentation=fully_seg,
+        )
 
-    def _rename(self,
-                full_segmentation: nd.DVector,
-                verbose: bool,
+    @staticmethod
+    def _rename(full_segmentation: nd.DVector,
+                verbose: bool
                 ) -> nd.DVector:
+        """
+        Renames nhb_p and nhb_m as m and p respectively in full segmentation
+
+        Parameters
+        ----------
+        full_segmentation:
+            fully segmented NHB productions containing nhb_p and nhb_m as column names
+
+        verbose:
+            Whether to print messages while running this module
+
+        Returns
+        -------
+        notem_segmented:
+            Returns the notem segmented NHB production DVector
+        """
 
         # Define the zoning and segmentations we want to use
         nhb_prod_seg = nd.get_segmentation_level('full_nhb_notem')
