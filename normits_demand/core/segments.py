@@ -39,7 +39,6 @@ from normits_demand.utils import pandas_utils as pd_utils
 
 # ## CLASSES ## #
 class SegmentationLevel:
-
     _weekday_time_periods = [1, 2, 3, 4]
     _weekend_time_periods = [5, 6]
 
@@ -511,7 +510,7 @@ class SegmentationLevel:
                 "Expected SegmentationLevel, got %s"
                 % type(other)
             )
-        
+
         join_cols, translate_cols = self._get_aggregation_definition(other)
 
         # Translate any columns we need to in order to join
@@ -913,6 +912,7 @@ class SegmentationError(nd.NormitsDemandError):
     """
     Exception for all errors that occur around zone management
     """
+
     def __init__(self, message=None):
         self.message = message
         super().__init__(self.message)
@@ -962,7 +962,7 @@ def _get_valid_segments(name: str) -> pd.DataFrame:
     Finds and reads in the valid segments data for segmentation with name
     """
     # ## DETERMINE THE IMPORT LOCATION ## #
-    import_home = os.path.join(SegmentationLevel._segment_definitions_path,  name)
+    import_home = os.path.join(SegmentationLevel._segment_definitions_path, name)
 
     # Make sure the import location exists
     if not os.path.exists(import_home):

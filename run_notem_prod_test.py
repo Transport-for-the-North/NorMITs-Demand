@@ -63,8 +63,7 @@ def nhb_main():
     )
 
     nhb_prod.run(
-        export_pure_demand=True,
-        export_fully_segmented=True,
+        export_nhb_pure_demand=True,
         export_notem_segmentation=True,
         export_reports=True,
         verbose=True,

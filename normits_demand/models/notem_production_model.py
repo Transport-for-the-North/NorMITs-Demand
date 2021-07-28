@@ -664,43 +664,45 @@ class NHBProductionModel:
         self._create_notem_segmented_report_paths(self.report_path, self.years)
 
     def run(self,
-            export_pure_demand: bool = True,
+            export_nhb_pure_demand: bool = False,
             export_fully_segmented: bool = False,
-            export_notem_segmentation: bool = True,
-            export_reports: bool = True,
+            export_notem_segmentation: bool = False,
+            export_reports: bool = False,
             verbose: bool = False,
             ) -> None:
         """
         Runs the NHB Production model.
 
         Completes the following steps for each year:
-            - Reads in the land use population data given in the constructor.
-            - Reads in the trip rates data given in the constructor.
-            - Multiplies the population and trip rates on relevant segments,
-              producing "pure demand".
-            - Optionally writes out a pickled DVector of "pure demand" at
+            - Reads in the notem segmented HB attractions compressed pickle
+              given in the constructor.
+            - Removes time period segmentation from the above data.
+            - Reads in the land use population data given in the constructor,
+              extracts msoa_zone_id and tfn_at.
+            - Checks whether all the msoa zones are present and throws an error if any msoa zone
+              is missing.
+            - Reads in the NHB trip rates data given in the constructor.
+            - Multiplies the HB attractions and NHB trip rates on relevant segments,
+              producing "pure NHB demand".
+            - Optionally writes out a pickled DVector of "pure NHB demand" at
               self.pure_demand_out[year]
             - Optionally writes out a number of "pure demand" reports, if
               reports is True.
-            - Reads in the mode-time splits given in the constructor.
-            - Multiplies the "pure demand" and mode-time splits on relevant
+            - Reads in the time splits given in the constructor.
+            - Multiplies the "pure NHB demand" and time splits on relevant
               segments, producing "fully segmented demand".
-            - Optionally writes out a pickled DVector of "fully segmented demand"
-              at self.fully_segmented_paths[year] if export_fully_segmented
-              is True.
-            - Aggregates this demand into hb_notem_full_tfn segmentation,
+            - Renames nhb_p and nhb_m as p and m respectively,
               producing "notem segmented demand".
             - Optionally writes out a number of "notem segmented demand"
               reports, if reports is True.
             - Optionally writes out a pickled DVector of "notem segmented demand"
               at self.notem_segmented_paths[year] if export_notem_segmentation
               is True.
-            - Finally, returns "notem segmented demand" as a DVector.
 
         Parameters
         ----------
-        export_pure_demand:
-            Whether to export the pure demand to disk or not.
+        export_nhb_pure_demand:
+            Whether to export the pure NHB demand to disk or not.
             Will be written out to: self.pure_demand_out[year]
 
         export_fully_segmented:
@@ -739,7 +741,7 @@ class NHBProductionModel:
             du.print_w_toggle("Applying trip rates...", verbose=verbose)
             pure_nhb_demand = self._generate_nhb_productions(hb_attr_dvec, verbose)
 
-            if export_pure_demand:
+            if export_nhb_pure_demand:
                 du.print_w_toggle("Exporting NHB pure demand to disk...", verbose=verbose)
                 pure_nhb_demand.to_pickle(self.pure_demand_paths[year])
 
@@ -761,7 +763,30 @@ class NHBProductionModel:
 
             # ## SPLIT NHB PURE DEMAND BY TIME ## #
             du.print_w_toggle("Splitting by time...", verbose=verbose)
-            fully_segmented = self._split_by_tp(pure_nhb_demand)
+            fully_segmented = self._split_by_tp(pure_nhb_demand, verbose)
+            # print("Total Productions for year: %.4f" % (fully_segmented.sum()))
+
+            if export_fully_segmented:
+                du.print_w_toggle(
+                    "Exporting fully segmented demand to disk...",
+                    verbose=verbose
+                )
+                fully_segmented.to_pickle(self.fully_segmented_paths[year])
+
+            if export_reports:
+                du.print_w_toggle(
+                    "Exporting fully segmented reports to disk...\n"
+                    "Total Productions for year %d: %.4f"
+                    % (year, fully_segmented.sum()),
+                    verbose=verbose
+                )
+
+                self._write_reports(
+                    dvec=fully_segmented,
+                    segment_totals_path=self.notem_report_segment_paths[year],
+                    ca_sector_path=self.notem_report_ca_sector_paths[year],
+                    ie_sector_path=self.notem_report_ie_sector_paths[year],
+                )
 
             # Renaming
             notem_segmented = self._rename(fully_segmented, verbose)
@@ -775,7 +800,7 @@ class NHBProductionModel:
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting notem segmented reports disk...\n"
+                    "Exporting notem segmented reports to disk...\n"
                     "Total Productions for year %d: %.4f"
                     % (year, notem_segmented.sum()),
                     verbose=verbose
@@ -808,7 +833,14 @@ class NHBProductionModel:
                                verbose: bool,
                                ) -> nd.DVector:
         """
-        Reads in the HB attractions and aggregates away time period
+        Removes time period adds tfn_at to HB attraction DVector
+
+        Reads the HB attractions compressed pickle.
+        Removes time period from segmentation.
+        Reads the population data and extracts msoa_zone_id and tfn_at from it.
+        Checks whether all the msoa zones are present and throws an error if
+        any msoa zone is missing.
+        Adds tfn_at to the HB attraction and returns its DVector.
 
         Parameters
         ----------
@@ -820,8 +852,8 @@ class NHBProductionModel:
 
         Returns
         -------
-        pop_dvec:
-            Returns the population Dvector
+        hb_attr_dvec:
+            Returns the HB attraction Dvector with tfn_at.
         """
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
@@ -842,6 +874,17 @@ class NHBProductionModel:
         pop.columns = ['zone', 'tfn_at']
         pop = pop.drop_duplicates()
 
+        # Check to see if all MSOA zones are present
+        zone_names = pop['zone'].astype(str)
+        msoa_zones = pd.DataFrame(msoa_zoning.unique_zones)
+
+        for zone in msoa_zones:
+            if zone not in zone_names:
+                raise ValueError(
+                    "MSOA zone %s not found in land use list\n"
+                    % zone
+                )
+
         # Add tfn area type to the segmentation
         hb_attr_at_df = pd.merge(hb_attr_df, pop, on="zone", how="left")
 
@@ -860,7 +903,7 @@ class NHBProductionModel:
                                   verbose: bool,
                                   ) -> nd.DVector:
         """
-        Applies trip rate split on the given HB attractions
+        Applies NHB trip rate split on the given HB attractions
 
         Parameters
         ----------
@@ -880,7 +923,7 @@ class NHBProductionModel:
         # Define the zoning and segmentations we want to use
         nhb_trip_rate_seg = nd.get_segmentation_level('nhb_trip_rate')
 
-        # Reading trip rates
+        # Reading NHB trip rates
         du.print_w_toggle("Reading in files...", verbose=verbose)
         trip_rates = du.safe_read_csv(self.nhb_trip_rates_path, usecols=self._target_cols['nhb_trip_rate'])
 
@@ -941,6 +984,7 @@ class NHBProductionModel:
 
     def _split_by_tp(self,
                      pure_nhb_demand: nd.DVector,
+                     verbose: bool,
                      ) -> nd.DVector:
         """
         Applies time period splits to the given pure nhb demand.
@@ -953,12 +997,14 @@ class NHBProductionModel:
         Returns
         -------
         full_segmented_demand:
-            A DVector containing pure_demand split by mode and time.
+            A DVector containing pure_demand split by time.
         """
         # Define the segmentation we want to use
         tp_pure_nhb_demand_seg = nd.get_segmentation_level('nhb_tp')
 
-        # Create the time splits DVector
+        du.print_w_toggle("Creating time splits DVec...", verbose=verbose)
+
+        # Read the time splits factor
         time_splits = pd.read_csv(
             self.nhb_time_splits_path,
             usecols=self._target_cols['tp']
@@ -972,6 +1018,7 @@ class NHBProductionModel:
             val_col="split",
         )
 
+        # Multiply together #
         return pure_nhb_demand * time_splits_dvec
 
     def _rename(self,
@@ -980,21 +1027,12 @@ class NHBProductionModel:
                 ) -> nd.DVector:
 
         # Define the zoning and segmentations we want to use
-        msoa_zoning = nd.get_zoning_system('msoa')
         nhb_prod_seg = nd.get_segmentation_level('full_nhb_notem')
-        # Rename columns
-        nhb_prod = full_segmentation.to_df()
-        nhb_prod = nhb_prod.rename(columns=self._col_rename)
 
-        # Instantiate
-        return nd.DVector(
-            zoning_system=msoa_zoning,
-            segmentation=nhb_prod_seg,
-            import_data=nhb_prod,
-            zone_col="zone",
-            val_col="val",
-            verbose=verbose
-        )
+        du.print_w_toggle("Renaming...", verbose=verbose)
+
+        # Rename columns
+        return full_segmentation.aggregate(nhb_prod_seg)
 
     def _create_output_paths(self,
                              export_path: nd.PathLike,
