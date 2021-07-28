@@ -1,19 +1,19 @@
 [input_folders]
 elasticity = I:/NorMITs Demand\import\elasticities
 translation = I:/NorMITs Demand\import\zone_translation\one_to_one
-rail_demand = E:/NorMITs Demand\norms\EFS\iter3i\SC01_JAM\Matrices\24hr PA Matrices WFH\internal
-car_demand = E:/NorMITs Demand\noham\EFS\iter3i\SC01_JAM\Matrices\24hr PA Matrices WFH\internal
+rail_demand = E:/NorMITs Demand\norms\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\internal
+car_demand = E:/NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\internal
 rail_costs = I:/NorMITs Demand\import\norms\costs\elasticity_model_format
 car_costs = I:/NorMITs Demand\import\noham\costs\elasticity_model_format
 
 [input_files]
-gc_parameters = I:/NorMITs Demand\import\scenarios\SC01_JAM\elasticity\vot_voc_values.csv
-cost_changes = I:/NorMITs Demand\import\scenarios\SC01_JAM\elasticity\cost_adjustments.csv
+gc_parameters = I:/NorMITs Demand\import\scenarios\SC04_UZC\elasticity\vot_voc_values.csv
+cost_changes = I:/NorMITs Demand\import\scenarios\SC04_UZC\elasticity\cost_adjustments.csv
 
 [output_folders]
-car = E:/NorMITs Demand\noham\EFS\iter3i\SC01_JAM\Matrices\24hr PA Matrices - Elasticity\internal
-rail = E:/NorMITs Demand\norms\EFS\iter3i\SC01_JAM\Matrices\24hr PA Matrices - Elasticity\internal
-others = E:/NorMITs Demand\elasticity\iter3i\SC01_JAM
+car = E:/NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices - Elasticity\internal
+rail = E:/NorMITs Demand\norms\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices - Elasticity\internal
+others = E:/NorMITs Demand\elasticity\iter3j\SC04_UZC
 
 [other]
 years = 2050

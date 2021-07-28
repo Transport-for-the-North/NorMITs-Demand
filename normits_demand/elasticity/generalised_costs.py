@@ -33,7 +33,6 @@ class CostBuilder:
 
     _valid_modes = list(ec.MODE_ID.keys())
     _valid_purposes = list(consts.USER_CLASS_PURPOSES.keys())
-    _valid_e_types = list(ec.GC_ELASTICITY_TYPES.keys())
 
     _e_types_dtypes = {
         'mode': str,
@@ -238,7 +237,7 @@ class CostBuilder:
     def get_cost_changes(self,
                          ignore_cols: List[str] = None,
                          ) -> pd.DataFrame:
-        """Read the elasticity cost changes file and check for missing data.
+        """Read the elasticity cost changes file and checks for missing data.
 
         Returns
         -------
@@ -255,7 +254,6 @@ class CostBuilder:
         nd.NormitsDemandError:
             If more than one elasticity type is found for a cost and mode
             combination
-
         """
         # Init
         dtypes = self._cost_adjustment_dtypes
@@ -317,6 +315,7 @@ class CostBuilder:
             cost_adj[str(year)] = cost_adj[str(upper)] + wanted_diff
 
         # ## ADD ELASTICITY TYPES ## #
+        # Function to apply to df to pull out elast type
         def get_e_type(x):
             m = (
                 (self.e_types['mode'] == x['mode'])
@@ -340,24 +339,24 @@ class CostBuilder:
 
             return x
 
+        # Apply the above function to get elast types
         cost_adj['e_type'] = 'none'
         cost_adj = cost_adj.apply(get_e_type, axis='columns')
 
-        # Drop any that we don't have an elasticity for
+        # Check that we found and elasticity type for all adjustments we want
+        # to make
         mask = (cost_adj['e_type'] == 'none')
-        cost_adj = cost_adj[~mask].copy()
+        no_elast_types = cost_adj[mask].copy()
 
-        # Check for unknown elasticity types
-        e_types = cost_adj["e_type"].unique()
-        unknown_types = [x for x in e_types if x not in self._valid_e_types]
-        if unknown_types != list():
-            raise KeyError(
-                f"Unknown elasticity_type: {unknown_types}, "
-                f"available types are: {self._valid_e_types}"
+        if not no_elast_types.empty:
+            raise nd.ElasticityError(
+                "Unable to find an elasticity type for the follow mode "
+                "and cost combinations:\n%s"
+                % no_elast_types
             )
 
         # ## CONVERT TO OUTPUT FORMAT ## #
-        id_vars = ['e_type', 'adj_type']
+        id_vars = ['mode', 'cost_component', 'e_type', 'adj_type']
         cost_adj = cost_adj.reindex(columns=id_vars + self.years_str)
 
         cost_adj = pd.melt(

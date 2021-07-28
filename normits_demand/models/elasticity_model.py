@@ -275,7 +275,8 @@ class ElasticityModel:
             fn=self.apply_elasticities,
             kwargs=kwarg_list,
             pbar_kwargs=pbar_kwargs,
-            process_count=process_count,
+            # process_count=process_count,
+            process_count=0,
         )
 
     def apply_all(self):
@@ -447,6 +448,9 @@ class ElasticityModel:
                 f"Elasticity values in {ec.ELASTICITIES_FILE} "
                 f"missing for the following types: {missing}"
             )
+
+        print(cost_changes)
+        exit()
 
         # ## LOAD IN THE CONSTRAINT MATRICES ## #
         path = self.import_home / ec.CONSTRAINTS_FOLDER

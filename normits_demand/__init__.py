@@ -10,6 +10,7 @@ from normits_demand.utils.general import NormitsDemandError
 from normits_demand.utils.general import ExternalForecastSystemError
 from normits_demand.utils.general import InitialisationError
 from normits_demand.audits.audits import AuditError
+from normits_demand.elasticity import ElasticityError
 
 # ## EXPOSE CLASS LAYER ## #
 # EFS Class Layer

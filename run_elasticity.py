@@ -200,11 +200,8 @@ def initialise(scenario,
         config.write(f)
 
 
-def run_elasticity():
+def run_elasticity(base_year):
     """Runs the elasticity model using parameters from the config file."""
-
-    # TODO(BT): Add as a param to the elasticity
-    base_year = 2018
 
     input_folders, input_files, output_folder, years = get_inputs()
     elast_model = nd.ElasticityModel(
@@ -281,27 +278,29 @@ def merge_internal_external(scenario,
 
 def main():
     # Controls I/O
-    scenario = efs_consts.SC01_JAM
-    iter_num = '3i'
+    scenario = efs_consts.SC04_UZC
+    iter_num = '3j'
     import_home = "I:/"
-    export_home = "I:/"
+    export_home = "E:/"
 
+    # TODO(BT): Add as a param to the elasticity
     base_year = 2018
-    years = [2033, 2040, 2050]
+    # years = [2033, 2040, 2050]
+    years = [2050]
     use_bespoke_zones = False
     use_wfh_adj = True
 
-    initialise(
-        scenario=scenario,
-        iter_num=iter_num,
-        import_home=import_home,
-        export_home=export_home,
-        years=years,
-        use_bespoke_zones=use_bespoke_zones,
-        use_wfh_adj=use_wfh_adj,
-    )
+    # initialise(
+    #     scenario=scenario,
+    #     iter_num=iter_num,
+    #     import_home=import_home,
+    #     export_home=export_home,
+    #     years=years,
+    #     use_bespoke_zones=use_bespoke_zones,
+    #     use_wfh_adj=use_wfh_adj,
+    # )
 
-    run_elasticity()
+    run_elasticity(base_year)
 
     merge_internal_external(
         scenario=scenario,
