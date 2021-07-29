@@ -10,8 +10,6 @@ Other updates made by:
 File purpose:
 Module containing the functions for applying elasticities to demand matrices.
 """
-
-
 # Built-in imports
 import copy
 import functools
@@ -52,18 +50,37 @@ class ElasticityModel:
     _valid_mode_names = list(ec.MODE_ID.keys())
     _valid_mode_nums = list(ec.MODE_ID.values())
 
+    # Define some filenames the elasticty model needs
+    _segments_filename = "elasticity_segments.csv"
+    _elasticities_filename = "elasticity_values.csv"
+    _constraints_folder = "elasticity_segments.csv"
+
+    _base_costs_fname = "{mode}_costs_p{purpose}.csv"
+
     def __init__(self,
-                 input_folders: Dict[str, Path],
-                 input_files: Dict[str, Path],
-                 output_folders: Dict[str, Path],
-                 output_years: List[int],
                  base_year: int,
+                 future_years: List[int],
+                 import_home: nd.PathLike,
+                 translation_home: nd.PathLike,
+                 car_demand_import: nd.PathLike,
+                 rail_demand_import: nd.PathLike,
+                 car_costs_import: nd.PathLike,
+                 rail_costs_import: nd.PathLike,
+                 vot_voc_values_path: nd.PathLike,
+                 cost_adjustments_path: nd.PathLike,
+                 car_demand_export: nd.PathLike,
+                 rail_demand_export: nd.PathLike,
+                 other_demand_export: nd.PathLike,
+                 reports_export: nd.PathLike,
                  common_zone_system: str = None,
                  ):
         """Check input files and folders exist and create output folders.
 
         Parameters
         ----------
+        import_home:
+
+
         input_folders : Dict[str, Path]
             Paths to the input folders, expects the following keys:
             - elasticity
@@ -85,7 +102,7 @@ class ElasticityModel:
             - others
 
         output_years : List[int]
-            List of years to perform elasticity calculations for.
+            List of future_years to perform elasticity calculations for.
 
         base_year:
             The base year of the produced matrices. This is used to
@@ -97,40 +114,37 @@ class ElasticityModel:
             Demand will be translated into and out of this zone system if
             it is not already in this format.
         """
-        # BACKLOG: Change ElasticityModel constructor. Make arguments explicit
+        # BACKLOG: Update ElasticityModel constructor docs
         #  labels: elasticity
-        self._check_paths(
-            input_folders,
-            (
-                "elasticity",
-                "translation",
-                "rail_demand",
-                "car_demand",
-                "rail_costs",
-                "car_costs",
-            ),
-        )
-        self._check_paths(
-            input_files, ("gc_parameters", "cost_changes"), "file"
-        )
-        self.input_files = input_files
+        # ## VALIDATE INPUTS ## #
+        # Check that all directories exist
 
-        self.import_home = input_folders["elasticity"]
-        self.zone_translation_folder = input_folders["translation"]
+        # Check that paths to files exist
+
+        # Assign attributes
+        self.base_year = base_year
+        self.future_years = future_years
+
+        self.import_home = import_home
+        self.zone_translation_folder = translation_home
+        self.vot_voc_values_path = vot_voc_values_path
+        self.cost_adjustments_path = cost_adjustments_path
+
+        self.car_demand_export = car_demand_export
+        self.rail_demand_export = rail_demand_export
+        self.other_demand_export = other_demand_export
+        self.reports_export = reports_export
 
         # Assign demand and cost dirs
-        modes = ['car', 'rail']
-        self.demand_dirs = {m: input_folders[f"{m}_demand"] for m in modes}
-        self.cost_dirs = {m: input_folders[f"{m}_costs"] for m in modes}
+        self.demand_dirs = {
+            'car': car_demand_import,
+            'rail': rail_demand_import,
+        }
 
-        self._check_paths(
-            output_folders,
-            ("car", "rail", "others"),
-            create_folders=True,
-        )
-        self.output_folder = output_folders
-        self.years = output_years
-        self.base_year = base_year
+        self.cost_dirs = {
+            'car': car_costs_import,
+            'rail': rail_costs_import,
+        }
 
         if common_zone_system is None:
             self.common_zone_system = self._default_common_zone_system
@@ -140,72 +154,13 @@ class ElasticityModel:
         # Set up the cost builder
         self.cost_builder = gc.CostBuilder(
             base_year=self.base_year,
-            years=self.years,
+            years=self.future_years,
             modes=list(ec.MODE_ID.keys()),
             purposes=ec.PURPOSES,
-            vot_voc_path=self.input_files["gc_parameters"],
-            cost_adj_path=self.input_files["cost_changes"],
+            vot_voc_path=self.vot_voc_values_path,
+            cost_adj_path=self.cost_adjustments_path,
             elasticity_types_path=self.import_home / ec.ETYPES_FNAME,
         )
-
-    @staticmethod
-    def _check_paths(paths: Dict[str, Path],
-                     expected: List[str],
-                     path_type: str = "folder",
-                     create_folders: bool = False,
-                     ) -> None:
-        """Check if expected paths are given and exist.
-
-        Parameters
-        ----------
-        paths : Dict[str, Path]
-            Dictionary containing paths to the expected folders
-            (or files).
-        expected : List[str]
-            List of expected keys in the `paths` dictionary.
-        path_type : str, optional
-            Type of paths being provided either 'folder' (default)
-            or 'file'.
-        create_folders : bool, optional
-            If True will create folders that don't exist, if False
-            (default) raises FileNotFoundError. If `path_type` is
-            'file' then this parameter is ignored.
-
-        Raises
-        ------
-        KeyError
-            If any `expected` folders are missing from `folders`.
-        FileNotFoundError
-            If any of the paths in `folders` aren't directories
-            and `create_folders` is False.
-        """
-        path_type = path_type.lower()
-        if path_type == "folder":
-            def check(p): return p.is_dir()
-        elif path_type == "file":
-            def check(p): return p.is_file()
-        else:
-            raise ValueError(
-                f"path_type should be 'folder' or 'file' not '{path_type}'"
-            )
-
-        missing = list()
-        not_dir = dict()
-        for i in expected:
-            if i not in paths.keys():
-                missing.append(i)
-                continue
-            if not check(paths[i]):
-                if create_folders and path_type == "folder":
-                    paths[i].mkdir(parents=True)
-                else:
-                    not_dir[i] = paths[i]
-        if missing:
-            raise KeyError(f"Missing input {path_type}s: {missing}")
-        if not_dir:
-            raise FileNotFoundError(
-                f"{path_type.capitalize()}s could not be found: {not_dir}"
-            )
 
     def apply_all_MP(self, process_count: int = consts.PROCESS_COUNT):
         """Performs elasticity calculations for all segments provided.
@@ -219,13 +174,13 @@ class ElasticityModel:
         cost_changes = self.cost_builder.get_cost_changes()
 
         # Read in the segments to loop around
-        segments = eu.read_segments_file(self.import_home / ec.SEGMENTS_FILE)
+        segments = eu.read_segments_file(self.import_home / self._segments_filename)
 
         # Set up the arguments for each iteration
         kwarg_list = list()
         print("Setting up arguments...")
         for _, row in segments.iterrows():
-            for yr in self.years:
+            for yr in self.future_years:
                 # Grab the elasticity params from the file
                 elasticity_params = {
                     "purpose": str(row["elast_p"]),
@@ -264,7 +219,7 @@ class ElasticityModel:
 
         # Set up progress bar kwargs to track
         pbar_kwargs = {
-            'total': len(segments) * len(self.years),
+            'total': len(segments) * len(self.future_years),
             'desc': "Applying elasticities to segments",
             'unit': "segment",
             'colour': 'cyan',
@@ -276,8 +231,8 @@ class ElasticityModel:
             fn=self.apply_elasticities,
             kwargs=kwarg_list,
             pbar_kwargs=pbar_kwargs,
-            process_count=process_count,
-            # process_count=0,
+            # process_count=process_count,
+            process_count=0,
         )
 
     def apply_all(self):
@@ -295,11 +250,11 @@ class ElasticityModel:
         with du.std_out_err_redirect_tqdm() as orig_stdout:
 
             # Read in the segments to loop around
-            segments = eu.read_segments_file(self.import_home / ec.SEGMENTS_FILE)
+            segments = eu.read_segments_file(self.import_home / self._segments_filename)
 
             # Set up pbar
             pbar = tqdm.tqdm(
-                total=len(segments) * len(self.years),
+                total=len(segments) * len(self.future_years),
                 desc="Applying elasticities to segments",
                 file=orig_stdout,
                 dynamic_ncols=True,
@@ -308,7 +263,7 @@ class ElasticityModel:
 
             # Loop through all of the defined segments
             for _, row in segments.iterrows():
-                for yr in self.years:
+                for yr in self.future_years:
                     # Grab the elasticity params from the file
                     elasticity_params = {
                         "purpose": str(row["elast_p"]),
@@ -435,9 +390,12 @@ class ElasticityModel:
         """
         # Init
         elasticities = eu.read_elasticity_file(
-            self.import_home / ec.ELASTICITIES_FILE,
+            self.import_home / self._elasticities_filename,
             **elasticity_params,
         )
+
+        print(cost_changes)
+        exit()
 
         # ## CHECK THE ELASTICITIES WE WANT EXIST ## #
         to_use = cost_changes["e_type"].unique()
@@ -446,12 +404,12 @@ class ElasticityModel:
 
         if missing != list():
             raise ValueError(
-                f"Elasticity values in {ec.ELASTICITIES_FILE} "
+                f"Elasticity values in {self._elasticities_filename} "
                 f"missing for the following types: {missing}"
             )
 
         # ## LOAD IN THE CONSTRAINT MATRICES ## #
-        path = self.import_home / ec.CONSTRAINTS_FOLDER
+        path = self.import_home / self._constraints_folder
         needed_mats = cost_changes["adj_type"].unique().tolist()
         constraint_mats = eu.get_constraint_mats(path, needed_mats)
 
@@ -786,7 +744,7 @@ class ElasticityModel:
         costs = dict()
         for m, zone in ec.MODE_ZONE_SYSTEM.items():
             # Get the path for this mode and purpose
-            fname = ec.COST_NAMES.format(mode=m, purpose=purpose)
+            fname = self._base_costs_fname.format(mode=m, purpose=purpose)
             path = self.cost_dirs[m] / fname
 
             # Load in the costs, translate if needed
@@ -884,7 +842,7 @@ class ElasticityModel:
         # car availabilities (ca1 and ca2)
         for k in car_keys:
             mode = 'car'
-            folder = self.output_folder[mode]
+            folder = self.car_demand_export
             name = du.get_dist_name(
                 **demand_params,
                 mode=str(ec.MODE_ID[mode]),
@@ -896,7 +854,7 @@ class ElasticityModel:
         for k in rail_keys:
             mode = 'rail'
             ca = k
-            folder = self.output_folder[mode]
+            folder = self.rail_demand_export
             name = du.get_dist_name(
                 **demand_params,
                 mode=str(ec.MODE_ID[mode]),
@@ -907,7 +865,7 @@ class ElasticityModel:
             du.safe_dataframe_to_csv(adjusted_demand[k], folder / name)
 
         # Write other modes to a single file
-        folder = self.output_folder["others"]
+        folder = self.other_demand_export
         name = du.get_dist_name(**demand_params, csv=True)
         df = pd.DataFrame(
             [
@@ -998,11 +956,12 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
         If an `elasticity_type` not present in the
         `GC_ELASTICITY_TYPES` lookup is given.
     """
-
-    # Filter only elasticities involving the mode that changes
-    elasticities = elasticities.loc[
-        elasticities["changing_mode"].str.lower() == changing_mode
-        ]
+    # Filter elasticities to only relevant ones
+    mask = (
+        (elasticities["changing_mode"].str.lower() == changing_mode)
+        & (elasticities["type"].str.lower() == elasticity_type)
+    )
+    elasticities = elasticities[mask].copy()
 
     # Figure out the GC ratio of change
     if changing_cost != "gc":
@@ -1296,7 +1255,7 @@ def read_cost_changes(path: Path, years: List[str]) -> pd.DataFrame:
     path : Path
         Path to the cost changes file.
     years : List[str]
-        List of years to be checked there is data for.
+        List of future_years to be checked there is data for.
 
     Returns
     -------
@@ -1308,7 +1267,7 @@ def read_cost_changes(path: Path, years: List[str]) -> pd.DataFrame:
     Raises
     ------
     ValueError
-        If no data is present for one, or more, `years`.
+        If no data is present for one, or more, `future_years`.
     """
     dtypes = {
         "year": str,
@@ -1320,6 +1279,6 @@ def read_cost_changes(path: Path, years: List[str]) -> pd.DataFrame:
 
     missing_years = [i for i in years if i not in df["year"].unique().tolist()]
     if missing_years:
-        raise ValueError(f"Cost change not present for years: {missing_years}")
+        raise ValueError(f"Cost change not present for future_years: {missing_years}")
 
     return df

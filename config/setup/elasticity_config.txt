@@ -1,20 +1,22 @@
 [input_folders]
-elasticity = I:/NorMITs Demand\import\elasticities
-translation = I:/NorMITs Demand\import\zone_translation\one_to_one
-rail_demand = E:/NorMITs Demand\norms\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\internal
-car_demand = E:/NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\internal
-rail_costs = I:/NorMITs Demand\import\norms\costs\elasticity_model_format
-car_costs = I:/NorMITs Demand\import\noham\costs\elasticity_model_format
+import_home = I:/NorMITs Demand\import\elasticities
+translation_home = I:/NorMITs Demand\import\zone_translation\one_to_one
+rail_demand_import = E:/NorMITs Demand\norms\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\internal
+car_demand_import = E:/NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\internal
+rail_costs_import = I:/NorMITs Demand\import\norms\costs\elasticity_model_format
+car_costs_import = I:/NorMITs Demand\import\noham\costs\elasticity_model_format
 
 [input_files]
-gc_parameters = I:/NorMITs Demand\import\scenarios\SC04_UZC\elasticity\vot_voc_values.csv
-cost_changes = I:/NorMITs Demand\import\scenarios\SC04_UZC\elasticity\cost_adjustments.csv
+vot_voc_values_path = I:/NorMITs Demand\import\scenarios\SC04_UZC\elasticity\vot_voc_values.csv
+cost_adjustments_path = I:/NorMITs Demand\import\scenarios\SC04_UZC\elasticity\cost_adjustments.csv
 
 [output_folders]
-car = E:/NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices - Elasticity\internal
-rail = E:/NorMITs Demand\norms\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices - Elasticity\internal
-others = E:/NorMITs Demand\elasticity\iter3j\SC04_UZC
+car_demand_export = E:/NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices - Elasticity\internal
+rail_demand_export = E:/NorMITs Demand\norms\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices - Elasticity\internal
+other_demand_export = E:/NorMITs Demand\elasticity\iter3j\SC04_UZC
+reports_export = E:/NorMITs Demand\elasticity\iter3j\SC04_UZC\Reports
 
 [other]
-years = 2050
+base_year = 2018
+future_years = 2050
 
