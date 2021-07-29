@@ -116,3 +116,7 @@ as part of their file name in distribution reports
     - Note that this is no longer backwards compatible. If old (pre iter3d)
       land use inputs are needed, you need to revert to an older version of 
       NorMITs Demand.
+      
+### v0.3.7
+- Updated the Furness so productions are done last in each iterations. This 
+  means productions will always closely match, rather than the attractions.

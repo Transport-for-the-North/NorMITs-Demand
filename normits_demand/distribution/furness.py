@@ -95,15 +95,6 @@ def doubly_constrained_furness(seed_vals: np.array,
     iter_num = 0
 
     for iter_num in range(max_iters):
-        # ## ROW CONSTRAIN ## #
-        # Calculate difference factor
-        row_ach = np.sum(furnessed_mat, axis=1)
-        row_ach = np.where(row_ach == 0, 1, row_ach)
-        diff_factor = row_targets / row_ach
-
-        # adjust rows
-        furnessed_mat = (furnessed_mat.T * diff_factor).T
-
         # ## COL CONSTRAIN ## #
         # Calculate difference factor
         col_ach = np.sum(furnessed_mat, axis=0)
@@ -112,6 +103,15 @@ def doubly_constrained_furness(seed_vals: np.array,
 
         # adjust cols
         furnessed_mat = furnessed_mat * diff_factor
+
+        # ## ROW CONSTRAIN ## #
+        # Calculate difference factor
+        row_ach = np.sum(furnessed_mat, axis=1)
+        row_ach = np.where(row_ach == 0, 1, row_ach)
+        diff_factor = row_targets / row_ach
+
+        # adjust rows
+        furnessed_mat = (furnessed_mat.T * diff_factor).T
 
         # Calculate the diff - leave early if met
         row_diff = (row_targets - np.sum(furnessed_mat, axis=1)) ** 2
