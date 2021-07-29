@@ -893,13 +893,13 @@ class NHBProductionModel:
         """
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
-        hb_attr_seg = nd.get_segmentation_level('hb_notem_without_tp')
-        nhb_tfnat_seg = nd.get_segmentation_level('nhb_tfnat')
+        hb_notem_no_output_seg = nd.get_segmentation_level('hb_notem_output_no_tp')
+        hb_notem_tfnat_seg = nd.get_segmentation_level('notem_hb_tfnat_p_m_g_soc_ns_ca')
 
         # Reading the notem segmented compressed pickle
         hb_attr_notem = nd.from_pickle(self.hb_attractions[year])
         # Removing time period from segmentation
-        hb_attr = hb_attr_notem.aggregate(hb_attr_seg)
+        hb_attr = hb_attr_notem.aggregate(hb_notem_no_output_seg)
         hb_attr_df = hb_attr.to_df()
 
         # Reading the land use data corresponding to the year
@@ -927,7 +927,7 @@ class NHBProductionModel:
         # Instantiate
         return nd.DVector(
             zoning_system=msoa_zoning,
-            segmentation=nhb_tfnat_seg,
+            segmentation=hb_notem_tfnat_seg,
             import_data=hb_attr_at_df.rename(columns=self._seg_rename),
             zone_col="zone",
             val_col="value",
@@ -1039,7 +1039,7 @@ class NHBProductionModel:
             A DVector containing pure_demand split by time.
         """
         # Define the segmentation we want to use
-        tp_pure_nhb_demand_seg = nd.get_segmentation_level('nhb_tp')
+        tp_pure_nhb_demand_seg = nd.get_segmentation_level('nhb_tfnat_p_m_tp')
         fully_seg = nd.get_segmentation_level('full_nhb')
 
         du.print_w_toggle("Creating time splits DVec...", verbose=verbose)
@@ -1086,7 +1086,7 @@ class NHBProductionModel:
         """
 
         # Define the zoning and segmentations we want to use
-        nhb_prod_seg = nd.get_segmentation_level('full_nhb_notem')
+        nhb_prod_seg = nd.get_segmentation_level('nhb_notem_output')
 
         du.print_w_toggle("Renaming...", verbose=verbose)
 

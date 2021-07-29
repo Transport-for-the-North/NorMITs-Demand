@@ -3,5 +3,5 @@ pure_demand,lu_pop,tfn_tt;tfn_at,pure_demand
 pure_demand,full_tfntt_tfnat,tfn_tt;tfn_at;p,full_tfntt_tfnat
 pure_attractions_ecat,lu_emp,e_cat;soc,pure_attractions_ecat
 pure_attractions,hb_p_m,p,full_attraction
-nhb_tfnat,nhb_trip_rate,p;m;tfn_at,pure_nhb_demand
-pure_nhb_demand,nhb_tp,nhb_p;nhb_m;tfn_at,full_nhb_tfnat
+notem_hb_tfnat_p_m_g_soc_ns_ca,nhb_trip_rate,p;m;tfn_at,pure_nhb_demand
+pure_nhb_demand,nhb_tfnat_p_m_tp,nhb_p;nhb_m;tfn_at,full_nhb_tfnat
