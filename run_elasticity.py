@@ -212,7 +212,7 @@ def initialise(scenario,
         config.write(f)
 
 
-def run_elasticity(base_year):
+def run_elasticity():
     """Runs the elasticity model using parameters from the config file."""
 
     input_folders, input_files, output_folders, base_year, future_years = get_inputs()
@@ -298,7 +298,6 @@ def main():
     import_home = "I:/"
     export_home = "E:/"
 
-    # TODO(BT): Add as a param to the elasticity
     base_year = 2018
     # future_years = [2033, 2040, 2050]
     future_years = [2050]
@@ -316,7 +315,7 @@ def main():
         use_wfh_adj=use_wfh_adj,
     )
 
-    run_elasticity(base_year)
+    run_elasticity()
 
     # merge_internal_external(
     #     scenario=scenario,

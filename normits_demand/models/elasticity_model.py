@@ -231,8 +231,8 @@ class ElasticityModel:
             fn=self.apply_elasticities,
             kwargs=kwarg_list,
             pbar_kwargs=pbar_kwargs,
-            # process_count=process_count,
-            process_count=0,
+            process_count=process_count,
+            # process_count=0,
         )
 
     def apply_all(self):
@@ -393,9 +393,6 @@ class ElasticityModel:
             self.import_home / self._elasticities_filename,
             **elasticity_params,
         )
-
-        print(cost_changes)
-        exit()
 
         # ## CHECK THE ELASTICITIES WE WANT EXIST ## #
         to_use = cost_changes["e_type"].unique()
