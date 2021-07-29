@@ -670,6 +670,20 @@ class NHBProductionModel:
         [ops.check_file_exists(x) for x in land_use_paths.values()]
         if constraint_paths is not None:
             [ops.check_file_exists(x) for x in constraint_paths.values()]
+        for year in land_use_paths.keys():
+            if year not in hb_attractions.keys():
+                raise ValueError(
+                    "Year %d found in land_use_paths\n"
+                    "But not found in notem segmented hb_attractions_paths"
+                    % year
+                )
+            if constraint_paths is not None:
+                if year not in constraint_paths.keys():
+                    raise ValueError(
+                        "Year %d found in land_use_paths\n"
+                        "But not found in constraint_paths"
+                        % year
+                    )
         ops.check_file_exists(nhb_trip_rates_path)
         ops.check_file_exists(nhb_time_splits_path)
         ops.check_path_exists(export_path)
