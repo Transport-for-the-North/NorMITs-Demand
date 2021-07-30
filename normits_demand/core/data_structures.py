@@ -19,6 +19,7 @@ import math
 import pickle
 import pathlib
 import itertools
+import copy
 
 from typing import Any
 from typing import Dict
@@ -460,7 +461,7 @@ class DVector:
 
         # Infill the missing segments
         for name in not_in:
-            data[name] = default_val
+            data[name] = copy.copy(default_val)
 
         return data
 

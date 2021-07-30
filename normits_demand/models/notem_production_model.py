@@ -29,7 +29,7 @@ import normits_demand as nd
 from normits_demand import efs_constants as consts
 
 from normits_demand.utils import general as du
-from normits_demand.utils import file_ops as ops
+from normits_demand.utils import file_ops
 from normits_demand.utils import timing
 
 
@@ -103,12 +103,12 @@ class HBProductionModel:
             Defaults to consts.PROCESS_COUNT.
         """
         # Validate inputs
-        [ops.check_file_exists(x) for x in land_use_paths.values()]
+        [file_ops.check_file_exists(x) for x in land_use_paths.values()]
         if constraint_paths is not None:
-            [ops.check_file_exists(x) for x in constraint_paths.values()]
-        ops.check_file_exists(trip_rates_path)
-        ops.check_file_exists(mode_time_splits_path)
-        ops.check_path_exists(export_path)
+            [file_ops.check_file_exists(x) for x in constraint_paths.values()]
+        file_ops.check_file_exists(trip_rates_path)
+        file_ops.check_file_exists(mode_time_splits_path)
+        file_ops.check_path_exists(export_path)
 
         # Assign
         self.land_use_paths = land_use_paths
@@ -610,7 +610,6 @@ class NHBProductionModel:
 
     # Define segment renames needed
     _seg_rename = {
-        'tfn_traveller_type': 'tfn_tt',
         'area_type': 'tfn_at',
     }
 
@@ -665,32 +664,33 @@ class NHBProductionModel:
             should not exceed the number of cores available.
             Defaults to consts.PROCESS_COUNT.
         """
+
         # Check that the paths we need exist!
-        [ops.check_file_exists(x) for x in hb_attractions.values()]
-        [ops.check_file_exists(x) for x in land_use_paths.values()]
+        [file_ops.check_file_exists(x) for x in hb_attractions.values()]
+        [file_ops.check_file_exists(x) for x in land_use_paths.values()]
 
         if constraint_paths is not None:
-            [ops.check_file_exists(x) for x in constraint_paths.values()]
+            [file_ops.check_file_exists(x) for x in constraint_paths.values()]
+        file_ops.check_file_exists(nhb_trip_rates_path)
+        file_ops.check_file_exists(nhb_time_splits_path)
+        file_ops.check_path_exists(export_path)
 
         # Validate that we have data for all the years we're running for
-        for year in land_use_paths.keys():
-            if year not in hb_attractions.keys():
+        for year in hb_attractions.keys():
+            if year not in land_use_paths.keys():
                 raise ValueError(
-                    "Year %d found in land_use_paths\n"
-                    "But not found in notem segmented hb_attractions_paths"
+                    "Year %d found in notem segmented hb_attractions_paths\n"
+                    "But not found in land_use_paths"
                     % year
                 )
 
             if constraint_paths is not None:
                 if year not in constraint_paths.keys():
                     raise ValueError(
-                        "Year %d found in land_use_paths\n"
+                        "Year %d found in notem segmented hb_attractions_paths\n"
                         "But not found in constraint_paths"
                         % year
                     )
-        ops.check_file_exists(nhb_trip_rates_path)
-        ops.check_file_exists(nhb_time_splits_path)
-        ops.check_path_exists(export_path)
 
         # Assign
         self.hb_attractions = hb_attractions
@@ -701,7 +701,7 @@ class NHBProductionModel:
         self.export_path = export_path
         self.report_path = os.path.join(export_path, "Reports")
         self.process_count = process_count
-        self.years = list(self.land_use_paths.keys())
+        self.years = list(self.hb_attractions.keys())
 
         # Create paths
         du.create_folder(self.report_path, verbose=False)
@@ -814,7 +814,7 @@ class NHBProductionModel:
 
             # ## SPLIT NHB PURE DEMAND BY TIME ## #
             du.print_w_toggle("Splitting by time...", verbose=verbose)
-            fully_segmented = self._split_by_tp(pure_nhb_demand, verbose)
+            fully_segmented = self._split_by_tp(pure_nhb_demand)
 
             if export_fully_segmented:
                 du.print_w_toggle(
@@ -822,21 +822,6 @@ class NHBProductionModel:
                     verbose=verbose
                 )
                 fully_segmented.to_pickle(self.fully_segmented_paths[year])
-
-            if export_reports:
-                du.print_w_toggle(
-                    "Exporting fully segmented reports to disk...\n"
-                    "Total Productions for year %d: %.4f"
-                    % (year, fully_segmented.sum()),
-                    verbose=verbose
-                )
-
-                self._write_reports(
-                    dvec=fully_segmented,
-                    segment_totals_path=self.notem_report_segment_paths[year],
-                    ca_sector_path=self.notem_report_ca_sector_paths[year],
-                    ie_sector_path=self.notem_report_ie_sector_paths[year],
-                )
 
             # Renaming
             notem_segmented = self._rename(fully_segmented, verbose)

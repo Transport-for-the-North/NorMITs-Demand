@@ -51,8 +51,28 @@ hb_attractions = {
 nhb_prod_trip_rates = r"I:\NorMITs Demand\import\NoTEM\NHB_Productions\nhb_ave_wday_enh_trip_rates_v1.5.csv"
 nhb_prod_time_splits = r"I:\NorMITs Demand\import\NoTEM\NHB_Productions\tfn_nhb_ave_week_time_split_18_v1.5.csv"
 
+nhb_prod = {
+    2018: r"C:\Data\Nirmal_Atkins\NHB_Productions\nhb_msoa_notem_segmented_2018_dvec.pkl"
+}
+nhba_export_path = r"C:\Data\Nirmal_Atkins\NHB_Attractions"
 
-def nhb_main():
+
+def nhb_attr_main():
+    nhb_attr = notem_attr.NHBAttractionModel(
+        hb_attractions,
+        nhb_prod,
+        nhba_export_path
+    )
+
+    nhb_attr.run(
+        export_nhb_pure_attractions=True,
+        export_notem_segmentation=True,
+        export_reports=True,
+        verbose=True,
+    )
+
+
+def nhb_prod_main():
     nhb_prod = notem.NHBProductionModel(
         hb_attractions,
         POPULATION_PATH,
@@ -109,4 +129,5 @@ def main_attr():
 if __name__ == '__main__':
     # main()
     # main_attr()
-    nhb_main()
+    nhb_prod_main()
+    # nhb_attr_main()
