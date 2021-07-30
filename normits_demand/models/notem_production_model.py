@@ -656,7 +656,7 @@ class NHBProductionModel:
             Dictionary of {year: constraint_path} pairs.
             Must contain the same keys as land_use_paths, but it can contain
             more (any extras will be ignored).
-            If set - will be used to constrain the attractions - a report will
+            If set - will be used to constrain the productions - a report will
             be written before and after.
 
         process_count:
