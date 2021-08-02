@@ -130,7 +130,7 @@ def main_attr():
 
 
 if __name__ == '__main__':
-    # main()
+    main()
     # main_attr()
     # nhb_prod_main()
-    nhb_attr_main()
+    # nhb_attr_main()

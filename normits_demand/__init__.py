@@ -11,6 +11,7 @@ from normits_demand.audits.audits import AuditError
 from normits_demand.core import ZoningError
 from normits_demand.core import SegmentationError
 from normits_demand.core import DVectorError
+from normits_demand.pathing import PathingError
 
 # ## EXPOSE CLASS LAYER ## #
 # EFS Class Layer
