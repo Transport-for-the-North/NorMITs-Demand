@@ -72,7 +72,7 @@ class HBAttractionModel:
     # Define segment renames needed
     _seg_rename = {
         'employment_cat': 'e_cat',
-        '2018': 'emp',
+        'people': 'people',
         'area_type': 'tfn_at',
         'purpose': 'p',
         'mode_share': 'split'
@@ -260,9 +260,7 @@ class HBAttractionModel:
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting pure attractions reports disk...\n"
-                    "Total Attractions for year %d: %.4f"
-                    % (year, pure_attractions.sum()),
+                    "Exporting pure demand reports disk...",
                     verbose=verbose
                 )
 
@@ -298,14 +296,15 @@ class HBAttractionModel:
             )
 
             if export_notem_segmentation:
-                du.print_w_toggle("Exporting notem segmented attractions to disk...", verbose=verbose)
+                du.print_w_toggle(
+                    "Exporting notem segmented attractions to disk...",
+                    verbose=verbose
+                )
                 notem_segmented.to_pickle(self.notem_segmented_paths[year])
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting notem segmented attractions reports disk...\n"
-                    "Total Attractions for year %d: %.4f"
-                    % (year, notem_segmented.sum()),
+                    "Exporting notem segmented reports disk...",
                     verbose=verbose
                 )
 
@@ -386,7 +385,7 @@ class HBAttractionModel:
             segmentation=emp_seg,
             import_data=emp.rename(columns=self._seg_rename),
             zone_col="msoa_zone_id",
-            val_col="emp",
+            val_col="people",
             verbose=verbose,
         )
 

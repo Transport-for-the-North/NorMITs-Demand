@@ -39,9 +39,7 @@ from normits_demand.pathing import HBProductionModelPaths
 class HBProductionModel(HBProductionModelPaths):
     """The Home-Based Production Model of NoTEM
 
-    This class defines and builds the export and reporting paths for
-    the NoTEMModelPaths. If the outputs of HBProductionModel are needed,
-    create an instance of this class to generate all paths.
+    The production model can be ran by calling the class run() method.
 
     Attributes
     ----------
@@ -71,7 +69,6 @@ class HBProductionModel(HBProductionModelPaths):
     See HBProductionModelPaths for documentation on:
         path_years, export_home, report_home, export_paths, report_paths
     """
-
     # Constants
     _return_segmentation_name = 'hb_notem_output'
 
@@ -239,9 +236,7 @@ class HBProductionModel(HBProductionModelPaths):
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting pure demand reports disk...\n"
-                    "Total Productions for year %d: %.4f"
-                    % (year, pure_demand.sum()),
+                    "Exporting pure demand reports disk...",
                     verbose=verbose
                 )
 
@@ -282,9 +277,7 @@ class HBProductionModel(HBProductionModelPaths):
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting notem segmented reports disk...\n"
-                    "Total Productions for year %d: %.4f"
-                    % (year, productions.sum()),
+                    "Exporting notem segmented reports disk...",
                     verbose=verbose
                 )
 

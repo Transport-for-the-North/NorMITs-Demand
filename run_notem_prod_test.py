@@ -41,7 +41,12 @@ attr_trip_rates_path = r"I:\NorMITs Demand\import\NoTEM\Attractions\sample_attra
 attr_mode_splits_path = r"I:\NorMITs Demand\import\NoTEM\Attractions\attraction_mode_split_new_infill.csv"
 
 # pure_demand_production = r"C:\Data\Nirmal_Atkins\hb_msoa_pure_demand_2018_dvec.pkl"
-pure_demand_production = {2018: r"E:\NoTEM\Productions\hb_msoa_notem_segmented_2018_dvec.pkl"}
+pure_demand_production = {
+    2018: r"E:\NoTEM\Productions\hb_msoa_notem_segmented_2018_dvec.pkl",
+    2033: r"E:\NoTEM\Productions\hb_msoa_notem_segmented_2033_dvec.pkl",
+    2040: r"E:\NoTEM\Productions\hb_msoa_notem_segmented_2040_dvec.pkl",
+    2050: r"E:\NoTEM\Productions\hb_msoa_notem_segmented_2050_dvec.pkl",
+}
 
 # attr_export_path = r"C:\Data\Nirmal_Atkins\Attractions"
 attr_export_path = "E:/NoTEM/Attractions"
@@ -133,7 +138,7 @@ def main_attr():
 
 
 if __name__ == '__main__':
-    main()
-    # main_attr()
+    # main()
+    main_attr()
     # nhb_prod_main()
     # nhb_attr_main()
