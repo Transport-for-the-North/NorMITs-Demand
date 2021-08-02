@@ -733,8 +733,8 @@ class NHBAttractionModel:
     _base_report_fname = '%s_%s_%d_%s.csv'
 
     def __init__(self,
-                 hb_attractions: Dict[int, nd.PathLike],
-                 nhb_productions: Dict[int, nd.PathLike],
+                 hb_attraction_paths: Dict[int, nd.PathLike],
+                 nhb_production_paths: Dict[int, nd.PathLike],
                  export_path: str,
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
@@ -744,12 +744,12 @@ class NHBAttractionModel:
 
         Parameters
         ----------
-        hb_attractions:
+        hb_attraction_paths:
             Dictionary of {year: notem_segmented_HB_attractions_data} pairs.
             These paths should come from nd.HBAttraction model and should
             be pickled Dvector paths.
 
-        nhb_productions:
+        nhb_production_paths:
             Dictionary of {year: notem_segmented_NHB_productions_data} pairs.
             These paths should come from nd.NHBProduction model and should
             be pickled Dvector paths.
@@ -770,18 +770,17 @@ class NHBAttractionModel:
             should not exceed the number of cores available.
             Defaults to consts.PROCESS_COUNT.
         """
-
         # Check that the paths we need exist!
-        [file_ops.check_file_exists(x) for x in hb_attractions.values()]
-        [file_ops.check_file_exists(x) for x in nhb_productions.values()]
+        [file_ops.check_file_exists(x) for x in hb_attraction_paths.values()]
+        [file_ops.check_file_exists(x) for x in nhb_production_paths.values()]
         file_ops.check_path_exists(export_path)
 
         if constraint_paths is not None:
             [file_ops.check_file_exists(x) for x in constraint_paths.values()]
 
         # Validate that we have data for all the years we're running for
-        for year in hb_attractions.keys():
-            if year not in nhb_productions.keys():
+        for year in hb_attraction_paths.keys():
+            if year not in nhb_production_paths.keys():
                 raise ValueError(
                     "Year %d found in notem segmented hb_attractions_paths\n"
                     "But not found in notem segmented nhb_productions_paths"
@@ -797,13 +796,13 @@ class NHBAttractionModel:
                     )
 
         # Assign
-        self.hb_attractions = hb_attractions
-        self.nhb_productions = nhb_productions
+        self.hb_attraction_paths = hb_attraction_paths
+        self.nhb_production_paths = nhb_production_paths
         self.constraint_paths = constraint_paths
         self.export_path = export_path
         self.report_path = os.path.join(export_path, "Reports")
         self.process_count = process_count
-        self.years = list(self.hb_attractions.keys())
+        self.years = list(self.hb_attraction_paths.keys())
 
         # Create paths
         du.create_folder(self.report_path, verbose=False)
@@ -815,9 +814,9 @@ class NHBAttractionModel:
         self._create_notem_segmented_report_paths(self.report_path, self.years)
 
     def run(self,
-            export_nhb_pure_attractions: bool = False,
-            export_notem_segmentation: bool = False,
-            export_reports: bool = False,
+            export_nhb_pure_attractions: bool = True,
+            export_notem_segmentation: bool = True,
+            export_reports: bool = True,
             verbose: bool = False,
             ) -> None:
         """
@@ -895,7 +894,7 @@ class NHBAttractionModel:
             # Control the attractions to the productions
             notem_segmented = self._attractions_balance(
                 a_dvec=pure_nhb_attr,
-                p_dvec_path=self.nhb_productions[year],
+                p_dvec_path=self.nhb_production_paths[year],
             )
 
             if export_notem_segmentation:
@@ -962,14 +961,18 @@ class NHBAttractionModel:
         nhb_notem_seg = nd.get_segmentation_level('nhb_notem_output')
 
         # Reading the notem segmented HB attractions compressed pickle
-        hb_attr_notem = nd.from_pickle(self.hb_attractions[year])
+        hb_attr_notem = nd.from_pickle(self.hb_attraction_paths[year])
         hb_attr_notem_df = hb_attr_notem.to_df()
 
         # Removing p1 and p7
-        hb_attr_notem_df = hb_attr_notem_df.loc[(hb_attr_notem_df['p'].astype(int) != 1) &
-                                                (hb_attr_notem_df['p'].astype(int) != 7)]
+        mask = (
+            (hb_attr_notem_df['p'].astype(int) == 1)
+            & (hb_attr_notem_df['p'].astype(int) == 7)
+        )
+        hb_attr_notem_df = hb_attr_notem_df[~mask].copy()
+
         # Adding 10 to the remaining purposes
-        hb_attr_notem_df['p'] = hb_attr_notem_df['p'].astype(int)+10
+        hb_attr_notem_df['p'] = hb_attr_notem_df['p'].astype(int) + 10
 
         # Instantiate
         return nd.DVector(
@@ -1193,4 +1196,4 @@ class NHBAttractionModel:
         p_dvec = nd.from_pickle(p_dvec_path)
 
         # Balance a_dvec with p_dvec
-        return a_dvec.balance_at_segments(p_dvec, split_weekday_weekend=False)
+        return a_dvec.balance_at_segments(p_dvec, split_weekday_weekend=True)

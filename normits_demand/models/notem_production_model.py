@@ -618,7 +618,7 @@ class NHBProductionModel:
     _base_report_fname = '%s_%s_%d_%s.csv'
 
     def __init__(self,
-                 hb_attractions: Dict[int, nd.PathLike],
+                 hb_attractions_paths: Dict[int, nd.PathLike],
                  land_use_paths: Dict[int, nd.PathLike],
                  nhb_trip_rates_path: str,
                  nhb_time_splits_path: str,
@@ -631,7 +631,7 @@ class NHBProductionModel:
 
         Parameters
         ----------
-        hb_attractions:
+        hb_attractions_paths:
             Dictionary of {year: notem_segmented_HB_attractions_data} pairs.
             These paths should come from nd.HBAttraction model and should
             be pickled Dvector paths.
@@ -664,22 +664,22 @@ class NHBProductionModel:
             should not exceed the number of cores available.
             Defaults to consts.PROCESS_COUNT.
         """
-
         # Check that the paths we need exist!
-        [file_ops.check_file_exists(x) for x in hb_attractions.values()]
+        [file_ops.check_file_exists(x) for x in hb_attractions_paths.values()]
         [file_ops.check_file_exists(x) for x in land_use_paths.values()]
 
         if constraint_paths is not None:
             [file_ops.check_file_exists(x) for x in constraint_paths.values()]
+
         file_ops.check_file_exists(nhb_trip_rates_path)
         file_ops.check_file_exists(nhb_time_splits_path)
         file_ops.check_path_exists(export_path)
 
         # Validate that we have data for all the years we're running for
-        for year in hb_attractions.keys():
+        for year in hb_attractions_paths.keys():
             if year not in land_use_paths.keys():
                 raise ValueError(
-                    "Year %d found in notem segmented hb_attractions_paths\n"
+                    "Year %d found given attractions: hb_attractions_paths\n"
                     "But not found in land_use_paths"
                     % year
                 )
@@ -693,7 +693,7 @@ class NHBProductionModel:
                     )
 
         # Assign
-        self.hb_attractions = hb_attractions
+        self.hb_attractions = hb_attractions_paths
         self.land_use_paths = land_use_paths
         self.nhb_trip_rates_path = nhb_trip_rates_path
         self.nhb_time_splits_path = nhb_time_splits_path

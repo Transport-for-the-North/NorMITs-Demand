@@ -264,10 +264,10 @@ class NoTEM:
         imports_nhb_prod = self.generate_nhb_attraction_imports()
 
         nhb_attr = notem_attr.NHBAttractionModel(
-            hb_attractions=self._generate_notem_seg_attr(),
-            nhb_productions=self._generate_notem_seg_nhb_prod(),
-            constraint_paths=None,
+            hb_attraction_paths=self._generate_notem_seg_attr(),
+            nhb_production_paths=self._generate_notem_seg_nhb_prod(),
             export_path=imports_nhb_prod['export_path'],
+            constraint_paths=None
         )
 
         nhb_attr.run(
