@@ -37,14 +37,7 @@ from normits_demand.pathing import HBProductionModelPaths
 
 class HBProductionModel(HBProductionModelPaths):
     # Constants
-    _trip_origin = 'hb'
-    _zoning_system = 'msoa'
     _return_segmentation_name = 'hb_notem_output'
-
-    # Segmentation names
-    _pure_demand = 'pure_demand'
-    _fully_segmented = 'fully_segmented'
-    _notem_segmented = 'notem_segmented'
 
     # Define wanted columns
     _target_cols = {
@@ -126,12 +119,6 @@ class HBProductionModel(HBProductionModelPaths):
             report_home=report_home,
         )
 
-        print(self.export_paths)
-        print(self.export_paths.pure_demand[2018])
-
-        print(self.report_paths.pure_demand.segment_total[2018])
-        exit()
-
     def run(self,
             export_pure_demand: bool = True,
             export_fully_segmented: bool = False,
@@ -210,7 +197,7 @@ class HBProductionModel(HBProductionModelPaths):
 
             if export_pure_demand:
                 du.print_w_toggle("Exporting pure demand to disk...", verbose=verbose)
-                pure_demand.to_pickle(self.pure_demand_paths[year])
+                pure_demand.to_pickle(self.export_paths.pure_demand[year])
 
             if export_reports:
                 du.print_w_toggle(
@@ -221,11 +208,12 @@ class HBProductionModel(HBProductionModelPaths):
                 )
 
                 tfn_agg_at_seg = nd.get_segmentation_level('pure_demand_reporting')
+                pure_demand_paths = self.report_paths.pure_demand
                 self._write_reports(
                     dvec=pure_demand.aggregate(tfn_agg_at_seg),
-                    segment_totals_path=self.pd_report_segment_paths[year],
-                    ca_sector_path=self.pd_report_ca_sector_paths[year],
-                    ie_sector_path=self.pd_report_ie_sector_paths[year],
+                    segment_totals_path=pure_demand_paths.segment_total[year],
+                    ca_sector_path=pure_demand_paths.ca_sector[year],
+                    ie_sector_path=pure_demand_paths.ie_sector[year],
                 )
 
             # ## SPLIT PURE DEMAND BY MODE AND TIME ## #
@@ -238,7 +226,7 @@ class HBProductionModel(HBProductionModelPaths):
                     "Exporting fully segmented productions to disk...",
                     verbose=verbose,
                 )
-                fully_segmented.to_pickle(self.fully_segmented_paths[year])
+                fully_segmented.to_pickle(self.export_paths.fully_segmented[year])
 
             # ## AGGREGATE INTO RETURN SEGMENTATION ## #
             return_seg = nd.get_segmentation_level(self._return_segmentation_name)
@@ -252,7 +240,7 @@ class HBProductionModel(HBProductionModelPaths):
                     "Exporting notem segmented demand to disk...",
                     verbose=verbose
                 )
-                productions.to_pickle(self.notem_segmented_paths[year])
+                productions.to_pickle(self.export_paths.notem_segmented[year])
 
             if export_reports:
                 du.print_w_toggle(
@@ -262,11 +250,12 @@ class HBProductionModel(HBProductionModelPaths):
                     verbose=verbose
                 )
 
+                notem_segmented_paths = self.report_paths.notem_segmented
                 self._write_reports(
                     dvec=productions,
-                    segment_totals_path=self.notem_report_segment_paths[year],
-                    ca_sector_path=self.notem_report_ca_sector_paths[year],
-                    ie_sector_path=self.notem_report_ie_sector_paths[year],
+                    segment_totals_path=notem_segmented_paths.segment_total[year],
+                    ca_sector_path=notem_segmented_paths.ca_sector[year],
+                    ie_sector_path=notem_segmented_paths.ie_sector[year],
                 )
 
             # TODO: Bring in constraints (Validation)

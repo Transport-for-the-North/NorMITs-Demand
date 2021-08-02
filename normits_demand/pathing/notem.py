@@ -44,7 +44,7 @@ class NoTEMModelPaths:
     # Output Path Classes
     ExportPaths = collections.namedtuple(
         typename='ExportPaths',
-        field_names='pure_demand, fully_segmented, notem_segmented',
+        field_names='home, pure_demand, fully_segmented, notem_segmented',
     )
 
     ReportPaths = collections.namedtuple(
@@ -176,7 +176,9 @@ class HBProductionModelPaths(NoTEMModelPaths):
             fname = base_fname % (*fname_parts, self._notem_segmented, year)
             notem_segmented_paths[year] = os.path.join(self.export_home, fname)
 
+        # Create the export_paths class
         self.export_paths = self.ExportPaths(
+            home=self.export_home,
             pure_demand=pure_demand_paths,
             fully_segmented=fully_segmented_paths,
             notem_segmented=notem_segmented_paths,
@@ -187,6 +189,7 @@ class HBProductionModelPaths(NoTEMModelPaths):
         Creates self.report_paths
         """
         self.report_paths = self.ExportPaths(
+            home=self.report_home,
             pure_demand=self._generate_report_paths(self._pure_demand),
             fully_segmented=None,
             notem_segmented=self._generate_report_paths(self._notem_segmented),
