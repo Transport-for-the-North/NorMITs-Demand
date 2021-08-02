@@ -19,6 +19,7 @@ import math
 import pickle
 import pathlib
 import itertools
+import copy
 
 from typing import Any
 from typing import Dict
@@ -132,10 +133,11 @@ class DVector:
             and should be set to False usually.
         """
         # Validate arguments
-        if not isinstance(zoning_system, nd.core.ZoningSystem):
-            raise ValueError(
-                "Given zoning_system is not a nd.core.ZoningSystem object."
-            )
+        if zoning_system is not None:
+            if not isinstance(zoning_system, nd.core.ZoningSystem):
+                raise ValueError(
+                    "Given zoning_system is not a nd.core.ZoningSystem object."
+                )
 
         if not isinstance(segmentation, nd.core.SegmentationLevel):
             raise ValueError(
@@ -459,7 +461,7 @@ class DVector:
 
         # Infill the missing segments
         for name in not_in:
-            data[name] = default_val.copy()
+            data[name] = copy.copy(default_val)
 
         return data
 

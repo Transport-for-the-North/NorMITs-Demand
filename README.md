@@ -121,5 +121,11 @@ as part of their file name in distribution reports
 - Added the new NoTEM Attraction model - built on top of DVec
     - Uses new, more disaggregate segmentation.
     - Optimised for run times using numpy.
+- Added the new NoTEM NHB Production model - built on top of DVec
+    - Uses new, more disaggregate segmentation.
+    - Optimised for run times using numpy.
+- Added the new NoTEM NHB Attraction model - built on top of DVec
+    - Uses new, more disaggregate segmentation.
+    - Optimised for run times using numpy.
     
 - Added a new NoTEM wrapper around the new production and attraction models 
