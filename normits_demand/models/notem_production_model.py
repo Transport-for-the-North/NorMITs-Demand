@@ -28,9 +28,10 @@ import normits_demand as nd
 
 from normits_demand import efs_constants as consts
 
-from normits_demand.utils import general as du
-from normits_demand.utils import file_ops
 from normits_demand.utils import timing
+from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
+from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.pathing import HBProductionModelPaths
 
@@ -298,10 +299,11 @@ class HBProductionModel(HBProductionModelPaths):
         pop_seg = nd.get_segmentation_level('lu_pop')
 
         # Read the land use data corresponding to the year
-        pop = du.safe_read_csv(
-            file_path=self.land_use_paths[year],
-            usecols=self._target_cols['land_use']
+        pop = file_ops.read_df(
+            path=self.land_use_paths[year],
+            find_similar=True,
         )
+        pop = pd_utils.reindex_cols(pop, self._target_cols['land_use'])
 
         # Instantiate
         return nd.DVector(

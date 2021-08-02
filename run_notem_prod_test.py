@@ -20,12 +20,12 @@ from normits_demand.models import notem_attraction_model as notem_attr
 # PRODUCTIONS
 POPULATION_PATH = {
     2018: r"I:\NorMITs Land Use\base_land_use\iter3d\outputs\land_use_output_msoa.csv",
-    # 2033: r"I:\NorMITs Land Use\future_land_use\iter3b\scenarios\NTEM\land_use_2033_pop.csv",
-    # 2040: r"I:\NorMITs Land Use\future_land_use\iter3b\scenarios\NTEM\land_use_2040_pop.csv",
-    # 2050: r"I:\NorMITs Land Use\future_land_use\iter3b\scenarios\NTEM\land_use_2050_pop.csv",
+    2033: r"I:\NorMITs Land Use\future_land_use\iter3d\outputs\scenarios\SC01_JAM\land_use_2033_pop.pbz2",
+    2040: r"I:\NorMITs Land Use\future_land_use\iter3d\outputs\scenarios\SC01_JAM\land_use_2040_pop.pbz2",
+    2050: r"I:\NorMITs Land Use\future_land_use\iter3d\outputs\scenarios\SC01_JAM\land_use_2050_pop.pbz2",
 }
-TRIP_RATES_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_trip_rates_v1.9.csv"
-MODE_TIME_SPLITS_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_mode_time_split_v1.9.csv"
+TRIP_RATES_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_trip_rates_v2.0.csv"
+MODE_TIME_SPLITS_PATH = r"I:\NorMITs Demand\import\NoTEM\HB_Productions\hb_mode_time_split_v2.0.csv"
 
 # p_export_path = r"C:\Data\Nirmal_Atkins\ss"
 p_export_path = "E:/NoTEM/Productions"
@@ -105,7 +105,7 @@ def main():
 
     hb_prod.run(
         export_pure_demand=True,
-        export_fully_segmented=True,
+        export_fully_segmented=False,
         export_notem_segmentation=True,
         export_reports=True,
         verbose=True,
@@ -123,7 +123,7 @@ def main_attr():
 
     hb_attr.run(
         export_pure_attractions=True,
-        export_fully_segmented=True,
+        export_fully_segmented=False,
         export_reports=True,
         verbose=True,
     )
