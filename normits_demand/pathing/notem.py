@@ -27,6 +27,25 @@ from normits_demand.utils import file_ops
 
 
 class NoTEMModelPaths:
+    """Base Path Class for all NoTEM models.
+
+    This class forms the base path class that all NoTEM model path classes
+    are built off of. It defines a number of constants to ensure all
+    NoTEM models follow the same output structure and naming conventions
+
+    Attributes
+    ----------
+    path_years: List[int]
+        A list of years that paths will be generated for.
+
+    export_home: nd.PathLike
+        The home directory of all exports. Is used as a basis for
+        all export path building.
+
+    report_home: nd.PathLike
+        The home directory of all reports. Is used as a basis for
+        all report path building.
+    """
     # Export fname params
     _trip_origin = None
     _zoning_system = 'msoa'
@@ -61,6 +80,14 @@ class NoTEMModelPaths:
                  export_home: nd.PathLike,
                  report_home: nd.PathLike,
                  ):
+        """Validates input attributes and builds class
+
+        Parameters
+        ----------
+        path_years
+        export_home
+        report_home
+        """
         # Assign attributes
         self.path_years = path_years
         self.export_home = export_home
@@ -86,12 +113,6 @@ class NoTEMModelPaths:
 
         Parameters
         ----------
-        report_path:
-           The home path (directory) where all the reports should go
-
-        years:
-           A list of years to generate report paths for
-
         report_name:
             The name to use in the report filename. Filenames will be named
             as: [report_name, year, report_type], joined with '_'.
@@ -140,10 +161,41 @@ class NoTEMModelPaths:
 
 
 class HBProductionModelPaths(NoTEMModelPaths):
+    """Path Class for the NoTEM HB Production Model.
+
+    This class defines and builds the export and reporting paths for
+    the NoTEMModelPaths. If the outputs of HBProductionModel are needed,
+    create an instance of this class to generate all paths.
+
+    Attributes
+    ----------
+    export_paths: nd.PathLike
+        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        attributes (dictionary keys are path_years):
+        - home: The home directory of all exports
+        - pure_demand: A dictionary of export paths for pure_demand DVectors
+        - fully_segmented: A dictionary of export paths for fully_segmented DVectors
+        - notem_segmented: A dictionary of export paths for notem_segmented DVectors
+
+    report_paths: nd.PathLike
+        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        attributes (dictionary keys are path_years):
+        - home: The home directory of all exports
+        - pure_demand: A NoTEMModelPaths.ReportPaths object
+        - fully_segmented: A NoTEMModelPaths.ReportPaths object
+        - notem_segmented: A NoTEMModelPaths.ReportPaths object
+
+    See NoTEMModelPaths for documentation on:
+    path_years, export_home, report_home
+    """
     # Export fname params
     _trip_origin = 'hb'
     
     def __init__(self, *args, **kwargs):
+        """Generates the export and report paths
+
+        See super for more detail
+        """
         # Set up superclass
         super().__init__(*args, **kwargs)
 

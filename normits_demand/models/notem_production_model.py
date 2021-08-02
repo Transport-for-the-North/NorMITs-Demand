@@ -37,6 +37,41 @@ from normits_demand.pathing import HBProductionModelPaths
 
 
 class HBProductionModel(HBProductionModelPaths):
+    """The Home-Based Production Model of NoTEM
+
+    This class defines and builds the export and reporting paths for
+    the NoTEMModelPaths. If the outputs of HBProductionModel are needed,
+    create an instance of this class to generate all paths.
+
+    Attributes
+    ----------
+    land_use_paths: Dict[int, nd.PathLike]:
+        Dictionary of {year: land_use_employment_data} pairs. As passed
+        into the constructor.
+
+    trip_rates_path: str
+        The path to the production trip rates. As passed into the constructor.
+
+    mode_time_splits_path: str
+        The path to production mode-time splits. As passed into the
+        constructor.
+
+    constraint_paths: Dict[int, nd.PathLike]
+        Dictionary of {year: constraint_path} pairs. As passed into the
+        constructor.
+
+    process_count: int
+        The number of processes to create in the Pool. As passed into the
+        constructor.
+
+    years: List[int]
+        A list of years that the model will run for. Derived from the keys of
+        land_use_paths
+
+    See HBProductionModelPaths for documentation on:
+        path_years, export_home, report_home, export_paths, report_paths
+    """
+
     # Constants
     _return_segmentation_name = 'hb_notem_output'
 
@@ -79,7 +114,7 @@ class HBProductionModel(HBProductionModelPaths):
             Should have the columns as defined in:
             HBProductionModel._target_cols['m_tp']
 
-        export_path:
+        export_home:
             Path to export attraction outputs.
 
         constraint_paths:
