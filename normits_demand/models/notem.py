@@ -33,14 +33,17 @@ class NoTEM:
     _base_year = 2018
     _normits_land_use = "NorMITs Land Use"
     _hb_prod = "HB_Productions"
-    _hb_attr = "Attractions"
+    _hb_attr = "HB_Attractions"
     _nhb_prod = "NHB_Productions"
     _nhb_attr = "NHB_Attractions"
     _hb_prod_trip_rate_fname = "hb_trip_rates_v1.9.csv"
     _hb_prod_mode_time_split_fname = "hb_mode_time_split_v1.9.csv"
     _notem_seg_prod_fname = "hb_msoa_notem_segmented_%d_dvec.pkl"
+    _notem_seg_attr_fname = "hb_msoa_notem_segmented_%d_dvec.pkl"
     _hb_attr_trip_rate_fname = "sample_attraction_trip_rate.csv"
     _hb_attr_mode_split_fname = "attraction_mode_split_new_infill.csv"
+    _nhb_prod_trip_rate_fname = "nhb_ave_wday_enh_trip_rates_v1.5.csv"
+    _nhb_prod_time_split_fname = "tfn_nhb_ave_week_time_split_18_v1.5.csv"
 
     def __init__(self,
                  years: List[int],
@@ -176,7 +179,7 @@ class NoTEM:
             trip_rates_path=imports_hb_prod['trip_rate'],
             mode_time_splits_path=imports_hb_prod['mode_time_split'],
             constraint_paths=None,
-            export_path=imports_hb_prod['export_path']
+            export_path=imports_hb_prod['export_path'],
         )
 
         hb_prod.run(
@@ -206,7 +209,7 @@ class NoTEM:
             attraction_trip_rates_path=imports_hb_attr['trip_rate'],
             mode_splits_path=imports_hb_attr['mode_split'],
             constraint_paths=None,
-            export_path=imports_hb_attr['export_path']
+            export_path=imports_hb_attr['export_path'],
         )
 
         hb_attr.run(
@@ -226,9 +229,26 @@ class NoTEM:
         -------
         None
         """
-        # TODO(NK) : Add the NHB Production trip end models
 
-        raise NotImplementedError
+        # Runs the module to create import dictionary
+        imports_nhb_prod = self.generate_nhb_production_imports()
+
+        nhb_prod = notem.NHBProductionModel(
+            hb_attractions=self._generate_notem_seg_attr(),
+            land_use_paths=self.pop_land_use_path,
+            nhb_trip_rates_path=imports_nhb_prod['nbh_trip_rate'],
+            nhb_time_splits_path=imports_nhb_prod['nbh_time_split_rate'],
+            export_path=imports_nhb_prod['export_path'],
+            constraint_paths=None,
+        )
+
+        nhb_prod.run(
+            export_nhb_pure_demand=True,
+            export_fully_segmented=True,
+            export_notem_segmentation=True,
+            export_reports=True,
+            verbose=True,
+        )
 
     def generate_nhb_attraction(self,
                                 ) -> None:
@@ -239,9 +259,23 @@ class NoTEM:
         -------
         None
         """
-        # TODO(NK) : Add the NHB Attraction trip end models
 
-        raise NotImplementedError
+        # Runs the module to create import dictionary
+        imports_nhb_prod = self.generate_nhb_attraction_imports()
+
+        nhb_attr = notem_attr.NHBAttractionModel(
+            hb_attractions=self._generate_notem_seg_attr(),
+            nhb_productions=self._generate_notem_seg_nhb_prod(),
+            constraint_paths=None,
+            export_path=imports_nhb_prod['export_path'],
+        )
+
+        nhb_attr.run(
+            export_nhb_pure_attractions=True,
+            export_notem_segmentation=True,
+            export_reports=True,
+            verbose=True,
+        )
 
     def _generate_land_use_inputs(self,
                                   ) -> None:
@@ -349,6 +383,59 @@ class NoTEM:
         }
         return imports_hb_attr
 
+    def generate_nhb_production_imports(self,
+                                        ) -> Dict[str, nd.PathLike]:
+        """
+        Creates inputs required for non home based production trip ends.
+
+        Creates dictionary containing import parameter and corresponding
+        file path as keys and values respectively for non home based production
+        trip ends.
+
+        Returns
+        -------
+        imports_nhb_prod:
+            A dictionary containing non home based production input parameters
+            and the corresponding file path.
+        """
+        # Creates inputs required for NHB Productions
+
+        nhb_trip_rates_path = os.path.join(self.notem_import_home, self._nhb_prod, self._nhb_prod_trip_rate_fname)
+        nhb_time_split_path = os.path.join(self.notem_import_home, self._hb_prod,
+                                           self._nhb_prod_time_split_fname)
+        export_path = os.path.join(self.notem_export_home, self._nhb_prod)
+
+        imports_nhb_prod = {
+            'nhb_trip_rate': nhb_trip_rates_path,
+            'nhb_time_split': nhb_time_split_path,
+            'export_path': export_path
+        }
+        return imports_nhb_prod
+
+    def generate_nhb_attraction_imports(self,
+                                        ) -> Dict[str, nd.PathLike]:
+        """
+        Creates inputs required for non home based attraction trip ends.
+
+        Creates dictionary containing import parameter and corresponding
+        file path as keys and values respectively for non home based attraction
+        trip ends.
+
+        Returns
+        -------
+        imports_nhb_attr:
+            A dictionary containing non home based attraction input parameters
+            and the corresponding file path.
+        """
+
+        # Creates inputs required for NHB Attractions
+        export_path = os.path.join(self.notem_export_home, self._nhb_attr)
+
+        imports_nhb_attr = {
+            'export_path': export_path
+        }
+        return imports_nhb_attr
+
     def _generate_notem_seg_prod(self,
                                  ) -> Dict[int, nd.PathLike]:
         """
@@ -370,3 +457,47 @@ class NoTEM:
             notem_seg_prod[year] = notem_seg_production
 
         return notem_seg_prod
+
+    def _generate_notem_seg_nhb_prod(self,
+                                     ) -> Dict[int, nd.PathLike]:
+        """
+        Creates the notem segmented NHB production paths.
+
+        Creates dictionary of {year: notem segmented NHB production paths} pairs.
+
+        Returns
+        -------
+        notem_seg_nhb_prod:
+            A dictionary containing {year: notem segmented NHB production paths} pairs
+        """
+        notem_seg_nhb_prod = dict()
+
+        for year in self.years:
+            # Path to read notem segmentation productions
+            notem_seg_nhb_production = os.path.join(self.notem_export_home, self._nhb_prod,
+                                                    self._notem_seg_prod_fname % year)
+            notem_seg_nhb_prod[year] = notem_seg_nhb_production
+
+        return notem_seg_nhb_prod
+
+    def _generate_notem_seg_attr(self,
+                                 ) -> Dict[int, nd.PathLike]:
+        """
+        Creates the notem segmented attraction paths.
+
+        Creates dictionary of {year: notem segmented attraction paths} pairs.
+
+        Returns
+        -------
+        notem_seg_attr:
+            A dictionary containing {year: notem segmented attraction paths} pairs
+        """
+        notem_seg_attr = dict()
+
+        for year in self.years:
+            # Path to read notem segmentation attractions
+            notem_seg_attraction = os.path.join(self.notem_export_home, self._hb_attr,
+                                                self._notem_seg_attr_fname % year)
+            notem_seg_attr[year] = notem_seg_attraction
+
+        return notem_seg_attr
