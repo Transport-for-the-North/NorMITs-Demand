@@ -32,7 +32,10 @@ p_export_path = "E:/NoTEM/Productions"
 
 # ATTRACTIONS
 attraction_path = {
-    2018: r"I:\NorMITs Land Use\base_land_use\iter3b\outputs\land_use_2018_emp.csv"
+    2018: r"I:\NorMITs Land Use\base_land_use\iter3d\outputs\land_use_2018_emp.csv",
+    2033: r"I:\NorMITs Land Use\future_land_use\iter3d\outputs\scenarios\SC01_JAM\land_use_2033_emp.pbz2",
+    2040: r"I:\NorMITs Land Use\future_land_use\iter3d\outputs\scenarios\SC01_JAM\land_use_2040_emp.pbz2",
+    2050: r"I:\NorMITs Land Use\future_land_use\iter3d\outputs\scenarios\SC01_JAM\land_use_2050_emp.pbz2",
 }
 attr_trip_rates_path = r"I:\NorMITs Demand\import\NoTEM\Attractions\sample_attraction_trip_rate.csv"
 attr_mode_splits_path = r"I:\NorMITs Demand\import\NoTEM\Attractions\attraction_mode_split_new_infill.csv"

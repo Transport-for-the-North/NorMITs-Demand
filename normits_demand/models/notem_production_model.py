@@ -189,6 +189,8 @@ class HBProductionModel(HBProductionModelPaths):
 
         # Generate the productions for each year
         for year in self.years:
+            year_start_time = timing.current_milli_time()
+
             # ## GENERATE PURE DEMAND ## #
             du.print_w_toggle("Loading the population data...", verbose=verbose)
             pop_dvec = self._read_land_use_data(year, verbose)
@@ -267,12 +269,22 @@ class HBProductionModel(HBProductionModelPaths):
                     "No code implemented to constrain productions."
                 )
 
-            # End timing
-            end_time = timing.current_milli_time()
-            du.print_w_toggle("Finished HB Production Model at: %s" % timing.get_datetime(),
-                              verbose=verbose)
-            du.print_w_toggle("HB Production Model took: %s"
-                              % timing.time_taken(start_time, end_time), verbose=verbose)
+            # Print timing stats for the year
+            year_end_time = timing.current_milli_time()
+            time_taken = timing.time_taken(year_start_time, year_end_time)
+            du.print_w_toggle(
+                "HB Productions in year %s took: %s\n" % (year, time_taken),
+                verbose=verbose
+            )
+
+        # End timing
+        end_time = timing.current_milli_time()
+        time_taken = timing.time_taken(start_time, end_time)
+        du.print_w_toggle(
+            "HB Production Model took: %s\n"
+            "Finished at: %s" % (time_taken, end_time),
+            verbose=verbose
+        )
 
     def _read_land_use_data(self,
                             year: int,

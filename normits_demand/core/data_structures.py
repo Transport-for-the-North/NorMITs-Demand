@@ -143,7 +143,6 @@ class DVector:
             raise ValueError(
                 "Given segmentation is not a nd.core.SegmentationLevel object."
             )
-
         # Init
         self.zoning_system = zoning_system
         self.segmentation = segmentation
@@ -430,7 +429,7 @@ class DVector:
         pbar_kwargs = {
             'desc': "Converting df to dvec",
             'unit': "segment",
-            'disable': (not self.verbose),
+            'disable': (not self._debugging_mp_code),
             'total': math.ceil(len(df) / chunk_size)
         }
 

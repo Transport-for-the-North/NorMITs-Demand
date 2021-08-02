@@ -30,9 +30,10 @@ import normits_demand as nd
 
 from normits_demand import efs_constants as consts
 
-from normits_demand.utils import general as du
-from normits_demand.utils import file_ops
 from normits_demand.utils import timing
+from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
+from normits_demand.utils import pandas_utils as pd_utils
 
 
 class HBAttractionModel:
@@ -47,12 +48,11 @@ class HBAttractionModel:
 
     # Define wanted columns
     _target_col_dtypes = {
-        # TODO: Check with BT on how to deal with year in column name
         'land_use': {
             'msoa_zone_id': str,
             'employment_cat': str,
             'soc': int,
-            '2018': float
+            'people': float
         },
         'trip_rate': {
             'msoa_zone_id': str,
@@ -245,6 +245,8 @@ class HBAttractionModel:
 
         # Generate the attractions for each year
         for year in self.years:
+            year_start_time = timing.current_milli_time()
+
             # ## GENERATE PURE ATTRACTIONS ## #
             du.print_w_toggle("Loading the employment data...", verbose=verbose)
             emp_dvec = self._read_land_use_data(year, verbose=verbose)
@@ -322,12 +324,22 @@ class HBAttractionModel:
                     "No code implemented to constrain attractions."
                 )
 
-            # End timing
-            end_time = timing.current_milli_time()
-            du.print_w_toggle("Finished HB Attraction Model at: %s" % timing.get_datetime(),
-                              verbose=verbose)
-            du.print_w_toggle("HB Attraction Model took: %s"
-                              % timing.time_taken(start_time, end_time), verbose=verbose)
+            # Print timing stats for the year
+            year_end_time = timing.current_milli_time()
+            time_taken = timing.time_taken(year_start_time, year_end_time)
+            du.print_w_toggle(
+                "HB Attraction in year %s took: %s\n" % (year, time_taken),
+                verbose=verbose
+            )
+
+        # End timing
+        end_time = timing.current_milli_time()
+        time_taken = timing.time_taken(start_time, end_time)
+        du.print_w_toggle(
+            "HB Attraction Model took: %s\n"
+            "Finished at: %s" % (time_taken, end_time),
+            verbose=verbose
+        )
 
     def _read_land_use_data(self,
                             year: int,
@@ -354,11 +366,19 @@ class HBAttractionModel:
         emp_seg = nd.get_segmentation_level('lu_emp')
 
         # Read the land use data corresponding to the year
-        emp = du.safe_read_csv(
-            file_path=self.land_use_paths[year],
-            usecols=self._target_col_dtypes['land_use'].keys(),
-            dtype=self._target_col_dtypes['land_use'],
+        # emp = du.safe_read_csv(
+        #     file_path=self.land_use_paths[year],
+        #     usecols=self._target_col_dtypes['land_use'].keys(),
+        #     dtype=self._target_col_dtypes['land_use'],
+        # )
+        # Read the land use data corresponding to the year
+        emp = file_ops.read_df(
+            path=self.land_use_paths[year],
+            find_similar=True,
         )
+        emp = pd_utils.reindex_cols(emp, self._target_col_dtypes['land_use'].keys())
+        for col, dt in self._target_col_dtypes['land_use'].items():
+            emp[col] = emp[col].astype(dt)
 
         # Instantiate
         return nd.DVector(
