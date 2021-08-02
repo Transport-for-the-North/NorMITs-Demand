@@ -53,7 +53,7 @@ class ElasticityModel:
     # Define some filenames the elasticty model needs
     _segments_filename = "elasticity_segments.csv"
     _elasticities_filename = "elasticity_values.csv"
-    _constraints_folder = "elasticity_segments.csv"
+    _constraints_folder = "constraint_matrices"
 
     _base_costs_fname = "{mode}_costs_p{purpose}.csv"
 
