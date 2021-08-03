@@ -34,6 +34,7 @@ from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.pathing import HBProductionModelPaths
+from normits_demand.pathing import NHBProductionModelPaths
 
 
 class HBProductionModel(HBProductionModelPaths):
@@ -112,7 +113,7 @@ class HBProductionModel(HBProductionModelPaths):
             HBProductionModel._target_cols['m_tp']
 
         export_home:
-            Path to export attraction outputs.
+            Path to export production outputs.
 
         constraint_paths:
             Dictionary of {year: constraint_path} pairs.
@@ -478,15 +479,7 @@ class HBProductionModel(HBProductionModelPaths):
         )
 
 
-class NHBProductionModel:
-    # Constants
-    _trip_origin = 'nhb'
-    _zoning_system = 'msoa'
-
-    # Segmentation names
-    _pure_demand = 'pure_demand'
-    _fully_segmented = 'fully_segmented'
-    _notem_segmented = 'notem_segmented'
+class NHBProductionModel(NHBProductionModelPaths):
 
     # Define wanted columns
     _target_cols = {
@@ -500,19 +493,15 @@ class NHBProductionModel:
         'area_type': 'tfn_at',
     }
 
-    # Define output fnames
-    _base_output_fname = '%s_%s_%s_%d_dvec.pkl'
-    _base_report_fname = '%s_%s_%d_%s.csv'
-
     def __init__(self,
                  hb_attractions_paths: Dict[int, nd.PathLike],
                  land_use_paths: Dict[int, nd.PathLike],
                  nhb_trip_rates_path: str,
                  nhb_time_splits_path: str,
-                 export_path: str,
+                 export_home: str,
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
-                 ):
+                 ) -> None:
         """
         Sets up and validates arguments for the NHB Production model.
 
@@ -536,7 +525,7 @@ class NHBProductionModel:
             Should have the columns as defined in:
             NHBProductionModel._target_cols['tp']
 
-        export_path:
+        export_home:
             Path to export NHB Production outputs.
 
         constraint_paths:
@@ -560,7 +549,6 @@ class NHBProductionModel:
 
         file_ops.check_file_exists(nhb_trip_rates_path)
         file_ops.check_file_exists(nhb_time_splits_path)
-        file_ops.check_path_exists(export_path)
 
         # Validate that we have data for all the years we're running for
         for year in hb_attractions_paths.keys():
@@ -585,20 +573,19 @@ class NHBProductionModel:
         self.nhb_trip_rates_path = nhb_trip_rates_path
         self.nhb_time_splits_path = nhb_time_splits_path
         self.constraint_paths = constraint_paths
-        self.export_path = export_path
-        self.report_path = os.path.join(export_path, "Reports")
         self.process_count = process_count
         self.years = list(self.hb_attractions.keys())
 
-        # Create paths
-        du.create_folder(self.report_path, verbose=False)
+        # Make sure the reports paths exists
+        report_home = os.path.join(export_home, "Reports")
+        file_ops.create_folder(report_home)
 
-        # Initialise Output paths
-        # TODO(BT): Convert output paths into dictionaries
-        #  something like: self.reports['pure_demand'][year]
-        self._create_output_paths(self.export_path, self.years)
-        self._create_pure_demand_report_paths(self.report_path, self.years)
-        self._create_notem_segmented_report_paths(self.report_path, self.years)
+        # Build the output paths
+        super().__init__(
+            path_years=self.years,
+            export_home=export_home,
+            report_home=report_home,
+        )
 
     def run(self,
             export_nhb_pure_demand: bool = False,
@@ -681,7 +668,7 @@ class NHBProductionModel:
 
             if export_nhb_pure_demand:
                 du.print_w_toggle("Exporting NHB pure demand to disk...", verbose=verbose)
-                pure_nhb_demand.to_pickle(self.pure_demand_paths[year])
+                pure_nhb_demand.to_pickle(self.export_paths.pure_demand[year])
 
             if export_reports:
                 du.print_w_toggle(
@@ -692,11 +679,12 @@ class NHBProductionModel:
                 )
 
                 tfn_agg_at_seg = nd.get_segmentation_level('pure_nhb_demand_reporting')
+                pure_demand_paths = self.report_paths.pure_demand
                 self._write_reports(
                     dvec=pure_nhb_demand.aggregate(tfn_agg_at_seg),
-                    segment_totals_path=self.pd_report_segment_paths[year],
-                    ca_sector_path=self.pd_report_ca_sector_paths[year],
-                    ie_sector_path=self.pd_report_ie_sector_paths[year],
+                    segment_totals_path=pure_demand_paths.segment_total[year],
+                    ca_sector_path=pure_demand_paths.ca_sector[year],
+                    ie_sector_path=pure_demand_paths.ie_sector[year],
                 )
 
             # ## SPLIT NHB PURE DEMAND BY TIME ## #
@@ -708,7 +696,7 @@ class NHBProductionModel:
                     "Exporting fully segmented demand to disk...",
                     verbose=verbose
                 )
-                fully_segmented.to_pickle(self.fully_segmented_paths[year])
+                fully_segmented.to_pickle(self.export_paths.fully_segmented[year])
 
             # Renaming
             notem_segmented = self._rename(fully_segmented, verbose)
@@ -718,7 +706,7 @@ class NHBProductionModel:
                     "Exporting notem segmented demand to disk...",
                     verbose=verbose
                 )
-                notem_segmented.to_pickle(self.notem_segmented_paths[year])
+                notem_segmented.to_pickle(self.export_paths.notem_segmented[year])
 
             if export_reports:
                 du.print_w_toggle(
@@ -728,11 +716,12 @@ class NHBProductionModel:
                     verbose=verbose
                 )
 
+                notem_segmented_paths = self.report_paths.notem_segmented
                 self._write_reports(
                     dvec=notem_segmented,
-                    segment_totals_path=self.notem_report_segment_paths[year],
-                    ca_sector_path=self.notem_report_ca_sector_paths[year],
-                    ie_sector_path=self.notem_report_ie_sector_paths[year],
+                    segment_totals_path=notem_segmented_paths.segment_total[year],
+                    ca_sector_path=notem_segmented_paths.ca_sector[year],
+                    ie_sector_path=notem_segmented_paths.ie_sector[year],
                 )
 
             # TODO: Bring in constraints (Validation)
@@ -987,149 +976,3 @@ class NHBProductionModel:
 
         # Rename columns
         return full_segmentation.aggregate(nhb_prod_seg)
-
-    def _create_output_paths(self,
-                             export_path: nd.PathLike,
-                             years: List[int],
-                             ) -> None:
-        """
-        Creates output file names for pure demand, fully segmented and aggregated
-        HB production outputs for the list of years
-
-        Parameters
-        ----------
-        export_path:
-            Location where the output files are to be created.
-
-        years:
-            Contains the list of years for which the production model is run.
-
-        Returns
-        -------
-        None
-        """
-        # Init
-        base_fname = self._base_output_fname
-        fname_parts = [self._trip_origin, self._zoning_system]
-
-        self.pure_demand_paths = dict()
-        self.fully_segmented_paths = dict()
-        self.notem_segmented_paths = dict()
-
-        for year in years:
-            # Pure demand path
-            fname = base_fname % (*fname_parts, self._pure_demand, year)
-            self.pure_demand_paths[year] = os.path.join(export_path, fname)
-
-            # Fully Segmented path
-            fname = base_fname % (*fname_parts, self._fully_segmented, year)
-            self.fully_segmented_paths[year] = os.path.join(export_path, fname)
-
-            # NoTEM Segmented path
-            fname = base_fname % (*fname_parts, self._notem_segmented, year)
-            self.notem_segmented_paths[year] = os.path.join(export_path, fname)
-
-    def _create_report_paths(self,
-                             report_path: nd.PathLike,
-                             years: List[int],
-                             report_name: str,
-                             ) -> Tuple[Dict[int, str], Dict[int, str], Dict[int, str]]:
-        """
-        Creates report file paths for each of years
-
-        Parameters
-        ----------
-        report_path:
-           The home path (directory) where all the reports should go
-
-        years:
-           A list of years to generate report paths for
-
-        report_name:
-            The name to use in the report filename. Filenames will be named
-            as: [report_name, year, report_type], joined with '_'.
-
-        Returns
-        -------
-        segment_total_paths:
-            A dictionary of paths where the key is the year and the value is
-            the path to the segment total reports for year.
-
-        ca_sector_total_paths:
-            A dictionary of paths where the key is the year and the value is
-            the path to the ca sector segment total reports for year.
-
-        ie_sector_total_paths:
-            A dictionary of paths where the key is the year and the value is
-            the path to the IE sector segment total reports for year.
-        """
-        # Init
-        base_fname = self._base_report_fname
-        fname_parts = [self._trip_origin, report_name]
-
-        segment_total_paths = dict()
-        ca_sector_paths = dict()
-        ie_sector_paths = dict()
-
-        for year in years:
-            # Segment totals
-            fname = base_fname % (*fname_parts, year, "segment_totals")
-            segment_total_paths[year] = os.path.join(report_path, fname)
-
-            # CA sector totals
-            fname = base_fname % (*fname_parts, year, "ca_sector_totals")
-            ca_sector_paths[year] = os.path.join(report_path, fname)
-
-            # IE sector totals
-            fname = base_fname % (*fname_parts, year, "ie_sector_totals")
-            ie_sector_paths[year] = os.path.join(report_path, fname)
-
-        return segment_total_paths, ca_sector_paths, ie_sector_paths
-
-    def _create_pure_demand_report_paths(self,
-                                         report_path: nd.PathLike,
-                                         years: List[int],
-                                         ) -> None:
-        """
-        Creates pure demand report file paths for each of years
-
-        Parameters
-        ----------
-        report_path:
-            The home path (directory) where all the reports should go
-
-        years:
-            A list of years to generate report paths for
-
-        Returns
-        -------
-        None
-        """
-        paths = self._create_report_paths(report_path, years, self._pure_demand)
-        self.pd_report_segment_paths = paths[0]
-        self.pd_report_ca_sector_paths = paths[1]
-        self.pd_report_ie_sector_paths = paths[2]
-
-    def _create_notem_segmented_report_paths(self,
-                                             report_path: nd.PathLike,
-                                             years: List[int],
-                                             ) -> None:
-        """
-        Creates notem_segmented report file paths for each of years
-
-        Parameters
-        ----------
-        report_path:
-            The home path (directory) where all the reports should go
-
-        years:
-            A list of years to generate report paths for
-
-        Returns
-        -------
-        None
-        """
-        paths = self._create_report_paths(report_path, years, self._notem_segmented)
-        self.notem_report_segment_paths = paths[0]
-        self.notem_report_ca_sector_paths = paths[1]
-        self.notem_report_ie_sector_paths = paths[2]
