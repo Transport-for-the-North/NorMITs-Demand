@@ -246,3 +246,267 @@ class HBProductionModelPaths(NoTEMModelPaths):
             fully_segmented=None,
             notem_segmented=self._generate_report_paths(self._notem_segmented),
         )
+
+
+class HBAttractionModelPaths(NoTEMModelPaths):
+    """Path Class for the NoTEM HB Attraction Model.
+
+    This class defines and builds the export and reporting paths for
+    the NoTEMModelPaths. If the outputs of HBAttractionModel are needed,
+    create an instance of this class to generate all paths.
+
+    Attributes
+    ----------
+    export_paths: nd.PathLike
+        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        attributes (dictionary keys are path_years):
+        - home: The home directory of all exports
+        - pure_demand: A dictionary of export paths for pure_demand DVectors
+        - fully_segmented: A dictionary of export paths for fully_segmented DVectors
+        - notem_segmented: A dictionary of export paths for notem_segmented DVectors
+
+    report_paths: nd.PathLike
+        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        attributes (dictionary keys are path_years):
+        - home: The home directory of all exports
+        - pure_demand: A NoTEMModelPaths.ReportPaths object
+        - fully_segmented: A NoTEMModelPaths.ReportPaths object
+        - notem_segmented: A NoTEMModelPaths.ReportPaths object
+
+    See NoTEMModelPaths for documentation on:
+    path_years, export_home, report_home
+    """
+    # Export fname params
+    _trip_origin = 'hb'
+
+    def __init__(self, *args, **kwargs):
+        """Generates the export and report paths
+
+        See super for more detail
+        """
+        # Set up superclass
+        super().__init__(*args, **kwargs)
+
+        # Generate the paths
+        self._create_export_paths()
+        self._create_report_paths()
+
+    def _create_export_paths(self) -> None:
+        """
+        Creates self.export_paths
+        """
+        # Init
+        base_fname = self._base_output_fname
+        fname_parts = [self._trip_origin, self._zoning_system]
+
+        pure_demand_paths = dict()
+        fully_segmented_paths = dict()
+        notem_segmented_paths = dict()
+
+        for year in self.path_years:
+            # Pure demand path
+            fname = base_fname % (*fname_parts, self._pure_demand, year)
+            pure_demand_paths[year] = os.path.join(self.export_home, fname)
+
+            # Fully Segmented path
+            fname = base_fname % (*fname_parts, self._fully_segmented, year)
+            fully_segmented_paths[year] = os.path.join(self.export_home, fname)
+
+            # NoTEM Segmented path
+            fname = base_fname % (*fname_parts, self._notem_segmented, year)
+            notem_segmented_paths[year] = os.path.join(self.export_home, fname)
+
+        # Create the export_paths class
+        self.export_paths = self.ExportPaths(
+            home=self.export_home,
+            pure_demand=pure_demand_paths,
+            fully_segmented=fully_segmented_paths,
+            notem_segmented=notem_segmented_paths,
+        )
+
+    def _create_report_paths(self) -> None:
+        """
+        Creates self.report_paths
+        """
+        self.report_paths = self.ExportPaths(
+            home=self.report_home,
+            pure_demand=self._generate_report_paths(self._pure_demand),
+            fully_segmented=None,
+            notem_segmented=self._generate_report_paths(self._notem_segmented),
+        )
+
+
+class NHBProductionModelPaths(NoTEMModelPaths):
+    """Path Class for the NoTEM NHB Production Model.
+
+    This class defines and builds the export and reporting paths for
+    the NoTEMModelPaths. If the outputs of NHBProductionModel are needed,
+    create an instance of this class to generate all paths.
+
+    Attributes
+    ----------
+    export_paths: nd.PathLike
+        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        attributes (dictionary keys are path_years):
+        - home: The home directory of all exports
+        - pure_demand: A dictionary of export paths for pure_demand DVectors
+        - fully_segmented: A dictionary of export paths for fully_segmented DVectors
+        - notem_segmented: A dictionary of export paths for notem_segmented DVectors
+
+    report_paths: nd.PathLike
+        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        attributes (dictionary keys are path_years):
+        - home: The home directory of all exports
+        - pure_demand: A NoTEMModelPaths.ReportPaths object
+        - fully_segmented: A NoTEMModelPaths.ReportPaths object
+        - notem_segmented: A NoTEMModelPaths.ReportPaths object
+
+    See NoTEMModelPaths for documentation on:
+    path_years, export_home, report_home
+    """
+    # Export fname params
+    _trip_origin = 'nhb'
+
+    def __init__(self, *args, **kwargs):
+        """Generates the export and report paths
+
+        See super for more detail
+        """
+        # Set up superclass
+        super().__init__(*args, **kwargs)
+
+        # Generate the paths
+        self._create_export_paths()
+        self._create_report_paths()
+
+    def _create_export_paths(self) -> None:
+        """
+        Creates self.export_paths
+        """
+        # Init
+        base_fname = self._base_output_fname
+        fname_parts = [self._trip_origin, self._zoning_system]
+
+        pure_demand_paths = dict()
+        fully_segmented_paths = dict()
+        notem_segmented_paths = dict()
+
+        for year in self.path_years:
+            # Pure demand path
+            fname = base_fname % (*fname_parts, self._pure_demand, year)
+            pure_demand_paths[year] = os.path.join(self.export_home, fname)
+
+            # Fully Segmented path
+            fname = base_fname % (*fname_parts, self._fully_segmented, year)
+            fully_segmented_paths[year] = os.path.join(self.export_home, fname)
+
+            # NoTEM Segmented path
+            fname = base_fname % (*fname_parts, self._notem_segmented, year)
+            notem_segmented_paths[year] = os.path.join(self.export_home, fname)
+
+        # Create the export_paths class
+        self.export_paths = self.ExportPaths(
+            home=self.export_home,
+            pure_demand=pure_demand_paths,
+            fully_segmented=fully_segmented_paths,
+            notem_segmented=notem_segmented_paths,
+        )
+
+    def _create_report_paths(self) -> None:
+        """
+        Creates self.report_paths
+        """
+        self.report_paths = self.ExportPaths(
+            home=self.report_home,
+            pure_demand=self._generate_report_paths(self._pure_demand),
+            fully_segmented=None,
+            notem_segmented=self._generate_report_paths(self._notem_segmented),
+        )
+
+
+class NHBAttractionModelPaths(NoTEMModelPaths):
+    """Path Class for the NoTEM NHB Attraction Model.
+
+    This class defines and builds the export and reporting paths for
+    the NoTEMModelPaths. If the outputs of NHBAttractionModel are needed,
+    create an instance of this class to generate all paths.
+
+    Attributes
+    ----------
+    export_paths: nd.PathLike
+        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        attributes (dictionary keys are path_years):
+        - home: The home directory of all exports
+        - pure_demand: A dictionary of export paths for pure_demand DVectors
+        - fully_segmented: A dictionary of export paths for fully_segmented DVectors
+        - notem_segmented: A dictionary of export paths for notem_segmented DVectors
+
+    report_paths: nd.PathLike
+        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        attributes (dictionary keys are path_years):
+        - home: The home directory of all exports
+        - pure_demand: A NoTEMModelPaths.ReportPaths object
+        - fully_segmented: A NoTEMModelPaths.ReportPaths object
+        - notem_segmented: A NoTEMModelPaths.ReportPaths object
+
+    See NoTEMModelPaths for documentation on:
+    path_years, export_home, report_home
+    """
+    # Export fname params
+    _trip_origin = 'nhb'
+
+    def __init__(self, *args, **kwargs):
+        """Generates the export and report paths
+
+        See super for more detail
+        """
+        # Set up superclass
+        super().__init__(*args, **kwargs)
+
+        # Generate the paths
+        self._create_export_paths()
+        self._create_report_paths()
+
+    def _create_export_paths(self) -> None:
+        """
+        Creates self.export_paths
+        """
+        # Init
+        base_fname = self._base_output_fname
+        fname_parts = [self._trip_origin, self._zoning_system]
+
+        pure_demand_paths = dict()
+        fully_segmented_paths = dict()
+        notem_segmented_paths = dict()
+
+        for year in self.path_years:
+            # Pure demand path
+            fname = base_fname % (*fname_parts, self._pure_demand, year)
+            pure_demand_paths[year] = os.path.join(self.export_home, fname)
+
+            # Fully Segmented path
+            fname = base_fname % (*fname_parts, self._fully_segmented, year)
+            fully_segmented_paths[year] = os.path.join(self.export_home, fname)
+
+            # NoTEM Segmented path
+            fname = base_fname % (*fname_parts, self._notem_segmented, year)
+            notem_segmented_paths[year] = os.path.join(self.export_home, fname)
+
+        # Create the export_paths class
+        self.export_paths = self.ExportPaths(
+            home=self.export_home,
+            pure_demand=pure_demand_paths,
+            fully_segmented=None,
+            notem_segmented=notem_segmented_paths,
+        )
+
+    def _create_report_paths(self) -> None:
+        """
+        Creates self.report_paths
+        """
+        self.report_paths = self.ExportPaths(
+            home=self.report_home,
+            pure_demand=self._generate_report_paths(self._pure_demand),
+            fully_segmented=None,
+            notem_segmented=self._generate_report_paths(self._notem_segmented),
+        )
