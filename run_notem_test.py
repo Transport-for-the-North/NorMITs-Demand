@@ -28,7 +28,7 @@ def main():
         generate_all=False,
         generate_hb=False,
         generate_hb_production=True,
-        generate_hb_attraction=True,
+        generate_hb_attraction=False,
         generate_nhb=False,
         generate_nhb_production=False,
         generate_nhb_attraction=False

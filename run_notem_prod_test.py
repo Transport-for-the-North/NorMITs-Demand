@@ -126,7 +126,7 @@ def main_attr():
         control_production_paths=pure_demand_production,
         attraction_trip_rates_path=attr_trip_rates_path,
         mode_splits_path=attr_mode_splits_path,
-        export_path=attr_export_path,
+        export_home=attr_export_path,
     )
 
     hb_attr.run(

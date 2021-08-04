@@ -18,7 +18,6 @@ import os
 
 from typing import Dict
 from typing import List
-from typing import Tuple
 
 # Third party imports
 import pandas as pd
@@ -35,9 +34,10 @@ from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.pathing import HBProductionModelPaths
 from normits_demand.pathing import NHBProductionModelPaths
+from normits_demand.pathing import WriteReports
 
 
-class HBProductionModel(HBProductionModelPaths):
+class HBProductionModel(HBProductionModelPaths, WriteReports):
     """The Home-Based Production Model of NoTEM
 
     The production model can be ran by calling the class run() method.
@@ -68,16 +68,33 @@ class HBProductionModel(HBProductionModelPaths):
         land_use_paths
 
     See HBProductionModelPaths for documentation on:
-        path_years, export_home, report_home, export_paths, report_paths
+        "path_years, export_home, report_home, export_paths, report_paths"
     """
     # Constants
     _return_segmentation_name = 'hb_notem_output'
 
     # Define wanted columns
-    _target_cols = {
-        'land_use': ['msoa_zone_id', 'area_type', 'tfn_traveller_type', 'people'],
-        'trip_rate': ['tfn_tt', 'tfn_at', 'p', 'trip_rate'],
-        'm_tp': ['p', 'tfn_tt', 'tfn_at', 'm', 'tp', 'split'],
+    _target_col_dtypes = {
+        'land_use': {
+            'msoa_zone_id': str,
+            'area_type': int,
+            'tfn_traveller_type': int,
+            'people': float
+        },
+        'trip_rate': {
+            'tfn_tt': int,
+            'tfn_at': int,
+            'p': int,
+            'trip_rate': float
+        },
+        'm_tp': {
+            'p': int,
+            'tfn_tt': int,
+            'tfn_at': int,
+            'm': int,
+            'tp': int,
+            'split': float
+        },
     }
 
     # Define segment renames needed
@@ -93,7 +110,7 @@ class HBProductionModel(HBProductionModelPaths):
                  export_home: str,
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
-                 ):
+                 ) -> None:
         """
         Sets up and validates arguments for the Production model.
 
@@ -127,12 +144,22 @@ class HBProductionModel(HBProductionModelPaths):
             should not exceed the number of cores available.
             Defaults to consts.PROCESS_COUNT.
         """
-        # Validate inputs
+        # Check that the paths we need exist!
         [file_ops.check_file_exists(x) for x in land_use_paths.values()]
-        if constraint_paths is not None:
-            [file_ops.check_file_exists(x) for x in constraint_paths.values()]
         file_ops.check_file_exists(trip_rates_path)
         file_ops.check_file_exists(mode_time_splits_path)
+        if constraint_paths is not None:
+            [file_ops.check_file_exists(x) for x in constraint_paths.values()]
+
+        # Validate that we have data for all the years we're running for
+        for year in land_use_paths.keys():
+            if constraint_paths is not None:
+                if year not in constraint_paths.keys():
+                    raise ValueError(
+                        "Year %d found in land_use_paths\n"
+                        "But not found in constraint_paths"
+                        % year
+                    )
 
         # Assign
         self.land_use_paths = land_use_paths
@@ -154,10 +181,10 @@ class HBProductionModel(HBProductionModelPaths):
         )
 
     def run(self,
-            export_pure_demand: bool = True,
+            export_pure_demand: bool = False,
             export_fully_segmented: bool = False,
-            export_notem_segmentation: bool = True,
-            export_reports: bool = True,
+            export_notem_segmentation: bool = False,
+            export_reports: bool = False,
             verbose: bool = False,
             ) -> None:
         """
@@ -169,21 +196,21 @@ class HBProductionModel(HBProductionModelPaths):
             - Multiplies the population and trip rates on relevant segments,
               producing "pure demand".
             - Optionally writes out a pickled DVector of "pure demand" at
-              self.pure_demand_out[year]
+              self.export_paths.pure_demand[year]
             - Optionally writes out a number of "pure demand" reports, if
               reports is True.
             - Reads in the mode-time splits given in the constructor.
             - Multiplies the "pure demand" and mode-time splits on relevant
               segments, producing "fully segmented demand".
             - Optionally writes out a pickled DVector of "fully segmented demand"
-              at self.fully_segmented_paths[year] if export_fully_segmented
+              at self.export_paths.fully_segmented[year] if export_fully_segmented
               is True.
             - Aggregates this demand into hb_notem_full_tfn segmentation,
               producing "notem segmented demand".
             - Optionally writes out a number of "notem segmented demand"
               reports, if reports is True.
             - Optionally writes out a pickled DVector of "notem segmented demand"
-              at self.notem_segmented_paths[year] if export_notem_segmentation
+              at self.export_paths.notem_segmented[year] if export_notem_segmentation
               is True.
             - Finally, returns "notem segmented demand" as a DVector.
 
@@ -191,19 +218,19 @@ class HBProductionModel(HBProductionModelPaths):
         ----------
         export_pure_demand:
             Whether to export the pure demand to disk or not.
-            Will be written out to: self.pure_demand_out[year]
+            Will be written out to: self.export_paths.pure_demand[year]
 
         export_fully_segmented:
             Whether to export the fully segmented demand to disk or not.
-            Will be written out to: self.fully_segmented_paths[year]
+            Will be written out to: self.export_paths.fully_segmented[year]
 
         export_notem_segmentation:
             Whether to export the notem segmented demand to disk or not.
-            Will be written out to: self.notem_segmented_paths[year]
+            Will be written out to: self.export_paths.notem_segmented[year]
 
         export_reports:
             Whether to output reports while running. All reports will be
-            written out to self.report_path.
+            written out to self.report_home.
 
         verbose:
             Whether to print progress bars during processing or not.
@@ -237,13 +264,13 @@ class HBProductionModel(HBProductionModelPaths):
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting pure demand reports disk...",
+                    "Exporting pure demand reports to disk...",
                     verbose=verbose
                 )
 
                 tfn_agg_at_seg = nd.get_segmentation_level('pure_demand_reporting')
                 pure_demand_paths = self.report_paths.pure_demand
-                self._write_reports(
+                self.write_reports(
                     dvec=pure_demand.aggregate(tfn_agg_at_seg),
                     segment_totals_path=pure_demand_paths.segment_total[year],
                     ca_sector_path=pure_demand_paths.ca_sector[year],
@@ -278,12 +305,12 @@ class HBProductionModel(HBProductionModelPaths):
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting notem segmented reports disk...",
+                    "Exporting notem segmented reports to disk...",
                     verbose=verbose
                 )
 
                 notem_segmented_paths = self.report_paths.notem_segmented
-                self._write_reports(
+                self.write_reports(
                     dvec=productions,
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
@@ -344,7 +371,9 @@ class HBProductionModel(HBProductionModelPaths):
             path=self.land_use_paths[year],
             find_similar=True,
         )
-        pop = pd_utils.reindex_cols(pop, self._target_cols['land_use'])
+        pop = pd_utils.reindex_cols(pop, self._target_col_dtypes['land_use'].keys())
+        for col, dt in self._target_col_dtypes['land_use'].items():
+            pop[col] = pop[col].astype(dt)
 
         # Instantiate
         return nd.DVector(
@@ -383,7 +412,11 @@ class HBProductionModel(HBProductionModelPaths):
 
         # Reading trip rates
         du.print_w_toggle("Reading in files...", verbose=verbose)
-        trip_rates = du.safe_read_csv(self.trip_rates_path, usecols=self._target_cols['trip_rate'])
+        trip_rates = du.safe_read_csv(
+            self.trip_rates_path,
+            usecols=self._target_col_dtypes['trip_rate'].keys(),
+            dtype=self._target_col_dtypes['trip_rate'],
+        )
 
         # ## CREATE THE TRIP RATES DVEC ## #
         du.print_w_toggle("Creating trip rates DVec...", verbose=verbose)
@@ -398,47 +431,6 @@ class HBProductionModel(HBProductionModelPaths):
         )
         # ## MULTIPLY TOGETHER ## #
         return population * trip_rates_dvec
-
-    @staticmethod
-    def _write_reports(dvec: nd.DVector,
-                       segment_totals_path: nd.PathLike,
-                       ca_sector_path: nd.PathLike,
-                       ie_sector_path: nd.PathLike,
-                       ) -> None:
-        """
-        Writes segment, CA sector, and IE sector reports to disk
-
-        Parameters
-        ----------
-        dvec:
-            The Dvector to write the reports for
-
-        segment_totals_path:
-            Path to write the segment totals report to
-
-        ca_sector_path:
-            Path to write the CA sector report to
-
-        ie_sector_path:
-            Path to write the IE sector report to
-
-        Returns
-        -------
-        None
-        """
-        # Segment totals report
-        df = dvec.sum_zoning().to_df()
-        df.to_csv(segment_totals_path, index=False)
-
-        # Segment by CA Sector total reports
-        tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-        df = dvec.translate_zoning(tfn_ca_sectors)
-        df.to_df().to_csv(ca_sector_path, index=False)
-
-        # Segment by IE Sector total reports
-        ie_sectors = nd.get_zoning_system('ie_sector')
-        df = dvec.translate_zoning(ie_sectors).to_df()
-        df.to_csv(ie_sector_path, index=False)
 
     def _split_by_tp_and_mode(self,
                               pure_demand: nd.DVector,
@@ -463,7 +455,8 @@ class HBProductionModel(HBProductionModelPaths):
         # Create the mode-time splits DVector
         mode_time_splits = pd.read_csv(
             self.mode_time_splits_path,
-            usecols=self._target_cols['m_tp']
+            usecols=self._target_col_dtypes['m_tp'].keys(),
+            dtype=self._target_col_dtypes['m_tp'],
         )
 
         mode_time_splits_dvec = nd.DVector(
@@ -479,13 +472,65 @@ class HBProductionModel(HBProductionModelPaths):
         )
 
 
-class NHBProductionModel(NHBProductionModelPaths):
+class NHBProductionModel(NHBProductionModelPaths, WriteReports):
+    """The Non Home-Based Production Model of NoTEM
+
+        The production model can be ran by calling the class run() method.
+
+        Attributes
+        ----------
+        hb_attractions_paths:
+            Dictionary of {year: notem_segmented_HB_attractions_data} pairs.
+            As passed into the constructor.
+
+        land_use_paths: Dict[int, nd.PathLike]:
+            Dictionary of {year: land_use_employment_data} pairs. As passed
+            into the constructor.
+
+        nhb_trip_rates_path: str
+            The path to the NHB production trip rates. As passed into the constructor.
+
+        nhb_time_splits_path: str
+            The path to the NHB production time splits. As passed into the
+            constructor.
+
+        constraint_paths: Dict[int, nd.PathLike]
+            Dictionary of {year: constraint_path} pairs. As passed into the
+            constructor.
+
+        process_count: int
+            The number of processes to create in the Pool. As passed into the
+            constructor.
+
+        years: List[int]
+            A list of years that the model will run for. Derived from the keys of
+            land_use_paths
+
+        See NHBProductionModelPaths for documentation on:
+            "path_years, export_home, report_home, export_paths, report_paths"
+        """
 
     # Define wanted columns
-    _target_cols = {
-        'land_use': ['msoa_zone_id', 'area_type'],
-        'nhb_trip_rate': ['nhb_p', 'nhb_m', 'p', 'm', 'tfn_at', 'nhb_trip_rate'],
-        'tp': ['nhb_p', 'nhb_m', 'tfn_at', 'tp', 'split'],
+    _target_col_dtypes = {
+        'land_use': {
+            'msoa_zone_id': str,
+            'area_type': int
+        },
+        'nhb_trip_rate': {
+            'nhb_p': int,
+            'nhb_m': int,
+            'p': int,
+            'm': int,
+            'tfn_at': int,
+            'nhb_trip_rate': float
+        },
+        'tp': {
+            'nhb_p': int,
+            'nhb_m': int,
+            'tfn_at': int,
+            'tp': int,
+            'split': float
+        },
     }
 
     # Define segment renames needed
@@ -516,7 +561,7 @@ class NHBProductionModel(NHBProductionModelPaths):
             Dictionary of {year: land_use_population_data} pairs.
 
         nhb_trip_rates_path:
-            The path to the nhb production trip rates.
+            The path to the NHB production trip rates.
             Should have the columns as defined in:
             NHBProductionModel._target_cols['nhb_trip_rate']
 
@@ -543,12 +588,11 @@ class NHBProductionModel(NHBProductionModelPaths):
         # Check that the paths we need exist!
         [file_ops.check_file_exists(x) for x in hb_attractions_paths.values()]
         [file_ops.check_file_exists(x) for x in land_use_paths.values()]
+        file_ops.check_file_exists(nhb_trip_rates_path)
+        file_ops.check_file_exists(nhb_time_splits_path)
 
         if constraint_paths is not None:
             [file_ops.check_file_exists(x) for x in constraint_paths.values()]
-
-        file_ops.check_file_exists(nhb_trip_rates_path)
-        file_ops.check_file_exists(nhb_time_splits_path)
 
         # Validate that we have data for all the years we're running for
         for year in hb_attractions_paths.keys():
@@ -607,40 +651,40 @@ class NHBProductionModel(NHBProductionModelPaths):
             - Multiplies the HB attractions and NHB trip rates on relevant segments,
               producing "pure NHB demand".
             - Optionally writes out a pickled DVector of "pure NHB demand" at
-              self.pure_demand_out[year]
+              self.export_paths.pure_demand[year]
             - Optionally writes out a number of "pure demand" reports, if
               reports is True.
             - Reads in the time splits given in the constructor.
             - Multiplies the "pure NHB demand" and time splits on relevant
               segments, producing "fully segmented demand".
             - Optionally writes out a pickled DVector of "fully segmented demand"
-              at self.fully_segmented_paths[year] if export_fully_segmented
+              at self.export_paths.fully_segmented[year] if export_fully_segmented
               is True.
             - Renames nhb_p and nhb_m as p and m respectively,
               producing "notem segmented demand".
             - Optionally writes out a number of "notem segmented demand"
               reports, if reports is True.
             - Optionally writes out a pickled DVector of "notem segmented demand"
-              at self.notem_segmented_paths[year] if export_notem_segmentation
+              at self.export_paths.notem_segmented[year] if export_notem_segmentation
               is True.
 
         Parameters
         ----------
         export_nhb_pure_demand:
             Whether to export the pure NHB demand to disk or not.
-            Will be written out to: self.pure_demand_out[year]
+            Will be written out to: self.export_paths.pure_demand[year]
 
         export_fully_segmented:
             Whether to export the fully segmented demand to disk or not.
-            Will be written out to: self.fully_segmented_paths[year]
+            Will be written out to: self.export_paths.fully_segmented[year]
 
         export_notem_segmentation:
             Whether to export the notem segmented demand to disk or not.
-            Will be written out to: self.notem_segmented_paths[year]
+            Will be written out to: self.export_paths.notem_segmented[year]
 
         export_reports:
             Whether to output reports while running. All reports will be
-            written out to self.report_path.
+            written out to self.report_home.
 
         verbose:
             Whether to print progress bars during processing or not.
@@ -659,6 +703,8 @@ class NHBProductionModel(NHBProductionModelPaths):
 
         # Generate the nhb productions for each year
         for year in self.years:
+            year_start_time = timing.current_milli_time()
+
             # ## GENERATE PURE DEMAND ## #
             du.print_w_toggle("Loading the HB attraction data...", verbose=verbose)
             hb_attr_dvec = self._transform_attractions(year, verbose)
@@ -672,15 +718,13 @@ class NHBProductionModel(NHBProductionModelPaths):
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting NHB pure demand reports to disk...\n"
-                    "Total NHB Productions for year %d: %.4f"
-                    % (year, pure_nhb_demand.sum()),
+                    "Exporting NHB pure demand reports to disk...\n",
                     verbose=verbose
                 )
 
                 tfn_agg_at_seg = nd.get_segmentation_level('pure_nhb_demand_reporting')
                 pure_demand_paths = self.report_paths.pure_demand
-                self._write_reports(
+                self.write_reports(
                     dvec=pure_nhb_demand.aggregate(tfn_agg_at_seg),
                     segment_totals_path=pure_demand_paths.segment_total[year],
                     ca_sector_path=pure_demand_paths.ca_sector[year],
@@ -710,14 +754,12 @@ class NHBProductionModel(NHBProductionModelPaths):
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting notem segmented reports to disk...\n"
-                    "Total Productions for year %d: %.4f"
-                    % (year, notem_segmented.sum()),
+                    "Exporting notem segmented reports to disk...\n",
                     verbose=verbose
                 )
 
                 notem_segmented_paths = self.report_paths.notem_segmented
-                self._write_reports(
+                self.write_reports(
                     dvec=notem_segmented,
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
@@ -732,12 +774,22 @@ class NHBProductionModel(NHBProductionModelPaths):
                     "No code implemented to constrain productions."
                 )
 
-            # End timing
-            end_time = timing.current_milli_time()
-            du.print_w_toggle("Finished NHB Production Model at: %s" % timing.get_datetime(),
-                              verbose=verbose)
-            du.print_w_toggle("NHB Production Model took: %s"
-                              % timing.time_taken(start_time, end_time), verbose=verbose)
+            # Print timing stats for the year
+            year_end_time = timing.current_milli_time()
+            time_taken = timing.time_taken(year_start_time, year_end_time)
+            du.print_w_toggle(
+                "HB Productions in year %s took: %s\n" % (year, time_taken),
+                verbose=verbose
+            )
+
+        # End timing
+        end_time = timing.current_milli_time()
+        time_taken = timing.time_taken(start_time, end_time)
+        du.print_w_toggle(
+            "NHB Production Model took: %s\n"
+            "Finished at: %s" % (time_taken, end_time),
+            verbose=verbose
+        )
 
     def _transform_attractions(self,
                                year: int,
@@ -775,7 +827,10 @@ class NHBProductionModel(NHBProductionModelPaths):
             path=self.land_use_paths[year],
             find_similar=True,
         )
-        pop = pd_utils.reindex_cols(pop, self._target_cols['land_use'])
+        pop = pd_utils.reindex_cols(pop, self._target_col_dtypes['land_use'].keys())
+        for col, dtype in self._target_col_dtypes['land_use'].items():
+            pop[col] = pop[col].astype(dtype)
+
         pop.columns = ['zone', 'tfn_at']
         pop = pop.drop_duplicates()
 
@@ -852,7 +907,8 @@ class NHBProductionModel(NHBProductionModelPaths):
         du.print_w_toggle("Reading in files...", verbose=verbose)
         trip_rates = du.safe_read_csv(
             file_path=self.nhb_trip_rates_path,
-            usecols=self._target_cols['nhb_trip_rate'],
+            usecols=self._target_col_dtypes['nhb_trip_rate'].keys(),
+            dtype=self._target_col_dtypes['nhb_trip_rate'],
         )
 
         # Create the NHB Trip Rates DVec
@@ -866,47 +922,6 @@ class NHBProductionModel(NHBProductionModelPaths):
 
         # Multiply
         return hb_attractions.multiply_and_aggregate(trip_rates_dvec, return_seg)
-
-    @staticmethod
-    def _write_reports(dvec: nd.DVector,
-                       segment_totals_path: nd.PathLike,
-                       ca_sector_path: nd.PathLike,
-                       ie_sector_path: nd.PathLike,
-                       ) -> None:
-        """
-        Writes segment, CA sector, and IE sector reports to disk
-
-        Parameters
-        ----------
-        dvec:
-            The Dvector to write the reports for
-
-        segment_totals_path:
-            Path to write the segment totals report to
-
-        ca_sector_path:
-            Path to write the CA sector report to
-
-        ie_sector_path:
-            Path to write the IE sector report to
-
-        Returns
-        -------
-        None
-        """
-        # Segment totals report
-        df = dvec.sum_zoning().to_df()
-        df.to_csv(segment_totals_path, index=False)
-
-        # Segment by CA Sector total reports
-        tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-        df = dvec.translate_zoning(tfn_ca_sectors)
-        df.to_df().to_csv(ca_sector_path, index=False)
-
-        # Segment by IE Sector total reports
-        ie_sectors = nd.get_zoning_system('ie_sector')
-        df = dvec.translate_zoning(ie_sectors).to_df()
-        df.to_csv(ie_sector_path, index=False)
 
     def _split_by_tp(self,
                      pure_nhb_demand: nd.DVector,
@@ -931,7 +946,8 @@ class NHBProductionModel(NHBProductionModelPaths):
         # Read the time splits factor
         time_splits = pd.read_csv(
             self.nhb_time_splits_path,
-            usecols=self._target_cols['tp'],
+            usecols=self._target_col_dtypes['tp'].keys(),
+            dtype=self._target_col_dtypes['tp'],
         )
 
         # Instantiate
