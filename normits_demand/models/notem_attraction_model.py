@@ -269,6 +269,14 @@ class HBAttractionModel(HBAttractionModelPaths):
                 fully_segmented_attractions=fully_segmented,
             )
 
+            if not pure_attractions.sum_is_close(fully_segmented):
+                raise ValueError(
+                    "The attraction totals before and after mode split are not same.\n"
+                    "Expected %f\n"
+                    "Got %f"
+                    % (pure_attractions.sum(), fully_segmented.sum())
+                )
+
             # Output attractions before any aggregation
             if export_fully_segmented:
                 du.print_w_toggle(
@@ -326,7 +334,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         time_taken = timing.time_taken(start_time, end_time)
         du.print_w_toggle(
             "HB Attraction Model took: %s\n"
-            "Finished at: %s" % (time_taken, end_time),
+            "Finished at: %s" % (time_taken, timing.get_datetime()),
             verbose=verbose
         )
 

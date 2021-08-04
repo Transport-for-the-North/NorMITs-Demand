@@ -833,6 +833,45 @@ class DVector:
             verbose=self.verbose,
         )
 
+    def sum_is_close(self,
+                     other: nd.DVector,
+                     rel_tol: float = 0.0001,
+                     abs_tol: float = 0.0,
+                     ) -> None:
+        """Checks if the sum() of other is similar to sum() of self
+
+        Whether or not two values are considered close is determined
+        according to given absolute and relative tolerances.
+
+        Parameters
+        -----------
+        other:
+            The DVector to check is we are close to
+
+        rel_tol:
+            the relative tolerance – it is the maximum allowed difference
+            between the sum of pure_attractions and fully_segmented_attractions,
+            relative to the larger absolute value of pure_attractions or
+            fully_segmented_attractions. By default, this is set to 0.0001,
+            meaning the values must be within 0.01% of each other.
+
+        abs_tol:
+            is the minimum absolute tolerance – useful for comparisons near
+            zero. abs_tol must be at least zero.
+
+        Returns
+        -------
+        is_close:
+             Return True if self.sum() and other.sum() are close to each
+             other, False otherwise.
+        """
+        return math.isclose(
+            self.sum(),
+            other.sum(),
+            rel_tol=rel_tol,
+            abs_tol=abs_tol,
+        )
+
     def sum(self) -> float:
         """
         Sums all values within the Dvector and returns the total
@@ -950,6 +989,78 @@ class DVector:
             process_count=self.process_count,
             verbose=self.verbose,
         )
+
+    def expand_segmentation(self,
+                            expansion_dvec: DVector,
+                            ) -> DVector:
+        """Expands the segmentation of self to include expansion_dvec
+
+        Expansion definition is defined in the expand.csv, path to this file
+        can be found in SegmentationLevel._expand_definitions_path
+
+        Parameters
+        ----------
+        expansion_dvec:
+            Values should be the weights to give to each segment, or
+            zone + segment (if using zoning system).
+
+        Returns
+        -------
+        expanded_dvec:
+            A new DVector instance that has been expanded with expansion_dvec.
+
+        Raises
+        ------
+        ValueError:
+            If the given values are not the correct types, or there are
+            different area types being used between self and expansion_dvec.
+        """
+        # Validate inputs
+        if not isinstance(expansion_dvec, DVector):
+            raise ValueError(
+                "expansion_dvec is not the correct type. "
+                "Expected DVector, got %s"
+                % type(expansion_dvec)
+            )
+
+        # Make sure the expansion DVector is in the right zoning system
+        if self.zoning_system is not None:
+            if expansion_dvec.zoning_system not in [self.zoning_system, None]:
+                raise ValueError(
+                    "Cannot expand the segmentation of a DVector using an "
+                    "expansion DVector with a different zoning system. "
+                    "Expected either this zoning system (%s), or no zoning "
+                    "system. Got: %s"
+                    % (self.zoning_system, expansion_dvec.zoning_system)
+                )
+
+        # ## EXPAND ## #
+        expand_dict, return_seg = self.segmentation.expand(expansion_dvec.segmentation)
+
+        # Build the new DVec data from the expansion
+        dvec_data = dict.fromkeys(expand_dict.keys())
+        for final_seg, (self_key, other_key) in expand_dict.items():
+            dvec_data[final_seg] = self.data[self_key] * expansion_dvec.data[other_key]
+
+        expanded_dvec = DVector(
+            zoning_system=self.zoning_system,
+            segmentation=return_seg,
+            import_data=dvec_data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
+
+        # Make sure we're not dropping any demand
+        if not self.sum_is_close(expanded_dvec):
+            raise ValueError(
+                "Error when expanding DVector. Before and after totals do "
+                "not match\n"
+                "Before: %f\n"
+                "After:  %f"
+                % (self.sum(), expanded_dvec.sum())
+            )
+
+        return expanded_dvec
 
     def split_tfntt_segmentation(self,
                                  out_segmentation: core.SegmentationLevel

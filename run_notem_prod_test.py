@@ -91,7 +91,7 @@ def nhb_prod_main():
         land_use_paths=POPULATION_PATH,
         nhb_trip_rates_path=nhb_prod_trip_rates,
         nhb_time_splits_path=nhb_prod_time_splits,
-        export_path=nhbp_export_path,
+        export_home=nhbp_export_path,
     )
 
     nhb_prod.run(
@@ -139,6 +139,6 @@ def main_attr():
 
 if __name__ == '__main__':
     # main()
-    main_attr()
-    # nhb_prod_main()
+    # main_attr()
+    nhb_prod_main()
     # nhb_attr_main()

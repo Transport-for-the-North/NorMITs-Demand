@@ -56,6 +56,10 @@ class SegmentationLevel:
         _segment_definitions_path,
         "multiply.csv",
     )
+    _expand_definitions_path = os.path.join(
+        _segment_definitions_path,
+        "expand.csv",
+    )
     _aggregation_definitions_path = os.path.join(
         _segment_definitions_path,
         "aggregate.csv",
@@ -200,6 +204,12 @@ class SegmentationLevel:
         """
         return pd.read_csv(self._multiply_definitions_path)
 
+    def _read_expand_definitions(self) -> pd.DataFrame:
+        """
+        Returns the expansion definitions for segments as a pd.DataFrame
+        """
+        return pd.read_csv(self._expand_definitions_path)
+
     def _get_multiply_definition(self,
                                  other: SegmentationLevel,
                                  ) -> Tuple[str, List[str]]:
@@ -238,6 +248,41 @@ class SegmentationLevel:
             definition['out'].squeeze(),
             self._parse_join_cols(definition['join'].squeeze())
         )
+
+    def _get_expansion_definition(self,
+                                  other: SegmentationLevel,
+                                  ) -> Tuple[str, List[str]]:
+        """
+        Returns the return_seg_name for expanding self with other
+        """
+        # Init
+        expand_def = self._read_expand_definitions()
+
+        # Try find a definition
+        df_filter = {
+            'a': self.name,
+            'b': other.name,
+        }
+        definition = pd_utils.filter_df(expand_def, df_filter)
+
+        # If none found, try flipping a and b
+        if definition.empty:
+            df_filter = {
+                'b': self.name,
+                'a': other.name,
+            }
+            definition = pd_utils.filter_df(expand_def, df_filter)
+
+            # If empty again, we don't know what to do
+            if definition.empty:
+                raise SegmentationError(
+                    "Got no definition for expanding '%s' with '%s'.\n"
+                    "If there should be a definition, please add one in "
+                    "at: %s"
+                    % (self.name, other.name, self._expand_definitions_path)
+                )
+
+        return definition['out'].squeeze()
 
     def _read_aggregation_definitions(self) -> pd.DataFrame:
         """
@@ -791,6 +836,116 @@ class SegmentationLevel:
             )
 
         return split_dict
+
+    def expand(self,
+               other: SegmentationLevel,
+               ) -> Tuple[nd.SegmentMultiplyDict, SegmentationLevel]:
+        """Generates a dict defining how to expand this segmentation with other
+
+        Every combination of this segmentation is combined with every
+        combination of other segmentation to create a new segmentation.
+
+        Parameters
+        ----------
+        other:
+            The segmentation to expand this segmentation with.
+
+        Returns
+        -------
+        expand_dict:
+            A dictionary defining how to combine self and other in order
+            to create a new segmentation.
+
+        Raises
+        ------
+        ValueError:
+            If the given parameters are not the correct types
+
+        SegmentationError:
+            If some of the segments overlap in self and other
+
+        SegmentationError:
+            If not all of the output segments can be found in the generated
+            expansion dictionary.
+        """
+        # Validate inputs
+        if not isinstance(other, SegmentationLevel):
+            raise ValueError(
+                "other is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(other)
+            )
+
+        # Check there are no overlapping segments
+        overlapping_segs = False
+        self_segs = set(self.naming_order)
+        other_segs = set(other.naming_order)
+
+        if len(self_segs - other_segs) != len(self_segs):
+            overlapping_segs = True
+        if len(other_segs - self_segs) != len(other_segs):
+            overlapping_segs = True
+
+        if overlapping_segs:
+            raise SegmentationError(
+                "There are some overlapping segments between self and other. "
+                "Cannot expand self with other.\n"
+                "self segments: %s\n"
+                "other segments: %s\n"
+                % (self_segs, other_segs)
+            )
+
+        # ## DEFINE THE EXPANSION ## #
+        # Get the multiplication definition
+        return_seg_name = self._get_expansion_definition(other)
+
+        # Build the return segmentation
+        if return_seg_name == self.name:
+            return_seg = self
+        elif return_seg_name == other.name:
+            return_seg = other
+        else:
+            return_seg = get_segmentation_level(return_seg_name)
+
+        # ## EXPAND THE SEGMENTATIONS ## #
+        self_vals = self.segments.values
+        other_vals = other.segments.values
+
+        # Repeat values to get all combos
+        self_repeat = other_vals.shape[0]
+        other_repeat = self_vals.shape[0]
+
+        self_vals = np.tile(self_vals.T, self_repeat).T
+        other_vals = np.repeat(other_vals, other_repeat, axis=0)
+
+        # Stick it all together
+        new_seg = pd.DataFrame(
+            data=np.hstack([self_vals, other_vals]),
+            columns=list(self.segments.columns) + list(other.segments.columns)
+        )
+
+        # ## GENERATE EXPANSION DICT ## #
+        new_seg['self_name'] = self.create_segment_col(new_seg)
+        new_seg['other_name'] = other.create_segment_col(new_seg)
+        new_seg['return_name'] = return_seg.create_segment_col(new_seg)
+
+        # Convert to expand dict
+        r = new_seg['return_name']
+        s = new_seg['self_name']
+        o = new_seg['other_name']
+        expand_dict = dict(zip(r, zip(s, o)))
+
+        # Check that the output segmentation has been created properly
+        if not return_seg.is_correct_naming(list(expand_dict.keys())):
+            raise SegmentationError(
+                "Some segment names seem to have gone missing during "
+                "expansion.\n"
+                "Expected %s segments.\n"
+                "Found %s segments."
+                % (len(return_seg.segment_names), len(set(expand_dict.keys())))
+            )
+
+        return expand_dict, return_seg
 
     def is_correct_naming(self, lst: List[str]) -> bool:
         """

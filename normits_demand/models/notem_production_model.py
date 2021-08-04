@@ -311,7 +311,7 @@ class HBProductionModel(HBProductionModelPaths):
         time_taken = timing.time_taken(start_time, end_time)
         du.print_w_toggle(
             "HB Production Model took: %s\n"
-            "Finished at: %s" % (time_taken, end_time),
+            "Finished at: %s" % (time_taken, timing.get_datetime()),
             verbose=verbose
         )
 
@@ -767,14 +767,15 @@ class NHBProductionModel(NHBProductionModelPaths):
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
         hb_notem_no_output_seg = nd.get_segmentation_level('hb_notem_output_no_tp')
-        hb_notem_tfnat_seg = nd.get_segmentation_level('notem_hb_tfnat_p_m_g_soc_ns_ca')
 
         # ## READ IN AND VALIDATE THE LAND USE DATA ## #
         # Reading the land use data
-        pop = du.safe_read_csv(
-            file_path=self.land_use_paths[year],
-            usecols=self._target_cols['land_use']
+        # Read the land use data corresponding to the year
+        pop = file_ops.read_df(
+            path=self.land_use_paths[year],
+            find_similar=True,
         )
+        pop = pd_utils.reindex_cols(pop, self._target_cols['land_use'])
         pop.columns = ['zone', 'tfn_at']
         pop = pop.drop_duplicates()
 
@@ -802,26 +803,24 @@ class NHBProductionModel(NHBProductionModelPaths):
                 % extra_zones
             )
 
-        # ## CONVERT THE ATTRACTIONS INTO DESIRED FORMAT ## #
-        # Read the notem segmented compressed pickle
-        hb_attr_notem = nd.from_pickle(self.hb_attractions[year])
-
-        # Remove time period from segmentation
-        hb_attr = hb_attr_notem.aggregate(hb_notem_no_output_seg)
-        hb_attr_df = hb_attr.to_df()
-
-        # Add tfn area type to the segmentation
-        hb_attr_at_df = pd.merge(hb_attr_df, pop, on="zone", how="left")
-
-        # Instantiate
-        return nd.DVector(
+        # Convert area_types into a DVector
+        pop['value'] = 1
+        area_type = nd.DVector(
             zoning_system=msoa_zoning,
-            segmentation=hb_notem_tfnat_seg,
-            import_data=hb_attr_at_df.rename(columns=self._seg_rename),
+            segmentation=nd.get_segmentation_level('tfn_at'),
+            import_data=pop,
             zone_col="zone",
             val_col="value",
             verbose=verbose,
         )
+
+        # ## CONVERT THE ATTRACTIONS INTO DESIRED FORMAT ## #
+        # Read the notem segmented compressed pickle
+        hb_attr_notem = nd.from_pickle(self.hb_attractions[year])
+
+        # Remove time period and add in tfn_at
+        hb_attr = hb_attr_notem.aggregate(hb_notem_no_output_seg)
+        return hb_attr.expand_segmentation(area_type)
 
     def _generate_nhb_productions(self,
                                   hb_attractions: nd.DVector,
@@ -847,6 +846,7 @@ class NHBProductionModel(NHBProductionModelPaths):
 
         # Define the zoning and segmentations we want to use
         nhb_trip_rate_seg = nd.get_segmentation_level('nhb_trip_rate')
+        return_seg = nd.get_segmentation_level('pure_nhb_demand')
 
         # Reading NHB trip rates
         du.print_w_toggle("Reading in files...", verbose=verbose)
@@ -865,7 +865,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         )
 
         # Multiply
-        return hb_attractions * trip_rates_dvec
+        return hb_attractions.multiply_and_aggregate(trip_rates_dvec, return_seg)
 
     @staticmethod
     def _write_reports(dvec: nd.DVector,
