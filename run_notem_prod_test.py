@@ -91,7 +91,7 @@ def nhb_prod_main():
         land_use_paths=POPULATION_PATH,
         nhb_trip_rates_path=nhb_prod_trip_rates,
         nhb_time_splits_path=nhb_prod_time_splits,
-        export_path=nhbp_export_path,
+        export_home=nhbp_export_path,
     )
 
     nhb_prod.run(
@@ -126,7 +126,7 @@ def main_attr():
         control_production_paths=pure_demand_production,
         attraction_trip_rates_path=attr_trip_rates_path,
         mode_splits_path=attr_mode_splits_path,
-        export_path=attr_export_path,
+        export_home=attr_export_path,
     )
 
     hb_attr.run(

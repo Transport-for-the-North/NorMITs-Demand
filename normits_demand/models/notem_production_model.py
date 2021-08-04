@@ -34,9 +34,10 @@ from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.pathing import HBProductionModelPaths
 from normits_demand.pathing import NHBProductionModelPaths
+from normits_demand.pathing import WriteReports
 
 
-class HBProductionModel(HBProductionModelPaths):
+class HBProductionModel(HBProductionModelPaths, WriteReports):
     """The Home-Based Production Model of NoTEM
 
     The production model can be ran by calling the class run() method.
@@ -269,7 +270,7 @@ class HBProductionModel(HBProductionModelPaths):
 
                 tfn_agg_at_seg = nd.get_segmentation_level('pure_demand_reporting')
                 pure_demand_paths = self.report_paths.pure_demand
-                self._write_reports(
+                self.write_reports(
                     dvec=pure_demand.aggregate(tfn_agg_at_seg),
                     segment_totals_path=pure_demand_paths.segment_total[year],
                     ca_sector_path=pure_demand_paths.ca_sector[year],
@@ -309,7 +310,7 @@ class HBProductionModel(HBProductionModelPaths):
                 )
 
                 notem_segmented_paths = self.report_paths.notem_segmented
-                self._write_reports(
+                self.write_reports(
                     dvec=productions,
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
@@ -431,47 +432,6 @@ class HBProductionModel(HBProductionModelPaths):
         # ## MULTIPLY TOGETHER ## #
         return population * trip_rates_dvec
 
-    @staticmethod
-    def _write_reports(dvec: nd.DVector,
-                       segment_totals_path: nd.PathLike,
-                       ca_sector_path: nd.PathLike,
-                       ie_sector_path: nd.PathLike,
-                       ) -> None:
-        """
-        Writes segment, CA sector, and IE sector reports to disk
-
-        Parameters
-        ----------
-        dvec:
-            The Dvector to write the reports for
-
-        segment_totals_path:
-            Path to write the segment totals report to
-
-        ca_sector_path:
-            Path to write the CA sector report to
-
-        ie_sector_path:
-            Path to write the IE sector report to
-
-        Returns
-        -------
-        None
-        """
-        # Segment totals report
-        df = dvec.sum_zoning().to_df()
-        df.to_csv(segment_totals_path, index=False)
-
-        # Segment by CA Sector total reports
-        tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-        df = dvec.translate_zoning(tfn_ca_sectors)
-        df.to_df().to_csv(ca_sector_path, index=False)
-
-        # Segment by IE Sector total reports
-        ie_sectors = nd.get_zoning_system('ie_sector')
-        df = dvec.translate_zoning(ie_sectors).to_df()
-        df.to_csv(ie_sector_path, index=False)
-
     def _split_by_tp_and_mode(self,
                               pure_demand: nd.DVector,
                               ) -> nd.DVector:
@@ -512,7 +472,7 @@ class HBProductionModel(HBProductionModelPaths):
         )
 
 
-class NHBProductionModel(NHBProductionModelPaths):
+class NHBProductionModel(NHBProductionModelPaths, WriteReports):
     """The Non Home-Based Production Model of NoTEM
 
         The production model can be ran by calling the class run() method.
@@ -764,7 +724,7 @@ class NHBProductionModel(NHBProductionModelPaths):
 
                 tfn_agg_at_seg = nd.get_segmentation_level('pure_nhb_demand_reporting')
                 pure_demand_paths = self.report_paths.pure_demand
-                self._write_reports(
+                self.write_reports(
                     dvec=pure_nhb_demand.aggregate(tfn_agg_at_seg),
                     segment_totals_path=pure_demand_paths.segment_total[year],
                     ca_sector_path=pure_demand_paths.ca_sector[year],
@@ -799,7 +759,7 @@ class NHBProductionModel(NHBProductionModelPaths):
                 )
 
                 notem_segmented_paths = self.report_paths.notem_segmented
-                self._write_reports(
+                self.write_reports(
                     dvec=notem_segmented,
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
@@ -960,47 +920,6 @@ class NHBProductionModel(NHBProductionModelPaths):
 
         # Multiply
         return hb_attractions * trip_rates_dvec
-
-    @staticmethod
-    def _write_reports(dvec: nd.DVector,
-                       segment_totals_path: nd.PathLike,
-                       ca_sector_path: nd.PathLike,
-                       ie_sector_path: nd.PathLike,
-                       ) -> None:
-        """
-        Writes segment, CA sector, and IE sector reports to disk
-
-        Parameters
-        ----------
-        dvec:
-            The Dvector to write the reports for
-
-        segment_totals_path:
-            Path to write the segment totals report to
-
-        ca_sector_path:
-            Path to write the CA sector report to
-
-        ie_sector_path:
-            Path to write the IE sector report to
-
-        Returns
-        -------
-        None
-        """
-        # Segment totals report
-        df = dvec.sum_zoning().to_df()
-        df.to_csv(segment_totals_path, index=False)
-
-        # Segment by CA Sector total reports
-        tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-        df = dvec.translate_zoning(tfn_ca_sectors)
-        df.to_df().to_csv(ca_sector_path, index=False)
-
-        # Segment by IE Sector total reports
-        ie_sectors = nd.get_zoning_system('ie_sector')
-        df = dvec.translate_zoning(ie_sectors).to_df()
-        df.to_csv(ie_sector_path, index=False)
 
     def _split_by_tp(self,
                      pure_nhb_demand: nd.DVector,

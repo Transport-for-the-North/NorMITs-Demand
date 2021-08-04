@@ -190,7 +190,7 @@ class HBProductionModelPaths(NoTEMModelPaths):
     """
     # Export fname params
     _trip_origin = 'hb'
-    
+
     def __init__(self, *args, **kwargs):
         """Generates the export and report paths
 
@@ -510,3 +510,47 @@ class NHBAttractionModelPaths(NoTEMModelPaths):
             fully_segmented=None,
             notem_segmented=self._generate_report_paths(self._notem_segmented),
         )
+
+
+class WriteReports:
+    
+    def write_reports(self,
+                      dvec,
+                      segment_totals_path: nd.PathLike,
+                      ca_sector_path: nd.PathLike,
+                      ie_sector_path: nd.PathLike,
+                      ) -> None:
+        """
+        Writes segment, CA sector, and IE sector reports to disk
+
+        Parameters
+        ----------
+        dvec:
+            The Dvector to write the reports for
+
+        segment_totals_path:
+            Path to write the segment totals report to
+
+        ca_sector_path:
+            Path to write the CA sector report to
+
+        ie_sector_path:
+            Path to write the IE sector report to
+
+        Returns
+        -------
+        None
+        """
+        # Segment totals report
+        df = dvec.sum_zoning().to_df()
+        df.to_csv(segment_totals_path, index=False)
+
+        # Segment by CA Sector total reports
+        tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
+        df = dvec.translate_zoning(tfn_ca_sectors)
+        df.to_df().to_csv(ca_sector_path, index=False)
+
+        # Segment by IE Sector total reports
+        ie_sectors = nd.get_zoning_system('ie_sector')
+        df = dvec.translate_zoning(ie_sectors).to_df()
+        df.to_csv(ie_sector_path, index=False)

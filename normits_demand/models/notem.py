@@ -179,7 +179,7 @@ class NoTEM:
             trip_rates_path=imports_hb_prod['trip_rate'],
             mode_time_splits_path=imports_hb_prod['mode_time_split'],
             constraint_paths=None,
-            export_path=imports_hb_prod['export_path'],
+            export_home=imports_hb_prod['export_path'],
         )
 
         hb_prod.run(
