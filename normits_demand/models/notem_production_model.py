@@ -181,10 +181,10 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
         )
 
     def run(self,
-            export_pure_demand: bool = False,
+            export_pure_demand: bool = True,
             export_fully_segmented: bool = False,
-            export_notem_segmentation: bool = False,
-            export_reports: bool = False,
+            export_notem_segmentation: bool = True,
+            export_reports: bool = True,
             verbose: bool = False,
             ) -> None:
         """
@@ -634,10 +634,10 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
         )
 
     def run(self,
-            export_nhb_pure_demand: bool = False,
+            export_nhb_pure_demand: bool = True,
             export_fully_segmented: bool = False,
-            export_notem_segmentation: bool = False,
-            export_reports: bool = False,
+            export_notem_segmentation: bool = True,
+            export_reports: bool = True,
             verbose: bool = False,
             ) -> None:
         """

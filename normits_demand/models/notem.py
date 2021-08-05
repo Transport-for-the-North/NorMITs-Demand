@@ -137,6 +137,7 @@ class NoTEM:
         -------
         None
         """
+        # Determine which models to run
         if generate_all:
             generate_hb = True
             generate_nhb = True
@@ -145,15 +146,16 @@ class NoTEM:
             generate_hb_production = True
             generate_hb_attraction = True
 
+        if generate_nhb:
+            generate_nhb_production = True
+            generate_nhb_attraction = True
+
+        # Run the models
         if generate_hb_production:
             self.generate_hb_production()
 
         if generate_hb_attraction:
             self.generate_hb_attraction()
-
-        if generate_nhb:
-            generate_nhb_production = True
-            generate_nhb_attraction = True
 
         if generate_nhb_production:
             self.generate_nhb_production()
