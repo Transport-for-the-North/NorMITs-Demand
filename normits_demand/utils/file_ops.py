@@ -111,7 +111,7 @@ def check_path_exists(path: nd.PathLike) -> None:
     """
     if not os.path.exists(path):
         raise IOError(
-            "Cannot find a path: %s" % str(path)
+            "The following path does not exist: %s" % str(path)
         )
 
 

@@ -22,8 +22,100 @@ from typing import Tuple
 
 # Local imports
 import normits_demand as nd
-
 from normits_demand.utils import file_ops
+
+
+class NoTEMImportPaths:
+
+    def __init__(self):
+        pass
+
+
+class NoTEMExportPaths:
+    # Define the names of the export dirs
+    _hb_productions_dir = 'hb_productions'
+    _nhb_productions_dir = 'nhb_productions'
+    _hb_attractions_dir = 'hb_attractions'
+    _nhb_attractions_dir = 'nhb_attractions'
+
+    _reports_dir = 'reports'
+
+    def __init__(self,
+                 path_years: List[int],
+                 export_home: nd.PathLike
+                 ):
+        """
+        Builds the export paths for all the NoTEM sub-models
+
+        Parameters
+        ----------
+        path_years:
+            A list of the years the models are running for.
+
+        export_home:
+            The home directory of all the export paths. A sub-directory will
+            be made for each of the NoTEM sub models.
+        """
+        # Init
+        file_ops.check_path_exists(export_home)
+
+        self.export_home = export_home
+        self.path_years = path_years
+
+        # ## BUILD ALL MODEL PATHS ## #
+        # hb productions
+        hb_p_export_home = os.path.join(export_home, self._hb_productions_dir)
+        hb_p_report_home = os.path.join(hb_p_export_home, self._reports_dir)
+        file_ops.create_folder(hb_p_report_home)
+        self.hb_production = HBProductionModelPaths(
+            path_years=path_years,
+            export_home=hb_p_export_home,
+            report_home=hb_p_report_home,
+        )
+
+        # nhb productions
+        nhb_p_export_home = os.path.join(export_home, self._nhb_productions_dir)
+        nhb_p_report_home = os.path.join(nhb_p_export_home, self._reports_dir)
+        file_ops.create_folder(nhb_p_report_home)
+        self.nhb_production = NHBProductionModelPaths(
+            path_years=path_years,
+            export_home=nhb_p_export_home,
+            report_home=nhb_p_report_home,
+        )
+
+        # hb attractions
+        hb_a_export_home = os.path.join(export_home, self._hb_attractions_dir)
+        hb_a_report_home = os.path.join(hb_a_export_home, self._reports_dir)
+        file_ops.create_folder(hb_a_report_home)
+
+        self.hb_attraction = HBAttractionModelPaths(
+            path_years=path_years,
+            export_home=hb_a_export_home,
+            report_home=hb_a_report_home,
+        )
+
+        # nhb attractions
+        nhb_a_export_home = os.path.join(export_home, self._nhb_attractions_dir)
+        nhb_a_report_home = os.path.join(nhb_a_export_home, self._reports_dir)
+        file_ops.create_folder(nhb_a_report_home)
+
+        self.nhb_attraction = NHBAttractionModelPaths(
+            path_years=path_years,
+            export_home=nhb_a_export_home,
+            report_home=nhb_a_report_home,
+        )
+
+
+class NoTEMPaths(NoTEMExportPaths, NoTEMImportPaths):
+
+    def __init__(self,
+                 path_years: List[int],
+                 export_home: nd.PathLike,
+                 ):
+        super(NoTEMPaths, self).__init__(
+            path_years=path_years,
+            export_home=export_home,
+        )
 
 
 class NoTEMModelPaths:
@@ -84,9 +176,14 @@ class NoTEMModelPaths:
 
         Parameters
         ----------
-        path_years
-        export_home
-        report_home
+        path_years:
+            A list of the years the models are running for.
+
+        export_home:
+            The home directory of all the export paths.
+
+        report_home:
+            The home directory of all the model reports paths.
         """
         # Assign attributes
         self.path_years = path_years
@@ -94,8 +191,15 @@ class NoTEMModelPaths:
         self.report_home = report_home
 
         # Make sure paths exist
-        file_ops.check_path_exists(export_home)
-        file_ops.check_path_exists(report_home)
+        try:
+            file_ops.check_path_exists(export_home)
+            file_ops.check_path_exists(report_home)
+        except IOError as e:
+            raise type(e)(
+                "Got the following error while checking if the export_home and "
+                "report_home paths exist:\n%s"
+                % str(e)
+            )
 
         # Make sure variables that need to be overwritten, are
         if self._trip_origin is None:

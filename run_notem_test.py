@@ -9,9 +9,10 @@ year = [2018]
 scenario = "NTEM"
 lu_drive = "I:/"
 by_iteration = "iter3d"
-fy_iteration = "iter3b"
+fy_iteration = "iter3d"
 notem_import_home = r"I:\NorMITs Demand\import\NoTEM"
-notem_export_home = r"C:\Data\Nirmal_Atkins"
+# notem_export_home = r"C:\Data\Nirmal_Atkins"
+notem_export_home = r"E:\NoTEM"
 
 
 def main():
@@ -21,8 +22,8 @@ def main():
         land_use_import_home=lu_drive,
         by_land_use_iter=by_iteration,
         fy_land_use_iter=fy_iteration,
-        notem_import_home=notem_import_home,
-        notem_export_home=notem_export_home
+        import_home=notem_import_home,
+        export_home=notem_export_home,
     )
     n.run(
         generate_all=False,
@@ -33,7 +34,6 @@ def main():
         generate_nhb_production=False,
         generate_nhb_attraction=False
     )
-
 
 if __name__ == '__main__':
     main()

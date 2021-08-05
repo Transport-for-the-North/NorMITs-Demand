@@ -20,12 +20,17 @@ from typing import Dict
 # Local Imports
 import normits_demand as nd
 
-from normits_demand.models import notem_production_model as notem
-from normits_demand.models import notem_attraction_model as notem_attr
-from normits_demand.utils import file_ops as ops
+from normits_demand.models import HBProductionModel
+from normits_demand.models import NHBProductionModel
+from normits_demand.models import HBAttractionModel
+from normits_demand.models import NHBAttractionModel
+
+from normits_demand.pathing import NoTEMPaths
+
+from normits_demand.utils import file_ops
 
 
-class NoTEM:
+class NoTEM(NoTEMPaths):
     # Constants
     _by_pop_file_name = "land_use_output_msoa.csv"
     _lu_pop_file_name = "land_use_%s_pop.csv"
@@ -38,8 +43,6 @@ class NoTEM:
     _nhb_attr = "NHB_Attractions"
     _hb_prod_trip_rate_fname = "hb_trip_rates_v1.9.csv"
     _hb_prod_mode_time_split_fname = "hb_mode_time_split_v1.9.csv"
-    _notem_seg_prod_fname = "hb_msoa_notem_segmented_%d_dvec.pkl"
-    _notem_seg_attr_fname = "hb_msoa_notem_segmented_%d_dvec.pkl"
     _hb_attr_trip_rate_fname = "sample_attraction_trip_rate.csv"
     _hb_attr_mode_split_fname = "attraction_mode_split_new_infill.csv"
     _nhb_prod_trip_rate_fname = "nhb_ave_wday_enh_trip_rates_v1.5.csv"
@@ -51,8 +54,8 @@ class NoTEM:
                  land_use_import_home: nd.PathLike,
                  by_land_use_iter: str,
                  fy_land_use_iter: str,
-                 notem_import_home: nd.PathLike,
-                 notem_export_home: nd.PathLike,
+                 import_home: nd.PathLike,
+                 export_home: nd.PathLike,
                  ):
         """
         Assigns the attributes needed for NoTEM model.
@@ -77,9 +80,8 @@ class NoTEM:
             String containing future year land use iteration Eg: 'iter3b'.
         """
         # Validate inputs
-        ops.check_path_exists(land_use_import_home)
-        ops.check_path_exists(notem_import_home)
-        ops.check_path_exists(notem_export_home)
+        file_ops.check_path_exists(land_use_import_home)
+        file_ops.check_path_exists(import_home)
         if self._base_year not in years:
             raise ValueError(
                 "Base year %d not found in years list"
@@ -90,10 +92,15 @@ class NoTEM:
         self.years = years
         self.scenario = scenario
         self.land_use_import_home = land_use_import_home
-        self.notem_import_home = notem_import_home
-        self.notem_export_home = notem_export_home
+        self.import_home = import_home
         self.by_land_use_iter = by_land_use_iter
         self.fy_land_use_iter = fy_land_use_iter
+
+        # Generate the import and export paths
+        super().__init__(
+            path_years=years,
+            export_home=export_home,
+        )
 
         # Create paths
         self._generate_land_use_inputs()
@@ -176,7 +183,7 @@ class NoTEM:
         imports_hb_prod = self.generate_hb_production_imports()
 
         # Runs the home based Production model
-        hb_prod = notem.HBProductionModel(
+        hb_prod = HBProductionModel(
             land_use_paths=self.pop_land_use_path,
             trip_rates_path=imports_hb_prod['trip_rate'],
             mode_time_splits_path=imports_hb_prod['mode_time_split'],
@@ -205,13 +212,13 @@ class NoTEM:
         imports_hb_attr = self.generate_hb_attraction_imports()
 
         # Runs the home based attraction model
-        hb_attr = notem_attr.HBAttractionModel(
+        hb_attr = HBAttractionModel(
             land_use_paths=self.emp_land_use_path,
             control_production_paths=self._generate_notem_seg_prod(),
             attraction_trip_rates_path=imports_hb_attr['trip_rate'],
             mode_splits_path=imports_hb_attr['mode_split'],
             constraint_paths=None,
-            export_path=imports_hb_attr['export_path'],
+            export_home=imports_hb_attr['export_path'],
         )
 
         hb_attr.run(
@@ -235,12 +242,12 @@ class NoTEM:
         # Runs the module to create import dictionary
         imports_nhb_prod = self.generate_nhb_production_imports()
 
-        nhb_prod = notem.NHBProductionModel(
-            hb_attractions=self._generate_notem_seg_attr(),
+        nhb_prod = NHBProductionModel(
+            hb_attractions_paths=self._generate_notem_seg_attr(),
             land_use_paths=self.pop_land_use_path,
             nhb_trip_rates_path=imports_nhb_prod['nbh_trip_rate'],
             nhb_time_splits_path=imports_nhb_prod['nbh_time_split_rate'],
-            export_path=imports_nhb_prod['export_path'],
+            export_home=imports_nhb_prod['export_path'],
             constraint_paths=None,
         )
 
@@ -265,10 +272,10 @@ class NoTEM:
         # Runs the module to create import dictionary
         imports_nhb_prod = self.generate_nhb_attraction_imports()
 
-        nhb_attr = notem_attr.NHBAttractionModel(
+        nhb_attr = NHBAttractionModel(
             hb_attraction_paths=self._generate_notem_seg_attr(),
             nhb_production_paths=self._generate_notem_seg_nhb_prod(),
-            export_path=imports_nhb_prod['export_path'],
+            export_home=imports_nhb_prod['export_path'],
             constraint_paths=None
         )
 
@@ -345,15 +352,14 @@ class NoTEM:
         """
         # Creates inputs required for HB Productions
 
-        trip_rates_path = os.path.join(self.notem_import_home, self._hb_prod, self._hb_prod_trip_rate_fname)
-        mode_time_split_path = os.path.join(self.notem_import_home, self._hb_prod,
+        trip_rates_path = os.path.join(self.import_home, self._hb_prod, self._hb_prod_trip_rate_fname)
+        mode_time_split_path = os.path.join(self.import_home, self._hb_prod,
                                             self._hb_prod_mode_time_split_fname)
-        export_path = os.path.join(self.notem_export_home, self._hb_prod)
 
         imports_hb_prod = {
             'trip_rate': trip_rates_path,
             'mode_time_split': mode_time_split_path,
-            'export_path': export_path
+            'export_path': self.hb_production.export_paths.home
         }
         return imports_hb_prod
 
@@ -374,14 +380,13 @@ class NoTEM:
         """
 
         # Creates inputs required for HB Attractions
-        trip_rates_path = os.path.join(self.notem_import_home, self._hb_attr, self._hb_attr_trip_rate_fname)
-        mode_split_path = os.path.join(self.notem_import_home, self._hb_attr, self._hb_attr_mode_split_fname)
-        export_path = os.path.join(self.notem_export_home, self._hb_attr)
+        trip_rates_path = os.path.join(self.import_home, self._hb_attr, self._hb_attr_trip_rate_fname)
+        mode_split_path = os.path.join(self.import_home, self._hb_attr, self._hb_attr_mode_split_fname)
 
         imports_hb_attr = {
             'trip_rate': trip_rates_path,
             'mode_split': mode_split_path,
-            'export_path': export_path
+            'export_path': self.hb_attraction.export_paths.home
         }
         return imports_hb_attr
 
@@ -402,15 +407,14 @@ class NoTEM:
         """
         # Creates inputs required for NHB Productions
 
-        nhb_trip_rates_path = os.path.join(self.notem_import_home, self._nhb_prod, self._nhb_prod_trip_rate_fname)
-        nhb_time_split_path = os.path.join(self.notem_import_home, self._hb_prod,
+        nhb_trip_rates_path = os.path.join(self.import_home, self._nhb_prod, self._nhb_prod_trip_rate_fname)
+        nhb_time_split_path = os.path.join(self.import_home, self._hb_prod,
                                            self._nhb_prod_time_split_fname)
-        export_path = os.path.join(self.notem_export_home, self._nhb_prod)
 
         imports_nhb_prod = {
             'nhb_trip_rate': nhb_trip_rates_path,
             'nhb_time_split': nhb_time_split_path,
-            'export_path': export_path
+            'export_path': self.nhb_production.export_paths.home
         }
         return imports_nhb_prod
 
@@ -429,17 +433,12 @@ class NoTEM:
             A dictionary containing non home based attraction input parameters
             and the corresponding file path.
         """
-
-        # Creates inputs required for NHB Attractions
-        export_path = os.path.join(self.notem_export_home, self._nhb_attr)
-
         imports_nhb_attr = {
-            'export_path': export_path
+            'export_path': self.nhb_attraction.export_paths.home
         }
         return imports_nhb_attr
 
-    def _generate_notem_seg_prod(self,
-                                 ) -> Dict[int, nd.PathLike]:
+    def _generate_notem_seg_prod(self) -> Dict[int, nd.PathLike]:
         """
         Creates the notem segmented production paths.
 
@@ -450,15 +449,7 @@ class NoTEM:
         notem_seg_prod:
             A dictionary containing {year: notem segmented production paths} pairs
         """
-        notem_seg_prod = dict()
-
-        for year in self.years:
-            # Path to read notem segmentation productions
-            notem_seg_production = os.path.join(self.notem_export_home, self._hb_prod,
-                                                self._notem_seg_prod_fname % year)
-            notem_seg_prod[year] = notem_seg_production
-
-        return notem_seg_prod
+        return {y: self.hb_production.export_paths.notem_segmented[y] for y in self.years}
 
     def _generate_notem_seg_nhb_prod(self,
                                      ) -> Dict[int, nd.PathLike]:
@@ -472,15 +463,7 @@ class NoTEM:
         notem_seg_nhb_prod:
             A dictionary containing {year: notem segmented NHB production paths} pairs
         """
-        notem_seg_nhb_prod = dict()
-
-        for year in self.years:
-            # Path to read notem segmentation productions
-            notem_seg_nhb_production = os.path.join(self.notem_export_home, self._nhb_prod,
-                                                    self._notem_seg_prod_fname % year)
-            notem_seg_nhb_prod[year] = notem_seg_nhb_production
-
-        return notem_seg_nhb_prod
+        return {y: self.nhb_production.export_paths.notem_segmented[y] for y in self.years}
 
     def _generate_notem_seg_attr(self,
                                  ) -> Dict[int, nd.PathLike]:
@@ -494,12 +477,4 @@ class NoTEM:
         notem_seg_attr:
             A dictionary containing {year: notem segmented attraction paths} pairs
         """
-        notem_seg_attr = dict()
-
-        for year in self.years:
-            # Path to read notem segmentation attractions
-            notem_seg_attraction = os.path.join(self.notem_export_home, self._hb_attr,
-                                                self._notem_seg_attr_fname % year)
-            notem_seg_attr[year] = notem_seg_attraction
-
-        return notem_seg_attr
+        return {y: self.hb_attraction.export_paths.notem_segmented[y] for y in self.years}
