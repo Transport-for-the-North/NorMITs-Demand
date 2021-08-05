@@ -509,6 +509,8 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
         See NHBProductionModelPaths for documentation on:
             "path_years, export_home, report_home, export_paths, report_paths"
         """
+    # Constants
+    _return_segmentation_name = 'nhb_notem_output'
 
     # Define wanted columns
     _target_col_dtypes = {
@@ -718,7 +720,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting NHB pure demand reports to disk...\n",
+                    "Exporting NHB pure demand reports to disk...",
                     verbose=verbose
                 )
 
@@ -743,7 +745,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
                 fully_segmented.to_pickle(self.export_paths.fully_segmented[year])
 
             # Renaming
-            notem_segmented = self._rename(fully_segmented, verbose)
+            notem_segmented = self._rename(fully_segmented)
 
             if export_notem_segmentation:
                 du.print_w_toggle(
@@ -787,7 +789,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
         time_taken = timing.time_taken(start_time, end_time)
         du.print_w_toggle(
             "NHB Production Model took: %s\n"
-            "Finished at: %s" % (time_taken, end_time),
+            "Finished at: %s" % (time_taken, timing.get_datetime()),
             verbose=verbose
         )
 
@@ -964,10 +966,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
             out_segmentation=fully_seg,
         )
 
-    @staticmethod
-    def _rename(full_segmentation: nd.DVector,
-                verbose: bool
-                ) -> nd.DVector:
+    def _rename(self, full_segmentation: nd.DVector) -> nd.DVector:
         """
         Renames nhb_p and nhb_m as m and p respectively in full segmentation
 
@@ -976,19 +975,10 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
         full_segmentation:
             fully segmented NHB productions containing nhb_p and nhb_m as column names
 
-        verbose:
-            Whether to print messages while running this module
-
         Returns
         -------
         notem_segmented:
             Returns the notem segmented NHB production DVector
         """
-
-        # Define the zoning and segmentations we want to use
-        nhb_prod_seg = nd.get_segmentation_level('nhb_notem_output')
-
-        du.print_w_toggle("Renaming...", verbose=verbose)
-
-        # Rename columns
+        nhb_prod_seg = nd.get_segmentation_level(self._return_segmentation_name)
         return full_segmentation.aggregate(nhb_prod_seg)

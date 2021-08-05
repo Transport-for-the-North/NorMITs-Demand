@@ -300,11 +300,6 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
             fully_segmented = self._split_by_mode(pure_attractions)
 
             # ## ATTRACTIONS TOTAL CHECK ## #
-            self._attractions_total_check(
-                pure_attractions=pure_attractions,
-                fully_segmented_attractions=fully_segmented,
-            )
-
             if not pure_attractions.sum_is_close(fully_segmented):
                 raise ValueError(
                     "The attraction totals before and after mode split are not same.\n"
@@ -511,45 +506,6 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
         )
 
         return attractions * mode_splits_dvec
-
-    @staticmethod
-    def _attractions_total_check(pure_attractions: nd.DVector,
-                                 fully_segmented_attractions: nd.DVector,
-                                 rel_tol: float = 0.0001,
-                                 ) -> None:
-        """
-        Checks if totals match
-
-        Checks if the attraction totals are matching before and
-        after mode split and returns error message if they are unequal.
-
-        Parameters
-        -----------
-        pure_attractions:
-            Dvector containing pure attractions.
-
-        fully_segmented_attractions:
-            Dvector containing attractions after mode split.
-
-        rel_tol:
-            the relative tolerance – it is the maximum allowed difference
-            between the sum of pure_attractions and fully_segmented_attractions,
-            relative to the larger absolute value of pure_attractions or
-            fully_segmented_attractions. By default, this is set to 0.0001,
-            meaning the values must be within 0.01% of each other.
-        """
-        # Init
-        pa_sum = pure_attractions.sum()
-        fsa_sum = fully_segmented_attractions.sum()
-
-        # check
-        if not math.isclose(pa_sum, fsa_sum, rel_tol=rel_tol):
-            raise ValueError(
-                "The attraction totals before and after mode split are not same.\n"
-                "Expected %f\n"
-                "Got %f"
-                % (pa_sum, fsa_sum)
-            )
 
     @staticmethod
     def _attractions_balance(a_dvec: nd.DVector,
