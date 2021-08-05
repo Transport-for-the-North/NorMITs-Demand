@@ -199,8 +199,7 @@ class NoTEM(NoTEMPaths):
             verbose=True,
         )
 
-    def generate_hb_attraction(self,
-                               ) -> None:
+    def generate_hb_attraction(self) -> None:
         """
         Runs home based Attraction trip end models
 
@@ -229,8 +228,7 @@ class NoTEM(NoTEMPaths):
             verbose=True,
         )
 
-    def generate_nhb_production(self,
-                                ) -> None:
+    def generate_nhb_production(self) -> None:
         """
         Runs non home based Production trip end models.
 
@@ -259,8 +257,7 @@ class NoTEM(NoTEMPaths):
             verbose=True,
         )
 
-    def generate_nhb_attraction(self,
-                                ) -> None:
+    def generate_nhb_attraction(self) -> None:
         """
         Runs non home based Attraction trip end models.
 
@@ -286,8 +283,7 @@ class NoTEM(NoTEMPaths):
             verbose=True,
         )
 
-    def _generate_land_use_inputs(self,
-                                  ) -> None:
+    def _generate_land_use_inputs(self) -> None:
         """
         Creates the land use import paths
 
@@ -335,8 +331,7 @@ class NoTEM(NoTEMPaths):
             self.pop_land_use_path[year] = year_pop
             self.emp_land_use_path[year] = year_emp
 
-    def generate_hb_production_imports(self,
-                                       ) -> Dict[str, nd.PathLike]:
+    def generate_hb_production_imports(self) -> Dict[str, nd.PathLike]:
         """
         Creates inputs required for home based production trip ends.
 
@@ -363,8 +358,7 @@ class NoTEM(NoTEMPaths):
         }
         return imports_hb_prod
 
-    def generate_hb_attraction_imports(self,
-                                       ) -> Dict[str, nd.PathLike]:
+    def generate_hb_attraction_imports(self) -> Dict[str, nd.PathLike]:
         """
         Creates inputs required for home based attraction trip ends.
 
@@ -390,8 +384,7 @@ class NoTEM(NoTEMPaths):
         }
         return imports_hb_attr
 
-    def generate_nhb_production_imports(self,
-                                        ) -> Dict[str, nd.PathLike]:
+    def generate_nhb_production_imports(self) -> Dict[str, nd.PathLike]:
         """
         Creates inputs required for non home based production trip ends.
 
@@ -418,8 +411,7 @@ class NoTEM(NoTEMPaths):
         }
         return imports_nhb_prod
 
-    def generate_nhb_attraction_imports(self,
-                                        ) -> Dict[str, nd.PathLike]:
+    def generate_nhb_attraction_imports(self) -> Dict[str, nd.PathLike]:
         """
         Creates inputs required for non home based attraction trip ends.
 
@@ -451,8 +443,7 @@ class NoTEM(NoTEMPaths):
         """
         return {y: self.hb_production.export_paths.notem_segmented[y] for y in self.years}
 
-    def _generate_notem_seg_nhb_prod(self,
-                                     ) -> Dict[int, nd.PathLike]:
+    def _generate_notem_seg_nhb_prod(self) -> Dict[int, nd.PathLike]:
         """
         Creates the notem segmented NHB production paths.
 
@@ -465,8 +456,7 @@ class NoTEM(NoTEMPaths):
         """
         return {y: self.nhb_production.export_paths.notem_segmented[y] for y in self.years}
 
-    def _generate_notem_seg_attr(self,
-                                 ) -> Dict[int, nd.PathLike]:
+    def _generate_notem_seg_attr(self) -> Dict[int, nd.PathLike]:
         """
         Creates the notem segmented attraction paths.
 
