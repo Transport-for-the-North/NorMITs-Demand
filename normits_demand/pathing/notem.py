@@ -13,6 +13,8 @@ Classes which build all the paths for NoTEM model outputs
 # Builtins
 import os
 import collections
+from abc import ABC
+from abc import abstractmethod
 
 from typing import List
 from typing import Dict
@@ -26,7 +28,105 @@ from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
 
 
-class NoTEMImportPaths:
+class NoTEMImportPathsBase(ABC):
+
+    @abstractmethod
+    def generate_hb_production_imports(self) -> Dict[str, nd.PathLike]:
+        """
+        Definition of function that needs to be overwritten
+
+        Returns
+        -------
+        kwargs:
+            This function should return a keyword argument dictionary to be
+            passed straight into the production model. Specifically, this
+            function needs to produce a dictionary with the following keys:
+                'population_paths'
+                'trip_rates_path'
+                'mode_time_splits_path'
+        """
+        raise NotImplementedError(
+            "generate_hb_production_imports() has not been implemented! If "
+            "you have inherited this class, you need to make sure this "
+            "function is overwritten by the child class.\n"
+            "See the method documentation for information on how the function "
+            "call and return should look."
+        )
+
+    @abstractmethod
+    def generate_nhb_production_imports(self) -> Dict[str, nd.PathLike]:
+        """
+        Definition of function that needs to be overwritten
+
+        Returns
+        -------
+        kwargs:
+            This function should return a keyword argument dictionary to be
+            passed straight into the production model. Specifically, this
+            function needs to produce a dictionary with the following keys:
+                'population_paths'
+                'trip_rates_path'
+                'mode_time_splits_path'
+        """
+        raise NotImplementedError(
+            "generate_nhb_production_imports() has not been implemented! If "
+            "you have inherited this class, you need to make sure this "
+            "function is overwritten by the child class.\n"
+            "See the method documentation for information on how the function "
+            "call and return should look."
+        )
+
+    @abstractmethod
+    def generate_hb_attraction_imports(self) -> Dict[str, nd.PathLike]:
+        """
+        Definition of function that needs to be overwritten
+
+        Returns
+        -------
+        kwargs:
+            This function should return a keyword argument dictionary to be
+            passed straight into the production model. Specifically, this
+            function needs to produce a dictionary with the following keys:
+                'employment_paths'
+                'trip_weights_path'
+                'mode_splits_path'
+        """
+        raise NotImplementedError(
+            "generate_hb_attraction_imports() has not been implemented! If "
+            "you have inherited this class, you need to make sure this "
+            "function is overwritten by the child class.\n"
+            "See the method documentation for information on how the function "
+            "call and return should look."
+        )
+
+    @abstractmethod
+    def generate_nhb_attraction_imports(self) -> Dict[str, nd.PathLike]:
+        """
+        Definition of function that needs to be overwritten
+
+        Returns
+        -------
+        kwargs:
+            This function should return a keyword argument dictionary to be
+            passed straight into the production model. Specifically, this
+            function needs to produce a dictionary with the following keys:
+                'population_paths'
+                'trip_rates_path'
+                'mode_time_splits_path'
+        """
+        raise NotImplementedError(
+            "generate_nhb_attraction_imports() has not been implemented! If "
+            "you have inherited this class, you need to make sure this "
+            "function is overwritten by the child class.\n"
+            "See the method documentation for information on how the function "
+            "call and return should look."
+        )
+
+
+class NoTEMImportPaths(NoTEMImportPathsBase):
+
+    # Constant
+    _current_base_year = 2018
 
     # Land Use
     _normits_land_use = "NorMITs Land Use"
@@ -38,11 +138,18 @@ class NoTEMImportPaths:
     _fy_emp_fname = "land_use_{year}_emp.csv"
 
     # HB Productions
-    _hb_productions_fname = "hb_productions"
+    _hb_productions_dname = "hb_productions"
     _hbp_trip_rate_fname = "hb_trip_rates_v{version}.csv"
     _hbp_m_tp_split_fname = "hb_mode_time_split_v{version}.csv"
 
     # HB Attractions
+    _hb_attractions_dname = "hb_attractions"
+    _hba_trip_weight_fname = "hb_trip_weights_v{version}.csv"
+    _hba_mode_split_fname = "hb_mode_splits_v{version}.csv"
+
+    # NHB Productions
+
+    # NHB Attractions
 
     def __init__(self,
                  import_home: nd.PathLike,
@@ -51,6 +158,8 @@ class NoTEMImportPaths:
                  land_use_import_home: nd.PathLike,
                  by_land_use_iter: str,
                  fy_land_use_iter: str,
+                 hb_production_import_version: str,
+                 hb_attraction_import_version: str,
                  ):
         """
         Assigns and validates attributes.
@@ -84,6 +193,8 @@ class NoTEMImportPaths:
 
         # Assign attributes
         self.import_home = import_home
+        self.hb_production_import_version = hb_production_import_version
+        self.hb_attraction_import_version = hb_attraction_import_version
 
         # Generate Land Use paths - needed later
         self._generate_land_use_paths(
@@ -126,8 +237,20 @@ class NoTEMImportPaths:
             scenario,
         )
 
-        # ## GENERATE FULL PATHS ## #
+        # Because of the way land use is written, we have this weird legacy
+        # now where NoTEM needs to base year to run correctly. If the smallest
+        # number given isn't the defined base year, we just can't run.
         base_year, _ = du.split_base_future_years(years)
+        if base_year != self._current_base_year:
+            raise ValueError(
+                "The assumed base year (the smallest of all inputs years) is "
+                "not the same as the defined base year in this model.\n"
+                "Assumed: %s\n"
+                "Defined: %s\n"
+                % (base_year, self._current_base_year)
+            )
+
+        # ## GENERATE FULL PATHS ## #
         self.population_paths = dict()
         self.employment_paths = dict()
 
@@ -146,22 +269,41 @@ class NoTEMImportPaths:
             self.population_paths[year] = year_pop
             self.employment_paths[year] = year_emp
 
-    def generate_hb_production_imports(self,
-                                       version: str,
-                                       ) -> Dict[str, nd.PathLike]:
+    def generate_hb_production_imports(self) -> Dict[str, nd.PathLike]:
         """
         Generates input paths for home based production model.
+
+        See NoTEMImportPathsBase.generate_hb_production_imports() for further
+        documentation
         """
         # Generate the paths
-        import_home = os.path.join(self.import_home, self._hb_productions_fname)
-        trip_rates = self._hbp_trip_rate_fname.format(version=version)
-        m_tp_split = self._hbp_m_tp_split_fname.format(version=version)
+        import_home = os.path.join(self.import_home, self._hb_productions_dname)
+        trip_rates = self._hbp_trip_rate_fname.format(version=self.hb_production_import_version)
+        m_tp_split = self._hbp_m_tp_split_fname.format(version=self.hb_production_import_version)
 
         # Format in dictionary
         return {
             'population_paths': self.population_paths,
             'trip_rates_path': os.path.join(import_home, trip_rates),
             'mode_time_splits_path': os.path.join(import_home, m_tp_split),
+        }
+
+    def generate_hb_attraction_imports(self) -> Dict[str, nd.PathLike]:
+        """
+        Generates input paths for home based attraction model
+
+        See NoTEMImportPathsBase.generate_hb_attraction_imports() for further
+        documentation
+        """
+        # Generate the paths
+        import_home = os.path.join(self.import_home, self._hb_attractions_dname)
+        trip_weights = self._hba_trip_weight_fname.format(version=self.hb_attraction_import_version)
+        mode_split = self._hba_mode_split_fname.format(version=self.hb_attraction_import_version)
+
+        return {
+            'employment_paths': self.employment_paths,
+            'trip_weights_path': os.path.join(import_home, trip_weights),
+            'mode_splits_path': os.path.join(import_home, mode_split),
         }
 
 

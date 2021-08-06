@@ -46,16 +46,16 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
 
         Attributes
         ----------
-        land_use_paths: Dict[int, nd.PathLike]:
+        employment_paths: Dict[int, nd.PathLike]:
             Dictionary of {year: land_use_employment_data} pairs. As passed
             into the constructor.
 
-        control_production_paths: Dict[int, nd.PathLike]:
+        production_balance_paths: Dict[int, nd.PathLike]:
             Dictionary of {year: path_to_production_to_control_to} pairs. As passed
             into the constructor.
 
-        attraction_trip_rates_path: str
-            The path to the attraction trip rates. As passed into the constructor.
+        trip_weights_path: str
+            The path to the attraction trip weights. As passed into the constructor.
 
         mode_splits_path: str
             The path to attraction mode splits. As passed into the constructor.
@@ -77,13 +77,13 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
         """
     # Define wanted columns
     _target_col_dtypes = {
-        'land_use': {
+        'employment': {
             'msoa_zone_id': str,
             'employment_cat': str,
             'soc': int,
             'people': float
         },
-        'trip_rate': {
+        'trip_weight': {
             'msoa_zone_id': str,
             'employment_cat': str,
             'purpose': int,
@@ -108,9 +108,9 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
     }
 
     def __init__(self,
-                 land_use_paths: Dict[int, nd.PathLike],
-                 control_production_paths: Dict[int, nd.PathLike],
-                 attraction_trip_rates_path: str,
+                 employment_paths: Dict[int, nd.PathLike],
+                 production_balance_paths: Dict[int, nd.PathLike],
+                 trip_weights_path: str,
                  mode_splits_path: str,
                  export_home: str,
                  constraint_paths: Dict[int, nd.PathLike] = None,
@@ -121,20 +121,22 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
 
         Parameters
         ----------
-        land_use_paths:
+        employment_paths:
             Dictionary of {year: land_use_employment_data} pairs.
+            Should have the columns as defined in:
+            HBAttractionModel._target_cols['employment']
 
-        control_production_paths:
+        production_balance_paths:
             Dictionary of {year: path_to_production_to_control_to} pairs.
             These paths should be gotten from nd.HBProduction model.
             Must contain the same keys as land_use_paths, but it can contain
             more (any extras will be ignored).
             These productions will be used to control the produced attractions.
 
-        attraction_trip_rates_path:
-            The path to the attraction trip rates.
+        trip_weights_path:
+            The path to the attraction trip weights.
             Should have the columns as defined in:
-            HBAttractionModel._target_cols['trip_rate']
+            HBAttractionModel._target_cols['trip_weight']
 
         mode_splits_path:
             The path to attraction mode split.
@@ -157,17 +159,17 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
             Defaults to consts.PROCESS_COUNT.
         """
         # Check that the paths we need exist!
-        [file_ops.check_file_exists(x) for x in land_use_paths.values()]
-        [file_ops.check_file_exists(x) for x in control_production_paths.values()]
-        file_ops.check_file_exists(attraction_trip_rates_path)
+        [file_ops.check_file_exists(x) for x in employment_paths.values()]
+        [file_ops.check_file_exists(x) for x in production_balance_paths.values()]
+        file_ops.check_file_exists(trip_weights_path)
         file_ops.check_file_exists(mode_splits_path)
 
         if constraint_paths is not None:
             [file_ops.check_file_exists(x) for x in constraint_paths.values()]
 
         # Validate that we have data for all the years we're running for
-        for year in land_use_paths.keys():
-            if year not in control_production_paths.keys():
+        for year in employment_paths.keys():
+            if year not in production_balance_paths.keys():
                 raise ValueError(
                     "Year %d found in land_use_paths\n"
                     "But not found in control_production_paths"
@@ -182,13 +184,13 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
                     )
 
         # Assign
-        self.land_use_paths = land_use_paths
-        self.control_production_paths = control_production_paths
-        self.attraction_trip_rates_path = attraction_trip_rates_path
+        self.employment_paths = employment_paths
+        self.production_balance_paths = production_balance_paths
+        self.trip_weights_path = trip_weights_path
         self.mode_splits_path = mode_splits_path
         self.constraint_paths = constraint_paths
         self.process_count = process_count
-        self.years = list(self.land_use_paths.keys())
+        self.years = list(self.employment_paths.keys())
 
         # Make sure the reports paths exists
         report_home = os.path.join(export_home, "Reports")
@@ -320,7 +322,7 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
             # some segmentation to bring it in line with the productions
             notem_segmented = self._attractions_balance(
                 a_dvec=fully_segmented,
-                p_dvec_path=self.control_production_paths[year],
+                p_dvec_path=self.production_balance_paths[year],
             )
 
             if export_notem_segmentation:
@@ -394,18 +396,12 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
         emp_seg = nd.get_segmentation_level('lu_emp')
 
         # Read the land use data corresponding to the year
-        # emp = du.safe_read_csv(
-        #     file_path=self.land_use_paths[year],
-        #     usecols=self._target_col_dtypes['land_use'].keys(),
-        #     dtype=self._target_col_dtypes['land_use'],
-        # )
-        # Read the land use data corresponding to the year
         emp = file_ops.read_df(
-            path=self.land_use_paths[year],
+            path=self.employment_paths[year],
             find_similar=True,
         )
-        emp = pd_utils.reindex_cols(emp, self._target_col_dtypes['land_use'].keys())
-        for col, dt in self._target_col_dtypes['land_use'].items():
+        emp = pd_utils.reindex_cols(emp, self._target_col_dtypes['employment'].keys())
+        for col, dt in self._target_col_dtypes['employment'].items():
             emp[col] = emp[col].astype(dt)
 
         # Instantiate
@@ -447,9 +443,9 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
         # Reading trip rates
         du.print_w_toggle("Reading in files...", verbose=verbose)
         trip_rates = du.safe_read_csv(
-            self.attraction_trip_rates_path,
-            usecols=self._target_col_dtypes['trip_rate'].keys(),
-            dtype=self._target_col_dtypes['trip_rate'],
+            self.trip_weights_path,
+            usecols=self._target_col_dtypes['trip_weight'].keys(),
+            dtype=self._target_col_dtypes['trip_weight'],
         )
 
         # ## CREATE THE TRIP RATES DVEC ## #

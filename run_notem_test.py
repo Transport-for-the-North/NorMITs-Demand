@@ -17,6 +17,7 @@ notem_export_home = r"E:\NoTEM"
 
 def main():
     hb_production_import_version = '2.0'
+    hb_attraction_import_version = '1.9'
 
     n = notem.NoTEM(
         years=year,
@@ -28,13 +29,14 @@ def main():
         export_home=notem_export_home,
 
         hb_production_import_version=hb_production_import_version,
+        hb_attraction_import_version=hb_attraction_import_version,
     )
     n.run(
         generate_all=False,
         generate_hb=False,
-        generate_hb_production=True,
-        generate_hb_attraction=False,
         generate_nhb=False,
+        generate_hb_production=False,
+        generate_hb_attraction=True,
         generate_nhb_production=False,
         generate_nhb_attraction=False
     )

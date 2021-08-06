@@ -3259,6 +3259,7 @@ def split_base_future_years(years: List[int],
         raise TypeError(
             "Expecting a list of integers, but not all items are integers."
         )
+    years = years.copy()
 
     # Find the smallest value
     base_year = years.pop(years.index(min(years)))

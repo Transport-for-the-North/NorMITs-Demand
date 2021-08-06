@@ -33,11 +33,8 @@ from normits_demand.utils import general as du
 
 class NoTEM(NoTEMPaths):
     # Constants
-    _hb_attr = "HB_Attractions"
     _nhb_prod = "NHB_Productions"
     _nhb_attr = "NHB_Attractions"
-    _hb_attr_trip_rate_fname = "sample_attraction_trip_rate.csv"
-    _hb_attr_mode_split_fname = "attraction_mode_split_new_infill.csv"
     _nhb_prod_trip_rate_fname = "nhb_ave_wday_enh_trip_rates_v1.5.csv"
     _nhb_prod_time_split_fname = "tfn_nhb_ave_week_time_split_18_v1.5.csv"
 
@@ -48,8 +45,6 @@ class NoTEM(NoTEMPaths):
                  scenario: str,
                  import_home: nd.PathLike,
                  export_home: nd.PathLike,
-
-                 hb_production_import_version: str,
 
                  *args,
                  **kwargs,
@@ -82,15 +77,12 @@ class NoTEM(NoTEMPaths):
         self.years = years
         self.scenario = scenario
 
-        self.hb_production_import_version = hb_production_import_version
-
         # Generate the import and export paths
         super().__init__(
-            path_years=self.years,
-            export_home=export_home,
+            years=self.years,
+            scenario=self.scenario,
             import_home=import_home,
-            scenario=scenario,
-            years=years,
+            export_home=export_home,
             *args,
             **kwargs,
         )
@@ -169,9 +161,7 @@ class NoTEM(NoTEMPaths):
         """
         Runs home based Production trip end models
         """
-        import_files = self.generate_hb_production_imports(
-            version=self.hb_production_import_version,
-        )
+        import_files = self.generate_hb_production_imports()
 
         # Runs the home based Production model
         hb_prod = HBProductionModel(
@@ -202,12 +192,10 @@ class NoTEM(NoTEMPaths):
 
         # ## INSTANTIATE AND RUN THE MODEL ## #
         hb_attr = HBAttractionModel(
-            land_use_paths=self.emp_land_use_path,
-            control_production_paths=control_production_paths,
-            attraction_trip_rates_path=imports['trip_rate'],
-            mode_splits_path=imports['mode_split'],
+            **imports,
+            production_balance_paths=control_production_paths,
             constraint_paths=None,
-            export_home=imports['export_path'],
+            export_home=self.hb_attraction.export_paths.home,
         )
 
         hb_attr.run(
@@ -278,32 +266,6 @@ class NoTEM(NoTEMPaths):
             export_reports=True,
             verbose=verbose,
         )
-
-    def generate_hb_attraction_imports(self) -> Dict[str, nd.PathLike]:
-        """
-        Creates inputs required for home based attraction trip ends.
-
-        Creates dictionary containing import parameter and corresponding
-        file path as keys and values respectively for home based attraction
-        trip ends.
-
-        Returns
-        -------
-        imports_hb_attr:
-            A dictionary containing home based attraction input parameters
-            and the corresponding file path.
-        """
-
-        # Creates inputs required for HB Attractions
-        trip_rates_path = os.path.join(self.import_home, self._hb_attr, self._hb_attr_trip_rate_fname)
-        mode_split_path = os.path.join(self.import_home, self._hb_attr, self._hb_attr_mode_split_fname)
-
-        imports_hb_attr = {
-            'trip_rate': trip_rates_path,
-            'mode_split': mode_split_path,
-
-        }
-        return imports_hb_attr
 
     def generate_nhb_production_imports(self) -> Dict[str, nd.PathLike]:
         """
