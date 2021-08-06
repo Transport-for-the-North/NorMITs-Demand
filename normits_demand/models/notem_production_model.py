@@ -484,14 +484,14 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
             Dictionary of {year: notem_segmented_HB_attractions_data} pairs.
             As passed into the constructor.
 
-        land_use_paths: Dict[int, nd.PathLike]:
+        population_paths: Dict[int, nd.PathLike]:
             Dictionary of {year: land_use_employment_data} pairs. As passed
             into the constructor.
 
-        nhb_trip_rates_path: str
+        trip_rates_path: str
             The path to the NHB production trip rates. As passed into the constructor.
 
-        nhb_time_splits_path: str
+        time_splits_path: str
             The path to the NHB production time splits. As passed into the
             constructor.
 
@@ -543,9 +543,9 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
 
     def __init__(self,
                  hb_attraction_paths: Dict[int, nd.PathLike],
-                 land_use_paths: Dict[int, nd.PathLike],
-                 nhb_trip_rates_path: str,
-                 nhb_time_splits_path: str,
+                 population_paths: Dict[int, nd.PathLike],
+                 trip_rates_path: str,
+                 time_splits_path: str,
                  export_home: str,
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
@@ -560,15 +560,15 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
             These paths should come from nd.HBAttraction model and should
             be pickled Dvector paths.
 
-        land_use_paths:
+        population_paths:
             Dictionary of {year: land_use_population_data} pairs.
 
-        nhb_trip_rates_path:
+        trip_rates_path:
             The path to the NHB production trip rates.
             Should have the columns as defined in:
             NHBProductionModel._target_cols['nhb_trip_rate']
 
-        nhb_time_splits_path:
+        time_splits_path:
             The path to NHB production time split.
             Should have the columns as defined in:
             NHBProductionModel._target_cols['tp']
@@ -590,16 +590,16 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
         """
         # Check that the paths we need exist!
         [file_ops.check_file_exists(x) for x in hb_attraction_paths.values()]
-        [file_ops.check_file_exists(x) for x in land_use_paths.values()]
-        file_ops.check_file_exists(nhb_trip_rates_path)
-        file_ops.check_file_exists(nhb_time_splits_path)
+        [file_ops.check_file_exists(x) for x in population_paths.values()]
+        file_ops.check_file_exists(trip_rates_path)
+        file_ops.check_file_exists(time_splits_path)
 
         if constraint_paths is not None:
             [file_ops.check_file_exists(x) for x in constraint_paths.values()]
 
         # Validate that we have data for all the years we're running for
         for year in hb_attraction_paths.keys():
-            if year not in land_use_paths.keys():
+            if year not in population_paths.keys():
                 raise ValueError(
                     "Year %d found given attractions: hb_attractions_paths\n"
                     "But not found in land_use_paths"
@@ -616,9 +616,9 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
 
         # Assign
         self.hb_attraction_paths = hb_attraction_paths
-        self.land_use_paths = land_use_paths
-        self.nhb_trip_rates_path = nhb_trip_rates_path
-        self.nhb_time_splits_path = nhb_time_splits_path
+        self.population_paths = population_paths
+        self.trip_rates_path = trip_rates_path
+        self.time_splits_path = time_splits_path
         self.constraint_paths = constraint_paths
         self.process_count = process_count
         self.years = list(self.hb_attraction_paths.keys())
@@ -827,7 +827,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
         # Reading the land use data
         # Read the land use data corresponding to the year
         pop = file_ops.read_df(
-            path=self.land_use_paths[year],
+            path=self.population_paths[year],
             find_similar=True,
         )
         pop = pd_utils.reindex_cols(pop, self._target_col_dtypes['land_use'].keys())
@@ -909,7 +909,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
         # Reading NHB trip rates
         du.print_w_toggle("Reading in files...", verbose=verbose)
         trip_rates = du.safe_read_csv(
-            file_path=self.nhb_trip_rates_path,
+            file_path=self.trip_rates_path,
             usecols=self._target_col_dtypes['nhb_trip_rate'].keys(),
             dtype=self._target_col_dtypes['nhb_trip_rate'],
         )
@@ -948,7 +948,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
 
         # Read the time splits factor
         time_splits = pd.read_csv(
-            self.nhb_time_splits_path,
+            self.time_splits_path,
             usecols=self._target_col_dtypes['tp'].keys(),
             dtype=self._target_col_dtypes['tp'],
         )

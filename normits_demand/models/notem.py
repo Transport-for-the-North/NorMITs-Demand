@@ -215,16 +215,14 @@ class NoTEM(NoTEMPaths):
         imports = self.generate_nhb_production_imports()
 
         # Get the hb attractions
-        export_paths = self.hb_attraction.export_path
+        export_paths = self.hb_attraction.export_paths
         hb_attraction_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
         # ## INSTANTIATE AND RUN THE MODEL ## #
         nhb_prod = NHBProductionModel(
+            **imports,
             hb_attraction_paths=hb_attraction_paths,
-            land_use_paths=self.pop_land_use_path,
-            nhb_trip_rates_path=imports['nbh_trip_rate'],
-            nhb_time_splits_path=imports['nbh_time_split_rate'],
-            export_home=imports['export_path'],
+            export_home=self.nhb_production.export_paths.home,
             constraint_paths=None,
         )
 
@@ -245,7 +243,7 @@ class NoTEM(NoTEMPaths):
         # imports = self.generate_nhb_attraction_imports()
 
         # Get the hb attractions
-        export_paths = self.hb_attraction.export_path
+        export_paths = self.hb_attraction.export_paths
         hb_attraction_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
         # Get the nhb productions
@@ -266,30 +264,3 @@ class NoTEM(NoTEMPaths):
             export_reports=True,
             verbose=verbose,
         )
-
-    def generate_nhb_production_imports(self) -> Dict[str, nd.PathLike]:
-        """
-        Creates inputs required for non home based production trip ends.
-
-        Creates dictionary containing import parameter and corresponding
-        file path as keys and values respectively for non home based production
-        trip ends.
-
-        Returns
-        -------
-        imports_nhb_prod:
-            A dictionary containing non home based production input parameters
-            and the corresponding file path.
-        """
-        # Creates inputs required for NHB Productions
-
-        nhb_trip_rates_path = os.path.join(self.import_home, self._nhb_prod, self._nhb_prod_trip_rate_fname)
-        nhb_time_split_path = os.path.join(self.import_home, self._hb_prod,
-                                           self._nhb_prod_time_split_fname)
-
-        imports_nhb_prod = {
-            'nhb_trip_rate': nhb_trip_rates_path,
-            'nhb_time_split': nhb_time_split_path,
-            'export_path': self.nhb_production.export_paths.home
-        }
-        return imports_nhb_prod

@@ -66,7 +66,7 @@ class NoTEMImportPathsBase(ABC):
             function needs to produce a dictionary with the following keys:
                 'population_paths'
                 'trip_rates_path'
-                'mode_time_splits_path'
+                'time_splits_path'
         """
         raise NotImplementedError(
             "generate_nhb_production_imports() has not been implemented! If "
@@ -110,9 +110,7 @@ class NoTEMImportPathsBase(ABC):
             This function should return a keyword argument dictionary to be
             passed straight into the production model. Specifically, this
             function needs to produce a dictionary with the following keys:
-                'population_paths'
-                'trip_rates_path'
-                'mode_time_splits_path'
+               None
         """
         raise NotImplementedError(
             "generate_nhb_attraction_imports() has not been implemented! If "
@@ -148,8 +146,12 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
     _hba_mode_split_fname = "hb_mode_splits_v{version}.csv"
 
     # NHB Productions
+    _nhb_productions_dname = "nhb_productions"
+    _nhbp_trip_rates_fname = "nhb_trip_rates_v{version}.csv"
+    _nhbp_time_split_fname = "nhb_time_split_v{version}.csv"
 
     # NHB Attractions
+    # None currently needed
 
     def __init__(self,
                  import_home: nd.PathLike,
@@ -160,6 +162,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
                  fy_land_use_iter: str,
                  hb_production_import_version: str,
                  hb_attraction_import_version: str,
+                 nhb_production_import_version: str,
                  ):
         """
         Assigns and validates attributes.
@@ -195,6 +198,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
         self.import_home = import_home
         self.hb_production_import_version = hb_production_import_version
         self.hb_attraction_import_version = hb_attraction_import_version
+        self.nhb_production_import_version = nhb_production_import_version
 
         # Generate Land Use paths - needed later
         self._generate_land_use_paths(
@@ -304,6 +308,24 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
             'employment_paths': self.employment_paths,
             'trip_weights_path': os.path.join(import_home, trip_weights),
             'mode_splits_path': os.path.join(import_home, mode_split),
+        }
+
+    def generate_nhb_production_imports(self) -> Dict[str, nd.PathLike]:
+        """
+        Generates input paths for non-home based production model
+
+        See NoTEMImportPathsBase.generate_nhb_production_imports() for further
+        documentation
+        """
+        # Generate the paths
+        import_home = os.path.join(self.import_home, self._nhb_productions_dname)
+        trip_rates = self._nhbp_trip_rates_fname.format(version=self.nhb_production_import_version)
+        time_split = self._nhbp_time_split_fname.format(version=self.nhb_production_import_version)
+
+        return {
+            'population_paths': self.population_paths,
+            'trip_rates_path': os.path.join(import_home, trip_rates),
+            'time_splits_path': os.path.join(import_home, time_split),
         }
 
     def generate_nhb_attraction_imports(self) -> Dict[str, nd.PathLike]:
