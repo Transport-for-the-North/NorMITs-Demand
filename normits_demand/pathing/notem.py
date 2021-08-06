@@ -23,12 +23,146 @@ from typing import Tuple
 # Local imports
 import normits_demand as nd
 from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
 
 
 class NoTEMImportPaths:
 
-    def __init__(self):
-        pass
+    # Land Use
+    _normits_land_use = "NorMITs Land Use"
+    _by_lu_dir = "base_land_use"
+    _fy_lu_dir = "future_land_use"
+
+    _by_pop_fname = "land_use_output_msoa.csv"
+    _fy_pop_fname = "land_use_{year}_pop.csv"
+    _fy_emp_fname = "land_use_{year}_emp.csv"
+
+    # HB Productions
+    _hb_productions_fname = "hb_productions"
+    _hbp_trip_rate_fname = "hb_trip_rates_v{version}.csv"
+    _hbp_m_tp_split_fname = "hb_mode_time_split_v{version}.csv"
+
+    # HB Attractions
+
+    def __init__(self,
+                 import_home: nd.PathLike,
+                 scenario: str,
+                 years: List[int],
+                 land_use_import_home: nd.PathLike,
+                 by_land_use_iter: str,
+                 fy_land_use_iter: str,
+                 ):
+        """
+        Assigns and validates attributes.
+
+        Parameters
+        ----------
+        import_home:
+            The home for all of the imports. This is usually a drive letter.
+            Expects to find a folder titled
+            NoTEMImportPath._normits_land_use in there.
+
+        scenario:
+            The name of the scenario to run for.
+
+        years:
+            List of years to run NoTEM for. Will assume that the smallest
+            year is the base year.
+
+        land_use_import_home:
+            Path to the base directory of land use outputs.
+
+        by_land_use_iter:
+            String containing base year land use iteration name Eg: 'iter3b'.
+
+        fy_land_use_iter:
+            String containing future year land use iteration name Eg: 'iter3b'.
+        """
+        # Validate inputs
+        file_ops.check_path_exists(import_home)
+        file_ops.check_path_exists(land_use_import_home)
+
+        # Assign attributes
+        self.import_home = import_home
+
+        # Generate Land Use paths - needed later
+        self._generate_land_use_paths(
+            scenario=scenario,
+            years=years,
+            land_use_import_home=land_use_import_home,
+            by_land_use_iter=by_land_use_iter,
+            fy_land_use_iter=fy_land_use_iter,
+        )
+
+    def _generate_land_use_paths(self,
+                                 scenario: str,
+                                 years: List[int],
+                                 land_use_import_home: nd.PathLike,
+                                 by_land_use_iter: str,
+                                 fy_land_use_iter: str,
+                                 ) -> None:
+        """
+        Creates population and employment data dictionaries.
+
+        Generated dictionaries are based on NorMITs Land Use paths.
+        """
+        # ## GENERATE THE HOME PATHS ## #
+        by_home = os.path.join(
+            land_use_import_home,
+            self._normits_land_use,
+            self._by_lu_dir,
+            by_land_use_iter,
+            'outputs',
+        )
+
+        # future year land use home path
+        fy_home = os.path.join(
+            land_use_import_home,
+            self._normits_land_use,
+            self._fy_lu_dir,
+            fy_land_use_iter,
+            'outputs',
+            'scenarios',
+            scenario,
+        )
+
+        # ## GENERATE FULL PATHS ## #
+        base_year, _ = du.split_base_future_years(years)
+        self.population_paths = dict()
+        self.employment_paths = dict()
+
+        for year in years:
+            pop_fname = self._fy_pop_fname.format(year=str(year))
+            emp_fname = self._fy_emp_fname.format(year=str(year))
+
+            # Land use gives a different pop fname in base year
+            if year == base_year:
+                year_pop = os.path.join(by_home, self._by_pop_fname)
+                year_emp = os.path.join(by_home, emp_fname)
+            else:
+                year_pop = os.path.join(fy_home, pop_fname)
+                year_emp = os.path.join(fy_home, emp_fname)
+
+            self.population_paths[year] = year_pop
+            self.employment_paths[year] = year_emp
+
+    def generate_hb_production_imports(self,
+                                       version: str,
+                                       ) -> Dict[str, nd.PathLike]:
+        """
+        Generates input paths for home based production model.
+        """
+        # Generate the paths
+        import_home = os.path.join(self.import_home, self._hb_productions_fname)
+        trip_rates = self._hbp_trip_rate_fname.format(version=version)
+        m_tp_split = self._hbp_m_tp_split_fname.format(version=version)
+
+        # Format in dictionary
+        return {
+            'population_paths': self.population_paths,
+            'trip_rates_path': os.path.join(import_home, trip_rates),
+            'mode_time_splits_path': os.path.join(import_home, m_tp_split),
+        }
 
 
 class NoTEMExportPaths:
@@ -109,12 +243,25 @@ class NoTEMExportPaths:
 class NoTEMPaths(NoTEMExportPaths, NoTEMImportPaths):
 
     def __init__(self,
-                 path_years: List[int],
+                 years: List[int],
                  export_home: nd.PathLike,
+                 import_home: nd.PathLike,
+                 scenario: str,
+                 *args,
+                 **kwargs,
                  ):
-        super(NoTEMPaths, self).__init__(
-            path_years=path_years,
+        NoTEMExportPaths.__init__(
+            self,
+            path_years=years,
             export_home=export_home,
+        )
+        NoTEMImportPaths.__init__(
+            self,
+            import_home=import_home,
+            scenario=scenario,
+            years=years,
+            *args,
+            **kwargs,
         )
 
 

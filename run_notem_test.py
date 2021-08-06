@@ -16,6 +16,8 @@ notem_export_home = r"E:\NoTEM"
 
 
 def main():
+    hb_production_import_version = '2.0'
+
     n = notem.NoTEM(
         years=year,
         scenario=scenario,
@@ -24,6 +26,8 @@ def main():
         fy_land_use_iter=fy_iteration,
         import_home=notem_import_home,
         export_home=notem_export_home,
+
+        hb_production_import_version=hb_production_import_version,
     )
     n.run(
         generate_all=False,

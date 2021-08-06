@@ -44,7 +44,7 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
 
     Attributes
     ----------
-    land_use_paths: Dict[int, nd.PathLike]:
+    population_paths: Dict[int, nd.PathLike]:
         Dictionary of {year: land_use_employment_data} pairs. As passed
         into the constructor.
 
@@ -75,7 +75,7 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
 
     # Define wanted columns
     _target_col_dtypes = {
-        'land_use': {
+        'pop': {
             'msoa_zone_id': str,
             'area_type': int,
             'tfn_traveller_type': int,
@@ -104,7 +104,7 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
     }
 
     def __init__(self,
-                 land_use_paths: Dict[int, nd.PathLike],
+                 population_paths: Dict[int, nd.PathLike],
                  trip_rates_path: str,
                  mode_time_splits_path: str,
                  export_home: str,
@@ -116,18 +116,19 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
 
         Parameters
         ----------
-        land_use_paths:
-            Dictionary of {year: land_use_employment_data} pairs.
+        population_paths:
+            Dictionary of {year: population_data} pairs.
+            HBProductionModel._target_col_dtypes['pop']
 
         trip_rates_path:
             The path to the production trip rates.
             Should have the columns as defined in:
-            HBProductionModel._target_cols['trip_rate']
+            HBProductionModel._target_col_dtypes['trip_rate']
 
         mode_time_splits_path:
             The path to production mode-time splits.
             Should have the columns as defined in:
-            HBProductionModel._target_cols['m_tp']
+            HBProductionModel._target_col_dtypes['m_tp']
 
         export_home:
             Path to export production outputs.
@@ -145,14 +146,14 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
             Defaults to consts.PROCESS_COUNT.
         """
         # Check that the paths we need exist!
-        [file_ops.check_file_exists(x) for x in land_use_paths.values()]
+        [file_ops.check_file_exists(x) for x in population_paths.values()]
         file_ops.check_file_exists(trip_rates_path)
         file_ops.check_file_exists(mode_time_splits_path)
         if constraint_paths is not None:
             [file_ops.check_file_exists(x) for x in constraint_paths.values()]
 
         # Validate that we have data for all the years we're running for
-        for year in land_use_paths.keys():
+        for year in population_paths.keys():
             if constraint_paths is not None:
                 if year not in constraint_paths.keys():
                     raise ValueError(
@@ -162,12 +163,12 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
                     )
 
         # Assign
-        self.land_use_paths = land_use_paths
+        self.population_paths = population_paths
         self.trip_rates_path = trip_rates_path
         self.mode_time_splits_path = mode_time_splits_path
         self.constraint_paths = constraint_paths
         self.process_count = process_count
-        self.years = list(self.land_use_paths.keys())
+        self.years = list(self.population_paths.keys())
 
         # Make sure the reports paths exists
         report_home = os.path.join(export_home, "Reports")
@@ -368,11 +369,11 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
 
         # Read the land use data corresponding to the year
         pop = file_ops.read_df(
-            path=self.land_use_paths[year],
+            path=self.population_paths[year],
             find_similar=True,
         )
-        pop = pd_utils.reindex_cols(pop, self._target_col_dtypes['land_use'].keys())
-        for col, dt in self._target_col_dtypes['land_use'].items():
+        pop = pd_utils.reindex_cols(pop, self._target_col_dtypes['pop'].keys())
+        for col, dt in self._target_col_dtypes['pop'].items():
             pop[col] = pop[col].astype(dt)
 
         # Instantiate
@@ -541,7 +542,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
     }
 
     def __init__(self,
-                 hb_attractions_paths: Dict[int, nd.PathLike],
+                 hb_attraction_paths: Dict[int, nd.PathLike],
                  land_use_paths: Dict[int, nd.PathLike],
                  nhb_trip_rates_path: str,
                  nhb_time_splits_path: str,
@@ -554,7 +555,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
 
         Parameters
         ----------
-        hb_attractions_paths:
+        hb_attraction_paths:
             Dictionary of {year: notem_segmented_HB_attractions_data} pairs.
             These paths should come from nd.HBAttraction model and should
             be pickled Dvector paths.
@@ -588,7 +589,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
             Defaults to consts.PROCESS_COUNT.
         """
         # Check that the paths we need exist!
-        [file_ops.check_file_exists(x) for x in hb_attractions_paths.values()]
+        [file_ops.check_file_exists(x) for x in hb_attraction_paths.values()]
         [file_ops.check_file_exists(x) for x in land_use_paths.values()]
         file_ops.check_file_exists(nhb_trip_rates_path)
         file_ops.check_file_exists(nhb_time_splits_path)
@@ -597,7 +598,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
             [file_ops.check_file_exists(x) for x in constraint_paths.values()]
 
         # Validate that we have data for all the years we're running for
-        for year in hb_attractions_paths.keys():
+        for year in hb_attraction_paths.keys():
             if year not in land_use_paths.keys():
                 raise ValueError(
                     "Year %d found given attractions: hb_attractions_paths\n"
@@ -614,13 +615,13 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
                     )
 
         # Assign
-        self.hb_attractions = hb_attractions_paths
+        self.hb_attraction_paths = hb_attraction_paths
         self.land_use_paths = land_use_paths
         self.nhb_trip_rates_path = nhb_trip_rates_path
         self.nhb_time_splits_path = nhb_time_splits_path
         self.constraint_paths = constraint_paths
         self.process_count = process_count
-        self.years = list(self.hb_attractions.keys())
+        self.years = list(self.hb_attraction_paths.keys())
 
         # Make sure the reports paths exists
         report_home = os.path.join(export_home, "Reports")
@@ -873,7 +874,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
 
         # ## CONVERT THE ATTRACTIONS INTO DESIRED FORMAT ## #
         # Read the notem segmented compressed pickle
-        hb_attr_notem = nd.from_pickle(self.hb_attractions[year])
+        hb_attr_notem = nd.from_pickle(self.hb_attraction_paths[year])
 
         # Remove time period and add in tfn_at
         hb_attr = hb_attr_notem.aggregate(hb_notem_no_output_seg)
