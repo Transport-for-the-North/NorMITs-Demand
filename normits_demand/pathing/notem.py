@@ -306,6 +306,17 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
             'mode_splits_path': os.path.join(import_home, mode_split),
         }
 
+    def generate_nhb_attraction_imports(self) -> Dict[str, nd.PathLike]:
+        """
+        Generates input paths for non-home based attraction model
+
+        Note that no import paths are currently needed for this model
+
+        See NoTEMImportPathsBase.generate_hb_attraction_imports() for further
+        documentation
+        """
+        return dict()
+
 
 class NoTEMExportPaths:
     # Define the names of the export dirs

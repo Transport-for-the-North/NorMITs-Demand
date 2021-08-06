@@ -241,8 +241,8 @@ class NoTEM(NoTEMPaths):
         Runs non home based Attraction trip end models.
         """
         # ## GENERATE THE NEEDED PATHS ## #
-        # Runs the module to create import dictionary
-        imports = self.generate_nhb_attraction_imports()
+        # No Imports currently needed for this model!
+        # imports = self.generate_nhb_attraction_imports()
 
         # Get the hb attractions
         export_paths = self.hb_attraction.export_path
@@ -256,7 +256,7 @@ class NoTEM(NoTEMPaths):
         nhb_attr = NHBAttractionModel(
             hb_attraction_paths=hb_attraction_paths,
             nhb_production_paths=nhb_production_paths,
-            export_home=imports['export_path'],
+            export_home=self.nhb_attraction.export_paths.home,
             constraint_paths=None
         )
 
@@ -293,22 +293,3 @@ class NoTEM(NoTEMPaths):
             'export_path': self.nhb_production.export_paths.home
         }
         return imports_nhb_prod
-
-    def generate_nhb_attraction_imports(self) -> Dict[str, nd.PathLike]:
-        """
-        Creates inputs required for non home based attraction trip ends.
-
-        Creates dictionary containing import parameter and corresponding
-        file path as keys and values respectively for non home based attraction
-        trip ends.
-
-        Returns
-        -------
-        imports_nhb_attr:
-            A dictionary containing non home based attraction input parameters
-            and the corresponding file path.
-        """
-        imports_nhb_attr = {
-            'export_path': self.nhb_attraction.export_paths.home
-        }
-        return imports_nhb_attr
