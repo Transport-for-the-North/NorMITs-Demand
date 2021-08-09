@@ -34,7 +34,7 @@ from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.pathing import HBProductionModelPaths
 from normits_demand.pathing import NHBProductionModelPaths
-from normits_demand.pathing import WriteReports
+from normits_demand.core import WriteReports
 
 
 class HBProductionModel(HBProductionModelPaths, WriteReports):
@@ -206,7 +206,7 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
             - Optionally writes out a pickled DVector of "fully segmented demand"
               at self.export_paths.fully_segmented[year] if export_fully_segmented
               is True.
-            - Aggregates this demand into hb_notem_full_tfn segmentation,
+            - Aggregates this demand into self._return_segmentation_name segmentation,
               producing "notem segmented demand".
             - Optionally writes out a number of "notem segmented demand"
               reports, if reports is True.

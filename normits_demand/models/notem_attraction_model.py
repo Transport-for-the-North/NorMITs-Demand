@@ -36,7 +36,7 @@ from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.pathing import HBAttractionModelPaths
 from normits_demand.pathing import NHBAttractionModelPaths
-from normits_demand.pathing import WriteReports
+from normits_demand.core import WriteReports
 
 
 class HBAttractionModel(HBAttractionModelPaths, WriteReports):
