@@ -705,7 +705,7 @@ class NHBAttractionModel(NHBAttractionModelPaths, WriteReports):
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting pure NHB attractions reports to disk...\n",
+                    "Exporting pure NHB attractions reports to disk...",
                     verbose=verbose
                 )
 
@@ -732,7 +732,7 @@ class NHBAttractionModel(NHBAttractionModelPaths, WriteReports):
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting notem segmented attractions reports to disk...\n",
+                    "Exporting notem segmented attractions reports to disk...",
                     verbose=verbose
                 )
 
@@ -805,9 +805,9 @@ class NHBAttractionModel(NHBAttractionModelPaths, WriteReports):
         # Removing p1 and p7
         mask = (
             (hb_attr_notem_df['p'].astype(int) == 1)
-            & (hb_attr_notem_df['p'].astype(int) == 7)
+            | (hb_attr_notem_df['p'].astype(int) == 7)
         )
-        hb_attr_notem_df = hb_attr_notem_df[~mask].copy()
+        hb_attr_notem_df = hb_attr_notem_df[~mask].copy().reset_index(drop=True)
 
         # Adding 10 to the remaining purposes
         hb_attr_notem_df['p'] = hb_attr_notem_df['p'].astype(int) + 10
@@ -817,7 +817,7 @@ class NHBAttractionModel(NHBAttractionModelPaths, WriteReports):
             zoning_system=msoa_zoning,
             segmentation=nhb_notem_seg,
             import_data=hb_attr_notem_df,
-            zone_col="zone",
+            zone_col=hb_attr_notem.zoning_system.col_name,
             val_col="val",
             verbose=verbose,
         )

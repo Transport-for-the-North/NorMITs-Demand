@@ -33,6 +33,7 @@ class ZoningSystem:
     _zoning_system_import_fname = "zoning_systems"
     _zones_csv_fname = "zones.csv"
     _zones_compress_fname = "zones.pbz2"
+    _base_col_name = "%s_zone_id"
 
     _zoning_definitions_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
@@ -63,6 +64,7 @@ class ZoningSystem:
                  ) -> ZoningSystem:
         # Init
         self.name = name
+        self.col_name = self._base_col_name % name
         self.unique_zones = np.sort(unique_zones)
         self.n_zones = len(self.unique_zones)
 
@@ -73,9 +75,20 @@ class ZoningSystem:
     def __eq__(self, other) -> bool:
         """Overrides the default implementation"""
         # May need to update in future, but assume they are equal if names match
-        if isinstance(other, ZoningSystem):
-            return self.name == other.name
-        return False
+        if not isinstance(other, ZoningSystem):
+            return False
+
+        # Make sure names, unique zones, and n_zones are all the same
+        if self.name != other.name:
+            return False
+
+        if set(self.unique_zones) != set(other.unique_zones):
+            return False
+
+        if self.n_zones != other.n_zones:
+            return False
+
+        return True
 
     def __ne__(self, other) -> bool:
         """Overrides the default implementation"""

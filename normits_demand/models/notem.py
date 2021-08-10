@@ -32,13 +32,6 @@ from normits_demand.utils import general as du
 
 
 class NoTEM(NoTEMPaths):
-    # Constants
-    _nhb_prod = "NHB_Productions"
-    _nhb_attr = "NHB_Attractions"
-    _nhb_prod_trip_rate_fname = "nhb_ave_wday_enh_trip_rates_v1.5.csv"
-    _nhb_prod_time_split_fname = "tfn_nhb_ave_week_time_split_18_v1.5.csv"
-
-    _hb_prod = "HB_Productions"
 
     def __init__(self,
                  years: List[int],

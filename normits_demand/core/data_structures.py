@@ -316,18 +316,20 @@ class DVector:
 
         else:
             # Generate the data on a per segment basis
-            dvec_chunk = dict()
+            dvec_chunk = dict.fromkeys(df_chunk[self._segment_col].tolist())
 
             for segment in df_chunk['segment'].unique():
+                # Get all available pop for this segment
+                seg_data = df_chunk[df_chunk[self._segment_col] == segment].copy()
+
                 # Check that it's a valid segment_name
                 if segment not in self.segmentation.segment_names:
                     raise ValueError(
                         "%s is not a valid segment name for a Dvector using %s "
-                        "segmentation" % (segment, self.segmentation.name)
+                        "segmentation.\n Data with segment:\n%s"
+                        % (segment, self.segmentation.name, seg_data)
                     )
 
-                # Get all available pop for this segment
-                seg_data = df_chunk[df_chunk[self._segment_col] == segment].copy()
 
                 # TODO(BT): There's a VERY slight chance that duplicate zones
                 #  could be split across processes. Need to add a check for
@@ -430,7 +432,7 @@ class DVector:
             'desc': "Converting df to dvec",
             'unit': "segment",
             'disable': (not self._debugging_mp_code),
-            'total': math.ceil(len(df) / chunk_size)
+            'total': math.ceil(len(df) / chunk_size),
         }
 
         # ## MULTIPROCESS THE DATA CONVERSION ## #
@@ -561,7 +563,10 @@ class DVector:
         col_names = list(self.segmentation.get_seg_dict(list(self.data.keys())[0]).keys())
         col_names = col_names + [self._val_col]
         if self.zoning_system is not None:
-            col_names = [self._zone_col] + col_names
+            zone_col = self.zoning_system.col_name
+            col_names = [zone_col] + col_names
+        else:
+            zone_col = None
 
         # ## MULTIPROCESS ## #
         # Define chunk size
@@ -590,7 +595,7 @@ class DVector:
                 'self_segmentation': self.segmentation.copy(),
                 'col_names': col_names.copy(),
                 'val_col': self._val_col,
-                'zone_col': self._zone_col,
+                'zone_col': zone_col,
             })
 
         # Define pbar

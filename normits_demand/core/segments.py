@@ -15,6 +15,7 @@ from __future__ import annotations
 
 # Builtins
 import os
+import math
 import itertools
 import collections
 
@@ -31,6 +32,7 @@ import numpy as np
 import normits_demand as nd
 
 from normits_demand import constants as consts
+from normits_demand.concurrency import multiprocessing
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
@@ -119,10 +121,20 @@ class SegmentationLevel:
 
     def __eq__(self, other) -> bool:
         """Overrides the default implementation"""
-        # May need to update in future, but assume they are equal if names match
-        if isinstance(other, SegmentationLevel):
-            return self.name == other.name
-        return False
+        if not isinstance(other, SegmentationLevel):
+            return False
+
+        # Make sure names, naming order, and segment names are all the same
+        if self.name != other.name:
+            return False
+
+        if set(self.naming_order) != set(other.naming_order):
+            return False
+
+        if set(self.segment_names) != set(other.segment_names):
+            return False
+
+        return True
 
     def __ne__(self, other) -> bool:
         """Overrides the default implementation"""
@@ -458,6 +470,9 @@ class SegmentationLevel:
     def create_segment_col(self,
                            df: pd.DataFrame,
                            naming_conversion: Dict[str, str] = None,
+                           chunk_size: int = int(3e6),
+                           process_count: int = consts.PROCESS_COUNT,
+                           check_all_segments: bool = False,
                            ) -> pd.Series:
         """
         Creates a pd.Series of segment names based on columns in df
@@ -477,6 +492,16 @@ class SegmentationLevel:
             A dictionary mapping segment names in self.naming order into
             df columns names. e.g.
             {segment_name: column_name}
+
+        chunk_size:
+            How big each chunk should be when joining the columns.
+            This is used to prevent hitting memory limits when joining the cols,
+            which can happen for large dataframes.
+
+        process_count:
+            The number of processes to use when splitting df into chunk_size
+            chunks. Negative numbers are that name less than all cores, and
+            0 can be used to determine that no multiprocessing should be used.
 
         Returns
         -------
@@ -505,8 +530,42 @@ class SegmentationLevel:
         # Rename columns as needed
         df = self.rename_segment_cols(df, naming_conversion, inplace=False)
 
-        # Generate the naming column, and return
-        return pd_utils.str_join_cols(df, self.naming_order)
+        # Create the segment col in chunks to avoid memory issues
+        total = math.ceil(len(df) / chunk_size)
+        pbar_kwargs = {
+            'desc': 'Creating Segment Cols',
+            'total': total,
+            'disable': True,
+        }
+
+        kwarg_list = list()
+        for df_chunk in pd_utils.chunk_df(df, chunk_size):
+            kwarg_list.append({
+                'df': df_chunk,
+                'columns': self.naming_order.copy(),
+            })
+
+        ph = multiprocessing.multiprocess(
+            fn=pd_utils.str_join_cols,
+            kwargs=kwarg_list,
+            process_count=process_count,
+            pbar_kwargs=pbar_kwargs,
+        )
+
+        # Generate the naming column
+        segment_col = pd.concat(ph, ignore_index=False)
+
+        if check_all_segments:
+            if not self.is_correct_naming(segment_col.to_list()):
+                raise SegmentationError(
+                    "Some segment names seem to have gone missing during "
+                    "while generating the segment col.\n"
+                    "Expected %s segments.\n"
+                    "Found %s segments."
+                    % (len(self.segment_names), len(segment_col))
+                )
+
+        return segment_col
 
     def get_seg_dict(self, segment_name: str) -> Dict[str, Any]:
         """
