@@ -42,7 +42,7 @@ def main():
         export_home=notem_export_home,
     )
     n.run(
-        generate_all=True,
+        generate_all=False,
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,

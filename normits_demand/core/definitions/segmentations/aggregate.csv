@@ -9,3 +9,4 @@ pure_nhb_demand,pure_nhb_demand_reporting,nhb_p;nhb_m;g;soc;ns;ca,tfn_at:tfn_agg
 full_nhb,nhb_notem_output,p;m;g;soc;ns;ca;tp,nhb_p:p;nhb_m:m;
 full_nhb_tfnat,full_nhb,nhb_p;nhb_m;g;soc;ns;ca;tp,
 hb_notem_output,hb_p_m_tp,p;m;tp,
+nhb_notem_output,nhb_p_m_tp,p;m;tp,

@@ -300,7 +300,7 @@ class NoTEM(NoTEMExportPaths):
 
         nhb_attr.run(
             export_nhb_pure_attractions=True,
-            export_notem_segmentation=False,
+            export_notem_segmentation=True,
             export_reports=True,
             verbose=verbose,
         )
