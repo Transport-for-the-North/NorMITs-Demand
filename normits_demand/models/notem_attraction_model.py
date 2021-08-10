@@ -16,7 +16,7 @@ from __future__ import annotations
 
 # Builtins
 import os
-import math
+import warnings
 
 from typing import Dict
 from typing import List
@@ -303,7 +303,7 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
 
             # ## ATTRACTIONS TOTAL CHECK ## #
             if not pure_attractions.sum_is_close(fully_segmented):
-                raise ValueError(
+                warnings.warn(
                     "The attraction totals before and after mode split are not same.\n"
                     "Expected %f\n"
                     "Got %f"

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 # Builtins
 import os
+import warnings
 
 from typing import Dict
 from typing import List
@@ -282,6 +283,15 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
             du.print_w_toggle("Splitting by mode and time...", verbose=verbose)
             fully_segmented = self._split_by_tp_and_mode(pure_demand)
 
+            # ## PRODUCTIONS TOTAL CHECK ## #
+            if not pure_demand.sum_is_close(fully_segmented):
+                warnings.warn(
+                    "The production totals before and after mode time split are not same.\n"
+                    "Expected %f\n"
+                    "Got %f"
+                    % (pure_demand.sum(), fully_segmented.sum())
+                )
+
             # Output productions before any aggregation
             if export_fully_segmented:
                 du.print_w_toggle(
@@ -480,7 +490,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
 
         Attributes
         ----------
-        hb_attractions_paths:
+        hb_attraction_paths:
             Dictionary of {year: notem_segmented_HB_attractions_data} pairs.
             As passed into the constructor.
 
@@ -737,6 +747,15 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
             # ## SPLIT NHB PURE DEMAND BY TIME ## #
             du.print_w_toggle("Splitting by time...", verbose=verbose)
             fully_segmented = self._split_by_tp(pure_nhb_demand)
+
+            # ## PRODUCTIONS TOTAL CHECK ## #
+            if not pure_nhb_demand.sum_is_close(fully_segmented):
+                warnings.warn(
+                    "The NHB production totals before and after time split are not same.\n"
+                    "Expected %f\n"
+                    "Got %f"
+                    % (pure_nhb_demand.sum(), fully_segmented.sum())
+                )
 
             if export_fully_segmented:
                 du.print_w_toggle(

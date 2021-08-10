@@ -75,7 +75,7 @@ class DVector:
                  infill: Any = 0,
                  process_count: int = consts.PROCESS_COUNT,
                  verbose: bool = False,
-                 ) -> DVector:
+                 ) -> None:
         """
         Validates the input arguments and creates a DVector
 
@@ -842,7 +842,7 @@ class DVector:
                      other: nd.DVector,
                      rel_tol: float = 0.0001,
                      abs_tol: float = 0.0,
-                     ) -> None:
+                     ) -> bool:
         """Checks if the sum() of other is similar to sum() of self
 
         Whether or not two values are considered close is determined
