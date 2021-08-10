@@ -1369,6 +1369,43 @@ class DVector:
             verbose=self.verbose,
         )
 
+    def write_sector_reports(self,
+                             segment_totals_path: nd.PathLike,
+                             ca_sector_path: nd.PathLike,
+                             ie_sector_path: nd.PathLike,
+                             ) -> None:
+        """
+        Writes segment, CA sector, and IE sector reports to disk
+
+        Parameters
+        ----------
+        segment_totals_path:
+            Path to write the segment totals report to
+
+        ca_sector_path:
+            Path to write the CA sector report to
+
+        ie_sector_path:
+            Path to write the IE sector report to
+
+        Returns
+        -------
+        None
+        """
+        # Segment totals report
+        df = self.sum_zoning().to_df()
+        df.to_csv(segment_totals_path, index=False)
+
+        # Segment by CA Sector total reports
+        tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
+        df = self.translate_zoning(tfn_ca_sectors)
+        df.to_df().to_csv(ca_sector_path, index=False)
+
+        # Segment by IE Sector total reports
+        ie_sectors = nd.get_zoning_system('ie_sector')
+        df = self.translate_zoning(ie_sectors).to_df()
+        df.to_csv(ie_sector_path, index=False)
+
 
 class DVectorError(nd.NormitsDemandError):
     """
@@ -1462,47 +1499,3 @@ def from_pickle(path: nd.PathLike) -> Union[DVector, Any]:
     with open(path, 'rb') as f:
         obj = pickle.load(f)
     return obj
-
-
-class WriteReports:
-
-    def write_reports(self,
-                      dvec,
-                      segment_totals_path: nd.PathLike,
-                      ca_sector_path: nd.PathLike,
-                      ie_sector_path: nd.PathLike,
-                      ) -> None:
-        """
-        Writes segment, CA sector, and IE sector reports to disk
-
-        Parameters
-        ----------
-        dvec:
-            The Dvector to write the reports for
-
-        segment_totals_path:
-            Path to write the segment totals report to
-
-        ca_sector_path:
-            Path to write the CA sector report to
-
-        ie_sector_path:
-            Path to write the IE sector report to
-
-        Returns
-        -------
-        None
-        """
-        # Segment totals report
-        df = dvec.sum_zoning().to_df()
-        df.to_csv(segment_totals_path, index=False)
-
-        # Segment by CA Sector total reports
-        tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-        df = dvec.translate_zoning(tfn_ca_sectors)
-        df.to_df().to_csv(ca_sector_path, index=False)
-
-        # Segment by IE Sector total reports
-        ie_sectors = nd.get_zoning_system('ie_sector')
-        df = dvec.translate_zoning(ie_sectors).to_df()
-        df.to_csv(ie_sector_path, index=False)

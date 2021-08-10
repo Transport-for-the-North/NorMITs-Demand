@@ -27,8 +27,6 @@ from normits_demand.models import NHBAttractionModel
 
 from normits_demand.pathing import NoTEMExportPaths
 
-from normits_demand.utils import general as du
-
 
 class NoTEM(NoTEMExportPaths):
     _running_report_fname = 'running_parameters.txt'

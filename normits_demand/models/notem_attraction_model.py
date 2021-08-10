@@ -36,10 +36,9 @@ from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.pathing import HBAttractionModelPaths
 from normits_demand.pathing import NHBAttractionModelPaths
-from normits_demand.core import WriteReports
 
 
-class HBAttractionModel(HBAttractionModelPaths, WriteReports):
+class HBAttractionModel(HBAttractionModelPaths):
     """The Home-Based Attraction Model of NoTEM
 
         The attraction model can be ran by calling the class run() method.
@@ -290,8 +289,7 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
                     verbose=verbose
                 )
                 pure_demand_paths = self.report_paths.pure_demand
-                self.write_reports(
-                    dvec=pure_attractions,
+                pure_attractions.write_sector_reports(
                     segment_totals_path=pure_demand_paths.segment_total[year],
                     ca_sector_path=pure_demand_paths.ca_sector[year],
                     ie_sector_path=pure_demand_paths.ie_sector[year],
@@ -339,8 +337,7 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
                 )
 
                 notem_segmented_paths = self.report_paths.notem_segmented
-                self.write_reports(
-                    dvec=notem_segmented,
+                notem_segmented.write_sector_reports(
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
@@ -532,7 +529,7 @@ class HBAttractionModel(HBAttractionModelPaths, WriteReports):
         return a_dvec.balance_at_segments(p_dvec, split_weekday_weekend=True)
 
 
-class NHBAttractionModel(NHBAttractionModelPaths, WriteReports):
+class NHBAttractionModel(NHBAttractionModelPaths):
     """The Non Home-Based Attraction Model of NoTEM
 
         The attraction model can be ran by calling the class run() method.
@@ -710,8 +707,7 @@ class NHBAttractionModel(NHBAttractionModelPaths, WriteReports):
                 )
 
                 pure_demand_paths = self.report_paths.pure_demand
-                self.write_reports(
-                    dvec=pure_nhb_attr,
+                pure_nhb_attr.write_sector_reports(
                     segment_totals_path=pure_demand_paths.segment_total[year],
                     ca_sector_path=pure_demand_paths.ca_sector[year],
                     ie_sector_path=pure_demand_paths.ie_sector[year],
@@ -737,8 +733,7 @@ class NHBAttractionModel(NHBAttractionModelPaths, WriteReports):
                 )
 
                 notem_segmented_paths = self.report_paths.notem_segmented
-                self.write_reports(
-                    dvec=notem_segmented,
+                notem_segmented.write_sector_reports(
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],

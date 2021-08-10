@@ -35,10 +35,9 @@ from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.pathing import HBProductionModelPaths
 from normits_demand.pathing import NHBProductionModelPaths
-from normits_demand.core import WriteReports
 
 
-class HBProductionModel(HBProductionModelPaths, WriteReports):
+class HBProductionModel(HBProductionModelPaths):
     """The Home-Based Production Model of NoTEM
 
     The production model can be ran by calling the class run() method.
@@ -272,8 +271,7 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
 
                 tfn_agg_at_seg = nd.get_segmentation_level('pure_demand_reporting')
                 pure_demand_paths = self.report_paths.pure_demand
-                self.write_reports(
-                    dvec=pure_demand.aggregate(tfn_agg_at_seg),
+                pure_demand.aggregate(tfn_agg_at_seg).write_sector_reports(
                     segment_totals_path=pure_demand_paths.segment_total[year],
                     ca_sector_path=pure_demand_paths.ca_sector[year],
                     ie_sector_path=pure_demand_paths.ie_sector[year],
@@ -321,8 +319,7 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
                 )
 
                 notem_segmented_paths = self.report_paths.notem_segmented
-                self.write_reports(
-                    dvec=productions,
+                productions.write_sector_reports(
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
@@ -483,7 +480,7 @@ class HBProductionModel(HBProductionModelPaths, WriteReports):
         )
 
 
-class NHBProductionModel(NHBProductionModelPaths, WriteReports):
+class NHBProductionModel(NHBProductionModelPaths):
     """The Non Home-Based Production Model of NoTEM
 
         The production model can be ran by calling the class run() method.
@@ -737,8 +734,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
 
                 tfn_agg_at_seg = nd.get_segmentation_level('pure_nhb_demand_reporting')
                 pure_demand_paths = self.report_paths.pure_demand
-                self.write_reports(
-                    dvec=pure_nhb_demand.aggregate(tfn_agg_at_seg),
+                pure_nhb_demand.aggregate(tfn_agg_at_seg).write_sector_reports(
                     segment_totals_path=pure_demand_paths.segment_total[year],
                     ca_sector_path=pure_demand_paths.ca_sector[year],
                     ie_sector_path=pure_demand_paths.ie_sector[year],
@@ -781,8 +777,7 @@ class NHBProductionModel(NHBProductionModelPaths, WriteReports):
                 )
 
                 notem_segmented_paths = self.report_paths.notem_segmented
-                self.write_reports(
-                    dvec=notem_segmented,
+                notem_segmented.write_sector_reports(
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
