@@ -25,22 +25,20 @@ from normits_demand.models import NHBProductionModel
 from normits_demand.models import HBAttractionModel
 from normits_demand.models import NHBAttractionModel
 
-from normits_demand.pathing import NoTEMPaths
+from normits_demand.pathing import NoTEMExportPaths
 
-from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
 
 
-class NoTEM(NoTEMPaths):
+class NoTEM(NoTEMExportPaths):
+    _running_report_fname = 'running_parameters.txt'
 
     def __init__(self,
                  years: List[int],
                  scenario: str,
-                 import_home: nd.PathLike,
+                 iteration_name: str,
+                 import_builder: nd.pathing.NoTEMImportPathsBase,
                  export_home: nd.PathLike,
-
-                 *args,
-                 **kwargs,
                  ):
         """
         Assigns the attributes needed for NoTEM model.
@@ -51,34 +49,85 @@ class NoTEM(NoTEMPaths):
             List of years to run NoTEM for. Will assume that the smallest
             year is the base year.
 
+        iteration_name:
+            The name of this iteration of the NoTEM models. Will have 'iter'
+            prepended to create the folder name. e.g. if iteration_name was
+            set to '3i' the iteration folder would be called 'iter3i'.
+
         scenario:
             The name of the scenario to run for.
 
-        land_use_import_home:
-            Path to the base directory of land use outputs.
+        import_builder:
+            A subclass of nd.pathing.NoTEMImportPathsBase. This class will
+            be called on to build and grab all of the import paths for each
+            model. See the aforementioned class for full detail on how an
+            implementation of this class should look. Also see
+            nd.pathing.NoTEMImportPaths for an example implementation.
 
-        by_land_use_iter:
-            String containing base year land use iteration Eg: 'iter3b'.
-
-        fy_land_use_iter:
-            String containing future year land use iteration Eg: 'iter3b'.
+        export_home:
+            The home where all the export paths should be built from. See
+            nd.pathing.NoTEMExportPaths for more info on how these paths
+            will be built.
         """
         # Validate inputs
-        file_ops.check_path_exists(import_home)
+        if not isinstance(import_builder, nd.pathing.NoTEMImportPathsBase):
+            raise ValueError(
+                'import_home is not the correct type. Expected '
+                '"nd.pathing.NoTEMImportPathsBase", but got %s'
+                % type(import_builder)
+            )
 
         # Assign
         self.years = years
         self.scenario = scenario
+        self.import_builder = import_builder
 
         # Generate the import and export paths
         super().__init__(
-            years=self.years,
-            scenario=self.scenario,
-            import_home=import_home,
             export_home=export_home,
-            *args,
-            **kwargs,
+            path_years=self.years,
+            scenario=scenario,
+            iteration_name=iteration_name,
         )
+
+        self._write_running_report()
+
+    def _write_running_report(self):
+        """
+        Outputs a simple report detailing inputs and outputs
+        """
+        # Define the lines to output
+        out_lines = [
+            'Code Version: %s' % str(nd.__version__),
+            'NoTEM Iteration: %s' % str(self.iteration_name),
+            'Scenario: %s' % str(self.scenario),
+            'NoTEM Iteration: %s' % str(self.iteration_name),
+            '',
+            '### HB Productions ###',
+            'import_files: %s' % self.import_builder.generate_hb_production_imports(),
+            'vector_export: %s' % self.hb_production.export_paths.home,
+            'report_export: %s' % self.hb_production.report_paths.home,
+            '',
+            '### HB Attractions ###',
+            'import_files: %s' % self.import_builder.generate_hb_attraction_imports(),
+            'vector_export: %s' % self.hb_attraction.export_paths.home,
+            'report_export: %s' % self.hb_attraction.report_paths.home,
+            '',
+            '### NHB Productions ###',
+            'import_files: %s' % self.import_builder.generate_nhb_production_imports(),
+            'vector_export: %s' % self.nhb_production.export_paths.home,
+            'report_export: %s' % self.nhb_production.report_paths.home,
+            '',
+            '### NHB Attractions ###',
+            'import_files: %s' % self.import_builder.generate_nhb_attraction_imports(),
+            'vector_export: %s' % self.nhb_attraction.export_paths.home,
+            'report_export: %s' % self.nhb_attraction.report_paths.home,
+        ]
+
+        # Write out to disk
+        output_path = os.path.join(self.export_home, self._running_report_fname)
+        with open(output_path, 'w') as out:
+            out.write('\n'.join(out_lines))
 
     def run(self,
             generate_all: bool = False,
@@ -154,7 +203,7 @@ class NoTEM(NoTEMPaths):
         """
         Runs home based Production trip end models
         """
-        import_files = self.generate_hb_production_imports()
+        import_files = self.import_builder.generate_hb_production_imports()
 
         # Runs the home based Production model
         hb_prod = HBProductionModel(
@@ -177,7 +226,7 @@ class NoTEM(NoTEMPaths):
         """
         # ## GENERATE THE NEEDED PATHS ## #
         # Runs the module to create import dictionary
-        imports = self.generate_hb_attraction_imports()
+        imports = self.import_builder.generate_hb_attraction_imports()
 
         # Get the hb productions
         export_paths = self.hb_production.export_paths
@@ -205,7 +254,7 @@ class NoTEM(NoTEMPaths):
         """
         # ## GENERATE THE NEEDED PATHS ## #
         # Runs the module to create import dictionary
-        imports = self.generate_nhb_production_imports()
+        imports = self.import_builder.generate_nhb_production_imports()
 
         # Get the hb attractions
         export_paths = self.hb_attraction.export_paths

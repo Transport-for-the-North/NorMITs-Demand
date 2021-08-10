@@ -2,11 +2,13 @@
 Temporary file for testing notem
 """
 from normits_demand.models import notem
+from normits_demand.pathing import NoTEMImportPaths
 
 
 # GLOBAL VARIABLES
-year = [2018]
+years = [2018]
 scenario = "NTEM"
+notem_iter = '4'
 lu_drive = "I:/"
 by_iteration = "iter3d"
 fy_iteration = "iter3d"
@@ -20,18 +22,24 @@ def main():
     hb_attraction_import_version = '1.5'
     nhb_production_import_version = '1.5'
 
-    n = notem.NoTEM(
-        years=year,
+    import_builder = NoTEMImportPaths(
+        import_home=notem_import_home,
         scenario=scenario,
+        years=years,
         land_use_import_home=lu_drive,
         by_land_use_iter=by_iteration,
         fy_land_use_iter=fy_iteration,
-        import_home=notem_import_home,
-        export_home=notem_export_home,
-
         hb_production_import_version=hb_production_import_version,
         hb_attraction_import_version=hb_attraction_import_version,
         nhb_production_import_version=nhb_production_import_version,
+    )
+
+    n = notem.NoTEM(
+        years=years,
+        scenario=scenario,
+        iteration_name=notem_iter,
+        import_builder=import_builder,
+        export_home=notem_export_home,
     )
     n.run(
         generate_all=True,

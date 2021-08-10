@@ -757,6 +757,6 @@ def create_folder(folder_path: nd.PathLike,
 
     os.makedirs(folder_path)
     du.print_w_toggle(
-        "New project folder created at %s" + folder_path,
+        "New project folder created at %s" % folder_path,
         verbose=verbose_create,
     )

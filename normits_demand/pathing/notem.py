@@ -189,6 +189,18 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
 
         fy_land_use_iter:
             String containing future year land use iteration name Eg: 'iter3b'.
+
+        hb_production_import_version:
+            The version of inputs to use for the HB production model.
+            e.g. '2.0'
+
+        hb_attraction_import_version:
+            The version of inputs to use for the HB attraction model.
+            e.g. '2.0'
+
+        nhb_production_import_version:
+            The version of inputs to use for the NHB production model.
+            e.g. '2.0'
         """
         # Validate inputs
         file_ops.check_path_exists(import_home)
@@ -351,7 +363,9 @@ class NoTEMExportPaths:
 
     def __init__(self,
                  path_years: List[int],
-                 export_home: nd.PathLike
+                 scenario: str,
+                 iteration_name: str,
+                 export_home: nd.PathLike,
                  ):
         """
         Builds the export paths for all the NoTEM sub-models
@@ -361,6 +375,15 @@ class NoTEMExportPaths:
         path_years:
             A list of the years the models are running for.
 
+        scenario:
+            The name of the scenario to run for.
+
+        iteration_name:
+            The name of this iteration of the NoTEM models. Will have 'iter'
+            prepended to create the folder name. e.g. if iteration_name was
+            set to '3i' the iteration folder would be called 'iter3i'.
+
+
         export_home:
             The home directory of all the export paths. A sub-directory will
             be made for each of the NoTEM sub models.
@@ -368,14 +391,19 @@ class NoTEMExportPaths:
         # Init
         file_ops.check_path_exists(export_home)
 
-        self.export_home = export_home
         self.path_years = path_years
+        self.scenario = scenario
+        self.iteration_name = du.create_iter_name(iteration_name)
+        self.export_home = os.path.join(export_home, self.iteration_name, self.scenario)
+        file_ops.create_folder(self.export_home)
 
         # ## BUILD ALL MODEL PATHS ## #
         # hb productions
-        hb_p_export_home = os.path.join(export_home, self._hb_productions_dir)
+        hb_p_export_home = os.path.join(self.export_home, self._hb_productions_dir)
         hb_p_report_home = os.path.join(hb_p_export_home, self._reports_dir)
+        file_ops.create_folder(hb_p_export_home)
         file_ops.create_folder(hb_p_report_home)
+
         self.hb_production = HBProductionModelPaths(
             path_years=path_years,
             export_home=hb_p_export_home,
@@ -383,9 +411,11 @@ class NoTEMExportPaths:
         )
 
         # nhb productions
-        nhb_p_export_home = os.path.join(export_home, self._nhb_productions_dir)
+        nhb_p_export_home = os.path.join(self.export_home, self._nhb_productions_dir)
         nhb_p_report_home = os.path.join(nhb_p_export_home, self._reports_dir)
+        file_ops.create_folder(nhb_p_export_home)
         file_ops.create_folder(nhb_p_report_home)
+
         self.nhb_production = NHBProductionModelPaths(
             path_years=path_years,
             export_home=nhb_p_export_home,
@@ -393,8 +423,9 @@ class NoTEMExportPaths:
         )
 
         # hb attractions
-        hb_a_export_home = os.path.join(export_home, self._hb_attractions_dir)
+        hb_a_export_home = os.path.join(self.export_home, self._hb_attractions_dir)
         hb_a_report_home = os.path.join(hb_a_export_home, self._reports_dir)
+        file_ops.create_folder(hb_a_export_home)
         file_ops.create_folder(hb_a_report_home)
 
         self.hb_attraction = HBAttractionModelPaths(
@@ -404,39 +435,15 @@ class NoTEMExportPaths:
         )
 
         # nhb attractions
-        nhb_a_export_home = os.path.join(export_home, self._nhb_attractions_dir)
+        nhb_a_export_home = os.path.join(self.export_home, self._nhb_attractions_dir)
         nhb_a_report_home = os.path.join(nhb_a_export_home, self._reports_dir)
+        file_ops.create_folder(nhb_a_export_home)
         file_ops.create_folder(nhb_a_report_home)
 
         self.nhb_attraction = NHBAttractionModelPaths(
             path_years=path_years,
             export_home=nhb_a_export_home,
             report_home=nhb_a_report_home,
-        )
-
-
-class NoTEMPaths(NoTEMExportPaths, NoTEMImportPaths):
-
-    def __init__(self,
-                 years: List[int],
-                 export_home: nd.PathLike,
-                 import_home: nd.PathLike,
-                 scenario: str,
-                 *args,
-                 **kwargs,
-                 ):
-        NoTEMExportPaths.__init__(
-            self,
-            path_years=years,
-            export_home=export_home,
-        )
-        NoTEMImportPaths.__init__(
-            self,
-            import_home=import_home,
-            scenario=scenario,
-            years=years,
-            *args,
-            **kwargs,
         )
 
 
