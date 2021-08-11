@@ -16,11 +16,10 @@ from __future__ import annotations
 
 # Builtins
 import os
-import math
+import warnings
 
 from typing import Dict
 from typing import List
-from typing import Tuple
 
 # Third party imports
 import pandas as pd
@@ -30,31 +29,60 @@ import normits_demand as nd
 
 from normits_demand import efs_constants as consts
 
-from normits_demand.utils import general as du
-from normits_demand.utils import file_ops
 from normits_demand.utils import timing
+from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
+from normits_demand.utils import pandas_utils as pd_utils
+
+from normits_demand.pathing import HBAttractionModelPaths
+from normits_demand.pathing import NHBAttractionModelPaths
 
 
-class HBAttractionModel:
-    # Constants
-    _trip_origin = 'hb'
-    _zoning_system = 'msoa'
+class HBAttractionModel(HBAttractionModelPaths):
+    """The Home-Based Attraction Model of NoTEM
 
-    # Segmentation names
-    _pure_attractions = 'pure_attractions'
-    _fully_segmented = 'fully_segmented'
-    _notem_segmented = 'notem_segmented'
+        The attraction model can be ran by calling the class run() method.
 
+        Attributes
+        ----------
+        employment_paths: Dict[int, nd.PathLike]:
+            Dictionary of {year: land_use_employment_data} pairs. As passed
+            into the constructor.
+
+        production_balance_paths: Dict[int, nd.PathLike]:
+            Dictionary of {year: path_to_production_to_control_to} pairs. As passed
+            into the constructor.
+
+        trip_weights_path: str
+            The path to the attraction trip weights. As passed into the constructor.
+
+        mode_splits_path: str
+            The path to attraction mode splits. As passed into the constructor.
+
+        constraint_paths: Dict[int, nd.PathLike]
+            Dictionary of {year: constraint_path} pairs. As passed into the
+            constructor.
+
+        process_count: int
+            The number of processes to create in the Pool. As passed into the
+            constructor.
+
+        years: List[int]
+            A list of years that the model will run for. Derived from the keys of
+            land_use_paths
+
+        See HBAttractionModelPaths for documentation on:
+            "path_years, export_home, report_home, export_paths, report_paths"
+        """
     # Define wanted columns
     _target_col_dtypes = {
-        # TODO: Check with BT on how to deal with year in column name
-        'land_use': {
+        'employment': {
             'msoa_zone_id': str,
             'employment_cat': str,
             'soc': int,
-            '2018': float
+            'people': float
         },
-        'trip_rate': {
+        'trip_weight': {
             'msoa_zone_id': str,
             'employment_cat': str,
             'purpose': int,
@@ -72,22 +100,18 @@ class HBAttractionModel:
     # Define segment renames needed
     _seg_rename = {
         'employment_cat': 'e_cat',
-        '2018': 'emp',
+        'people': 'people',
         'area_type': 'tfn_at',
         'purpose': 'p',
         'mode_share': 'split'
     }
 
-    # Define output fnames
-    _base_output_fname = '%s_%s_%s_%d_dvec.pkl'
-    _base_report_fname = '%s_%s_%d_%s.csv'
-
     def __init__(self,
-                 land_use_paths: Dict[int, nd.PathLike],
-                 control_production_paths: Dict[int, nd.PathLike],
-                 attraction_trip_rates_path: str,
+                 employment_paths: Dict[int, nd.PathLike],
+                 production_balance_paths: Dict[int, nd.PathLike],
+                 trip_weights_path: str,
                  mode_splits_path: str,
-                 export_path: str,
+                 export_home: str,
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
                  ) -> None:
@@ -96,27 +120,29 @@ class HBAttractionModel:
 
         Parameters
         ----------
-        land_use_paths:
+        employment_paths:
             Dictionary of {year: land_use_employment_data} pairs.
+            Should have the columns as defined in:
+            HBAttractionModel._target_cols['employment']
 
-        control_production_paths:
+        production_balance_paths:
             Dictionary of {year: path_to_production_to_control_to} pairs.
             These paths should be gotten from nd.HBProduction model.
             Must contain the same keys as land_use_paths, but it can contain
             more (any extras will be ignored).
             These productions will be used to control the produced attractions.
 
-        attraction_trip_rates_path:
-            The path to the attraction trip rates.
+        trip_weights_path:
+            The path to the attraction trip weights.
             Should have the columns as defined in:
-            HBAttractionModel._target_cols['trip_rate']
+            HBAttractionModel._target_cols['trip_weight']
 
         mode_splits_path:
             The path to attraction mode split.
             Should have the columns as defined in:
             HBAttractionModel._target_cols['mode_split']
 
-        export_path:
+        export_home:
             Path to export attraction outputs.
 
         constraint_paths:
@@ -131,18 +157,18 @@ class HBAttractionModel:
             should not exceed the number of cores available.
             Defaults to consts.PROCESS_COUNT.
         """
-        # Validate inputs
-        [file_ops.check_file_exists(x) for x in land_use_paths.values()]
-        [file_ops.check_file_exists(x) for x in control_production_paths.values()]
-        file_ops.check_file_exists(attraction_trip_rates_path)
+        # Check that the paths we need exist!
+        [file_ops.check_file_exists(x) for x in employment_paths.values()]
+        [file_ops.check_file_exists(x) for x in production_balance_paths.values()]
+        file_ops.check_file_exists(trip_weights_path)
         file_ops.check_file_exists(mode_splits_path)
-        file_ops.check_path_exists(export_path)
 
         if constraint_paths is not None:
             [file_ops.check_file_exists(x) for x in constraint_paths.values()]
 
-        for year in land_use_paths.keys():
-            if year not in control_production_paths.keys():
+        # Validate that we have data for all the years we're running for
+        for year in employment_paths.keys():
+            if year not in production_balance_paths.keys():
                 raise ValueError(
                     "Year %d found in land_use_paths\n"
                     "But not found in control_production_paths"
@@ -157,25 +183,24 @@ class HBAttractionModel:
                     )
 
         # Assign
-        self.land_use_paths = land_use_paths
-        self.control_production_paths = control_production_paths
-        self.attraction_trip_rates_path = attraction_trip_rates_path
+        self.employment_paths = employment_paths
+        self.production_balance_paths = production_balance_paths
+        self.trip_weights_path = trip_weights_path
         self.mode_splits_path = mode_splits_path
         self.constraint_paths = constraint_paths
-        self.export_path = export_path
-        self.report_path = os.path.join(export_path, "Reports")
         self.process_count = process_count
-        self.years = list(self.land_use_paths.keys())
+        self.years = list(self.employment_paths.keys())
 
-        # Create paths
-        du.create_folder(self.report_path, verbose=False)
+        # Make sure the reports paths exists
+        report_home = os.path.join(export_home, "Reports")
+        file_ops.create_folder(report_home)
 
-        # Initialise Output paths
-        # TODO(BT): Convert output paths into dictionaries
-        #  something like: self.reports['pure_attractions'][year]
-        self._create_output_paths(self.export_path, self.years)
-        self._create_pure_attractions_report_paths(self.report_path, self.years)
-        self._create_notem_segmented_report_paths(self.report_path, self.years)
+        # Build the output paths
+        super().__init__(
+            path_years=self.years,
+            export_home=export_home,
+            report_home=report_home,
+        )
 
     def run(self,
             export_pure_attractions: bool = True,
@@ -193,7 +218,7 @@ class HBAttractionModel:
             - Multiplies the employment and trip rates on relevant segments,
               producing "pure attractions".
             - Optionally writes out a pickled DVector of "pure attractions" at
-              self.pure_attractions_out[year]
+              self.export_paths.pure_demand[year]
             - Optionally writes out a number of "pure attractions" reports, if
               reports is True.
             - Reads in the mode splits given in the constructor.
@@ -202,11 +227,11 @@ class HBAttractionModel:
             - Checks the attraction totals before and after mode split and throws
               error if they don't match.
             - Optionally writes out a pickled DVector of "fully segmented attractions"
-              at self.fully_segmented_paths[year].
+              at self.export_paths.fully_segmented[year].
             - Balances "fully segmented attractions" to production notem segmentation,
               producing "notem segmented" attractions.
             - Optionally writes out a pickled DVector of "notem segmented attractions"
-              at self.notem_segmented_paths[year].
+              at self.export_paths.notem_segmented[year].
             - Optionally writes out a number of "notem segmented" reports, if
               reports is True.
 
@@ -214,19 +239,19 @@ class HBAttractionModel:
         ----------
         export_pure_attractions:
             Whether to export the pure attractions to disk or not.
-            Will be written out to: self.pure_attractions_out[year]
+            Will be written out to: self.export_paths.pure_demand[year]
 
         export_fully_segmented:
             Whether to export the fully segmented attractions to disk or not.
-            Will be written out to: self.fully_segmented_paths[year]
+            Will be written out to: self.export_paths.fully_segmented[year]
 
         export_notem_segmentation:
             Whether to export the notem segmented demand to disk or not.
-            Will be written out to: self.notem_segmented_paths[year]
+            Will be written out to: self.export_paths.notem_segmented[year]
 
         export_reports:
             Whether to output reports while running. All reports will be
-            written out to self.report_path.
+            written out to self.report_home.
 
         verbose:
             Whether to print progress bars during processing or not.
@@ -245,6 +270,8 @@ class HBAttractionModel:
 
         # Generate the attractions for each year
         for year in self.years:
+            year_start_time = timing.current_milli_time()
+
             # ## GENERATE PURE ATTRACTIONS ## #
             du.print_w_toggle("Loading the employment data...", verbose=verbose)
             emp_dvec = self._read_land_use_data(year, verbose=verbose)
@@ -254,31 +281,32 @@ class HBAttractionModel:
 
             if export_pure_attractions:
                 du.print_w_toggle("Exporting pure attractions to disk...", verbose=verbose)
-                pure_attractions.to_pickle(self.pure_attractions_paths[year])
+                pure_attractions.to_pickle(self.export_paths.pure_demand[year])
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting pure attractions reports disk...\n"
-                    "Total Attractions for year %d: %.4f"
-                    % (year, pure_attractions.sum()),
+                    "Exporting pure demand reports to disk...",
                     verbose=verbose
                 )
-
-                self._write_reports(
-                    dvec=pure_attractions,
-                    segment_totals_path=self.pd_report_segment_paths[year],
-                    ca_sector_path=self.pd_report_ca_sector_paths[year],
-                    ie_sector_path=self.pd_report_ie_sector_paths[year],
+                pure_demand_paths = self.report_paths.pure_demand
+                pure_attractions.write_sector_reports(
+                    segment_totals_path=pure_demand_paths.segment_total[year],
+                    ca_sector_path=pure_demand_paths.ca_sector[year],
+                    ie_sector_path=pure_demand_paths.ie_sector[year],
                 )
 
             # ## SPLIT PURE ATTRACTIONS BY MODE ## #
             du.print_w_toggle("Splitting by mode...", verbose=verbose)
             fully_segmented = self._split_by_mode(pure_attractions)
 
-            self._attractions_total_check(
-                pure_attractions=pure_attractions,
-                fully_segmented_attractions=fully_segmented,
-            )
+            # ## ATTRACTIONS TOTAL CHECK ## #
+            if not pure_attractions.sum_is_close(fully_segmented):
+                warnings.warn(
+                    "The attraction totals before and after mode split are not same.\n"
+                    "Expected %f\n"
+                    "Got %f"
+                    % (pure_attractions.sum(), fully_segmented.sum())
+                )
 
             # Output attractions before any aggregation
             if export_fully_segmented:
@@ -286,32 +314,33 @@ class HBAttractionModel:
                     "Exporting fully segmented attractions to disk...",
                     verbose=verbose,
                 )
-                fully_segmented.to_pickle(self.fully_segmented_paths[year])
+                fully_segmented.to_pickle(self.export_paths.fully_segmented[year])
 
             # Control the attractions to the productions - this also adds in
             # some segmentation to bring it in line with the productions
             notem_segmented = self._attractions_balance(
                 a_dvec=fully_segmented,
-                p_dvec_path=self.control_production_paths[year],
+                p_dvec_path=self.production_balance_paths[year],
             )
 
             if export_notem_segmentation:
-                du.print_w_toggle("Exporting notem segmented attractions to disk...", verbose=verbose)
-                notem_segmented.to_pickle(self.notem_segmented_paths[year])
+                du.print_w_toggle(
+                    "Exporting notem segmented attractions to disk...",
+                    verbose=verbose
+                )
+                notem_segmented.to_pickle(self.export_paths.notem_segmented[year])
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting notem segmented attractions reports disk...\n"
-                    "Total Attractions for year %d: %.4f"
-                    % (year, notem_segmented.sum()),
+                    "Exporting notem segmented reports to disk...",
                     verbose=verbose
                 )
 
-                self._write_reports(
-                    dvec=notem_segmented,
-                    segment_totals_path=self.notem_report_segment_paths[year],
-                    ca_sector_path=self.notem_report_ca_sector_paths[year],
-                    ie_sector_path=self.notem_report_ie_sector_paths[year],
+                notem_segmented_paths = self.report_paths.notem_segmented
+                notem_segmented.write_sector_reports(
+                    segment_totals_path=notem_segmented_paths.segment_total[year],
+                    ca_sector_path=notem_segmented_paths.ca_sector[year],
+                    ie_sector_path=notem_segmented_paths.ie_sector[year],
                 )
 
             # TODO: Bring in constraints (Validation)
@@ -322,12 +351,22 @@ class HBAttractionModel:
                     "No code implemented to constrain attractions."
                 )
 
-            # End timing
-            end_time = timing.current_milli_time()
-            du.print_w_toggle("Finished HB Attraction Model at: %s" % timing.get_datetime(),
-                              verbose=verbose)
-            du.print_w_toggle("HB Attraction Model took: %s"
-                              % timing.time_taken(start_time, end_time), verbose=verbose)
+            # Print timing stats for the year
+            year_end_time = timing.current_milli_time()
+            time_taken = timing.time_taken(year_start_time, year_end_time)
+            du.print_w_toggle(
+                "HB Attraction in year %s took: %s\n" % (year, time_taken),
+                verbose=verbose
+            )
+
+        # End timing
+        end_time = timing.current_milli_time()
+        time_taken = timing.time_taken(start_time, end_time)
+        du.print_w_toggle(
+            "HB Attraction Model took: %s\n"
+            "Finished at: %s" % (time_taken, timing.get_datetime()),
+            verbose=verbose
+        )
 
     def _read_land_use_data(self,
                             year: int,
@@ -354,11 +393,13 @@ class HBAttractionModel:
         emp_seg = nd.get_segmentation_level('lu_emp')
 
         # Read the land use data corresponding to the year
-        emp = du.safe_read_csv(
-            file_path=self.land_use_paths[year],
-            usecols=self._target_col_dtypes['land_use'].keys(),
-            dtype=self._target_col_dtypes['land_use'],
+        emp = file_ops.read_df(
+            path=self.employment_paths[year],
+            find_similar=True,
         )
+        emp = pd_utils.reindex_cols(emp, self._target_col_dtypes['employment'].keys())
+        for col, dt in self._target_col_dtypes['employment'].items():
+            emp[col] = emp[col].astype(dt)
 
         # Instantiate
         return nd.DVector(
@@ -366,7 +407,7 @@ class HBAttractionModel:
             segmentation=emp_seg,
             import_data=emp.rename(columns=self._seg_rename),
             zone_col="msoa_zone_id",
-            val_col="emp",
+            val_col="people",
             verbose=verbose,
         )
 
@@ -399,9 +440,9 @@ class HBAttractionModel:
         # Reading trip rates
         du.print_w_toggle("Reading in files...", verbose=verbose)
         trip_rates = du.safe_read_csv(
-            self.attraction_trip_rates_path,
-            usecols=self._target_col_dtypes['trip_rate'].keys(),
-            dtype=self._target_col_dtypes['trip_rate'],
+            self.trip_weights_path,
+            usecols=self._target_col_dtypes['trip_weight'].keys(),
+            dtype=self._target_col_dtypes['trip_weight'],
         )
 
         # ## CREATE THE TRIP RATES DVEC ## #
@@ -421,48 +462,6 @@ class HBAttractionModel:
         # Remove un-needed ecat column too
         pure_attractions_ecat = emp_dvec * trip_rates_dvec
         return pure_attractions_ecat.aggregate(pure_attractions_seg)
-
-    # TODO: module _write_reports is common for both production and attraction models, so it can be grouped elsewhere
-    @staticmethod
-    def _write_reports(dvec: nd.DVector,
-                       segment_totals_path: nd.PathLike,
-                       ca_sector_path: nd.PathLike,
-                       ie_sector_path: nd.PathLike,
-                       ) -> None:
-        """
-        Writes segment, CA sector, and IE sector reports to disk.
-
-        Parameters
-        ----------
-        dvec:
-            The Dvector to write the reports for.
-
-        segment_totals_path:
-            Path to write the segment totals report to.
-
-        ca_sector_path:
-            Path to write the CA sector report to.
-
-        ie_sector_path:
-            Path to write the IE sector report to.
-
-        Returns
-        -------
-        None
-        """
-        # Segment totals report
-        df = dvec.sum_zoning().to_df()
-        df.to_csv(segment_totals_path, index=False)
-
-        # Segment by CA Sector total reports
-        tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-        df = dvec.translate_zoning(tfn_ca_sectors)
-        df.to_df().to_csv(ca_sector_path, index=False)
-
-        # Segment by IE Sector total reports
-        ie_sectors = nd.get_zoning_system('ie_sector')
-        df = dvec.translate_zoning(ie_sectors).to_df()
-        df.to_csv(ie_sector_path, index=False)
 
     def _split_by_mode(self,
                        attractions: nd.DVector,
@@ -502,195 +501,6 @@ class HBAttractionModel:
         return attractions * mode_splits_dvec
 
     @staticmethod
-    def _attractions_total_check(pure_attractions: nd.DVector,
-                                 fully_segmented_attractions: nd.DVector,
-                                 rel_tol: float = 0.0001,
-                                 ) -> None:
-        """
-        Checks if totals match
-
-        Checks if the attraction totals are matching before and
-        after mode split and returns error message if they are unequal.
-
-        Parameters
-        -----------
-        pure_attractions:
-            Dvector containing pure attractions.
-
-        fully_segmented_attractions:
-            Dvector containing attractions after mode split.
-
-        rel_tol:
-            the relative tolerance – it is the maximum allowed difference
-            between the sum of pure_attractions and fully_segmented_attractions,
-            relative to the larger absolute value of pure_attractions or
-            fully_segmented_attractions. By default, this is set to 0.0001,
-            meaning the values must be within 0.01% of each other.
-        """
-        # Init
-        pa_sum = pure_attractions.sum()
-        fsa_sum = fully_segmented_attractions.sum()
-
-        # check
-        if not math.isclose(pa_sum, fsa_sum, rel_tol=rel_tol):
-            raise ValueError(
-                "The attraction totals before and after mode split are not same.\n"
-                "Expected %f\n"
-                "Got %f"
-                % (pa_sum, fsa_sum)
-            )
-
-    def _create_output_paths(self,
-                             export_path: nd.PathLike,
-                             years: List[int],
-                             ) -> None:
-        """
-        Creates output file paths for different segmentations.
-
-        Creates output file names for pure attractions, fully segmented
-        and notem segmented HB attraction outputs for the list of years.
-
-        Parameters
-        ----------
-        export_path:
-            Location where the output files are to be created.
-
-        years:
-            Contains the list of years for which the attraction model is run.
-
-        Returns
-        -------
-        None
-        """
-        # Init
-        base_fname = self._base_output_fname
-        fname_parts = [self._trip_origin, self._zoning_system]
-
-        self.pure_attractions_paths = dict()
-        self.fully_segmented_paths = dict()
-        self.notem_segmented_paths = dict()
-
-        for year in years:
-            # Pure attractions path
-            fname = base_fname % (*fname_parts, self._pure_attractions, year)
-            self.pure_attractions_paths[year] = os.path.join(export_path, fname)
-
-            # Fully Segmented path
-            fname = base_fname % (*fname_parts, self._fully_segmented, year)
-            self.fully_segmented_paths[year] = os.path.join(export_path, fname)
-
-            # Notem Segmented path
-            fname = base_fname % (*fname_parts, self._notem_segmented, year)
-            self.notem_segmented_paths[year] = os.path.join(export_path, fname)
-
-    # TODO: module _create_report_paths is common for both production and attraction models,
-    #  so it can be grouped elsewhere
-    def _create_report_paths(self,
-                             report_path: nd.PathLike,
-                             years: List[int],
-                             report_name: str,
-                             ) -> Tuple[Dict[int, str], Dict[int, str], Dict[int, str]]:
-        """
-        Creates report file paths for each of years
-
-        Parameters
-        ----------
-        report_path:
-           The home path (directory) where all the reports should go
-
-        years:
-           A list of years to generate report paths for
-
-        report_name:
-            The name to use in the report filename. Filenames will be named
-            as: [report_name, year, report_type], joined with '_'.
-
-        Returns
-        -------
-        segment_total_paths:
-            A dictionary of paths where the key is the year and the value is
-            the path to the segment total reports for year.
-
-        ca_sector_total_paths:
-            A dictionary of paths where the key is the year and the value is
-            the path to the ca sector segment total reports for year.
-
-        ie_sector_total_paths:
-            A dictionary of paths where the key is the year and the value is
-            the path to the IE sector segment total reports for year.
-        """
-        # Init
-        base_fname = self._base_report_fname
-        fname_parts = [self._trip_origin, report_name]
-
-        segment_total_paths = dict()
-        ca_sector_paths = dict()
-        ie_sector_paths = dict()
-
-        for year in years:
-            # Segment totals
-            fname = base_fname % (*fname_parts, year, "segment_totals")
-            segment_total_paths[year] = os.path.join(report_path, fname)
-
-            # CA sector totals
-            fname = base_fname % (*fname_parts, year, "ca_sector_totals")
-            ca_sector_paths[year] = os.path.join(report_path, fname)
-
-            # IE sector totals
-            fname = base_fname % (*fname_parts, year, "ie_sector_totals")
-            ie_sector_paths[year] = os.path.join(report_path, fname)
-
-        return segment_total_paths, ca_sector_paths, ie_sector_paths
-
-    def _create_pure_attractions_report_paths(self,
-                                              report_path: nd.PathLike,
-                                              years: List[int],
-                                              ) -> None:
-        """
-        Creates pure attractions report file paths for each of years
-
-        Parameters
-        ----------
-        report_path:
-            The home path (directory) where all the reports should go
-
-        years:
-            A list of years to generate report paths for
-
-        Returns
-        -------
-        None
-        """
-        paths = self._create_report_paths(report_path, years, self._pure_attractions)
-        self.pd_report_segment_paths = paths[0]
-        self.pd_report_ca_sector_paths = paths[1]
-        self.pd_report_ie_sector_paths = paths[2]
-
-    def _create_notem_segmented_report_paths(self,
-                                             report_path: nd.PathLike,
-                                             years: List[int],
-                                             ) -> None:
-        """
-        Creates notem_segmented report file paths for each of years
-
-        Parameters
-        ----------
-        report_path:
-            The home path (directory) where all the reports should go
-
-        years:
-            A list of years to generate report paths for
-
-        Returns
-        -------
-        None
-        """
-        paths = self._create_report_paths(report_path, years, self._notem_segmented)
-        self.notem_report_segment_paths = paths[0]
-        self.notem_report_ca_sector_paths = paths[1]
-        self.notem_report_ie_sector_paths = paths[2]
-
-    @staticmethod
     def _attractions_balance(a_dvec: nd.DVector,
                              p_dvec_path: str,
                              ) -> nd.DVector:
@@ -719,23 +529,36 @@ class HBAttractionModel:
         return a_dvec.balance_at_segments(p_dvec, split_weekday_weekend=True)
 
 
-class NHBAttractionModel:
-    # Constants
-    _trip_origin = 'nhb'
-    _zoning_system = 'msoa'
+class NHBAttractionModel(NHBAttractionModelPaths):
+    """The Non Home-Based Attraction Model of NoTEM
 
-    # Segmentation names
-    _pure_attractions = 'pure_attractions'
-    _notem_segmented = 'notem_segmented'
+        The attraction model can be ran by calling the class run() method.
 
-    # Define output fnames
-    _base_output_fname = '%s_%s_%s_%d_dvec.pkl'
-    _base_report_fname = '%s_%s_%d_%s.csv'
+        Attributes
+        ----------
+        hb_attraction_paths: Dict[int, nd.PathLike]:
+            Dictionary of {year: notem_segmented_HB_attractions_data} pairs. As passed
+            into the constructor.
 
+        nhb_production_paths: Dict[int, nd.PathLike]:
+            Dictionary of {year: notem_segmented_NHB_productions_data} pairs. As passed
+            into the constructor.
+
+        constraint_paths: Dict[int, nd.PathLike]
+            Dictionary of {year: constraint_path} pairs. As passed into the
+            constructor.
+
+        process_count: int
+            The number of processes to create in the Pool. As passed into the
+            constructor.
+
+        See NHBAttractionModelPaths for documentation on:
+            "path_years, export_home, report_home, export_paths, report_paths"
+        """
     def __init__(self,
                  hb_attraction_paths: Dict[int, nd.PathLike],
                  nhb_production_paths: Dict[int, nd.PathLike],
-                 export_path: str,
+                 export_home: str,
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
                  ) -> None:
@@ -755,7 +578,7 @@ class NHBAttractionModel:
             be pickled Dvector paths.
             These productions will be used to control the produced attractions.
 
-        export_path:
+        export_home:
             Path to export NHB attraction outputs.
 
         constraint_paths:
@@ -773,7 +596,6 @@ class NHBAttractionModel:
         # Check that the paths we need exist!
         [file_ops.check_file_exists(x) for x in hb_attraction_paths.values()]
         [file_ops.check_file_exists(x) for x in nhb_production_paths.values()]
-        file_ops.check_path_exists(export_path)
 
         if constraint_paths is not None:
             [file_ops.check_file_exists(x) for x in constraint_paths.values()]
@@ -799,19 +621,19 @@ class NHBAttractionModel:
         self.hb_attraction_paths = hb_attraction_paths
         self.nhb_production_paths = nhb_production_paths
         self.constraint_paths = constraint_paths
-        self.export_path = export_path
-        self.report_path = os.path.join(export_path, "Reports")
         self.process_count = process_count
         self.years = list(self.hb_attraction_paths.keys())
 
-        # Create paths
-        du.create_folder(self.report_path, verbose=False)
+        # Make sure the reports paths exists
+        report_home = os.path.join(export_home, "Reports")
+        file_ops.create_folder(report_home)
 
-        # Initialise Output paths
-        # TODO(BT): Convert output paths into dictionaries
-        #  something like: self.reports['pure_attractions'][year]
-        self._create_output_paths(self.export_path, self.years)
-        self._create_notem_segmented_report_paths(self.report_path, self.years)
+        # Build the output paths
+        super().__init__(
+            path_years=self.years,
+            export_home=export_home,
+            report_home=report_home,
+        )
 
     def run(self,
             export_nhb_pure_attractions: bool = True,
@@ -841,15 +663,15 @@ class NHBAttractionModel:
         ----------
         export_nhb_pure_attractions:
             Whether to export the pure attractions to disk or not.
-            Will be written out to: self.pure_attractions_out[year]
+            Will be written out to: self.export_paths.pure_demand[year]
 
         export_notem_segmentation:
             Whether to export the notem segmented demand to disk or not.
-            Will be written out to: self.notem_segmented_paths[year]
+            Will be written out to: self.export_paths.notem_segmented[year]
 
         export_reports:
             Whether to output reports while running. All reports will be
-            written out to self.report_path.
+            written out to self.report_home.
 
         verbose:
             Whether to print progress bars during processing or not.
@@ -868,27 +690,27 @@ class NHBAttractionModel:
 
         # Generate the nhb attractions for each year
         for year in self.years:
+            year_start_time = timing.current_milli_time()
+
             # ## GENERATE PURE ATTRACTIONS ## #
             du.print_w_toggle("Loading the HB attraction data...", verbose=verbose)
             pure_nhb_attr = self._create_nhb_attraction_data(year, verbose=verbose)
 
             if export_nhb_pure_attractions:
                 du.print_w_toggle("Exporting NHB pure attractions to disk...", verbose=verbose)
-                pure_nhb_attr.to_pickle(self.pure_attractions_paths[year])
+                pure_nhb_attr.to_pickle(self.export_paths.pure_demand[year])
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting pure NHB attractions reports to disk...\n"
-                    "Total Attractions for year %d: %.4f"
-                    % (year, pure_nhb_attr.sum()),
+                    "Exporting pure NHB attractions reports to disk...",
                     verbose=verbose
                 )
 
-                self._write_reports(
-                    dvec=pure_nhb_attr,
-                    segment_totals_path=self.pd_report_segment_paths[year],
-                    ca_sector_path=self.pd_report_ca_sector_paths[year],
-                    ie_sector_path=self.pd_report_ie_sector_paths[year],
+                pure_demand_paths = self.report_paths.pure_demand
+                pure_nhb_attr.write_sector_reports(
+                    segment_totals_path=pure_demand_paths.segment_total[year],
+                    ca_sector_path=pure_demand_paths.ca_sector[year],
+                    ie_sector_path=pure_demand_paths.ie_sector[year],
                 )
 
             # Control the attractions to the productions
@@ -898,22 +720,23 @@ class NHBAttractionModel:
             )
 
             if export_notem_segmentation:
-                du.print_w_toggle("Exporting notem segmented attractions to disk...", verbose=verbose)
-                notem_segmented.to_pickle(self.notem_segmented_paths[year])
+                du.print_w_toggle(
+                    "Exporting notem segmented attractions to disk...",
+                    verbose=verbose
+                )
+                notem_segmented.to_pickle(self.export_paths.notem_segmented[year])
 
             if export_reports:
                 du.print_w_toggle(
-                    "Exporting notem segmented attractions reports to disk...\n"
-                    "Total Attractions for year %d: %.4f"
-                    % (year, notem_segmented.sum()),
+                    "Exporting notem segmented attractions reports to disk...",
                     verbose=verbose
                 )
 
-                self._write_reports(
-                    dvec=notem_segmented,
-                    segment_totals_path=self.notem_report_segment_paths[year],
-                    ca_sector_path=self.notem_report_ca_sector_paths[year],
-                    ie_sector_path=self.notem_report_ie_sector_paths[year],
+                notem_segmented_paths = self.report_paths.notem_segmented
+                notem_segmented.write_sector_reports(
+                    segment_totals_path=notem_segmented_paths.segment_total[year],
+                    ca_sector_path=notem_segmented_paths.ca_sector[year],
+                    ie_sector_path=notem_segmented_paths.ie_sector[year],
                 )
 
             # TODO: Bring in constraints (Validation)
@@ -924,12 +747,22 @@ class NHBAttractionModel:
                     "No code implemented to constrain attractions."
                 )
 
-            # End timing
-            end_time = timing.current_milli_time()
-            du.print_w_toggle("Finished NHB Attraction Model at: %s" % timing.get_datetime(),
-                              verbose=verbose)
-            du.print_w_toggle("NHB Attraction Model took: %s"
-                              % timing.time_taken(start_time, end_time), verbose=verbose)
+            # Print timing stats for the year
+            year_end_time = timing.current_milli_time()
+            time_taken = timing.time_taken(year_start_time, year_end_time)
+            du.print_w_toggle(
+                "NHB Attraction in year %s took: %s\n" % (year, time_taken),
+                verbose=verbose
+            )
+
+        # End timing
+        end_time = timing.current_milli_time()
+        time_taken = timing.time_taken(start_time, end_time)
+        du.print_w_toggle(
+            "NHB Attraction Model took: %s\n"
+            "Finished at: %s" % (time_taken, end_time),
+            verbose=verbose
+        )
 
     def _create_nhb_attraction_data(self,
                                     year: int,
@@ -967,9 +800,9 @@ class NHBAttractionModel:
         # Removing p1 and p7
         mask = (
             (hb_attr_notem_df['p'].astype(int) == 1)
-            & (hb_attr_notem_df['p'].astype(int) == 7)
+            | (hb_attr_notem_df['p'].astype(int) == 7)
         )
-        hb_attr_notem_df = hb_attr_notem_df[~mask].copy()
+        hb_attr_notem_df = hb_attr_notem_df[~mask].copy().reset_index(drop=True)
 
         # Adding 10 to the remaining purposes
         hb_attr_notem_df['p'] = hb_attr_notem_df['p'].astype(int) + 10
@@ -979,197 +812,10 @@ class NHBAttractionModel:
             zoning_system=msoa_zoning,
             segmentation=nhb_notem_seg,
             import_data=hb_attr_notem_df,
-            zone_col="zone",
+            zone_col=hb_attr_notem.zoning_system.col_name,
             val_col="val",
             verbose=verbose,
         )
-
-    # TODO: module _write_reports is common for both production and attraction models, so it can be grouped elsewhere
-    @staticmethod
-    def _write_reports(dvec: nd.DVector,
-                       segment_totals_path: nd.PathLike,
-                       ca_sector_path: nd.PathLike,
-                       ie_sector_path: nd.PathLike,
-                       ) -> None:
-        """
-        Writes segment, CA sector, and IE sector reports to disk.
-
-        Parameters
-        ----------
-        dvec:
-            The Dvector to write the reports for.
-
-        segment_totals_path:
-            Path to write the segment totals report to.
-
-        ca_sector_path:
-            Path to write the CA sector report to.
-
-        ie_sector_path:
-            Path to write the IE sector report to.
-
-        Returns
-        -------
-        None
-        """
-        # Segment totals report
-        df = dvec.sum_zoning().to_df()
-        df.to_csv(segment_totals_path, index=False)
-
-        # Segment by CA Sector total reports
-        tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-        df = dvec.translate_zoning(tfn_ca_sectors)
-        df.to_df().to_csv(ca_sector_path, index=False)
-
-        # Segment by IE Sector total reports
-        ie_sectors = nd.get_zoning_system('ie_sector')
-        df = dvec.translate_zoning(ie_sectors).to_df()
-        df.to_csv(ie_sector_path, index=False)
-
-    def _create_output_paths(self,
-                             export_path: nd.PathLike,
-                             years: List[int],
-                             ) -> None:
-        """
-        Creates output file paths for different segmentations.
-
-        Creates output file names for pure attractions
-        and notem segmented HB attraction outputs for the list of years.
-
-        Parameters
-        ----------
-        export_path:
-            Location where the output files are to be created.
-
-        years:
-            Contains the list of years for which the attraction model is run.
-
-        Returns
-        -------
-        None
-        """
-        # Init
-        base_fname = self._base_output_fname
-        fname_parts = [self._trip_origin, self._zoning_system]
-
-        self.pure_attractions_paths = dict()
-        self.notem_segmented_paths = dict()
-
-        for year in years:
-            # Pure attractions path
-            fname = base_fname % (*fname_parts, self._pure_attractions, year)
-            self.pure_attractions_paths[year] = os.path.join(export_path, fname)
-
-            # Notem Segmented path
-            fname = base_fname % (*fname_parts, self._notem_segmented, year)
-            self.notem_segmented_paths[year] = os.path.join(export_path, fname)
-
-    # TODO: module _create_report_paths is common for both production and attraction models,
-    #  so it can be grouped elsewhere
-    def _create_report_paths(self,
-                             report_path: nd.PathLike,
-                             years: List[int],
-                             report_name: str,
-                             ) -> Tuple[Dict[int, str], Dict[int, str], Dict[int, str]]:
-        """
-        Creates report file paths for each of years
-
-        Parameters
-        ----------
-        report_path:
-           The home path (directory) where all the reports should go
-
-        years:
-           A list of years to generate report paths for
-
-        report_name:
-            The name to use in the report filename. Filenames will be named
-            as: [report_name, year, report_type], joined with '_'.
-
-        Returns
-        -------
-        segment_total_paths:
-            A dictionary of paths where the key is the year and the value is
-            the path to the segment total reports for year.
-
-        ca_sector_total_paths:
-            A dictionary of paths where the key is the year and the value is
-            the path to the ca sector segment total reports for year.
-
-        ie_sector_total_paths:
-            A dictionary of paths where the key is the year and the value is
-            the path to the IE sector segment total reports for year.
-        """
-        # Init
-        base_fname = self._base_report_fname
-        fname_parts = [self._trip_origin, report_name]
-
-        segment_total_paths = dict()
-        ca_sector_paths = dict()
-        ie_sector_paths = dict()
-
-        for year in years:
-            # Segment totals
-            fname = base_fname % (*fname_parts, year, "segment_totals")
-            segment_total_paths[year] = os.path.join(report_path, fname)
-
-            # CA sector totals
-            fname = base_fname % (*fname_parts, year, "ca_sector_totals")
-            ca_sector_paths[year] = os.path.join(report_path, fname)
-
-            # IE sector totals
-            fname = base_fname % (*fname_parts, year, "ie_sector_totals")
-            ie_sector_paths[year] = os.path.join(report_path, fname)
-
-        return segment_total_paths, ca_sector_paths, ie_sector_paths
-
-    def _create_pure_attractions_report_paths(self,
-                                              report_path: nd.PathLike,
-                                              years: List[int],
-                                              ) -> None:
-        """
-        Creates pure attractions report file paths for each of years
-
-        Parameters
-        ----------
-        report_path:
-            The home path (directory) where all the reports should go
-
-        years:
-            A list of years to generate report paths for
-
-        Returns
-        -------
-        None
-        """
-        paths = self._create_report_paths(report_path, years, self._pure_attractions)
-        self.pd_report_segment_paths = paths[0]
-        self.pd_report_ca_sector_paths = paths[1]
-        self.pd_report_ie_sector_paths = paths[2]
-
-    def _create_notem_segmented_report_paths(self,
-                                             report_path: nd.PathLike,
-                                             years: List[int],
-                                             ) -> None:
-        """
-        Creates notem_segmented report file paths for each of years
-
-        Parameters
-        ----------
-        report_path:
-            The home path (directory) where all the reports should go
-
-        years:
-            A list of years to generate report paths for
-
-        Returns
-        -------
-        None
-        """
-        paths = self._create_report_paths(report_path, years, self._notem_segmented)
-        self.notem_report_segment_paths = paths[0]
-        self.notem_report_ca_sector_paths = paths[1]
-        self.notem_report_ie_sector_paths = paths[2]
 
     @staticmethod
     def _attractions_balance(a_dvec: nd.DVector,

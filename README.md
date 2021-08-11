@@ -129,3 +129,4 @@ as part of their file name in distribution reports
     - Optimised for run times using numpy.
     
 - Added a new NoTEM wrapper around the new production and attraction models 
+- Added new pathing module, which can be used to access NoTEM output paths

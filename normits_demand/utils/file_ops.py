@@ -28,7 +28,6 @@ from normits_demand.utils import general as du
 from normits_demand.concurrency import multiprocessing as multiprocessing
 
 # Imports that need moving into here
-from normits_demand.utils.utils import create_folder
 from normits_demand.utils.general import list_files
 
 
@@ -112,7 +111,7 @@ def check_path_exists(path: nd.PathLike) -> None:
     """
     if not os.path.exists(path):
         raise IOError(
-            "Cannot find a path: %s" % str(path)
+            "The following path does not exist: %s" % str(path)
         )
 
 
@@ -730,4 +729,34 @@ def copy_files(src_dir: nd.PathLike,
         kwargs=kwarg_list,
         process_count=process_count,
         pbar_kwargs={'disable': False},
+    )
+
+
+def create_folder(folder_path: nd.PathLike,
+                  verbose_create: bool = True,
+                  verbose_exists: bool = False,
+                  ) -> None:
+    """
+    Creates the folder at folder_path
+    Parameters
+    ----------
+    folder_path:
+        Path to the folder to create
+
+    verbose_create:
+        Whether to print a message when creating the path
+
+    verbose_exists:
+        Whether to print a message when the path already exists
+
+    """
+    # Check if path exists
+    if os.path.exists(folder_path):
+        du.print_w_toggle('Folder already exists', verbose=verbose_exists)
+        return
+
+    os.makedirs(folder_path)
+    du.print_w_toggle(
+        "New project folder created at %s" % folder_path,
+        verbose=verbose_create,
     )
