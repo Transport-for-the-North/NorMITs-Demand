@@ -513,6 +513,15 @@ def build_efs_io_paths(import_location: str,
 
     # Add Land use import if we have an iteration
     if all([x is not None for x in [land_use_drive, by_land_use_iteration, fy_land_use_iteration]]):
+        by_land_use_home = os.path.join(
+            land_use_drive,
+            'NorMITs Land Use',
+            'base_land_use',
+            by_land_use_iteration,
+            'outputs',
+            'old_EFS_format',
+        )
+
         fy_land_use_home = os.path.join(
             land_use_drive,
             'NorMITs Land Use',
@@ -520,15 +529,9 @@ def build_efs_io_paths(import_location: str,
             fy_land_use_iteration,
             'outputs',
         )
-        by_land_use_home = os.path.join(
-            land_use_drive,
-            'NorMITs Land Use',
-            'base_land_use',
-            by_land_use_iteration,
-            'outputs',
-        )
 
         land_use_fy = os.path.join(fy_land_use_home, 'scenarios', scenario_name)
+        land_use_fy = os.path.join(land_use_fy, 'old_EFS_format')
 
         imports['pop_by'] = os.path.join(by_land_use_home, consts.BASE_YEAR_POP_FNAME)
         imports['emp_by'] = os.path.join(by_land_use_home, consts.BASE_YEAR_EMP_FNAME)

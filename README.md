@@ -111,6 +111,17 @@ better with TMS output paths.
 - Added versioning to reports_audits.py and updated code to include versioning 
 as part of their file name in distribution reports
 
+### v0.3.6
+- Updated EFS Production and Attraction models to accept new Land Use outputs
+    - Note that this is no longer backwards compatible. If old (pre iter3d)
+      land use inputs are needed, you need to revert to an older version of 
+      NorMITs Demand.
+      
+### v0.3.7
+- Updated the Furness so productions are done last in each iterations. This 
+  means productions will always closely match, rather than the attractions.
+
+
 ### v0.4.0 (NoTEM Development)
 - Added the SegmentationLevel Class
 - Added the ZoningSystem Class
