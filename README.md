@@ -141,3 +141,6 @@ as part of their file name in distribution reports
     
 - Added a new NoTEM wrapper around the new production and attraction models 
 - Added new pathing module, which can be used to access NoTEM output paths
+
+
+###v0.4.1
