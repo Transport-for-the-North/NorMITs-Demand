@@ -79,7 +79,7 @@ def time_taken(start_time: int,
 
     # Validate
     if elapsed_secs <= 0:
-        raise ValueError("Elapsed time is 0, or negative! Was the start_time"
+        raise ValueError("Elapsed time is 0, or negative! Was the start_time "
                          "and end_time given the wrong way around?")
 
     # Split into minutes and seconds

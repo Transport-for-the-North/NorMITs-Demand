@@ -70,6 +70,7 @@ def pure_np_main(mat):
     print("Translation result")
     print(out_mat_2)
 
+
 def disagg():
     mat = np.ones((3, 3)) * 1000
 
@@ -108,6 +109,32 @@ def disagg():
     print(out_mat_2.sum())
 
 
+def vector():
+    trans = np.array([
+        [1, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [0, 0, 1],
+    ])
+
+    vec = np.array([8, 2, 8, 8, 5])
+
+    print("Starting mat")
+    print(vec)
+
+    print("Translation mat")
+    print(trans)
+
+    a = np.broadcast_to(np.expand_dims(vec, axis=1), trans.shape)
+    temp = a * trans
+    out = temp.sum(axis=0)
+
+    print("Translation result")
+    print(out)
+    print(out.sum())
+
+
 if __name__ == '__main__':
     mat = np.random.randint(1, 10, 25).reshape((5, 5))
 
@@ -121,3 +148,8 @@ if __name__ == '__main__':
 
     print("Disaggregation")
     disagg()
+    print('\n\n')
+
+    print("Vector")
+    vector()
+    print('\n\n')

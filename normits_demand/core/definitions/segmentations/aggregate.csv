@@ -1,0 +1,12 @@
+in,out,common,translate
+full_tfntt_tfnat,full_tfntt,p;tfn_tt;m;tp,
+pure_demand,pure_demand_reporting,p;tfn_tt,tfn_at:tfn_agg_at;
+pure_attractions_ecat,pure_attractions,p;soc,
+full_attraction,p_m_soc,p;m;soc,
+hb_notem_output,hb_notem_output_no_tp,p;m;g;soc;ns;ca,
+notem_hb_tfnat_p_m_g_soc_ns_ca_nhbp_nhbm,pure_nhb_demand,tfn_at;nhb_p;nhb_m;g;soc;ns;ca,
+pure_nhb_demand,pure_nhb_demand_reporting,nhb_p;nhb_m;g;soc;ns;ca,tfn_at:tfn_agg_at;
+full_nhb,nhb_notem_output,p;m;g;soc;ns;ca;tp,nhb_p:p;nhb_m:m;
+full_nhb_tfnat,full_nhb,nhb_p;nhb_m;g;soc;ns;ca;tp,
+hb_notem_output,hb_p_m_tp,p;m;tp,
+nhb_notem_output,nhb_p_m_tp,p;m;tp,
