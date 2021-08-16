@@ -11,7 +11,60 @@ import normits_demand.models.production_model as pm
 import normits_demand.models.attraction_model as am
 import normits_demand.models.external_model as em
 import normits_demand.models.distribution_model as dm
+import normits_demand.matrices.tms_pa_to_od as pa2od
+import normits_demand.reports.reports_audits as ra
+from normits_demand.utils import vehicle_occupancy as vo
+from normits_demand.utils import utils as nup
+from normits_demand.utils import timing
 from normits_demand import version
+from normits_demand.models import notem
+from normits_demand.pathing import NoTEMImportPaths
+
+# GLOBAL VARIABLES
+years = [2018]
+scenario = "NTEM"
+notem_iter = '4'
+lu_drive = "I:/"
+by_iteration = "iter3d"
+fy_iteration = "iter3d"
+notem_import_home = r"I:\NorMITs Demand\import\NoTEM"
+# notem_export_home = r"C:\Data\Nirmal_Atkins"
+notem_export_home = r"E:\NoTEM"
+
+
+def main():
+    hb_production_import_version = '2.0'
+    hb_attraction_import_version = '1.5'
+    nhb_production_import_version = '1.5'
+
+    import_builder = NoTEMImportPaths(
+        import_home=notem_import_home,
+        scenario=scenario,
+        years=years,
+        land_use_import_home=lu_drive,
+        by_land_use_iter=by_iteration,
+        fy_land_use_iter=fy_iteration,
+        hb_production_import_version=hb_production_import_version,
+        hb_attraction_import_version=hb_attraction_import_version,
+        nhb_production_import_version=nhb_production_import_version,
+    )
+
+    n = notem.NoTEM(
+        years=years,
+        scenario=scenario,
+        iteration_name=notem_iter,
+        import_builder=import_builder,
+        export_home=notem_export_home,
+    )
+    n.run(
+        generate_all=False,
+        generate_hb=False,
+        generate_nhb=False,
+        generate_hb_production=False,
+        generate_hb_attraction=False,
+        generate_nhb_production=False,
+        generate_nhb_attraction=True,
+    )
 
 
 class TmsParameterBuilder:
@@ -36,9 +89,9 @@ class TmsParameterBuilder:
             else:
                 print("Invalid input")
 
-    def assign_param(self):
+    def assign_param(self, model: str):
 
-        if model_name == 'noham':
+        if model == 'noham':
             params = {
                 'base_directory': 'Y: /',
                 'iteration': 'iter8c',
@@ -64,6 +117,7 @@ class TmsParameterBuilder:
         else:
             params = {
                 'base_directory': 'I:/NorMITs Synthesiser',
+                'model_name': 'norms',
                 'iteration': 'iter6',
                 'model_zoning': 'Norms',
                 'land_use_version': 3,
@@ -124,23 +178,25 @@ class TmsParameterBuilder:
 
 
 if __name__ == '__main__':
+    main()
 
     config_path = 'I:/NorMITs Synthesiser/config/'
+    tmsparam = TmsParameterBuilder()
 
     # Ask user which config file to use
     # params_file = prj.select_params_file(config_path)
     """
     Gets model name from the user using the module
     """
-    model_name = TmsParameterBuilder.get_model_name()
+    model_name = tmsparam.get_model_name()
     """
     Assigns the various model parameters required based on model_name
     """
-    params_file = TmsParameterBuilder.assign_param()
+    params = tmsparam.assign_param(model_name)
 
     # TODO: Building loose folders for External model paths
     tms_run = tms.TMSPathing(config_path,
-                             params_file)
+                             params)
 
     # Check status of lookup folder
     tms_run.lookups = tms_run.lookup_audit()
@@ -149,12 +205,12 @@ if __name__ == '__main__':
     tms_run.project_status = tms_run.project_check()
 
     # BACKLOG: Do this stuff based on the project status
-    p = pm.ProductionModel(config_path, params_file)
+    p = pm.ProductionModel(config_path, params)
 
     hb_p_out = p.run_hb(verbose=True)
     p.ping_outpath()
 
-    a = am.AttractionModel(config_path, params_file)
+    a = am.AttractionModel(config_path, params)
     hb_a_out = a.run(trip_origin='hb',
                      control_to_productions=True,
                      productions_path=p.export['in_hb'])
@@ -178,7 +234,7 @@ if __name__ == '__main__':
     # Run HB external model
     ext = em.ExternalModel(
         config_path,
-        params_file)
+        params)
     hb_ext_out = ext.run(
         trip_origin='hb',
         cost_type='24hr')
@@ -188,9 +244,9 @@ if __name__ == '__main__':
 
     dist = dm.DistributionModel(
         config_path,
-        params_file)
+        params)
 
-    int_hb = dist.run(
+    int_hb = dist.run_distribution_model(
         tlb_area='north',
         segmentation='tfn',
         distribution_segments=params['hb_distribution_segments'],
@@ -204,7 +260,7 @@ if __name__ == '__main__':
         echo=True,
         mp_threads=-1)
 
-    int_nhb = dist.run(
+    int_nhb = dist.run_distribution_model(
         tlb_area='north',
         segmentation='tfn',
         distribution_segments=params['nhb_distribution_segments'],
@@ -230,16 +286,16 @@ if __name__ == '__main__':
                       write=True)
 
     # *Compile tp pa @ 24hr
-    f.build_tp_pa(file_drive=params['base_directory'],
-                  model_name=params['model_name'],
-                  iteration=params['iteration'],
-                  distribution_segments=params['hb_output_segments'],
-                  internal_input='synthetic',
-                  external_input='synthetic',
-                  write_modes=[3],
-                  arrivals=False,
-                  export_24hr=True,
-                  write=True)
+    pa2od.build_tp_pa(file_drive=params['base_directory'],
+                      model_name=params['model_name'],
+                      iteration=params['iteration'],
+                      distribution_segments=params['hb_output_segments'],
+                      internal_input='synthetic',
+                      external_input='synthetic',
+                      write_modes=[3],
+                      arrivals=False,
+                      export_24hr=True,
+                      write=True)
 
     # Build any non dist tps as required
     pa2od.build_tp_pa(file_drive=params['base_directory'],
@@ -344,12 +400,15 @@ if __name__ == '__main__':
                            internal_reports=True,
                            write=True)
 
+    lookup_folder = os.path.join(params['base_directory'],
+                                 params['model_name'],
+                                 'Model Zone Lookups')
     # Import compilation params
     pa_compilation_params, od_compilation_params = nup.get_compilation_params(lookup_folder)
 
     if params['compile_pa']:
         compiled_pa_matrices = nup.compile_pa(o_paths['pa'],
-                                              (i_paths['lookups'] +
+                                              (lookup_folder +
                                                '/' +
                                                pa_compilation_params))  # Split time = true
 
@@ -434,12 +493,12 @@ if __name__ == '__main__':
 
     # Convert to vehicles
     if params['vehicle_demand']:
-        vo.people_vehicle_conversion(input_folder=os.path.join(params['base_directory'],
-                                                               'NorMITs Synthesiser',
-                                                               params['model_name'],
-                                                               params['iteration'],
-                                                               'Distribution Outputs',
-                                                               'Compiled OD Matrices'),
+        vo.people_vehicle_conversion(import_folder=os.path.join(params['base_directory'],
+                                                                'NorMITs Synthesiser',
+                                                                params['model_name'],
+                                                                params['iteration'],
+                                                                'Distribution Outputs',
+                                                                'Compiled OD Matrices'),
                                      export_folder='D:/',
                                      mode='3',
                                      method='to_vehicles',
@@ -469,8 +528,8 @@ if __name__ == '__main__':
         out_lines = [
             'TMS version: ' + str(tms_version),
             'Model Name: ' + str(model_name),
-            'Run Date: ' + str(time.strftime('%D').replace('/', '_')),
-            'Start Time: ' + str(time.strftime('%T').replace('/', '_')),
+            'Run Date: ' + str(timing.strftime('%D').replace('/', '_')),
+            'Start Time: ' + str(timing.strftime('%T').replace('/', '_')),
             "Land Use Zoning System: " + str(land_use_zoning),
 
         ]
