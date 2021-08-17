@@ -1,6 +1,9 @@
 """
-Temporary file for testing notem
+Master run file to run NoTEM
 """
+import sys
+
+sys.path.append("..")
 from normits_demand.models import notem
 from normits_demand.pathing import NoTEMImportPaths
 
@@ -46,9 +49,9 @@ def main():
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,
-        generate_hb_attraction=False,
+        generate_hb_attraction=True,
         generate_nhb_production=False,
-        generate_nhb_attraction=True,
+        generate_nhb_attraction=False,
     )
 
 
