@@ -8,29 +8,209 @@ using the census journey to work data reformatted to model dimensions
 @author: cruella
 """
 
-import pandas as pd # most of the heavy lifting
-import os # File ops
+import pandas as pd  # most of the heavy lifting
+import os  # File ops
+import warnings
 
 import normits_demand.build.tms_pathing as tms
 
 from normits_demand.concurrency import multiprocessing as mp
-from normits_demand.distribution import gravity_model as gm # For distribution functions
-from normits_demand.utils import utils as nup # Folder management, reindexing, optimisation
+from normits_demand.distribution import gravity_model as gm  # For distribution functions
+from normits_demand.utils import utils as nup  # Folder management, reindexing, optimisation
 
 
 class DistributionModel(tms.TMSPathing):
     pass
 
+    def path_config(self,
+                    file_drive,
+                    model_name,
+                    iteration,
+                    trip_origin='hb'):
+
+        """
+        Sets paths for imports to be set as variables.
+        Creates project folders.
+
+        Parameters
+        ----------
+        file_drive = 'Y:/':
+            Name of root drive to do work on. Defaults to TfN Y drive.
+
+        model_name:
+            Name of model as string. Should be same as model descriptions.
+
+        iteration:
+            Current iteration of model. Defaults to global default.
+
+        Returns
+        ----------
+        [0] imports:
+            Paths to all Synthesiser import parameters.
+
+        [1] exports:
+            Paths to all Synthesiser output parameters
+        """
+
+        # Set base dir
+        home_path = os.path.join(file_drive, 'NorMITs Synthesiser')
+
+        # Set synth import folder
+        import_path = os.path.join(home_path, 'import')
+
+        # Set top level model folder, leave the slash on
+        model_path = os.path.join(home_path,
+                                  model_name,
+                                  iteration)
+        model_path += os.path.sep
+
+        # Set model lookups location
+        model_lookup_path = os.path.join(home_path,
+                                         model_name,
+                                         'Model Zone Lookups')
+
+        # Set production path, leave slash on
+        production_path = os.path.join(model_path, 'Production Outputs')
+        production_path += os.path.sep
+
+        # Set production path
+        production_path = (model_path +
+                           'Production Outputs/')
+
+        # Set attraction path
+        attraction_path = (model_path +
+                           'Attraction Outputs/')
+
+        # Production import path
+        if trip_origin == 'hb':
+            p_import_path = (production_path +
+                             model_name.lower() +
+                             '_hb_internal_productions.csv')
+            a_import_path = (attraction_path +
+                             model_name.lower() +
+                             '_hb_internal_attractions.csv')
+        elif trip_origin == 'nhb':
+            p_import_path = (production_path +
+                             model_name.lower() +
+                             '_nhb_internal_productions.csv')
+            a_import_path = (attraction_path +
+                             model_name.lower() +
+                             '_nhb_internal_attractions.csv')
+        # Raise user warning if no productions by this name
+        if not os.path.exists(p_import_path):
+            warnings.warn('No productions in folder.' +
+                          'Check path or run production model')
+
+        # Raise user warning if no productions by this name
+        if not os.path.exists(a_import_path):
+            warnings.warn('No attractions in folder.' +
+                          'Check path or run attraction model')
+
+        # Create project folders
+        distribution_path = os.path.join(model_path, 'Distribution Outputs')
+        nup.create_folder(distribution_path, chDir=False)
+
+        fusion_path = os.path.join(model_path, 'Fusion Outputs')
+        nup.create_folder(fusion_path, chDir=False)
+
+        pcu_path = os.path.join(model_path, 'PCU Outputs')
+        nup.create_folder(pcu_path)
+
+        # Set distribution outputs (synthetic)
+        reports = os.path.join(distribution_path, 'Logs & Reports')
+        nup.create_folder(reports)
+
+        summary_matrix_export = os.path.join(distribution_path, '24hr PA Distributions')
+        nup.create_folder(summary_matrix_export)
+
+        cjtw_hb_export = os.path.join(distribution_path, 'Cjtw PA Distributions')
+        nup.create_folder(cjtw_hb_export)
+
+        external_export = os.path.join(distribution_path, 'External Distributions')
+        nup.create_folder(external_export)
+
+        bin_export = os.path.join(distribution_path, 'Trip Length Distributions')
+        nup.create_folder(bin_export)
+
+        pa_export = os.path.join(distribution_path, 'PA Matrices')
+        nup.create_folder(pa_export)
+
+        pa_export_24 = os.path.join(distribution_path, 'PA Matrices 24hr')
+        nup.create_folder(pa_export_24)
+
+        arrival_export = os.path.join(distribution_path, 'D Arrivals')
+        nup.create_folder(arrival_export)
+
+        od_export = os.path.join(distribution_path, 'OD Matrices')
+        nup.create_folder(od_export)
+
+        me_export = os.path.join(distribution_path, 'PostME OD Matrices')
+        nup.create_folder(me_export)
+
+        compiled_pa_export = os.path.join(distribution_path, 'Compiled PA Matrices')
+        nup.create_folder(compiled_pa_export)
+
+        compiled_od_export = os.path.join(distribution_path, 'Compiled OD Matrices')
+        nup.create_folder(compiled_od_export)
+
+        # Set fusion exports
+        fusion_summary_export = os.path.join(fusion_path, '24hr Fusion PA Distributions')
+        nup.create_folder(fusion_summary_export)
+
+        fusion_pa_export = os.path.join(fusion_path, 'Fusion PA Matrices')
+        nup.create_folder(fusion_pa_export)
+
+        fusion_od_export = os.path.join(fusion_path, 'Fusion OD Matrices')
+        nup.create_folder(fusion_od_export)
+
+        pcu_od_export = os.path.join(pcu_path, 'PCU OD Matrices')
+        nup.create_folder(pcu_od_export)
+
+        compiled_fusion_pa_export = os.path.join(fusion_path, 'Compiled Fusion PA Matrices')
+        nup.create_folder(compiled_fusion_pa_export)
+
+        compiled_fusion_od_export = os.path.join(fusion_path, 'Compiled Fusion OD Matrices')
+        nup.create_folder(compiled_fusion_od_export)
+
+        # Compile into import and export
+        imports = {'imports': import_path,
+                   'lookups': model_lookup_path,
+                   'production_import': p_import_path,
+                   'attraction_import': a_import_path}
+
+        exports = {'production_export': production_path,
+                   'attraction_export': attraction_path,
+                   'reports': reports,
+                   'summaries': summary_matrix_export,
+                   'cjtw': cjtw_hb_export,
+                   'external': external_export,
+                   'tld': bin_export,
+                   'pa': pa_export,
+                   'pa_24': pa_export_24,
+                   'od_export': od_export,
+                   'arrival_export': arrival_export,
+                   'me_export': me_export,
+                   'c_pa_export': compiled_pa_export,
+                   'c_od_export': compiled_od_export,
+                   'fusion_summaries': fusion_summary_export,
+                   'fusion_pa_export': fusion_pa_export,
+                   'fusion_od_export': fusion_od_export,
+                   'pcu_od_export': pcu_od_export,
+                   'c_fusion_pa_export': compiled_fusion_pa_export,
+                   'c_fusion_od_export': compiled_fusion_od_export}
+
+        return imports, exports
+
     def distribute_cjtw(
             self,
             internal_24hr_productions,
-                        model_lookup_path,
-                        ia_name,
-                        model_name,
-                        calib_params,
-                        cost_type = '24hr',
-                        subset=None,
-                        verbose=True):
+            model_lookup_path,
+            ia_name,
+            model_name,
+            calib_params,
+            cost_type='24hr',
+            subset=None,
+            verbose=True):
         """
         This distributes commute productions by census journey to work distributions
         using zone to zone movements as a factor.
@@ -76,7 +256,7 @@ class DistributionModel(tms.TMSPathing):
         # Get unique internal zones in a smart way
         min_zone = min(internal_24hr_productions['p_zone'])
         max_zone = max(internal_24hr_productions['p_zone'])
-        unq_internal_zones = [i for i in range(min_zone,max_zone+1)]
+        unq_internal_zones = [i for i in range(min_zone, max_zone + 1)]
 
         # Filter to calib params - should be p1 only
         target_p = nup.filter_pa_cols(internal_24hr_productions,
@@ -85,7 +265,7 @@ class DistributionModel(tms.TMSPathing):
                                       round_val=3,
                                       verbose=verbose)[0]
         target_p = target_p.rename(
-                columns={list(target_p)[-1]: 'productions'})
+            columns={list(target_p)[-1]: 'productions'})
 
         target_p = target_p.rename(columns={'p_zone': ia_name})
 
@@ -107,7 +287,7 @@ class DistributionModel(tms.TMSPathing):
         # Rename as m
         cjtw = cjtw.rename(columns={'mode': 'm'})
         # Filter to calib params mode
-        cjtw = cjtw[cjtw['m']==calib_params['m']].reset_index(drop=True)
+        cjtw = cjtw[cjtw['m'] == calib_params['m']].reset_index(drop=True)
         cjtw = cjtw.drop('m', axis=1)
 
         commute_pa = target_p.merge(cjtw,
@@ -198,26 +378,26 @@ class DistributionModel(tms.TMSPathing):
         # Should be handled by a beta seeding function in the run_gravity_model.
         for index, cp in calib_params.items():
             beta_subset = beta_subset[
-                    beta_subset[index] == cp
-            ].reset_index(drop=True)
+                beta_subset[index] == cp
+                ].reset_index(drop=True)
 
         init_param_a = beta_subset['init_param_a'][0]
         init_param_b = beta_subset['init_param_b'][0]
         ttl = beta_subset['average_trip_length'][0]
 
-        distribution_params = {'init_param_a':init_param_a,
-                               'init_param_b':init_param_b,
-                               'ttl':ttl}
+        distribution_params = {'init_param_a': init_param_a,
+                               'init_param_b': init_param_b,
+                               'ttl': ttl}
         return distribution_params
 
     def translate_distribution(
-        self,
-        om_dist,
-        model_name,
-        other_model_name,
-        internal_24hr_productions,
-        calib_params,
-        target_path):
+            self,
+            om_dist,
+            model_name,
+            other_model_name,
+            internal_24hr_productions,
+            calib_params,
+            target_path):
 
         """
         Translate distribution from one model zoning system to another using
@@ -266,45 +446,45 @@ class DistributionModel(tms.TMSPathing):
 
         # Round & drop 0 segments
         zt_pop[split_factor_col] = zt_pop[split_factor_col].round(3)
-        zt_pop = zt_pop[zt_pop[split_factor_col]>0]
+        zt_pop = zt_pop[zt_pop[split_factor_col] > 0]
 
         # Correct factors back to 0
         zt_pop_tot = zt_pop.reindex([original_model_col, split_factor_col], axis=1).groupby(
-                original_model_col).sum().reset_index()
+            original_model_col).sum().reset_index()
 
         # Derive adjustment for factor
-        zt_pop_tot['adj_factor'] = 1/(zt_pop_tot[split_factor_col]/1)
+        zt_pop_tot['adj_factor'] = 1 / (zt_pop_tot[split_factor_col] / 1)
         zt_pop_tot = zt_pop_tot.drop(split_factor_col, axis=1)
         zt_pop = zt_pop.merge(zt_pop_tot,
                               how='left',
-                              on = original_model_col)
+                              on=original_model_col)
         zt_pop[split_factor_col] = zt_pop[split_factor_col] * zt_pop['adj_factor']
         zt_pop = zt_pop.drop('adj_factor', axis=1)
 
         # Round & drop 0 segments
         zt_emp[split_factor_col] = zt_emp[split_factor_col].round(3)
-        zt_emp = zt_emp[zt_emp[split_factor_col]>0]
+        zt_emp = zt_emp[zt_emp[split_factor_col] > 0]
 
         # Correct factors back to 0
         zt_emp_tot = zt_emp.reindex([original_model_col,
                                      split_factor_col],
-        axis=1).groupby(
-                original_model_col).sum().reset_index()
+                                    axis=1).groupby(
+            original_model_col).sum().reset_index()
         # Derive adjustment for factor
-        zt_emp_tot['adj_factor'] = 1/(zt_emp_tot[split_factor_col]/1)
+        zt_emp_tot['adj_factor'] = 1 / (zt_emp_tot[split_factor_col] / 1)
         zt_emp_tot = zt_emp_tot.drop(split_factor_col, axis=1)
         zt_emp = zt_emp.merge(zt_emp_tot,
                               how='left',
-                              on = original_model_col)
+                              on=original_model_col)
         zt_emp[split_factor_col] = zt_emp[split_factor_col] * zt_emp['adj_factor']
         zt_emp = zt_emp.drop('adj_factor', axis=1)
         # zone translations defined
 
         # Rename destination zone names to join w/o duplication
         zt_pop = zt_pop.rename(
-                columns={(other_model_name + '_zone_id'):'p_zone'})
+            columns={(other_model_name + '_zone_id'): 'p_zone'})
         zt_emp = zt_emp.rename(
-                columns={(other_model_name + '_zone_id'):'a_zone'})
+            columns={(other_model_name + '_zone_id'): 'a_zone'})
 
         # Transform model demand to current model zones
         # Bring in population split for productions
@@ -314,18 +494,18 @@ class DistributionModel(tms.TMSPathing):
         # Multiply out
         om_dist['dt'] = om_dist['dt'] * om_dist[('overlap_' + other_model_name + '_split_factor')]
         om_dist = om_dist.drop(
-                ['p_zone',
-                 'overlap_' + other_model_name + '_split_factor'], axis=1)
+            ['p_zone',
+             'overlap_' + other_model_name + '_split_factor'], axis=1)
         om_dist = om_dist.rename(
-                columns={(model_name.lower() + '_zone_id'):'p_zone'})
+            columns={(model_name.lower() + '_zone_id'): 'p_zone'})
         # Group and sum
         group_cols = ['p_zone', 'a_zone']
         sum_cols = group_cols.copy()
         sum_cols.append('dt')
 
         om_dist = om_dist.reindex(
-                sum_cols,axis=1).groupby(
-                        group_cols).sum().reset_index()
+            sum_cols, axis=1).groupby(
+            group_cols).sum().reset_index()
 
         # Bring in employment split for attractions
         om_dist = om_dist.merge(zt_emp,
@@ -334,31 +514,31 @@ class DistributionModel(tms.TMSPathing):
         # Multiply out
         om_dist['dt'] = om_dist['dt'] * om_dist[('overlap_' + other_model_name + '_split_factor')]
         om_dist = om_dist.drop(
-                ['a_zone',
-                 'overlap_' + other_model_name + '_split_factor'], axis=1)
+            ['a_zone',
+             'overlap_' + other_model_name + '_split_factor'], axis=1)
         om_dist = om_dist.rename(
-                columns={(model_name.lower() + '_zone_id'):'a_zone'})
+            columns={(model_name.lower() + '_zone_id'): 'a_zone'})
         # Group and sum
         om_dist = om_dist.reindex(
-                sum_cols,axis=1).groupby(
-                        group_cols).sum().reset_index()
+            sum_cols, axis=1).groupby(
+            group_cols).sum().reset_index()
 
         # Audit total
         if om_productions.round(0) == om_dist['dt'].sum().round(0):
             print('Balanced well')
         else:
-            print('Balance off') # TODO: Bit more
+            print('Balance off')  # TODO: Bit more
 
         # Reduce to zonal factors to apply new productions to
         om_dist_p_totals = om_dist.reindex(['p_zone', 'dt'], axis=1).groupby('p_zone').sum().reset_index()
-        om_dist_p_totals = om_dist_p_totals.rename(columns={'dt':'dt_total'})
+        om_dist_p_totals = om_dist_p_totals.rename(columns={'dt': 'dt_total'})
 
         om_dist = om_dist.merge(om_dist_p_totals,
                                 how='left',
                                 on='p_zone')
         # Derive p/a share by p
-        om_dist['p_a_share'] = om_dist['dt']/om_dist['dt_total']
-        om_dist = om_dist.drop(['dt', 'dt_total'],axis=1)
+        om_dist['p_a_share'] = om_dist['dt'] / om_dist['dt_total']
+        om_dist = om_dist.drop(['dt', 'dt_total'], axis=1)
 
         # Get target productions
         target_p = nup.filter_distribution_p(internal_24hr_productions,
@@ -367,7 +547,7 @@ class DistributionModel(tms.TMSPathing):
                                              round_val=3)
 
         original_p = target_p['productions'].sum()
-        target_p = target_p.rename(columns={target_model_col:'p_zone'})
+        target_p = target_p.rename(columns={target_model_col: 'p_zone'})
 
         # Join on distribution
         target_p = target_p.merge(om_dist,
@@ -375,11 +555,11 @@ class DistributionModel(tms.TMSPathing):
                                   on='p_zone')
         target_dist = target_p.copy()
         target_dist['dt'] = (target_dist['productions'] *
-                   target_dist['p_a_share'])
+                             target_dist['p_a_share'])
         target_dist = target_dist.drop(['productions', 'p_a_share'], axis=1)
 
         # Correct for dropped trips as required
-        correction_factor = 1/(target_dist['dt'].sum()/original_p)
+        correction_factor = 1 / (target_dist['dt'].sum() / original_p)
         if correction_factor > 1.1 or correction_factor < 0.9:
             Warning('Massive correction required for balance, check inputs')
         target_dist['dt'] = target_dist['dt'] * correction_factor
@@ -388,7 +568,7 @@ class DistributionModel(tms.TMSPathing):
         if original_p.round(0) == target_dist['dt'].sum().round(0):
             print('Balanced well')
         else:
-            print('Balance off') # TODO: Bit more
+            print('Balance off')  # TODO: Bit more
 
         # Reapply segments
         col_ph = ['p_zone', 'a_zone']
@@ -401,8 +581,7 @@ class DistributionModel(tms.TMSPathing):
         # Final order preserving reindex
         target_dist = target_dist.reindex(col_ph, axis=1)
 
-        return(target_dist)
-
+        return (target_dist)
 
     def pass_to_intrazonal(internal_24hr_productions,
                            ia_name,
@@ -417,7 +596,7 @@ class DistributionModel(tms.TMSPathing):
         # Get unique internal zones in a smart way
         min_zone = min(internal_24hr_productions[ia_name])
         max_zone = max(internal_24hr_productions[ia_name])
-        unq_internal_zones = [i for i in range(min_zone, max_zone+1)]
+        unq_internal_zones = [i for i in range(min_zone, max_zone + 1)]
 
         target_p = nup.filter_distribution_p(internal_24hr_productions,
                                              ia_name,
@@ -440,7 +619,7 @@ class DistributionModel(tms.TMSPathing):
         # Reindex cols to match standard
         reindex_cols.append('dt')
         intra_dist = intra_dist.reindex(
-                reindex_cols, axis=1).reset_index(drop=True)
+            reindex_cols, axis=1).reset_index(drop=True)
 
         # Push to wide format
         intra_dist = nup.df_to_np(intra_dist,
@@ -456,8 +635,8 @@ class DistributionModel(tms.TMSPathing):
 
         return intra_dist
 
-
-    def run_separation(initial_betas, available_dists):
+    def run_separation(self,
+                       initial_betas, available_dists):
 
         """
         Function to separate intial betas based on the type of distribution required.
@@ -473,15 +652,15 @@ class DistributionModel(tms.TMSPathing):
 
         null_dists = initial_betas[
             initial_betas['distribution'] == 'none'
-        ].copy().reset_index(drop=True)
+            ].copy().reset_index(drop=True)
 
         cjtw_dists = initial_betas[
             initial_betas['distribution'] == 'cjtw'
-        ].copy().reset_index(drop=True)
+            ].copy().reset_index(drop=True)
 
         intra_zonal_dists = initial_betas[
             initial_betas['distribution'] == 'intra'
-        ].copy().reset_index(drop=True)
+            ].copy().reset_index(drop=True)
 
         translated_dists = initial_betas[
             initial_betas['distribution'].isin(available_dists)
@@ -489,24 +668,23 @@ class DistributionModel(tms.TMSPathing):
 
         initial_betas = initial_betas[
             initial_betas['distribution'] == 'synthetic'
-        ].reset_index(drop=True)
+            ].reset_index(drop=True)
 
-        beta_length_end = sum([len(null_dists.iloc[:,0]),
-                              len(cjtw_dists.iloc[:0]),
-                              len(intra_zonal_dists.iloc[:,0]),
-                              len(translated_dists.iloc[:,0]),
-                              len(initial_betas.iloc[:,0])])
+        beta_length_end = sum([len(null_dists.iloc[:, 0]),
+                               len(cjtw_dists.iloc[:0]),
+                               len(intra_zonal_dists.iloc[:, 0]),
+                               len(translated_dists.iloc[:, 0]),
+                               len(initial_betas.iloc[:, 0])])
         if beta_length_start == beta_length_end:
             print('All betas accounted for')
         else:
             Warning('Some betas dropped')
 
-        return(initial_betas,
-               translated_dists,
-               intra_zonal_dists,
-               cjtw_dists,
-               null_dists)
-
+        return (initial_betas,
+                translated_dists,
+                intra_zonal_dists,
+                cjtw_dists,
+                null_dists)
 
     def fetch_other_model_distribution(other_model_name,
                                        file_drive,
@@ -540,7 +718,7 @@ class DistributionModel(tms.TMSPathing):
                         break
                     else:
                         t_iter_list.append(item)
-                     # Remove iterx
+                    # Remove iterx
             t_iteration = max(t_iter_list)
         else:
             nup.print_w_toggle('Checking for ' + str(t_iteration), verbose=verbose)
@@ -585,13 +763,12 @@ class DistributionModel(tms.TMSPathing):
             temp_dist = pd.read_csv(os.path.join(t_import_path, item))
             temp_dist = nup.optimise_data_types(temp_dist, verbose=verbose)
             dist_ph.append(temp_dist)
-            del(temp_dist)
+            del (temp_dist)
 
         t_dist = pd.concat(dist_ph, sort=True)
 
         # Used to return ignored segs but I don't want it to anymore
         return t_import_dist, t_dist
-
 
     def _synth_dist_worker(
             self,
@@ -663,30 +840,28 @@ class DistributionModel(tms.TMSPathing):
         # TODO: Filter should be done outside of function and passed as np vector, still inside atm
         #  - this applies to intra & cjtw too
         hb_distribution = gm.run_gravity_model(
-                ia_name,
-                calib_params,
-                init_param_a,
-                init_param_b,
-                productions,
-                attractions,
-                model_lookup_path=i_paths['lookups'],
-                dist_log_path=o_paths['reports'],
-                dist_log_fname=trip_origin + '_internal_distribution',
-                dist_function = dist_function,
-                cost_type=cost_type,
-                apply_k_factoring = True,
-                furness_loops=furness_loops,
-                fitting_loops=fitting_loops,
-                bs_con_target = .95,
-                target_r_gap = 1,
-                rounding_factor=3,
-                iz_cost_infill=iz_cost_infill,
-                verbose=verbose
+            ia_name,
+            calib_params,
+            init_param_a,
+            init_param_b,
+            productions,
+            attractions,
+            model_lookup_path=i_paths['lookups'],
+            dist_log_path=o_paths['reports'],
+            dist_log_fname=trip_origin + '_internal_distribution',
+            dist_function=dist_function,
+            cost_type=cost_type,
+            apply_k_factoring=True,
+            furness_loops=furness_loops,
+            fitting_loops=fitting_loops,
+            bs_con_target=.95,
+            target_r_gap=1,
+            rounding_factor=3,
+            iz_cost_infill=iz_cost_infill,
+            verbose=verbose
         )
 
-
         # Print calib outputs - append calib outputs
-
 
         # Export 24hr distribution
         # Generate distribution name
@@ -894,17 +1069,24 @@ class DistributionModel(tms.TMSPathing):
         # Export trip length bins
         cjtw_distribution[1].to_csv(c_bin_path, index=False)
 
-
-    def run_distribution_model(
-            self,
-            trip_origin='hb',
-            cost_type='24hr',
-            furness_loops=1999,
-            fitting_loops=100,
-            iz_cost_infill=.5,
-            export_modes=[3],
-            verbose=True,
-            mp_threads=-1):
+    def run_distribution_model(self,
+                               file_drive,
+                               model_name,
+                               iteration,
+                               tlb_area='north',
+                               segmentation='tfn',
+                               distribution_segments=['p', 'm'],
+                               dist_function='tanner',
+                               trip_origin='hb',
+                               cost_type='24hr',
+                               furness_loops=1999,
+                               fitting_loops=100,
+                               iz_cost_infill=.5,
+                               export_modes=[3],
+                               echo=True,
+                               mp_threads=-1,
+                               verbose=True,
+                               ):
 
         """
         This function runs the distribution of productions and attractions to a
@@ -957,9 +1139,19 @@ class DistributionModel(tms.TMSPathing):
                                     "mp_threads must be -1 or greater.\n" +
                                     "Got %s." % str(mp_threads))
         if mp_threads == -1:
-            mp_threads = os.cpu_count()-1
+            mp_threads = os.cpu_count() - 1
 
         # Path to root, stop any folder overwrites
+
+        # Define paths for import
+        paths = self.path_config(file_drive=file_drive,
+                                 model_name=model_name,
+                                 iteration=iteration,
+                                 trip_origin=trip_origin)
+        i_paths = paths[0]
+        o_paths = paths[1]
+        del paths
+
         # Define list of available distributions (for translation)
         # TODO: filter out fluff, lower case
         # TODO: Push to run script
@@ -976,11 +1168,11 @@ class DistributionModel(tms.TMSPathing):
         print('attractions from:' + i_paths['attraction_import'])
 
         # Import productions and attractions
-        pa = nup.import_pa(i_paths['production_import'], # p import path
-                           i_paths['attraction_import']) # a import path
+        pa = nup.import_pa(i_paths['production_import'],  # p import path
+                           i_paths['attraction_import'])  # a import path
         productions = pa[0]
         attractions = pa[1]
-        del(pa)
+        del pa
 
         ia_areas = nup.define_internal_external_areas(i_paths['lookups'])
         internal_area = ia_areas[0]
@@ -1004,12 +1196,12 @@ class DistributionModel(tms.TMSPathing):
         # zone_conversion_dists = Combos to be translated from another zoning system
         # init_params = actual distribution alphas & betas
 
-        segmented_params = run_separation(init_params,
+        segmented_params = self.run_separation(init_params,
                                           # lower dist list
                                           [x.lower() for x in available_dists])
 
         synthetic_dists = segmented_params[0]
-        translated_dists = segmented_params[1] # TODO: Specify iteration
+        translated_dists = segmented_params[1]  # TODO: Specify iteration
         intra_zonal_dists = segmented_params[2]
         cjtw_dists = segmented_params[3]
         null_dists = segmented_params[4]
@@ -1020,8 +1212,8 @@ class DistributionModel(tms.TMSPathing):
 
         # Target trip lengths here, derived straight from beta file
         target_trip_lengths = synthetic_dists.reindex(
-                ttl_cols,
-                axis=1).reset_index(drop=True)
+            ttl_cols,
+            axis=1).reset_index(drop=True)
 
         # Let the user know if threads are being used or not
         if mp_threads == 0:
@@ -1045,8 +1237,8 @@ class DistributionModel(tms.TMSPathing):
                              'productions': productions,
                              'attractions': attractions,
                              'cost_type': cost_type,
-                             'furness_loops':furness_loops,
-                             'fitting_loops':fitting_loops,
+                             'furness_loops': furness_loops,
+                             'fitting_loops': fitting_loops,
                              'i_paths': i_paths,
                              'o_paths': o_paths,
                              'iz_cost_infill': iz_cost_infill,

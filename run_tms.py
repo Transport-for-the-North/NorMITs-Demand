@@ -7,16 +7,13 @@ import pandas as pd
 import importlib as ri
 
 import normits_demand.build.tms_pathing as tms
-import normits_demand.models.production_model as pm
-import normits_demand.models.attraction_model as am
 import normits_demand.models.external_model as em
 import normits_demand.models.distribution_model as dm
 import normits_demand.matrices.tms_pa_to_od as pa2od
 import normits_demand.reports.reports_audits as ra
 from normits_demand.utils import vehicle_occupancy as vo
 from normits_demand.utils import utils as nup
-from normits_demand.utils import timing
-from normits_demand import version
+from normits_demand.utils import file_ops
 from normits_demand.models import notem
 from normits_demand.pathing import NoTEMImportPaths
 
@@ -30,41 +27,20 @@ fy_iteration = "iter3d"
 notem_import_home = r"I:\NorMITs Demand\import\NoTEM"
 # notem_export_home = r"C:\Data\Nirmal_Atkins"
 notem_export_home = r"E:\NoTEM"
+output_file = "%s_msoa_notem_segmented_%d_dvec.pkl"
 
 
-def main():
-    hb_production_import_version = '2.0'
-    hb_attraction_import_version = '1.5'
-    nhb_production_import_version = '1.5'
-
-    import_builder = NoTEMImportPaths(
-        import_home=notem_import_home,
-        scenario=scenario,
-        years=years,
-        land_use_import_home=lu_drive,
-        by_land_use_iter=by_iteration,
-        fy_land_use_iter=fy_iteration,
-        hb_production_import_version=hb_production_import_version,
-        hb_attraction_import_version=hb_attraction_import_version,
-        nhb_production_import_version=nhb_production_import_version,
-    )
-
-    n = notem.NoTEM(
-        years=years,
-        scenario=scenario,
-        iteration_name=notem_iter,
-        import_builder=import_builder,
-        export_home=notem_export_home,
-    )
-    n.run(
-        generate_all=False,
-        generate_hb=False,
-        generate_nhb=False,
-        generate_hb_production=False,
-        generate_hb_attraction=False,
-        generate_nhb_production=False,
-        generate_nhb_attraction=True,
-    )
+def check_notem_run_status() -> None:
+    hb_fname = output_file % ('hb', years)
+    nhb_fname = output_file % ('nhb', years)
+    hb_trip_ends = ['HB_Productions', 'HB_Attractions']
+    nhb_trip_ends = ['NHB_Productions', 'NHB_Attractions']
+    for trip in hb_trip_ends:
+        file = os.path.join(notem_export_home, trip, hb_fname)
+        file_ops.check_file_exists(file)
+    for trip in nhb_trip_ends:
+        file = os.path.join(notem_export_home, trip, nhb_fname)
+        file_ops.check_file_exists(file)
 
 
 class TmsParameterBuilder:
@@ -104,7 +80,6 @@ class TmsParameterBuilder:
                 'export_msoa_productions': False,
                 'attraction_segment_type': 'ntem',
                 'cjtw_path': None,
-                ##can be moved
                 'hb_distribution_segments': ['p', 'm'],
                 'nhb_distribution_segments': ['p', 'm', 'tp'],
                 'output_modes': 3,
@@ -121,19 +96,6 @@ class TmsParameterBuilder:
                 'iteration': 'iter6',
                 'model_zoning': 'Norms',
                 'land_use_version': 3,
-                'resi_land_use_path': 'Y:/NorMITs Land Use/iter3b/outputs/land_use_output_safe_msoa.csv',
-                'non_resi_land_use_path': 'Y:/NorMITs Land Use/iter3b/outputs/land_use_2018_emp.csv',
-                'land_use_zoning': 'MSOA',
-                'run_trip_ends': True,
-                'hb_trip_rates': 'tfn_hb_trip_rates_18_0620.csv',
-                'hb_time_split': 'tfn_hb_time_split_18_0620.csv',
-                'hb_ave_time_split': 'hb_ave_time_split.csv',
-                'hb_mode_split': 'tfn_hb_mode_split_18_0620.csv',
-                'nhb_trip_rates': 'tfn_nhb_ave_wday_trip_rates_18.csv',
-                'nhb_time_split': 'tfn_nhb_ave_wday_time_split_18.csv',
-                'nhb_mode_split': 'tfn_nhb_ave_wday_mode_split_18.csv',
-                'hb_trip_end_segmentation': ['p, m, area_type, ca, soc, ns, g'],
-                'nhb_trip_end_segmentation': ['p, m, area_type, ca, soc, ns, g'],
                 'hb_attraction_weights': 'hb_attraction_weights.csv',
                 'nhb_attraction_weights': 'nhb_attraction_weights.csv',
                 'attraction_mode_split': 'attraction_mode_split.csv',
@@ -178,20 +140,16 @@ class TmsParameterBuilder:
 
 
 if __name__ == '__main__':
-    main()
+    # Checks whether NoTEM trip end runs are completed
+    check_notem_run_status()
 
     config_path = 'I:/NorMITs Synthesiser/config/'
     tmsparam = TmsParameterBuilder()
 
-    # Ask user which config file to use
-    # params_file = prj.select_params_file(config_path)
-    """
-    Gets model name from the user using the module
-    """
+    # Gets model name from the user using the module
     model_name = tmsparam.get_model_name()
-    """
-    Assigns the various model parameters required based on model_name
-    """
+
+    # Assigns the various model parameters required based on model_name
     params = tmsparam.assign_param(model_name)
 
     # TODO: Building loose folders for External model paths
@@ -204,28 +162,6 @@ if __name__ == '__main__':
     # BACKLOG: Project status
     tms_run.project_status = tms_run.project_check()
 
-    # BACKLOG: Do this stuff based on the project status
-    p = pm.ProductionModel(config_path, params)
-
-    hb_p_out = p.run_hb(verbose=True)
-    p.ping_outpath()
-
-    a = am.AttractionModel(config_path, params)
-    hb_a_out = a.run(trip_origin='hb',
-                     control_to_productions=True,
-                     productions_path=p.export['in_hb'])
-    a.ping_outpath()
-
-    nhb_p_out = p.run_nhb(
-        attraction_vector=a.export['in_hb'])
-    p.ping_outpath()
-
-    nhb_a_out = a.run(trip_origin='nhb',
-                      control_to_productions=True,
-                      productions_path=p.export['in_nhb'])
-
-    # Delete trip end models
-    del p, a
     # Update project status
     # BACKLOG: Project status
 
@@ -247,6 +183,9 @@ if __name__ == '__main__':
         params)
 
     int_hb = dist.run_distribution_model(
+        file_drive=params['base_directory'],
+        model_name=params['model_name'],
+        iteration=params['iteration'],
         tlb_area='north',
         segmentation='tfn',
         distribution_segments=params['hb_distribution_segments'],
@@ -261,6 +200,9 @@ if __name__ == '__main__':
         mp_threads=-1)
 
     int_nhb = dist.run_distribution_model(
+        file_drive=params['base_directory'],
+        model_name=params['model_name'],
+        iteration=params['iteration'],
         tlb_area='north',
         segmentation='tfn',
         distribution_segments=params['nhb_distribution_segments'],
@@ -403,11 +345,22 @@ if __name__ == '__main__':
     lookup_folder = os.path.join(params['base_directory'],
                                  params['model_name'],
                                  'Model Zone Lookups')
+    o_paths_pa = os.path.join(params['base_directory'],
+                              params['model_name'],
+                              params['iteration'],
+                              'Distribution Outputs',
+                              'PA Matrices')
+    o_paths_c_pa_export = os.path.join(params['base_directory'],
+                                       params['model_name'],
+                                       params['iteration'],
+                                       'Distribution Outputs',
+                                       'Compiled PA Matrices')
+
     # Import compilation params
     pa_compilation_params, od_compilation_params = nup.get_compilation_params(lookup_folder)
 
     if params['compile_pa']:
-        compiled_pa_matrices = nup.compile_pa(o_paths['pa'],
+        compiled_pa_matrices = nup.compile_pa(o_paths_pa,
                                               (lookup_folder +
                                                '/' +
                                                pa_compilation_params))  # Split time = true
@@ -416,7 +369,7 @@ if __name__ == '__main__':
         for mat in compiled_pa_matrices:
             for key, value in mat.items():
                 print(key)
-                c_pa_out = (o_paths['c_pa_export'] +
+                c_pa_out = (o_paths_c_pa_export +
                             '/' +
                             key +
                             '.csv')
@@ -508,30 +461,3 @@ if __name__ == '__main__':
                                      header=False,
                                      write=True)
         # TODO: add 3 sectore report call
-    # ## PREPARE OUTPUTS ## #
-    print("Initialising outputs...")
-    write_input_info(
-        os.path.join(params['base_directory'], "input_parameters.txt"),
-        version.__version__,
-        params['iteration'],
-        params['model_name'],
-        params['land_use_zoning']
-    )
-
-
-    def write_input_info(output_path: str,
-                         tms_version: str,
-                         model_name: str,
-                         land_use_zoning: str,
-                         ) -> None:
-
-        out_lines = [
-            'TMS version: ' + str(tms_version),
-            'Model Name: ' + str(model_name),
-            'Run Date: ' + str(timing.strftime('%D').replace('/', '_')),
-            'Start Time: ' + str(timing.strftime('%T').replace('/', '_')),
-            "Land Use Zoning System: " + str(land_use_zoning),
-
-        ]
-        with open(output_path, 'w') as out:
-            out.write('\n'.join(out_lines))
