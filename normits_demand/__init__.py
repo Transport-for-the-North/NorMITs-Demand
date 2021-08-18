@@ -36,6 +36,10 @@ from normits_demand.core import from_pickle
 from normits_demand.core import get_zoning_system
 from normits_demand.core import get_segmentation_level
 
+# Useful utilities
+from normits_demand.utils import read_df
+from normits_demand.utils import write_df
+
 # Audit classes
 from normits_demand.reports.efs_reporting import EfsReporter
 
