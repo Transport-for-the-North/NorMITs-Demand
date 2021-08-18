@@ -1,4 +1,13 @@
+# -*- coding: utf-8 -*-
 """
+Created on: Tues August 17 2021
+Updated on:
+
+Original author: Ben Taylor
+Last update made by:
+Other updates made by:
+
+File purpose:
 Master run file to run NoTEM
 """
 import sys
@@ -49,9 +58,9 @@ def main():
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,
-        generate_hb_attraction=True,
+        generate_hb_attraction=False,
         generate_nhb_production=False,
-        generate_nhb_attraction=False,
+        generate_nhb_attraction=True,
     )
 
 
