@@ -13,17 +13,16 @@ NoTEM Class Frontend for calling all production and attraction models
 # Builtins
 import os.path
 from typing import List
-from typing import Dict
 
 # Third Party
 
 # Local Imports
 import normits_demand as nd
 
-from normits_demand.models import HBProductionModel
-from normits_demand.models import NHBProductionModel
-from normits_demand.models import HBAttractionModel
-from normits_demand.models import NHBAttractionModel
+from normits_demand.models.notem import HBProductionModel
+from normits_demand.models.notem import NHBProductionModel
+from normits_demand.models.notem import HBAttractionModel
+from normits_demand.models.notem import NHBAttractionModel
 
 from normits_demand.pathing import NoTEMExportPaths
 
