@@ -14,8 +14,7 @@ import normits_demand.reports.reports_audits as ra
 from normits_demand.utils import vehicle_occupancy as vo
 from normits_demand.utils import utils as nup
 from normits_demand.utils import file_ops
-from normits_demand.models import notem
-from normits_demand.pathing import NoTEMImportPaths
+
 
 # GLOBAL VARIABLES
 years = [2018]
@@ -93,7 +92,7 @@ class TmsParameterBuilder:
             params = {
                 'base_directory': 'I:/NorMITs Synthesiser',
                 'model_name': 'norms',
-                'iteration': 'iter6',
+                'iteration': 'iter7',
                 'model_zoning': 'Norms',
                 'land_use_version': 3,
                 'hb_attraction_weights': 'hb_attraction_weights.csv',
@@ -114,7 +113,7 @@ class TmsParameterBuilder:
                 'external_tlb_area': 'gb',
                 'external_tlb_name': 'standard_plus_ca_segments',
                 'external_segmentation': ['p', 'm', 'ca'],
-                'external_export_modes': 6,
+                'external_export_modes': [6],
                 'non_dist_export_modes': None,
                 'run_distribution': True,
                 'distribution_segmentation': ['p', 'm', 'ca'],
@@ -141,7 +140,7 @@ class TmsParameterBuilder:
 
 if __name__ == '__main__':
     # Checks whether NoTEM trip end runs are completed
-    check_notem_run_status()
+    #check_notem_run_status()
 
     config_path = 'I:/NorMITs Synthesiser/config/'
     tmsparam = TmsParameterBuilder()
@@ -171,9 +170,11 @@ if __name__ == '__main__':
     ext = em.ExternalModel(
         config_path,
         params)
+    """
     hb_ext_out = ext.run(
         trip_origin='hb',
         cost_type='24hr')
+    """
     nhb_ext_out = ext.run(
         trip_origin='nhb',
         cost_type='24hr')

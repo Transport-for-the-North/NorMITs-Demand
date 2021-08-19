@@ -794,7 +794,7 @@ def get_attraction_type(calib_params,
 
     # Get purpose and soc cat from calib params
     for index, param in wcp.items():
-        print_w_toggle(index, param, echo=echo)
+        print_w_toggle(index, param, verbose=echo)
         if index == 'p':
             purpose = param
         if index == 'soc':
@@ -814,32 +814,32 @@ def get_attraction_type(calib_params,
     hdt_purpose = [8, 18]
 
     if purpose in commute_purpose:
-        print_w_toggle('balancing to commute attractions', echo=echo)
+        print_w_toggle('balancing to commute attractions', verbose=echo)
         a_t = 'Commute'
         if soc_cat is not None:
             a_t = (a_t + '_' + soc_cat)
     elif purpose in business_purpose:
-        print_w_toggle('balancing to business attractions', echo=echo)
+        print_w_toggle('balancing to business attractions', verbose=echo)
         a_t = 'Business'
         if soc_cat is not None:
             a_t = (a_t + '_' + soc_cat)
     elif purpose in education_purpose:
-        print_w_toggle('balancing to education attractions', echo=echo)
+        print_w_toggle('balancing to education attractions', verbose=echo)
         a_t = 'Education'
     elif purpose in shopping_purpose:
-        print_w_toggle('balancing to shopping attractions', echo=echo)
+        print_w_toggle('balancing to shopping attractions', verbose=echo)
         a_t = 'Shopping'
     elif purpose in pb_purpose:
-        print_w_toggle('balancing to PB attractions', echo=echo)
+        print_w_toggle('balancing to PB attractions', verbose=echo)
         a_t = 'Personal_business'
     elif purpose in r_s_purpose:
-        print_w_toggle('balancing to recreation attractions', echo=echo)
+        print_w_toggle('balancing to recreation attractions', verbose=echo)
         a_t = 'Recreation_social'
     elif purpose in vfr_purpose:
-        print_w_toggle('balancing to visiting friends attractions', echo=echo)
+        print_w_toggle('balancing to visiting friends attractions', verbose=echo)
         a_t = 'Visiting_friends'
     elif purpose in hdt_purpose:
-        print_w_toggle('balancing to holiday, day trip attractions', echo=echo)
+        print_w_toggle('balancing to holiday, day trip attractions', verbose=echo)
         a_t = 'Holiday_day_trip'
 
     return(a_t)
@@ -847,7 +847,7 @@ def get_attraction_type(calib_params,
 
 def print_w_toggle(*args, verbose):
     """
-    Small wrapper to only print when echo=True
+    Small wrapper to only print when verbose=True
 
     Parameters
     ----------
@@ -975,9 +975,9 @@ def filter_pa_vector(pa_vector,
                 if echo:
                     print(index, cp)
             else:
-                print_w_toggle('Ignoring ' + index, echo=echo)
+                print_w_toggle('Ignoring ' + index, verbose=echo)
         else:
-            print_w_toggle('Ignoring trip length bands', echo=echo)
+            print_w_toggle('Ignoring trip length bands', verbose=echo)
 
     dp_ri = [ia_name, value_var]
     dp = dp.reindex(dp_ri, axis=1)
@@ -1460,7 +1460,7 @@ def balance_a_to_p(ia_name,
         # Always print as it's a warning of future problems
         print('WARNING: Not the same number of zones')
 
-    print_w_toggle('Balancing internal attractions to productions', echo=echo)
+    print_w_toggle('Balancing internal attractions to productions', verbose=echo)
     a_factors[a_var_name] = (
         a_factors[a_var_name]
         *
