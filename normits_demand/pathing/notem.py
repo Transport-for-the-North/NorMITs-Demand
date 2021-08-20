@@ -29,6 +29,12 @@ from normits_demand.utils import general as du
 
 
 class NoTEMImportPathsBase(ABC):
+    """Abstract Class defining how the import paths class for NoTEM should look.
+
+    If custom import paths are needed, then a new class needs to be made
+    which inherits this abstract class. NoTEM can then use the defined
+    functions to pick up new import files.
+    """
 
     @abstractmethod
     def generate_hb_production_imports(self) -> Dict[str, nd.PathLike]:
@@ -122,6 +128,30 @@ class NoTEMImportPathsBase(ABC):
 
 
 class NoTEMImportPaths(NoTEMImportPathsBase):
+    """The default NoTEM Import paths class.
+
+    Defines the default input paths for NoTEM. All Attributes are as
+    passed in to the constructor.
+
+    Attributes
+    ----------
+    import_home:
+        The home for all of the imports. This is usually a drive letter.
+        Expects to find a folder titled
+        NoTEMImportPath._normits_land_use in there.
+
+    hb_production_import_version:
+        The version of inputs to use for the HB production model.
+        e.g. '2.0'
+
+    hb_attraction_import_version:
+        The version of inputs to use for the HB attraction model.
+        e.g. '2.0'
+
+    nhb_production_import_version:
+        The version of inputs to use for the NHB production model.
+        e.g. '2.0'
+    """
 
     # Constant
     _current_base_year = 2018
@@ -353,6 +383,50 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
 
 
 class NoTEMExportPaths:
+    """Path Class for the NoTEM Model.
+
+    This class defines and builds the export and reporting paths for
+    all NoTEM sub-models. It creates and stores an instance of:
+    HBProductionModelPaths, NHBProductionModelPaths,
+    HBAttractionModelPaths, NHBAttractionModelPaths.
+    If the outputs of NoTEM are needed, create an instance of this
+    class to generate all paths.
+
+    Attributes
+    ----------
+    path_years:
+        A list of the years the models are running for. As passed into the
+        constructor.
+
+    scenario:
+        The name of the scenario to run for. As passed in to the constructor.
+
+    iteration_name:
+        The name of this iteration of the NoTEM models. Constructor argument
+        of the same name will have 'iter' prepended to create this name.
+        e.g. if '3i' was passed in, this would become 'iter3i'.
+
+    export_home:
+        The home directory of all the export paths. Nested folder of the
+        passed in export_home, iteration_name, and scenario
+
+    hb_production:
+        An instance of HBProductionModelPaths. See docs for more info on how
+        to access paths.
+
+    nhb_production:
+        An instance of NHBProductionModelPaths. See docs for more info on how
+        to access paths.
+
+    hb_attraction:
+        An instance of HBAttractionModelPaths. See docs for more info on how
+        to access paths.
+
+    nhb_attraction:
+        An instance of NHBAttractionModelPaths. See docs for more info on how
+        to access paths.
+    """
+
     # Define the names of the export dirs
     _hb_productions_dir = 'hb_productions'
     _nhb_productions_dir = 'nhb_productions'
@@ -382,7 +456,6 @@ class NoTEMExportPaths:
             The name of this iteration of the NoTEM models. Will have 'iter'
             prepended to create the folder name. e.g. if iteration_name was
             set to '3i' the iteration folder would be called 'iter3i'.
-
 
         export_home:
             The home directory of all the export paths. A sub-directory will

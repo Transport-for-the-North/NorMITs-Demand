@@ -16,9 +16,9 @@ If you want to define a new segmentation, take the following steps:
     with each segment name on its own line. The order of the segment names
     will be used when naming segments within normits_demand.
     
-3. If no aggregation or multiplication methods need to be defined,
+3. If no aggregation, multiplication, or expansion methods need to be defined,
    you are done, otherwise:
-    * **Multiplication** - Open multiply.csv. Add a row to this csv, where:
+    * **Multiplication** - Open `multiply.csv`. Add a row to this csv, where:
         * _a_ is this segmentation name.
         * _b_ is the name of the segmentation to multiply this one with.
         * _join_ is a semi-colon delimited list of segment names which _a_
@@ -26,9 +26,15 @@ If you want to define a new segmentation, take the following steps:
         * _out_ the name of the segmentation that results of multiplying _a_
         and _b_ together, this is often either _a_ or _b_, depending on which
         has more segmentation.
-    * **Aggregation** - Open aggregate.csv. Add a row to this csv, where:
+    * **Aggregation** - Open `aggregate.csv`. Add a row to this csv, where:
         * _in_ is the name of the segmentation to start the aggregation with.
         * _out_ is the name of the segmentation to end the aggregation with.
         * _common_ is a semi-colon delimited list of segment names which _in_
         and _out_ have in common. This is often a list of all segment names that
         are in _out_.
+    * **Expansion** - Open `expand.csv`. Add a row to this csv, where:
+        * _a_ is this segmentation name.
+        * _b_ is the name of the segmentation to expand this one with.
+        * _out_ is the segmentation that expanding _a_ with _b_ should
+        result in. All values of _a_ will be multiplied by all values
+        of _b_ to produce _out_.

@@ -29,6 +29,24 @@ from normits_demand.utils import pandas_utils as pd_utils
 
 
 class ZoningSystem:
+    """Zoning definitions to provide common interface
+
+    Attributes
+    ----------
+    name:
+        The name of the zoning system. This will be the same as the name in
+        the definitions folder
+
+    col_name:
+        The default naming that should be given to this zoning system if
+        defined to a pandas.DataFrame
+
+    unique_zones:
+        A sorted numpy array of unique zone names for this zoning system.
+
+    n_zones:
+        The number of zones in this zoning system
+    """
 
     _zoning_system_import_fname = "zoning_systems"
     _zones_csv_fname = "zones.csv"
@@ -62,11 +80,41 @@ class ZoningSystem:
                  name: str,
                  unique_zones: np.ndarray,
                  ) -> ZoningSystem:
+        """Builds a ZoningSystem
+
+        This class should almost never be constructed directly. If an
+        instance of ZoningSystem is needed, the helper function
+        `get_zoning_system()` should be used instead.
+
+        Parameters
+        ----------
+        name:
+            The name of the zoning system to create.
+
+        unique_zones:
+            A numpy array of unique zone names for this zoning system.
+        """
         # Init
-        self.name = name
-        self.col_name = self._base_col_name % name
-        self.unique_zones = np.sort(unique_zones)
-        self.n_zones = len(self.unique_zones)
+        self._name = name
+        self._col_name = self._base_col_name % name
+        self._unique_zones = np.sort(unique_zones)
+        self._n_zones = len(self.unique_zones)
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def col_name(self):
+        return self._col_name
+
+    @property
+    def unique_zones(self):
+        return self._unique_zones
+
+    @property
+    def n_zones(self):
+        return self._n_zones
 
     def __copy__(self):
         """Returns a copy of this class"""

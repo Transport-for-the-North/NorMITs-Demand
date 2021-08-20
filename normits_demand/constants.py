@@ -1,5 +1,7 @@
 from normits_demand.efs_constants import *
 
+PACKAGE_NAME = __name__.split('.')[0]
+
 # VALID VALUES FOR ARGS
 VECTOR_TYPES = [
     'productions',

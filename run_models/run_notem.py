@@ -1,6 +1,18 @@
+# -*- coding: utf-8 -*-
 """
-Temporary file for testing notem
+Created on: Tues August 17 2021
+Updated on:
+
+Original author: Ben Taylor
+Last update made by:
+Other updates made by:
+
+File purpose:
+Master run file to run NoTEM
 """
+import sys
+
+sys.path.append("..")
 from normits_demand.models import notem
 from normits_demand.pathing import NoTEMImportPaths
 
@@ -42,13 +54,13 @@ def main():
         export_home=notem_export_home,
     )
     n.run(
-        generate_all=False,
+        generate_all=True,
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,
         generate_hb_attraction=False,
         generate_nhb_production=False,
-        generate_nhb_attraction=True,
+        generate_nhb_attraction=False,
     )
 
 
