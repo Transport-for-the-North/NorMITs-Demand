@@ -390,7 +390,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         """
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
-        emp_seg = nd.get_segmentation_level('lu_emp')
+        emp_seg = nd.get_segmentation_level('notem_lu_emp')
 
         # Read the land use data corresponding to the year
         emp = file_ops.read_df(
@@ -434,8 +434,8 @@ class HBAttractionModel(HBAttractionModelPaths):
         """
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
-        pure_attractions_ecat_seg = nd.get_segmentation_level('pure_attractions_ecat')
-        pure_attractions_seg = nd.get_segmentation_level('pure_attractions')
+        trip_weights_seg = nd.get_segmentation_level('notem_hb_attractions_trip_weights')
+        pure_attractions_seg = nd.get_segmentation_level('notem_hb_attractions_pure')
 
         # Reading trip rates
         du.print_w_toggle("Reading in files...", verbose=verbose)
@@ -449,9 +449,9 @@ class HBAttractionModel(HBAttractionModelPaths):
         du.print_w_toggle("Creating trip rates DVec...", verbose=verbose)
 
         # Instantiate
-        trip_rates_dvec = nd.DVector(
+        trip_weights_dvec = nd.DVector(
             zoning_system=msoa_zoning,
-            segmentation=pure_attractions_ecat_seg,
+            segmentation=trip_weights_seg,
             import_data=trip_rates.rename(columns=self._seg_rename),
             zone_col="msoa_zone_id",
             val_col="trip_rate",
@@ -460,8 +460,7 @@ class HBAttractionModel(HBAttractionModelPaths):
 
         # ## MULTIPLY TOGETHER ## #
         # Remove un-needed ecat column too
-        pure_attractions_ecat = emp_dvec * trip_rates_dvec
-        return pure_attractions_ecat.aggregate(pure_attractions_seg)
+        return emp_dvec.multiply_and_aggregate(trip_weights_dvec, pure_attractions_seg)
 
     def _split_by_mode(self,
                        attractions: nd.DVector,
@@ -789,9 +788,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         nhb_attr_dvec:
             Returns NHB attractions as a Dvector
         """
-        # Define the zoning and segmentations we want to use
-        msoa_zoning = nd.get_zoning_system('msoa')
-        nhb_notem_seg = nd.get_segmentation_level('nhb_notem_output')
+        segmentation = nd.get_segmentation_level('notem_nhb_output')
 
         # Reading the notem segmented HB attractions compressed pickle
         hb_attr_notem = nd.from_pickle(self.hb_attraction_paths[year])
@@ -809,8 +806,8 @@ class NHBAttractionModel(NHBAttractionModelPaths):
 
         # Instantiate
         return nd.DVector(
-            zoning_system=msoa_zoning,
-            segmentation=nhb_notem_seg,
+            zoning_system=hb_attr_notem.zoning_system,
+            segmentation=segmentation,
             import_data=hb_attr_notem_df,
             zone_col=hb_attr_notem.zoning_system.col_name,
             val_col="val",

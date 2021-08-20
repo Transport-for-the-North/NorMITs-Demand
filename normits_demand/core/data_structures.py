@@ -47,6 +47,38 @@ from normits_demand.concurrency import multiprocessing
 
 # ## CLASSES ## #
 class DVector:
+    """One dimensional, segmentation and zoning flexible, heterogeneous data.
+
+    Custom Vector Object for NorMITs Demand
+    A Demand Vector object built to handle flexible segmentations and zoning
+    systems. All data is stored in "data dictionaries" alongside meta data
+    to link all data points back to segments and zones. DVector has been
+    multiprocessed and optimised to avoid memory over-utilisation.
+
+    Create a Dvector by passing in a pandas.DataFrame, or a "data
+    dictionary".
+
+    WARNING: DVectors can be converted into Pandas.DatFrame, however this is
+    not recommended for large DVectors as DataFrames are incredibly inefficient
+    for storing DVector data due to the number of repeated values needed in
+    a dataframe.
+
+    Attributes
+    ----------
+    zoning_system:
+        The zoning system of this DVector, as passed into the constructor.
+
+    segmentation:
+        The segmentation level of this DVector, as passed into the constructor.
+
+    process_count:
+        The maximum number of parallel processes that this DVector can use
+        when processing data.
+
+    verbose:
+        If set to True, the DVector will print out progress updates while
+        running. Currently, setting this to True will not change anything.
+    """
 
     _zone_col = 'zone'
     _segment_col = 'segment'
@@ -144,20 +176,18 @@ class DVector:
                 "Given segmentation is not a nd.core.SegmentationLevel object."
             )
         # Init
-        self.zoning_system = zoning_system
-        self.segmentation = segmentation
+        self._zoning_system = zoning_system
+        self._segmentation = segmentation
         self.verbose = verbose
-        self.df_chunk_size = self._chunk_size if df_chunk_size is None else df_chunk_size
+        self._df_chunk_size = self._chunk_size if df_chunk_size is None else df_chunk_size
 
         # Define multiprocessing arguments
-        if process_count < 0:
-            process_count = os.cpu_count() + process_count
         self.process_count = process_count
 
-        if process_count == 0:
-            self.chunk_divider = 1
+        if self.process_count == 0:
+            self._chunk_divider = 1
         else:
-            self.chunk_divider = self.process_count * 3
+            self._chunk_divider = self.process_count * 3
 
         # Set defaults if args not set
         zone_col = self._zone_col if zone_col is None else zone_col
@@ -165,7 +195,7 @@ class DVector:
 
         # Try to convert the given data into DVector format
         if isinstance(import_data, pd.DataFrame):
-            self.data = self._dataframe_to_dvec(
+            self._data = self._dataframe_to_dvec(
                 df=import_data,
                 zone_col=zone_col,
                 val_col=val_col,
@@ -173,7 +203,7 @@ class DVector:
                 infill=infill,
             )
         elif isinstance(import_data, dict):
-            self.data = self._dict_to_dvec(
+            self._data = self._dict_to_dvec(
                 import_data=import_data,
                 infill=infill,
             )
@@ -183,6 +213,39 @@ class DVector:
                 "pandas DF, or dict"
             )
 
+    # SETTERS AND GETTERS
+    @property
+    def zoning_system(self):
+        return self._zoning_system
+
+    @zoning_system.setter
+    def zoning_system(self, a):
+        raise DVectorError(
+            "Zoning System cannot be changed for an already created DVector."
+        )
+
+    @property
+    def segmentation(self):
+        return self._segmentation
+
+    @segmentation.setter
+    def segmentation(self, a):
+        raise DVectorError(
+            "Segmentation Level cannot be changed for an already created DVector."
+        )
+
+    @property
+    def process_count(self):
+        return self._process_count
+
+    @process_count.setter
+    def process_count(self, a):
+        if a < 0:
+            self._process_count = os.cpu_count() + a
+        else:
+            self._process_count = a
+
+    # BUILT IN METHODS
     def __mul__(self: DVector, other: DVector) -> DVector:
         """
         Builds a new Dvec by multiplying a and b together.
@@ -235,7 +298,7 @@ class DVector:
         # Build the dvec data here with multiplication
         dvec_data = dict.fromkeys(multiply_dict.keys())
         for final_seg, (self_key, other_key) in multiply_dict.items():
-            dvec_data[final_seg] = self.data[self_key] * other.data[other_key]
+            dvec_data[final_seg] = self._data[self_key] * other._data[other_key]
 
         return DVector(
             zoning_system=return_zoning_system,
@@ -245,6 +308,7 @@ class DVector:
             verbose=self.verbose,
         )
 
+    # CUSTOM METHODS
     def _dict_to_dvec(self,
                       import_data: nd.DVectorData,
                       infill: Any
@@ -422,10 +486,10 @@ class DVector:
 
         # ## MULTIPROCESSING SETUP ## #
         # If the dataframe is smaller than the chunk size, evenly split across cores
-        if len(df) < self.df_chunk_size * self.process_count:
+        if len(df) < self._df_chunk_size * self.process_count:
             chunk_size = math.ceil(len(df) / self.process_count)
         else:
-            chunk_size = self.df_chunk_size
+            chunk_size = self._df_chunk_size
 
         # setup a pbar
         pbar_kwargs = {
@@ -516,7 +580,7 @@ class DVector:
             )
 
         # Get data and covert to zoning system
-        return self.data[segment_name]
+        return self._data[segment_name]
 
     @staticmethod
     def _to_df_internal(self_data: nd.DVectorData,
@@ -560,7 +624,7 @@ class DVector:
         as the index
         """
         # Init
-        col_names = list(self.segmentation.get_seg_dict(list(self.data.keys())[0]).keys())
+        col_names = list(self.segmentation.get_seg_dict(list(self._data.keys())[0]).keys())
         col_names = col_names + [self._val_col]
         if self.zoning_system is not None:
             zone_col = self.zoning_system.col_name
@@ -570,8 +634,8 @@ class DVector:
 
         # ## MULTIPROCESS ## #
         # Define chunk size
-        total = len(self.data)
-        chunk_size = math.ceil(total / self.chunk_divider)
+        total = len(self._data)
+        chunk_size = math.ceil(total / self._chunk_divider)
 
         # Make sure the chunks aren't too small
         if chunk_size < self._to_df_min_chunk_size:
@@ -579,9 +643,9 @@ class DVector:
 
         # Define the kwargs
         kwarg_list = list()
-        for keys_chunk in du.chunk_list(self.data.keys(), chunk_size):
+        for keys_chunk in du.chunk_list(self._data.keys(), chunk_size):
             # Calculate subsets of self.data to avoid locks between processes
-            self_data_subset = {k: self.data[k] for k in keys_chunk}
+            self_data_subset = {k: self._data[k] for k in keys_chunk}
 
             if self.zoning_system is not None:
                 self_zoning_system = self.zoning_system.copy()
@@ -731,7 +795,7 @@ class DVector:
         # TODO(BT): Add optional multiprocessing if aggregation_dict is big enough
         dvec_data = dict()
         for out_seg_name, in_seg_names in aggregation_dict.items():
-            in_lst = [self.data[x].flatten() for x in in_seg_names]
+            in_lst = [self._data[x].flatten() for x in in_seg_names]
             dvec_data[out_seg_name] = np.sum(in_lst, axis=0)
 
         return DVector(
@@ -787,7 +851,7 @@ class DVector:
         # ## MULTIPROCESS ## #
         # Define the chunk size
         total = len(aggregation_dict)
-        chunk_size = math.ceil(total / self.chunk_divider)
+        chunk_size = math.ceil(total / self._chunk_divider)
 
         # Define the kwargs
         kwarg_list = list()
@@ -799,8 +863,8 @@ class DVector:
             mult_dict_subset = {k: multiply_dict[k] for k in key_subset}
 
             self_keys, other_keys = zip(*mult_dict_subset.values())
-            self_data = {k: self.data[k] for k in self_keys}
-            other_data = {k: other.data[k] for k in other_keys}
+            self_data = {k: self._data[k] for k in self_keys}
+            other_data = {k: other._data[k] for k in other_keys}
 
             # Assign to a process
             kwarg_list.append({
@@ -886,7 +950,7 @@ class DVector:
         sum:
             The total sum of all values
         """
-        return np.sum([x.flatten() for x in self.data.values()])
+        return np.sum([x.flatten() for x in self._data.values()])
 
     @staticmethod
     def _translate_zoning_internal(self_data: nd.DVectorData,
@@ -949,8 +1013,8 @@ class DVector:
 
         # ## MULTIPROCESS ## #
         # Define the chunk size
-        total = len(self.data)
-        chunk_size = math.ceil(total / self.chunk_divider)
+        total = len(self._data)
+        chunk_size = math.ceil(total / self._chunk_divider)
 
         # Make sure the chunks aren't too small
         if chunk_size < self._translate_zoning_min_chunk_size:
@@ -958,9 +1022,9 @@ class DVector:
 
         # Define the kwargs
         kwarg_list = list()
-        for keys_chunk in du.chunk_list(self.data.keys(), chunk_size):
+        for keys_chunk in du.chunk_list(self._data.keys(), chunk_size):
             # Calculate subsets of self.data to avoid locks between processes
-            self_data_subset = {k: self.data[k] for k in keys_chunk}
+            self_data_subset = {k: self._data[k] for k in keys_chunk}
 
             # Assign to a process
             kwarg_list.append({
@@ -983,7 +1047,7 @@ class DVector:
         )
 
         # Combine all computation chunks into one
-        dvec_data = dict.fromkeys(self.data.keys())
+        dvec_data = dict.fromkeys(self._data.keys())
         for chunk in data_chunks:
             dvec_data.update(chunk)
 
@@ -1045,7 +1109,7 @@ class DVector:
         # Build the new DVec data from the expansion
         dvec_data = dict.fromkeys(expand_dict.keys())
         for final_seg, (self_key, other_key) in expand_dict.items():
-            dvec_data[final_seg] = self.data[self_key] * expansion_dvec.data[other_key]
+            dvec_data[final_seg] = self._data[self_key] * expansion_dvec._data[other_key]
 
         expanded_dvec = DVector(
             zoning_system=self.zoning_system,
@@ -1126,7 +1190,7 @@ class DVector:
         # TODO(BT): Add optional multiprocessing if aggregation_dict is big enough
         dvec_data = dict()
         for out_seg_name, in_seg_names in aggregation_dict.items():
-            in_lst = [self.data[x].flatten() for x in in_seg_names]
+            in_lst = [self._data[x].flatten() for x in in_seg_names]
             dvec_data[out_seg_name] = np.sum(in_lst, axis=0)
 
         return DVector(
@@ -1186,11 +1250,11 @@ class DVector:
         dvec_data = dict.fromkeys(other.segmentation.segment_names)
         for in_seg_name, out_seg_names in split_dict.items():
             # Calculate the splitting factors
-            other_segs = [np.mean(other.data[s]) for s in out_seg_names]
+            other_segs = [np.mean(other._data[s]) for s in out_seg_names]
             split_factors = other_segs / np.sum(other_segs)
 
             # Get the original value
-            self_seg = self.data[in_seg_name]
+            self_seg = self._data[in_seg_name]
 
             # Split
             for name, factor in zip(out_seg_names, split_factors):
@@ -1278,8 +1342,8 @@ class DVector:
                     other_data_lst = list()
                     for segment in segment_group:
                         # Get data
-                        self_data = self.data[segment]
-                        other_data = other.data[segment]
+                        self_data = self._data[segment]
+                        other_data = other._data[segment]
 
                         # Infill zeros
                         self_data = np.where(self_data <= 0, infill, self_data)
@@ -1300,8 +1364,8 @@ class DVector:
             # Control all segments as normal
             for segment in self.segmentation.segment_names:
                 # Get data
-                self_data = self.data[segment]
-                other_data = other.data[segment]
+                self_data = self._data[segment]
+                other_data = other._data[segment]
 
                 # Infill zeros
                 self_data = np.where(self_data <= 0, infill, self_data)
@@ -1358,8 +1422,8 @@ class DVector:
             )
 
         # Aggregate all the data
-        keys = self.data.keys()
-        values = [fn(x) for x in self.data.values()]
+        keys = self._data.keys()
+        values = [fn(x) for x in self._data.values()]
 
         return DVector(
             zoning_system=None,

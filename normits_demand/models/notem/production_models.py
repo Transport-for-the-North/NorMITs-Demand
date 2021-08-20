@@ -71,7 +71,7 @@ class HBProductionModel(HBProductionModelPaths):
         "path_years, export_home, report_home, export_paths, report_paths"
     """
     # Constants
-    _return_segmentation_name = 'hb_notem_output'
+    _return_segmentation_name = 'notem_hb_output'
 
     # Define wanted columns
     _target_col_dtypes = {
@@ -269,9 +269,9 @@ class HBProductionModel(HBProductionModelPaths):
                     verbose=verbose
                 )
 
-                tfn_agg_at_seg = nd.get_segmentation_level('pure_demand_reporting')
+                report_seg = nd.get_segmentation_level('notem_hb_productions_pure_report')
                 pure_demand_paths = self.report_paths.pure_demand
-                pure_demand.aggregate(tfn_agg_at_seg).write_sector_reports(
+                pure_demand.aggregate(report_seg).write_sector_reports(
                     segment_totals_path=pure_demand_paths.segment_total[year],
                     ca_sector_path=pure_demand_paths.ca_sector[year],
                     ie_sector_path=pure_demand_paths.ie_sector[year],
@@ -372,7 +372,7 @@ class HBProductionModel(HBProductionModelPaths):
         """
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
-        pop_seg = nd.get_segmentation_level('lu_pop')
+        pop_seg = nd.get_segmentation_level('notem_lu_pop')
 
         # Read the land use data corresponding to the year
         pop = file_ops.read_df(
@@ -416,7 +416,7 @@ class HBProductionModel(HBProductionModelPaths):
         """
 
         # Define the zoning and segmentations we want to use
-        pure_demand_seg = nd.get_segmentation_level('pure_demand')
+        pure_hb_prod = nd.get_segmentation_level('notem_hb_productions_pure')
 
         # Reading trip rates
         du.print_w_toggle("Reading in files...", verbose=verbose)
@@ -432,7 +432,7 @@ class HBProductionModel(HBProductionModelPaths):
         # Instantiate
         trip_rates_dvec = nd.DVector(
             zoning_system=None,
-            segmentation=pure_demand_seg,
+            segmentation=pure_hb_prod,
             import_data=trip_rates.rename(columns=self._seg_rename),
             val_col="trip_rate",
             verbose=verbose,
@@ -457,8 +457,8 @@ class HBProductionModel(HBProductionModelPaths):
             A DVector containing pure_demand split by mode and time.
         """
         # Define the segmentation we want to use
-        m_tp_pure_demand_seg = nd.get_segmentation_level('full_tfntt_tfnat')
-        notem_seg = nd.get_segmentation_level('full_tfntt')
+        m_tp_splits_seg = nd.get_segmentation_level('notem_hb_productions_full_tfnat')
+        full_seg = nd.get_segmentation_level('notem_hb_productions_full')
 
         # Create the mode-time splits DVector
         mode_time_splits = pd.read_csv(
@@ -469,14 +469,14 @@ class HBProductionModel(HBProductionModelPaths):
 
         mode_time_splits_dvec = nd.DVector(
             zoning_system=None,
-            segmentation=m_tp_pure_demand_seg,
+            segmentation=m_tp_splits_seg,
             import_data=mode_time_splits,
             val_col="split",
         )
 
         return pure_demand.multiply_and_aggregate(
             other=mode_time_splits_dvec,
-            out_segmentation=notem_seg,
+            out_segmentation=full_seg,
         )
 
 
@@ -518,7 +518,7 @@ class NHBProductionModel(NHBProductionModelPaths):
             "path_years, export_home, report_home, export_paths, report_paths"
         """
     # Constants
-    _return_segmentation_name = 'nhb_notem_output'
+    _return_segmentation_name = 'notem_nhb_output'
 
     # Define wanted columns
     _target_col_dtypes = {
@@ -732,9 +732,9 @@ class NHBProductionModel(NHBProductionModelPaths):
                     verbose=verbose
                 )
 
-                tfn_agg_at_seg = nd.get_segmentation_level('pure_nhb_demand_reporting')
+                report_seg = nd.get_segmentation_level('notem_nhb_productions_pure_report')
                 pure_demand_paths = self.report_paths.pure_demand
-                pure_nhb_demand.aggregate(tfn_agg_at_seg).write_sector_reports(
+                pure_nhb_demand.aggregate(report_seg).write_sector_reports(
                     segment_totals_path=pure_demand_paths.segment_total[year],
                     ca_sector_path=pure_demand_paths.ca_sector[year],
                     ie_sector_path=pure_demand_paths.ie_sector[year],
@@ -835,7 +835,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         """
         # Define the zoning and segmentations we want to use
         msoa_zoning = nd.get_zoning_system('msoa')
-        hb_notem_no_output_seg = nd.get_segmentation_level('hb_notem_output_no_tp')
+        notem_no_tp_seg = nd.get_segmentation_level('notem_hb_output_no_tp')
 
         # ## READ IN AND VALIDATE THE LAND USE DATA ## #
         # Reading the land use data
@@ -891,7 +891,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         hb_attr_notem = nd.from_pickle(self.hb_attraction_paths[year])
 
         # Remove time period and add in tfn_at
-        hb_attr = hb_attr_notem.aggregate(hb_notem_no_output_seg)
+        hb_attr = hb_attr_notem.aggregate(notem_no_tp_seg)
         return hb_attr.expand_segmentation(area_type)
 
     def _generate_nhb_productions(self,
@@ -917,8 +917,8 @@ class NHBProductionModel(NHBProductionModelPaths):
         """
 
         # Define the zoning and segmentations we want to use
-        nhb_trip_rate_seg = nd.get_segmentation_level('nhb_trip_rate')
-        return_seg = nd.get_segmentation_level('pure_nhb_demand')
+        nhb_trip_rate_seg = nd.get_segmentation_level('notem_nhb_trip_rate')
+        pure_seg = nd.get_segmentation_level('notem_nhb_productions_pure')
 
         # Reading NHB trip rates
         du.print_w_toggle("Reading in files...", verbose=verbose)
@@ -938,7 +938,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         )
 
         # Multiply
-        return hb_attractions.multiply_and_aggregate(trip_rates_dvec, return_seg)
+        return hb_attractions.multiply_and_aggregate(trip_rates_dvec, pure_seg)
 
     def _split_by_tp(self,
                      pure_nhb_demand: nd.DVector,
@@ -957,8 +957,8 @@ class NHBProductionModel(NHBProductionModelPaths):
             A DVector containing pure_demand split by time.
         """
         # Define the segmentation we want to use
-        tp_pure_nhb_demand_seg = nd.get_segmentation_level('nhb_tfnat_p_m_tp')
-        fully_seg = nd.get_segmentation_level('full_nhb')
+        nhb_time_splits_seg = nd.get_segmentation_level('notem_nhb_tfnat_p_m_tp')
+        full_seg = nd.get_segmentation_level('notem_nhb_productions_full')
 
         # Read the time splits factor
         time_splits = pd.read_csv(
@@ -970,7 +970,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         # Instantiate
         time_splits_dvec = nd.DVector(
             zoning_system=None,
-            segmentation=tp_pure_nhb_demand_seg,
+            segmentation=nhb_time_splits_seg,
             import_data=time_splits,
             val_col="split",
         )
@@ -978,7 +978,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         # Multiply together #
         return pure_nhb_demand.multiply_and_aggregate(
             other=time_splits_dvec,
-            out_segmentation=fully_seg,
+            out_segmentation=full_seg,
         )
 
     def _rename(self, full_segmentation: nd.DVector) -> nd.DVector:

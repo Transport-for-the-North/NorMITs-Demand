@@ -118,7 +118,7 @@ as part of their file name in distribution reports
       NorMITs Demand.
       
 ### v0.3.7
-- Updated the Furness so productions are done last in each iterations. This 
+- Updated the Furness so productions are done last in each iteration. This 
   means productions will always closely match, rather than the attractions.
 
 
@@ -137,7 +137,13 @@ as part of their file name in distribution reports
     - Optimised for run times using numpy.
 - Added the new NoTEM NHB Attraction model - built on top of DVec
     - Uses new, more disaggregate segmentation.
-    - Optimised for run times using numpy.
-    
+    - Optimised for run times using numpy.    
 - Added a new NoTEM wrapper around the new production and attraction models 
 - Added new pathing module, which can be used to access NoTEM output paths
+
+###v0.4.1 (NoTEM Enhancements)
+- SegmentationLevel and ZoningSystem have been fully documented
+- SegmentationLevel and ZoningSystem have had read only properties added
+- Segmentation names have changed. NoTEM specific segmentations now have 
+  'notem_' prefixed onto their name
+- Logging module has been added to codebase. Partially integrated into NoTEM 
