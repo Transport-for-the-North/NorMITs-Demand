@@ -116,7 +116,7 @@ class TmsParameterBuilder:
                 'external_export_modes': [6],
                 'non_dist_export_modes': None,
                 'run_distribution': True,
-                'distribution_segmentation': ['p', 'm', 'ca'],
+                'distribution_segmentation': ['p', 'm'],
                 'cjtw_modes': None,
                 'intrazonal_modes': [1, 2],
                 'infill_modes': 3,
@@ -170,11 +170,11 @@ if __name__ == '__main__':
     ext = em.ExternalModel(
         config_path,
         params)
-    """
+
     hb_ext_out = ext.run(
         trip_origin='hb',
         cost_type='24hr')
-    """
+
     nhb_ext_out = ext.run(
         trip_origin='nhb',
         cost_type='24hr')
@@ -189,14 +189,14 @@ if __name__ == '__main__':
         iteration=params['iteration'],
         tlb_area='north',
         segmentation='tfn',
-        distribution_segments=params['hb_distribution_segments'],
+        distribution_segments=params['distribution_segmentation'],
         dist_function='ln',
         trip_origin='hb',
         cost_type='24hr',
         furness_loops=1999,
         fitting_loops=100,
         iz_cost_infill=.5,
-        export_modes=params['output_modes'],
+        export_modes=params['infill_modes'],
         echo=True,
         mp_threads=-1)
 

@@ -187,7 +187,7 @@ def reapply_index(dataframe, index):
 
 # Optimise functions
 
-def optimise_data_types(dataframe, echo=True):
+def optimise_data_types(dataframe, verbose=True):
     """
     Function to iterate over a DataFrames columns and change data types
     to minimise memory use.
@@ -199,7 +199,7 @@ def optimise_data_types(dataframe, echo=True):
         a DataFrame with a single zone and category variables.
         Designed for a production vector.
 
-    echo:
+    verbose:
         Toggle output describing conversion process.
 
     Returns
@@ -223,12 +223,12 @@ def optimise_data_types(dataframe, echo=True):
         col_len = len(dataframe[col])
         # Get number of unique values
         unq_val = len(dataframe[col].drop_duplicates())
-        print_w_toggle(col, 'is', col_np_type, echo=echo)
+        print_w_toggle(col, 'is', col_np_type, verbose=verbose)
         # If unsigned int8, make signed int8 (neutral)
         if col_np_type == 'uint8':
             dataframe[col] = dataframe[col].astype('int8')
             print_w_toggle('converted to', type(dataframe[col][0]).__name__,
-                           echo=echo)
+                           verbose=verbose)
         # If unsigned int64, make int8 or int32 depending on length
         elif col_np_type == 'int64':
             if unq_val < 127:
@@ -236,20 +236,20 @@ def optimise_data_types(dataframe, echo=True):
             else:
                 dataframe[col] = dataframe[col].astype('int16')
             print_w_toggle('converted to', type(dataframe[col][0]).__name__,
-                           echo=echo)
+                           verbose=verbose)
         # If float64 () make float16
         elif col_np_type == 'float64':
             # if df is less than long threshold, give it a bit of space
             dataframe[col] = dataframe[col].astype('float32')
             print_w_toggle('converted to', type(dataframe[col][0]).__name__,
-                           echo=echo)
+                           verbose=verbose)
 
     # Get size after optimisation
     # TODO: Look at deepgetsizeof
     after = sys.getsizeof(dataframe)
     # Get improvement value (bytes)
     shrink = before - after
-    print_w_toggle('optimised for', shrink, 'bytes', echo=echo)
+    print_w_toggle('optimised for', shrink, 'bytes', verbose=verbose)
     return(dataframe)
 
 def refresh():
@@ -390,7 +390,7 @@ def df_to_np(df,
              unq_internal_zones,
              v_heading,
              h_heading=None,
-             echo=True):
+             verbose=True):
     """
     df: A Dataframe
 
@@ -400,9 +400,9 @@ def df_to_np(df,
 
     unq_internal_zones: unq zones to use as placeholder
 
-    echo = True:
+    verbose = True:
         Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops
+        Useful to set verbose=False when using multi-threaded loops
     """
     df = df.copy()
 
@@ -455,7 +455,7 @@ def df_to_np(df,
         ).values
 
     # Array len should be same as length of unq values
-    if echo and len(array) == len(unq_internal_zones):
+    if verbose and len(array) == len(unq_internal_zones):
         print('Matrix length=%d. Matches input constraint.' % (len(array)))
 
     return array
@@ -1003,7 +1003,7 @@ def filter_pa_cols(pa_frame,
                    ia_name,
                    calib_params,
                    round_val=3,
-                   echo=True):
+                   verbose=True):
     """
     """
     dp = pa_frame.copy()
@@ -1408,7 +1408,7 @@ def balance_a_to_p(ia_name,
                    p_var_name='productions',
                    a_var_name='attractions',
                    round_val=None,
-                   echo=True):
+                   verbose=True):
 
     """
     This function takes a set of attractions, selects the relevant attractions
@@ -1435,9 +1435,9 @@ def balance_a_to_p(ia_name,
     round_val:
         Number of dp to round attractions to. Defaults to None.
 
-    echo:
+    verbose:
         Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops.
+        Useful to set verbose=False when using multi-threaded loops.
         Default to True.
 
     Returns
@@ -1460,7 +1460,7 @@ def balance_a_to_p(ia_name,
         # Always print as it's a warning of future problems
         print('WARNING: Not the same number of zones')
 
-    print_w_toggle('Balancing internal attractions to productions', verbose=echo)
+    print_w_toggle('Balancing internal attractions to productions', verbose=verbose)
     a_factors[a_var_name] = (
         a_factors[a_var_name]
         *
@@ -1470,7 +1470,7 @@ def balance_a_to_p(ia_name,
     total_balanced_attractions = sum(a_factors[a_var_name])
 
     # Check
-    if echo:
+    if verbose:
         if round(total_balanced_attractions) == round(total_internal_productions):
             print('attractions successfully balanced to productions')
         else:
@@ -1533,6 +1533,7 @@ def import_pa(production_import_path,
     [1] attractions:
         Mainland GB attractions.
     """
+    print(production_import_path)
     productions = pd.read_csv(production_import_path)
     attractions = pd.read_csv(attraction_import_path)
     return(productions, attractions)
@@ -1543,14 +1544,13 @@ def get_trip_length_bands(import_folder,
                           segmentation,
                           trip_origin,
                           replace_nan=False,
-                          echo=True): # 'hb' or 'nhb'
+                          verbose=True): # 'hb' or 'nhb'
 
     """
     Function to check a folder for trip length band parameters.
     Returns a subset.
     """
     # Append name of tlb area
-
 
     # Index folder
     target_files = os.listdir(import_folder)
@@ -1563,7 +1563,7 @@ def get_trip_length_bands(import_folder,
             # print_w_toggle(key + str(value), echo=echo)
             import_files = [x for x in import_files if
                             ('_' + key + str(value)) in x]
-
+    print(import_files)
     if trip_origin == 'hb':
         import_files = [x for x in import_files if 'nhb' not in x]
     elif trip_origin == 'nhb':
@@ -1576,7 +1576,7 @@ def get_trip_length_bands(import_folder,
                       ' check import folder')
 
     # Import
-    if echo:
+    if verbose:
         print(import_files)
         print(import_files[0])
     tlb = pd.read_csv(os.path.join(import_folder, import_files[0]))

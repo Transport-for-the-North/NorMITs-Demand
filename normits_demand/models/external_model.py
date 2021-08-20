@@ -134,7 +134,9 @@ class ExternalModel(tms.TMSPathing):
             calib_params = {}
             for ds in self.params['external_segmentation']:
                 calib_params.update({ds: init_params[ds][ed]})
-
+            print(tlb_folder)
+            print(calib_params)
+            print(self.params['external_tlb_name'])
             # Get target tlb
             tlb = nup.get_trip_length_bands(
                 tlb_folder,
@@ -179,10 +181,15 @@ class ExternalModel(tms.TMSPathing):
             # Import costs based on distribution parameters & car availability
             print('Importing costs')
             print(calib_params, cost_type)
+            if trip_origin == 'nhb':
+                replace_nhb_with_hb = True
+            else:
+                replace_nhb_with_hb = False
             internal_costs = nup.get_costs(self.lookup_folder,
                                            calib_params,
                                            tp=cost_type,
-                                           iz_infill=0.5)
+                                           iz_infill=0.5,
+                                           replace_nhb_with_hb=replace_nhb_with_hb)
 
             print('Cost lookup returned ' + internal_costs[1])
             internal_costs = internal_costs[0].copy()

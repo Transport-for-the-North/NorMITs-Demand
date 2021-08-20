@@ -53,7 +53,7 @@ class DistributionModel(tms.TMSPathing):
         """
 
         # Set base dir
-        home_path = os.path.join(file_drive, 'NorMITs Synthesiser')
+        home_path = os.path.join(file_drive)
 
         # Set synth import folder
         import_path = os.path.join(home_path, 'import')
@@ -822,7 +822,7 @@ class DistributionModel(tms.TMSPathing):
                                   'trip_length_bands',
                                   tlb_area,
                                   'standard_segments')
-
+        print(calib_params)
         # Get trip length bands
         tlb = nup.get_trip_length_bands(tlb_folder,
                                         calib_params,
@@ -1155,7 +1155,7 @@ class DistributionModel(tms.TMSPathing):
         # Define list of available distributions (for translation)
         # TODO: filter out fluff, lower case
         # TODO: Push to run script
-        available_dists = os.listdir(os.path.join(file_drive, 'NorMITs Synthesiser/'))
+        available_dists = os.listdir(file_drive)
 
         # Paths returns:
         # (import_folder_path, model_lookup_path,

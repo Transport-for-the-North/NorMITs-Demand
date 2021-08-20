@@ -38,7 +38,7 @@ def run_gravity_model(ia_name,
                       target_r_gap = 1,
                       rounding_factor=3,
                       iz_cost_infill=0.5,
-                      echo=True):
+                      verbose=True):
 
     """
     Function that filters down productions and attractions to deal only with a
@@ -109,11 +109,11 @@ def run_gravity_model(ia_name,
         Number of decimal places to round by. Defines how precise calibration
         will be. 3 is industry standard.
 
-    echo:
+    verbose:
         Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops.
+        Useful to set verbose=False when using multi-threaded loops.
         
-    echo_outer_loop_updates:
+    verbose_outer_loop_updates:
         See gravity model
 
     Returns
@@ -141,7 +141,7 @@ def run_gravity_model(ia_name,
                                         'p_zone',
                                         calib_params,
                                         round_val=3,
-                                        echo=True)
+                                        verbose=True)
     distribution_p = distribution_p[0]
     distribution_p = distribution_p.rename(
             columns={list(distribution_p)[-1]: 'productions'})
@@ -153,7 +153,7 @@ def run_gravity_model(ia_name,
                                         'a_zone',
                                         calib_params,
                                         round_val=3,
-                                        echo=True)
+                                        verbose=True)
     distribution_a = distribution_a[0]
     distribution_a = distribution_a.rename(
             columns={list(distribution_a)[-1]: 'attractions'})
@@ -166,14 +166,14 @@ def run_gravity_model(ia_name,
                                         distribution_p,
                                         distribution_a,
                                         round_val=3,
-                                        echo=False)
+                                        verbose=False)
 
     # Productions as numpy
     p = nup.df_to_np(distribution_p,
                      v_heading=ia_name,
                      values='productions',
                      unq_internal_zones=unq_internal_zones,
-                     echo=echo)
+                     verbose=verbose)
     p = p.astype(np.float64, copy=True)
 
     # Attractions as numpy
@@ -181,17 +181,17 @@ def run_gravity_model(ia_name,
                      v_heading=ia_name,
                      values='attractions',
                      unq_internal_zones=unq_internal_zones,
-                     echo=echo)
+                     verbose=verbose)
     a = a.astype(np.float64, copy=True)
 
     # TODO: Pass car ownership params for costs
     # Import costs based on distribution parameters & car availability
-    nup.print_w_toggle('Importing costs', echo=echo)
+    nup.print_w_toggle('Importing costs', verbose=verbose)
     internal_costs = nup.get_costs(model_lookup_path,
                                    calib_params,
                                    tp=cost_type,
                                    iz_infill=iz_cost_infill)
-    nup.print_w_toggle('Cost lookup returned ' + internal_costs[1], echo=echo)
+    nup.print_w_toggle('Cost lookup returned ' + internal_costs[1], verbose=verbose)
     internal_costs = internal_costs[0].copy()
 
     # Test order is preserved
@@ -205,7 +205,7 @@ def run_gravity_model(ia_name,
                         h_heading='a_zone',
                         values='cost',
                         unq_internal_zones=unq_internal_zones,
-                        echo=echo)
+                        verbose=verbose)
     cost = cost.astype(np.float64, copy=True)
 
     if (np.diag(cost) == diag).sum() == len(unq_internal_zones):
@@ -277,7 +277,7 @@ def run_gravity_model(ia_name,
                             furness_loops=furness_loops,
                             fitting_loops=fitting_loops,
                             loop_number='1.' + str(out_loop),
-                            echo=echo,
+                            verbose=verbose,
                             optimise = True
                             )
 
@@ -328,7 +328,7 @@ def run_gravity_model(ia_name,
                 furness_loops=furness_loops,
                 fitting_loops=1,
                 loop_number=str(out_loop),
-                echo=echo,
+                verbose=verbose,
                 optimise = True)
             out_para, bs_con, max_r_sqr = grav_run[1], grav_run[5], grav_run[6]
 
@@ -385,7 +385,7 @@ def run_gravity_model(ia_name,
                     furness_loops=furness_loops,
                     fitting_loops=1,
                     loop_number=str(out_loop+1),
-                    echo=echo,
+                    verbose=verbose,
                     optimise = True)
 
                 kfc_para, bs_con, k_r_sqr = grav_run[1], grav_run[5], grav_run[6]
@@ -432,12 +432,12 @@ def run_gravity_model(ia_name,
         if key != 'tlb':
             col_ph.append(key)
             long_pa[key] = value
-            nup.print_w_toggle(key, value, echo=echo)
+            nup.print_w_toggle(key, value, verbose=verbose)
             nup.print_w_toggle('Re-appending segment values for ' + key,
-                               echo=echo)
+                               verbose=verbose)
 
         elif key == 'tlb':
-            if echo:
+            if verbose:
                 print('...')
 
     col_ph.append('dt')
@@ -480,7 +480,7 @@ def gravity_model(dist_log_path: str,
                   furness_loops: int,
                   fitting_loops: int,
                   loop_number: str,
-                  echo: bool = True,
+                  verbose: bool = True,
                   optimise = True):
 
     """
@@ -534,9 +534,9 @@ def gravity_model(dist_log_path: str,
     loop_number:
         String defining the name of this outer loop.
 
-    echo:
+    verbose:
         Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops.
+        Useful to set verbose=False when using multi-threaded loops.
         
     optimise = True:
         Run the optimisation loop while searching or not
@@ -591,7 +591,7 @@ def gravity_model(dist_log_path: str,
     for ft_loop in range(fitting_loops):
         print('fit loop ' + str(ft_loop))
 
-        nup.print_w_toggle('Passing to gravity model', echo=echo)
+        nup.print_w_toggle('Passing to gravity model', verbose=verbose)
         gm_start = time.time()
 
         if dist_function.lower() =='tanner': #x1, x2 - Tanner
@@ -1005,12 +1005,12 @@ def get_new_pa(pa_dt, rounding=_default_rounding):
                              axis=1).groupby('p_zone').sum().reset_index()
     worked_p = worked_p.rename(columns={'dt':'p'})
     worked_p['p'] = worked_p['p'].round(rounding)
-    worked_p = nup.optimise_data_types(worked_p, echo=False)
+    worked_p = nup.optimise_data_types(worked_p, verbose=False)
     worked_a = pa_dt.reindex(['a_zone', 'dt'],
                              axis=1).groupby('a_zone').sum().reset_index()
     worked_a = worked_a.rename(columns={'dt':'a'})
     worked_a['a'] = worked_a['a'].round(rounding)
-    worked_a = nup.optimise_data_types(worked_a, echo=False)
+    worked_a = nup.optimise_data_types(worked_a, verbose=False)
 
     return(worked_p, worked_a)
 
