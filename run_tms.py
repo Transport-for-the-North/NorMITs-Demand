@@ -69,7 +69,9 @@ class TmsParameterBuilder:
         if model == 'noham':
             params = {
                 'base_directory': 'Y: /',
+                'model_name': 'noham',
                 'iteration': 'iter8c',
+                'model_zoning': 'Noham',
                 'segmentation_type': 'tfn',
                 'hb_output_segments': ['p', 'm'],
                 'nhb_output_segments': ['area_type', 'p', 'm', 'ca', 'tp'],
@@ -170,7 +172,7 @@ if __name__ == '__main__':
     ext = em.ExternalModel(
         config_path,
         params)
-
+    """
     hb_ext_out = ext.run(
         trip_origin='hb',
         cost_type='24hr')
@@ -178,7 +180,7 @@ if __name__ == '__main__':
     nhb_ext_out = ext.run(
         trip_origin='nhb',
         cost_type='24hr')
-
+    """
     dist = dm.DistributionModel(
         config_path,
         params)
@@ -196,7 +198,7 @@ if __name__ == '__main__':
         furness_loops=1999,
         fitting_loops=100,
         iz_cost_infill=.5,
-        export_modes=params['infill_modes'],
+        export_modes=params['synthetic_modes'],
         echo=True,
         mp_threads=-1)
 

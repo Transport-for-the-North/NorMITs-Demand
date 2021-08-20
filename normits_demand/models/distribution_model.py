@@ -380,7 +380,7 @@ class DistributionModel(tms.TMSPathing):
             beta_subset = beta_subset[
                 beta_subset[index] == cp
                 ].reset_index(drop=True)
-
+        print(beta_subset)
         init_param_a = beta_subset['init_param_a'][0]
         init_param_b = beta_subset['init_param_b'][0]
         ttl = beta_subset['average_trip_length'][0]
@@ -813,6 +813,7 @@ class DistributionModel(tms.TMSPathing):
         # Unpack params into dict
         init_param_a = distribution_params['init_param_a']
         init_param_b = distribution_params['init_param_b']
+        print(distribution_params)
 
         del distribution_params
 
@@ -1195,7 +1196,8 @@ class DistributionModel(tms.TMSPathing):
         # intra_zonal_dists = Combos to be passed straight to intra zonal and exported
         # zone_conversion_dists = Combos to be translated from another zoning system
         # init_params = actual distribution alphas & betas
-
+        print("Printing init params")
+        print(init_params)
         segmented_params = self.run_separation(init_params,
                                           # lower dist list
                                           [x.lower() for x in available_dists])

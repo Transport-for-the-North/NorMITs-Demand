@@ -176,7 +176,7 @@ class ExternalModel(tms.TMSPathing):
                                        sub_p,
                                        sub_a,
                                        round_val=3,
-                                       echo=False)
+                                       verbose=False)
 
             # Import costs based on distribution parameters & car availability
             print('Importing costs')
