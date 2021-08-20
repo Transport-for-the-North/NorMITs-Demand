@@ -407,8 +407,8 @@ class NoTEMExportPaths:
         e.g. if '3i' was passed in, this would become 'iter3i'.
 
     export_home:
-        The home directory of all the export paths. As passed in to the
-        constructor.
+        The home directory of all the export paths. Nested folder of the
+        passed in export_home, iteration_name, and scenario
 
     hb_production:
         An instance of HBProductionModelPaths. See docs for more info on how

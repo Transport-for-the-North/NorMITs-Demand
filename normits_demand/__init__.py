@@ -1,7 +1,12 @@
 from .version import __version__
+from normits_demand.constants import PACKAGE_NAME
 
 # Custom types
 from normits_demand.types import *
+
+# Logging
+from normits_demand.logging import get_logger
+from normits_demand.logging import get_custom_logger
 
 # NorMITs Demand Errors
 from normits_demand.utils.general import NormitsDemandError

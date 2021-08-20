@@ -11,7 +11,8 @@ File purpose:
 NoTEM Class Frontend for calling all production and attraction models
 """
 # Builtins
-import os.path
+import os
+
 from typing import List
 
 # Third Party
@@ -29,6 +30,7 @@ from normits_demand.pathing import NoTEMExportPaths
 
 class NoTEM(NoTEMExportPaths):
     _running_report_fname = 'running_parameters.txt'
+    _log_fname = "NoTEM_log.log"
 
     def __init__(self,
                  years: List[int],
@@ -85,6 +87,15 @@ class NoTEM(NoTEMExportPaths):
             path_years=self.years,
             scenario=scenario,
             iteration_name=iteration_name,
+        )
+
+        # Create a logger
+        logger_name = "%s.%s" % (__name__, self.__class__.__name__)
+        log_file_path = os.path.join(self.export_home, self._log_fname)
+        self._logger = nd.get_logger(
+            logger_name=logger_name,
+            log_file_path=log_file_path,
+            instantiate_msg="Initialised new NoTEM Logger",
         )
 
         self._write_running_report()
@@ -170,6 +181,8 @@ class NoTEM(NoTEMExportPaths):
         -------
         None
         """
+        # TODO(BT): Add checks to make sure input paths exist when models
+        #  depend on one another
         # Determine which models to run
         if generate_all:
             generate_hb = True
@@ -200,15 +213,18 @@ class NoTEM(NoTEMExportPaths):
         """
         Runs home based Production trip end models
         """
+        self._logger.debug("Generating Home-Based Production Model imports")
         import_files = self.import_builder.generate_hb_production_imports()
 
         # Runs the home based Production model
+        self._logger.debug("Instantiating Home-Based Production Model")
         hb_prod = HBProductionModel(
             **import_files,
             constraint_paths=None,
             export_home=self.hb_production.export_paths.home,
         )
 
+        self._logger.info("Running the Home-Based Production Model")
         hb_prod.run(
             export_pure_demand=True,
             export_fully_segmented=True,
@@ -221,7 +237,7 @@ class NoTEM(NoTEMExportPaths):
         """
         Runs the home based Attraction trip end model
         """
-        # ## GENERATE THE NEEDED PATHS ## #
+        self._logger.debug("Generating Home-Based Attraction Model imports")
         # Runs the module to create import dictionary
         imports = self.import_builder.generate_hb_attraction_imports()
 
@@ -229,7 +245,7 @@ class NoTEM(NoTEMExportPaths):
         export_paths = self.hb_production.export_paths
         control_production_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
-        # ## INSTANTIATE AND RUN THE MODEL ## #
+        self._logger.debug("Instantiating Home-Based Attraction Model")
         hb_attr = HBAttractionModel(
             **imports,
             production_balance_paths=control_production_paths,
@@ -237,6 +253,7 @@ class NoTEM(NoTEMExportPaths):
             export_home=self.hb_attraction.export_paths.home,
         )
 
+        self._logger.info("Running the Home-Based Attraction Model")
         hb_attr.run(
             export_pure_attractions=True,
             export_fully_segmented=False,
@@ -249,7 +266,7 @@ class NoTEM(NoTEMExportPaths):
         """
         Runs the non-home based Production trip end model
         """
-        # ## GENERATE THE NEEDED PATHS ## #
+        self._logger.debug("Generating Non-Home-Based Production Model imports")
         # Runs the module to create import dictionary
         imports = self.import_builder.generate_nhb_production_imports()
 
@@ -257,7 +274,7 @@ class NoTEM(NoTEMExportPaths):
         export_paths = self.hb_attraction.export_paths
         hb_attraction_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
-        # ## INSTANTIATE AND RUN THE MODEL ## #
+        self._logger.debug("Instantiating Non-Home-Based Production Model")
         nhb_prod = NHBProductionModel(
             **imports,
             hb_attraction_paths=hb_attraction_paths,
@@ -265,6 +282,7 @@ class NoTEM(NoTEMExportPaths):
             constraint_paths=None,
         )
 
+        self._logger.info("Running the Non-Home-Based Production Model")
         nhb_prod.run(
             export_nhb_pure_demand=True,
             export_fully_segmented=False,
@@ -277,7 +295,7 @@ class NoTEM(NoTEMExportPaths):
         """
         Runs non home based Attraction trip end models.
         """
-        # ## GENERATE THE NEEDED PATHS ## #
+        self._logger.debug("Generating Non-Home-Based Attraction Model imports")
         # No Imports currently needed for this model!
         # imports = self.generate_nhb_attraction_imports()
 
@@ -289,7 +307,7 @@ class NoTEM(NoTEMExportPaths):
         export_paths = self.nhb_production.export_paths
         nhb_production_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
-        # ## INSTANTIATE AND RUN THE MODEL ## #
+        self._logger.debug("Instantiating Non-Home-Based Attraction Model")
         nhb_attr = NHBAttractionModel(
             hb_attraction_paths=hb_attraction_paths,
             nhb_production_paths=nhb_production_paths,
@@ -297,6 +315,7 @@ class NoTEM(NoTEMExportPaths):
             constraint_paths=None
         )
 
+        self._logger.info("Running the Non-Home-Based Attraction Model")
         nhb_attr.run(
             export_nhb_pure_attractions=True,
             export_notem_segmentation=True,
