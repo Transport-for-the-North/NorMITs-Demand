@@ -41,6 +41,35 @@ from normits_demand.utils import pandas_utils as pd_utils
 
 # ## CLASSES ## #
 class SegmentationLevel:
+    """Segmentation definitions to provide common interface
+
+    Attributes
+    ----------
+    name:
+        The name of the segmentation. This will be the same as the name in
+        the definitions folder
+
+    naming_order:
+        A list of segment names, defining the order that the segments should
+        be named in when assigned a segment name. E.g. a naming order of
+        ['p', 'm'], and the segment where p=1, and m=3, would be named
+        '1_3'.
+
+    segments:
+        A pandas.DataFrame listing every single valid combination of segment
+        values for this segmentation. Often this is simply to product of all
+        possible values, but that is not always the case. Columns will be
+        named after the segment they relate to.
+
+    segment_names:
+        A list of valid segment names, as defined by the valid segments in
+        segments, and the naming order.
+
+    segments_and_names:
+        The pandas.DataFrame from segments, with segment names attached on
+        the relevant segments. An additional column will be added titled
+        'name' with the segment names in.
+    """
     _weekday_time_periods = [1, 2, 3, 4]
     _weekend_time_periods = [5, 6]
 
@@ -86,9 +115,29 @@ class SegmentationLevel:
                  naming_order: List[str],
                  valid_segments: pd.DataFrame,
                  ):
+        """Builds a SegmentationLevel
+
+        This class should almost never be constructed directly. If an
+        instance of SegmentationLevel is needed, the helper function
+        `get_segmentation_level()` should be used instead.
+
+        Parameters
+        ----------
+        name:
+            The name of the segmentation to create.
+
+        naming_order:
+            The order the segments should be in when creating segment names.
+
+        valid_segments:
+            A pandas.DataFrame listing all the valid segments of this
+            segmentation. The columns should be named after the segments
+            they represent, and should correspond to naming_order
+        """
+        # TODO: Validate this is a valid segment name
         # Init
-        self.name = name
-        self.naming_order = naming_order
+        self._name = name
+        self._naming_order = naming_order
 
         # Retain this for copying later
         self._valid_segments = valid_segments
@@ -104,7 +153,7 @@ class SegmentationLevel:
                 )
 
         # Make sure the df is just the segment columns
-        self.segments = pd_utils.reindex_cols(valid_segments, self.naming_order)
+        self._segments = pd_utils.reindex_cols(valid_segments, self.naming_order)
 
         # ## BUILD SEGMENT NAMING ## #
         segments_and_names = self.segments.copy()
@@ -112,8 +161,28 @@ class SegmentationLevel:
             df=segments_and_names,
             columns=self.naming_order,
         )
-        self.segments_and_names = segments_and_names
-        self.segment_names = segments_and_names['name'].to_list()
+        self._segments_and_names = segments_and_names
+        self._segment_names = segments_and_names['name'].to_list()
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def naming_order(self):
+        return self._naming_order
+
+    @property
+    def segments(self):
+        return self._segments
+
+    @property
+    def segment_names(self):
+        return self._segment_names
+
+    @property
+    def segments_and_names(self):
+        return self._segments_and_names
 
     def __copy__(self):
         """Returns a copy of this class"""

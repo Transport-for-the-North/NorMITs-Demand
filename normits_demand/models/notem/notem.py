@@ -26,6 +26,7 @@ from normits_demand.models.notem import HBAttractionModel
 from normits_demand.models.notem import NHBAttractionModel
 
 from normits_demand.pathing import NoTEMExportPaths
+from normits_demand.utils import timing
 
 
 class NoTEM(NoTEMExportPaths):
@@ -109,7 +110,6 @@ class NoTEM(NoTEMExportPaths):
             'Code Version: %s' % str(nd.__version__),
             'NoTEM Iteration: %s' % str(self.iteration_name),
             'Scenario: %s' % str(self.scenario),
-            'NoTEM Iteration: %s' % str(self.iteration_name),
             '',
             '### HB Productions ###',
             'import_files: %s' % self.import_builder.generate_hb_production_imports(),
@@ -183,6 +183,9 @@ class NoTEM(NoTEMExportPaths):
         """
         # TODO(BT): Add checks to make sure input paths exist when models
         #  depend on one another
+        start_time = timing.current_milli_time()
+        self._logger.info("Starting a new run of NoTEM")
+
         # Determine which models to run
         if generate_all:
             generate_hb = True
@@ -196,6 +199,12 @@ class NoTEM(NoTEMExportPaths):
             generate_nhb_production = True
             generate_nhb_attraction = True
 
+        self._logger.debug("Running hb productions: %s" % generate_hb_production)
+        self._logger.debug("Running nhb productions: %s" % generate_nhb_production)
+        self._logger.debug("Running hb attractions: %s" % generate_hb_attraction)
+        self._logger.debug("Running nhb attractions: %s" % generate_nhb_attraction)
+        self._logger.debug("")
+
         # Run the models
         if generate_hb_production:
             self._generate_hb_production(verbose)
@@ -208,6 +217,10 @@ class NoTEM(NoTEMExportPaths):
 
         if generate_nhb_attraction:
             self._generate_nhb_attraction(verbose)
+
+        end_time = timing.current_milli_time()
+        time_taken = timing.time_taken(start_time, end_time)
+        self._logger.info("NoTEM run complete! Took %s" % time_taken)
 
     def _generate_hb_production(self, verbose: bool) -> None:
         """

@@ -47,8 +47,9 @@ from normits_demand.concurrency import multiprocessing
 
 # ## CLASSES ## #
 class DVector:
-    """Custom Vector Object for NorMITs Demand.
+    """One dimensional, segmentation and zoning flexible, heterogeneous data.
 
+    Custom Vector Object for NorMITs Demand
     A Demand Vector object built to handle flexible segmentations and zoning
     systems. All data is stored in "data dictionaries" alongside meta data
     to link all data points back to segments and zones. DVector has been
