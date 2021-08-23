@@ -123,3 +123,34 @@ as part of their file name in distribution reports
     - Update parameters as we are now benchmarking OD matrices against
       NELUM
     - Hopefully find some time to optimise the PA2OD process 
+      
+### v0.3.7
+- Updated the Furness so productions are done last in each iteration. This 
+  means productions will always closely match, rather than the attractions.
+
+
+### v0.4.0 (NoTEM Development)
+- Added the SegmentationLevel Class
+- Added the ZoningSystem Class
+- Added the DVector class (built on two previous classes)
+- Added the new NoTEM Production model - built on top of DVec
+    - Uses new, more disaggregate segmentation.
+    - Optimised for run times using numpy.
+- Added the new NoTEM Attraction model - built on top of DVec
+    - Uses new, more disaggregate segmentation.
+    - Optimised for run times using numpy.
+- Added the new NoTEM NHB Production model - built on top of DVec
+    - Uses new, more disaggregate segmentation.
+    - Optimised for run times using numpy.
+- Added the new NoTEM NHB Attraction model - built on top of DVec
+    - Uses new, more disaggregate segmentation.
+    - Optimised for run times using numpy.    
+- Added a new NoTEM wrapper around the new production and attraction models 
+- Added new pathing module, which can be used to access NoTEM output paths
+
+### v0.4.1 (NoTEM Enhancements)
+- SegmentationLevel and ZoningSystem have been fully documented
+- SegmentationLevel and ZoningSystem have had read only properties added
+- Segmentation names have changed. NoTEM specific segmentations now have 
+  'notem_' prefixed onto their name
+- Logging module has been added to codebase. Partially integrated into NoTEM 

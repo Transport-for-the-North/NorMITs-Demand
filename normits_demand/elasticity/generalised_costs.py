@@ -727,10 +727,10 @@ def gen_cost_mode(costs: Union[pd.DataFrame, float],
         not used for any other modes. The following arguments
         are expected:
         For `gen_cost_car_mins`:
-        - vt : float
-        - vc : float
+        - vot : float
+        - voc : float
         For `gen_cost_rail_mins`:
-        - vt : float
+        - vot : float
         - factors : Dict[str, float], optional
 
     Returns

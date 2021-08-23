@@ -26,21 +26,11 @@ import pandas as pd
 
 # Local imports
 sys.path.append("..")
+from normits_demand import constants as consts
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 
 from normits_demand.concurrency import multiprocessing
-
-NOHAM_INPUT = r'E:\NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\internal'
-NORMS_INPUT = r'E:\NorMITs Demand\norms\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\internal'
-
-NOHAM_OUTPUT = r'E:\NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices - Elasticity\internal'
-NORMS_OUTPUT = r'E:\NorMITs Demand\norms\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices - Elasticity\internal'
-
-NOHAM_EXTERNAL = r'E:\NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\external'
-NORMS_EXTERNAL = r'E:\NorMITs Demand\norms\EFS\iter3j\SC04_UZC\Matrices\24hr PA Matrices WFH\external'
-
-OUTPUT = r'E:\elasticity.csv'
 
 YEARS = [2018, 2033, 2040, 2050]
 YEARS = [2050]
@@ -93,17 +83,28 @@ def get_mat_totals(path, fnames):
     return mats_sum.sum().sum()
 
 
-def mp_func(year, purpose, model, norms, noham):
+def mp_func(year,
+            purpose,
+            model,
+            norms,
+            noham,
+            noham_input,
+            norms_input,
+            noham_output,
+            norms_output,
+            noham_external,
+            norms_external,
+            ):
     # Determine paths
     if model == 'noham':
-        in_path = NOHAM_INPUT
-        out_path = NOHAM_OUTPUT
-        ext_path = NOHAM_EXTERNAL
+        in_path = noham_input
+        out_path = noham_output
+        ext_path = noham_external
         mat_dict = noham
     elif model == 'norms':
-        in_path = NORMS_INPUT
-        out_path = NORMS_OUTPUT
-        ext_path = NORMS_EXTERNAL
+        in_path = norms_input
+        out_path = norms_output
+        ext_path = norms_external
         mat_dict = norms
     else:
         raise ValueError("WHAT?!")
@@ -133,17 +134,23 @@ def mp_func(year, purpose, model, norms, noham):
     }
 
 
-def main():
+def main(noham_input,
+         norms_input,
+         noham_output,
+         norms_output,
+         noham_external,
+         norms_external,
+         ):
 
     # Find the matrices that belong to each UC
     print("Reading in matrices...")
     paths = [
-        NORMS_INPUT,
-        NORMS_OUTPUT,
-        NORMS_EXTERNAL,
-        NOHAM_INPUT,
-        NOHAM_OUTPUT,
-        NOHAM_EXTERNAL,
+        norms_input,
+        norms_output,
+        norms_external,
+        noham_input,
+        noham_output,
+        noham_external,
     ]
 
     with Pool(processes=6) as pool:
@@ -176,6 +183,12 @@ def main():
             'model': model,
             'norms': norms,
             'noham': noham,
+            'noham_input': noham_input,
+            'norms_input': norms_input,
+            'noham_output': noham_output,
+            'norms_output': norms_output,
+            'noham_external': noham_external,
+            'norms_external': norms_external,
         })
 
     ph = multiprocessing.multiprocess(
@@ -185,8 +198,35 @@ def main():
         pbar_kwargs=pbar_kwargs,
     )
 
-    pd.DataFrame(ph).to_csv(OUTPUT, index=False)
+    # pd.DataFrame(ph).to_csv(OUTPUT, index=False)
+    return pd.DataFrame(ph)
 
 
 if __name__ == '__main__':
-    main()
+    noham_input = r'I:\NorMITs Demand\noham\EFS\%s\%s\Matrices\24hr PA Matrices WFH\internal'
+    norms_input = r'I:\NorMITs Demand\norms\EFS\%s\%s\Matrices\24hr PA Matrices WFH\internal'
+
+    noham_output = r'I:\NorMITs Demand\noham\EFS\%s\%s\Matrices\24hr PA Matrices - Elasticity\internal'
+    norms_output = r'I:\NorMITs Demand\norms\EFS\%s\%s\Matrices\24hr PA Matrices - Elasticity\internal'
+
+    noham_external = r'I:\NorMITs Demand\noham\EFS\%s\%s\Matrices\24hr PA Matrices WFH\external'
+    norms_external = r'I:\NorMITs Demand\norms\EFS\%s\%s\Matrices\24hr PA Matrices WFH\external'
+
+    iter = 'iter3k'
+    scenarios = consts.TFN_SCENARIOS
+    OUTPUT = r'E:\elasticity_%s.csv' % iter
+
+    ph = list()
+    for scenario in scenarios:
+        df = main(
+            noham_input % (iter, scenario),
+            norms_input % (iter, scenario),
+            noham_output % (iter, scenario),
+            norms_output % (iter, scenario),
+            noham_external % (iter, scenario),
+            norms_external % (iter, scenario),
+        )
+        df['scenario'] = scenario
+        ph.append(df)
+
+    pd.concat(ph).to_csv(OUTPUT, index=False)
