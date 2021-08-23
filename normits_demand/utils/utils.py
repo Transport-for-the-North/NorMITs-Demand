@@ -999,12 +999,14 @@ def filter_pa_vector(pa_vector,
 
     return dp, total_dp
 
+
 def filter_pa_cols(pa_frame,
                    ia_name,
                    calib_params,
                    round_val=3,
                    verbose=True):
     """
+    Returns data for a unique segmentation and it sum
     """
     dp = pa_frame.copy()
     col_names = list(dp)
@@ -1017,19 +1019,20 @@ def filter_pa_cols(pa_frame,
             prior = target_col
             target_col = [x for x in target_col if (index+str(cp)) in x]
             if len(target_col) == 0:
-                print('Col lookup ' + index + ' failed')
+                print_w_toggle('Col lookup %s failed' % index, verbose=verbose)
                 target_col = prior
 
     if len(target_col) > 1:
-        print('Search returned >1 col')
+        print_w_toggle('Search returned >1 col', verbose=verbose)
         print(target_col)
-        print('Picking ' + target_col[0])
+        print_w_toggle('Picking ' + target_col[0], verbose=verbose)
     target_col = target_col[0]
 
     dp = dp.reindex([ia_name, target_col], axis=1)
+    print(dp)
     total_dp = dp[target_col].sum()
 
-    return(dp, total_dp)
+    return dp, total_dp
 
 def get_costs(model_lookup_path,
               calib_params,
@@ -2419,7 +2422,7 @@ def parse_mat_output(list_dir,
 
 
 def unpack_tlb(tlb,
-               km_constant = _M_KM):
+               ):
 
     """
     Function to unpack a trip length band table into constituents.

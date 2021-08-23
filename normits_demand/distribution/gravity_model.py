@@ -218,24 +218,6 @@ def run_gravity_model(ia_name,
 
     min_dist, max_dist, obs_trip, obs_dist = nup.unpack_tlb(calib_params['tlb'])
 
-    """
-    Function to unpack a trip length band table into constituents.
-    Parameters
-    ----------
-    tlb:
-        A trip length band DataFrame
-    Returns
-    ----------
-    min_dist:
-        ndarray of minimum distance by band
-    max_dist:
-        ndarray of maximum distance by band
-    obs_trip:
-        Band share by band as fraction of 1
-    obs_dist:
-        
-    """
-
     ### Start of parameter search ###
 
     # Initial Search Loop - looking for OK values
@@ -244,6 +226,12 @@ def run_gravity_model(ia_name,
         init_param_a,
         init_param_b,
         dist_function)
+    print(a_search)
+    print(b_search)
+    print(m_search)
+    print(s_search)
+    print(min_para)
+    print(max_para)
 
     # Search for initial values
     out_para, out_loop, max_r_sqr = [], 0, [0, 0, 0, 0, 0]
@@ -335,6 +323,7 @@ def run_gravity_model(ia_name,
         if param_check(min_para, max_para,
                        max_r_sqr[0], max_r_sqr[1],
                        max_r_sqr[2], max_r_sqr[3]):
+
             internal_pa = grav_run[0]
             num_band = len(min_dist)
 
@@ -570,6 +559,7 @@ def gravity_model(dist_log_path: str,
             [alpha_con, beta_con, bs_con, tl_con]
 
     """
+
     # Check input params
     assert dist_function.lower() in ['tanner', 'ln'], 'Not a valid function'
 
@@ -1170,8 +1160,8 @@ def param_check(min_para,
              mu <= max_para[2] and
              sig >= min_para[3] and
              sig <= max_para[3])
-
-    return (check)
+    print(check)
+    return check
 
 
 def check_con_val(con_vals,

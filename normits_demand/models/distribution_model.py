@@ -823,7 +823,7 @@ class DistributionModel(tms.TMSPathing):
                                   'trip_length_bands',
                                   tlb_area,
                                   'standard_segments')
-        print(calib_params)
+
         # Get trip length bands
         tlb = nup.get_trip_length_bands(tlb_folder,
                                         calib_params,
@@ -833,6 +833,8 @@ class DistributionModel(tms.TMSPathing):
                                         verbose=verbose)
 
         calib_params.update({'tlb': tlb})
+        print("Printing calib params")
+        print(calib_params)
 
         # Loop over the distributions until beta gives:
         # 1. a decent average trip length by band
@@ -1196,8 +1198,7 @@ class DistributionModel(tms.TMSPathing):
         # intra_zonal_dists = Combos to be passed straight to intra zonal and exported
         # zone_conversion_dists = Combos to be translated from another zoning system
         # init_params = actual distribution alphas & betas
-        print("Printing init params")
-        print(init_params)
+
         segmented_params = self.run_separation(init_params,
                                           # lower dist list
                                           [x.lower() for x in available_dists])
