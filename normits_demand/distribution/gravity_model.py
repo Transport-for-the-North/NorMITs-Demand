@@ -790,6 +790,8 @@ def run_furness(furness_loops,
     r_gap:
         Achieved r gap at furness end.
     """
+
+    gravity = True
     if sum(par_data) == 0:
         print('No gravity function provided')
         gravity = False
