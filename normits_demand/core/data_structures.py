@@ -1543,23 +1543,3 @@ def read_compressed_dvector(path: nd.PathLike) -> Union[DVector, Any]:
     file_ops.check_file_exists(path)
 
     return compress.read_in(path)
-
-
-def from_pickle(path: nd.PathLike) -> Union[DVector, Any]:
-    """
-    Load pickled DVector object (or any object) from file.
-
-    Parameters
-    ----------
-    path:
-        Filepath to the object to read in and unpickle
-
-    Returns
-    -------
-    unpickled:
-        Same type as object stored in file.
-    """
-    # TODO(BT): VALIDATE PATH
-    with open(path, 'rb') as f:
-        obj = pickle.load(f)
-    return obj
