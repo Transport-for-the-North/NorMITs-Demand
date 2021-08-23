@@ -232,7 +232,6 @@ class ElasticityModel:
             kwargs=kwarg_list,
             pbar_kwargs=pbar_kwargs,
             process_count=process_count,
-            # process_count=0,
         )
 
     def apply_all(self):

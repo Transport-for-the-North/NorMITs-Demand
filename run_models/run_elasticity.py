@@ -4,11 +4,9 @@
     which will eventually be supersceded by a wrapper script
     which will run the whole ESF process.
 """
-
-##### imports #####
 # Standard imports
-import sys
 import os
+import sys
 import configparser
 
 from pathlib import Path
@@ -17,6 +15,7 @@ from typing import Tuple, List, Dict
 # Third party imports
 
 # Local imports
+sys.path.append("..")
 import normits_demand as nd
 
 from normits_demand import constants as consts
@@ -25,12 +24,11 @@ from normits_demand.utils import file_ops
 
 from normits_demand.matrices import matrix_processing as mat_p
 
+# #### CONSTANTS #### #
+CONFIG_FILE = "../config/setup/elasticity_config.txt"
 
-##### CONSTANTS #####
-CONFIG_FILE = "config/setup/elasticity_config.txt"
 
-
-##### FUNCTIONS #####
+# #### FUNCTIONS #### #
 def get_inputs() -> Tuple[Dict[str, Path],
                           Dict[str, Path],
                           Dict[str, Path],
@@ -156,7 +154,7 @@ def _create_output_files(noham_efs, norms_efs, iteration, scenario):
 
     # Make sure all the paths exits
     for _, v in output_dict.items():
-        file_ops.create_folder(v, verbose=False)
+        file_ops.create_folder(v)
 
     return output_dict
 
@@ -177,10 +175,6 @@ def initialise(scenario,
                use_bespoke_zones,
                use_wfh_adj,
                ):
-    # Where to write the config file
-    fname = 'elasticity_config.txt'
-    config_path = os.path.join(os.getcwd(), 'config', 'setup', fname)
-
     # ## INITIALISE EFS TO GET PATHS ## #
     efs_params = {
         'iter_num': iter_num,
@@ -208,7 +202,7 @@ def initialise(scenario,
     config['other'] = other_args
 
     # Write out to disk
-    with open(config_path, 'w') as f:
+    with open(CONFIG_FILE, 'w') as f:
         config.write(f)
 
 
@@ -293,8 +287,8 @@ def merge_internal_external(scenario,
 
 def main():
     # Controls I/O
-    scenario = efs_consts.SC01_JAM
-    iter_num = '3j'
+    scenario = efs_consts.SC04_UZC
+    iter_num = '3k'
     import_home = "I:/"
     export_home = "I:/"
 

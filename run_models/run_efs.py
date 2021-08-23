@@ -10,7 +10,9 @@ Other updates made by:
 File purpose:
 Running test runs of EFS
 """
+import sys
 
+sys.path.append("..")
 import normits_demand as nd
 from normits_demand import efs_constants as consts
 
@@ -31,7 +33,7 @@ def main():
     apply_wfh_adjustments = True
 
     # Base EFS
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = False
     recreate_attractions = False
     recreate_nhb_productions = False
@@ -43,7 +45,7 @@ def main():
     use_elasticity_to_od = True
 
     # Compiling matrices
-    run_pa_to_od = False
+    run_pa_to_od = True
     run_compile_mats = False
     run_decompile_post_me = False
 
@@ -52,10 +54,10 @@ def main():
     output_years = consts.FUTURE_YEARS
 
     # Controls I/O
-    scenario = consts.SC01_JAM
+    scenario = consts.SC04_UZC
     iter_num = '3j'
     import_home = "I:/"
-    export_home = "F:/"
+    export_home = "E:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #
