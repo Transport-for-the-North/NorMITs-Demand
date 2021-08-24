@@ -25,10 +25,14 @@ from itertools import product
 from tqdm import tqdm
 
 # self imports
+import normits_demand as nd
+
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 from normits_demand.concurrency import multiprocessing
+
+from normits_demand.matrices import utils as mat_utils
 
 # Can call tms pa_to_od.py functions from here
 from normits_demand.matrices.tms_pa_to_od import *
@@ -810,91 +814,68 @@ def maybe_get_aggregated_tour_proportions(orig: int,
 def to_od_via_tour_props(orig_vals,
                          dest_vals,
                          pa_24,
-                         tour_props,
-                         lad_tour_props,
-                         tfn_tour_props,
+                         fh_factor_dict,
+                         th_factor_dict,
                          zone_translate_dir,
                          tp_needed,
                          input_dist_name,
                          model_name,
                          ):
     # TODO: Write to_od_via_tour_props() docs
-
-    # Make sure tour props are the right shape
-    du.check_tour_proportions(
-        tour_props=tour_props,
-        n_tp=len(tp_needed),
-        n_row_col=len(orig_vals)
+    # Make sure the given factors are the correct shape
+    mat_utils.check_fh_th_factors(
+        factor_dict=fh_factor_dict,
+        tp_needed=tp_needed,
+        n_row_col=len(orig_vals),
     )
 
-    for tp_dict in [lad_tour_props, tfn_tour_props]:
-        du.check_tour_proportions(
-            tour_props=tp_dict,
-            n_tp=len(tp_needed),
-            n_row_col=len(tp_dict)
+    mat_utils.check_fh_th_factors(
+        factor_dict=th_factor_dict,
+        tp_needed=tp_needed,
+        n_row_col=len(orig_vals),
+    )
+
+    # Create the from home OD matrices
+    fh_mats = dict.fromkeys(fh_factor_dict.keys())
+    for tp, factor_mat in fh_factor_dict.items():
+        fh_mats[tp] = pa_24 * factor_mat
+
+    # Create the to home OD matrices
+    th_mats = dict.fromkeys(th_factor_dict.keys())
+    for tp, factor_mat in th_factor_dict.items():
+        th_mats[tp] = pa_24 * factor_mat
+
+    # Validate return matrix totals
+    fh_total = np.sum([x.values.sum() for x in fh_mats.values()])
+    th_total = np.sum([x.values.sum() for x in th_mats.values()])
+    od_total = fh_total + th_total
+
+    # From home and to home should be the same total
+    if not du.is_almost_equal(fh_total, th_total, significant=5):
+        raise nd.NormitsDemandError(
+            "From-home and to-home OD matrix totals are not the same."
+            "Are the given splitting factors correct?\n"
+            "from-home total: %.5f\n"
+            "to-home total: %.5f\n"
+            % (float(fh_total), float(th_total))
         )
 
-    # Load the zone aggregation dictionaries for this model
-    model2lad = du.get_zone_translation(
-        import_dir=zone_translate_dir,
-        from_zone=model_name,
-        to_zone='lad'
-    )
-    model2tfn = du.get_zone_translation(
-        import_dir=zone_translate_dir,
-        from_zone=model_name,
-        to_zone='tfn_sectors'
-    )
-
-    # Create empty from_home OD matrices
-    fh_mats = dict()
-    for tp in tp_needed:
-        fh_mats[tp] = pd.DataFrame(0.0,
-                                   index=pa_24.index,
-                                   columns=pa_24.columns)
-
-    # Create empty to_home OD matrices
-    th_mats = dict()
-    for tp in tp_needed:
-        th_mats[tp] = pd.DataFrame(0.0,
-                                   index=pa_24.index,
-                                   columns=pa_24.columns)
-
-    # For each OD pair, generate value from 24hr PA & tour_prop
-    # TODO: Stop all of the tqdm bars overwriting each other
-    # Some info on how to do it https://github.com/tqdm/tqdm/pull/329
-    total = len(orig_vals) * len(dest_vals)
-    desc = "Converting %s to tp split OD..." % input_dist_name
-    for orig, dest in tqdm(product(orig_vals, dest_vals), total=total, desc=desc):
-
-        # Will get the aggregated tour props if needed
-        od_tour_props = maybe_get_aggregated_tour_proportions(
-            orig=orig,
-            dest=dest,
-            model_tour_props=tour_props,
-            lad_tour_props=lad_tour_props,
-            tfn_tour_props=tfn_tour_props,
-            model2lad=model2lad,
-            model2tfn=model2tfn,
-            cell_demand=pa_24.loc[orig, dest]
+    # OD total should be double the input PA
+    if not du.is_almost_equal(od_total, pa_24.values.sum() * 2, significant=5):
+        raise nd.NormitsDemandError(
+            "OD Matrices total is not 2 * the input PA input."
+            "Are the given splitting factors correct?"
+            "2 * PA total total: %.5f\n"
+            "OD total: %.5f\n"
+            % (float(pa_24.values.sum() * 2), float(od_total))
         )
-
-        # Generate the values for the from home mats
-        fh_factors = np.sum(od_tour_props, axis=1)
-        for i, tp in enumerate(fh_mats.keys()):
-            fh_mats[tp].loc[orig, dest] = pa_24.loc[orig, dest] * fh_factors[i]
-
-        # Generate the values for the to home mats
-        th_factors = np.sum(od_tour_props, axis=0)
-        for i, tp in enumerate(th_mats.keys()):
-            th_mats[tp].loc[orig, dest] = pa_24.loc[orig, dest] * th_factors[i]
 
     return fh_mats, th_mats
 
 
 def _tms_od_from_tour_props_internal(pa_import,
                                      od_export,
-                                     tour_proportions_dir,
+                                     fh_th_factors_dir,
                                      zone_translate_dir,
                                      model_name,
                                      trip_origin,
@@ -926,11 +907,11 @@ def _tms_od_from_tour_props_internal(pa_import,
     orig_vals = [int(x) for x in pa_24.index.values]
     dest_vals = [int(x) for x in list(pa_24)]
 
-    # ## Load the tour proportions - always generated on base year ## #
+    # ## Load the from home and to home factors - always generated on base year ## #
     # Load the model zone tour proportions
-    tour_prop_fname = du.get_dist_name(
+    fh_factor_fname = du.get_dist_name(
         trip_origin=trip_origin,
-        matrix_format='tour_proportions',
+        matrix_format='fh_factors',
         year=str(base_year),
         purpose=str(p),
         mode=str(m),
@@ -938,23 +919,17 @@ def _tms_od_from_tour_props_internal(pa_import,
         car_availability=str(ca),
         suffix='.pkl'
     )
-    tour_props = pd.read_pickle(os.path.join(tour_proportions_dir,
-                                             tour_prop_fname))
+    fh_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, fh_factor_fname))
 
-    # Load the aggregated tour props
-    lad_fname = tour_prop_fname.replace('tour_proportions', 'lad_tour_proportions')
-    lad_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, lad_fname))
-
-    tfn_fname = tour_prop_fname.replace('tour_proportions', 'tfn_tour_proportions')
-    tfn_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, tfn_fname))
+    th_factor_fname = fh_factor_fname.replace('fh_factors', 'th_factors')
+    th_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, th_factor_fname))
 
     fh_mats, th_mats = to_od_via_tour_props(
         orig_vals,
         dest_vals,
         pa_24,
-        tour_props,
-        lad_tour_props,
-        tfn_tour_props,
+        fh_factor_dict,
+        th_factor_dict,
         zone_translate_dir,
         tp_needed,
         input_dist_name,
@@ -997,7 +972,7 @@ def _tms_od_from_tour_props_internal(pa_import,
 
 def _tms_od_from_tour_props(pa_import: str,
                             od_export: str,
-                            tour_proportions_dir: str,
+                            fh_th_factors_dir: str,
                             zone_translate_dir: str,
                             model_name: str,
                             base_year: str = consts.BASE_YEAR,
@@ -1008,7 +983,7 @@ def _tms_od_from_tour_props(pa_import: str,
                             ns_needed: List[int] = None,
                             ca_needed: List[int] = None,
                             tp_needed: List[int] = consts.TIME_PERIODS,
-                            process_count: int = os.cpu_count() - 2
+                            process_count: int = consts.PROCESS_COUNT,
                             ) -> None:
     # TODO: Write _tms_od_from_tour_props() docs
     # Init
@@ -1035,10 +1010,16 @@ def _tms_od_from_tour_props(pa_import: str,
         )
 
         # ## MULTIPROCESS ## #
+        pbar_kwargs = {
+            'desc': 'Converting segments %s from PA to OD' % year,
+            'unit': 'segments',
+            'disable': False,
+        }
+
         unchanging_kwargs = {
             'pa_import': pa_import,
             'od_export': od_export,
-            'tour_proportions_dir': tour_proportions_dir,
+            'fh_th_factors_dir': fh_th_factors_dir,
             'zone_translate_dir': zone_translate_dir,
             'model_name': model_name,
             'trip_origin': trip_origin,
@@ -1061,7 +1042,8 @@ def _tms_od_from_tour_props(pa_import: str,
         multiprocessing.multiprocess(
             _tms_od_from_tour_props_internal,
             kwargs=kwargs_list,
-            process_count=process_count
+            pbar_kwargs=pbar_kwargs,
+            process_count=process_count,
         )
 
         # Repeat loop for every wanted year
@@ -1069,7 +1051,7 @@ def _tms_od_from_tour_props(pa_import: str,
 
 def _vdm_od_from_tour_props_internal(pa_import,
                                      od_export,
-                                     tour_proportions_dir,
+                                     fh_th_factors_dir,
                                      zone_translate_dir,
                                      model_name,
                                      trip_origin,
@@ -1112,15 +1094,15 @@ def _vdm_od_from_tour_props_internal(pa_import,
         ca=ca,
         suffix='.pkl'
     )
-    tour_props = pd.read_pickle(os.path.join(tour_proportions_dir,
+    tour_props = pd.read_pickle(os.path.join(fh_th_factors_dir,
                                              tour_prop_fname))
 
     # Load the aggregated tour props
     lad_fname = tour_prop_fname.replace('tour_proportions', 'lad_tour_proportions')
-    lad_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, lad_fname))
+    lad_tour_props = pd.read_pickle(os.path.join(fh_th_factors_dir, lad_fname))
 
     tfn_fname = tour_prop_fname.replace('tour_proportions', 'tfn_tour_proportions')
-    tfn_tour_props = pd.read_pickle(os.path.join(tour_proportions_dir, tfn_fname))
+    tfn_tour_props = pd.read_pickle(os.path.join(fh_th_factors_dir, tfn_fname))
 
     fh_mats, th_mats = to_od_via_tour_props(
         orig_vals,
@@ -1169,7 +1151,7 @@ def _vdm_od_from_tour_props_internal(pa_import,
 
 def _vdm_od_from_tour_props(pa_import: str,
                             od_export: str,
-                            tour_proportions_dir: str,
+                            fh_th_factors_dir: str,
                             zone_translate_dir: str,
                             model_name: str,
                             base_year: str = consts.BASE_YEAR,
@@ -1198,7 +1180,7 @@ def _vdm_od_from_tour_props(pa_import: str,
         unchanging_kwargs = {
             'pa_import': pa_import,
             'od_export': od_export,
-            'tour_proportions_dir': tour_proportions_dir,
+            'fh_th_factors_dir': fh_th_factors_dir,
             'zone_translate_dir': zone_translate_dir,
             'model_name': model_name,
             'base_year': base_year,
@@ -1228,7 +1210,7 @@ def _vdm_od_from_tour_props(pa_import: str,
 
 def build_od_from_tour_proportions(pa_import: str,
                                    od_export: str,
-                                   tour_proportions_dir: str,
+                                   fh_th_factors_dir: str,
                                    zone_translate_dir: str,
                                    model_name: str,
                                    seg_level: str,
@@ -1308,7 +1290,7 @@ def build_od_from_tour_proportions(pa_import: str,
     to_od_fn(
         pa_import=pa_import,
         od_export=od_export,
-        tour_proportions_dir=tour_proportions_dir,
+        fh_th_factors_dir=fh_th_factors_dir,
         zone_translate_dir=zone_translate_dir,
         model_name=model_name,
         base_year=base_year,

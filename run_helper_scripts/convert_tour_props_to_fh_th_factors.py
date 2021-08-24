@@ -64,7 +64,7 @@ def get_io(model_name,
         verbose=False,
     )
     tour_prop_dir = efs.imports['post_me_tours']
-    tour_factor_dir = efs.imports['post_me_th_fh_factors']
+    tour_factor_dir = efs.imports['post_me_fh_th_factors']
 
     # Generate the output factor paths
     fh_factor_fname = du.get_dist_name(

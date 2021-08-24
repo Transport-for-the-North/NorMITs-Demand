@@ -507,7 +507,7 @@ def build_efs_io_paths(import_location: str,
         'params': model_param_home,
         'post_me_factors': os.path.join(model_param_home, 'post_me_tms_decompile_factors.pkl'),
         'post_me_tours': model_tour_prop_home,
-        'post_me_th_fh_factors': os.path.join(model_tour_prop_home, 'th_fh_factors'),
+        'post_me_fh_th_factors': os.path.join(model_tour_prop_home, 'fh_th_factors'),
         'decomp_post_me': os.path.join(import_home, model_name, 'decompiled_post_me'),
 
     }
