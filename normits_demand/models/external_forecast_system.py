@@ -1322,18 +1322,18 @@ class ExternalForecastSystem:
             ['hb', 'nhb'],
         )
 
-        # # Aggregate to TMS level?
-        # for sub_p_needed, to in iterator:
-        #     mat_p.aggregate_matrices(
-        #         import_dir=self.exports[pa_import],
-        #         export_dir=self.exports['aggregated_pa'],
-        #         trip_origin=to,
-        #         matrix_format='pa',
-        #         years_needed=years_needed,
-        #         p_needed=sub_p_needed,
-        #         m_needed=m_needed,
-        #         round_dp=round_dp,
-        #     )
+        # Aggregate to TMS level?
+        for sub_p_needed, to in iterator:
+            mat_p.aggregate_matrices(
+                import_dir=self.exports[pa_import],
+                export_dir=self.exports['aggregated_pa'],
+                trip_origin=to,
+                matrix_format='pa',
+                years_needed=years_needed,
+                p_needed=sub_p_needed,
+                m_needed=m_needed,
+                round_dp=round_dp,
+            )
 
         # Set up the segmentation params
         seg_level = 'tms'

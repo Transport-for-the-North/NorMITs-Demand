@@ -926,9 +926,6 @@ def _tms_od_from_tour_props_internal(pa_import,
         tp_needed=tp_needed,
     )
 
-    print("Writing %s converted matrices to disk..." % input_dist_name)
-    exit()
-
     # Save the generated from_home matrices
     for tp, mat in fh_mats.items():
         dist_name = du.get_dist_name(
@@ -940,9 +937,9 @@ def _tms_od_from_tour_props_internal(pa_import,
             segment=str(seg),
             car_availability=str(ca),
             tp=str(tp),
-            csv=True
+            compressed=True
         )
-        mat.to_csv(os.path.join(od_export, dist_name))
+        file_ops.write_df(mat, os.path.join(od_export, dist_name))
 
     # Save the generated to_home matrices
     for tp, mat in th_mats.items():
@@ -955,10 +952,10 @@ def _tms_od_from_tour_props_internal(pa_import,
             segment=str(seg),
             car_availability=str(ca),
             tp=str(tp),
-            csv=True
+            compressed=True
         )
         # Need to transpose to_home before writing
-        mat.T.to_csv(os.path.join(od_export, dist_name))
+        file_ops.write_df(mat.T, os.path.join(od_export, dist_name))
 
 
 def _tms_od_from_tour_props(pa_import: str,
@@ -1001,7 +998,7 @@ def _tms_od_from_tour_props(pa_import: str,
         # ## MULTIPROCESS ## #
         pbar_kwargs = {
             'desc': 'Converting segments %s from PA to OD' % year,
-            'unit': 'segments',
+            'unit': 'segment',
             'disable': False,
         }
 
@@ -1030,8 +1027,7 @@ def _tms_od_from_tour_props(pa_import: str,
             _tms_od_from_tour_props_internal,
             kwargs=kwargs_list,
             pbar_kwargs=pbar_kwargs,
-            # process_count=process_count,
-            process_count=0,
+            process_count=process_count,
         )
 
         # Repeat loop for every wanted year
