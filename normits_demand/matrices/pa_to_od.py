@@ -869,18 +869,18 @@ def to_od_via_tour_props(n_od_vals,
     return fh_mats, th_mats
 
 
-def _tms_od_from_tour_props_internal(pa_import,
-                                     od_export,
-                                     fh_th_factors_dir,
-                                     trip_origin,
-                                     base_year,
-                                     year,
-                                     p,
-                                     m,
-                                     seg,
-                                     ca,
-                                     tp_needed
-                                     ) -> None:
+def _tms_od_from_fh_th_factors_internal(pa_import,
+                                        od_export,
+                                        fh_th_factors_dir,
+                                        trip_origin,
+                                        base_year,
+                                        year,
+                                        p,
+                                        m,
+                                        seg,
+                                        ca,
+                                        tp_needed
+                                        ) -> None:
     # TODO: Write _tms_od_from_tour_props_internal docs()
     # Load in 24hr PA
     input_dist_name = du.get_dist_name(
@@ -958,19 +958,47 @@ def _tms_od_from_tour_props_internal(pa_import,
         file_ops.write_df(mat.T, os.path.join(od_export, dist_name))
 
 
-def _tms_od_from_tour_props(pa_import: str,
-                            od_export: str,
-                            fh_th_factors_dir: str,
-                            base_year: str = consts.BASE_YEAR,
-                            years_needed: List[int] = consts.FUTURE_YEARS,
-                            p_needed: List[int] = consts.ALL_HB_P,
-                            m_needed: List[int] = consts.MODES_NEEDED,
-                            soc_needed: List[int] = None,
-                            ns_needed: List[int] = None,
-                            ca_needed: List[int] = None,
-                            tp_needed: List[int] = consts.TIME_PERIODS,
-                            process_count: int = consts.PROCESS_COUNT,
-                            ) -> None:
+def _tms_od_from_fh_th_factors(pa_import: str,
+                               od_export: str,
+                               fh_th_factors_dir: str,
+                               base_year: str = consts.BASE_YEAR,
+                               years_needed: List[int] = consts.FUTURE_YEARS,
+                               p_needed: List[int] = consts.ALL_HB_P,
+                               m_needed: List[int] = consts.MODES_NEEDED,
+                               soc_needed: List[int] = None,
+                               ns_needed: List[int] = None,
+                               ca_needed: List[int] = None,
+                               tp_needed: List[int] = consts.TIME_PERIODS,
+                               process_count: int = consts.PROCESS_COUNT,
+                               ) -> None:
+    """Internal function of build_od_from_fh_th_factors to handle 'tms' seg_level
+
+    Reads in each of the matrices, as defined by the possible segments in
+    p_needed, m_needed, soc_needed, ns_needed, ca_needed, and tp_needed.
+    Converts the pa matrices, in pa_import, into OD matrices. Writing them out
+    to od_export.
+    It is assumed that the base year from-home and to-home factors should be
+    used from fh_th_factors_dir.
+
+    Parameters
+    ----------
+    pa_import
+    od_export
+    fh_th_factors_dir
+    base_year
+    years_needed
+    p_needed
+    m_needed
+    soc_needed
+    ns_needed
+    ca_needed
+    tp_needed
+    process_count
+
+    Returns
+    -------
+
+    """
     # TODO: Write _tms_od_from_tour_props() docs
     # Init
     soc_needed = [None] if soc_needed is None else soc_needed
@@ -1024,7 +1052,7 @@ def _tms_od_from_tour_props(pa_import: str,
             kwargs_list.append(kwargs)
 
         multiprocessing.multiprocess(
-            _tms_od_from_tour_props_internal,
+            _tms_od_from_fh_th_factors_internal,
             kwargs=kwargs_list,
             pbar_kwargs=pbar_kwargs,
             process_count=process_count,
@@ -1033,17 +1061,17 @@ def _tms_od_from_tour_props(pa_import: str,
         # Repeat loop for every wanted year
 
 
-def _vdm_od_from_tour_props_internal(pa_import,
-                                     od_export,
-                                     fh_th_factors_dir,
-                                     trip_origin,
-                                     base_year,
-                                     year,
-                                     uc,
-                                     m,
-                                     ca,
-                                     tp_needed
-                                     ) -> None:
+def _vdm_od_from_fh_th_factors_internal(pa_import,
+                                        od_export,
+                                        fh_th_factors_dir,
+                                        trip_origin,
+                                        base_year,
+                                        year,
+                                        uc,
+                                        m,
+                                        ca,
+                                        tp_needed
+                                        ) -> None:
     # TODO: Write _vdm_od_from_tour_props_internal docs()
     # TODO: Is there a way to combine get_vdm_dist_name and get_dist_name?
     #  Cracking this would make all future code super easy flexible!
@@ -1121,18 +1149,18 @@ def _vdm_od_from_tour_props_internal(pa_import,
         mat.T.to_csv(os.path.join(od_export, dist_name))
 
 
-def _vdm_od_from_tour_props(pa_import: str,
-                            od_export: str,
-                            fh_th_factors_dir: str,
-                            base_year: str = consts.BASE_YEAR,
-                            years_needed: List[int] = consts.FUTURE_YEARS,
-                            to_needed: List[str] = consts.VDM_TRIP_ORIGINS,
-                            uc_needed: List[str] = consts.USER_CLASSES,
-                            m_needed: List[int] = consts.MODES_NEEDED,
-                            ca_needed: List[int] = None,
-                            tp_needed: List[int] = consts.TIME_PERIODS,
-                            process_count: int = os.cpu_count() - 2
-                            ):
+def _vdm_od_from_fh_th_factors(pa_import: str,
+                               od_export: str,
+                               fh_th_factors_dir: str,
+                               base_year: str = consts.BASE_YEAR,
+                               years_needed: List[int] = consts.FUTURE_YEARS,
+                               to_needed: List[str] = consts.VDM_TRIP_ORIGINS,
+                               uc_needed: List[str] = consts.USER_CLASSES,
+                               m_needed: List[int] = consts.MODES_NEEDED,
+                               ca_needed: List[int] = None,
+                               tp_needed: List[int] = consts.TIME_PERIODS,
+                               process_count: int = os.cpu_count() - 2
+                               ):
     # TODO: Write _vdm_od_from_tour_props() docs
     # Init
     ca_needed = [None] if ca_needed is None else ca_needed
@@ -1167,7 +1195,7 @@ def _vdm_od_from_tour_props(pa_import: str,
             kwargs_list.append(kwargs)
 
         multiprocessing.multiprocess(
-            _vdm_od_from_tour_props_internal,
+            _vdm_od_from_fh_th_factors_internal,
             kwargs=kwargs_list,
             process_count=process_count
         )
@@ -1175,18 +1203,19 @@ def _vdm_od_from_tour_props(pa_import: str,
         # Repeat loop for every wanted year
 
 
-def build_od_from_tour_proportions(pa_import: str,
-                                   od_export: str,
-                                   fh_th_factors_dir: str,
-                                   seg_level: str,
-                                   seg_params: Dict[str, Any],
-                                   base_year: str = consts.BASE_YEAR,
-                                   years_needed: List[int] = consts.FUTURE_YEARS,
-                                   process_count: int = consts.PROCESS_COUNT,
-                                   ) -> None:
-    """
-    Builds future year OD matrices based on the base year tour proportions
-    at tour_proportions_dir.
+def build_od_from_fh_th_factors(pa_import: str,
+                                od_export: str,
+                                fh_th_factors_dir: str,
+                                seg_level: str,
+                                seg_params: Dict[str, Any],
+                                base_year: str = consts.BASE_YEAR,
+                                years_needed: List[int] = consts.FUTURE_YEARS,
+                                process_count: int = consts.PROCESS_COUNT,
+                                ) -> None:
+    """Builds OD Matrices from PA using the factors in fh_th_factors_dir
+
+    Builds OD matrices based on the base year tour proportions
+    at fh_th_factors_dir.
 
     Parameters
     ----------
@@ -1196,36 +1225,30 @@ def build_od_from_tour_proportions(pa_import: str,
     od_export:
         Path to the directory to export the future year tp split OD matrices.
 
-    tour_proportions_dir:
-        Path to the directory containing the base year tour proportions.
+    fh_th_factors_dir:
+        Path to the directory containing the base year from-home and to-home
+        splitting factors across time periods.
 
-    zone_translate_dir:
-        Where to find the zone translation files from the model zoning system
-        to the aggregated LAD nad TfN zoning systems.
+    seg_level:
+        The name of the segmentation level to use. Should be one of
+        efs_consts.SEG_LEVELS. Currently only 'tms' and 'vdm' are supported.
+
+    seg_params:
+        A dictionary defining the possible values for each of the segments.
+        This is like a kwarg dictionary to pass through to the underlying
+        function of the seg level. For seg_level='tms', this should look
+        something like:
+        {
+            'p_needed': [1, 2, 3, 4, 5, 6, 7, 8],
+            'm_needed': [3],
+            'ca_needed': [1, 2],
+        }
 
     base_year:
         The base year that the tour proportions were generated for
 
     years_needed:
-        The future year matrices that need to be converted from PA to OD
-
-    p_needed:
-        A list of purposes to use when converting from PA to OD
-
-    m_needed:
-        A list of modes to use when converting from PA to OD
-
-    soc_needed:
-        A list of skill levels to use when converting from PA to OD
-
-    ns_needed:
-        A list of income levels to use when converting from PA to OD
-
-    ca_needed:
-        A list of car availabilities to use when converting from PA to OD
-
-    tp_needed:
-        A list of time periods to use when converting from PA to OD
+        The year of the matrices that need to be converted from PA to OD
 
     process_count:
         The number of processes to use when multiprocessing. Set to 0 to not
@@ -1236,15 +1259,14 @@ def build_od_from_tour_proportions(pa_import: str,
     -------
     None
     """
-    # TODO: Update build_od_from_tour_proportions() docs
     # Init
     seg_level = du.validate_seg_level(seg_level)
 
     # Call the correct mid-level function to deal with the segmentation
     if seg_level == 'tms':
-        to_od_fn = _tms_od_from_tour_props
+        to_od_fn = _tms_od_from_fh_th_factors
     elif seg_level == 'vdm':
-        to_od_fn = _vdm_od_from_tour_props
+        to_od_fn = _vdm_od_from_fh_th_factors
     else:
         raise NotImplementedError(
             "'%s' is a valid segmentation level, however, we do not have a "
