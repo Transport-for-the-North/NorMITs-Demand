@@ -1348,8 +1348,6 @@ class ExternalForecastSystem:
             pa_import=self.exports['aggregated_pa'],
             od_export=self.exports['od'],
             fh_th_factors_dir=self.imports['post_me_fh_th_factors'],
-            zone_translate_dir=self.imports['zone_translation']['one_to_one'],
-            model_name=self.model_name,
             years_needed=years_needed,
             seg_level=seg_level,
             seg_params=seg_params

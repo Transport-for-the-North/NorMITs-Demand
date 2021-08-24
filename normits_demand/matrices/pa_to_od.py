@@ -811,28 +811,24 @@ def maybe_get_aggregated_tour_proportions(orig: int,
     return od_tour_props
 
 
-def to_od_via_tour_props(orig_vals,
-                         dest_vals,
+def to_od_via_tour_props(n_od_vals,
                          pa_24,
                          fh_factor_dict,
                          th_factor_dict,
-                         zone_translate_dir,
                          tp_needed,
-                         input_dist_name,
-                         model_name,
                          ):
     # TODO: Write to_od_via_tour_props() docs
     # Make sure the given factors are the correct shape
     mat_utils.check_fh_th_factors(
         factor_dict=fh_factor_dict,
         tp_needed=tp_needed,
-        n_row_col=len(orig_vals),
+        n_row_col=n_od_vals,
     )
 
     mat_utils.check_fh_th_factors(
         factor_dict=th_factor_dict,
         tp_needed=tp_needed,
-        n_row_col=len(orig_vals),
+        n_row_col=n_od_vals,
     )
 
     # Create the from home OD matrices
@@ -876,8 +872,6 @@ def to_od_via_tour_props(orig_vals,
 def _tms_od_from_tour_props_internal(pa_import,
                                      od_export,
                                      fh_th_factors_dir,
-                                     zone_translate_dir,
-                                     model_name,
                                      trip_origin,
                                      base_year,
                                      year,
@@ -925,18 +919,15 @@ def _tms_od_from_tour_props_internal(pa_import,
     th_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, th_factor_fname))
 
     fh_mats, th_mats = to_od_via_tour_props(
-        orig_vals,
-        dest_vals,
-        pa_24,
-        fh_factor_dict,
-        th_factor_dict,
-        zone_translate_dir,
-        tp_needed,
-        input_dist_name,
-        model_name=model_name,
+        n_od_vals=len(orig_vals),
+        pa_24=pa_24,
+        fh_factor_dict=fh_factor_dict,
+        th_factor_dict=th_factor_dict,
+        tp_needed=tp_needed,
     )
 
     print("Writing %s converted matrices to disk..." % input_dist_name)
+    exit()
 
     # Save the generated from_home matrices
     for tp, mat in fh_mats.items():
@@ -973,8 +964,6 @@ def _tms_od_from_tour_props_internal(pa_import,
 def _tms_od_from_tour_props(pa_import: str,
                             od_export: str,
                             fh_th_factors_dir: str,
-                            zone_translate_dir: str,
-                            model_name: str,
                             base_year: str = consts.BASE_YEAR,
                             years_needed: List[int] = consts.FUTURE_YEARS,
                             p_needed: List[int] = consts.ALL_HB_P,
@@ -1020,8 +1009,6 @@ def _tms_od_from_tour_props(pa_import: str,
             'pa_import': pa_import,
             'od_export': od_export,
             'fh_th_factors_dir': fh_th_factors_dir,
-            'zone_translate_dir': zone_translate_dir,
-            'model_name': model_name,
             'trip_origin': trip_origin,
             'base_year': base_year,
             'year': year,
@@ -1043,7 +1030,8 @@ def _tms_od_from_tour_props(pa_import: str,
             _tms_od_from_tour_props_internal,
             kwargs=kwargs_list,
             pbar_kwargs=pbar_kwargs,
-            process_count=process_count,
+            # process_count=process_count,
+            process_count=0,
         )
 
         # Repeat loop for every wanted year
@@ -1052,8 +1040,6 @@ def _tms_od_from_tour_props(pa_import: str,
 def _vdm_od_from_tour_props_internal(pa_import,
                                      od_export,
                                      fh_th_factors_dir,
-                                     zone_translate_dir,
-                                     model_name,
                                      trip_origin,
                                      base_year,
                                      year,
@@ -1083,38 +1069,28 @@ def _vdm_od_from_tour_props_internal(pa_import,
     orig_vals = [int(x) for x in pa_24.index.values]
     dest_vals = [int(x) for x in list(pa_24)]
 
-    # ## Load the tour proportions - always generated on base year ## #
+    # ## Load the from home and to home factors - always generated on base year ## #
     # Load the model zone tour proportions
-    tour_prop_fname = du.get_vdm_dist_name(
+    fh_factor_fname = du.get_vdm_dist_name(
         trip_origin=trip_origin,
-        matrix_format='tour_proportions',
+        matrix_format='fh_factors',
         year=str(year),
         user_class=str(uc),
         mode=str(m),
         ca=ca,
         suffix='.pkl'
     )
-    tour_props = pd.read_pickle(os.path.join(fh_th_factors_dir,
-                                             tour_prop_fname))
+    fh_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, fh_factor_fname))
 
-    # Load the aggregated tour props
-    lad_fname = tour_prop_fname.replace('tour_proportions', 'lad_tour_proportions')
-    lad_tour_props = pd.read_pickle(os.path.join(fh_th_factors_dir, lad_fname))
-
-    tfn_fname = tour_prop_fname.replace('tour_proportions', 'tfn_tour_proportions')
-    tfn_tour_props = pd.read_pickle(os.path.join(fh_th_factors_dir, tfn_fname))
+    th_factor_fname = fh_factor_fname.replace('fh_factors', 'th_factors')
+    th_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, th_factor_fname))
 
     fh_mats, th_mats = to_od_via_tour_props(
-        orig_vals,
-        dest_vals,
-        pa_24,
-        tour_props,
-        lad_tour_props,
-        tfn_tour_props,
-        zone_translate_dir,
-        tp_needed,
-        input_dist_name,
-        model_name=model_name,
+        n_od_vals=len(orig_vals),
+        pa_24=pa_24,
+        fh_factor_dict=fh_factor_dict,
+        th_factor_dict=th_factor_dict,
+        tp_needed=tp_needed,
     )
 
     print("Writing %s converted matrices to disk..." % input_dist_name)
@@ -1152,8 +1128,6 @@ def _vdm_od_from_tour_props_internal(pa_import,
 def _vdm_od_from_tour_props(pa_import: str,
                             od_export: str,
                             fh_th_factors_dir: str,
-                            zone_translate_dir: str,
-                            model_name: str,
                             base_year: str = consts.BASE_YEAR,
                             years_needed: List[int] = consts.FUTURE_YEARS,
                             to_needed: List[str] = consts.VDM_TRIP_ORIGINS,
@@ -1181,9 +1155,6 @@ def _vdm_od_from_tour_props(pa_import: str,
             'pa_import': pa_import,
             'od_export': od_export,
             'fh_th_factors_dir': fh_th_factors_dir,
-            'zone_translate_dir': zone_translate_dir,
-            'model_name': model_name,
-            'base_year': base_year,
             'year': year,
             'tp_needed': tp_needed
         }
@@ -1211,8 +1182,6 @@ def _vdm_od_from_tour_props(pa_import: str,
 def build_od_from_tour_proportions(pa_import: str,
                                    od_export: str,
                                    fh_th_factors_dir: str,
-                                   zone_translate_dir: str,
-                                   model_name: str,
                                    seg_level: str,
                                    seg_params: Dict[str, Any],
                                    base_year: str = consts.BASE_YEAR,
@@ -1291,8 +1260,6 @@ def build_od_from_tour_proportions(pa_import: str,
         pa_import=pa_import,
         od_export=od_export,
         fh_th_factors_dir=fh_th_factors_dir,
-        zone_translate_dir=zone_translate_dir,
-        model_name=model_name,
         base_year=base_year,
         years_needed=years_needed,
         process_count=process_count,
