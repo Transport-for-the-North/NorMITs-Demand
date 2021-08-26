@@ -126,7 +126,7 @@ def get_internal_mask(df: pd.DataFrame,
     mask:
         A mask of true and false values. Will be the same shape as df.
     """
-    return get_wide_mask(df, zones, operator.and_)
+    return get_wide_mask(df=df, zones=zones, join_fn=operator.and_)
 
 
 def get_external_mask(df: pd.DataFrame,
@@ -148,7 +148,7 @@ def get_external_mask(df: pd.DataFrame,
     mask:
         A mask of true and false values. Will be the same shape as df.
     """
-    return get_wide_mask(df, zones, operator.or_)
+    return get_wide_mask(df=df, zones=zones, join_fn=operator.or_)
 
 
 def check_fh_th_factors(factor_dict: Dict[int, np.array],
