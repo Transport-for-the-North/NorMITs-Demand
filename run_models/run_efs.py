@@ -52,6 +52,7 @@ def main():
     # Controls matrix conversion
     output_years = consts.ALL_YEARS
     output_years = consts.FUTURE_YEARS
+    output_years = [2050]
 
     # Controls I/O
     scenario = consts.SC04_UZC

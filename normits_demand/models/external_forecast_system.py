@@ -1332,6 +1332,7 @@ class ExternalForecastSystem:
                 years_needed=years_needed,
                 p_needed=sub_p_needed,
                 m_needed=m_needed,
+                ca_needed=self.ca_needed,
                 round_dp=round_dp,
             )
 

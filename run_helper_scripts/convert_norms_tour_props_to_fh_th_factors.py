@@ -144,6 +144,11 @@ def get_hb_output_paths(efs_imports, purpose, mode, ca):
     return fh_factor_path, th_factor_path
 
 
+def get_nhb_output_path(efs_imports):
+    fname = consts.POSTME_TP_SPLIT_FACTORS_FNAME
+    return os.path.join(efs_imports['post_me_tours'], fname)
+
+
 def infill_all_zeros(factor_dict):
     fh_zero_dict = dict.fromkeys(TP_NEEDED)
     for tp in fh_zero_dict:
@@ -269,11 +274,11 @@ def hb_conversion(input_tour_props, efs_imports, mode):
             # Get the achieved values
             fh_total = 0
             for v in fh_factors_dict.values():
-                fh_total += v
+                fh_total += v.sum()
 
             th_total = 0
             for v in th_factors_dict.values():
-                th_total += v
+                th_total += v.sum()
 
             # Percentage diff
             fh_perc_diff = np.abs(fh_total - target) / target
@@ -298,8 +303,111 @@ def hb_conversion(input_tour_props, efs_imports, mode):
                 )
 
 
-def nhb_conversion():
-    pass
+def nhb_conversion(input_tour_props, efs_imports, mode):
+    trip_origin = 'nhb'
+
+    # Validate globals that are needed
+    if not all([p in PURPOSE_TO_TOUR_PROP_KEYS for p in NHB_PURPOSES]):
+        raise ValueError(
+            "Not all of the defined NHB_PURPOSES can be found in "
+            "PURPOSE_TO_TOUR_PROP_KEYS. Double check that all the "
+            "keys match!\n"
+            "Missing keys: %s"
+            % (set(NHB_PURPOSES) - set(PURPOSE_TO_TOUR_PROP_KEYS))
+        )
+
+    # Use masks to make sure we're only getting internal and external numbers
+    norms_zones = max(NORMS_ZONES)
+    blank_norms_df = pd.DataFrame(
+        index=NORMS_ZONES,
+        columns=NORMS_ZONES,
+        data=np.zeros((norms_zones, norms_zones)),
+    )
+    internal_mask = mat_utils.get_internal_mask(blank_norms_df, NORMS_INTERNAL_ZONES)
+    external_mask = mat_utils.get_external_mask(blank_norms_df, NORMS_EXTERNAL_ZONES)
+
+    # ## CONVERT INTO A DICTIONARY FOR OUTPUT ## #
+    output_dict = dict()
+    for p in tqdm(NHB_PURPOSES, desc='Converting nhb purposes to factors'):
+        # Whittle down the input tour props
+        int_keys = PURPOSE_TO_TOUR_PROP_KEYS[p]['internal']
+        ext_keys = PURPOSE_TO_TOUR_PROP_KEYS[p]['external']
+        int_p_tour_props = [input_tour_props[x] for x in int_keys]
+        ext_p_tour_props = [input_tour_props[x] for x in ext_keys]
+
+        # ## GRAB ALL INPUT MATRICES ## #
+        for ca in CA_CONVERSION.keys():
+            # Get the input tour props that relate to this ca segment
+            tour_props_list = [x[CA_CONVERSION[ca]] for x in int_p_tour_props]
+
+            # Initialise lists to collect all splitting factors
+            split_factors_list = list()
+
+            # ## CONVERT INTERNAL INPUT SPLITTING FACTORS ## #
+            for tour_props in tour_props_list:
+                # From home conversion
+                split_factors_dict = dict.fromkeys(TP_NEEDED)
+                for tp in split_factors_dict:
+                    split_factors_dict[tp] = tour_props[tp] * internal_mask
+                split_factors_list.append(split_factors_dict)
+
+            # ## CONVERT EXTERNAL INPUT TOUR PROPS ## #
+            # We fudge this slightly and use ca no matter what
+            for tour_props in ext_p_tour_props:
+                # Grab from home factors
+                split_factors_dict = dict.fromkeys(TP_NEEDED)
+                for tp in split_factors_dict:
+                    split_factors_dict[tp] = tour_props['ca_fh'][tp] * external_mask
+                split_factors_list.append(split_factors_dict)
+
+            # Add all the dictionaries together and equally split where 0
+            split_factors_dict = sum_dict_list(split_factors_list)
+            split_factors_dict = infill_all_zeros(split_factors_dict)
+
+            # ## VALIDATE THE GENERATED SPLITS ## #
+            target = norms_zones ** 2
+            tol = 1e-3
+
+            # Get the achieved values
+            total = 0
+            for v in split_factors_dict.values():
+                total += v.sum()
+
+            # Percentage diff
+            perc_diff = np.abs(total - target) / target
+            if perc_diff > tol:
+                raise ValueError(
+                    "Produced splitting factors for p%s, ca%s are not within"
+                    "%s%% of what they should be! (%s)"
+                    "Check the inputs and outputs to find out where demand will "
+                    "go missing."
+                    % (p, ca, tol, target)
+                )
+
+            # ## CONVERT DICTIONARY INTO RIGHT FORMAT ## #
+            fname_kwargs = {
+                'trip_origin': trip_origin,
+                'matrix_format': 'pa',
+                'year': str(BASE_YEAR),
+                'purpose': str(p),
+                'mode': str(mode),
+                'car_availability': str(ca),
+                'csv': True,
+            }
+
+            # Generate filenames
+            segment_dict = dict()
+            parent_name = du.get_dist_name(**fname_kwargs)
+            for tp, factors in split_factors_dict.items():
+                tp_fname = du.get_dist_name(tp=str(tp), **fname_kwargs)
+                segment_dict[tp_fname] = factors
+
+            # Assign to output dict
+            output_dict[parent_name] = segment_dict
+
+    # ## WRITE TO DISK ## #
+    output_path = get_nhb_output_path(efs_imports)
+    nd.to_pickle(output_dict, output_path)
 
 
 def main():
@@ -322,9 +430,8 @@ def main():
     input_tour_props = get_input_tour_props(efs.imports)
 
     # HB and NHB need converting differently
-    hb_conversion(input_tour_props, efs.imports, MODE)
-    exit()
-    nhb_conversion()
+    # hb_conversion(input_tour_props, efs.imports, MODE)
+    nhb_conversion(input_tour_props, efs.imports, MODE)
 
 
 if __name__ == '__main__':

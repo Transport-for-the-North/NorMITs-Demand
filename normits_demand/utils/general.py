@@ -3051,7 +3051,9 @@ def is_almost_equal(v1: float,
         The second value to compare
 
     significant:
-        The number of significant bits to compare over
+        The number of significant bits to compare over. If negative,
+        then this represents rounding.
+        i.e. -1 is same up until 10s, -2 100s etc
 
     Returns
     -------

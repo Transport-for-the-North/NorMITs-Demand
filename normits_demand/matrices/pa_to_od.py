@@ -847,22 +847,22 @@ def to_od_via_tour_props(n_od_vals,
     od_total = fh_total + th_total
 
     # From home and to home should be the same total
-    if not du.is_almost_equal(fh_total, th_total, significant=5):
+    if not du.is_almost_equal(fh_total, th_total, significant=0):
         raise nd.NormitsDemandError(
             "From-home and to-home OD matrix totals are not the same."
             "Are the given splitting factors correct?\n"
-            "from-home total: %.5f\n"
-            "to-home total: %.5f\n"
+            "from-home total: %.2f\n"
+            "to-home total: %.2f\n"
             % (float(fh_total), float(th_total))
         )
 
     # OD total should be double the input PA
-    if not du.is_almost_equal(od_total, pa_24.values.sum() * 2, significant=5):
+    if not du.is_almost_equal(od_total, pa_24.values.sum() * 2, significant=-1):
         raise nd.NormitsDemandError(
             "OD Matrices total is not 2 * the input PA input."
             "Are the given splitting factors correct?"
-            "2 * PA total total: %.5f\n"
-            "OD total: %.5f\n"
+            "2 * PA total total: %.2f\n"
+            "OD total: %.2f\n"
             % (float(pa_24.values.sum() * 2), float(od_total))
         )
 
