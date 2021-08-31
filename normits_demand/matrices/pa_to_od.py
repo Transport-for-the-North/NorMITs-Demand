@@ -836,8 +836,6 @@ def to_od_via_tour_props(n_od_vals,
     for tp, factor_mat in fh_factor_dict.items():
         fh_mats[tp] = pa_24 * factor_mat
 
-    # test
-
     # Create the to home OD matrices
     th_mats = dict.fromkeys(th_factor_dict.keys())
     for tp, factor_mat in th_factor_dict.items():
