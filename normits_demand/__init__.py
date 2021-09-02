@@ -19,16 +19,14 @@ from normits_demand.core import DVectorError
 from normits_demand.pathing import PathingError
 
 # ## EXPOSE CLASS LAYER ## #
-# EFS Class Layer
-from normits_demand.models.external_forecast_system import ExternalForecastSystem
+# Models
+from normits_demand.models import *
+
+# Legacy model imports
 from normits_demand.models.efs_production_model import EFSProductionGenerator
 from normits_demand.models.efs_production_model import NhbProductionModel
 from normits_demand.models.efs_attraction_model import EFSAttractionGenerator
 from normits_demand.models.efs_zone_translator import ZoneTranslator
-from normits_demand.models.elasticity_model import ElasticityModel
-
-# NoTEM Class Layer
-from normits_demand.models.notem import NoTEM
 
 # Core Objects
 from normits_demand.core import DVector

@@ -6,3 +6,9 @@ from normits_demand.models.notem import HBAttractionModel
 from normits_demand.models.notem import NHBAttractionModel
 from normits_demand.models.notem import NoTEM
 
+# Supply Model
+from normits_demand.models.supply import NorMITsSupply
+
+# EFS
+from normits_demand.models.external_forecast_system import ExternalForecastSystem
+from normits_demand.models.elasticity_model import ElasticityModel
