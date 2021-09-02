@@ -145,6 +145,10 @@ TAG_CERTAINTY_BOUNDS = {
 }
 
 # ## File Names and Paths ## #
+# Zone_system, trip_origin, year
+PRODS_FNAME_YEAR = '%s_%s_%d_productions.csv'
+ATTRS_FNAME_YEAR = '%s_%s_%d_attractions.csv'
+
 # Zone_system, trip_origin
 PRODS_FNAME = '%s_%s_productions.csv'
 ATTRS_FNAME = '%s_%s_attractions.csv'
@@ -256,7 +260,7 @@ TFN_MSOA_SECTOR_LOOKUPS = {
 #  labels: EFS, demand merge
 
 # RUNNING CONSTANTS
-MODEL_NAME = 'norms'
+MODEL_NAME = 'noham'
 
 # YEARS
 BASE_YEAR = 2018

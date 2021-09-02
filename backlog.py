@@ -25,5 +25,7 @@
 #  labels: optimisations
 
 # BACKLOG: Add in a level of path building inheritance for models
-#  lables: demand merge, QoL Updates
+#  labels: demand merge, QoL Updates
 
+# BACKLOG: Move zone_translation and segmentation definitions into database
+#  labels: core, database

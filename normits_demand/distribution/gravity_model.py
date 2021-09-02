@@ -655,6 +655,9 @@ def gravity_model(dist_log_path: str,
             cur_val1, cur_val2 = np.sum(est_trip*cst_val1[1]), np.sum(est_trip*cst_val2[1])
             gra_val1, gra_val2 = np.sum(obs_trip*cst_val1[0]-est_trip*cst_val1[1]), np.sum(obs_trip*cst_val2[0]-est_trip*cst_val2[1])
 
+        else:
+            raise ValueError
+
         con_val1 = np.where(fix_val1!=0,np.abs(gra_val1/fix_val1)*100,100)
         con_val2 = np.where(fix_val2!=0,np.abs(gra_val2/fix_val2)*100,100)
 
