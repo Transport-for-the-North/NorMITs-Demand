@@ -23,7 +23,11 @@ from collections import defaultdict
 
 from tqdm import tqdm
 
+import normits_demand as nd
+
+from normits_demand import constants as consts
 from normits_demand.utils import general as du
+from normits_demand.concurrency import multiprocessing
 
 
 def noham_vdm_tour_proportions_out(input_path: str,
@@ -100,22 +104,53 @@ def noham_vdm_tour_proportions_out(input_path: str,
 
 def convert_wide_to_long(import_dir: str,
                          export_dir: str,
-                         id_vars: str = 'o_zone',
-                         var_name: str = 'd_zone',
+                         matrix_format: str,
                          value_name: str = 'trips',
-                         echo: bool = True
                          ) -> None:
     # TODO: Write convert_wide_to_long() docs
-    desc = 'Converting Matrices'
-    for mat_name in tqdm(du.list_files(import_dir), desc=desc, disable=(not echo)):
-        in_path = os.path.join(import_dir, mat_name)
-        out_path = os.path.join(export_dir, mat_name)
+    kwarg_list = list()
+    for mat_name in du.list_files(import_dir):
+        kwarg_list.append({
+           'import_path': os.path.join(import_dir, mat_name),
+           'export_path': os.path.join(export_dir, mat_name),
+           'matrix_format': matrix_format,
+           'value_name': value_name,
+        })
 
-        df = pd.read_csv(in_path)
-        du.wide_to_long_out(
-            df,
-            id_vars,
-            var_name,
-            value_name,
-            out_path
+    pbar_kwargs = {
+        'desc': 'Converting Matrices',
+        'unit': 'Matrix',
+    }
+
+    multiprocessing.multiprocess(
+        fn=wide_to_long,
+        kwargs=kwarg_list,
+        process_count=consts.PROCESS_COUNT,
+        pbar_kwargs=pbar_kwargs,
+    )
+
+
+def wide_to_long(import_path: nd.PathLike,
+                 export_path: nd.PathLike,
+                 matrix_format: str,
+                 value_name: str,
+                 ) -> None:
+    # TODO(BT) Write wide_to_long() docs
+    if matrix_format == 'pa':
+        col_name = 'p_zone'
+        row_name = 'a_zone'
+    elif matrix_format == 'od':
+        col_name = 'o_zone'
+        row_name = 'd_zone'
+    else:
+        raise ValueError(
+            "%s is not a valid matrix format"
         )
+
+    du.wide_to_long_out(
+        df=pd.read_csv(import_path),
+        id_vars=col_name,
+        var_name=row_name,
+        value_name=value_name,
+        out_path=export_path
+    )

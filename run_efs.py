@@ -22,8 +22,8 @@ def main():
 
     # Land Use imports
     land_use_drive = "I:/"
-    by_land_use_iteration = 'iter3b'
-    fy_land_use_iteration = 'iter3c'
+    by_land_use_iteration = 'iter3d'
+    fy_land_use_iteration = 'iter3d'
 
     # Running control
     integrate_dlog = False
@@ -31,7 +31,7 @@ def main():
     apply_wfh_adjustments = True
 
     # Base EFS
-    run_base_efs = False
+    run_base_efs = True
     recreate_productions = False
     recreate_attractions = False
     recreate_nhb_productions = False
@@ -44,7 +44,7 @@ def main():
 
     # Compiling matrices
     run_pa_to_od = False
-    run_compile_mats = True
+    run_compile_mats = False
     run_decompile_post_me = False
 
     # Controls matrix conversion
@@ -52,10 +52,10 @@ def main():
     output_years = consts.FUTURE_YEARS
 
     # Controls I/O
-    scenario = consts.SC04_UZC
-    iter_num = '3i'
+    scenario = consts.SC01_JAM
+    iter_num = '3j'
     import_home = "I:/"
-    export_home = "I:/"
+    export_home = "F:/"
     model_name = consts.MODEL_NAME
 
     # ## RUN START ## #

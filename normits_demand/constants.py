@@ -1,5 +1,7 @@
 from normits_demand.efs_constants import *
 
+PACKAGE_NAME = __name__.split('.')[0]
+
 # VALID VALUES FOR ARGS
 VECTOR_TYPES = [
     'productions',
@@ -14,7 +16,7 @@ VECTOR_TYPES = [
 INTERNAL_AREA = "%s_internal_area.csv"
 EXTERNAL_AREA = "%s_external_area.csv"
 
-BASE_YEAR_POP_FNAME = 'land_use_output_safe_msoa.csv'
+BASE_YEAR_POP_FNAME = 'land_use_output_msoa.csv'
 BASE_YEAR_EMP_FNAME = 'land_use_2018_emp.csv'
 
 POSTME_TP_SPLIT_FACTORS_FNAME = "post_me_nhb_tp_splitting_factors.pkl"
