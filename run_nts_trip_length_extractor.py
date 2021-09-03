@@ -10,7 +10,7 @@ if __name__ == '__main__':
 
     # TODO: path and smart search should be in constants
     _TLB_FOLDER = 'I:/NorMITs Synthesiser/import/trip_length_bands'
-    _NTS_IMPORT = 'Y:/NTS/import/classified builds/classified_build.csv'
+    _NTS_IMPORT = 'Y:/NTS/import/classified builds/cb_tfn.csv'
 
     xtract = nts.NTSTripLengthBuilder(tlb_folder=_TLB_FOLDER,
                                       nts_import=_NTS_IMPORT)
