@@ -102,8 +102,8 @@ class NTSTripLengthBuilder:
                                       on='CarAccess_B01ID')
 
         # Aggregate area type application
-        agg_at = pd.DataFrame({'tfn_area_type':[1, 2, 3, 4, 5, 6, 7, 8],
-                               'agg_tfn_area_type':[1, 1, 2, 2, 3, 3, 4, 4]})
+        agg_at = pd.DataFrame({'tfn_area_type': [1, 2, 3, 4, 5, 6, 7, 8],
+                               'agg_tfn_area_type': [1, 1, 2, 2, 3, 3, 4, 4]})
 
         output_dat = output_dat.merge(agg_at,
                                       how='left',
@@ -125,8 +125,8 @@ class NTSTripLengthBuilder:
             op_sub = output_dat.copy()
 
             # Seed values so they can go MIA
-            trip_origin, purpose, mode, tp, soc, ns, tfn_at, agg_at, g = [0, 0, 0, 0, 0,
-                                                                          0, 0, 0, 0]
+            trip_origin, purpose, mode, tp, soc, ns, tfn_at, agg_at, g, ca = [0, 0, 0, 0, 0,
+                                                                          0, 0, 0, 0, 0]
             # TODO: Use nones to bypass some of these as required - or else it'll fail except on full seg
             for subset, value in row.iteritems():
                 if subset == 'trip_origin':
