@@ -19,13 +19,33 @@ import numpy as np
 import pandas as pd
 
 # Local Imports
-import sys
 from normits_demand.utils import pandas_utils as pd_utils
 
 
 def numpy_zone_translation(matrix: np.array,
                            translation: np.array,
                            ) -> np.array:
+    """Translates matrix with translation
+
+    Pure numpy operations. Should be super fast!!
+
+    Parameters
+    ----------
+    matrix:
+        The matrix to translate. Needs to be square!
+        e.g. (n_in, n_in)
+
+    translation:
+        The matrix defining the factors to use to translate matrix. Should
+        be of shape (n_in, n_out), where the output matrix shape will be
+        (n_out, n_out).
+
+    Returns
+    -------
+    translated_matrix:
+        matrix, translated into (n_out, n_out) shape via translation.
+
+    """
     n_in, n_out = translation.shape
 
     # Translate rows
@@ -56,6 +76,51 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
                                    to_unique_zones: List[str],
                                    translate_infill: float = 0.0,
                                    ) -> pd.DataFrame:
+    """Translates a Pandas DataFrame from one zoning system to another
+
+
+    Parameters
+    ----------
+    matrix:
+        The matrix to translate. The index and columns need to be the
+        from_zone_system ID
+
+    translation:
+        A pandas dataframe with at least 3 columns, defining how the
+        factor to translate from from_zone to to_zone.
+        Needs to contain columns [from_zone_col, to_zone_col, factors_col].
+
+    from_zone_col:
+        The name of the column in translation containing the from_zone system
+        ID. Values should be in the same format as matrix index and columns.
+
+    to_zone_col:
+        The name of the column in translation containing the to_zone system
+        ID. Values should be in the same format as expected in the output.
+
+    factors_col:
+        The name of the column in translation containing the translation
+        factors between from_zone and to_zone. Where zone pairs do not exist,
+        they will be infilled with translate_infill.
+
+    from_unique_zones:
+        A list of all the unique zones in the from_zone system. Used to know
+        where an infill is needed for missing zones in translation.
+
+    to_unique_zones:
+        A list of all the unique zones in the to_zone system. Used to know
+        where an infill is needed for missing zones in translation.
+
+    translate_infill:
+        The value to use to infill any missing translation factors.
+
+    Returns
+    -------
+    translated_matrix:
+        matrix, translated into to_zone system.
+    """
+    # TODO (BT): Add a check to make sure no demand is being dropped
+
     # Check all values in matrix are in from zone col
     row_zones = matrix.index.to_list()
     col_zones = matrix.columns.to_list()
