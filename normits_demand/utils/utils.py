@@ -866,7 +866,7 @@ def filter_distribution_p(internal_24hr_productions,
                           ia_name,
                           calib_params,
                           round_val=3,
-                          echo=True):
+                          verbose=True):
     """
     This function adds new balancing factors in to a matrix. They are returned
     in the dt col and added to whichever col comes through in zone_col
@@ -883,9 +883,9 @@ def filter_distribution_p(internal_24hr_productions,
     calib_params:
         Dictionary of calibration parameters.
 
-    echo = True:
+    verbose = True:
         Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops
+        Useful to set verbose=False when using multi-threaded loops
 
     Returns:
     ----------
@@ -902,12 +902,12 @@ def filter_distribution_p(internal_24hr_productions,
                 # Force the parameter to integer, or it drops trips
                 param = cp
                 dp = dp[dp[index]==param]
-                if echo:
+                if verbose:
                     print(index, cp)
             else:
-                print_w_toggle('Ignoring ' + index, echo=echo)
+                print_w_toggle('Ignoring ' + index, verbose=verbose)
         else:
-            print_w_toggle('Ignoring trip length bands', echo=echo)
+            print_w_toggle('Ignoring trip length bands', verbose=verbose)
 
     dp_cols = [ia_name, 'trips']
     dp = dp.reindex(dp_cols, axis=1)
@@ -920,7 +920,7 @@ def filter_distribution_p(internal_24hr_productions,
         total_dp = dp['productions'].sum()
         dp['productions'] = dp['productions'].round(round_val)
 
-        if echo:
+        if verbose:
             print('Productions=%f before rounding.' % total_dp)
             print('Productions=%f after rounding.' % (dp['productions'].sum()))
             print('Same=%s' % str(total_dp == dp['productions'].sum()))
@@ -1370,7 +1370,7 @@ def single_balance(achieved_pa,
 
 def build_distribution_bins(internal_distance,
                             distribution,
-                            echo=True):
+                            verbose=True):
     """
     This takes a distribution and rounds the trip lengths to the nearest
     whole number, then counts the number of trips by each km.
@@ -1401,7 +1401,7 @@ def build_distribution_bins(internal_distance,
     dist_bins = distribution.reindex(dist_cols,axis=1)
     dist_bins['distance'] = dist_bins['distance'].round(0)
     dist_bins = dist_bins.groupby('distance').sum().reset_index()
-    print_w_toggle('outputting distribution bin', echo=echo)
+    print_w_toggle('outputting distribution bin', verbose=verbose)
     return(dist_bins)
 
 
@@ -1513,7 +1513,7 @@ def define_internal_external_areas(model_lookup_path):
     internal_area = pd.read_csv(model_lookup_path + '/' + internal_file)
     external_area = pd.read_csv(model_lookup_path + '/' + external_file)
 
-    return(internal_area, external_area)
+    return internal_area, external_area
 
 def import_pa(production_import_path,
               attraction_import_path):
@@ -1619,7 +1619,7 @@ def get_init_params(path,
     Returns:
     ----------
     initial_betas:
-        DataFrame containing target betas for distibution.
+        DataFrame containing target betas for distribution.
     """
 
     if model_name is None:
@@ -1641,7 +1641,7 @@ def get_init_params(path,
         init_params = init_params[
                 init_params['p'].isin(purpose_subset)]
 
-    return(init_params)
+    return init_params
 
 
 def get_cjtw(model_lookup_path,
@@ -2250,7 +2250,7 @@ def get_pa_diff(new_p,
         ** .5
     )
 
-    return(pa_diff)
+    return pa_diff
 
     """
     def get_pa_diff(new_p,
@@ -2441,6 +2441,7 @@ def unpack_tlb(tlb,
     obs_dist:
 
     """
+    print("tlb:", tlb)
 
     # Convert miles from raw NTS to km
     min_dist = tlb['lower'].astype('float').to_numpy()*_M_KM

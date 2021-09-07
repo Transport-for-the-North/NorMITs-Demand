@@ -26,7 +26,7 @@ class DistributionModel(tms.TMSPathing):
                     file_drive,
                     model_name,
                     iteration,
-                    trip_origin='hb'):
+                    trip_origin='hb') -> dict:
 
         """
         Sets paths for imports to be set as variables.
@@ -34,7 +34,7 @@ class DistributionModel(tms.TMSPathing):
 
         Parameters
         ----------
-        file_drive = 'Y:/':
+        file_drive:
             Name of root drive to do work on. Defaults to TfN Y drive.
 
         model_name:
@@ -42,6 +42,9 @@ class DistributionModel(tms.TMSPathing):
 
         iteration:
             Current iteration of model. Defaults to global default.
+
+        trip_origin:
+            Type of trip origin. Whether home based or non home based.
 
         Returns
         ----------
@@ -583,7 +586,8 @@ class DistributionModel(tms.TMSPathing):
 
         return (target_dist)
 
-    def pass_to_intrazonal(internal_24hr_productions,
+    def pass_to_intrazonal(self,
+                           internal_24hr_productions,
                            ia_name,
                            calib_params,
                            verbose=True):
@@ -592,7 +596,7 @@ class DistributionModel(tms.TMSPathing):
         Function to pass distributions straight to intrazonal as required.
         For active modes and PT until MSOA distribution in March-20
         """
-
+        #ia_name="p_zone"
         # Get unique internal zones in a smart way
         min_zone = min(internal_24hr_productions[ia_name])
         max_zone = max(internal_24hr_productions[ia_name])
@@ -636,15 +640,23 @@ class DistributionModel(tms.TMSPathing):
         return intra_dist
 
     def run_separation(self,
-                       initial_betas, available_dists):
+                       initial_betas,
+                       available_dists):
 
         """
-        Function to separate intial betas based on the type of distribution required.
+        Function to separate initial betas based on the type of distribution required.
 
         null_dists = Distributions to be ignored (usually cjtw)
         intra_zonal_dists = Combos to be passed straight to intra zonal and exported
         zone_conversion_dists = Combos to be translated from another zoning system
         initial_betas = actual distribution betas
+
+        Parameters
+        ----------
+        initial_betas:
+            Dataframe containing segmentations, initial parameters and distribution type
+
+        available_dists:
 
         """
         # Get len at the start
@@ -680,6 +692,11 @@ class DistributionModel(tms.TMSPathing):
         else:
             Warning('Some betas dropped')
 
+        print("inital betas", initial_betas,
+              "transalated dists",translated_dists,
+              "intra_zonal_dists",intra_zonal_dists,
+              "cjtw_dists",cjtw_dists,
+              "null_dists",null_dists)
         return (initial_betas,
                 translated_dists,
                 intra_zonal_dists,
@@ -833,8 +850,6 @@ class DistributionModel(tms.TMSPathing):
                                         verbose=verbose)
 
         calib_params.update({'tlb': tlb})
-        print("Printing calib params")
-        print(calib_params)
 
         # Loop over the distributions until beta gives:
         # 1. a decent average trip length by band
@@ -988,7 +1003,7 @@ class DistributionModel(tms.TMSPathing):
 
         # Print a message telling the user which matrix is being worked on
         dist_name = nup.generate_distribution_name(calib_params)
-        print("INFO: Creating the synthetic distribution for %s..." % dist_name)
+        print("INFO: Creating the intra_zonal distribution for %s..." % dist_name)
 
         iz_distribution = self.pass_to_intrazonal(
             internal_24hr_productions,
@@ -1086,7 +1101,6 @@ class DistributionModel(tms.TMSPathing):
                                fitting_loops=100,
                                iz_cost_infill=.5,
                                export_modes=[3],
-                               echo=True,
                                mp_threads=-1,
                                verbose=True,
                                ):
@@ -1097,6 +1111,22 @@ class DistributionModel(tms.TMSPathing):
 
         Parameters
         ----------
+        file_drive:
+
+        model_name:
+
+        tlb_area:
+
+        segmentation:
+
+        distribution_segments:
+        dist_function:
+        trip_origin:
+        cost_type:
+        furness_loops:
+        fitting_loops:
+        iz_cost_infill:
+        export_modes:
         production_import_path=_default_p_import_path:
             Import path for productions.
 
@@ -1146,7 +1176,7 @@ class DistributionModel(tms.TMSPathing):
 
         # Path to root, stop any folder overwrites
 
-        # Define paths for import
+        # Define paths for import and export
         paths = self.path_config(file_drive=file_drive,
                                  model_name=model_name,
                                  iteration=iteration,
@@ -1200,8 +1230,8 @@ class DistributionModel(tms.TMSPathing):
         # init_params = actual distribution alphas & betas
 
         segmented_params = self.run_separation(init_params,
-                                          # lower dist list
-                                          [x.lower() for x in available_dists])
+                                               # lower dist list
+                                               [x.lower() for x in available_dists])
 
         synthetic_dists = segmented_params[0]
         translated_dists = segmented_params[1]  # TODO: Specify iteration
@@ -1212,11 +1242,14 @@ class DistributionModel(tms.TMSPathing):
         # Get target trip length
         ttl_cols = distribution_segments.copy()
         ttl_cols.append('average_trip_length')
+        print("ttl_cols", ttl_cols)
 
         # Target trip lengths here, derived straight from beta file
         target_trip_lengths = synthetic_dists.reindex(
             ttl_cols,
             axis=1).reset_index(drop=True)
+
+        print("target_trip_lengths", target_trip_lengths)
 
         # Let the user know if threads are being used or not
         if mp_threads == 0:

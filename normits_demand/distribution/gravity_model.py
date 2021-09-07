@@ -143,6 +143,7 @@ def run_gravity_model(ia_name,
                                         round_val=3,
                                         verbose=True)
     distribution_p = distribution_p[0]
+
     distribution_p = distribution_p.rename(
         columns={list(distribution_p)[-1]: 'productions'})
 
@@ -247,6 +248,7 @@ def run_gravity_model(ia_name,
                                    asv, bsv, msv, ssv):
                         # Run gravity model
                         out_loop += 1
+                        print("Running for loop gravity model")
                         grav_run = gravity_model(
                             dist_log_path=dist_log_path,
                             dist_log_fname=dist_log_fname,
@@ -272,6 +274,10 @@ def run_gravity_model(ia_name,
                         # Check convergence criteria
                         print('prev_best')
                         print(max_r_sqr[4])
+                        print(grav_run[6][4])
+                        print(grav_run[6])
+                        print("Printing output of grav model")
+                        print(grav_run)
                         if max_r_sqr[4] < grav_run[6][4]:
                             print('This is better')
                             max_r_sqr = grav_run[6]
@@ -292,12 +298,14 @@ def run_gravity_model(ia_name,
                 break
 
     # Refine values
+    print("Length of out_para:", len(out_para))
     if len(out_para) != 0:
         if len(list(set(out_para) - set(max_r_sqr))) > 0:
             # Restore best R-squared loop
             out_loop = out_loop + 1
             # Run gravity model
             # Set total runs to 1
+            print("Running len(out_para) != 0 gravity model")
             grav_run = gravity_model(
                 dist_log_path=dist_log_path,
                 dist_log_fname=dist_log_fname,
@@ -357,7 +365,7 @@ def run_gravity_model(ia_name,
                 for row in range(num_band):
                     kfc_dist[row] = np.where(est_trip[row] > 0, min(max(obs_trip[row] / est_trip[row], .001), 10), 1)
                     k_factors = np.where((cost >= min_dist[row]) & (cost < max_dist[row]), kfc_dist[row], k_factors)
-
+                print("Running third gravity model")
                 grav_run = gravity_model(
                     dist_log_path=dist_log_path,
                     dist_log_fname=dist_log_fname,
@@ -609,7 +617,7 @@ def gravity_model(dist_log_path: str,
         gm_time_taken = time.time() - gm_start
 
         internal_pa, fn_loops, pa_diff = model_run
-        del (model_run)
+        del model_run
 
         # Get rid of any NaNs that might have snuck in
         internal_pa = np.nan_to_num(internal_pa)
@@ -666,7 +674,9 @@ def gravity_model(dist_log_path: str,
                                                cost,
                                                internal_pa)
         trip_lengths, band_share, atl = con_param
-
+        print("Trip details")
+        print(est_trip)
+        print(obs_trip)
         bs_con = max(1 - np.sum((est_trip - obs_trip) ** 2) / np.sum(
             (obs_trip[1:] - np.sum(obs_trip) / (len(obs_trip) - 1)) ** 2), 0)
 
@@ -727,7 +737,7 @@ def gravity_model(dist_log_path: str,
             par_temp[2] = par_data[2] * (1 + min(max(gra_val1 / cur_val1, -0.5), 0.5))
             par_temp[3] = par_data[3] * (1 + min(max(gra_val2 / cur_val2, -0.5), 0.5))
 
-            if optimise == True:
+            if optimise:
                 opt_loop += 1
                 if opt_loop == 25:
                     par_temp[0] = pre_data[0] + (0 - pre_val1) / (gra_val1 - pre_val1) * (par_data[0] - pre_data[0])
@@ -770,7 +780,8 @@ def run_furness(furness_loops,
     destination:
         Vector of destination trips, usually attractions for hb.
     
-    par_data = list of parameters in order alpha, beta, mu, sigma
+    par_data:
+        list of parameters in order alpha, beta, mu, sigma
 
     cost:
         Matrix of cost for distribution.
@@ -778,8 +789,8 @@ def run_furness(furness_loops,
     k_factors:
         Vector of k factors for optimisation.
     
-    target_r_gap = 0.1:
-        Acceptable level of furness convergence.
+    min_pa_diff:
+        Acceptable level of furness convergence. Default =0.1
 
     Returns
     ----------
@@ -790,26 +801,28 @@ def run_furness(furness_loops,
     r_gap:
         Achieved r gap at furness end.
     """
-
+    print(par_data)
     gravity = True
-    if sum(par_data) == 0:
-        print('No gravity function provided')
-        gravity = False
 
     # Unpack params
     alpha, beta, mu, sigma = par_data
 
+    if alpha == 0 and beta == 0 and mu == 0 and sigma == 0:
+        print('No gravity function provided')
+        gravity = False
+
     # Tanner
     if gravity:
+        print("calculating mat_est")
         mat_est = np.where(cost > 0, (cost ** alpha) * np.exp(beta * cost) *
                            # Log normal
                            np.where(sigma > 0, (1 / (cost * sigma * (2 * np.pi) ** 0.5)) *
                                     np.exp(-(np.log(cost) - mu) ** 2 / (2 * sigma ** 2)), 1),
                            # K factor
                            0) * k_factors
-
+        print(mat_est)
     # Full furness
-    print('Furness running - loops:')
+
     for fur_loop in range(furness_loops):
 
         fur_loop += 1
@@ -1080,7 +1093,7 @@ def define_search_criteria(init_param_a,
                            init_param_b,
                            dist_function):
     """
-    Sets search criteria for serach loop depending on initial value and 
+    Sets search criteria for search loop depending on initial value and
     fitting function.
 
     Parameters

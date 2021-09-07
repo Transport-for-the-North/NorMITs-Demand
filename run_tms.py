@@ -118,7 +118,7 @@ class TmsParameterBuilder:
                 'external_export_modes': [6],
                 'non_dist_export_modes': None,
                 'run_distribution': True,
-                'distribution_segmentation': ['p', 'm'],
+                'distribution_segmentation': ['p', 'm', 'ca'],
                 'cjtw_modes': None,
                 'intrazonal_modes': [1, 2],
                 'infill_modes': 3,
@@ -192,14 +192,13 @@ if __name__ == '__main__':
         tlb_area='north',
         segmentation='tfn',
         distribution_segments=params['distribution_segmentation'],
-        dist_function='ln',
+        dist_function='tanner',
         trip_origin='hb',
         cost_type='24hr',
         furness_loops=1999,
         fitting_loops=100,
         iz_cost_infill=.5,
         export_modes=params['synthetic_modes'],
-        echo=True,
         mp_threads=-1)
 
     int_nhb = dist.run_distribution_model(
