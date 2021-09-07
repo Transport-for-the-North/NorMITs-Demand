@@ -430,7 +430,7 @@ def main():
     input_tour_props = get_input_tour_props(efs.imports)
 
     # HB and NHB need converting differently
-    # hb_conversion(input_tour_props, efs.imports, MODE)
+    hb_conversion(input_tour_props, efs.imports, MODE)
     nhb_conversion(input_tour_props, efs.imports, MODE)
 
 
