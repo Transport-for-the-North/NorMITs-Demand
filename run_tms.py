@@ -68,14 +68,14 @@ class TmsParameterBuilder:
 
         if model == 'noham':
             params = {
-                'base_directory': 'Y: /',
+                'base_directory': 'I:/NorMITs Synthesiser',
                 'model_name': 'noham',
-                'iteration': 'iter8c',
+                'iteration': 'iter_test',
                 'model_zoning': 'Noham',
                 'segmentation_type': 'tfn',
                 'hb_output_segments': ['p', 'm'],
                 'nhb_output_segments': ['area_type', 'p', 'm', 'ca', 'tp'],
-                'land_use_path': 'Y: / NorMITs Land Use / iter3 / land_use_output_msoa.csv',
+                'land_use_path': 'I: / NorMITs Land Use / iter3 / land_use_output_msoa.csv',
                 'control_production_to_ntem': True,
                 'k_factor_path': None,
                 'export_msoa_productions': False,
@@ -83,7 +83,11 @@ class TmsParameterBuilder:
                 'cjtw_path': None,
                 'hb_distribution_segments': ['p', 'm'],
                 'nhb_distribution_segments': ['p', 'm', 'tp'],
+                'distribution_segmentation': ['p', 'm'],
                 'output_modes': 3,
+                'intrazonal_modes': [1, 2],
+                'infill_modes': 6,
+                'synthetic_modes': 3,
                 'rail_fusion': False,
                 'compile_pa': False,
                 'compile_od': True,
@@ -160,11 +164,10 @@ if __name__ == '__main__':
     # Check status of lookup folder
     tms_run.lookups = tms_run.lookup_audit()
 
+    # Update project status
     # BACKLOG: Project status
     tms_run.project_status = tms_run.project_check()
 
-    # Update project status
-    # BACKLOG: Project status
 
     # TODO: Define init params
 

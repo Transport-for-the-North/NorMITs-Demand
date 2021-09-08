@@ -1547,7 +1547,7 @@ def get_trip_length_bands(import_folder,
                           segmentation,
                           trip_origin,
                           replace_nan=False,
-                          verbose=True): # 'hb' or 'nhb'
+                          verbose=False): # 'hb' or 'nhb'
 
     """
     Function to check a folder for trip length band parameters.
@@ -1566,7 +1566,7 @@ def get_trip_length_bands(import_folder,
             # print_w_toggle(key + str(value), echo=echo)
             import_files = [x for x in import_files if
                             ('_' + key + str(value)) in x]
-    print(import_files)
+
     if trip_origin == 'hb':
         import_files = [x for x in import_files if 'nhb' not in x]
     elif trip_origin == 'nhb':
@@ -1575,8 +1575,13 @@ def get_trip_length_bands(import_folder,
         raise ValueError('Trip length band import failed,' +
                          'provide valid trip origin')
     if len(import_files) > 1:
-        raise Warning('Picking from two similar files,' +
-                      ' check import folder')
+        raise Warning(
+            'Found multiple viable files. Cannot pick one.\n'
+            'Search criteria: %s\n'
+            'Import folder: %s\n'
+            'Viable files: %s'
+            % (calib_params, import_folder, import_files)
+        )
 
     # Import
     if verbose:

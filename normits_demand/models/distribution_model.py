@@ -842,12 +842,17 @@ class DistributionModel(tms.TMSPathing):
                                   'standard_segments')
 
         # Get trip length bands
+        # TODO (BT): Get this to happen a bit more naturally
+        # Ignore ca unless we are doing rail (m6)
+        temp_calib_params = calib_params.copy()
+        if calib_params['m'] != 6:
+            temp_calib_params.pop('ca', None)
         tlb = nup.get_trip_length_bands(tlb_folder,
-                                        calib_params,
+                                        temp_calib_params,
                                         segmentation,
                                         trip_origin=trip_origin,
                                         replace_nan=True,
-                                        verbose=verbose)
+                                        )
 
         calib_params.update({'tlb': tlb})
 
