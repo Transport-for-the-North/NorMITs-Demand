@@ -74,6 +74,8 @@ class NTSTripLengthBuilder:
         """
 
         """
+        # TODO: Need smart aggregation based on sample size threshold
+
         north_la = con.NORTH_LA
 
         # TODO: Traveller gender
