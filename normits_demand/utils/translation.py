@@ -22,9 +22,10 @@ import pandas as pd
 from normits_demand.utils import pandas_utils as pd_utils
 
 
-def numpy_zone_translation(matrix: np.array,
-                           translation: np.array,
-                           ) -> np.array:
+def numpy_matrix_zone_translation(matrix: np.array,
+                                  translation: np.array,
+                                  check_shapes: bool = True,
+                                  ) -> np.array:
     """Translates matrix with translation
 
     Pure numpy operations. Should be super fast!!
@@ -40,12 +41,50 @@ def numpy_zone_translation(matrix: np.array,
         be of shape (n_in, n_out), where the output matrix shape will be
         (n_out, n_out).
 
+    check_shapes:
+        Whether to check that the input and translation shapes look correct.
+        Will raise an error if matrix is not a square array, or if translation
+        does not have the same number of rows as matrix.
+        Optionally set to False if checks have been done externally to speed
+        up runtime.
+
     Returns
     -------
     translated_matrix:
         matrix, translated into (n_out, n_out) shape via translation.
 
+    Raises
+    ------
+    ValueError:
+        Will raise an error if matrix is not a square array, or if translation
+        does not have the same number of rows as matrix.
     """
+    # ## OPTIONALLY CHECK INPUT SHAPES ## #
+    if check_shapes:
+        # Check matrix is square
+        mat_rows, mat_columns = matrix.shape
+        if mat_rows != mat_columns:
+            raise ValueError(
+                "The given matrix is not square. Matrix needs to be square "
+                "for the numpy zone translations to work.\n"
+                "Given matrix shape: %s"
+                % matrix.shape
+            )
+
+        # Check translation has the right number of rows
+        n_zones_in, _ = translation.shape
+        if n_zones_in != mat_rows:
+            raise ValueError(
+                "The given translation does not have the correct number of "
+                "rows. Translation rows needs to match matrix rows for the "
+                "numpy zone translations to work.\n"
+                "Given matrix shape: %s\n"
+                "Given translation shape: %s"
+                % (matrix.shape, translation.shape)
+            )
+
+    # ## DO THE TRANSLATION ## #
+    # Get the input and output shapes
     n_in, n_out = translation.shape
 
     # Translate rows
@@ -65,6 +104,12 @@ def numpy_zone_translation(matrix: np.array,
     out_mat_2 = temp.sum(axis=0)
 
     return out_mat_2
+
+
+def numpy_vector_zone_translation(vector: np.array,
+                                  translation: np.array,
+                                  ) -> np.array:
+    pass
 
 
 def pandas_matrix_zone_translation(matrix: pd.DataFrame,
@@ -120,6 +165,28 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
         matrix, translated into to_zone system.
     """
     # TODO (BT): Add a check to make sure no demand is being dropped
+    # ## CHECK ZONE NAME DTYPES ## #
+    # Check the matrix index and column dtypes match
+    if matrix.columns.dtype != matrix.index.dtype:
+        raise ValueError(
+            "The datatype of the index and columns in matrix must be the same "
+            "for the zone translation to work.\n"
+            "Index Dtype: %s\n"
+            "Column Dtype: %s"
+            % (matrix.index.dtype, matrix.columns.dtype)
+        )
+
+    # Check the matrix and translation dtypes match
+    if matrix.index.dtype != translation[from_zone_col].dtype:
+        raise ValueError(
+            "The datatype of the matrix index and columns must be the same "
+            "as the translation datatype in from_zone_col for the zone "
+            "translation to work.\n"
+            "matrix index Dtype: %s\n"
+            "translation[from_zone_col] Dtype: %s"
+            % (matrix.index.dtype, translation[from_zone_col].dtype)
+        )
+
 
     # Check all values in matrix are in from zone col
     row_zones = matrix.index.to_list()
@@ -148,7 +215,7 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
     )
 
     # Translate
-    translated = numpy_zone_translation(
+    translated = numpy_matrix_zone_translation(
         matrix=matrix.values,
         translation=translation.values,
     )
