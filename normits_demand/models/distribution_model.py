@@ -1173,11 +1173,11 @@ class DistributionModel(tms.TMSPathing):
             24hr PA matrix by zone by mode and purpose.
         """
         # Argument validation
-        assert (mp_threads >= -1), ("In distribution_model.run_distribution_model(), " +
+        assert (mp_threads >= -2), ("In distribution_model.run_distribution_model(), " +
                                     "mp_threads must be -1 or greater.\n" +
                                     "Got %s." % str(mp_threads))
-        if mp_threads == -1:
-            mp_threads = os.cpu_count() - 1
+        if mp_threads < 0 :
+            mp_threads = os.cpu_count() + mp_threads
 
         # Path to root, stop any folder overwrites
 

@@ -583,6 +583,11 @@ def gravity_model(dist_log_path: str,
     max_r_sqr, pre_data = [0, 0, 0, 0, 0], [0, 0, 0, 0]
     pre_val1, pre_val2 = 0, 0
 
+    if dist_function.lower() == 'tanner':
+        max_r_sqr[0], max_r_sqr[1] = par_data[0], par_data[1]
+    else:
+        max_r_sqr[2], max_r_sqr[3] = par_data[2], par_data[3]
+
     # Count bands
     num_band = len(calib_params['tlb'])
     opt_loop = 0

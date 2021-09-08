@@ -1536,7 +1536,6 @@ def import_pa(production_import_path,
     [1] attractions:
         Mainland GB attractions.
     """
-    print(production_import_path)
     productions = pd.read_csv(production_import_path)
     attractions = pd.read_csv(attraction_import_path)
     return(productions, attractions)

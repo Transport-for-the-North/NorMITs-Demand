@@ -84,7 +84,12 @@ class TmsParameterBuilder:
                 'hb_distribution_segments': ['p', 'm'],
                 'nhb_distribution_segments': ['p', 'm', 'tp'],
                 'distribution_segmentation': ['p', 'm'],
+                'external_tlb_area': 'gb',
+                'external_tlb_name': 'external_ph_segments',
+                'external_segmentation': ['p', 'm'],
+                'external_export_modes': [3],
                 'output_modes': 3,
+                'non_dist_export_modes': None,
                 'intrazonal_modes': [1, 2],
                 'infill_modes': 6,
                 'synthetic_modes': 3,
@@ -172,18 +177,19 @@ if __name__ == '__main__':
     # TODO: Define init params
 
     # Run HB external model
-    ext = em.ExternalModel(
-        config_path,
-        params)
-    """
-    hb_ext_out = ext.run(
-        trip_origin='hb',
-        cost_type='24hr')
-
-    nhb_ext_out = ext.run(
-        trip_origin='nhb',
-        cost_type='24hr')
-    """
+    # ext = em.ExternalModel(
+    #     config_path,
+    #     params)
+    #
+    # hb_ext_out = ext.run(
+    #     trip_origin='hb',
+    #     cost_type='24hr',
+    # )
+    # nhb_ext_out = ext.run(
+    #     trip_origin='nhb',
+    #     cost_type='24hr',
+    # )
+    #
     dist = dm.DistributionModel(
         config_path,
         params)
@@ -202,7 +208,7 @@ if __name__ == '__main__':
         fitting_loops=100,
         iz_cost_infill=.5,
         export_modes=params['synthetic_modes'],
-        mp_threads=-1)
+        mp_threads=-2)
 
     int_nhb = dist.run_distribution_model(
         file_drive=params['base_directory'],
@@ -218,8 +224,8 @@ if __name__ == '__main__':
         fitting_loops=100,
         iz_cost_infill=.5,
         export_modes=params['output_modes'],
-        echo=True,
-        mp_threads=-1)
+        verbose=True,
+        mp_threads=-2)
 
     # Compile tp pa
     pa2od.build_tp_pa(file_drive=params['base_directory'],
