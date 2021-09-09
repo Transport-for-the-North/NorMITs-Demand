@@ -210,6 +210,9 @@ if __name__ == '__main__':
         export_modes=params['synthetic_modes'],
         mp_threads=-2)
 
+    # print("HB DIST DONE!")
+    # exit()
+
     int_nhb = dist.run_distribution_model(
         file_drive=params['base_directory'],
         model_name=params['model_name'],
