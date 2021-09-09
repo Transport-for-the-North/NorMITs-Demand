@@ -807,7 +807,6 @@ class DistributionModel(tms.TMSPathing):
             o_paths,
             iz_cost_infill,
             verbose=True):
-
         """
         Distributes the synthetic distributions, producing 24hr PA Matrices
 
@@ -1300,9 +1299,12 @@ class DistributionModel(tms.TMSPathing):
                 kwargs_list.append(kwargs)
 
             # Call using multiple threads
-            mp.process_pool_wrapper(self._synth_dist_worker,
-                                    kwargs=kwargs_list,
-                                    process_count=mp_threads)
+            mp.process_pool_wrapper(
+                self._synth_dist_worker,
+                kwargs=kwargs_list,
+                process_count=mp_threads,
+            )
+
         del unchanging_kwargs
         print("-" * 20, " End Synthetic Distributions ", "-" * 20)
 

@@ -173,16 +173,14 @@ def run_gravity_model(ia_name,
     p = nup.df_to_np(distribution_p,
                      v_heading=ia_name,
                      values='productions',
-                     unq_internal_zones=unq_internal_zones,
-                     verbose=verbose)
+                     unq_internal_zones=unq_internal_zones)
     p = p.astype(np.float64, copy=True)
 
     # Attractions as numpy
     a = nup.df_to_np(distribution_a,
                      v_heading=ia_name,
                      values='attractions',
-                     unq_internal_zones=unq_internal_zones,
-                     verbose=verbose)
+                     unq_internal_zones=unq_internal_zones)
     a = a.astype(np.float64, copy=True)
 
     # TODO: Pass car ownership params for costs
@@ -205,8 +203,7 @@ def run_gravity_model(ia_name,
                         v_heading='p_zone',
                         h_heading='a_zone',
                         values='cost',
-                        unq_internal_zones=unq_internal_zones,
-                        verbose=verbose)
+                        unq_internal_zones=unq_internal_zones)
     cost = cost.astype(np.float64, copy=True)
 
     if (np.diag(cost) == diag).sum() == len(unq_internal_zones):
@@ -234,10 +231,11 @@ def run_gravity_model(ia_name,
     print(min_para)
     print(max_para)
 
-    # Search for initial values
-    out_para, out_loop, max_r_sqr = [], 0, [0, 0, 0, 0, 0]
+    # Initialise, so something will run if all else fails
+    max_r_sqr = [a_search[0], b_search[0], m_search[0], s_search[0], 0]
 
     out_loop = 0
+    out_para = list()
     for asv in a_search:
         for bsv in b_search:
             for msv in m_search:
@@ -272,10 +270,10 @@ def run_gravity_model(ia_name,
                         )
 
                         # Check convergence criteria
-                        print('prev_best')
-                        print(max_r_sqr[4])
-                        print(grav_run[6][4])
-                        print(grav_run[6])
+                        print('achieved bs_con: %s' % grav_run[6][4])
+                        print('achieved params: %s' % grav_run[6])
+                        print()
+                        print('prev best bs_con: %s' % max_r_sqr[4])
                         print("Printing output of grav model")
                         print(grav_run)
                         if max_r_sqr[4] < grav_run[6][4]:
@@ -598,8 +596,6 @@ def gravity_model(dist_log_path: str,
 
     for ft_loop in range(fitting_loops):
         print('fit loop ' + str(ft_loop))
-
-        nup.print_w_toggle('Passing to gravity model', verbose=verbose)
         gm_start = time.time()
 
         if dist_function.lower() == 'tanner':  # x1, x2 - Tanner
@@ -674,14 +670,6 @@ def gravity_model(dist_log_path: str,
         con_val2 = np.where(fix_val2 != 0, np.abs(gra_val2 / fix_val2) * 100, 100)
 
         # ## Calculate our estimating parameters and convergence factors
-
-        con_param = ra.get_trip_length_by_band(calib_params['tlb'],
-                                               cost,
-                                               internal_pa)
-        trip_lengths, band_share, atl = con_param
-        print("Trip details")
-        print(est_trip)
-        print(obs_trip)
         bs_con = max(1 - np.sum((est_trip - obs_trip) ** 2) / np.sum(
             (obs_trip[1:] - np.sum(obs_trip) / (len(obs_trip) - 1)) ** 2), 0)
 
@@ -806,33 +794,27 @@ def run_furness(furness_loops,
     r_gap:
         Achieved r gap at furness end.
     """
-    print(par_data)
     gravity = True
 
     # Unpack params
     alpha, beta, mu, sigma = par_data
 
     if alpha == 0 and beta == 0 and mu == 0 and sigma == 0:
-        print('No gravity function provided')
         gravity = False
 
     # Tanner
     if gravity:
-        print("calculating mat_est")
         mat_est = np.where(cost > 0, (cost ** alpha) * np.exp(beta * cost) *
                            # Log normal
                            np.where(sigma > 0, (1 / (cost * sigma * (2 * np.pi) ** 0.5)) *
                                     np.exp(-(np.log(cost) - mu) ** 2 / (2 * sigma ** 2)), 1),
                            # K factor
                            0) * k_factors
-        print(mat_est)
     # Full furness
 
     for fur_loop in range(furness_loops):
 
         fur_loop += 1
-        if fur_loop % 10 == 0:
-            print(fur_loop)
 
         mat_d = np.sum(mat_est, axis=0)
         mat_d[destination == 0] = 1

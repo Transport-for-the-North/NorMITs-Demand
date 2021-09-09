@@ -390,7 +390,7 @@ def df_to_np(df,
              unq_internal_zones,
              v_heading,
              h_heading=None,
-             verbose=True):
+             verbose=False):
     """
     df: A Dataframe
 
