@@ -1082,6 +1082,7 @@ def get_costs(model_lookup_path,
                                    'costs',
                                    tp_path[0]))
     cols = list(dat)
+    print("cols",cols)
 
     # Get purpose and direction from calib_params
     ca = None
@@ -1138,6 +1139,7 @@ def get_costs(model_lookup_path,
     for col in cost_cols:
         target_cols.append(col)
 
+    print("cost_cols", cost_cols)
     cost_return_name = cost_cols[0]
 
     dat = dat.reindex(target_cols, axis=1)
@@ -1558,6 +1560,8 @@ def get_trip_length_bands(import_folder,
     target_files = os.listdir(import_folder)
     # Define file contents, should just be target files - should fix.
     import_files = target_files.copy()
+
+    print("calib_params", calib_params)
 
     for key, value in calib_params.items():
         # Don't want empty segments, don't want ca

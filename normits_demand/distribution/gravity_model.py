@@ -742,6 +742,7 @@ def gravity_model(dist_log_path: str,
                 if opt_loop == 15:
                     pre_val1, pre_val2 = gra_val1, gra_val2
                     pre_data = par_data * 1
+            print("par_temp",par_temp)
             par_data = par_temp
 
     return [internal_pa,

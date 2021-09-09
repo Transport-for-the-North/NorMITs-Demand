@@ -128,6 +128,7 @@ class TmsParameterBuilder:
                 'non_dist_export_modes': None,
                 'run_distribution': True,
                 'distribution_segmentation': ['p', 'm', 'ca'],
+                'nhb_distribution_segmentation': ['p', 'm', 'tp', 'ca'],
                 'cjtw_modes': None,
                 'intrazonal_modes': [1, 2],
                 'infill_modes': 3,
@@ -194,21 +195,21 @@ if __name__ == '__main__':
         config_path,
         params)
 
-    int_hb = dist.run_distribution_model(
-        file_drive=params['base_directory'],
-        model_name=params['model_name'],
-        iteration=params['iteration'],
-        tlb_area='north',
-        segmentation='tfn',
-        distribution_segments=params['distribution_segmentation'],
-        dist_function='tanner',
-        trip_origin='hb',
-        cost_type='24hr',
-        furness_loops=1999,
-        fitting_loops=100,
-        iz_cost_infill=.5,
-        export_modes=params['synthetic_modes'],
-        mp_threads=-2)
+    # int_hb = dist.run_distribution_model(
+    #     file_drive=params['base_directory'],
+    #     model_name=params['model_name'],
+    #     iteration=params['iteration'],
+    #     tlb_area='north',
+    #     segmentation='tfn',
+    #     distribution_segments=params['distribution_segmentation'],
+    #     dist_function='tanner',
+    #     trip_origin='hb',
+    #     cost_type='24hr',
+    #     furness_loops=1999,
+    #     fitting_loops=100,
+    #     iz_cost_infill=.5,
+    #     export_modes=params['synthetic_modes'],
+    #     mp_threads=-2)
 
     # print("HB DIST DONE!")
     # exit()
@@ -219,14 +220,14 @@ if __name__ == '__main__':
         iteration=params['iteration'],
         tlb_area='north',
         segmentation='tfn',
-        distribution_segments=params['nhb_distribution_segments'],
-        dist_function='ln',
+        distribution_segments=params['nhb_distribution_segmentation'],
+        dist_function='tanner',
         trip_origin='nhb',
         cost_type='tp',
         furness_loops=1999,
         fitting_loops=100,
         iz_cost_infill=.5,
-        export_modes=params['output_modes'],
+        export_modes=params['synthetic_modes'],
         verbose=True,
         mp_threads=-2)
 
