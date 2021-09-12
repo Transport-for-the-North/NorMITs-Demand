@@ -1577,6 +1577,29 @@ def get_trip_length_bands(import_folder,
     else:
         raise ValueError('Trip length band import failed,' +
                          'provide valid trip origin')
+
+    if len(import_files) <= 0:
+        raise IOError(
+            "Cannot find any %s trip length bands.\n"
+            "import folder: %s"
+            % (trip_origin, import_folder)
+        )
+
+    for key, value in calib_params.items():
+        # Don't want empty segments, don't want ca
+        if value != 'none' and key != 'mat_type':
+            # print_w_toggle(key + str(value), echo=echo)
+            import_files = [x for x in import_files if
+                            ('_' + key + str(value)) in x]
+
+    if len(import_files) <= 0:
+        raise IOError(
+            "Cannot find any import files matching the given criteria.\n"
+            'Import folder: %s\n'
+            'Search criteria: %s'
+            % (import_folder, calib_params)
+        )
+
     if len(import_files) > 1:
         raise Warning(
             'Found multiple viable files. Cannot pick one.\n'

@@ -295,21 +295,87 @@ def run_gravity_model(ia_name,
             if len(out_para) != 0:
                 break
 
+    # We did real bad. Just use the last run and output something
+    if len(out_para) == 0:
+        out_para, bs_con = grav_run[1], grav_run[5]
+    internal_pa = grav_run[0]
+
+
     # Refine values
     print("Length of out_para:", len(out_para))
-    if len(out_para) != 0:
-        if len(list(set(out_para) - set(max_r_sqr))) > 0:
-            # Restore best R-squared loop
+    if len(list(set(out_para) - set(max_r_sqr))) > 0:
+        # Restore best R-squared loop
+        out_loop = out_loop + 1
+        # Run gravity model
+        # Set total runs to 1
+        print("Running len(out_para) != 0 gravity model")
+        grav_run = gravity_model(
+            dist_log_path=dist_log_path,
+            dist_log_fname=dist_log_fname,
+            calib_params=calib_params,
+            dist_function=dist_function,
+            par_data=max_r_sqr[0:4],
+            min_para=min_para,
+            max_para=max_para,
+            bs_con_target=bs_con_target,
+            target_r_gap=target_r_gap,
+            furness_target=0.1,
+            productions=p,
+            attractions=a,
+            cost=cost,
+            k_factors=k_factors,  # 1s
+            furness_loops=furness_loops,
+            fitting_loops=1,
+            loop_number=str(out_loop),
+            verbose=verbose,
+            optimise=True)
+        out_para, bs_con, max_r_sqr = grav_run[1], grav_run[5], grav_run[6]
+        internal_pa = grav_run[0]
+
+    if param_check(min_para, max_para,
+                   max_r_sqr[0], max_r_sqr[1],
+                   max_r_sqr[2], max_r_sqr[3]):
+
+        internal_pa = grav_run[0]
+        num_band = len(min_dist)
+
+        est_trip, est_dist, cij_freq = [0] * num_band, [0] * num_band, [0] * num_band
+        for row in range(num_band):
+            """
+            """
+            est_trip[row] = np.sum(np.where((cost >= min_dist[row]) & (cost < max_dist[row]), internal_pa, 0))
+            est_dist[row] = np.sum(
+                np.where((cost >= min_dist[row]) & (cost < max_dist[row]), cost * internal_pa, 0))
+            est_dist[row] = np.where(est_trip[row] > 0, est_dist[row] / est_trip[row],
+                                     (min_dist[row] + max_dist[row]) / 2)
+            obs_dist[row] = np.where(obs_dist[row] > 0, obs_dist[row], est_dist[row])
+            est_trip[row] = est_trip[row] / np.sum(internal_pa) * 100
+            cij_freq[row] = np.sum(np.where((cost >= min_dist[row]) & (cost < max_dist[row]), len(cost), 0))
+            cij_freq[row] = cij_freq[row] / np.sum(len(cost)) * 100
+
+        obs_mean, obs_logm, obs_stdv = 0, 0, 0
+        # mean trip length
+        est_mean = np.sum(internal_pa * cost) / np.sum(internal_pa)
+        est_logm = np.sum(internal_pa * np.log(np.where(cost > 0, cost, 1))) / np.sum(internal_pa)
+        est_stdv = (np.sum(internal_pa * (cost - est_mean) ** 2) / np.sum(internal_pa)) ** 0.5
+
+        # Auto-apply k-Factor
+        kfc_dist, kfc_trip = [0] * num_band, [0] * num_band
+        kfc_mean, kfc_logm, kfc_stdv, kfc_para, k_bs_con = est_mean, est_logm, est_stdv, out_para.copy(), bs_con
+        if apply_k_factoring:
             out_loop = out_loop + 1
-            # Run gravity model
-            # Set total runs to 1
-            print("Running len(out_para) != 0 gravity model")
+            k_factors = k_factors = cost ** 0
+            # k_factors = k_factors**0
+            for row in range(num_band):
+                kfc_dist[row] = np.where(est_trip[row] > 0, min(max(obs_trip[row] / est_trip[row], .001), 10), 1)
+                k_factors = np.where((cost >= min_dist[row]) & (cost < max_dist[row]), kfc_dist[row], k_factors)
+            print("Running third gravity model")
             grav_run = gravity_model(
                 dist_log_path=dist_log_path,
                 dist_log_fname=dist_log_fname,
                 calib_params=calib_params,
                 dist_function=dist_function,
-                par_data=max_r_sqr[0:4],
+                par_data=kfc_para,
                 min_para=min_para,
                 max_para=max_para,
                 bs_con_target=bs_con_target,
@@ -318,93 +384,33 @@ def run_gravity_model(ia_name,
                 productions=p,
                 attractions=a,
                 cost=cost,
-                k_factors=k_factors,  # 1s
+                k_factors=k_factors,
                 furness_loops=furness_loops,
                 fitting_loops=1,
-                loop_number=str(out_loop),
+                loop_number=str(out_loop + 1),
                 verbose=verbose,
                 optimise=True)
-            out_para, bs_con, max_r_sqr = grav_run[1], grav_run[5], grav_run[6]
 
-        if param_check(min_para, max_para,
-                       max_r_sqr[0], max_r_sqr[1],
-                       max_r_sqr[2], max_r_sqr[3]):
+            kfc_para, bs_con, k_r_sqr = grav_run[1], grav_run[5], grav_run[6]
 
-            internal_pa = grav_run[0]
-            num_band = len(min_dist)
+            if param_check(min_para, max_para,
+                           kfc_para[0], kfc_para[1],
+                           kfc_para[2], kfc_para[3]):
+                internal_pa = grav_run[0]
 
-            est_trip, est_dist, cij_freq = [0] * num_band, [0] * num_band, [0] * num_band
-            for row in range(num_band):
-                """
-                """
-                est_trip[row] = np.sum(np.where((cost >= min_dist[row]) & (cost < max_dist[row]), internal_pa, 0))
-                est_dist[row] = np.sum(
-                    np.where((cost >= min_dist[row]) & (cost < max_dist[row]), cost * internal_pa, 0))
-                est_dist[row] = np.where(est_trip[row] > 0, est_dist[row] / est_trip[row],
-                                         (min_dist[row] + max_dist[row]) / 2)
-                obs_dist[row] = np.where(obs_dist[row] > 0, obs_dist[row], est_dist[row])
-                est_trip[row] = est_trip[row] / np.sum(internal_pa) * 100
-                cij_freq[row] = np.sum(np.where((cost >= min_dist[row]) & (cost < max_dist[row]), len(cost), 0))
-                cij_freq[row] = cij_freq[row] / np.sum(len(cost)) * 100
-
-            obs_mean, obs_logm, obs_stdv = 0, 0, 0
-            # mean trip length
-            est_mean = np.sum(internal_pa * cost) / np.sum(internal_pa)
-            est_logm = np.sum(internal_pa * np.log(np.where(cost > 0, cost, 1))) / np.sum(internal_pa)
-            est_stdv = (np.sum(internal_pa * (cost - est_mean) ** 2) / np.sum(internal_pa)) ** 0.5
-
-            # Auto-apply k-Factor
-            kfc_dist, kfc_trip = [0] * num_band, [0] * num_band
-            kfc_mean, kfc_logm, kfc_stdv, kfc_para, k_bs_con = est_mean, est_logm, est_stdv, out_para.copy(), bs_con
-            if apply_k_factoring:
-                out_loop = out_loop + 1
-                k_factors = k_factors = cost ** 0
-                # k_factors = k_factors**0
                 for row in range(num_band):
-                    kfc_dist[row] = np.where(est_trip[row] > 0, min(max(obs_trip[row] / est_trip[row], .001), 10), 1)
-                    k_factors = np.where((cost >= min_dist[row]) & (cost < max_dist[row]), kfc_dist[row], k_factors)
-                print("Running third gravity model")
-                grav_run = gravity_model(
-                    dist_log_path=dist_log_path,
-                    dist_log_fname=dist_log_fname,
-                    calib_params=calib_params,
-                    dist_function=dist_function,
-                    par_data=kfc_para,
-                    min_para=min_para,
-                    max_para=max_para,
-                    bs_con_target=bs_con_target,
-                    target_r_gap=target_r_gap,
-                    furness_target=0.1,
-                    productions=p,
-                    attractions=a,
-                    cost=cost,
-                    k_factors=k_factors,
-                    furness_loops=furness_loops,
-                    fitting_loops=1,
-                    loop_number=str(out_loop + 1),
-                    verbose=verbose,
-                    optimise=True)
-
-                kfc_para, bs_con, k_r_sqr = grav_run[1], grav_run[5], grav_run[6]
-
-                if param_check(min_para, max_para,
-                               kfc_para[0], kfc_para[1],
-                               kfc_para[2], kfc_para[3]):
-                    internal_pa = grav_run[0]
-
-                    for row in range(num_band):
-                        kfc_trip[row] = np.sum(
-                            np.where((cost >= min_dist[row]) & (cost < max_dist[row]), internal_pa, 0))
-                        kfc_dist[row] = np.sum(
-                            np.where((cost >= min_dist[row]) & (cost < max_dist[row]), cost * internal_pa, 0))
-                        kfc_dist[row] = np.where(kfc_trip[row] > 0, kfc_dist[row] / kfc_trip[row],
-                                                 (min_dist[row] + max_dist[row]) / 2)
-                        kfc_trip[row] = kfc_trip[row] / np.sum(internal_pa) * 100
-                    kfc_mean = np.sum(internal_pa * cost) / np.sum(internal_pa)
-                    kfc_logm = np.sum(internal_pa * np.log(np.where(cost > 0, cost, 1))) / np.sum(internal_pa)
-                    kfc_stdv = (np.sum(internal_pa * (cost - kfc_mean) ** 2) / np.sum(internal_pa)) ** 0.5
-        else:
-            print('Grav model netherworld - what did you do?')
+                    kfc_trip[row] = np.sum(
+                        np.where((cost >= min_dist[row]) & (cost < max_dist[row]), internal_pa, 0))
+                    kfc_dist[row] = np.sum(
+                        np.where((cost >= min_dist[row]) & (cost < max_dist[row]), cost * internal_pa, 0))
+                    kfc_dist[row] = np.where(kfc_trip[row] > 0, kfc_dist[row] / kfc_trip[row],
+                                             (min_dist[row] + max_dist[row]) / 2)
+                    kfc_trip[row] = kfc_trip[row] / np.sum(internal_pa) * 100
+                kfc_mean = np.sum(internal_pa * cost) / np.sum(internal_pa)
+                kfc_logm = np.sum(internal_pa * np.log(np.where(cost > 0, cost, 1))) / np.sum(internal_pa)
+                kfc_stdv = (np.sum(internal_pa * (cost - kfc_mean) ** 2) / np.sum(internal_pa)) ** 0.5
+    else:
+        print('Grav model netherworld - what did you do?')
 
     # ########## End of alpha/beta search ########## #
 

@@ -128,7 +128,8 @@ class TmsParameterBuilder:
                 'non_dist_export_modes': None,
                 'run_distribution': True,
                 'distribution_segmentation': ['p', 'm', 'ca'],
-                'nhb_distribution_segmentation': ['p', 'm', 'tp', 'ca'],
+                'nhb_distribution_segments': ['p', 'm', 'ca', 'tp'],
+                'output_modes': 6,
                 'cjtw_modes': None,
                 'intrazonal_modes': [1, 2],
                 'infill_modes': 3,
@@ -211,9 +212,6 @@ if __name__ == '__main__':
     #     export_modes=params['synthetic_modes'],
     #     mp_threads=-2)
 
-    # print("HB DIST DONE!")
-    # exit()
-
     int_nhb = dist.run_distribution_model(
         file_drive=params['base_directory'],
         model_name=params['model_name'],
@@ -230,6 +228,7 @@ if __name__ == '__main__':
         export_modes=params['synthetic_modes'],
         verbose=True,
         mp_threads=-2)
+
 
     # Compile tp pa
     pa2od.build_tp_pa(file_drive=params['base_directory'],

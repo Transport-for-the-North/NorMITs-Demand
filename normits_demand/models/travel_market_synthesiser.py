@@ -21,6 +21,8 @@ from normits_demand.pathing import TMSExportPaths
 
 from normits_demand.utils import timing
 
+import normits_demand.models.external_model as em
+
 
 class TravelMarketSynthesiser(TMSExportPaths):
     # ## Class Constants ## #
@@ -116,7 +118,22 @@ class TravelMarketSynthesiser(TMSExportPaths):
         self._logger.info("TMS run complete! Took %s" % time_taken)
 
     def _run_external_model(self):
-        pass
+
+        # Run HB external model
+        ext = em.ExternalModel(
+            config_path,
+            params,
+        )
+
+        hb_ext_out = ext.run(
+            trip_origin='hb',
+            cost_type='24hr',
+        )
+        nhb_ext_out = ext.run(
+            trip_origin='nhb',
+            cost_type='24hr',
+        )
+
 
     def _run_gravity_model(self):
         pass
