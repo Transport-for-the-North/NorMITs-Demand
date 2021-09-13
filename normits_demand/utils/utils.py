@@ -187,7 +187,7 @@ def reapply_index(dataframe, index):
 
 # Optimise functions
 
-def optimise_data_types(dataframe, echo=True):
+def optimise_data_types(dataframe, verbose=True):
     """
     Function to iterate over a DataFrames columns and change data types
     to minimise memory use.
@@ -199,7 +199,7 @@ def optimise_data_types(dataframe, echo=True):
         a DataFrame with a single zone and category variables.
         Designed for a production vector.
 
-    echo:
+    verbose:
         Toggle output describing conversion process.
 
     Returns
@@ -223,12 +223,12 @@ def optimise_data_types(dataframe, echo=True):
         col_len = len(dataframe[col])
         # Get number of unique values
         unq_val = len(dataframe[col].drop_duplicates())
-        print_w_toggle(col, 'is', col_np_type, echo=echo)
+        print_w_toggle(col, 'is', col_np_type, verbose=verbose)
         # If unsigned int8, make signed int8 (neutral)
         if col_np_type == 'uint8':
             dataframe[col] = dataframe[col].astype('int8')
             print_w_toggle('converted to', type(dataframe[col][0]).__name__,
-                           echo=echo)
+                           verbose=verbose)
         # If unsigned int64, make int8 or int32 depending on length
         elif col_np_type == 'int64':
             if unq_val < 127:
@@ -236,20 +236,20 @@ def optimise_data_types(dataframe, echo=True):
             else:
                 dataframe[col] = dataframe[col].astype('int16')
             print_w_toggle('converted to', type(dataframe[col][0]).__name__,
-                           echo=echo)
+                           verbose=verbose)
         # If float64 () make float16
         elif col_np_type == 'float64':
             # if df is less than long threshold, give it a bit of space
             dataframe[col] = dataframe[col].astype('float32')
             print_w_toggle('converted to', type(dataframe[col][0]).__name__,
-                           echo=echo)
+                           verbose=verbose)
 
     # Get size after optimisation
     # TODO: Look at deepgetsizeof
     after = sys.getsizeof(dataframe)
     # Get improvement value (bytes)
     shrink = before - after
-    print_w_toggle('optimised for', shrink, 'bytes', echo=echo)
+    print_w_toggle('optimised for', shrink, 'bytes', verbose=verbose)
     return(dataframe)
 
 def refresh():
@@ -390,7 +390,7 @@ def df_to_np(df,
              unq_internal_zones,
              v_heading,
              h_heading=None,
-             echo=True):
+             verbose=False):
     """
     df: A Dataframe
 
@@ -400,9 +400,9 @@ def df_to_np(df,
 
     unq_internal_zones: unq zones to use as placeholder
 
-    echo = True:
+    verbose = True:
         Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops
+        Useful to set verbose=False when using multi-threaded loops
     """
     df = df.copy()
 
@@ -455,7 +455,7 @@ def df_to_np(df,
         ).values
 
     # Array len should be same as length of unq values
-    if echo and len(array) == len(unq_internal_zones):
+    if verbose and len(array) == len(unq_internal_zones):
         print('Matrix length=%d. Matches input constraint.' % (len(array)))
 
     return array
@@ -794,7 +794,7 @@ def get_attraction_type(calib_params,
 
     # Get purpose and soc cat from calib params
     for index, param in wcp.items():
-        print_w_toggle(index, param, echo=echo)
+        print_w_toggle(index, param, verbose=echo)
         if index == 'p':
             purpose = param
         if index == 'soc':
@@ -814,32 +814,32 @@ def get_attraction_type(calib_params,
     hdt_purpose = [8, 18]
 
     if purpose in commute_purpose:
-        print_w_toggle('balancing to commute attractions', echo=echo)
+        print_w_toggle('balancing to commute attractions', verbose=echo)
         a_t = 'Commute'
         if soc_cat is not None:
             a_t = (a_t + '_' + soc_cat)
     elif purpose in business_purpose:
-        print_w_toggle('balancing to business attractions', echo=echo)
+        print_w_toggle('balancing to business attractions', verbose=echo)
         a_t = 'Business'
         if soc_cat is not None:
             a_t = (a_t + '_' + soc_cat)
     elif purpose in education_purpose:
-        print_w_toggle('balancing to education attractions', echo=echo)
+        print_w_toggle('balancing to education attractions', verbose=echo)
         a_t = 'Education'
     elif purpose in shopping_purpose:
-        print_w_toggle('balancing to shopping attractions', echo=echo)
+        print_w_toggle('balancing to shopping attractions', verbose=echo)
         a_t = 'Shopping'
     elif purpose in pb_purpose:
-        print_w_toggle('balancing to PB attractions', echo=echo)
+        print_w_toggle('balancing to PB attractions', verbose=echo)
         a_t = 'Personal_business'
     elif purpose in r_s_purpose:
-        print_w_toggle('balancing to recreation attractions', echo=echo)
+        print_w_toggle('balancing to recreation attractions', verbose=echo)
         a_t = 'Recreation_social'
     elif purpose in vfr_purpose:
-        print_w_toggle('balancing to visiting friends attractions', echo=echo)
+        print_w_toggle('balancing to visiting friends attractions', verbose=echo)
         a_t = 'Visiting_friends'
     elif purpose in hdt_purpose:
-        print_w_toggle('balancing to holiday, day trip attractions', echo=echo)
+        print_w_toggle('balancing to holiday, day trip attractions', verbose=echo)
         a_t = 'Holiday_day_trip'
 
     return(a_t)
@@ -847,7 +847,7 @@ def get_attraction_type(calib_params,
 
 def print_w_toggle(*args, verbose):
     """
-    Small wrapper to only print when echo=True
+    Small wrapper to only print when verbose=True
 
     Parameters
     ----------
@@ -866,7 +866,7 @@ def filter_distribution_p(internal_24hr_productions,
                           ia_name,
                           calib_params,
                           round_val=3,
-                          echo=True):
+                          verbose=True):
     """
     This function adds new balancing factors in to a matrix. They are returned
     in the dt col and added to whichever col comes through in zone_col
@@ -883,9 +883,9 @@ def filter_distribution_p(internal_24hr_productions,
     calib_params:
         Dictionary of calibration parameters.
 
-    echo = True:
+    verbose = True:
         Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops
+        Useful to set verbose=False when using multi-threaded loops
 
     Returns:
     ----------
@@ -902,12 +902,12 @@ def filter_distribution_p(internal_24hr_productions,
                 # Force the parameter to integer, or it drops trips
                 param = cp
                 dp = dp[dp[index]==param]
-                if echo:
+                if verbose:
                     print(index, cp)
             else:
-                print_w_toggle('Ignoring ' + index, echo=echo)
+                print_w_toggle('Ignoring ' + index, verbose=verbose)
         else:
-            print_w_toggle('Ignoring trip length bands', echo=echo)
+            print_w_toggle('Ignoring trip length bands', verbose=verbose)
 
     dp_cols = [ia_name, 'trips']
     dp = dp.reindex(dp_cols, axis=1)
@@ -920,7 +920,7 @@ def filter_distribution_p(internal_24hr_productions,
         total_dp = dp['productions'].sum()
         dp['productions'] = dp['productions'].round(round_val)
 
-        if echo:
+        if verbose:
             print('Productions=%f before rounding.' % total_dp)
             print('Productions=%f after rounding.' % (dp['productions'].sum()))
             print('Same=%s' % str(total_dp == dp['productions'].sum()))
@@ -975,9 +975,9 @@ def filter_pa_vector(pa_vector,
                 if echo:
                     print(index, cp)
             else:
-                print_w_toggle('Ignoring ' + index, echo=echo)
+                print_w_toggle('Ignoring ' + index, verbose=echo)
         else:
-            print_w_toggle('Ignoring trip length bands', echo=echo)
+            print_w_toggle('Ignoring trip length bands', verbose=echo)
 
     dp_ri = [ia_name, value_var]
     dp = dp.reindex(dp_ri, axis=1)
@@ -999,12 +999,14 @@ def filter_pa_vector(pa_vector,
 
     return dp, total_dp
 
+
 def filter_pa_cols(pa_frame,
                    ia_name,
                    calib_params,
                    round_val=3,
-                   echo=True):
+                   verbose=True):
     """
+    Returns data for a unique segmentation and it sum
     """
     dp = pa_frame.copy()
     col_names = list(dp)
@@ -1017,19 +1019,20 @@ def filter_pa_cols(pa_frame,
             prior = target_col
             target_col = [x for x in target_col if (index+str(cp)) in x]
             if len(target_col) == 0:
-                print('Col lookup ' + index + ' failed')
+                print_w_toggle('Col lookup %s failed' % index, verbose=verbose)
                 target_col = prior
 
     if len(target_col) > 1:
-        print('Search returned >1 col')
+        print_w_toggle('Search returned >1 col', verbose=verbose)
         print(target_col)
-        print('Picking ' + target_col[0])
+        print_w_toggle('Picking ' + target_col[0], verbose=verbose)
     target_col = target_col[0]
 
     dp = dp.reindex([ia_name, target_col], axis=1)
+    print(dp)
     total_dp = dp[target_col].sum()
 
-    return(dp, total_dp)
+    return dp, total_dp
 
 def get_costs(model_lookup_path,
               calib_params,
@@ -1079,6 +1082,7 @@ def get_costs(model_lookup_path,
                                    'costs',
                                    tp_path[0]))
     cols = list(dat)
+    print("cols",cols)
 
     # Get purpose and direction from calib_params
     ca = None
@@ -1135,6 +1139,7 @@ def get_costs(model_lookup_path,
     for col in cost_cols:
         target_cols.append(col)
 
+    print("cost_cols", cost_cols)
     cost_return_name = cost_cols[0]
 
     dat = dat.reindex(target_cols, axis=1)
@@ -1367,7 +1372,7 @@ def single_balance(achieved_pa,
 
 def build_distribution_bins(internal_distance,
                             distribution,
-                            echo=True):
+                            verbose=True):
     """
     This takes a distribution and rounds the trip lengths to the nearest
     whole number, then counts the number of trips by each km.
@@ -1398,7 +1403,7 @@ def build_distribution_bins(internal_distance,
     dist_bins = distribution.reindex(dist_cols,axis=1)
     dist_bins['distance'] = dist_bins['distance'].round(0)
     dist_bins = dist_bins.groupby('distance').sum().reset_index()
-    print_w_toggle('outputting distribution bin', echo=echo)
+    print_w_toggle('outputting distribution bin', verbose=verbose)
     return(dist_bins)
 
 
@@ -1408,7 +1413,7 @@ def balance_a_to_p(ia_name,
                    p_var_name='productions',
                    a_var_name='attractions',
                    round_val=None,
-                   echo=True):
+                   verbose=True):
 
     """
     This function takes a set of attractions, selects the relevant attractions
@@ -1435,9 +1440,9 @@ def balance_a_to_p(ia_name,
     round_val:
         Number of dp to round attractions to. Defaults to None.
 
-    echo:
+    verbose:
         Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops.
+        Useful to set verbose=False when using multi-threaded loops.
         Default to True.
 
     Returns
@@ -1460,7 +1465,7 @@ def balance_a_to_p(ia_name,
         # Always print as it's a warning of future problems
         print('WARNING: Not the same number of zones')
 
-    print_w_toggle('Balancing internal attractions to productions', echo=echo)
+    print_w_toggle('Balancing internal attractions to productions', verbose=verbose)
     a_factors[a_var_name] = (
         a_factors[a_var_name]
         *
@@ -1470,7 +1475,7 @@ def balance_a_to_p(ia_name,
     total_balanced_attractions = sum(a_factors[a_var_name])
 
     # Check
-    if echo:
+    if verbose:
         if round(total_balanced_attractions) == round(total_internal_productions):
             print('attractions successfully balanced to productions')
         else:
@@ -1510,7 +1515,7 @@ def define_internal_external_areas(model_lookup_path):
     internal_area = pd.read_csv(model_lookup_path + '/' + internal_file)
     external_area = pd.read_csv(model_lookup_path + '/' + external_file)
 
-    return(internal_area, external_area)
+    return internal_area, external_area
 
 def import_pa(production_import_path,
               attraction_import_path):
@@ -1543,7 +1548,7 @@ def get_trip_length_bands(import_folder,
                           segmentation,
                           trip_origin,
                           replace_nan=False,
-                          echo=True): # 'hb' or 'nhb'
+                          verbose=False): # 'hb' or 'nhb'
 
     """
     Function to check a folder for trip length band parameters.
@@ -1551,11 +1556,12 @@ def get_trip_length_bands(import_folder,
     """
     # Append name of tlb area
 
-
     # Index folder
     target_files = os.listdir(import_folder)
     # Define file contents, should just be target files - should fix.
     import_files = target_files.copy()
+
+    print("calib_params", calib_params)
 
     for key, value in calib_params.items():
         # Don't want empty segments, don't want ca
@@ -1571,12 +1577,40 @@ def get_trip_length_bands(import_folder,
     else:
         raise ValueError('Trip length band import failed,' +
                          'provide valid trip origin')
+
+    if len(import_files) <= 0:
+        raise IOError(
+            "Cannot find any %s trip length bands.\n"
+            "import folder: %s"
+            % (trip_origin, import_folder)
+        )
+
+    for key, value in calib_params.items():
+        # Don't want empty segments, don't want ca
+        if value != 'none' and key != 'mat_type':
+            # print_w_toggle(key + str(value), echo=echo)
+            import_files = [x for x in import_files if
+                            ('_' + key + str(value)) in x]
+
+    if len(import_files) <= 0:
+        raise IOError(
+            "Cannot find any import files matching the given criteria.\n"
+            'Import folder: %s\n'
+            'Search criteria: %s'
+            % (import_folder, calib_params)
+        )
+
     if len(import_files) > 1:
-        raise Warning('Picking from two similar files,' +
-                      ' check import folder')
+        raise Warning(
+            'Found multiple viable files. Cannot pick one.\n'
+            'Search criteria: %s\n'
+            'Import folder: %s\n'
+            'Viable files: %s'
+            % (calib_params, import_folder, import_files)
+        )
 
     # Import
-    if echo:
+    if verbose:
         print(import_files)
         print(import_files[0])
     tlb = pd.read_csv(os.path.join(import_folder, import_files[0]))
@@ -1616,7 +1650,7 @@ def get_init_params(path,
     Returns:
     ----------
     initial_betas:
-        DataFrame containing target betas for distibution.
+        DataFrame containing target betas for distribution.
     """
 
     if model_name is None:
@@ -1638,7 +1672,7 @@ def get_init_params(path,
         init_params = init_params[
                 init_params['p'].isin(purpose_subset)]
 
-    return(init_params)
+    return init_params
 
 
 def get_cjtw(model_lookup_path,
@@ -2247,7 +2281,7 @@ def get_pa_diff(new_p,
         ** .5
     )
 
-    return(pa_diff)
+    return pa_diff
 
     """
     def get_pa_diff(new_p,
@@ -2419,7 +2453,7 @@ def parse_mat_output(list_dir,
 
 
 def unpack_tlb(tlb,
-               km_constant = _M_KM):
+               ):
 
     """
     Function to unpack a trip length band table into constituents.
@@ -2438,6 +2472,7 @@ def unpack_tlb(tlb,
     obs_dist:
 
     """
+    print("tlb:", tlb)
 
     # Convert miles from raw NTS to km
     min_dist = tlb['lower'].astype('float').to_numpy()*_M_KM

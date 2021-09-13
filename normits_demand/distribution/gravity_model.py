@@ -11,11 +11,12 @@ import itertools
 import numpy as np
 import pandas as pd
 
-from normits_demand.utils import utils as nup # Folder management, reindexing, optimisation
+from normits_demand.utils import utils as nup  # Folder management, reindexing, optimisation
 from normits_demand.reports import reports_audits as ra
 
 # TODO: Where should this live?
 _default_rounding = 3
+
 
 # TODO: More error handling
 # TODO: object orient
@@ -29,17 +30,16 @@ def run_gravity_model(ia_name,
                       model_lookup_path,
                       dist_log_path,
                       dist_log_fname,
-                      dist_function = 'tanner',
+                      dist_function='tanner',
                       cost_type='24hr',
-                      apply_k_factoring = True,
+                      apply_k_factoring=True,
                       furness_loops=1999,
                       fitting_loops=100,
                       bs_con_target=.95,
-                      target_r_gap = 1,
+                      target_r_gap=1,
                       rounding_factor=3,
                       iz_cost_infill=0.5,
-                      echo=True):
-
+                      verbose=True):
     """
     Function that filters down productions and attractions to deal only with a
     specific segment and then calls the gravity model to model 24hr PA trips.
@@ -109,11 +109,11 @@ def run_gravity_model(ia_name,
         Number of decimal places to round by. Defines how precise calibration
         will be. 3 is industry standard.
 
-    echo:
+    verbose:
         Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops.
+        Useful to set verbose=False when using multi-threaded loops.
         
-    echo_outer_loop_updates:
+    verbose_outer_loop_updates:
         See gravity model
 
     Returns
@@ -134,17 +134,18 @@ def run_gravity_model(ia_name,
     # TODO: Safer to pass the internal area?
     # TODO: Maybe go in the distribution model loop instead? // Yes
     unq_internal_zones = productions[
-            'p_zone'].drop_duplicates().reset_index(drop=True).copy()
+        'p_zone'].drop_duplicates().reset_index(drop=True).copy()
     unq_internal_zones.name = ia_name
 
     distribution_p = nup.filter_pa_cols(productions,
                                         'p_zone',
                                         calib_params,
                                         round_val=3,
-                                        echo=True)
+                                        verbose=True)
     distribution_p = distribution_p[0]
+
     distribution_p = distribution_p.rename(
-            columns={list(distribution_p)[-1]: 'productions'})
+        columns={list(distribution_p)[-1]: 'productions'})
 
     # Filter productions to target distribution type
 
@@ -153,10 +154,10 @@ def run_gravity_model(ia_name,
                                         'a_zone',
                                         calib_params,
                                         round_val=3,
-                                        echo=True)
+                                        verbose=True)
     distribution_a = distribution_a[0]
     distribution_a = distribution_a.rename(
-            columns={list(distribution_a)[-1]: 'attractions'})
+        columns={list(distribution_a)[-1]: 'attractions'})
 
     distribution_p = distribution_p.rename(columns={'p_zone': ia_name})
     distribution_a = distribution_a.rename(columns={'a_zone': ia_name})
@@ -166,46 +167,43 @@ def run_gravity_model(ia_name,
                                         distribution_p,
                                         distribution_a,
                                         round_val=3,
-                                        echo=False)
+                                        verbose=False)
 
     # Productions as numpy
     p = nup.df_to_np(distribution_p,
                      v_heading=ia_name,
                      values='productions',
-                     unq_internal_zones=unq_internal_zones,
-                     echo=echo)
+                     unq_internal_zones=unq_internal_zones)
     p = p.astype(np.float64, copy=True)
 
     # Attractions as numpy
     a = nup.df_to_np(distribution_a,
                      v_heading=ia_name,
                      values='attractions',
-                     unq_internal_zones=unq_internal_zones,
-                     echo=echo)
+                     unq_internal_zones=unq_internal_zones)
     a = a.astype(np.float64, copy=True)
 
     # TODO: Pass car ownership params for costs
     # Import costs based on distribution parameters & car availability
-    nup.print_w_toggle('Importing costs', echo=echo)
+    nup.print_w_toggle('Importing costs', verbose=verbose)
     internal_costs = nup.get_costs(model_lookup_path,
                                    calib_params,
                                    tp=cost_type,
                                    iz_infill=iz_cost_infill)
-    nup.print_w_toggle('Cost lookup returned ' + internal_costs[1], echo=echo)
+    nup.print_w_toggle('Cost lookup returned ' + internal_costs[1], verbose=verbose)
     internal_costs = internal_costs[0].copy()
 
     # Test order is preserved
     diag = internal_costs[
-            internal_costs['p_zone']==internal_costs['a_zone']][
-                    'cost'].values[0:len(unq_internal_zones)]
+               internal_costs['p_zone'] == internal_costs['a_zone']][
+               'cost'].values[0:len(unq_internal_zones)]
 
     # Translate costs to array
     cost = nup.df_to_np(internal_costs,
                         v_heading='p_zone',
                         h_heading='a_zone',
                         values='cost',
-                        unq_internal_zones=unq_internal_zones,
-                        echo=echo)
+                        unq_internal_zones=unq_internal_zones)
     cost = cost.astype(np.float64, copy=True)
 
     if (np.diag(cost) == diag).sum() == len(unq_internal_zones):
@@ -214,41 +212,30 @@ def run_gravity_model(ia_name,
         raise ValueError('Zone order lost in cost conversion to ndarray')
 
     # Seed k-factors with 1s for first runs
-    k_factors = cost**0
+    k_factors = cost ** 0
 
     min_dist, max_dist, obs_trip, obs_dist = nup.unpack_tlb(calib_params['tlb'])
-
-    """
-    Function to unpack a trip length band table into constituents.
-    Parameters
-    ----------
-    tlb:
-        A trip length band DataFrame
-    Returns
-    ----------
-    min_dist:
-        ndarray of minimum distance by band
-    max_dist:
-        ndarray of maximum distance by band
-    obs_trip:
-        Band share by band as fraction of 1
-    obs_dist:
-        
-    """
 
     ### Start of parameter search ###
 
     # Initial Search Loop - looking for OK values
     # Define criteria
     a_search, b_search, m_search, s_search, min_para, max_para = define_search_criteria(
-            init_param_a,
-            init_param_b,
-            dist_function)
-    
-    #Search for initial values
-    out_para, out_loop, max_r_sqr = [], 0, [0,0,0,0,0]
+        init_param_a,
+        init_param_b,
+        dist_function)
+    print(a_search)
+    print(b_search)
+    print(m_search)
+    print(s_search)
+    print(min_para)
+    print(max_para)
+
+    # Initialise, so something will run if all else fails
+    max_r_sqr = [a_search[0], b_search[0], m_search[0], s_search[0], 0]
 
     out_loop = 0
+    out_para = list()
     for asv in a_search:
         for bsv in b_search:
             for msv in m_search:
@@ -259,31 +246,36 @@ def run_gravity_model(ia_name,
                                    asv, bsv, msv, ssv):
                         # Run gravity model
                         out_loop += 1
+                        print("Running for loop gravity model")
                         grav_run = gravity_model(
                             dist_log_path=dist_log_path,
                             dist_log_fname=dist_log_fname,
                             calib_params=calib_params,
-                            dist_function = dist_function,
-                            par_data = [asv, bsv, msv, ssv],
+                            dist_function=dist_function,
+                            par_data=[asv, bsv, msv, ssv],
                             min_para=min_para,
                             max_para=max_para,
-                            bs_con_target = bs_con_target,
-                            target_r_gap = target_r_gap,
-                            furness_target = 0.1,
+                            bs_con_target=bs_con_target,
+                            target_r_gap=target_r_gap,
+                            furness_target=0.1,
                             productions=p,
                             attractions=a,
                             cost=cost,
-                            k_factors = k_factors, # 1s
+                            k_factors=k_factors,  # 1s
                             furness_loops=furness_loops,
                             fitting_loops=fitting_loops,
                             loop_number='1.' + str(out_loop),
-                            echo=echo,
-                            optimise = True
-                            )
+                            verbose=verbose,
+                            optimise=True
+                        )
 
                         # Check convergence criteria
-                        print('prev_best')
-                        print(max_r_sqr[4])
+                        print('achieved bs_con: %s' % grav_run[6][4])
+                        print('achieved params: %s' % grav_run[6])
+                        print()
+                        print('prev best bs_con: %s' % max_r_sqr[4])
+                        print("Printing output of grav model")
+                        print(grav_run)
                         if max_r_sqr[4] < grav_run[6][4]:
                             print('This is better')
                             max_r_sqr = grav_run[6]
@@ -291,8 +283,8 @@ def run_gravity_model(ia_name,
                             # TODO: if it's not doing a good job, search more and better!
                             out_para, bs_con = grav_run[1], grav_run[5]
                         if (check_con_val(grav_run[3], target_r_gap) or
-                            # Over 90
-                            (grav_run[5] >= bs_con_target-.05)):
+                                # Over 90
+                                (grav_run[5] >= bs_con_target - .05)):
                             # Assign success values and leave loop - well done!
                             out_para, bs_con = grav_run[1], grav_run[5]
                             break
@@ -303,108 +295,122 @@ def run_gravity_model(ia_name,
             if len(out_para) != 0:
                 break
 
-    #Refine values
-    if len(out_para) != 0:
-        if len(list(set(out_para)-set(max_r_sqr))) > 0:
-            #Restore best R-squared loop
-            out_loop = out_loop+1
-            # Run gravity model
-            # Set total runs to 1
+    # We did real bad. Just use the last run and output something
+    if len(out_para) == 0:
+        out_para, bs_con = grav_run[1], grav_run[5]
+    internal_pa = grav_run[0]
+
+
+    # Refine values
+    print("Length of out_para:", len(out_para))
+    if len(list(set(out_para) - set(max_r_sqr))) > 0:
+        # Restore best R-squared loop
+        out_loop = out_loop + 1
+        # Run gravity model
+        # Set total runs to 1
+        print("Running len(out_para) != 0 gravity model")
+        grav_run = gravity_model(
+            dist_log_path=dist_log_path,
+            dist_log_fname=dist_log_fname,
+            calib_params=calib_params,
+            dist_function=dist_function,
+            par_data=max_r_sqr[0:4],
+            min_para=min_para,
+            max_para=max_para,
+            bs_con_target=bs_con_target,
+            target_r_gap=target_r_gap,
+            furness_target=0.1,
+            productions=p,
+            attractions=a,
+            cost=cost,
+            k_factors=k_factors,  # 1s
+            furness_loops=furness_loops,
+            fitting_loops=1,
+            loop_number=str(out_loop),
+            verbose=verbose,
+            optimise=True)
+        out_para, bs_con, max_r_sqr = grav_run[1], grav_run[5], grav_run[6]
+        internal_pa = grav_run[0]
+
+    if param_check(min_para, max_para,
+                   max_r_sqr[0], max_r_sqr[1],
+                   max_r_sqr[2], max_r_sqr[3]):
+
+        internal_pa = grav_run[0]
+        num_band = len(min_dist)
+
+        est_trip, est_dist, cij_freq = [0] * num_band, [0] * num_band, [0] * num_band
+        for row in range(num_band):
+            """
+            """
+            est_trip[row] = np.sum(np.where((cost >= min_dist[row]) & (cost < max_dist[row]), internal_pa, 0))
+            est_dist[row] = np.sum(
+                np.where((cost >= min_dist[row]) & (cost < max_dist[row]), cost * internal_pa, 0))
+            est_dist[row] = np.where(est_trip[row] > 0, est_dist[row] / est_trip[row],
+                                     (min_dist[row] + max_dist[row]) / 2)
+            obs_dist[row] = np.where(obs_dist[row] > 0, obs_dist[row], est_dist[row])
+            est_trip[row] = est_trip[row] / np.sum(internal_pa) * 100
+            cij_freq[row] = np.sum(np.where((cost >= min_dist[row]) & (cost < max_dist[row]), len(cost), 0))
+            cij_freq[row] = cij_freq[row] / np.sum(len(cost)) * 100
+
+        obs_mean, obs_logm, obs_stdv = 0, 0, 0
+        # mean trip length
+        est_mean = np.sum(internal_pa * cost) / np.sum(internal_pa)
+        est_logm = np.sum(internal_pa * np.log(np.where(cost > 0, cost, 1))) / np.sum(internal_pa)
+        est_stdv = (np.sum(internal_pa * (cost - est_mean) ** 2) / np.sum(internal_pa)) ** 0.5
+
+        # Auto-apply k-Factor
+        kfc_dist, kfc_trip = [0] * num_band, [0] * num_band
+        kfc_mean, kfc_logm, kfc_stdv, kfc_para, k_bs_con = est_mean, est_logm, est_stdv, out_para.copy(), bs_con
+        if apply_k_factoring:
+            out_loop = out_loop + 1
+            k_factors = k_factors = cost ** 0
+            # k_factors = k_factors**0
+            for row in range(num_band):
+                kfc_dist[row] = np.where(est_trip[row] > 0, min(max(obs_trip[row] / est_trip[row], .001), 10), 1)
+                k_factors = np.where((cost >= min_dist[row]) & (cost < max_dist[row]), kfc_dist[row], k_factors)
+            print("Running third gravity model")
             grav_run = gravity_model(
                 dist_log_path=dist_log_path,
                 dist_log_fname=dist_log_fname,
-                calib_params = calib_params,
-                dist_function = dist_function,
-                par_data = max_r_sqr[0:4],
+                calib_params=calib_params,
+                dist_function=dist_function,
+                par_data=kfc_para,
                 min_para=min_para,
                 max_para=max_para,
-                bs_con_target = bs_con_target,
-                target_r_gap = target_r_gap,
-                furness_target = 0.1,
+                bs_con_target=bs_con_target,
+                target_r_gap=target_r_gap,
+                furness_target=0.1,
                 productions=p,
                 attractions=a,
                 cost=cost,
-                k_factors = k_factors, # 1s
+                k_factors=k_factors,
                 furness_loops=furness_loops,
                 fitting_loops=1,
-                loop_number=str(out_loop),
-                echo=echo,
-                optimise = True)
-            out_para, bs_con, max_r_sqr = grav_run[1], grav_run[5], grav_run[6]
+                loop_number=str(out_loop + 1),
+                verbose=verbose,
+                optimise=True)
 
-        if param_check(min_para, max_para,
-                       max_r_sqr[0], max_r_sqr[1],
-                       max_r_sqr[2], max_r_sqr[3]):
-            internal_pa = grav_run[0]
-            num_band = len(min_dist)
+            kfc_para, bs_con, k_r_sqr = grav_run[1], grav_run[5], grav_run[6]
 
-            est_trip, est_dist, cij_freq = [0]*num_band, [0]*num_band, [0]*num_band
-            for row in range(num_band):
-                """
-                """
-                est_trip[row] = np.sum(np.where((cost>=min_dist[row]) & (cost<max_dist[row]),internal_pa,0))
-                est_dist[row] = np.sum(np.where((cost>=min_dist[row]) & (cost<max_dist[row]), cost*internal_pa,0))
-                est_dist[row] = np.where(est_trip[row]>0,est_dist[row]/est_trip[row],(min_dist[row]+max_dist[row])/2)
-                obs_dist[row] = np.where(obs_dist[row]>0,obs_dist[row],est_dist[row])
-                est_trip[row] = est_trip[row]/np.sum(internal_pa)*100
-                cij_freq[row] = np.sum(np.where((cost>=min_dist[row]) & (cost<max_dist[row]),len(cost),0))
-                cij_freq[row] = cij_freq[row]/np.sum(len(cost))*100
+            if param_check(min_para, max_para,
+                           kfc_para[0], kfc_para[1],
+                           kfc_para[2], kfc_para[3]):
+                internal_pa = grav_run[0]
 
-            obs_mean, obs_logm, obs_stdv = 0, 0, 0
-            # mean trip length
-            est_mean = np.sum(internal_pa*cost)/np.sum(internal_pa)
-            est_logm = np.sum(internal_pa*np.log(np.where(cost>0,cost,1)))/np.sum(internal_pa)
-            est_stdv = (np.sum(internal_pa*(cost-est_mean)**2)/np.sum(internal_pa))**0.5
-            
-            #Auto-apply k-Factor
-            kfc_dist, kfc_trip = [0]*num_band, [0]*num_band
-            kfc_mean, kfc_logm, kfc_stdv, kfc_para, k_bs_con = est_mean, est_logm, est_stdv, out_para.copy(), bs_con
-            if apply_k_factoring:
-                out_loop = out_loop+1
-                k_factors = k_factors = cost**0
-                # k_factors = k_factors**0
                 for row in range(num_band):
-                    kfc_dist[row] = np.where(est_trip[row]>0,min(max(obs_trip[row]/est_trip[row],.001),10),1)
-                    k_factors = np.where((cost>=min_dist[row]) & (cost<max_dist[row]),kfc_dist[row],k_factors)
-
-                grav_run = gravity_model(
-                    dist_log_path=dist_log_path,
-                    dist_log_fname=dist_log_fname,
-                    calib_params = calib_params,
-                    dist_function = dist_function,
-                    par_data = kfc_para,
-                    min_para=min_para,
-                    max_para=max_para,
-                    bs_con_target = bs_con_target,
-                    target_r_gap = target_r_gap,
-                    furness_target = 0.1,
-                    productions=p,
-                    attractions=a,
-                    cost=cost,
-                    k_factors = k_factors,
-                    furness_loops=furness_loops,
-                    fitting_loops=1,
-                    loop_number=str(out_loop+1),
-                    echo=echo,
-                    optimise = True)
-
-                kfc_para, bs_con, k_r_sqr = grav_run[1], grav_run[5], grav_run[6]
-
-                if param_check(min_para, max_para,
-                               kfc_para[0], kfc_para[1],
-                               kfc_para[2], kfc_para[3]):
-                    internal_pa = grav_run[0]
-
-                    for row in range(num_band):
-                        kfc_trip[row] = np.sum(np.where((cost>=min_dist[row]) & (cost<max_dist[row]),internal_pa,0))
-                        kfc_dist[row] = np.sum(np.where((cost>=min_dist[row]) & (cost<max_dist[row]),cost*internal_pa,0))
-                        kfc_dist[row] = np.where(kfc_trip[row]>0,kfc_dist[row]/kfc_trip[row],(min_dist[row]+max_dist[row])/2)
-                        kfc_trip[row] = kfc_trip[row]/np.sum(internal_pa)*100
-                    kfc_mean = np.sum(internal_pa*cost)/np.sum(internal_pa)
-                    kfc_logm = np.sum(internal_pa*np.log(np.where(cost>0,cost,1)))/np.sum(internal_pa)
-                    kfc_stdv = (np.sum(internal_pa*(cost-kfc_mean)**2)/np.sum(internal_pa))**0.5
-        else:
-            print('Grav model netherworld - what did you do?')
+                    kfc_trip[row] = np.sum(
+                        np.where((cost >= min_dist[row]) & (cost < max_dist[row]), internal_pa, 0))
+                    kfc_dist[row] = np.sum(
+                        np.where((cost >= min_dist[row]) & (cost < max_dist[row]), cost * internal_pa, 0))
+                    kfc_dist[row] = np.where(kfc_trip[row] > 0, kfc_dist[row] / kfc_trip[row],
+                                             (min_dist[row] + max_dist[row]) / 2)
+                    kfc_trip[row] = kfc_trip[row] / np.sum(internal_pa) * 100
+                kfc_mean = np.sum(internal_pa * cost) / np.sum(internal_pa)
+                kfc_logm = np.sum(internal_pa * np.log(np.where(cost > 0, cost, 1))) / np.sum(internal_pa)
+                kfc_stdv = (np.sum(internal_pa * (cost - kfc_mean) ** 2) / np.sum(internal_pa)) ** 0.5
+    else:
+        print('Grav model netherworld - what did you do?')
 
     # ########## End of alpha/beta search ########## #
 
@@ -432,12 +438,12 @@ def run_gravity_model(ia_name,
         if key != 'tlb':
             col_ph.append(key)
             long_pa[key] = value
-            nup.print_w_toggle(key, value, echo=echo)
+            nup.print_w_toggle(key, value, verbose=verbose)
             nup.print_w_toggle('Re-appending segment values for ' + key,
-                               echo=echo)
+                               verbose=verbose)
 
         elif key == 'tlb':
-            if echo:
+            if verbose:
                 print('...')
 
     col_ph.append('dt')
@@ -459,15 +465,16 @@ def run_gravity_model(ia_name,
     long_pa.p_zone = long_pa.p_zone.astype(int)
     long_pa.a_zone = long_pa.a_zone.astype(int)
 
-    return(internal_pa,
-           d_bin
-           )
+    return (internal_pa,
+            d_bin
+            )
+
 
 def gravity_model(dist_log_path: str,
                   dist_log_fname: str,
                   calib_params: dict,
                   dist_function: str,
-                  par_data : list,
+                  par_data: list,
                   min_para: list,
                   max_para: list,
                   bs_con_target: float,
@@ -480,9 +487,8 @@ def gravity_model(dist_log_path: str,
                   furness_loops: int,
                   fitting_loops: int,
                   loop_number: str,
-                  echo: bool = True,
-                  optimise = True):
-
+                  verbose: bool = True,
+                  optimise=True):
     """
     Runs the outer loop of the gravity model, searching for the optimal
     alpha and beta values for trip distribution.
@@ -534,9 +540,9 @@ def gravity_model(dist_log_path: str,
     loop_number:
         String defining the name of this outer loop.
 
-    echo:
+    verbose:
         Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops.
+        Useful to set verbose=False when using multi-threaded loops.
         
     optimise = True:
         Run the optimisation loop while searching or not
@@ -565,9 +571,10 @@ def gravity_model(dist_log_path: str,
             [alpha_con, beta_con, bs_con, tl_con]
 
     """
+
     # Check input params
     assert dist_function.lower() in ['tanner', 'ln'], 'Not a valid function'
-    
+
     # Create the output path
     dist_log_path = os.path.join(dist_log_path, dist_log_fname)
     dist_log_path = nup.build_path(dist_log_path, calib_params)
@@ -577,24 +584,27 @@ def gravity_model(dist_log_path: str,
     # Convert miles from raw NTS to km
     min_dist, max_dist, obs_trip, obs_dist_o = nup.unpack_tlb(tlb)
 
-    max_r_sqr, pre_data = [0,0,0,0,0], [0,0,0,0]
+    max_r_sqr, pre_data = [0, 0, 0, 0, 0], [0, 0, 0, 0]
     pre_val1, pre_val2 = 0, 0
+
+    if dist_function.lower() == 'tanner':
+        max_r_sqr[0], max_r_sqr[1] = par_data[0], par_data[1]
+    else:
+        max_r_sqr[2], max_r_sqr[3] = par_data[2], par_data[3]
 
     # Count bands
     num_band = len(calib_params['tlb'])
     opt_loop = 0
 
     # Seed calibration factors
-    est_trip, est_dist, obs_dist = [0]*num_band,[0]*num_band,[0]*num_band
+    est_trip, est_dist, obs_dist = [0] * num_band, [0] * num_band, [0] * num_band
     obs_dist, est_trip, est_dist = np.array(obs_dist), np.array(est_trip), np.array(est_dist)
 
     for ft_loop in range(fitting_loops):
         print('fit loop ' + str(ft_loop))
-
-        nup.print_w_toggle('Passing to gravity model', echo=echo)
         gm_start = time.time()
 
-        if dist_function.lower() =='tanner': #x1, x2 - Tanner
+        if dist_function.lower() == 'tanner':  # x1, x2 - Tanner
             min_val1, min_val2 = min_para[0], min_para[1]
             max_val1, max_val2 = max_para[0], max_para[1]
 
@@ -604,76 +614,74 @@ def gravity_model(dist_log_path: str,
 
         # Run furness process
         model_run = run_furness(furness_loops,
-                                origin = productions,
-                                destination = attractions,
-                                par_data = par_data,
-                                cost = cost,
-                                k_factors = k_factors,
-                                min_pa_diff = furness_target)
+                                origin=productions,
+                                destination=attractions,
+                                par_data=par_data,
+                                cost=cost,
+                                k_factors=k_factors,
+                                min_pa_diff=furness_target)
 
         gm_time_taken = time.time() - gm_start
 
         internal_pa, fn_loops, pa_diff = model_run
-        del(model_run)
+        del model_run
 
         # Get rid of any NaNs that might have snuck in
         internal_pa = np.nan_to_num(internal_pa)
 
         for i in range(num_band):
             # Get trips by band
-            est_trip[i] = np.sum(np.where((cost>=min_dist[i]) & (cost<max_dist[i]),internal_pa,0))
+            est_trip[i] = np.sum(np.where((cost >= min_dist[i]) & (cost < max_dist[i]), internal_pa, 0))
             # Get distance by band
-            est_dist[i] = np.sum(np.where((cost>=min_dist[i]) & (cost<max_dist[i]),cost*internal_pa,0))
+            est_dist[i] = np.sum(np.where((cost >= min_dist[i]) & (cost < max_dist[i]), cost * internal_pa, 0))
             # Get mean distance by band
-            est_dist[i] = np.where(est_trip[i]>0,est_dist[i]/est_trip[i],(max_dist[i]+min_dist[i])/2)
+            est_dist[i] = np.where(est_trip[i] > 0, est_dist[i] / est_trip[i], (max_dist[i] + min_dist[i]) / 2)
             # Get observed distance by band
-            obs_dist[i] = np.where(obs_dist_o[i]>0,obs_dist_o[i],est_dist[i])
+            obs_dist[i] = np.where(obs_dist_o[i] > 0, obs_dist_o[i], est_dist[i])
 
         # Control observed trips to PA volume
-        obs_trip = obs_trip*np.sum(internal_pa)/np.sum(obs_trip)
+        obs_trip = obs_trip * np.sum(internal_pa) / np.sum(obs_trip)
 
-        abs_diff = np.sum(np.abs(est_trip-obs_trip))
-        obj_func = np.sum(est_trip-obs_trip*(
-                np.where(est_trip>0,np.log(
-                        est_trip),0)-np.where(obs_trip>0,np.log(obs_trip),0)))
-        est_err = np.sum(est_trip*np.where(
-                est_trip>0,np.log(est_trip),0)**2)**0.5
+        abs_diff = np.sum(np.abs(est_trip - obs_trip))
+        obj_func = np.sum(est_trip - obs_trip * (
+                np.where(est_trip > 0, np.log(
+                    est_trip), 0) - np.where(obs_trip > 0, np.log(obs_trip), 0)))
+        est_err = np.sum(est_trip * np.where(
+            est_trip > 0, np.log(est_trip), 0) ** 2) ** 0.5
 
-        if dist_function.lower() == 'tanner': #x1, x2 - Tanner
-            cst_val1 = [np.where(obs_dist>0,np.log(obs_dist),0),np.where(est_dist>0,np.log(est_dist),0)]
-            cst_val2 = [obs_dist*1,est_dist*1]
+        if dist_function.lower() == 'tanner':  # x1, x2 - Tanner
+            cst_val1 = [np.where(obs_dist > 0, np.log(obs_dist), 0), np.where(est_dist > 0, np.log(est_dist), 0)]
+            cst_val2 = [obs_dist * 1, est_dist * 1]
             par_val1, par_val2 = par_data[0], par_data[1]
-            fix_val1, fix_val2 = np.sum(obs_trip*cst_val1[0]), np.sum(obs_trip*cst_val2[0])
-            cur_val1, cur_val2 = np.sum(est_trip*cst_val1[1]), np.sum(est_trip*cst_val2[1])
-            gra_val1, gra_val2 = np.sum(est_trip*cst_val1[1]-obs_trip*cst_val1[0]), np.sum(est_trip*cst_val2[1]-obs_trip*cst_val2[0])
+            fix_val1, fix_val2 = np.sum(obs_trip * cst_val1[0]), np.sum(obs_trip * cst_val2[0])
+            cur_val1, cur_val2 = np.sum(est_trip * cst_val1[1]), np.sum(est_trip * cst_val2[1])
+            gra_val1, gra_val2 = np.sum(est_trip * cst_val1[1] - obs_trip * cst_val1[0]), np.sum(
+                est_trip * cst_val2[1] - obs_trip * cst_val2[0])
 
-        elif dist_function.lower() == 'ln': #mu, sigma - LogNormal f(Cij) = (1/(Cij*sigma*(2*np.pi)**0.5))*np.exp(-(np.log(Cij)-mu)**2/(2*sigma**2))
-            cst_val1 = [np.where(obs_dist>0,(-np.log(obs_dist)**2/2),0),np.where(est_dist>0,(-np.log(est_dist)**2/2),0)] #mu
-            cst_val2 = [np.where(obs_dist>0,np.log(1/(obs_dist*(2*np.pi)**0.5)),0)*cst_val1[0],np.where(est_dist>0,np.log(1/(est_dist*(2*np.pi)**0.5)),0)*cst_val1[1]] #sigma
+        elif dist_function.lower() == 'ln':  # mu, sigma - LogNormal f(Cij) = (1/(Cij*sigma*(2*np.pi)**0.5))*np.exp(-(np.log(Cij)-mu)**2/(2*sigma**2))
+            cst_val1 = [np.where(obs_dist > 0, (-np.log(obs_dist) ** 2 / 2), 0),
+                        np.where(est_dist > 0, (-np.log(est_dist) ** 2 / 2), 0)]  # mu
+            cst_val2 = [np.where(obs_dist > 0, np.log(1 / (obs_dist * (2 * np.pi) ** 0.5)), 0) * cst_val1[0],
+                        np.where(est_dist > 0, np.log(1 / (est_dist * (2 * np.pi) ** 0.5)), 0) * cst_val1[1]]  # sigma
             par_val1, par_val2 = par_data[2], par_data[3]
-            fix_val1, fix_val2 = np.sum(obs_trip*cst_val1[0]), np.sum(obs_trip*cst_val2[0])
-            cur_val1, cur_val2 = np.sum(est_trip*cst_val1[1]), np.sum(est_trip*cst_val2[1])
-            gra_val1, gra_val2 = np.sum(obs_trip*cst_val1[0]-est_trip*cst_val1[1]), np.sum(obs_trip*cst_val2[0]-est_trip*cst_val2[1])
+            fix_val1, fix_val2 = np.sum(obs_trip * cst_val1[0]), np.sum(obs_trip * cst_val2[0])
+            cur_val1, cur_val2 = np.sum(est_trip * cst_val1[1]), np.sum(est_trip * cst_val2[1])
+            gra_val1, gra_val2 = np.sum(obs_trip * cst_val1[0] - est_trip * cst_val1[1]), np.sum(
+                obs_trip * cst_val2[0] - est_trip * cst_val2[1])
 
         else:
             raise ValueError
 
-        con_val1 = np.where(fix_val1!=0,np.abs(gra_val1/fix_val1)*100,100)
-        con_val2 = np.where(fix_val2!=0,np.abs(gra_val2/fix_val2)*100,100)
+        con_val1 = np.where(fix_val1 != 0, np.abs(gra_val1 / fix_val1) * 100, 100)
+        con_val2 = np.where(fix_val2 != 0, np.abs(gra_val2 / fix_val2) * 100, 100)
 
         # ## Calculate our estimating parameters and convergence factors
+        bs_con = max(1 - np.sum((est_trip - obs_trip) ** 2) / np.sum(
+            (obs_trip[1:] - np.sum(obs_trip) / (len(obs_trip) - 1)) ** 2), 0)
 
-        con_param = ra.get_trip_length_by_band(calib_params['tlb'],
-                                               cost,
-                                               internal_pa)
-        trip_lengths, band_share, atl = con_param
-
-        bs_con = max(1-np.sum((est_trip-obs_trip)**2)/np.sum(
-                (obs_trip[1:]-np.sum(obs_trip)/(len(obs_trip)-1))**2),0)
-        
         print('Achieved Rsqr: ' + str(bs_con))
         print('Achieved PA diff: ' + str(round(pa_diff, 4)))
-        
+
         if bs_con > max_r_sqr[4]:
             if dist_function.lower() == 'tanner':
                 max_r_sqr[0], max_r_sqr[1] = par_val1, par_val2
@@ -686,19 +694,19 @@ def gravity_model(dist_log_path: str,
         # Log this iteration
         log_dict = {'loop_number': str(loop_number),
                     'fit_loop': str(ft_loop),
-                    'run_time':gm_time_taken,
-                    'par_val1': np.round(par_val1,6),
-                    'par_val2': np.round(par_val2,6),
-                    'abs_diff': np.round(abs_diff,3),
-                    'obj_fun': np.round(obj_func,3),
-                    'est_error': np.round(est_err,3),
-                    'gra_val1': np.round(gra_val1,3),
-                    'gra_val2': np.round(gra_val2,3),
-                    'con_val1': np.round(con_val1,6),
-                    'con_val2': np.round(con_val2,6),
+                    'run_time': gm_time_taken,
+                    'par_val1': np.round(par_val1, 6),
+                    'par_val2': np.round(par_val2, 6),
+                    'abs_diff': np.round(abs_diff, 3),
+                    'obj_fun': np.round(obj_func, 3),
+                    'est_error': np.round(est_err, 3),
+                    'gra_val1': np.round(gra_val1, 3),
+                    'gra_val2': np.round(gra_val2, 3),
+                    'con_val1': np.round(con_val1, 6),
+                    'con_val2': np.round(con_val2, 6),
                     'furness_loops': fn_loops,
-                    'pa_diff':np.round(pa_diff,6),
-                    'bs_con': np.round(bs_con,4)
+                    'pa_diff': np.round(pa_diff, 6),
+                    'bs_con': np.round(bs_con, 4)
                     }
 
         # Append this iteration to log file
@@ -715,30 +723,32 @@ def gravity_model(dist_log_path: str,
             break
         elif bs_con >= bs_con_target:
             break
-        elif par_val1 < min_val1 or par_val1 > max_val1 or par_val2 < min_val2 or par_val2 > max_val2 or np.sum(internal_pa) == 0:
+        elif par_val1 < min_val1 or par_val1 > max_val1 or par_val2 < min_val2 or par_val2 > max_val2 or np.sum(
+                internal_pa) == 0:
             break
-        elif ft_loop == fitting_loops-1:
+        elif ft_loop == fitting_loops - 1:
             break
         else:
-            par_temp, dis_loop = [0,0,0,0], ''
-            par_temp[0] = par_data[0]*(1+min(max(gra_val1/cur_val1,-0.5),0.5))
-            par_temp[1] = par_data[1]*(1+min(max(gra_val2/cur_val2,-0.5),0.5))
+            par_temp, dis_loop = [0, 0, 0, 0], ''
+            par_temp[0] = par_data[0] * (1 + min(max(gra_val1 / cur_val1, -0.5), 0.5))
+            par_temp[1] = par_data[1] * (1 + min(max(gra_val2 / cur_val2, -0.5), 0.5))
             # sigma
-            par_temp[2] = par_data[2]*(1+min(max(gra_val1/cur_val1,-0.5),0.5))
-            par_temp[3] = par_data[3]*(1+min(max(gra_val2/cur_val2,-0.5),0.5))
+            par_temp[2] = par_data[2] * (1 + min(max(gra_val1 / cur_val1, -0.5), 0.5))
+            par_temp[3] = par_data[3] * (1 + min(max(gra_val2 / cur_val2, -0.5), 0.5))
 
-            if optimise == True:
+            if optimise:
                 opt_loop += 1
                 if opt_loop == 25:
-                    par_temp[0] = pre_data[0]+(0-pre_val1)/(gra_val1-pre_val1)*(par_data[0]-pre_data[0])
-                    par_temp[1] = pre_data[1]+(0-pre_val2)/(gra_val2-pre_val2)*(par_data[1]-pre_data[1])
-                    par_temp[2] = pre_data[2]+(0-pre_val1)/(gra_val1-pre_val1)*(par_data[2]-pre_data[2])
-                    par_temp[3] = pre_data[3]+(0-pre_val2)/(gra_val2-pre_val2)*(par_data[3]-pre_data[3])
+                    par_temp[0] = pre_data[0] + (0 - pre_val1) / (gra_val1 - pre_val1) * (par_data[0] - pre_data[0])
+                    par_temp[1] = pre_data[1] + (0 - pre_val2) / (gra_val2 - pre_val2) * (par_data[1] - pre_data[1])
+                    par_temp[2] = pre_data[2] + (0 - pre_val1) / (gra_val1 - pre_val1) * (par_data[2] - pre_data[2])
+                    par_temp[3] = pre_data[3] + (0 - pre_val2) / (gra_val2 - pre_val2) * (par_data[3] - pre_data[3])
 
                     opt_loop, dis_loop = 0, ''
                 if opt_loop == 15:
                     pre_val1, pre_val2 = gra_val1, gra_val2
-                    pre_data = par_data*1
+                    pre_data = par_data * 1
+            print("par_temp",par_temp)
             par_data = par_temp
 
     return [internal_pa,
@@ -750,14 +760,14 @@ def gravity_model(dist_log_path: str,
             bs_con,
             max_r_sqr]
 
+
 def run_furness(furness_loops,
                 origin,
                 destination,
                 par_data,
                 cost,
                 k_factors,
-                min_pa_diff = 0.1):
-
+                min_pa_diff=0.1):
     """
     Parameters
     ----------
@@ -770,7 +780,8 @@ def run_furness(furness_loops,
     destination:
         Vector of destination trips, usually attractions for hb.
     
-    par_data = list of parameters in order alpha, beta, mu, sigma
+    par_data:
+        list of parameters in order alpha, beta, mu, sigma
 
     cost:
         Matrix of cost for distribution.
@@ -778,8 +789,8 @@ def run_furness(furness_loops,
     k_factors:
         Vector of k factors for optimisation.
     
-    target_r_gap = 0.1:
-        Acceptable level of furness convergence.
+    min_pa_diff:
+        Acceptable level of furness convergence. Default =0.1
 
     Returns
     ----------
@@ -790,51 +801,50 @@ def run_furness(furness_loops,
     r_gap:
         Achieved r gap at furness end.
     """
-    if sum(par_data) == 0:
-        print('No gravity function provided')
-        gravity = False
+    gravity = True
 
     # Unpack params
     alpha, beta, mu, sigma = par_data
 
+    if alpha == 0 and beta == 0 and mu == 0 and sigma == 0:
+        gravity = False
+
     # Tanner
     if gravity:
-        mat_est = np.where(cost>0,(cost**alpha)*np.exp(beta*cost)*
+        mat_est = np.where(cost > 0, (cost ** alpha) * np.exp(beta * cost) *
                            # Log normal
-                           np.where(sigma>0,(1/(cost*sigma*(2*np.pi)**0.5))*
-                                    np.exp(-(np.log(cost)-mu)**2/(2*sigma**2)),1),
-                                    # K factor
-                                    0)*k_factors
-
+                           np.where(sigma > 0, (1 / (cost * sigma * (2 * np.pi) ** 0.5)) *
+                                    np.exp(-(np.log(cost) - mu) ** 2 / (2 * sigma ** 2)), 1),
+                           # K factor
+                           0) * k_factors
     # Full furness
-    print('Furness running - loops:')
+
     for fur_loop in range(furness_loops):
 
         fur_loop += 1
-        if fur_loop % 10 == 0:
-            print(fur_loop)
 
-        mat_d = np.sum(mat_est,axis=0)
-        mat_d[destination==0]=1
-        mat_est = mat_est*destination/mat_d
-        mat_o = np.sum(mat_est,axis=1)
-        mat_o[mat_o==0]=1
-        mat_est = (mat_est.T*origin/mat_o).T
+        mat_d = np.sum(mat_est, axis=0)
+        mat_d[destination == 0] = 1
+        mat_est = mat_est * destination / mat_d
+        mat_o = np.sum(mat_est, axis=1)
+        mat_o[mat_o == 0] = 1
+        mat_est = (mat_est.T * origin / mat_o).T
 
         # Get pa diff
-        mat_o = np.sum(mat_est,axis=1)
-        mat_d = np.sum(mat_est,axis=0)
+        mat_o = np.sum(mat_est, axis=1)
+        mat_d = np.sum(mat_est, axis=0)
         pa_diff = nup.get_pa_diff(mat_o,
                                   origin,
                                   mat_d,
-                                  destination) #.max()
+                                  destination)  # .max()
 
         if pa_diff < min_pa_diff or np.isnan(np.sum(mat_est)):
             break
 
     return (mat_est,
-            fur_loop+1,
+            fur_loop + 1,
             pa_diff)
+
 
 def single_constraint(balance,
                       constraint,
@@ -865,7 +875,7 @@ def single_constraint(balance,
     dt = New balancing factor. Should be added to column.
     """
 
-    t = (cost**alpha)*np.exp(beta*cost)
+    t = (cost ** alpha) * np.exp(beta * cost)
     dt = balance * constraint * t
 
     # Log normal
@@ -873,7 +883,8 @@ def single_constraint(balance,
     # 1/(Cij*sigma*(2pi)**0.5)*exp(-nlog(Cij)-mu)**2/2*(2/sigma**2)
     # TODO: Look at graph
 
-    return(dt)
+    return (dt)
+
 
 def double_constraint(ba,
                       p,
@@ -899,11 +910,12 @@ def double_constraint(ba,
     ----------
     dt = Distributed trips for a given interzonal.
     """
-    t = (cost**alpha)*np.exp(beta*cost)
+    t = (cost ** alpha) * np.exp(beta * cost)
     dt = p * ba * a * bb * t
     return dt
 
-def dt_to_factors(pa, dt_type = 'new_ba'):
+
+def dt_to_factors(pa, dt_type='new_ba'):
     """
     This function calculates the new pa values of a given distribution.
     It rounds the distributed trips to a given value to allow convergence at
@@ -938,14 +950,15 @@ def dt_to_factors(pa, dt_type = 'new_ba'):
         zone_col = 'a_zone'
         new_col = 'bb'
 
-    new = pa.reindex([zone_col,'dt'],
+    new = pa.reindex([zone_col, 'dt'],
                      axis=1).groupby(zone_col).sum().reset_index()
     # Seed in >0 to avoid div0
     new['dt'] = new['dt'].replace(0, 0.0001)
-    new['dt'] = 1/new['dt']
-    new = new.rename(columns={'dt':new_col})
+    new['dt'] = 1 / new['dt']
+    new = new.rename(columns={'dt': new_col})
 
-    return(new, new_col, zone_col)
+    return (new, new_col, zone_col)
+
 
 def apply_new_dt(pa, new, new_col, zone_col):
     """
@@ -973,13 +986,13 @@ def apply_new_dt(pa, new, new_col, zone_col):
         PA matrix with new balancing factors added in.
     """
 
-    pa = pa.drop([new_col,'dt'],axis=1)
+    pa = pa.drop([new_col, 'dt'], axis=1)
     pa = pa.merge(new, how='inner', on=zone_col)
 
-    return(pa)
+    return (pa)
+
 
 def get_new_pa(pa_dt, rounding=_default_rounding):
-
     """
     This function calculates the new pa values of a given distribution.
     It rounds the distributed trips to a given value to allow convergence at
@@ -1003,16 +1016,17 @@ def get_new_pa(pa_dt, rounding=_default_rounding):
     """
     worked_p = pa_dt.reindex(['p_zone', 'dt'],
                              axis=1).groupby('p_zone').sum().reset_index()
-    worked_p = worked_p.rename(columns={'dt':'p'})
+    worked_p = worked_p.rename(columns={'dt': 'p'})
     worked_p['p'] = worked_p['p'].round(rounding)
-    worked_p = nup.optimise_data_types(worked_p, echo=False)
+    worked_p = nup.optimise_data_types(worked_p, verbose=False)
     worked_a = pa_dt.reindex(['a_zone', 'dt'],
                              axis=1).groupby('a_zone').sum().reset_index()
-    worked_a = worked_a.rename(columns={'dt':'a'})
+    worked_a = worked_a.rename(columns={'dt': 'a'})
     worked_a['a'] = worked_a['a'].round(rounding)
-    worked_a = nup.optimise_data_types(worked_a, echo=False)
+    worked_a = nup.optimise_data_types(worked_a, verbose=False)
 
-    return(worked_p, worked_a)
+    return (worked_p, worked_a)
+
 
 def check_new_pa(worked_p,
                  worked_a,
@@ -1062,17 +1076,18 @@ def check_new_pa(worked_p,
     worked_a['a'] = worked_a['a'].round(1)
 
     true_p = distribution_p == worked_p
-    true_p = true_p.reindex(['p'],axis=1)
+    true_p = true_p.reindex(['p'], axis=1)
     true_a = distribution_a == worked_a
-    true_a = true_a.reindex(['a'],axis=1)
+    true_a = true_a.reindex(['a'], axis=1)
 
-    return(true_p, true_a)
+    return (true_p, true_a)
+
 
 def define_search_criteria(init_param_a,
                            init_param_b,
                            dist_function):
     """
-    Sets search criteria for serach loop depending on initial value and 
+    Sets search criteria for search loop depending on initial value and
     fitting function.
 
     Parameters
@@ -1108,40 +1123,41 @@ def define_search_criteria(init_param_a,
 
     """
     # Assign blank lists in case nothing returns
-    alpha_search, beta_search, mu_search, sigma_search = [[0]]*4
+    alpha_search, beta_search, mu_search, sigma_search = [[0]] * 4
 
-    if dist_function == 'tanner':    
+    if dist_function == 'tanner':
         alpha_search_factors = [1, -1, .5, -.5, 2, -2]
         beta_search_factors = [1, -1]
         # Multiply search range by input param to get search params
-        alpha_search = [x*init_param_a for x in alpha_search_factors]
-        beta_search = [x*init_param_b for x in beta_search_factors]
+        alpha_search = [x * init_param_a for x in alpha_search_factors]
+        beta_search = [x * init_param_b for x in beta_search_factors]
         # Hard code min/max on what works
-        min_para = [-5,-5, 0, 0]
-        max_para = [ 5, 5, 0, 0]
+        min_para = [-5, -5, 0, 0]
+        max_para = [5, 5, 0, 0]
     elif dist_function == 'ln':
         mu_search_factors = [1, .5, .2, 2, 5]
         sigma_search_factors = [1, .5]
         # Multiply search range by input param to get search params
-        mu_search = [x*init_param_a for x in mu_search_factors]
-        sigma_search = [x*init_param_b for x in sigma_search_factors]
+        mu_search = [x * init_param_a for x in mu_search_factors]
+        sigma_search = [x * init_param_b for x in sigma_search_factors]
         # Hard code min/max on what works
         min_para = [0, 0, 0, 0]
         max_para = [0, 0, 9, 3]
 
-    return(alpha_search,
-           beta_search,
-           mu_search,
-           sigma_search,
-           min_para,
-           max_para)
+    return (alpha_search,
+            beta_search,
+            mu_search,
+            sigma_search,
+            min_para,
+            max_para)
+
 
 def param_check(min_para,
                 max_para,
-                alpha = 0,
-                beta = 0,
-                mu = 0,
-                sig = 0):
+                alpha=0,
+                beta=0,
+                mu=0,
+                sig=0):
     """
     Checks that distribution params are within given range
     """
@@ -1153,12 +1169,12 @@ def param_check(min_para,
              mu <= max_para[2] and
              sig >= min_para[3] and
              sig <= max_para[3])
+    print(check)
+    return check
 
-    return(check)
-         
+
 def check_con_val(con_vals,
                   target_r_gap):
-    
     """
     Check convergence values are within acceptable range
     
@@ -1167,15 +1183,15 @@ def check_con_val(con_vals,
     target_r_gap:
         Acceptable gap
     """
-    
+
     val_1 = False
     val_2 = False
 
-    if con_vals[0] > 0 and con_vals[0] < max(10,target_r_gap):
+    if con_vals[0] > 0 and con_vals[0] < max(10, target_r_gap):
         val_1 = True
-    if con_vals[1] > 0 and con_vals[1] < max(10,target_r_gap):
+    if con_vals[1] > 0 and con_vals[1] < max(10, target_r_gap):
         val_2 = True
-    
+
     if val_1 and val_2:
         return True
     else:

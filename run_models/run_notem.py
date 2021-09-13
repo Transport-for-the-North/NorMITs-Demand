@@ -13,7 +13,7 @@ Master run file to run NoTEM
 import sys
 
 sys.path.append("..")
-from normits_demand.models import notem
+from normits_demand.models import NoTEM
 from normits_demand.pathing import NoTEMImportPaths
 
 
@@ -46,7 +46,7 @@ def main():
         nhb_production_import_version=nhb_production_import_version,
     )
 
-    n = notem.NoTEM(
+    n = NoTEM(
         years=years,
         scenario=scenario,
         iteration_name=notem_iter,
