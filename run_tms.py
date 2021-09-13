@@ -106,6 +106,7 @@ class TmsParameterBuilder:
                 'iteration': 'iter7',
                 'model_zoning': 'Norms',
                 'land_use_version': 3,
+                'hb_output_segments': ['p', 'm'],
                 'hb_attraction_weights': 'hb_attraction_weights.csv',
                 'nhb_attraction_weights': 'nhb_attraction_weights.csv',
                 'attraction_mode_split': 'attraction_mode_split.csv',
@@ -127,9 +128,9 @@ class TmsParameterBuilder:
                 'external_export_modes': [6],
                 'non_dist_export_modes': None,
                 'run_distribution': True,
-                'distribution_segmentation': ['p', 'm', 'ca'],
-                'nhb_distribution_segments': ['p', 'm', 'ca', 'tp'],
-                'output_modes': 6,
+                'hb_distribution_segmentation': ['p', 'm', 'ca'],
+                'nhb_distribution_segmentation': ['p', 'm', 'ca', 'tp'],
+                'output_modes': [6],
                 'cjtw_modes': None,
                 'intrazonal_modes': [1, 2],
                 'infill_modes': 3,
@@ -178,15 +179,15 @@ if __name__ == '__main__':
 
     # TODO: Define init params
 
-    # Run HB external model
-    # ext = em.ExternalModel(
-    #     config_path,
-    #     params)
-    #
-    # hb_ext_out = ext.run(
-    #     trip_origin='hb',
-    #     cost_type='24hr',
-    # )
+    #Run HB external model
+    ext = em.ExternalModel(
+        config_path,
+        params)
+
+    hb_ext_out = ext.run(
+        trip_origin='hb',
+        cost_type='24hr',
+    )
     # nhb_ext_out = ext.run(
     #     trip_origin='nhb',
     #     cost_type='24hr',
@@ -202,7 +203,7 @@ if __name__ == '__main__':
     #     iteration=params['iteration'],
     #     tlb_area='north',
     #     segmentation='tfn',
-    #     distribution_segments=params['distribution_segmentation'],
+    #     distribution_segments=params['hb_distribution_segmentation'],
     #     dist_function='tanner',
     #     trip_origin='hb',
     #     cost_type='24hr',
@@ -212,22 +213,22 @@ if __name__ == '__main__':
     #     export_modes=params['synthetic_modes'],
     #     mp_threads=-2)
 
-    int_nhb = dist.run_distribution_model(
-        file_drive=params['base_directory'],
-        model_name=params['model_name'],
-        iteration=params['iteration'],
-        tlb_area='north',
-        segmentation='tfn',
-        distribution_segments=params['nhb_distribution_segmentation'],
-        dist_function='tanner',
-        trip_origin='nhb',
-        cost_type='tp',
-        furness_loops=1999,
-        fitting_loops=100,
-        iz_cost_infill=.5,
-        export_modes=params['synthetic_modes'],
-        verbose=True,
-        mp_threads=-2)
+    # int_nhb = dist.run_distribution_model(
+    #     file_drive=params['base_directory'],
+    #     model_name=params['model_name'],
+    #     iteration=params['iteration'],
+    #     tlb_area='north',
+    #     segmentation='tfn',
+    #     distribution_segments=params['nhb_distribution_segmentation'],
+    #     dist_function='tanner',
+    #     trip_origin='nhb',
+    #     cost_type='tp',
+    #     furness_loops=1999,
+    #     fitting_loops=100,
+    #     iz_cost_infill=.5,
+    #     export_modes=params['synthetic_modes'],
+    #     verbose=True,
+    #     mp_threads=-2)
 
 
     # Compile tp pa
@@ -237,7 +238,7 @@ if __name__ == '__main__':
                       distribution_segments=params['hb_output_segments'],
                       internal_input='synthetic',
                       external_input='synthetic',
-                      write_modes=[3],
+                      write_modes=params['output_modes'],
                       arrivals=False,
                       write=True)
 
@@ -248,7 +249,7 @@ if __name__ == '__main__':
                       distribution_segments=params['hb_output_segments'],
                       internal_input='synthetic',
                       external_input='synthetic',
-                      write_modes=[3],
+                      write_modes=params['output_modes'],
                       arrivals=False,
                       export_24hr=True,
                       write=True)

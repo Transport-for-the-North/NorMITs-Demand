@@ -859,12 +859,27 @@ class DistributionModel(tms.TMSPathing):
             Internal attraction data.
 
         cost_type:
+            The cost type used for trip length curve. Usually '24hr' for Noham and 'tp' for Norms.
+
         furness_loops:
+            Number of inner loop iterations to do before abandoning.
+
         fitting_loops:
+            Number of outer loop iterations to complete before abandoning.
+
         i_paths:
+            Dictionary containing paths to import, model lookups, production and attraction files.
+
         o_paths:
+            Dictionary containing various export paths are required.
+
         iz_cost_infill:
+            Intra zonal cost infill.
+
         verbose:
+            Indicates whether to print a log of the process to the terminal.
+            Useful to set verbose=False when using multi-threaded loops.
+            Defaults to True.
         """
         # get all segments and define parameters for distribution
         calib_params = {}

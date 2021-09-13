@@ -77,7 +77,7 @@ def path_config(file_drive,
     """
 
     # Set base dir
-    home_path = os.path.join(file_drive, 'NorMITs Synthesiser')
+    home_path = os.path.join(file_drive)
 
     # Set synth import folder
     import_path = os.path.join(home_path, 'import')
@@ -105,6 +105,7 @@ def path_config(file_drive,
                      'hb_productions_' +
                      model_name.lower() +
                      '.csv')
+    print('p_import_path', p_import_path)
 
     # Raise user warning if no productions by this name
     if not os.path.exists(p_import_path):
@@ -288,14 +289,14 @@ def build_tp_pa(file_drive = _default_file_drive,
             calib_params.update({ds:init_params[ds][tp_pa]})
             print(calib_params)
 
-            # Subset productions
-        for index,cp in calib_params.items():
-            if cp != 'none':
-                p_subset = p_subset[p_subset[index]==cp]
+        #     # Subset productions
+        # for index,cp in calib_params.items():
+        #     if cp != 'none':
+        #         p_subset = p_subset[p_subset[index]==cp]
 
         # Work out time split
         # This won't work if there are duplicates
-        time_splits = get_production_time_split(productions)
+        time_splits = get_production_time_split(productions, model_zone)
 
         ts_ph = time_splits.copy()
         for cp, name in calib_params.items():
@@ -458,7 +459,6 @@ def build_tp_pa(file_drive = _default_file_drive,
 
                 matrix_totals.append(compile_params)
                 # End
-
     time_split_path = i_paths['production_import'].replace(
             'productions', 'time_splits')
     time_split_ref = pd.concat(ts_vec)
