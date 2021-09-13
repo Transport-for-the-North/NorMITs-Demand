@@ -141,9 +141,14 @@ as part of their file name in distribution reports
 - Added a new NoTEM wrapper around the new production and attraction models 
 - Added new pathing module, which can be used to access NoTEM output paths
 
-###v0.4.1 (NoTEM Enhancements)
+
+### v0.4.1 (NoTEM Enhancements)
 - SegmentationLevel and ZoningSystem have been fully documented
 - SegmentationLevel and ZoningSystem have had read only properties added
 - Segmentation names have changed. NoTEM specific segmentations now have 
   'notem_' prefixed onto their name
 - Logging module has been added to codebase. Partially integrated into NoTEM 
+
+
+### v0.4.2
+- A number of minor fixes have been added to get TMS up and running again
