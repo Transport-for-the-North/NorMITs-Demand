@@ -16,6 +16,7 @@ from __future__ import annotations
 # Builtins
 import os
 import math
+import enum
 import pickle
 import pathlib
 import itertools
@@ -87,6 +88,13 @@ class DVector:
 
     _dvec_suffix = '_dvec%s' % consts.COMPRESSION_SUFFIX
 
+    # Define valid time formats
+    @enum.unique
+    class TimeFormat(enum.Enum):
+        AVG_WEEK = 'avg_week'
+        AVG_DAY = 'avg_day'
+        AVG_HOUR = 'avg_hour'
+
     # Default chunk sizes for multiprocessing
     # Chosen through best guesses and tests
     _chunk_size = 100000
@@ -100,6 +108,7 @@ class DVector:
                  zoning_system: core.ZoningSystem,
                  segmentation: core.SegmentationLevel,
                  import_data: Union[pd.DataFrame, nd.DVectorData],
+                 time_format: Union[str, TimeFormat] = None,
                  zone_col: str = None,
                  val_col: str = None,
                  df_naming_conversion: str = None,
@@ -175,9 +184,25 @@ class DVector:
             raise ValueError(
                 "Given segmentation is not a nd.core.SegmentationLevel object."
             )
+
+        # Time period format only matters if it's in the segmentation
+        if segmentation.has_time_period_segments():
+            if time_format is None:
+                raise ValueError(
+                    "The given segmentation level has time periods in its "
+                    "segmentation, but the format of this time period has "
+                    "not been defined.\n"
+                    "\tTime periods segment name: %s\n"
+                    "\tValid time_format values: %s"
+                    % (segmentation._time_period_segment_name, self._valid_time_formats)
+                )
+        else:
+            time_format = None
+
         # Init
         self._zoning_system = zoning_system
         self._segmentation = segmentation
+        self._time_format = self._validate_time_format(time_format)
         self.verbose = verbose
         self._df_chunk_size = self._chunk_size if df_chunk_size is None else df_chunk_size
 
@@ -244,6 +269,65 @@ class DVector:
             self._process_count = os.cpu_count() + a
         else:
             self._process_count = a
+
+    @property
+    def time_format(self):
+        return self._time_format.name
+
+    @classmethod
+    def _valid_time_formats(cls) -> List[str]:
+        """
+        Returns a list of valid strings to pass for time_format
+        """
+        return [x.value for x in cls.TimeFormat]
+
+    def _validate_time_format(self, time_format: str) -> TimeFormat:
+        """Validate the time format is a valid value
+
+        Parameters
+        ----------
+        time_format:
+            The name of the time format name to validate
+
+        Returns
+        -------
+        time_format:
+            Returns a tidied up version of the passed in time_format.
+
+        Raises
+        ------
+        ValueError:
+            If the given time_format is not on of self._valid_time_formats
+        """
+        # If None or TimeFormat, that's fine
+        if time_format is None or isinstance(time_format, self.TimeFormat):
+            return time_format
+
+        # Check we've got a valid value
+        time_format = time_format.strip().lower()
+        if time_format not in self._valid_time_formats():
+            raise ValueError(
+                "The given time_format is not valid.\n"
+                "\tGot: %s\n"
+                "\tExpected one of: %s"
+                % (time_format, self._valid_time_formats())
+            )
+
+        # Convert into a TimeFormat constant
+        return_val = None
+        for name, value in self.TimeFormat.__members__.items():
+            if name == time_format:
+                return_val = value
+                break
+
+        if return_val is None:
+            raise ValueError(
+                "We checked that the given time_format was valid, but it "
+                "wasn't set when we tried to set it. This shouldn't be "
+                "possible!"
+            )
+
+        return return_val
 
     # BUILT IN METHODS
     def __mul__(self: DVector, other: DVector) -> DVector:

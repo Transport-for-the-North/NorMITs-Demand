@@ -70,6 +70,9 @@ class SegmentationLevel:
         the relevant segments. An additional column will be added titled
         'name' with the segment names in.
     """
+    # Special segment names
+    _time_period_segment_name = 'tp'
+
     _weekday_time_periods = [1, 2, 3, 4]
     _weekend_time_periods = [5, 6]
 
@@ -528,13 +531,24 @@ class SegmentationLevel:
         rename_dict = {v: k for k, v in naming_conversion.items()}
         return df.rename(columns=rename_dict, inplace=inplace)
 
-    def copy(self):
+    def copy(self) -> SegmentationLevel:
         """Returns a copy of this class"""
         return SegmentationLevel(
             name=self.name,
             naming_order=self.naming_order.copy(),
             valid_segments=self._valid_segments.copy()
         )
+
+    def has_time_period_segments(self) -> bool:
+        """Checks whether this segmentation has time period segmentation
+
+        Returns
+        -------
+        has_time_period_segments:
+            True if there is a time_period segment in this segmentation,
+            False otherwise
+        """
+        return self._time_period_segment_name in self.naming_order
 
     def create_segment_col(self,
                            df: pd.DataFrame,

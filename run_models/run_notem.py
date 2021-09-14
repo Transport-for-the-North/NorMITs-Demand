@@ -20,7 +20,7 @@ from normits_demand.pathing import NoTEMImportPaths
 # GLOBAL VARIABLES
 years = [2018]
 scenario = "NTEM"
-notem_iter = '4'
+notem_iter = '_test'
 lu_drive = "I:/"
 by_iteration = "iter3d"
 fy_iteration = "iter3d"
@@ -64,5 +64,41 @@ def main():
     )
 
 
+def time_test():
+    hb_production_import_version = '2.0'
+    hb_attraction_import_version = '1.5'
+    nhb_production_import_version = '1.5'
+
+    import_builder = NoTEMImportPaths(
+        import_home=notem_import_home,
+        scenario=scenario,
+        years=years,
+        land_use_import_home=lu_drive,
+        by_land_use_iter=by_iteration,
+        fy_land_use_iter=fy_iteration,
+        hb_production_import_version=hb_production_import_version,
+        hb_attraction_import_version=hb_attraction_import_version,
+        nhb_production_import_version=nhb_production_import_version,
+    )
+
+    n = NoTEM(
+        years=years,
+        scenario=scenario,
+        iteration_name=notem_iter,
+        import_builder=import_builder,
+        export_home=notem_export_home,
+    )
+    n.run(
+        generate_all=False,
+        generate_hb=False,
+        generate_nhb=False,
+        generate_hb_production=False,
+        generate_hb_attraction=True,
+        generate_nhb_production=False,
+        generate_nhb_attraction=False,
+    )
+
+
 if __name__ == '__main__':
-    main()
+    # main()
+    time_test()
