@@ -70,6 +70,9 @@ class SegmentationLevel:
         the relevant segments. An additional column will be added titled
         'name' with the segment names in.
     """
+    # Constants
+    __version__ = nd.__version__
+
     # Special segment names
     _time_period_segment_name = 'tp'
 

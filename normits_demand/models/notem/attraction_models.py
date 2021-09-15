@@ -74,6 +74,9 @@ class HBAttractionModel(HBAttractionModelPaths):
         See HBAttractionModelPaths for documentation on:
             "path_years, export_home, report_home, export_paths, report_paths"
         """
+    # Constants
+    __version__ = nd.__version__
+
     # Define wanted columns
     _target_col_dtypes = {
         'employment': {
@@ -554,6 +557,9 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         See NHBAttractionModelPaths for documentation on:
             "path_years, export_home, report_home, export_paths, report_paths"
         """
+    # Constants
+    __version__ = nd.__version__
+
     def __init__(self,
                  hb_attraction_paths: Dict[int, nd.PathLike],
                  nhb_production_paths: Dict[int, nd.PathLike],

@@ -17,10 +17,12 @@ from __future__ import annotations
 import os
 import math
 import enum
+import copy
 import pickle
 import pathlib
+import warnings
+import operator
 import itertools
-import copy
 
 from typing import Any
 from typing import Dict
@@ -47,6 +49,131 @@ from normits_demand.concurrency import multiprocessing
 
 
 # ## CLASSES ## #
+# Define valid time formats
+@enum.unique
+class TimeFormat(enum.Enum):
+    AVG_WEEK = 'avg_week'
+    AVG_DAY = 'avg_day'
+    AVG_HOUR = 'avg_hour'
+
+    @classmethod
+    def get_time_periods(cls) -> List[int]:
+        return [1, 2, 3, 4, 5, 6]
+
+    @classmethod
+    def conversion_order(cls) -> List[TimeFormat]:
+        return [cls.AVG_WEEK, cls.AVG_DAY, cls.AVG_HOUR]
+
+    @classmethod
+    def _week_to_hour_factors(cls) -> Dict[int, float]:
+        """Compound week to day and day to hour factors"""
+        return du.combine_dict_list(
+            dict_list=[cls._week_to_day_factors(), cls._day_to_hour_factors()],
+            operation=operator.mul,
+        )
+
+    @classmethod
+    def _hour_to_week_factors(cls) -> Dict[int, float]:
+        """Compound hour to day and day to week factors"""
+        return du.combine_dict_list(
+            dict_list=[cls._hour_to_day_factors(), cls._day_to_week_factors()],
+            operation=operator.mul,
+        )
+
+    @classmethod
+    def _hour_to_day_factors(cls) -> Dict[int, float]:
+        """Inverse of day to hour factors"""
+        return {k: 1 / v for k, v in cls._day_to_hour_factors().items()}
+
+    @classmethod
+    def _day_to_week_factors(cls) -> Dict[int, float]:
+        """Inverse of week to day factors"""
+        return {k: 1 / v for k, v in cls._week_to_day_factors().items()}
+
+    @classmethod
+    def _week_to_day_factors(cls) -> Dict[int, float]:
+        return {
+            1: 0.2,
+            2: 0.2,
+            3: 0.2,
+            4: 0.2,
+            5: 1,
+            6: 1,
+        }
+
+    @classmethod
+    def _day_to_hour_factors(cls) -> Dict[int, float]:
+        return {
+            1: 1/3,
+            2: 1/6,
+            3: 1/3,
+            4: 1/12,
+            5: 1/24,
+            6: 1/24,
+        }
+
+    def get_conversion_factors(self,
+                               to_time_format: TimeFormat,
+                               ) -> Dict[int, float]:
+        """Get the conversion factors for each time period
+
+        Get a dictionary of the values to multiply each time period by
+        in order to convert between time formats
+
+        Parameters
+        ----------
+        to_time_format:
+            The time format you want to convert this time format to.
+            Cannot be the same TimeFormat as this.
+
+        Returns
+        -------
+        conversion_factors:
+            A dictionary of conversion factors for each time period.
+            Keys will the the time period, and values are the conversion
+            factors.
+
+        Raises
+        ------
+        ValueError:
+            If any of the given values are invalid, or to_time_format
+            is the same TimeFormat as self.
+        """
+        # Validate inputs
+        if not isinstance(to_time_format, TimeFormat):
+            raise ValueError(
+                "Expected to_time_format to be a TimeFormat object. Got: %s"
+                % (type(to_time_format))
+            )
+
+        if to_time_format == self:
+            raise ValueError(
+                "Cannot get the conversion factors when converting to self."
+            )
+
+        # Figure out which function to call
+        if self == TimeFormat.AVG_WEEK and to_time_format == TimeFormat.AVG_DAY:
+            factors_fn = self._week_to_day_factors
+        elif self == TimeFormat.AVG_WEEK and to_time_format == TimeFormat.AVG_HOUR:
+            factors_fn = self._week_to_hour_factors
+        elif self == TimeFormat.AVG_DAY and to_time_format == TimeFormat.AVG_WEEK:
+            factors_fn = self._day_to_week_factors
+        elif self == TimeFormat.AVG_DAY and to_time_format == TimeFormat.AVG_HOUR:
+            factors_fn = self._day_to_hour_factors
+        elif self == TimeFormat.AVG_HOUR and to_time_format == TimeFormat.AVG_WEEK:
+            factors_fn = self._hour_to_week_factors
+        elif self == TimeFormat.AVG_HOUR and to_time_format == TimeFormat.AVG_DAY:
+            factors_fn = self._hour_to_day_factors
+        else:
+            raise nd.NormitsDemandError(
+                "Cannot figure out the conversion factors to get from "
+                "time_format %s to %s"
+                % (self.value, to_time_format.value)
+            )
+
+        return factors_fn()
+
+
 class DVector:
     """One dimensional, segmentation and zoning flexible, heterogeneous data.
 
@@ -80,6 +207,8 @@ class DVector:
         If set to True, the DVector will print out progress updates while
         running. Currently, setting this to True will not change anything.
     """
+    # Constants
+    __version__ = nd.__version__
 
     _zone_col = 'zone'
     _segment_col = 'segment'
@@ -87,13 +216,6 @@ class DVector:
     _zero_infill = 1e-10
 
     _dvec_suffix = '_dvec%s' % consts.COMPRESSION_SUFFIX
-
-    # Define valid time formats
-    @enum.unique
-    class TimeFormat(enum.Enum):
-        AVG_WEEK = 'avg_week'
-        AVG_DAY = 'avg_day'
-        AVG_HOUR = 'avg_hour'
 
     # Default chunk sizes for multiprocessing
     # Chosen through best guesses and tests
@@ -134,6 +256,13 @@ class DVector:
             The data to become the DVector data. Can take either a
             dictionary in the DVector.data format (usually used internally),
             or a pandas DataFrame.
+
+        time_format:
+            The time_format that the import_data represents. Must be one of:
+            'avg_week', 'avg_day', 'avg_hour'
+            if a tp segment is being used, then this needs to be defined!
+            If there is no tp segment, this is an optional argument, but
+            it is highly recommended.
 
         zone_col:
             Only used when import_data is a pandas.DataFrame. This is the name
@@ -184,20 +313,6 @@ class DVector:
             raise ValueError(
                 "Given segmentation is not a nd.core.SegmentationLevel object."
             )
-
-        # Time period format only matters if it's in the segmentation
-        if segmentation.has_time_period_segments():
-            if time_format is None:
-                raise ValueError(
-                    "The given segmentation level has time periods in its "
-                    "segmentation, but the format of this time period has "
-                    "not been defined.\n"
-                    "\tTime periods segment name: %s\n"
-                    "\tValid time_format values: %s"
-                    % (segmentation._time_period_segment_name, self._valid_time_formats)
-                )
-        else:
-            time_format = None
 
         # Init
         self._zoning_system = zoning_system
@@ -272,6 +387,8 @@ class DVector:
 
     @property
     def time_format(self):
+        if self._time_format is None:
+            return None
         return self._time_format.name
 
     @classmethod
@@ -280,54 +397,6 @@ class DVector:
         Returns a list of valid strings to pass for time_format
         """
         return [x.value for x in cls.TimeFormat]
-
-    def _validate_time_format(self, time_format: str) -> TimeFormat:
-        """Validate the time format is a valid value
-
-        Parameters
-        ----------
-        time_format:
-            The name of the time format name to validate
-
-        Returns
-        -------
-        time_format:
-            Returns a tidied up version of the passed in time_format.
-
-        Raises
-        ------
-        ValueError:
-            If the given time_format is not on of self._valid_time_formats
-        """
-        # If None or TimeFormat, that's fine
-        if time_format is None or isinstance(time_format, self.TimeFormat):
-            return time_format
-
-        # Check we've got a valid value
-        time_format = time_format.strip().lower()
-        if time_format not in self._valid_time_formats():
-            raise ValueError(
-                "The given time_format is not valid.\n"
-                "\tGot: %s\n"
-                "\tExpected one of: %s"
-                % (time_format, self._valid_time_formats())
-            )
-
-        # Convert into a TimeFormat constant
-        return_val = None
-        for name, value in self.TimeFormat.__members__.items():
-            if name == time_format:
-                return_val = value
-                break
-
-        if return_val is None:
-            raise ValueError(
-                "We checked that the given time_format was valid, but it "
-                "wasn't set when we tried to set it. This shouldn't be "
-                "possible!"
-            )
-
-        return return_val
 
     # BUILT IN METHODS
     def __mul__(self: DVector, other: DVector) -> DVector:
@@ -387,12 +456,132 @@ class DVector:
         return DVector(
             zoning_system=return_zoning_system,
             segmentation=return_segmentation,
+            time_format=self._choose_time_format(other),
             import_data=dvec_data,
             process_count=self.process_count,
             verbose=self.verbose,
         )
 
+    def copy(self) -> DVector:
+        """Returns a copy of this class"""
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=self.segmentation,
+            time_format=self._time_format,
+            import_data=self._data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
+
     # CUSTOM METHODS
+    def _validate_time_format(self,
+                              time_format: Union[str, TimeFormat],
+                              ) -> TimeFormat:
+        """Validate the time format is a valid value
+
+        Parameters
+        ----------
+        time_format:
+            The name of the time format name to validate
+
+        Returns
+        -------
+        time_format:
+            Returns a tidied up version of the passed in time_format.
+
+        Raises
+        ------
+        ValueError:
+            If the given time_format is not on of self._valid_time_formats
+        """
+        # Time period format only matters if it's in the segmentation
+        if self.segmentation.has_time_period_segments():
+            if time_format is None:
+                raise ValueError(
+                    "The given segmentation level has time periods in its "
+                    "segmentation, but the format of this time period has "
+                    "not been defined.\n"
+                    "\tTime periods segment name: %s\n"
+                    "\tValid time_format values: %s"
+                    % (self.segmentation._time_period_segment_name,
+                       self._valid_time_formats(),
+                       )
+                )
+
+        # If None or TimeFormat, that's fine
+        if time_format is None or isinstance(time_format, TimeFormat):
+            return time_format
+
+        # Check we've got a valid value
+        time_format = time_format.strip().lower()
+        if time_format not in self._valid_time_formats():
+            raise ValueError(
+                "The given time_format is not valid.\n"
+                "\tGot: %s\n"
+                "\tExpected one of: %s"
+                % (time_format, self._valid_time_formats())
+            )
+
+        # Convert into a TimeFormat constant
+        return_val = None
+        for name, time_format_obj in TimeFormat.__members__.items():
+            if name.lower() == time_format:
+                return_val = time_format_obj
+                break
+
+        if return_val is None:
+            raise ValueError(
+                "We checked that the given time_format was valid, but it "
+                "wasn't set when we tried to set it. This shouldn't be "
+                "possible!"
+            )
+
+        return return_val
+
+    def _choose_time_format(self, other: DVector) -> TimeFormat:
+        """Returns the time_format to use from self and other
+
+        Internal function for use when combining multiple DVectors.
+        Will choose self.time_format if it is not None, otherwise
+        other.time_format will be returned.
+        If neither is set, then None is returned
+
+        Parameters
+        ----------
+        other:
+            The other DVector to choose a time_format from.
+
+        Returns
+        -------
+        time_format:
+            The time format to retain from self and other
+
+        Raises
+        ------
+        Warning:
+            If both self and other have a time_format set and they are not
+            the same
+        """
+        # If both are set, but not the same
+        if self._time_format is not None and other._time_format is not None:
+            if self._time_format != other._time_format:
+                warnings.warn(
+                    "The time_format of both DVectors is set, but they are not "
+                    "set to the same format. This might not give the "
+                    "results you expect!\n"
+                    "\tself time_format: %s\n"
+                    "\tother time_format: %s"
+                    % (self.time_format, other.time_format)
+                )
+
+        if self._time_format is not None:
+            return self._time_format
+
+        if other._time_format is not None:
+            return other._time_format
+
+        return None
+
     def _dict_to_dvec(self,
                       import_data: nd.DVectorData,
                       infill: Any
@@ -885,6 +1074,7 @@ class DVector:
         return DVector(
             zoning_system=self.zoning_system,
             segmentation=out_segmentation,
+            time_format=self.time_format,
             import_data=dvec_data,
             process_count=self.process_count,
             verbose=self.verbose,
@@ -981,6 +1171,7 @@ class DVector:
         return DVector(
             zoning_system=self.zoning_system,
             segmentation=out_segmentation,
+            time_format=self._choose_time_format(other),
             import_data=dvec_data,
             process_count=self.process_count,
             verbose=self.verbose,
@@ -1138,6 +1329,7 @@ class DVector:
         return DVector(
             zoning_system=new_zoning,
             segmentation=self.segmentation,
+            time_format=self.time_format,
             import_data=dvec_data,
             process_count=self.process_count,
             verbose=self.verbose,
@@ -1280,6 +1472,7 @@ class DVector:
         return DVector(
             zoning_system=self.zoning_system,
             segmentation=out_segmentation,
+            time_format=self.time_format,
             import_data=dvec_data,
             process_count=self.process_count,
             verbose=self.verbose,
@@ -1347,6 +1540,7 @@ class DVector:
         return DVector(
             zoning_system=self.zoning_system,
             segmentation=other.segmentation,
+            time_format=self._choose_time_format(other),
             import_data=dvec_data,
             process_count=self.process_count,
             verbose=self.verbose,
@@ -1461,6 +1655,7 @@ class DVector:
         return DVector(
             zoning_system=self.zoning_system,
             segmentation=other.segmentation,
+            time_format=self.time_format,
             import_data=dvec_data,
             process_count=self.process_count,
             verbose=self.verbose,
@@ -1512,10 +1707,59 @@ class DVector:
         return DVector(
             zoning_system=None,
             segmentation=self.segmentation,
+            time_format=self.time_format,
             import_data=dict(zip(keys, values)),
             process_count=self.process_count,
             verbose=self.verbose,
         )
+
+    def convert_time_format(self,
+                            new_time_format: Union[str, TimeFormat],
+                            ) -> DVector:
+        # Validate the given value
+        new_time_format = self._validate_time_format(new_time_format)
+
+        # ## CHECK THIS IS A VALID CONVERSION ## #
+        if self._time_format is None:
+            raise ValueError(
+                "Cannot convert the time format of a DVector that does not "
+                "have a time format to begin with."
+            )
+
+        if new_time_format is None:
+            raise ValueError(
+                "Cannot convert the time format of a DVector to None. If "
+                "a DVector has a time_format, it cannot be converted away."
+            )
+
+        if not self.segmentation.has_time_period_segments():
+            segment_name = self.segmentation._time_period_segment_name
+            raise ValueError(
+                "Cannot convert the time_format of a DVector without a %s"
+                "segment, as the conversion is different per segment. Please "
+                "add a %s segment in and then convert."
+                % (segment_name, segment_name)
+            )
+
+        # ## CONVERT THE TIME FORMAT ## #
+        # If current time_format is the same as new, do nothing
+        if self._time_format == new_time_format:
+            return self.copy()
+
+        dvec_data = self._data
+        conversion_factors = self._time_format.get_conversion_factors(new_time_format)
+        print(conversion_factors)
+        exit()
+
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=self.segmentation,
+            time_format=new_time_format,
+            import_data=dvec_data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
+
 
     def write_sector_reports(self,
                              segment_totals_path: nd.PathLike,

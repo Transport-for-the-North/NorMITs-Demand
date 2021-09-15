@@ -1517,6 +1517,7 @@ def define_internal_external_areas(model_lookup_path):
 
     return internal_area, external_area
 
+
 def import_pa(production_import_path,
               attraction_import_path):
     """
