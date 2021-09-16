@@ -1,0 +1,12 @@
+in,out,common,translate
+notem_hb_productions_pure,notem_hb_productions_pure_report,p;tfn_tt,tfn_at:tfn_agg_at;
+notem_hb_productions_full_tfnat,notem_hb_productions_full,p;tfn_tt;m;tp,
+notem_hb_attractions_trip_weights,notem_hb_attractions_pure,p;soc,
+notem_hb_output,notem_hb_output_no_tp,p;m;g;soc;ns;ca,
+notem_hb_tfnat_p_m_g_soc_ns_ca_nhbp_nhbm,notem_nhb_productions_pure,tfn_at;nhb_p;nhb_m;g;soc;ns;ca,
+notem_nhb_productions_pure,notem_nhb_productions_pure_report,nhb_p;nhb_m;g;soc;ns;ca,tfn_at:tfn_agg_at;
+notem_nhb_productions_full_tfnat,notem_nhb_productions_full,nhb_p;nhb_m;g;soc;ns;ca;tp,
+notem_nhb_productions_full,notem_nhb_output,p;m;g;soc;ns;ca;tp,nhb_p:p;nhb_m:m;
+,,,
+notem_hb_output,hb_p_m_6tp,p;m;tp,
+notem_nhb_output,nhb_p_m_6tp,p;m;tp,

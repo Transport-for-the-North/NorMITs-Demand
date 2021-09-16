@@ -304,14 +304,18 @@ class DVector:
         """
         # Validate arguments
         if zoning_system is not None:
-            if not isinstance(zoning_system, nd.core.ZoningSystem):
+            if not isinstance(zoning_system, nd.core.zoning.ZoningSystem):
                 raise ValueError(
                     "Given zoning_system is not a nd.core.ZoningSystem object."
+                    "Got a %s object instead."
+                    % type(zoning_system)
                 )
 
-        if not isinstance(segmentation, nd.core.SegmentationLevel):
+        if not isinstance(segmentation, nd.core.segments.SegmentationLevel):
             raise ValueError(
                 "Given segmentation is not a nd.core.SegmentationLevel object."
+                "Got a %s object instead."
+                % type(segmentation)
             )
 
         # Init
@@ -396,7 +400,7 @@ class DVector:
         """
         Returns a list of valid strings to pass for time_format
         """
-        return [x.value for x in cls.TimeFormat]
+        return [x.value for x in TimeFormat]
 
     # BUILT IN METHODS
     def __mul__(self: DVector, other: DVector) -> DVector:
@@ -1746,10 +1750,18 @@ class DVector:
         if self._time_format == new_time_format:
             return self.copy()
 
+        # Get the data we need to convert
         dvec_data = self._data
         conversion_factors = self._time_format.get_conversion_factors(new_time_format)
-        print(conversion_factors)
-        exit()
+        tp_groups = self.segmentation.get_time_period_groups()
+
+        # Check we have conversion factors for each needed time period
+
+        # Convert each time period of segments
+        dvec_data = dict.fromkeys(self._data.keys())
+        for tp, segments in tp_groups.items():
+            for seg in segments:
+                dvec_data[seg] = self._data[seg] * conversion_factors[tp]
 
         return DVector(
             zoning_system=self.zoning_system,

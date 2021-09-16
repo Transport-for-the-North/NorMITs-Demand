@@ -1137,8 +1137,11 @@ class SegmentationLevel:
         ValueError:
             If this segmentation does not have a time period segment
         """
+        # Init
+        tp_segment = self._time_period_segment_name
+
         # Validate arguments
-        if 'tp' not in self.naming_order:
+        if tp_segment not in self.naming_order:
             raise ValueError(
                 "SegmentationLevel does not have a time period segment (tp). "
                 "Cannot get segments by weekday without a time period"
@@ -1147,11 +1150,11 @@ class SegmentationLevel:
 
         # Init
         no_tp_naming = self.naming_order.copy()
-        no_tp_naming.remove('tp')
+        no_tp_naming.remove(tp_segment)
 
         # Filter down to just the weekday time periods
         segments = self.segments_and_names.copy()
-        segments = segments[segments['tp'].isin(self._weekday_time_periods)]
+        segments = segments[segments[tp_segment].isin(self._weekday_time_periods)]
 
         # Generate no tp segment name
         segments['no_tp_name'] = pd_utils.str_join_cols(segments, no_tp_naming)
@@ -1180,21 +1183,23 @@ class SegmentationLevel:
         ValueError:
             If this segmentation does not have a time period segment
         """
+        # Init
+        tp_segment = self._time_period_segment_name
+
         # Validate arguments
-        if 'tp' not in self.naming_order:
+        if tp_segment not in self.naming_order:
             raise ValueError(
                 "SegmentationLevel does not have a time period segment (tp). "
                 "Cannot get segments by weekday without a time period"
                 "segment."
             )
 
-        # Init
         no_tp_naming = self.naming_order.copy()
-        no_tp_naming.remove('tp')
+        no_tp_naming.remove(tp_segment)
 
         # Filter down to just the weekday time periods
         segments = self.segments_and_names.copy()
-        segments = segments[segments['tp'].isin(self._weekend_time_periods)]
+        segments = segments[segments[tp_segment].isin(self._weekend_time_periods)]
 
         # Generate no tp segment name
         segments['no_tp_name'] = pd_utils.str_join_cols(segments, no_tp_naming)
@@ -1206,6 +1211,44 @@ class SegmentationLevel:
 
         # Grab just the values for returning
         return list(temp_dict.values())
+
+    def get_time_period_groups(self):
+        """
+        Get a dictionary of {time_period: segments} in this segmentation.
+
+        Returns
+        -------
+        time_period_dict:
+            A dictionary of {time_period: segments}, where segments is a list
+            of all the segments in that time_period.
+
+        Raises
+        ------
+        ValueError:
+            If this segmentation does not have a time period segment
+        """
+        # Init
+        tp_segment_name = self._time_period_segment_name
+
+        # Validate arguments
+        if tp_segment_name not in self.naming_order:
+            raise ValueError(
+                "SegmentationLevel does not have a time period segment (tp). "
+                "Cannot get segments by weekday without a time period"
+                "segment."
+            )
+
+        # Find out which time_periods are in this segmentation
+        unique_tp = self.segments_and_names[tp_segment_name].unique()
+
+        # Generate the dictionary
+        tp_dict = dict.fromkeys(unique_tp)
+        segments = self.segments_and_names.copy()
+        for tp in unique_tp:
+            tp_segments = segments[segments[tp_segment_name].isin([tp])]
+            tp_dict[tp] = tp_segments['name'].to_list()
+
+        return tp_dict
 
 
 class SegmentationError(nd.NormitsDemandError):
