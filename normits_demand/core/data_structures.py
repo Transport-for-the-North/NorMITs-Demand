@@ -1055,7 +1055,7 @@ class DVector:
             out_segmentation.
         """
         # Validate inputs
-        if not isinstance(out_segmentation, core.SegmentationLevel):
+        if not isinstance(out_segmentation, nd.core.segments.SegmentationLevel):
             raise ValueError(
                 "out_segmentation is not the correct type. "
                 "Expected SegmentationLevel, got %s"
@@ -1070,7 +1070,7 @@ class DVector:
 
         # Aggregate!
         # TODO(BT): Add optional multiprocessing if aggregation_dict is big enough
-        dvec_data = dict()
+        dvec_data = dict.fromkeys(aggregation_dict.keys())
         for out_seg_name, in_seg_names in aggregation_dict.items():
             in_lst = [self._data[x].flatten() for x in in_seg_names]
             dvec_data[out_seg_name] = np.sum(in_lst, axis=0)
@@ -1410,6 +1410,56 @@ class DVector:
             )
 
         return expanded_dvec
+
+    def subset(self,
+               out_segmentation: nd.core.SegmentationLevel,
+               ) -> DVector:
+        """Subsets the segmentation of self to out_segmentation
+
+        Subset definition is defined in the subset.csv, path to this file
+        can be found in SegmentationLevel._subset_definitions_path
+
+        Parameters
+        ----------
+        out_segmentation:
+            A SegmentationLevel object defining the segmentation level to
+            subset this DVectors segmentation down to.
+
+        Returns
+        -------
+        subset_dvec:
+            A new DVector instance that has been subset to out_segmentation.
+
+        Raises
+        ------
+        ValueError:
+            If the given values are not the correct types, or there are
+            different area types being used between self and expansion_dvec.
+        """
+        # Validate inputs
+        if not isinstance(out_segmentation, nd.core.segments.SegmentationLevel):
+            raise ValueError(
+                "target_segmentation is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(out_segmentation)
+            )
+
+        # Get the subset definition
+        subset_list = self.segmentation.subset(out_segmentation)
+
+        # Keep just the subset
+        dvec_data = dict.fromkeys(subset_list)
+        for segment in subset_list:
+            dvec_data[segment] = self._data[segment]
+
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=out_segmentation,
+            time_format=self.time_format,
+            import_data=dvec_data,
+            process_count=self.process_count,
+            verbose=self.verbose,
+        )
 
     def split_tfntt_segmentation(self,
                                  out_segmentation: core.SegmentationLevel
@@ -1751,11 +1801,21 @@ class DVector:
             return self.copy()
 
         # Get the data we need to convert
-        dvec_data = self._data
         conversion_factors = self._time_format.get_conversion_factors(new_time_format)
         tp_groups = self.segmentation.get_time_period_groups()
 
         # Check we have conversion factors for each needed time period
+        segmentation_tps = set(tp_groups.keys())
+        conversion_tps = set(conversion_factors.keys())
+        missing_tps = segmentation_tps - conversion_tps
+        if len(missing_tps) > 0:
+            raise nd.SegmentationError(
+                "This DVector is using a segmentation with time_periods in "
+                "that we don't know how to convert. We only have conversion "
+                "factors for the following time periods: %s.\n"
+                "Missing conversion factors for the following time periods: %s"
+                % (conversion_tps, missing_tps)
+            )
 
         # Convert each time period of segments
         dvec_data = dict.fromkeys(self._data.keys())
@@ -1771,7 +1831,6 @@ class DVector:
             process_count=self.process_count,
             verbose=self.verbose,
         )
-
 
     def write_sector_reports(self,
                              segment_totals_path: nd.PathLike,
