@@ -304,7 +304,7 @@ class HBProductionModel(HBProductionModelPaths):
                 out_segmentation=return_seg,
                 split_tfntt_segmentation=True
             )
-
+            productions.ag
             if export_notem_segmentation:
                 du.print_w_toggle(
                     "Exporting notem segmented demand to disk...",

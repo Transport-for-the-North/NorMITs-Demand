@@ -33,8 +33,9 @@ class ExternalModel(tms.TMSPathing):
         """
         """
         # Define internal name
+        model_zone = self.params['model_zoning'].lower()
         ia_name = (
-                self.params['model_zoning'].lower() + '_zone_id')
+                model_zone + '_zone_id')
 
         # Pick different imports if it's HB or NHB
         if trip_origin == 'hb':
@@ -43,7 +44,9 @@ class ExternalModel(tms.TMSPathing):
             in_list = ['nhb_p', 'nhb_a']
         # Import PA
         pa = nup.import_pa(self.tms_in[in_list[0]],  # p import path
-                           self.tms_in[in_list[1]])  # a import path
+                           self.tms_in[in_list[1]],
+                           model_zone,
+                           trip_origin)  # a import path
         productions = pa[0]
         attractions = pa[1]
         del pa
@@ -150,25 +153,26 @@ class ExternalModel(tms.TMSPathing):
                                          ia_name,
                                          calib_params,
                                          round_val=3,
-                                         value_var='trips',
-                                         echo=False)
+                                         value_var='val',
+                                         verbose=True)
 
             # Get the productions from the tuple
             sub_p = sub_p[0]
-            sub_p = sub_p.rename(columns={'trips': 'productions'})
+            sub_p = sub_p.rename(columns={'val': 'productions'})
 
             # Work out which attractions to use from purpose
             sub_a = nup.filter_pa_vector(attractions,
                                          ia_name,
                                          calib_params,
                                          round_val=3,
-                                         value_var='attractions',
-                                         echo=False)
+                                         value_var='val',
+                                         verbose=True)
             # Get the Attractions from the tuple
             sub_a = sub_a[0]
+            sub_a = sub_a.rename(columns={'val': 'attractions'})
 
             a_t = nup.get_attraction_type(calib_params)
-            print(a_t)
+            print('a_t', a_t)
 
             # Balance a to p
             print(sub_p['productions'].sum())
@@ -176,7 +180,7 @@ class ExternalModel(tms.TMSPathing):
                                        sub_p,
                                        sub_a,
                                        round_val=3,
-                                       verbose=False)
+                                       verbose=True)
 
             # Import costs based on distribution parameters & car availability
             print('Importing costs')

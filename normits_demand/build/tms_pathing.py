@@ -78,10 +78,10 @@ class TMSPathing(pathing.Pathing):
 
         # Compile into import and export
         self.tms_in = {
-            'hb_p': hb_p_import_path,
-            'hb_a': hb_a_import_path,
-            'nhb_p': nhb_p_import_path,
-            'nhb_a': nhb_a_import_path}
+            'hb_p': r"I:\NorMITs Demand\NoTEM\iter4\NTEM\hb_productions\hb_msoa_notem_segmented_2018_dvec.pkl",
+            'hb_a': r"I:\NorMITs Demand\NoTEM\iter4\NTEM\hb_attractions\hb_msoa_notem_segmented_2018_dvec.pkl",
+            'nhb_p': r"I:\NorMITs Demand\NoTEM\iter4\NTEM\nhb_productions\nhb_msoa_notem_segmented_2018_dvec.pkl",
+            'nhb_a': r"I:\NorMITs Demand\NoTEM\iter4\NTEM\nhb_attractions\nhb_msoa_notem_segmented_2018_dvec.pkl"}
 
         self.tms_out = {
             'p': production_path,

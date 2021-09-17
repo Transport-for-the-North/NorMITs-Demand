@@ -1273,7 +1273,9 @@ class DistributionModel(tms.TMSPathing):
 
         # Import productions and attractions
         pa = nup.import_pa(i_paths['production_import'],  # p import path
-                           i_paths['attraction_import'])  # a import path
+                           i_paths['attraction_import'],
+                           model_name,
+                           trip_origin)  # a import path
         productions = pa[0]
         attractions = pa[1]
         del pa
