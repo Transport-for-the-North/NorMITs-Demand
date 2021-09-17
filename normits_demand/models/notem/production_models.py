@@ -974,6 +974,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         time_splits_dvec = nd.DVector(
             zoning_system=None,
             segmentation=nhb_time_splits_seg,
+            time_format='avg_week',
             import_data=time_splits,
             val_col="split",
         )

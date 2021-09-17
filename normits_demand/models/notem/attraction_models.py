@@ -814,6 +814,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         return nd.DVector(
             zoning_system=hb_attr_notem.zoning_system,
             segmentation=segmentation,
+            time_format='avg_week',
             import_data=hb_attr_notem_df,
             zone_col=hb_attr_notem.zoning_system.col_name,
             val_col="val",
