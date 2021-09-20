@@ -886,6 +886,14 @@ class DistributionModel(tms.TMSPathing):
         for ds in distribution_segments:
             calib_params.update({ds: target_trip_lengths[ds][dist_index]})
 
+        # if calib_params['m'] != 3:
+        #     return
+        #
+        # if calib_params['p'] != 1:
+        #     return
+        #
+        # print("Running for p%s, m%s..." % (calib_params['p'], calib_params['m']))
+
         # Get initial alpha & beta from distribution parameters
         distribution_params = self.get_distribution_parameters(
             synthetic_dists, calib_params)
@@ -1271,14 +1279,8 @@ class DistributionModel(tms.TMSPathing):
         print('productions from:' + i_paths['production_import'])
         print('attractions from:' + i_paths['attraction_import'])
 
-        # Import productions and attractions
-        pa = nup.import_pa(i_paths['production_import'],  # p import path
-                           i_paths['attraction_import'],
-                           model_name,
-                           trip_origin)  # a import path
-        productions = pa[0]
-        attractions = pa[1]
-        del pa
+        productions = pd.read_csv(i_paths['production_import'])
+        attractions = pd.read_csv(i_paths['attraction_import'])
 
         ia_areas = nup.define_internal_external_areas(i_paths['lookups'])
         internal_area = ia_areas[0]

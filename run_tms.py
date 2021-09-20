@@ -81,9 +81,10 @@ class TmsParameterBuilder:
                 'export_msoa_productions': False,
                 'attraction_segment_type': 'ntem',
                 'cjtw_path': None,
-                'hb_distribution_segments': ['p', 'm'],
+                'hb_distribution_segmentation': ['p', 'm'],
                 'nhb_distribution_segments': ['p', 'm', 'tp'],
                 'distribution_segmentation': ['p', 'm'],
+                'distribution_function': 'ln',
                 'external_tlb_area': 'gb',
                 'external_tlb_name': 'external_ph_segments',
                 'external_segmentation': ['p', 'm'],
@@ -179,19 +180,19 @@ if __name__ == '__main__':
 
     # TODO: Define init params
 
-    #Run HB external model
-    ext = em.ExternalModel(
-        config_path,
-        params)
-
+    # #Run HB external model
+    # ext = em.ExternalModel(
+    #     config_path,
+    #     params)
+    #
     # hb_ext_out = ext.run(
     #     trip_origin='hb',
     #     cost_type='24hr',
     # )
-    nhb_ext_out = ext.run(
-        trip_origin='nhb',
-        cost_type='24hr',
-    )
+    # nhb_ext_out = ext.run(
+    #     trip_origin='nhb',
+    #     cost_type='24hr',
+    # )
 
     dist = dm.DistributionModel(
         config_path,
@@ -204,14 +205,18 @@ if __name__ == '__main__':
         tlb_area='north',
         segmentation='tfn',
         distribution_segments=params['hb_distribution_segmentation'],
-        dist_function='tanner',
+        dist_function=params['distribution_function'],
         trip_origin='hb',
         cost_type='24hr',
         furness_loops=1999,
         fitting_loops=100,
         iz_cost_infill=.5,
         export_modes=params['synthetic_modes'],
-        mp_threads=-2)
+        mp_threads=0,
+    )
+
+    print("DONE!")
+    exit()
 
     int_nhb = dist.run_distribution_model(
         file_drive=params['base_directory'],
@@ -220,7 +225,7 @@ if __name__ == '__main__':
         tlb_area='north',
         segmentation='tfn',
         distribution_segments=params['nhb_distribution_segmentation'],
-        dist_function='tanner',
+        dist_function=params['distribution_function'],
         trip_origin='nhb',
         cost_type='tp',
         furness_loops=1999,

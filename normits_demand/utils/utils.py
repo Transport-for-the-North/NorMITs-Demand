@@ -2575,8 +2575,6 @@ def unpack_tlb(tlb,
     obs_dist:
 
     """
-    print("tlb:", tlb)
-
     # Convert miles from raw NTS to km
     min_dist = tlb['lower'].astype('float').to_numpy() * _M_KM
     max_dist = tlb['upper'].astype('float').to_numpy() * _M_KM

@@ -224,12 +224,12 @@ def run_gravity_model(ia_name,
         init_param_a,
         init_param_b,
         dist_function)
-    print(a_search)
-    print(b_search)
-    print(m_search)
-    print(s_search)
-    print(min_para)
-    print(max_para)
+    print("a_search: %s" % a_search)
+    print("b_search: %s" % b_search)
+    print("m_search: %s" % m_search)
+    print("s_search: %s" % s_search)
+    print("min_para: %s" % min_para)
+    print("max_para: %s" % max_para)
 
     # Initialise, so something will run if all else fails
     max_r_sqr = [a_search[0], b_search[0], m_search[0], s_search[0], 0]
@@ -274,20 +274,23 @@ def run_gravity_model(ia_name,
                         print('achieved params: %s' % grav_run[6])
                         print()
                         print('prev best bs_con: %s' % max_r_sqr[4])
-                        print("Printing output of grav model")
-                        print(grav_run)
+
                         if max_r_sqr[4] < grav_run[6][4]:
                             print('This is better')
                             max_r_sqr = grav_run[6]
                             # This will pass an out para even if it's not doing a great job
                             # TODO: if it's not doing a good job, search more and better!
-                            out_para, bs_con = grav_run[1], grav_run[5]
+                            out_para, bs_con = grav_run[1], grav_run[6][4]
                         if (check_con_val(grav_run[3], target_r_gap) or
                                 # Over 90
                                 (grav_run[5] >= bs_con_target - .05)):
                             # Assign success values and leave loop - well done!
-                            out_para, bs_con = grav_run[1], grav_run[5]
+                            out_para, bs_con = grav_run[1], grav_run[6][4]
                             break
+
+                    else:
+                        print("Parameters outside of min max range")
+
                     if len(out_para) != 0:
                         break
                 if len(out_para) != 0:
@@ -297,7 +300,7 @@ def run_gravity_model(ia_name,
 
     # We did real bad. Just use the last run and output something
     if len(out_para) == 0:
-        out_para, bs_con = grav_run[1], grav_run[5]
+        out_para, bs_con = grav_run[1], grav_run[6][4]
     internal_pa = grav_run[0]
 
 
@@ -341,8 +344,7 @@ def run_gravity_model(ia_name,
 
         est_trip, est_dist, cij_freq = [0] * num_band, [0] * num_band, [0] * num_band
         for row in range(num_band):
-            """
-            """
+            # TODO(BT): Can this be replaced with a histogram function?
             est_trip[row] = np.sum(np.where((cost >= min_dist[row]) & (cost < max_dist[row]), internal_pa, 0))
             est_dist[row] = np.sum(
                 np.where((cost >= min_dist[row]) & (cost < max_dist[row]), cost * internal_pa, 0))
@@ -353,21 +355,22 @@ def run_gravity_model(ia_name,
             cij_freq[row] = np.sum(np.where((cost >= min_dist[row]) & (cost < max_dist[row]), len(cost), 0))
             cij_freq[row] = cij_freq[row] / np.sum(len(cost)) * 100
 
-        obs_mean, obs_logm, obs_stdv = 0, 0, 0
         # mean trip length
         est_mean = np.sum(internal_pa * cost) / np.sum(internal_pa)
         est_logm = np.sum(internal_pa * np.log(np.where(cost > 0, cost, 1))) / np.sum(internal_pa)
         est_stdv = (np.sum(internal_pa * (cost - est_mean) ** 2) / np.sum(internal_pa)) ** 0.5
+
+        # TODO(BT): Do the same as above, compare to the above results - REPORTING
+        obs_mean, obs_logm, obs_stdv = 0, 0, 0
 
         # Auto-apply k-Factor
         kfc_dist, kfc_trip = [0] * num_band, [0] * num_band
         kfc_mean, kfc_logm, kfc_stdv, kfc_para, k_bs_con = est_mean, est_logm, est_stdv, out_para.copy(), bs_con
         if apply_k_factoring:
             out_loop = out_loop + 1
-            k_factors = k_factors = cost ** 0
-            # k_factors = k_factors**0
+            k_factors = cost ** 0
             for row in range(num_band):
-                kfc_dist[row] = np.where(est_trip[row] > 0, min(max(obs_trip[row] / est_trip[row], .001), 10), 1)
+                kfc_dist[row] = np.where(est_trip[row] > 0, min(max(obs_trip[row] / est_trip[row], .2), 5), 1)
                 k_factors = np.where((cost >= min_dist[row]) & (cost < max_dist[row]), kfc_dist[row], k_factors)
             print("Running third gravity model")
             grav_run = gravity_model(
@@ -398,6 +401,7 @@ def run_gravity_model(ia_name,
                            kfc_para[2], kfc_para[3]):
                 internal_pa = grav_run[0]
 
+                # TODO(BT): Can this be replaced with a histogram function?
                 for row in range(num_band):
                     kfc_trip[row] = np.sum(
                         np.where((cost >= min_dist[row]) & (cost < max_dist[row]), internal_pa, 0))
@@ -582,6 +586,9 @@ def gravity_model(dist_log_path: str,
     # Build min max vectors
     tlb = calib_params['tlb']
     # Convert miles from raw NTS to km
+    print("tlb:", tlb)
+    # TODO(BT): Calculate Band share, total trip length, total average
+    #  trip length in code
     min_dist, max_dist, obs_trip, obs_dist_o = nup.unpack_tlb(tlb)
 
     max_r_sqr, pre_data = [0, 0, 0, 0, 0], [0, 0, 0, 0]
@@ -629,6 +636,7 @@ def gravity_model(dist_log_path: str,
         # Get rid of any NaNs that might have snuck in
         internal_pa = np.nan_to_num(internal_pa)
 
+        # TODO(BT): Can this be replaced with a histogram function?
         for i in range(num_band):
             # Get trips by band
             est_trip[i] = np.sum(np.where((cost >= min_dist[i]) & (cost < max_dist[i]), internal_pa, 0))
@@ -649,6 +657,7 @@ def gravity_model(dist_log_path: str,
         est_err = np.sum(est_trip * np.where(
             est_trip > 0, np.log(est_trip), 0) ** 2) ** 0.5
 
+        # Figure out how to adjust the par_Data (alpha, beta etc...) for next iteration
         if dist_function.lower() == 'tanner':  # x1, x2 - Tanner
             cst_val1 = [np.where(obs_dist > 0, np.log(obs_dist), 0), np.where(est_dist > 0, np.log(est_dist), 0)]
             cst_val2 = [obs_dist * 1, est_dist * 1]
@@ -682,14 +691,13 @@ def gravity_model(dist_log_path: str,
         print('Achieved Rsqr: ' + str(bs_con))
         print('Achieved PA diff: ' + str(round(pa_diff, 4)))
 
+        # Check if this coinvergence is better than previous best
         if bs_con > max_r_sqr[4]:
             if dist_function.lower() == 'tanner':
                 max_r_sqr[0], max_r_sqr[1] = par_val1, par_val2
             else:
                 max_r_sqr[2], max_r_sqr[3] = par_val1, par_val2
             max_r_sqr[4] = bs_con
-
-        print(bs_con)
 
         # Log this iteration
         log_dict = {'loop_number': str(loop_number),
@@ -729,7 +737,7 @@ def gravity_model(dist_log_path: str,
         elif ft_loop == fitting_loops - 1:
             break
         else:
-            par_temp, dis_loop = [0, 0, 0, 0], ''
+            par_temp = [0, 0, 0, 0]
             par_temp[0] = par_data[0] * (1 + min(max(gra_val1 / cur_val1, -0.5), 0.5))
             par_temp[1] = par_data[1] * (1 + min(max(gra_val2 / cur_val2, -0.5), 0.5))
             # sigma
@@ -744,21 +752,22 @@ def gravity_model(dist_log_path: str,
                     par_temp[2] = pre_data[2] + (0 - pre_val1) / (gra_val1 - pre_val1) * (par_data[2] - pre_data[2])
                     par_temp[3] = pre_data[3] + (0 - pre_val2) / (gra_val2 - pre_val2) * (par_data[3] - pre_data[3])
 
-                    opt_loop, dis_loop = 0, ''
+                    opt_loop = 0
                 if opt_loop == 15:
                     pre_val1, pre_val2 = gra_val1, gra_val2
                     pre_data = par_data * 1
             print("par_temp",par_temp)
             par_data = par_temp
 
-    return [internal_pa,
-            par_data,
-            [abs(gra_val1),
-             abs(gra_val2)],
-            [con_val1, con_val2],
-            fn_loops,
-            bs_con,
-            max_r_sqr]
+    return [
+        internal_pa,
+        par_data,
+        [abs(gra_val1), abs(gra_val2)],
+        [con_val1, con_val2],
+        fn_loops,
+        bs_con,
+        max_r_sqr,
+    ]
 
 
 def run_furness(furness_loops,
@@ -767,7 +776,7 @@ def run_furness(furness_loops,
                 par_data,
                 cost,
                 k_factors,
-                min_pa_diff=0.1):
+                min_pa_diff=0.01):
     """
     Parameters
     ----------
@@ -811,21 +820,24 @@ def run_furness(furness_loops,
 
     # Tanner
     if gravity:
-        mat_est = np.where(cost > 0, (cost ** alpha) * np.exp(beta * cost) *
+        mat_est = np.where(cost > 0,
+                           # Tanner
+                           (cost ** alpha) * np.exp(beta * cost) *
                            # Log normal
                            np.where(sigma > 0, (1 / (cost * sigma * (2 * np.pi) ** 0.5)) *
                                     np.exp(-(np.log(cost) - mu) ** 2 / (2 * sigma ** 2)), 1),
                            # K factor
                            0) * k_factors
-    # Full furness
 
+    # Full furness
     for fur_loop in range(furness_loops):
 
         fur_loop += 1
 
         mat_d = np.sum(mat_est, axis=0)
-        mat_d[destination == 0] = 1
+        mat_d[mat_d == 0] = 1
         mat_est = mat_est * destination / mat_d
+
         mat_o = np.sum(mat_est, axis=1)
         mat_o[mat_o == 0] = 1
         mat_est = (mat_est.T * origin / mat_o).T
