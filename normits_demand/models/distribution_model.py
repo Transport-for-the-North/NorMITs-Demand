@@ -821,7 +821,8 @@ class DistributionModel(tms.TMSPathing):
                            i_paths,
                            o_paths,
                            iz_cost_infill,
-                           verbose=True) -> None:
+                           verbose=True,
+                           ) -> None:
         """
         Distributes the synthetic distributions, producing 24hr PA Matrices
 
