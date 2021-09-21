@@ -180,19 +180,20 @@ if __name__ == '__main__':
 
     # TODO: Define init params
 
-    # #Run HB external model
-    # ext = em.ExternalModel(
-    #     config_path,
-    #     params)
-    #
-    # hb_ext_out = ext.run(
-    #     trip_origin='hb',
-    #     cost_type='24hr',
-    # )
-    # nhb_ext_out = ext.run(
-    #     trip_origin='nhb',
-    #     cost_type='24hr',
-    # )
+    #Run HB external model
+    ext = em.ExternalModel(
+        config_path,
+        params)
+
+    hb_ext_out = ext.run(
+        trip_origin='hb',
+        cost_type='24hr',
+    )
+    nhb_ext_out = ext.run(
+        trip_origin='nhb',
+        cost_type='24hr',
+    )
+
 
     dist = dm.DistributionModel(
         config_path,

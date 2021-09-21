@@ -1588,7 +1588,7 @@ def import_pa(production_import_path,
     prod_df = prod_dvec.to_df()
     print(prod_df)
     # Weekly trips to weekday trips conversion
-    prod_wd = weekly_to_weekday(prod_df, trip_origin)
+    prod_wd = weekly_to_weekday(prod_df, trip_origin, model_zone)
     print(prod_wd)
 
     # Reading pickled Dvector
@@ -1601,13 +1601,13 @@ def import_pa(production_import_path,
     attr_df = attr_dvec.to_df()
     print(attr_df)
     # Weekly trips to weekday trips conversion
-    attr_wd = weekly_to_weekday(attr_df, trip_origin)
+    attr_wd = weekly_to_weekday(attr_df, trip_origin, model_zone)
     print(attr_wd)
 
     return prod_wd, attr_wd
 
 
-def weekly_to_weekday(df, trip_origin) -> pd.DataFrame:
+def weekly_to_weekday(df, trip_origin, model_zone) -> pd.DataFrame:
     """
     Convert weekly trips to weekday trips.
 
@@ -1627,9 +1627,10 @@ def weekly_to_weekday(df, trip_origin) -> pd.DataFrame:
     df:
     Dataframe (either productions or attractions) containing notem segmented weekday trips.
     """
-    df[["p", "m", "ca", "tp"]] = df[["p", "m", "ca", "tp"]].apply(pd.to_numeric)
-    #df['tp'] = df['tp'].astype(int)
-    print(df.dtypes)
+    if model_zone == 'norms':
+        df[["p", "m", "ca", "tp"]] = df[["p", "m", "ca", "tp"]].apply(pd.to_numeric)
+    else:
+        df[["p", "m", "tp"]] = df[["p", "m", "tp"]].apply(pd.to_numeric)
     df = df.drop(df[df.tp >= 5].index)
     df['val'] = df['val'] / 5
     df_index_cols = list(df)
