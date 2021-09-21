@@ -1387,6 +1387,7 @@ def single_balance(achieved_pa,
 
 def build_distribution_bins(internal_distance,
                             distribution,
+                            cost_col='cost',
                             verbose=True):
     """
     This takes a distribution and rounds the trip lengths to the nearest
@@ -1414,12 +1415,12 @@ def build_distribution_bins(internal_distance,
                                       how='left',
                                       on=['p_zone', 'a_zone'])
     # Output trips by target trip length distribution
-    dist_cols = ['dt', 'distance']
+    dist_cols = ['dt', cost_col]
     dist_bins = distribution.reindex(dist_cols, axis=1)
-    dist_bins['distance'] = dist_bins['distance'].round(0)
-    dist_bins = dist_bins.groupby('distance').sum().reset_index()
+    dist_bins[cost_col] = dist_bins[cost_col].round(0)
+    dist_bins = dist_bins.groupby(cost_col).sum().reset_index()
     print_w_toggle('outputting distribution bin', verbose=verbose)
-    return (dist_bins)
+    return dist_bins
 
 
 def balance_a_to_p(ia_name,

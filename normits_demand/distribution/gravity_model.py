@@ -6,7 +6,6 @@ Created on Wed Mar  4 11:02:39 2020
 """
 import os
 import time
-import itertools
 
 import numpy as np
 import pandas as pd
@@ -28,6 +27,7 @@ def run_gravity_model(ia_name,
                       productions,
                       attractions,
                       model_lookup_path,
+                      tlb,
                       dist_log_path,
                       dist_log_fname,
                       dist_function='tanner',
@@ -422,56 +422,23 @@ def run_gravity_model(ia_name,
     internal_pa = pd.DataFrame(internal_pa,
                                index=distribution_p[ia_name],
                                columns=distribution_a[ia_name]).reset_index()
-    long_pa = pd.melt(internal_pa,
-                      id_vars=[ia_name],
-                      var_name='a_zone',
-                      value_name='dt',
-                      col_level=0)
-    long_pa = long_pa.rename(columns={ia_name: 'p_zone'})
 
-    # TODO: Check output p & a
-    # Round distributed trips for output
-    # internal_pa = tidy_pa(internal_pa,
-    #                      params=output_row,
-    #                      rounding=3)
-
-    # Reapply segment information
-    # Iterate over calib dict - paste values back on.
-    col_ph = ['p_zone', 'a_zone']
-    for key, value in calib_params.items():
-        if key != 'tlb':
-            col_ph.append(key)
-            long_pa[key] = value
-            nup.print_w_toggle(key, value, verbose=verbose)
-            nup.print_w_toggle('Re-appending segment values for ' + key,
-                               verbose=verbose)
-
-        elif key == 'tlb':
-            if verbose:
-                print('...')
-
-    col_ph.append('dt')
-
-    # Construct bins
-    d_bin = nup.build_distribution_bins(internal_costs, long_pa)
-
-    # Final order
-    long_pa = long_pa.reindex(
-        col_ph,
-        axis=1
-    ).sort_values(
-        ['p_zone', 'a_zone']
-    ).reset_index(
-        drop=True
+    # ## GENERATE A TLD REPORT ## #
+    # Get distance into the right format
+    distance = internal_costs.pivot(index='p_zone', columns='a_zone', values='cost')
+    distance = pd.DataFrame(
+        data=distance.values[:internal_pa.shape[0], :internal_pa.shape[1]],
+        index=internal_pa.index,
+        columns=internal_pa.columns,
     )
 
-    # Sort weirdness
-    long_pa.p_zone = long_pa.p_zone.astype(int)
-    long_pa.a_zone = long_pa.a_zone.astype(int)
+    _, d_bin, _ = ra.get_trip_length_by_band(
+        band_atl=tlb,
+        distance=distance,
+        internal_pa=internal_pa,
+    )
 
-    return (internal_pa,
-            d_bin
-            )
+    return internal_pa, d_bin
 
 
 def gravity_model(dist_log_path: str,

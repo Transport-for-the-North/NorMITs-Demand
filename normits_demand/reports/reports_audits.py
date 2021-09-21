@@ -1171,7 +1171,7 @@ def get_trip_length_by_band(band_atl,
         band_trips = internal_pa * distance_bool
 
         # Get output parameters
-        total_trips = band_trips.sum()
+        total_trips = np.sum(band_trips.values)
         band_share = total_trips/global_trips
 
         # Get average trip length

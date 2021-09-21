@@ -360,8 +360,7 @@ class DistributionModel(tms.TMSPathing):
         # Build a trip length curve
         # TODO: Failing for some reason
         d_bin = nup.build_distribution_bins(internal_costs,
-                                            long_pa,
-                                            verbose=verbose)
+                                            long_pa)
 
         return commute_pa, d_bin
 
@@ -887,14 +886,6 @@ class DistributionModel(tms.TMSPathing):
         for ds in distribution_segments:
             calib_params.update({ds: target_trip_lengths[ds][dist_index]})
 
-        # if calib_params['m'] != 3:
-        #     return
-        #
-        # if calib_params['p'] != 1:
-        #     return
-        #
-        # print("Running for p%s, m%s..." % (calib_params['p'], calib_params['m']))
-
         # Get initial alpha & beta from distribution parameters
         distribution_params = self.get_distribution_parameters(
             synthetic_dists, calib_params)
@@ -946,6 +937,7 @@ class DistributionModel(tms.TMSPathing):
             productions,
             attractions,
             model_lookup_path=i_paths['lookups'],
+            tlb=tlb,
             dist_log_path=o_paths['reports'],
             dist_log_fname=trip_origin + '_internal_distribution',
             dist_function=dist_function,
@@ -960,36 +952,16 @@ class DistributionModel(tms.TMSPathing):
             verbose=verbose
         )
 
-        # Print calib outputs - append calib outputs
-
-        # Export 24hr distribution
-        # Generate distribution name
+        # Export distribution
         dist_path = os.path.join(o_paths['summaries'],
                                  trip_origin + '_synthetic')
-
         dist_path = nup.build_path(dist_path, calib_params)
+        hb_distribution[0].to_csv(dist_path, index=False)
 
-        # Generate trip length bin name
+        # Export trip length bins
         bin_path = os.path.join(o_paths['tld'],
                                 trip_origin + '_synthetic_bin')
-
         bin_path = nup.build_path(bin_path, calib_params)
-
-        # Generate trip length band name
-        tlb_path = os.path.join(o_paths['reports'],
-                                trip_origin + '_trip_length_bands')
-
-        tlb_path = nup.build_path(tlb_path, calib_params)
-
-        # Generate band distribution name
-        tbd_path = os.path.join(o_paths['reports'],
-                                trip_origin + '_band_distribution')
-
-        tbd_path = nup.build_path(tbd_path, calib_params)
-
-        # Export distribution
-        hb_distribution[0].to_csv(dist_path, index=False)
-        # Export trip length bins
         hb_distribution[1].to_csv(bin_path, index=False)
 
         del hb_distribution
