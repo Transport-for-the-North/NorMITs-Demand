@@ -133,7 +133,8 @@ def trip_end_pa_to_od(pa_productions,
 
     return od_productions, totals
 
-def simplify_time_period_splits(time_period_splits: pd.DataFrame):
+
+def simplify_phi_factors(time_period_splits: pd.DataFrame):
     """
     Simplifies time_period_splits to a case where the purpose_from_home
     is always the same as the purpose_to_home
@@ -508,7 +509,7 @@ def _build_od_internal(pa_import,
         phi_type,
         aggregate_to_wday=aggregate_to_wday,
         lookup_folder=phi_lookup_folder)
-    phi_factors = simplify_time_period_splits(phi_factors)
+    phi_factors = simplify_phi_factors(phi_factors)
     phi_factors = phi_factors[phi_factors['purpose_from_home'] == purpose]
 
     # Get the relevant filenames from the dir

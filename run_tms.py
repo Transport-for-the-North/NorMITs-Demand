@@ -88,8 +88,8 @@ class TmsParameterBuilder:
                 'external_tlb_area': 'gb',
                 'external_tlb_name': 'external_ph_segments',
                 'external_segmentation': ['p', 'm'],
-                'external_export_modes': [3],
-                'output_modes': 3,
+                'external_export_modes': [3, 5],
+                'output_modes': [3, 5],
                 'non_dist_export_modes': None,
                 'intrazonal_modes': [1, 2],
                 'infill_modes': 6,
@@ -183,23 +183,27 @@ if __name__ == '__main__':
     #Run HB external model
     ext = em.ExternalModel(
         config_path,
-        params)
+        params,
+    )
 
     hb_ext_out = ext.run(
         trip_origin='hb',
         cost_type='24hr',
     )
+
+    print("'hb external done")
+    exit()
+
     nhb_ext_out = ext.run(
         trip_origin='nhb',
         cost_type='24hr',
     )
 
-
     dist = dm.DistributionModel(
         config_path,
         params)
 
-    int_hb = dist.run_distribution_model(
+    dist.run_distribution_model(
         file_drive=params['base_directory'],
         model_name=params['model_name'],
         iteration=params['iteration'],
@@ -216,10 +220,7 @@ if __name__ == '__main__':
         mp_threads=0,
     )
 
-    print("DONE!")
-    exit()
-
-    int_nhb = dist.run_distribution_model(
+    dist.run_distribution_model(
         file_drive=params['base_directory'],
         model_name=params['model_name'],
         iteration=params['iteration'],
@@ -234,7 +235,8 @@ if __name__ == '__main__':
         iz_cost_infill=.5,
         export_modes=params['synthetic_modes'],
         verbose=True,
-        mp_threads=-2)
+        mp_threads=-2,
+    )
 
 
     # Compile tp pa

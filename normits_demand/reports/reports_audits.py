@@ -1171,7 +1171,9 @@ def get_trip_length_by_band(band_atl,
         band_trips = internal_pa * distance_bool
 
         # Get output parameters
-        total_trips = np.sum(band_trips.values)
+        if isinstance(band_trips, pd.DataFrame):
+            band_trips = band_trips.values
+        total_trips = np.sum(band_trips)
         band_share = total_trips/global_trips
 
         # Get average trip length
@@ -1243,35 +1245,36 @@ def get_row_or_column_by_band(band_atl,
 
     return(dist_mat)
 
-def get_matrix_by_band(band_atl,
+
+def get_matrix_by_band(tld_band,
                        distance,
                        internal_pa,
                        echo = False):
     """
     """
 
-    band_atl = band_atl.reset_index(drop=True)
+    tld_band = tld_band.reset_index(drop=True)
 
     # Get min max for each
     # This handles R built and python built now, should move towards python built
-    if 'tlb_desc' in list(band_atl):
+    if 'tlb_desc' in list(tld_band):
         # R built
-        ph = band_atl['tlb_desc'].str.split('-', n=1, expand=True)
-        band_atl['min'] = ph[0].str.replace('(', '')
-        band_atl['max'] = ph[1].str.replace('[', '')
-        band_atl['min'] = band_atl['min'].str.replace('(', '').values
-        band_atl['max'] = band_atl['max'].str.replace(']', '').values
+        ph = tld_band['tlb_desc'].str.split('-', n=1, expand=True)
+        tld_band['min'] = ph[0].str.replace('(', '')
+        tld_band['max'] = ph[1].str.replace('[', '')
+        tld_band['min'] = tld_band['min'].str.replace('(', '').values
+        tld_band['max'] = tld_band['max'].str.replace(']', '').values
         del(ph)
-    elif 'lower' in list(band_atl):
+    elif 'lower' in list(tld_band):
         # Python built
         # Convert bands to km
-        band_atl['min'] = band_atl['lower']*1.61
-        band_atl['max'] = band_atl['upper']*1.61
+        tld_band['min'] = tld_band['lower'] * 1.61
+        tld_band['max'] = tld_band['upper'] * 1.61
 
     dist_mat = []
 
     # Loop over rows in band_atl
-    for index, row in band_atl.iterrows():
+    for index, row in tld_band.iterrows():
 
         # Get total distance
         band_mat = np.where((distance >= float(row['min'])) & (distance < float(row['max'])), distance, 0)
@@ -1282,4 +1285,4 @@ def get_matrix_by_band(band_atl,
 
         dist_mat.append({'tlb_index': index,
                          'totals': band_trips})
-    return(dist_mat)
+    return dist_mat

@@ -943,7 +943,7 @@ def filter_pa_vector(pa_vector,
                      calib_params,
                      value_var='trips',
                      round_val=3,
-                     verbose=True):
+                     verbose=False):
     """
     Filter productions to target distribution type.
 
@@ -971,10 +971,7 @@ def filter_pa_vector(pa_vector,
         Filtered DataFrame of distributed productions.
     """
     dp = pa_vector.copy()
-    print('dp',dp)
     dp_cols = list(dp)
-    print('dp_cols', dp_cols)
-    print('calib_params',calib_params.items)
 
     for index, cp in calib_params.items():
         # except trip length bands
@@ -996,8 +993,6 @@ def filter_pa_vector(pa_vector,
 
     # Aggregate to zones
     dp = dp.groupby(ia_name).sum().reset_index()
-
-    print('dp',dp)
 
     # Round, if it wants
     if round_val is not None:
@@ -1096,7 +1091,6 @@ def get_costs(model_lookup_path,
                                    'costs',
                                    tp_path[0]))
     cols = list(dat)
-    print("cols", cols)
 
     # Get purpose and direction from calib_params
     ca = None
@@ -1152,8 +1146,6 @@ def get_costs(model_lookup_path,
     target_cols = ['p_zone', 'a_zone']
     for col in cost_cols:
         target_cols.append(col)
-
-    print("cost_cols", cost_cols)
     cost_return_name = cost_cols[0]
 
     dat = dat.reindex(target_cols, axis=1)
@@ -1429,7 +1421,7 @@ def balance_a_to_p(ia_name,
                    p_var_name='productions',
                    a_var_name='attractions',
                    round_val=None,
-                   verbose=True):
+                   verbose=False):
     """
     This function takes a set of attractions, selects the relevant attractions
     for the required distribution and balances attractions to productions.
@@ -1466,7 +1458,6 @@ def balance_a_to_p(ia_name,
     """
     dp = productions.copy()
     ia = attractions.copy()
-    print('column head',list(ia))
 
     total_internal_productions = dp['productions'].sum()
     # Add total attraction column for balancing
@@ -1477,7 +1468,7 @@ def balance_a_to_p(ia_name,
     a_factors = ia.copy()
     a_factors[a_var_name] /= a_factors['total_attractions']
 
-    if (len(dp[ia_name].drop_duplicates()) != len(a_factors[ia_name])):
+    if len(dp[ia_name].drop_duplicates()) != len(a_factors[ia_name]):
         # Always print as it's a warning of future problems
         print('WARNING: Not the same number of zones')
 
@@ -1563,6 +1554,7 @@ def import_pa(production_import_path,
     """
     # Reading pickled Dvector
     prod_dvec = nd.read_pickle(production_import_path)
+
     # Aggregate to the required segmentation
     if trip_origin == 'hb':
         if model_zone == 'noham':
@@ -1570,40 +1562,39 @@ def import_pa(production_import_path,
         elif model_zone == 'norms':
             agg_seg = nd.get_segmentation_level('hb_p_m_ca_6tp')
         else:
-            print("Invalid model name")
+            raise ValueError("Invalid model name")
     elif trip_origin == 'nhb':
         if model_zone == 'noham':
             agg_seg = nd.get_segmentation_level('nhb_p_m_6tp')
         elif model_zone == 'norms':
             agg_seg = nd.get_segmentation_level('nhb_p_m_ca_6tp')
         else:
-            print("Invalid model name")
+            raise ValueError("Invalid model name")
     else:
-        print("Invalid trip origin")
+        raise ValueError("Invalid trip origin")
 
+    # Aggregate and translate for norms/noham
     prod_dvec_agg = prod_dvec.aggregate(out_segmentation=agg_seg)
-    # Zone translation to norms/noham
     model_zoning = nd.get_zoning_system(model_zone)
     prod_dvec = prod_dvec_agg.translate_zoning(model_zoning, "population")
-    # Conversion to dataframe
-    prod_df = prod_dvec.to_df()
-    print(prod_df)
+
     # Weekly trips to weekday trips conversion
+    prod_df = prod_dvec.to_df()
     prod_wd = weekly_to_weekday(prod_df, trip_origin, model_zone)
-    print(prod_wd)
 
     # Reading pickled Dvector
     attr_dvec = nd.read_pickle(attraction_import_path)
+
+    # Aggregate and translate for norms/noham
     attr_dvec_agg = attr_dvec.aggregate(out_segmentation=agg_seg)
-    # Zone translation to norms/noham
     model_zoning = nd.get_zoning_system(model_zone)
     attr_dvec = attr_dvec_agg.translate_zoning(model_zoning, "employment")
-    # Conversion to dataframe
-    attr_df = attr_dvec.to_df()
-    print(attr_df)
+
     # Weekly trips to weekday trips conversion
+    attr_df = attr_dvec.to_df()
     attr_wd = weekly_to_weekday(attr_df, trip_origin, model_zone)
-    print(attr_wd)
+
+    # TODO(BT): Sort zoning system into order
 
     return prod_wd, attr_wd
 
@@ -2412,8 +2403,8 @@ def get_pa_diff(new_p,
 """
 
 
-def correct_band_share(external_pa,
-                       tbs,
+def correct_band_share(pa_mat,
+                       tld_band,
                        band_totals,
                        seed_infill=.001,
                        axis=1,
@@ -2421,7 +2412,7 @@ def correct_band_share(external_pa,
     """
     Adjust band shares of rows or columnns
 
-    external pa:
+    pa_mat pa:
         Square matrix
     band_totals:
         list of dictionaries of trip lenth bands
@@ -2430,26 +2421,29 @@ def correct_band_share(external_pa,
     axis = 1:
         Axis to adjust band share, takes 0 or 1
     """
-    if not len(tbs.index) == len(band_totals):
+    if not len(tld_band.index) == len(band_totals):
         raise Warning('Adjustment factors and trip vectors not aligned')
 
-    v_totals = external_pa.sum(axis=axis)
+    v_totals = pa_mat.sum(axis=axis)
 
     out_mat = np.zeros((len(band_totals[0]['totals']),
                         len(band_totals[0]['totals'])))
 
-    for index, row in tbs.iterrows():
-        target_band = index
+    for index, row in tld_band.iterrows():
         target_band_share = row['band_share']
         for b in band_totals:
-            if b['tlb_index'] == target_band:
+            if b['tlb_index'] == index:
                 v_mat = b['totals']
+
+        # Get proportion of all trips in each band
         target_v = v_totals * target_band_share
+
+        # Get total trips that currently belong to this band
         current_v = v_mat.sum(axis=axis)
+
         # infill
-        current_v = np.where(current_v == 0,
-                             seed_infill,
-                             current_v)
+        current_v = np.where(current_v == 0, seed_infill, current_v)
+
         adj_v = target_v / current_v
         adj_v = np.broadcast_to(adj_v,
                                 (len(band_totals[0]['totals']),
