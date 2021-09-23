@@ -13,6 +13,10 @@ import normits_demand.build.tms_pathing as tms
 
 from normits_demand.reports import reports_audits as ra
 from normits_demand.utils import utils as nup
+from normits_demand.utils import general as du
+from normits_demand.utils import timing
+from normits_demand.utils import math_utils
+from normits_demand.distribution import furness
 
 # TODO: Object layer
 
@@ -195,45 +199,30 @@ class ExternalModel(tms.TMSPathing):
             # Sort iz to be more friendly
             costs = nup.iz_costs_to_mean(costs)
 
-            # ## EXTRACT THE INTERNAL TRIP ENDS ## #
-            # Note that these will include i-i, e-i, and i-e trips
-            unq_internal_zones = nup.get_zone_range(int_costs['p_zone'])
+            # ## RUN THE EXTERNAL MODEL ## #
+            # Logging set up
+            log_fname = du.calib_params_to_dist_name(
+                trip_origin=trip_origin,
+                matrix_format='external_log',
+                calib_params=segment_params,
+                csv=True,
+            )
+            log_path = os.path.join(self.tms_out['reports'], log_fname)
 
-            print(len(unq_internal_zones))
+            # Replace the log if it already exists
+            if os.path.isfile(log_path):
+                os.remove(log_path)
 
-            # Join ps and a's onto full unq internal vector (infill placeholders)
-            uiz_vector = pd.DataFrame(unq_internal_zones)
-            col_name = self.params['model_zoning'].lower() + '_zone_id'
-            uiz_vector = uiz_vector.rename(columns={0: col_name})
-
-            # # Productions
-            # sub_p = pd.merge(
-            #     uiz_vector,
-            #     sub_p,
-            #     how='left',
-            #     on=(self.params['model_zoning'].lower() + '_zone_id'),
-            # )
-            # sub_p['productions'] = sub_p['productions'].replace(np.nan, 0)
-            #
-            # # Attractions
-            # sub_a = pd.merge(
-            #     uiz_vector,
-            #     sub_a,
-            #     how='left',
-            #     on=zoning_name,
-            # )
-            # sub_a['attractions'] = sub_a['attractions'].replace(np.nan, 0)
-
-            print(sub_p)
-            print(sub_a)
-
-            # TODO Currently does not balance at row level
+            # Run
             external_out = self._external_model(
                 p=sub_p,
                 a=sub_a,
                 base_matrix=cjtw,
                 costs=costs,
                 segment_params=segment_params,
+                log_path=log_path,
+                furness_tol=0.1,
+                furness_max_iters=2000,
             )
 
             # Unpack exports
@@ -522,6 +511,10 @@ class ExternalModel(tms.TMSPathing):
         base_matrix,
         costs,
         segment_params,
+        log_path,
+        max_iters: int = 1000,
+        furness_tol: float = 0.1,
+        furness_max_iters: int = 2000,
     ):
         """
         p:
@@ -558,9 +551,8 @@ class ExternalModel(tms.TMSPathing):
         print('Initial band share convergence: ' + str(bs_con))
 
         # Calibrate
-        bls = 1
-        while bs_con < .9:
-            print('Band share loop: ' + str(bls))
+        for iter_num in range(max_iters):
+            iter_start_time = timing.current_milli_time()
 
             # ## ATTRACTION ADJUSTMENT ## #
             # Get mat by band
@@ -577,90 +569,70 @@ class ExternalModel(tms.TMSPathing):
             new_p = gb_pa.sum(axis=1)
             new_a = gb_pa.sum(axis=0)
 
-            # Check validation
-            pa_diff = nup.get_pa_diff(new_p,
-                                      target_p,
-                                      new_a,
-                                      target_a)
-
-            print('Max p/a diff: ' + str(pa_diff.max()))
-
-            # Furness to tl con
-            fl = 1
-            while pa_diff.max() > .1:
-                # Balance a
-                gb_pa = nup.balance_columns(gb_pa,
-                                            target_a,
-                                            infill=0.001)
-
-                # Balance p
-                gb_pa = nup.balance_rows(gb_pa,
-                                         target_p,
-                                         infill=0.001)
-
-                # Round
-                gb_pa = gb_pa.round(5)
-
-                new_p = gb_pa.sum(axis=1)
-                new_a = gb_pa.sum(axis=0)
-
-                # Check validation
-                prev_pa_diff = pa_diff.copy()
-                pa_diff = nup.get_pa_diff(new_p,
-                                          target_p,
-                                          new_a,
-                                          target_a)
-
-                f_change = prev_pa_diff.mean() - pa_diff.mean()
-
-                print('Loop: ' + str(fl) + ' Max diff: ' + str(pa_diff.max()))
-                if f_change < .0001:
-                    # If not converging hard balance
-                    gb_pa = nup.single_balance(gb_pa,
-                                               target_a,
-                                               target_p)
-                    new_p = gb_pa.sum(axis=1)
-                    new_a = gb_pa.sum(axis=0)
-
-                    # Check validation
-                    prev_pa_diff = pa_diff.copy()
-                    pa_diff = nup.get_pa_diff(
-                        new_p,
-                        target_p,
-                        new_a,
-                        target_a)
-                    break
-
-                # iterate
-                fl += 1
-
-            print('Max p/a diff: ' + str(pa_diff.max()))
+            # Furness across the other 2 dimensions
+            gb_pa, furn_iters, furn_r2 = furness.doubly_constrained_furness(
+                seed_vals=gb_pa,
+                row_targets=target_p,
+                col_targets=target_a,
+                tol=furness_tol,
+                max_iters=furness_max_iters,
+            )
 
             # Get convergence
-            tlb_con = ra.get_trip_length_by_band(
+            _, tlb_con, _ = ra.get_trip_length_by_band(
                 segment_params['tlb'],
                 costs,
-                gb_pa)
+                gb_pa,
+            )
+
+            mse = math_utils.vector_mean_squared_error(
+                vector1=tlb_con['tbs'].values,
+                vector2=tlb_con['bs'].values,
+            )
 
             prior_bs_con = bs_con
-            bs_con = max(1 - np.sum(
-                (tlb_con[1]['bs'] - tlb_con[1]['tbs']) ** 2) / np.sum(
-                (tlb_con[1]['tbs'] - np.sum(
-                    tlb_con[1]['tbs']) / len(
-                    tlb_con[1]['tbs'])) ** 2), 0)
+            bs_con = math_utils.curve_convergence(tlb_con['tbs'], tlb_con['bs'])
 
+            print(tlb_con)
+
+            iter_end_time = timing.current_milli_time()
+            time_taken = iter_end_time - iter_start_time
+
+            pa_diff = nup.get_pa_diff(
+                new_p,
+                target_p,
+                new_a,
+                target_a,
+            )
+
+            # ## LOG THIS ITERATION ## #
+            # Log this iteration
+            log_dict = {
+                'Loop Num': str(iter_num),
+                'run_time': time_taken,
+                'furness_loops': furn_iters,
+                'furness_r2': furn_r2,
+                'pa_diff': np.round(pa_diff, 6),
+                'bs_con': np.round(bs_con, 6),
+                'bs_mse': np.round(mse, 8),
+            }
+
+            # Append this iteration to log file
+            nup.safe_dataframe_to_csv(
+                pd.DataFrame(log_dict, index=[0]),
+                log_path,
+                mode='a',
+                header=(not os.path.exists(log_path)),
+                index=False,
+            )
+
+            # ## EXIT EARLY IF CONDITIONS MET ## #
             diff = prior_bs_con - bs_con
-
-            print(tlb_con[1])
-
-            print('Band share convergence: ' + str(bs_con))
-            print('Improvement: ' + str(diff))
-
-            # TODO(BT): CHECK THIS
-            if diff < .0001 and bs_con > 0.8:
+            if diff < .0001 and bs_con > .7:
                 break
 
-            bls += 1
+            if bs_con > .9:
+                break
 
         # Gives great convergence on PA here - but we want the bands more
         # Do another hard balance, control to P - then stop
@@ -689,11 +661,6 @@ class ExternalModel(tms.TMSPathing):
                                          target_a,
                                          infill=0.001)
 
-        # get new tlb con
-        tlb_con = ra.get_trip_length_by_band(segment_params['tlb'],
-                                             costs,
-                                             p_balanced)
-
         # Check validation
         pa_diff = nup.get_pa_diff(
             new_p,
@@ -701,11 +668,13 @@ class ExternalModel(tms.TMSPathing):
             new_a,
             target_a)
 
-        bs_con = max(1 - np.sum(
-            (tlb_con[1]['bs'] - tlb_con[1]['tbs']) ** 2) / np.sum(
-            (tlb_con[1]['tbs'] - np.sum(
-                tlb_con[1]['tbs']) / len(
-                tlb_con[1]['tbs'])) ** 2), 0)
+        # Get convergence
+        _, tlb_con, _ = ra.get_trip_length_by_band(
+            segment_params['tlb'],
+            costs,
+            p_balanced,
+        )
+        bs_con = math_utils.curve_convergence(tlb_con['tbs'], tlb_con['bs'])
 
         return gb_pa, p_balanced, a_balanced, tlb_con, bs_con, pa_diff.max()
 
