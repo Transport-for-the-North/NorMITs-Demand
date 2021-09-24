@@ -16,6 +16,7 @@ from normits_demand.utils import utils as nup
 from normits_demand.utils import general as du
 from normits_demand.utils import timing
 from normits_demand.utils import math_utils
+from normits_demand.matrices import utils as mat_utils
 from normits_demand.distribution import furness
 
 # TODO: Object layer
@@ -37,8 +38,18 @@ class ExternalModel(tms.TMSPathing):
         """
         """
         # Define internal name
-        model_zone = self.params['model_zoning'].lower()
-        zoning_name = (model_zone + '_zone_id')
+        zoning_name = self.params['model_zoning'].lower()
+        zone_col = (zoning_name + '_zone_id')
+        val_col = 'val'
+
+        # INIT
+        # Get internal and external area
+        int_zones = nup.get_internal_area(self.lookup_folder)
+        ext_zones = nup.get_external_area(self.lookup_folder)
+        all_zones = int_zones + ext_zones
+
+        internal_index = np.array(int_zones) - 1
+        external_index = np.array(ext_zones) - 1
 
         # Pick different imports if it's HB or NHB
         if trip_origin == 'hb':
@@ -55,7 +66,7 @@ class ExternalModel(tms.TMSPathing):
         productions, attractions = nup.import_pa(
             self.tms_in[in_list[0]],
             self.tms_in[in_list[1]],
-            model_zone,
+            zoning_name,
             trip_origin,
         )
 
@@ -101,7 +112,7 @@ class ExternalModel(tms.TMSPathing):
 
         # Handle cols - transpose
         print('cjtw:\n %s\n' % cjtw)
-        unq_zones = nup.get_zone_range(productions[zoning_name])
+        unq_zones = nup.get_zone_range(productions[zone_col])
         cjtw = nup.df_to_np(cjtw,
                             v_heading=p_col,
                             h_heading=a_col,
@@ -113,8 +124,6 @@ class ExternalModel(tms.TMSPathing):
 
         # ## DO THE EXTERNAL DISTRIBUTION ## #
         ei = init_params.index
-        internal_bin = []
-        full_bin = []
 
         # Path tlb folder
         tlb_folder = os.path.join(
@@ -126,26 +135,32 @@ class ExternalModel(tms.TMSPathing):
         print("tlb_folder: %s" % tlb_folder)
 
         # Loop through each of the segments
+        internal_p_vector_eff_df = list()
+        internal_a_vector_eff_df = list()
         for ed in ei:
             # Get segment_params from table
             segment_params = {}
             for ds in self.params['external_segmentation']:
                 segment_params.update({ds: init_params[ds][ed]})
 
-            # Get target tlb
-            tlb = nup.get_trip_length_bands(
+            # Get target trip length distribution
+            trip_length_dist = nup.get_trip_length_bands(
                 tlb_folder,
                 segment_params,
                 segmentation=self.params['external_tlb_name'],
                 trip_origin=trip_origin,
             )
-            segment_params.update({'tlb': tlb})
+
+            # Convert from miles to KM
+            trip_length_dist = trip_length_dist.reset_index(drop=True)
+            trip_length_dist['min'] = trip_length_dist['lower'] * 1.61
+            trip_length_dist['max'] = trip_length_dist['upper'] * 1.61
 
             # ## GET P/A VECTORS FOR THIS SEGMENT ## #
             # Filter productions to target distribution type
             sub_p, _ = nup.filter_pa_vector(
                 productions,
-                zoning_name,
+                zone_col,
                 segment_params,
                 value_var='val',
                 verbose=False,
@@ -155,7 +170,7 @@ class ExternalModel(tms.TMSPathing):
             # Work out which attractions to use from purpose
             sub_a, _ = nup.filter_pa_vector(
                 attractions,
-                zoning_name,
+                zone_col,
                 segment_params,
                 value_var='val',
                 verbose=False,
@@ -167,7 +182,7 @@ class ExternalModel(tms.TMSPathing):
             # Balance a to p
             print("total productions in segment: %s" % sub_p['productions'].sum())
             sub_a = nup.balance_a_to_p(
-                zoning_name,
+                zone_col,
                 sub_p,
                 sub_a,
                 round_val=3,
@@ -196,8 +211,6 @@ class ExternalModel(tms.TMSPathing):
                 values='cost',
                 unq_internal_zones=unq_zones,
             )
-            # Sort iz to be more friendly
-            costs = nup.iz_costs_to_mean(costs)
 
             # ## RUN THE EXTERNAL MODEL ## #
             # Logging set up
@@ -214,295 +227,102 @@ class ExternalModel(tms.TMSPathing):
                 os.remove(log_path)
 
             # Run
-            external_out = self._external_model(
+            gb_pa, bs_con = self._external_model(
                 p=sub_p,
                 a=sub_a,
                 base_matrix=cjtw,
                 costs=costs,
-                segment_params=segment_params,
+                convergence_target=0.9,
+                target_tld=trip_length_dist,
                 log_path=log_path,
                 furness_tol=0.1,
-                furness_max_iters=2000,
+                furness_max_iters=5000,
             )
 
-            # Unpack exports
-            external_pa, external_pa_p, external_pa_a, tl_con, bs_con, max_diff = external_out
-
-            report = tl_con[1]
+            # ## WRITE A REPORT OF HOW THE EXTERNAL MODEL DID ## #
+            # Build a report from external model
+            _, tlb_con, _ = ra.get_trip_length_by_band(trip_length_dist, costs, gb_pa)
+            report = tlb_con
             report['bs_con'] = bs_con
-            report['max_diff'] = max_diff
 
-            # perc_iz = np.diag(external_pa)/external_pa.sum(axis=1)
-
-            print(tl_con)
-            del external_out
-
-            # Check row totals
-
-            # External pa backup
-            full_epa = external_pa.copy()
-
-            # Sidepot full pa
-            full_pa_p = external_pa_p.copy()
-            full_pa_a = external_pa_a.copy()
-
-            # Get internal and external area
-            int_area = nup.get_internal_area(self.lookup_folder)
-            ext_area = nup.get_external_area(self.lookup_folder)
-            internal_index = int_area[zoning_name].values - 1
-            external_index = ext_area[zoning_name].values - 1
-
-            # Do int-ext report
-            ie_report = nup.n_matrix_split(
-                external_pa_p,
-                indices=[internal_index,
-                         external_index],
-                index_names=['i', 'e'],
-                summarise=True)
-
-            ie_report = pd.DataFrame(ie_report)
-
-            # Sub off internal only
-            # Now for pure internal with better balance and p balanced for external
-            internal_pa = np.take(external_pa, internal_index, axis=1)
-            internal_pa = internal_pa.take(internal_index, axis=0)
-
-            internal_pa_p = np.take(external_pa_p, internal_index, axis=1)
-            internal_pa_p = internal_pa_p.take(internal_index, axis=0)
-
-            i_ph = np.zeros([len(external_pa_p), len(external_pa_p)])
-            i_ph[0:len(internal_pa_p), 0:len(internal_pa_p)] = internal_pa_p
-
-            external_pa_p = external_pa_p - i_ph
-            del i_ph
-
-            internal_bin.append({'cp': segment_params,
-                                 'int_pa': internal_pa_p})
-            full_bin.append({'cp': segment_params,
-                             'full_pa_p': full_pa_p,
-                             'full_pa_a': full_pa_a})
-
-            audit_path = os.path.join(
-                self.tms_out['reports'],
-                trip_origin + '_external_report')
-            audit_path = nup.build_path(audit_path,
-                                        segment_params)
-
+            # Build the output path
+            fname = trip_origin + '_external_report'
+            audit_path = os.path.join(self.tms_out['reports'], fname)
+            audit_path = nup.build_path(audit_path, segment_params)
             report.to_csv(audit_path, index=False)
 
-            ie_path = os.path.join(
-                self.tms_out['reports'],
-                trip_origin + '_ie_report')
-            ie_path = nup.build_path(ie_path,
-                                     segment_params)
+            # Build an IE report
+            # Do int-ext report
+            ie_report = nup.n_matrix_split(
+                gb_pa,
+                indices=[internal_index, external_index],
+                index_names=['i', 'e'],
+                summarise=True,
+            )
+            ie_report = pd.DataFrame(ie_report)
 
+            # Build the output path
+            fname = trip_origin + '_ie_report'
+            ie_path = os.path.join(self.tms_out['reports'], fname)
+            ie_path = nup.build_path(ie_path, segment_params)
             ie_report.to_csv(ie_path, index=False)
 
-            # Export
-            validate_mode_ext = (
-                    segment_params['m'] in
-                    self.params['external_export_modes'] or
-                    str(segment_params['m']) in
-                    self.params['external_export_modes'])
+            # ## WRITE FULL DEMAND TO DISK ## #
+            # Append zone names
+            gb_pa = pd.DataFrame(gb_pa, index=unq_zones, columns=unq_zones)
+            gb_pa = gb_pa.rename(columns={'index': zone_col})
 
-            if validate_mode_ext:
-                # Append zone names
-                external_pa_p = pd.DataFrame(
-                    external_pa_p,
-                    index=unq_zones,
-                    columns=unq_zones).reset_index()
-                external_pa_p = external_pa_p.rename(
-                    columns={'index': zoning_name})
+            # Generate the path
+            fname = trip_origin + '_external'
+            ext_path = os.path.join(self.tms_out['external'], fname)
+            ext_path = nup.build_path(ext_path, segment_params)
+            gb_pa.to_csv(ext_path)
 
-                # Path export
-                ext_path = os.path.join(
-                    self.tms_out['external'],
-                    trip_origin + '_external')
+            # ## BUILD THE INTERNAL ONLY VECTORS ## #
+            # Get the internal only demand
+            internal_mask = mat_utils.get_internal_mask(
+                df=pd.DataFrame(data=gb_pa, index=all_zones, columns=all_zones),
+                zones=int_zones,
+            )
+            internal_pa = np.where(internal_mask, gb_pa, 0)
 
-                ext_path = nup.build_path(ext_path,
-                                          segment_params)
+            # Create an index for the dataframes
+            zone_index = pd.Index(all_zones, name=zone_col)
 
-                external_pa_p.to_csv(ext_path, index=False)
+            # Production vector
+            prods_eff_df = segment_params.copy()
+            prods_eff_df['df'] = pd.DataFrame(
+                data=np.sum(internal_pa, axis=1),
+                index=zone_index,
+                columns=[val_col],
+            ).reset_index()
+            internal_p_vector_eff_df.append(prods_eff_df)
 
-            # Export full external matrices, for best guess non dist demand mats
-            if self.params['non_dist_export_modes'] is not None:
-                validate_mode_non_dist = (
-                        segment_params['m'] in
-                        self.params['non_dist_export_modes'] or
-                        str(segment_params['m']) in
-                        self.params['non_dist_export_modes'])
+            # Attraction Vector
+            attrs_eff_df = segment_params.copy()
+            attrs_eff_df['df'] = pd.DataFrame(
+                data=np.sum(internal_pa, axis=0),
+                index=zone_index,
+                columns=[val_col],
+            ).reset_index()
+            internal_a_vector_eff_df.append(attrs_eff_df)
 
-                if validate_mode_non_dist:
-                    full_epa = pd.DataFrame(full_epa,
-                                            index=unq_zones,
-                                            columns=unq_zones).reset_index()
-                    full_epa = full_epa.rename(
-                        columns={'index': zoning_name})
+        # ## EXTERNAL DISTRIBUTION DONE WRITE OUTPUTS ## #
+        # Build base names
+        base_fname = "%s_%s_internal_%s.csv"
+        col_names = [zone_col] + list(init_params) + [val_col]
 
-                    # Path export
-                    ext_path = os.path.join(
-                        self.tms_out['non_dist'],
-                        trip_origin +
-                        '_nondist')
-                    ext_path = nup.build_path(ext_path,
-                                              segment_params)
+        # Write out productions
+        internal_productions = du.compile_efficient_df(internal_p_vector_eff_df, col_names)
+        fname = base_fname % (zoning_name, trip_origin, 'productions')
+        out_path = os.path.join(self.tms_out['p'], fname)
+        internal_productions.to_csv(out_path, index=False)
 
-                    full_epa.to_csv(ext_path, index=False)
-
-                    del full_epa
-
-        # Unpack and compile internal productions and attractions
-
-        # Build uip
-        p_ph = int_area.copy().rename(columns={zoning_name: 'p_zone'})
-        a_ph = int_area.copy().rename(columns={zoning_name: 'a_zone'})
-
-        for int_r in internal_bin:
-
-            cp = int_r['cp'].copy()
-
-            # Get name in string
-            int_path = ''
-            int_path = nup.build_path(int_path,
-                                      int_r['cp'],
-                                      no_csv=True)
-            print(int_path)
-
-            val_m = (
-                    cp['m'] in
-                    self.params['external_export_modes'] or
-                    str(cp)['m'] in
-                    self.params['external_export_modes'])
-
-            if val_m:
-                # Format and prepare for export
-                int_pa = pd.DataFrame(
-                    int_r['int_pa'],
-                    index=int_area[zoning_name],
-                    columns=int_area[zoning_name]).reset_index()
-                int_pa = pd.melt(int_pa,
-                                 id_vars=[zoning_name],
-                                 var_name='a_zone',
-                                 value_name='dt',
-                                 col_level=0)
-                int_pa = int_pa.rename(columns={zoning_name: 'p_zone'})
-
-                int_p = int_pa.reindex(['p_zone', 'dt'],
-                                       axis=1).groupby(
-                    ['p_zone']).sum().reset_index()
-                p_ph = p_ph.merge(int_p,
-                                  how='left',
-                                  on='p_zone')
-                p_ph = p_ph.rename(columns={'dt': int_path.replace('_', '')})
-
-                # Same for attractions            
-                print(list(int_pa))
-
-                int_a = int_pa.reindex(['a_zone', 'dt'],
-                                       axis=1).groupby(
-                    ['a_zone']).sum().reset_index()
-                a_ph = a_ph.merge(int_a,
-                                  how='left',
-                                  on='a_zone')
-                a_ph = a_ph.rename(columns={'dt': int_path.replace('_', '')})
-
-        # Export
-        p_ph_path = os.path.join(
-            self.tms_out['p'],
-            self.params['model_zoning'].lower() +
-            '_' +
-            trip_origin +
-            '_internal_productions.csv')
-        a_ph_path = os.path.join(
-            self.tms_out['a'],
-            self.params['model_zoning'].lower() +
-            '_' +
-            trip_origin +
-            '_internal_attractions.csv')
-
-        p_ph.to_csv(p_ph_path, index=False)
-        a_ph.to_csv(a_ph_path, index=False)
-
-        audit = True
-
-        # Unpack and compile full productions and attractions
-        p_ph = pd.DataFrame(unq_zones)
-        a_ph = pd.DataFrame(unq_zones)
-        p_ph = p_ph.rename(columns={0: 'p_zone'})
-        a_ph = a_ph.rename(columns={0: 'a_zone'})
-
-        for full_r in full_bin:
-            cp = full_r['cp'].copy()
-
-            # Get name in string
-            full_path = ''
-            full_path = nup.build_path(full_path,
-                                       full_r['cp'],
-                                       no_csv=True)
-            print(full_path)
-
-            # Format and prepare for export
-            full_pa_p = pd.DataFrame(full_r['full_pa_p'],
-                                     index=unq_zones,
-                                     columns=unq_zones).reset_index()
-            full_pa_p = full_pa_p.rename(columns={'index': zoning_name})
-            full_pa_p = pd.melt(full_pa_p,
-                                id_vars=[zoning_name],
-                                var_name='a_zone',
-                                value_name='dt',
-                                col_level=0)
-            full_pa_p = full_pa_p.rename(columns={zoning_name: 'p_zone'})
-
-            full_p = full_pa_p.reindex(['p_zone', 'dt'],
-                                       axis=1).groupby(
-                ['p_zone']).sum().reset_index()
-
-            full_p = full_p.rename(columns={'dt': full_path.replace('_', '')})
-
-            # Same for attractions
-            full_pa_a = pd.DataFrame(full_r['full_pa_a'],
-                                     index=unq_zones,
-                                     columns=unq_zones).reset_index()
-            full_pa_a = full_pa_a.rename(columns={'index': zoning_name})
-            full_pa_a = pd.melt(full_pa_a,
-                                id_vars=[zoning_name],
-                                var_name='a_zone',
-                                value_name='dt',
-                                col_level=0)
-            full_pa_a = full_pa_a.rename(columns={zoning_name: 'p_zone'})
-
-            full_a = full_pa_a.reindex(['a_zone', 'dt'],
-                                       axis=1).groupby(
-                ['a_zone']).sum().reset_index()
-            full_a = full_a.rename(columns={'dt': full_path.replace('_', '')})
-
-            p_ph = p_ph.merge(full_p,
-                              how='left',
-                              on=['p_zone'])
-            a_ph = a_ph.merge(full_a,
-                              how='left',
-                              on=['a_zone'])
-
-        # Export
-        full_p_ph_path = os.path.join(
-            self.tms_out['p'],
-            self.params['model_zoning'].lower() +
-            '_' +
-            trip_origin +
-            '_full_productions.csv')
-        full_a_ph_path = os.path.join(
-            self.tms_out['a'],
-            self.params['model_zoning'].lower() +
-            '_' +
-            trip_origin +
-            '_full_attractions.csv')
-
-        p_ph.to_csv(full_p_ph_path, index=False)
-        a_ph.to_csv(full_a_ph_path, index=False)
-
-        audit = True
-
-        return audit
+        # Write out attractions
+        internal_attractions = du.compile_efficient_df(internal_a_vector_eff_df, col_names)
+        fname = base_fname % (zoning_name, trip_origin, 'attractions')
+        out_path = os.path.join(self.tms_out['a'], fname)
+        internal_attractions.to_csv(out_path, index=False)
 
     @staticmethod
     def _external_model(
@@ -510,30 +330,43 @@ class ExternalModel(tms.TMSPathing):
         a,
         base_matrix,
         costs,
-        segment_params,
         log_path,
-        max_iters: int = 1000,
+        target_tld: pd.DataFrame,
+        convergence_target: float = 0.9,
+        max_iters: int = 100,
         furness_tol: float = 0.1,
-        furness_max_iters: int = 2000,
+        furness_max_iters: int = 5000,
     ):
         """
         p:
             Production vector
+
         a:
             Attraction vector
+
         base_matrix:
             Seed matrix for transformation. Will usually be cjtw for shape.
             Could be 1s.
+
         costs:
             Cost/distance matrix for transformation
+
         calib_params:
             Distribution calib params. For write out desc only.
+
         model_lookup_path:
             Where are the lookups, for finding cjtw.
+
         model_name:
             Model name. Needs to be lower case I think.
+
         trip_origin:
             Is this HB or NHB? Takes 'hb' or 'nhb', shockingly.
+
+        target_tld:
+            pandas dataframe of the target trip length distributions. Should
+            have min and max columns for each band, and these should be in
+            KM.
         """
         # Transform original p/a into vectors
         target_p = p['productions'].values
@@ -554,20 +387,12 @@ class ExternalModel(tms.TMSPathing):
         for iter_num in range(max_iters):
             iter_start_time = timing.current_milli_time()
 
-            # ## ATTRACTION ADJUSTMENT ## #
-            # Get mat by band
-            band_totals = ra.get_matrix_by_band(segment_params['tlb'], costs, gb_pa)
-            # Correct a band share
-            gb_pa = nup.correct_band_share(gb_pa, segment_params['tlb'], band_totals, axis=0)
-
-            # ## PRODUCTION ADJUSTMENT ## #
-            # Get mat by band
-            band_totals = ra.get_matrix_by_band(segment_params['tlb'], costs, gb_pa)
-            # Correct p band share
-            gb_pa = nup.correct_band_share(gb_pa, segment_params['tlb'], band_totals, axis=1)
-
-            new_p = gb_pa.sum(axis=1)
-            new_a = gb_pa.sum(axis=0)
+            # ## BAND SHARE ADJUSTMENT ## #
+            gb_pa = correct_band_share(
+                pa_mat=gb_pa,
+                distance=costs,
+                tld_band=target_tld,
+            )
 
             # Furness across the other 2 dimensions
             gb_pa, furn_iters, furn_r2 = furness.doubly_constrained_furness(
@@ -579,12 +404,7 @@ class ExternalModel(tms.TMSPathing):
             )
 
             # Get convergence
-            _, tlb_con, _ = ra.get_trip_length_by_band(
-                segment_params['tlb'],
-                costs,
-                gb_pa,
-            )
-
+            _, tlb_con, _ = ra.get_trip_length_by_band(target_tld, costs, gb_pa)
             mse = math_utils.vector_mean_squared_error(
                 vector1=tlb_con['tbs'].values,
                 vector2=tlb_con['bs'].values,
@@ -593,15 +413,13 @@ class ExternalModel(tms.TMSPathing):
             prior_bs_con = bs_con
             bs_con = math_utils.curve_convergence(tlb_con['tbs'], tlb_con['bs'])
 
-            print(tlb_con)
-
             iter_end_time = timing.current_milli_time()
             time_taken = iter_end_time - iter_start_time
 
             pa_diff = nup.get_pa_diff(
-                new_p,
+                gb_pa.sum(axis=1),
                 target_p,
-                new_a,
+                gb_pa.sum(axis=0),
                 target_a,
             )
 
@@ -627,56 +445,15 @@ class ExternalModel(tms.TMSPathing):
             )
 
             # ## EXIT EARLY IF CONDITIONS MET ## #
-            diff = prior_bs_con - bs_con
-            if diff < .0001 and bs_con > .7:
+            # If we're stuck near the target, exit early
+            diff = np.abs(bs_con - prior_bs_con)
+            if diff < .0001 and bs_con > convergence_target - 0.1:
                 break
 
-            if bs_con > .9:
+            if bs_con > convergence_target:
                 break
 
-        # Gives great convergence on PA here - but we want the bands more
-        # Do another hard balance, control to P - then stop
-
-        # Rebalance tlb
-        # Get mat by band
-        band_totals = ra.get_matrix_by_band(segment_params['tlb'], costs, gb_pa)
-        # Correct a band share
-        external_pa_balanced = nup.correct_band_share(gb_pa, segment_params['tlb'], band_totals,
-                                                      axis=0)
-        # Get mat by band
-        band_totals = ra.get_matrix_by_band(segment_params['tlb'], costs, external_pa_balanced)
-        # Correct p band share
-        external_pa_balanced = nup.correct_band_share(external_pa_balanced, segment_params['tlb'],
-                                                      band_totals, axis=1)
-
-        new_p = external_pa_balanced.sum(axis=1)
-        new_a = external_pa_balanced.sum(axis=0)
-
-        # Single balance (productions)
-        p_balanced = nup.balance_rows(external_pa_balanced,
-                                      target_p,
-                                      infill=0.001)
-
-        a_balanced = nup.balance_columns(external_pa_balanced,
-                                         target_a,
-                                         infill=0.001)
-
-        # Check validation
-        pa_diff = nup.get_pa_diff(
-            new_p,
-            target_p,
-            new_a,
-            target_a)
-
-        # Get convergence
-        _, tlb_con, _ = ra.get_trip_length_by_band(
-            segment_params['tlb'],
-            costs,
-            p_balanced,
-        )
-        bs_con = math_utils.curve_convergence(tlb_con['tbs'], tlb_con['bs'])
-
-        return gb_pa, p_balanced, a_balanced, tlb_con, bs_con, pa_diff.max()
+        return gb_pa, bs_con
 
     @staticmethod
     def adjust_trip_length_by_band(band_atl,
@@ -853,3 +630,52 @@ class ExternalModel(tms.TMSPathing):
         w_external_pa = pd.concat([infill_output, other_mode], sort=True)
 
         return w_external_pa
+
+
+def correct_band_share(pa_mat,
+                       distance,
+                       tld_band,
+                       seed_infill=.001,
+                       ):
+    """
+    Adjust band shares of rows or columnns
+
+    pa_mat pa:
+        Square matrix
+    band_totals:
+        list of dictionaries of trip lenth bands
+    seed_infill = .0001:
+        Seed in fill to balance
+    axis = 1:
+        Axis to adjust band share, takes 0 or 1
+    """
+    # Init
+    total_trips = np.sum(pa_mat)
+    out_mat = np.zeros_like(pa_mat)
+
+    # Internal trips: i-i, i-e
+    # External trips: e-i, e-e
+
+    # Adjust bands one at a time
+    for index, row in tld_band.iterrows():
+        # Get proportion of all trips that should be in this band
+        target_band_share = row['band_share']
+        target_band_trips = total_trips * target_band_share
+
+        # Get proportion of all trips that are in this band
+        distance_mask = (distance >= float(row['min'])) & (distance < float(row['max']))
+        distance_bool = np.where(distance_mask, 1, 0)
+        band_trips = pa_mat * distance_bool
+        achieved_band_trips = np.sum(band_trips)
+
+        # infill
+        achieved_band_trips = np.where(achieved_band_trips==0, seed_infill, achieved_band_trips)
+
+        # Adjust the matrix by difference
+        adjustment = target_band_trips / achieved_band_trips
+        adj_mat = band_trips * adjustment
+
+        # Add into the return matrix
+        out_mat += adj_mat
+
+    return out_mat

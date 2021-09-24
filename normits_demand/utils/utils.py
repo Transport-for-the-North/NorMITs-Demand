@@ -1158,8 +1158,7 @@ def get_costs(model_lookup_path,
         dat = dat.copy()
         min_inter_dat = dat[dat[cols[2]] > 0]
         # Derive minimum intrazonal
-        min_inter_dat = min_inter_dat.groupby(
-            cols[0]).min().reset_index().drop(cols[1], axis=1)
+        min_inter_dat = min_inter_dat.groupby(cols[0]).min().reset_index().drop(cols[1], axis=1)
         intra_dat = min_inter_dat.copy()
         intra_dat[cols[2]] = intra_dat[cols[2]] * iz_infill
         iz = dat[dat[cols[0]] == dat[cols[1]]]
@@ -1958,6 +1957,10 @@ def get_internal_area(lookup_folder):
     int_path = [x for x in directory if 'internal_area' in x][0]
     int_area = pd.read_csv(os.path.join(lookup_folder, int_path))
 
+    # Assume first col it model zone
+    zone_col = int_area.columns[0]
+    int_area = int_area[zone_col].tolist()
+
     return int_area
 
 
@@ -1969,6 +1972,10 @@ def get_external_area(lookup_folder):
     directory = os.listdir(lookup_folder)
     ext_path = [x for x in directory if 'external_area' in x][0]
     ext_area = pd.read_csv(os.path.join(lookup_folder, ext_path))
+
+    # Assume first col it model zone
+    zone_col = ext_area.columns[0]
+    ext_area = ext_area[zone_col].tolist()
 
     return ext_area
 
@@ -2302,166 +2309,12 @@ def least_squares(df, achieved_col, target_col):
     return r_squared(estimated, target)
 
 
-def balance_rows(matrix,
-                 target_po,
-                 infill=None):
-    """
-    Balance rows of a matrix.
-    This will be P for PA or O for OD.
-    infill takes a number
-    """
-    curr_p = matrix.sum(axis=1)
-
-    if infill is not None:
-        curr_p = np.where(curr_p == 0, infill, curr_p)
-        target_po = np.where(target_po == 0,
-                             infill,
-                             target_po)
-
-    # Target over current, multiply across rows by factor
-    corr_fac_p = target_po / curr_p
-
-    # Transpose to rows
-    corr_fac_p = np.broadcast_to(corr_fac_p,
-                                 (len(corr_fac_p),
-                                  len(corr_fac_p))).T
-    # Apply
-    po_matrix = matrix * corr_fac_p
-
-    return po_matrix
-
-
-def balance_columns(matrix,
-                    target_ad,
-                    infill=None):
-    """
-    Balance columns of a matrix
-    This will be A for PA or D for OD.
-    infill takes a number
-    """
-    curr_a = matrix.sum(axis=0)
-
-    if infill is not None:
-        # Infill current
-        curr_a = np.where(curr_a == 0, infill, curr_a)
-        # Infill target
-        target_ad = np.where(target_ad == 0,
-                             infill,
-                             target_ad)
-
-    # Target over current, multiply across rows by factor
-    corr_fac_a = target_ad / curr_a
-    corr_fac_a = np.broadcast_to(corr_fac_a,
-                                 (len(corr_fac_a),
-                                  len(corr_fac_a)))
-    # Apply
-    ad_matrix = matrix * corr_fac_a
-
-    return ad_matrix
-
-
 def get_pa_diff(new_p,
                 p_target,
                 new_a,
                 a_target):
-    pa_diff = (
-            (
-                    (
-                            sum((new_p - p_target) ** 2)
-                            +
-                            sum((new_a - a_target) ** 2)
-                    )
-                    /
-                    len(p_target))
-            ** .5
-    )
-
+    pa_diff = (((sum((new_p - p_target) ** 2) + sum((new_a - a_target) ** 2))/len(p_target)) ** .5)
     return pa_diff
-
-    """
-    def get_pa_diff(new_p,
-                    p_target,
-                    new_a,
-                    a_target):
-
-    """
-    """
-    pa_diff = (
-        (
-            (
-                (new_p-p_target)**2
-                +
-                (new_a-a_target)**2
-            )
-            /
-            len(p_target))
-        ** .5
-    )
-
-    return pa_diff
-
-"""
-
-
-def correct_band_share(pa_mat,
-                       tld_band,
-                       band_totals,
-                       seed_infill=.001,
-                       axis=1,
-                       echo=False):
-    """
-    Adjust band shares of rows or columnns
-
-    pa_mat pa:
-        Square matrix
-    band_totals:
-        list of dictionaries of trip lenth bands
-    seed_infill = .0001:
-        Seed in fill to balance
-    axis = 1:
-        Axis to adjust band share, takes 0 or 1
-    """
-    if not len(tld_band.index) == len(band_totals):
-        raise Warning('Adjustment factors and trip vectors not aligned')
-
-    v_totals = pa_mat.sum(axis=axis)
-
-    out_mat = np.zeros((len(band_totals[0]['totals']),
-                        len(band_totals[0]['totals'])))
-
-    for index, row in tld_band.iterrows():
-        target_band_share = row['band_share']
-        for b in band_totals:
-            if b['tlb_index'] == index:
-                v_mat = b['totals']
-
-        # Get proportion of all trips in each band
-        target_v = v_totals * target_band_share
-
-        # Get total trips that currently belong to this band
-        current_v = v_mat.sum(axis=axis)
-
-        # infill
-        current_v = np.where(current_v == 0, seed_infill, current_v)
-
-        adj_v = target_v / current_v
-        adj_v = np.broadcast_to(adj_v,
-                                (len(band_totals[0]['totals']),
-                                 len(band_totals[0]['totals'])))
-        if axis == 1:
-            adj_v = adj_v.T
-
-        new_v_mat = v_mat * adj_v
-
-        out_mat = out_mat + new_v_mat
-
-    v_vec = out_mat.sum(axis=axis)
-
-    if echo:
-        print(v_vec)
-        print(v_totals)
-
-    return out_mat
 
 
 def get_band_adjustment_factors(band_df):
@@ -2579,18 +2432,3 @@ def unpack_tlb(tlb,
     obs_dist = tlb['ave_km'].astype(float).to_numpy()
 
     return min_dist, max_dist, obs_trip, obs_dist
-
-
-def iz_costs_to_mean(costs):
-    """
-    Sort bands that are too big outside of the north
-    - nudge towards intrazonal
-    """
-    # Get mean
-    diag_mean = np.mean(np.diag(costs))
-    diag = costs.diagonal()
-    diag = np.where(diag > diag_mean, diag_mean, diag)
-
-    np.fill_diagonal(costs, diag)
-
-    return costs
