@@ -25,7 +25,7 @@ import pandas as pd
 
 # local imports
 import normits_demand as nd
-
+import logging
 from normits_demand import efs_constants as consts
 
 from normits_demand.utils import timing
@@ -243,6 +243,8 @@ class HBProductionModel(HBProductionModelPaths):
         # Initialise timing
         # TODO(BT): Properly integrate logging
         start_time = timing.current_milli_time()
+        logging.basicConfig(filename=output_dir + "runtime_Production.log", format='%(levelname)s:%(message)s', level=logging.INFO)
+        logging.info("Starting HB Production Model at: %s" + datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
         du.print_w_toggle(
             "Starting HB Production Model at: %s" % timing.get_datetime(),
             verbose=verbose
@@ -252,18 +254,22 @@ class HBProductionModel(HBProductionModelPaths):
         for year in self.years:
             year_start_time = timing.current_milli_time()
 
-            # ## GENERATE PURE DEMAND ## #
+            # ## GENERATE PURE DEMAND ###
             du.print_w_toggle("Loading the population data...", verbose=verbose)
             pop_dvec = self._read_land_use_data(year, verbose)
+            logging.info("Loading the population data..."+ datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
 
             du.print_w_toggle("Applying trip rates...", verbose=verbose)
             pure_demand = self._generate_productions(pop_dvec, verbose)
+            logging.info("Applying trip rates..."+ datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
 
             if export_pure_demand:
                 du.print_w_toggle("Exporting pure demand to disk...", verbose=verbose)
                 pure_demand.to_pickle(self.export_paths.pure_demand[year])
+                logging.info("Exporting pure demand to disk...."+ datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
 
             if export_reports:
+                logging.info("Exporting pure demand reports to disk...."+ datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
                 du.print_w_toggle(
                     "Exporting pure demand reports to disk...",
                     verbose=verbose
@@ -278,11 +284,15 @@ class HBProductionModel(HBProductionModelPaths):
                 )
 
             # ## SPLIT PURE DEMAND BY MODE AND TIME ## #
+            logging.info("Splitting by mode and time..." + datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
             du.print_w_toggle("Splitting by mode and time...", verbose=verbose)
             fully_segmented = self._split_by_tp_and_mode(pure_demand)
 
             # ## PRODUCTIONS TOTAL CHECK ## #
             if not pure_demand.sum_is_close(fully_segmented):
+                logging.info("WARNING:The production totals before and after mode time split are not same" + datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
+                logging.info("Expected" + (pure_demand.sum()))
+                logging.info("Actual" + (fully_segmented.sum()))
                 warnings.warn(
                     "The production totals before and after mode time split are not same.\n"
                     "Expected %f\n"
@@ -292,6 +302,7 @@ class HBProductionModel(HBProductionModelPaths):
 
             # Output productions before any aggregation
             if export_fully_segmented:
+                logging.info("Exporting fully segmented productions to disk..." + datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
                 du.print_w_toggle(
                     "Exporting fully segmented productions to disk...",
                     verbose=verbose,
@@ -306,6 +317,7 @@ class HBProductionModel(HBProductionModelPaths):
             )
 
             if export_notem_segmentation:
+                logging.info("Exporting notem segmented demand to disk..." + datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
                 du.print_w_toggle(
                     "Exporting notem segmented demand to disk...",
                     verbose=verbose
@@ -313,6 +325,8 @@ class HBProductionModel(HBProductionModelPaths):
                 productions.to_pickle(self.export_paths.notem_segmented[year])
 
             if export_reports:
+                logging.info(
+                    "Exporting notem segmented reports to disk..." + datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
                 du.print_w_toggle(
                     "Exporting notem segmented reports to disk...",
                     verbose=verbose
@@ -329,6 +343,7 @@ class HBProductionModel(HBProductionModelPaths):
             #  Output some audits of what demand was before and after control
             #  By segment.
             if self.constraint_paths is not None:
+                logging.info("No code implemented to constrain productions." + datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
                 raise NotImplemented(
                     "No code implemented to constrain productions."
                 )
@@ -336,6 +351,7 @@ class HBProductionModel(HBProductionModelPaths):
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
+            logging.info("HB Productions in year " + year+"took :"+time_taken)
             du.print_w_toggle(
                 "HB Productions in year %s took: %s\n" % (year, time_taken),
                 verbose=verbose
@@ -349,6 +365,8 @@ class HBProductionModel(HBProductionModelPaths):
             "Finished at: %s" % (time_taken, timing.get_datetime()),
             verbose=verbose
         )
+        logging.info("HB Production Model took: " + time_taken)
+        logging.info("HB Production Model Finished at: " + timing.get_datetime())
 
     def _read_land_use_data(self,
                             year: int,
@@ -375,6 +393,7 @@ class HBProductionModel(HBProductionModelPaths):
         pop_seg = nd.get_segmentation_level('notem_lu_pop')
 
         # Read the land use data corresponding to the year
+        logging.info("Reading the land use data ." + datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
         pop = file_ops.read_df(
             path=self.population_paths[year],
             find_similar=True,
