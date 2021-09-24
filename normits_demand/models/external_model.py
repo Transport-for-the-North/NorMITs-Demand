@@ -6,6 +6,9 @@ Created on Thu Feb 27 13:45:03 2020
 """
 import os
 
+from typing import List
+from typing import Union
+
 import pandas as pd
 import numpy as np
 
@@ -132,7 +135,6 @@ class ExternalModel(tms.TMSPathing):
             self.params['external_tlb_area'],
             self.params['external_tlb_name'],
         )
-        print("tlb_folder: %s" % tlb_folder)
 
         # Loop through each of the segments
         internal_p_vector_eff_df = list()
@@ -151,10 +153,42 @@ class ExternalModel(tms.TMSPathing):
                 trip_origin=trip_origin,
             )
 
+            # TODO(BT): READ IN EXTERNAL TLD FROM FILE
+            # Aggregate some bands for external
+            new_bands = [
+                ([0, 1, 2, 3, 5, 10], 15),
+                ([15], 25),
+                ([25, 35], 50),
+                ([50], 75),
+                ([75], 100),
+                ([100], 150),
+                ([150], 200),
+                ([200], 199),
+            ]
+
+            ext_ph = list()
+            for lower_nums, upper in new_bands:
+                mask = trip_length_dist['lower'].isin(lower_nums)
+                ext_ph.append({
+                    'lower': min(lower_nums),
+                    'upper': upper,
+                    'trips': np.sum(trip_length_dist[mask]['trips'].values),
+                    'ave_km': 0,
+                    'band_share': np.sum(trip_length_dist[mask]['band_share'].values),
+
+                })
+
+            ext_trip_length_dist = pd.DataFrame(ext_ph)
+
             # Convert from miles to KM
             trip_length_dist = trip_length_dist.reset_index(drop=True)
             trip_length_dist['min'] = trip_length_dist['lower'] * 1.61
             trip_length_dist['max'] = trip_length_dist['upper'] * 1.61
+
+            # Convert from miles to KM
+            ext_trip_length_dist = ext_trip_length_dist.reset_index(drop=True)
+            ext_trip_length_dist['min'] = ext_trip_length_dist['lower'] * 1.61
+            ext_trip_length_dist['max'] = ext_trip_length_dist['upper'] * 1.61
 
             # ## GET P/A VECTORS FOR THIS SEGMENT ## #
             # Filter productions to target distribution type
@@ -233,7 +267,10 @@ class ExternalModel(tms.TMSPathing):
                 base_matrix=cjtw,
                 costs=costs,
                 convergence_target=0.9,
-                target_tld=trip_length_dist,
+                int_target_tld=trip_length_dist,
+                ext_target_tld=ext_trip_length_dist,
+                internal_index=internal_index,
+                external_index=external_index,
                 log_path=log_path,
                 furness_tol=0.1,
                 furness_max_iters=5000,
@@ -331,7 +368,10 @@ class ExternalModel(tms.TMSPathing):
         base_matrix,
         costs,
         log_path,
-        target_tld: pd.DataFrame,
+        int_target_tld: pd.DataFrame,
+        ext_target_tld: pd.DataFrame,
+        internal_index: Union[np.ndarray, List[int]],
+        external_index: Union[np.ndarray, List[int]],
         convergence_target: float = 0.9,
         max_iters: int = 100,
         furness_tol: float = 0.1,
@@ -379,11 +419,9 @@ class ExternalModel(tms.TMSPathing):
         # Seed base
         gb_pa = base_matrix.copy()
 
-        # Seed con crit
-        bs_con = 0
-        print('Initial band share convergence: ' + str(bs_con))
-
         # Calibrate
+        int_bs_con = 0
+        ext_bs_con = 0
         for iter_num in range(max_iters):
             iter_start_time = timing.current_milli_time()
 
@@ -391,8 +429,13 @@ class ExternalModel(tms.TMSPathing):
             gb_pa = correct_band_share(
                 pa_mat=gb_pa,
                 distance=costs,
-                tld_band=target_tld,
+                int_tld_band=int_target_tld,
+                ext_tld_band=ext_target_tld,
+                int_index=internal_index,
+                ext_index=external_index,
             )
+
+            print(gb_pa.shape)
 
             # Furness across the other 2 dimensions
             gb_pa, furn_iters, furn_r2 = furness.doubly_constrained_furness(
@@ -403,16 +446,33 @@ class ExternalModel(tms.TMSPathing):
                 max_iters=furness_max_iters,
             )
 
+            # Split out the internal and external trips
+            internal_pa = gb_pa[:max(internal_index), :]
+            internal_dist = costs[:max(internal_index), :]
+
+            external_pa = gb_pa[max(internal_index):, :]
+            external_dist = costs[max(internal_index):, :]
+
+            # Internal vals
+            _, tlb_con, _ = ra.get_trip_length_by_band(int_target_tld, internal_dist, internal_pa)
+            prior_int_bs_con = int_bs_con
+            int_bs_con = math_utils.curve_convergence(tlb_con['tbs'], tlb_con['bs'])
+
+            # External vals
+            _, tlb_con, _ = ra.get_trip_length_by_band(ext_target_tld, external_dist, external_pa)
+            prior_ext_bs_con = ext_bs_con
+            ext_bs_con = math_utils.curve_convergence(tlb_con['tbs'], tlb_con['bs'])
+
             # Get convergence
-            _, tlb_con, _ = ra.get_trip_length_by_band(target_tld, costs, gb_pa)
-            mse = math_utils.vector_mean_squared_error(
-                vector1=tlb_con['tbs'].values,
-                vector2=tlb_con['bs'].values,
-            )
-
-            prior_bs_con = bs_con
-            bs_con = math_utils.curve_convergence(tlb_con['tbs'], tlb_con['bs'])
-
+            # _, tlb_con, _ = ra.get_trip_length_by_band(int_target_tld, costs, gb_pa)
+            # mse = math_utils.vector_mean_squared_error(
+            #     vector1=tlb_con['tbs'].values,
+            #     vector2=tlb_con['bs'].values,
+            # )
+            #
+            # prior_bs_con = bs_con
+            # bs_con = math_utils.curve_convergence(tlb_con['tbs'], tlb_con['bs'])
+            #
             iter_end_time = timing.current_milli_time()
             time_taken = iter_end_time - iter_start_time
 
@@ -431,8 +491,9 @@ class ExternalModel(tms.TMSPathing):
                 'furness_loops': furn_iters,
                 'furness_r2': furn_r2,
                 'pa_diff': np.round(pa_diff, 6),
-                'bs_con': np.round(bs_con, 6),
-                'bs_mse': np.round(mse, 8),
+                'int_bs_con': np.round(int_bs_con, 6),
+                'ext_bs_con': np.round(ext_bs_con, 6),
+                # 'bs_mse': np.round(mse, 8),
             }
 
             # Append this iteration to log file
@@ -445,15 +506,15 @@ class ExternalModel(tms.TMSPathing):
             )
 
             # ## EXIT EARLY IF CONDITIONS MET ## #
-            # If we're stuck near the target, exit early
-            diff = np.abs(bs_con - prior_bs_con)
-            if diff < .0001 and bs_con > convergence_target - 0.1:
+            # # If we're stuck near the target, exit early
+            # diff = np.abs(bs_con - prior_bs_con)
+            # if diff < .0001 and bs_con > convergence_target - 0.1:
+            #     break
+
+            if int_bs_con > convergence_target and ext_bs_con > convergence_target:
                 break
 
-            if bs_con > convergence_target:
-                break
-
-        return gb_pa, bs_con
+        return gb_pa, int_bs_con
 
     @staticmethod
     def adjust_trip_length_by_band(band_atl,
@@ -634,7 +695,10 @@ class ExternalModel(tms.TMSPathing):
 
 def correct_band_share(pa_mat,
                        distance,
-                       tld_band,
+                       int_tld_band,
+                       ext_tld_band,
+                       int_index,
+                       ext_index,
                        seed_infill=.001,
                        ):
     """
@@ -649,33 +713,46 @@ def correct_band_share(pa_mat,
     axis = 1:
         Axis to adjust band share, takes 0 or 1
     """
-    # Init
-    total_trips = np.sum(pa_mat)
-    out_mat = np.zeros_like(pa_mat)
-
     # Internal trips: i-i, i-e
     # External trips: e-i, e-e
 
-    # Adjust bands one at a time
-    for index, row in tld_band.iterrows():
-        # Get proportion of all trips that should be in this band
-        target_band_share = row['band_share']
-        target_band_trips = total_trips * target_band_share
+    # Split out the internal and external trips
+    internal_pa = pa_mat[:max(int_index), :]
+    internal_dist = distance[:max(int_index), :]
+    int_out = np.zeros_like(internal_pa)
 
-        # Get proportion of all trips that are in this band
-        distance_mask = (distance >= float(row['min'])) & (distance < float(row['max']))
-        distance_bool = np.where(distance_mask, 1, 0)
-        band_trips = pa_mat * distance_bool
-        achieved_band_trips = np.sum(band_trips)
+    external_pa = pa_mat[max(int_index):, :]
+    external_dist = distance[max(int_index):, :]
+    ext_out = np.zeros_like(external_pa)
 
-        # infill
-        achieved_band_trips = np.where(achieved_band_trips==0, seed_infill, achieved_band_trips)
+    for trips, dist, out_mat, tld_band in [(internal_pa, internal_dist, int_out, int_tld_band),
+                                           (external_pa, external_dist, ext_out, ext_tld_band)]:
+        # Init
+        total_trips = np.sum(trips)
 
-        # Adjust the matrix by difference
-        adjustment = target_band_trips / achieved_band_trips
-        adj_mat = band_trips * adjustment
+        # Adjust bands one at a time
+        for index, row in tld_band.iterrows():
+            # Get proportion of all trips that should be in this band
+            target_band_share = row['band_share']
+            target_band_trips = total_trips * target_band_share
 
-        # Add into the return matrix
-        out_mat += adj_mat
+            # Get proportion of all trips that are in this band
+            distance_mask = (dist >= float(row['min'])) & (dist < float(row['max']))
+            distance_bool = np.where(distance_mask, 1, 0)
+            band_trips = trips * distance_bool
+            achieved_band_trips = np.sum(band_trips)
+
+            # infill
+            achieved_band_trips = np.where(achieved_band_trips==0, seed_infill, achieved_band_trips)
+
+            # Adjust the matrix by difference
+            adjustment = target_band_trips / achieved_band_trips
+            adj_mat = band_trips * adjustment
+
+            # Add into the return matrix
+            out_mat += adj_mat
+
+    # Stick internal and external back together
+    out_mat = np.vstack([int_out, ext_out])
 
     return out_mat

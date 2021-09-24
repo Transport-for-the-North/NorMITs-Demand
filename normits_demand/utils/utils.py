@@ -1551,6 +1551,12 @@ def import_pa(production_import_path,
     [1] attractions:
         Mainland GB attractions.
     """
+    p_cache = "E:/%s_productions.csv" % model_zone
+    a_cache = "E:/%s_attractions.csv" % model_zone
+
+    if os.path.exists(p_cache) and os.path.exists(a_cache):
+        return pd.read_csv(p_cache), pd.read_csv(a_cache)
+
     # Reading pickled Dvector
     prod_dvec = nd.read_pickle(production_import_path)
 
@@ -1594,6 +1600,8 @@ def import_pa(production_import_path,
     attr_wd = weekly_to_weekday(attr_df, trip_origin, model_zone)
 
     # TODO(BT): Sort zoning system into order
+    prod_wd.to_csv(p_cache)
+    attr_wd.to_csv(a_cache)
 
     return prod_wd, attr_wd
 
