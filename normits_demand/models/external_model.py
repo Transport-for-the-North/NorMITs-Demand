@@ -12,6 +12,8 @@ from typing import Union
 import pandas as pd
 import numpy as np
 
+
+import normits_demand as nd
 import normits_demand.build.tms_pathing as tms
 
 from normits_demand.reports import reports_audits as ra
@@ -34,11 +36,25 @@ class ExternalModel(tms.TMSPathing):
     pass
 
     def run(self,
-            trip_origin: str = 'hb',
-            cost_type: str = '24hr',
-            seed_infill=.1):
-
+            trip_origin: str,
+            cost_type: str,
+            internal_tld_path: nd.PathLike,
+            external_tld_path: nd.PathLike,
+            seed_infill=.1,
+            ):
         """
+
+        Parameters
+        ----------
+        trip_origin: 'hb'
+        cost_type: '24hr'
+        internal_tld_path
+        external_tld_path
+        seed_infill
+
+        Returns
+        -------
+
         """
         # Define internal name
         zoning_name = self.params['model_zoning'].lower()
@@ -128,13 +144,6 @@ class ExternalModel(tms.TMSPathing):
         # ## DO THE EXTERNAL DISTRIBUTION ## #
         ei = init_params.index
 
-        # Path tlb folder
-        tld_dir = os.path.join(
-            self.import_folder,
-            'trip_length_bands',
-            self.params['tld_area'],
-        )
-
         # Loop through each of the segments
         internal_p_vector_eff_df = list()
         internal_a_vector_eff_df = list()
@@ -146,14 +155,14 @@ class ExternalModel(tms.TMSPathing):
 
             # Get target trip length distribution
             internal_tld = nup.get_trip_length_bands(
-                import_folder=os.path.join(tld_dir, self.params['internal_tld_bands']),
+                import_folder=internal_tld_path,
                 segment_params=segment_params,
                 segmentation=None,
                 trip_origin=trip_origin,
             )
 
             external_tld = nup.get_trip_length_bands(
-                import_folder=os.path.join(tld_dir, self.params['external_tld_bands']),
+                import_folder=external_tld_path,
                 segment_params=segment_params,
                 segmentation=None,
                 trip_origin=trip_origin,
@@ -192,15 +201,9 @@ class ExternalModel(tms.TMSPathing):
 
             print('attraction type: ', nup.get_attraction_type(segment_params))
 
-            # Balance a to p
-            print("total productions in segment: %s" % sub_p['productions'].sum())
-            sub_a = nup.balance_a_to_p(
-                zone_col,
-                sub_p,
-                sub_a,
-                round_val=3,
-                verbose=True,
-            )
+            # Balance A to P
+            adj_factor = sub_p['productions'].sum() / sub_a['attractions'].sum()
+            sub_a['attractions'] *= adj_factor
 
             # ## GET THE COSTS FOR THIS SEGMENT ## #
             print('Importing costs...')

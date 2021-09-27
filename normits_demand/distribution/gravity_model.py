@@ -13,6 +13,8 @@ import pandas as pd
 from normits_demand.utils import utils as nup  # Folder management, reindexing, optimisation
 from normits_demand.reports import reports_audits as ra
 
+from normits_demand.utils import pandas_utils as pd_utils
+
 # TODO: Where should this live?
 _default_rounding = 3
 
@@ -20,14 +22,14 @@ _default_rounding = 3
 # TODO: More error handling
 # TODO: object orient
 
-def run_gravity_model(ia_name,
-                      calib_params: dict,
+def run_gravity_model(zone_col,
+                      segment_params: dict,
                       init_param_a: float,
                       init_param_b: float,
                       productions,
                       attractions,
                       model_lookup_path,
-                      tlb,
+                      target_tld,
                       dist_log_path,
                       dist_log_fname,
                       dist_function='tanner',
@@ -39,6 +41,8 @@ def run_gravity_model(ia_name,
                       target_r_gap=1,
                       rounding_factor=3,
                       iz_cost_infill=0.5,
+                      production_val_col: str = 'val',
+                      attraction_val_col: str = 'val',
                       verbose=True):
     """
     Function that filters down productions and attractions to deal only with a
@@ -133,88 +137,58 @@ def run_gravity_model(ia_name,
     # Get unique zones for numpy placeholder
     # TODO: Safer to pass the internal area?
     # TODO: Maybe go in the distribution model loop instead? // Yes
-    unq_internal_zones = productions[
-        'p_zone'].drop_duplicates().reset_index(drop=True).copy()
-    unq_internal_zones.name = ia_name
+    unq_internal_zones = productions[zone_col].unique()
 
-    distribution_p = nup.filter_pa_cols(productions,
-                                        'p_zone',
-                                        calib_params,
-                                        round_val=3,
-                                        verbose=True)
-    distribution_p = distribution_p[0]
-
-    distribution_p = distribution_p.rename(
-        columns={list(distribution_p)[-1]: 'productions'})
-
-    # Filter productions to target distribution type
-
-    # Balance attractions to rounded productions
-    distribution_a = nup.filter_pa_cols(attractions,
-                                        'a_zone',
-                                        calib_params,
-                                        round_val=3,
-                                        verbose=True)
-    distribution_a = distribution_a[0]
-    distribution_a = distribution_a.rename(
-        columns={list(distribution_a)[-1]: 'attractions'})
-
-    distribution_p = distribution_p.rename(columns={'p_zone': ia_name})
-    distribution_a = distribution_a.rename(columns={'a_zone': ia_name})
+    # Filter P/A Vectors
+    productions = pd_utils.filter_df(productions, segment_params)
+    attractions = pd_utils.filter_df(attractions, segment_params)
 
     # Balance A to P
-    distribution_a = nup.balance_a_to_p(ia_name,
-                                        distribution_p,
-                                        distribution_a,
-                                        round_val=3,
-                                        verbose=False)
+    adj_factor = productions[production_val_col].sum() / attractions[attraction_val_col].sum()
+    attractions[attraction_val_col] *= adj_factor
 
     # Productions as numpy
-    p = nup.df_to_np(distribution_p,
-                     v_heading=ia_name,
-                     values='productions',
-                     unq_internal_zones=unq_internal_zones)
+    p = nup.df_to_np(
+        productions,
+        v_heading=zone_col,
+        values=production_val_col,
+        unq_internal_zones=unq_internal_zones,
+    )
     p = p.astype(np.float64, copy=True)
 
     # Attractions as numpy
-    a = nup.df_to_np(distribution_a,
-                     v_heading=ia_name,
-                     values='attractions',
-                     unq_internal_zones=unq_internal_zones)
+    a = nup.df_to_np(
+        attractions,
+        v_heading=zone_col,
+        values=attraction_val_col,
+        unq_internal_zones=unq_internal_zones,
+    )
     a = a.astype(np.float64, copy=True)
 
     # TODO: Pass car ownership params for costs
     # Import costs based on distribution parameters & car availability
     nup.print_w_toggle('Importing costs', verbose=verbose)
     internal_costs = nup.get_costs(model_lookup_path,
-                                   calib_params,
+                                   segment_params,
                                    tp=cost_type,
                                    iz_infill=iz_cost_infill)
     nup.print_w_toggle('Cost lookup returned ' + internal_costs[1], verbose=verbose)
     internal_costs = internal_costs[0].copy()
 
-    # Test order is preserved
-    diag = internal_costs[
-               internal_costs['p_zone'] == internal_costs['a_zone']][
-               'cost'].values[0:len(unq_internal_zones)]
-
     # Translate costs to array
-    cost = nup.df_to_np(internal_costs,
-                        v_heading='p_zone',
-                        h_heading='a_zone',
-                        values='cost',
-                        unq_internal_zones=unq_internal_zones)
+    cost = nup.df_to_np(
+        internal_costs,
+        v_heading='p_zone',
+        h_heading='a_zone',
+        values='cost',
+        unq_internal_zones=unq_internal_zones,
+    )
     cost = cost.astype(np.float64, copy=True)
-
-    if (np.diag(cost) == diag).sum() == len(unq_internal_zones):
-        print('Zone order preserved')
-    else:
-        raise ValueError('Zone order lost in cost conversion to ndarray')
 
     # Seed k-factors with 1s for first runs
     k_factors = cost ** 0
 
-    min_dist, max_dist, obs_trip, obs_dist = nup.unpack_tlb(calib_params['tlb'])
+    min_dist, max_dist, obs_trip, obs_dist = nup.unpack_tlb(target_tld)
 
     ### Start of parameter search ###
 
@@ -223,13 +197,8 @@ def run_gravity_model(ia_name,
     a_search, b_search, m_search, s_search, min_para, max_para = define_search_criteria(
         init_param_a,
         init_param_b,
-        dist_function)
-    print("a_search: %s" % a_search)
-    print("b_search: %s" % b_search)
-    print("m_search: %s" % m_search)
-    print("s_search: %s" % s_search)
-    print("min_para: %s" % min_para)
-    print("max_para: %s" % max_para)
+        dist_function,
+    )
 
     # Initialise, so something will run if all else fails
     max_r_sqr = [a_search[0], b_search[0], m_search[0], s_search[0], 0]
@@ -250,7 +219,8 @@ def run_gravity_model(ia_name,
                         grav_run = gravity_model(
                             dist_log_path=dist_log_path,
                             dist_log_fname=dist_log_fname,
-                            calib_params=calib_params,
+                            calib_params=segment_params,
+                            target_tld=target_tld,
                             dist_function=dist_function,
                             par_data=[asv, bsv, msv, ssv],
                             min_para=min_para,
@@ -315,7 +285,8 @@ def run_gravity_model(ia_name,
         grav_run = gravity_model(
             dist_log_path=dist_log_path,
             dist_log_fname=dist_log_fname,
-            calib_params=calib_params,
+            calib_params=segment_params,
+            target_tld=target_tld,
             dist_function=dist_function,
             par_data=max_r_sqr[0:4],
             min_para=min_para,
@@ -376,7 +347,8 @@ def run_gravity_model(ia_name,
             grav_run = gravity_model(
                 dist_log_path=dist_log_path,
                 dist_log_fname=dist_log_fname,
-                calib_params=calib_params,
+                calib_params=segment_params,
+                target_tld=target_tld,
                 dist_function=dist_function,
                 par_data=kfc_para,
                 min_para=min_para,
@@ -420,8 +392,8 @@ def run_gravity_model(ia_name,
 
     # TODO: Add indices, back to pandas
     internal_pa = pd.DataFrame(internal_pa,
-                               index=distribution_p[ia_name],
-                               columns=distribution_a[ia_name]).reset_index()
+                               index=productions[zone_col],
+                               columns=attractions[zone_col]).reset_index()
 
     # ## GENERATE A TLD REPORT ## #
     # Get distance into the right format
@@ -433,7 +405,7 @@ def run_gravity_model(ia_name,
     )
 
     _, d_bin, _ = ra.get_trip_length_by_band(
-        band_atl=tlb,
+        band_atl=target_tld,
         distance=distance,
         internal_pa=internal_pa,
     )
@@ -444,6 +416,7 @@ def run_gravity_model(ia_name,
 def gravity_model(dist_log_path: str,
                   dist_log_fname: str,
                   calib_params: dict,
+                  target_tld: pd.DataFrame,
                   dist_function: str,
                   par_data: list,
                   min_para: list,
@@ -551,12 +524,10 @@ def gravity_model(dist_log_path: str,
     dist_log_path = nup.build_path(dist_log_path, calib_params)
 
     # Build min max vectors
-    tlb = calib_params['tlb']
     # Convert miles from raw NTS to km
-    print("tlb:", tlb)
     # TODO(BT): Calculate Band share, total trip length, total average
     #  trip length in code
-    min_dist, max_dist, obs_trip, obs_dist_o = nup.unpack_tlb(tlb)
+    min_dist, max_dist, obs_trip, obs_dist_o = nup.unpack_tlb(target_tld)
 
     max_r_sqr, pre_data = [0, 0, 0, 0, 0], [0, 0, 0, 0]
     pre_val1, pre_val2 = 0, 0
@@ -567,7 +538,7 @@ def gravity_model(dist_log_path: str,
         max_r_sqr[2], max_r_sqr[3] = par_data[2], par_data[3]
 
     # Count bands
-    num_band = len(calib_params['tlb'])
+    num_band = len(target_tld)
     opt_loop = 0
 
     # Seed calibration factors

@@ -28,6 +28,8 @@ notem_import_home = r"I:\NorMITs Demand\import\NoTEM"
 notem_export_home = r"E:\NoTEM"
 output_file = "%s_msoa_notem_segmented_%d_dvec.pkl"
 
+TLD_HOME = r"I:\NorMITs Synthesiser\import\trip_length_bands"
+
 
 def check_notem_run_status() -> None:
     hb_fname = output_file % ('hb', years)
@@ -85,10 +87,14 @@ class TmsParameterBuilder:
                 'nhb_distribution_segments': ['p', 'm', 'tp'],
                 'distribution_segmentation': ['p', 'm'],
                 'distribution_function': 'ln',
-                'external_tlb_area': 'gb',
-                'external_tlb_name': 'external_ph_segments',
+
+                # EXTERNAL MODEL
+                'tld_area': 'gb',
+                'internal_tld_bands': 'p_m_standard_bands',
+                'external_tld_bands': 'p_m_large_bands',
                 'external_segmentation': ['p', 'm'],
                 'external_export_modes': [3, 5],
+
                 'output_modes': [3, 5],
                 'non_dist_export_modes': None,
                 'intrazonal_modes': [1, 2],
@@ -184,24 +190,31 @@ if __name__ == '__main__':
 
     # TODO: Define init params
 
-    #Run HB external model
-    ext = em.ExternalModel(
-        config_path,
-        params,
-    )
+    # Setup up TLD paths
+    # Path tlb folder
+    tld_dir = os.path.join(TLD_HOME, params['tld_area'])
+    internal_tld_path = os.path.join(tld_dir, params['internal_tld_bands'])
+    external_tld_path = os.path.join(tld_dir, params['external_tld_bands'])
 
-    hb_ext_out = ext.run(
-        trip_origin='hb',
-        cost_type='24hr',
-    )
-
-    print("'hb external done")
-    exit()
-
-    nhb_ext_out = ext.run(
-        trip_origin='nhb',
-        cost_type='24hr',
-    )
+    # Run HB external model
+    # ext = em.ExternalModel(
+    #     config_path,
+    #     params,
+    # )
+    #
+    # hb_ext_out = ext.run(
+    #     trip_origin='hb',
+    #     cost_type='24hr',
+    #     internal_tld_path=internal_tld_path,
+    #     external_tld_path=external_tld_path,
+    # )
+    #
+    # nhb_ext_out = ext.run(
+    #     trip_origin='nhb',
+    #     cost_type='24hr',
+    #     internal_tld_path=internal_tld_path,
+    #     external_tld_path=external_tld_path,
+    # )
 
     dist = dm.DistributionModel(
         config_path,
@@ -223,6 +236,9 @@ if __name__ == '__main__':
         export_modes=params['synthetic_modes'],
         mp_threads=0,
     )
+
+    print("hb dist done")
+    exit()
 
     dist.run_distribution_model(
         file_drive=params['base_directory'],
