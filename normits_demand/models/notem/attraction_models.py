@@ -39,6 +39,7 @@ from normits_demand.pathing import NHBAttractionModelPaths
 
 
 class HBAttractionModel(HBAttractionModelPaths):
+    _log_fname = "NoTEM_log.log"
     """The Home-Based Attraction Model of NoTEM
 
         The attraction model can be ran by calling the class run() method.
@@ -201,7 +202,14 @@ class HBAttractionModel(HBAttractionModelPaths):
             export_home=export_home,
             report_home=report_home,
         )
-
+        # Create a logger
+        logger_name = "%s.%s" % (__name__, self.__class__.__name__)
+        log_file_path = os.path.join(self.export_home, self._log_fname)
+        self._logger = nd.get_logger(
+            logger_name=logger_name,
+            log_file_path=log_file_path,
+            instantiate_msg="Initialised HB Attraction Model",
+        )
     def run(self,
             export_pure_attractions: bool = True,
             export_fully_segmented: bool = False,
@@ -261,33 +269,28 @@ class HBAttractionModel(HBAttractionModelPaths):
         None
         """
         # Initialise timing
-        # TODO(BT): Properly integrate logging
+        
         start_time = timing.current_milli_time()
-        du.print_w_toggle(
-            "Starting HB Attraction Model at: %s" % timing.get_datetime(),
-            verbose=verbose
-        )
+        self._logger.info("Starting HB Attraction Model" )        
 
         # Generate the attractions for each year
         for year in self.years:
             year_start_time = timing.current_milli_time()
 
             # ## GENERATE PURE ATTRACTIONS ## #
-            du.print_w_toggle("Loading the employment data...", verbose=verbose)
+            self._logger.info("Loading the employment data")
             emp_dvec = self._read_land_use_data(year, verbose=verbose)
 
-            du.print_w_toggle("Applying trip rates...", verbose=verbose)
+            self._logger.info("Applying trip rates")
             pure_attractions = self._generate_attractions(emp_dvec, verbose=verbose)
 
             if export_pure_attractions:
-                du.print_w_toggle("Exporting pure attractions to disk...", verbose=verbose)
+                self._logger.info("Exporting pure attractions to disk")
                 pure_attractions.to_pickle(self.export_paths.pure_demand[year])
 
             if export_reports:
-                du.print_w_toggle(
-                    "Exporting pure demand reports to disk...",
-                    verbose=verbose
-                )
+                self._logger.info("Exporting pure demand reports to disk")                  
+                report_seg = nd.get_segmentation_level('notem_hb_attractions_pure_report')   
                 pure_demand_paths = self.report_paths.pure_demand
                 pure_attractions.write_sector_reports(
                     segment_totals_path=pure_demand_paths.segment_total[year],
@@ -296,24 +299,22 @@ class HBAttractionModel(HBAttractionModelPaths):
                 )
 
             # ## SPLIT PURE ATTRACTIONS BY MODE ## #
-            du.print_w_toggle("Splitting by mode...", verbose=verbose)
+            self._logger.info("Splitting by mode")
             fully_segmented = self._split_by_mode(pure_attractions)
 
             # ## ATTRACTIONS TOTAL CHECK ## #
             if not pure_attractions.sum_is_close(fully_segmented):
-                warnings.warn(
+                msg=(
                     "The attraction totals before and after mode split are not same.\n"
                     "Expected %f\n"
                     "Got %f"
                     % (pure_attractions.sum(), fully_segmented.sum())
-                )
+                )                
+                self._logger.warning(msg)
 
             # Output attractions before any aggregation
             if export_fully_segmented:
-                du.print_w_toggle(
-                    "Exporting fully segmented attractions to disk...",
-                    verbose=verbose,
-                )
+                self._logger.info("Exporting fully segmented attractions to disk")
                 fully_segmented.to_pickle(self.export_paths.fully_segmented[year])
 
             # Control the attractions to the productions - this also adds in
@@ -324,18 +325,11 @@ class HBAttractionModel(HBAttractionModelPaths):
             )
 
             if export_notem_segmentation:
-                du.print_w_toggle(
-                    "Exporting notem segmented attractions to disk...",
-                    verbose=verbose
-                )
+                self._logger.info("Exporting notem segmented attractions to disk")
                 notem_segmented.to_pickle(self.export_paths.notem_segmented[year])
 
             if export_reports:
-                du.print_w_toggle(
-                    "Exporting notem segmented reports to disk...",
-                    verbose=verbose
-                )
-
+                self._logger.info("Exporting notem segmented reports to disk")
                 notem_segmented_paths = self.report_paths.notem_segmented
                 notem_segmented.write_sector_reports(
                     segment_totals_path=notem_segmented_paths.segment_total[year],
@@ -347,26 +341,20 @@ class HBAttractionModel(HBAttractionModelPaths):
             #  Output some audits of what attractions was before and after control
             #  By segment.
             if self.constraint_paths is not None:
-                raise NotImplemented(
-                    "No code implemented to constrain attractions."
-                )
-
+                msg = "No code implemented to constrain attractions."
+                self._logger.error(msg)
+                raise NotImplementedError(msg)  
+              
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
-            du.print_w_toggle(
-                "HB Attraction in year %s took: %s\n" % (year, time_taken),
-                verbose=verbose
-            )
+            self._logger.info("HB Attraction in year %s took: %s\n" % (year, time_taken))
 
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        du.print_w_toggle(
-            "HB Attraction Model took: %s\n"
-            "Finished at: %s" % (time_taken, timing.get_datetime()),
-            verbose=verbose
-        )
+        self._logger.info("HB Attraction Model took:" % time_taken)
+        self._logger.info("HB Attraction Model Finished")        
 
     def _read_land_use_data(self,
                             year: int,
@@ -437,8 +425,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         trip_weights_seg = nd.get_segmentation_level('notem_hb_attractions_trip_weights')
         pure_attractions_seg = nd.get_segmentation_level('notem_hb_attractions_pure')
 
-        # Reading trip rates
-        du.print_w_toggle("Reading in files...", verbose=verbose)
+        # Reading trip rates        
         trip_rates = du.safe_read_csv(
             self.trip_weights_path,
             usecols=self._target_col_dtypes['trip_weight'].keys(),
@@ -446,8 +433,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         )
 
         # ## CREATE THE TRIP RATES DVEC ## #
-        du.print_w_toggle("Creating trip rates DVec...", verbose=verbose)
-
+        
         # Instantiate
         trip_weights_dvec = nd.DVector(
             zoning_system=msoa_zoning,
@@ -529,6 +515,7 @@ class HBAttractionModel(HBAttractionModelPaths):
 
 
 class NHBAttractionModel(NHBAttractionModelPaths):
+    _log_fname = "NoTEM_log.log"
     """The Non Home-Based Attraction Model of NoTEM
 
         The attraction model can be ran by calling the class run() method.
@@ -633,7 +620,14 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             export_home=export_home,
             report_home=report_home,
         )
-
+        # Create a logger
+        logger_name = "%s.%s" % (__name__, self.__class__.__name__)
+        log_file_path = os.path.join(self.export_home, self._log_fname)
+        self._logger = nd.get_logger(
+            logger_name=logger_name,
+            log_file_path=log_file_path,
+            instantiate_msg="Initialised NHB Attraction Model",
+        )
     def run(self,
             export_nhb_pure_attractions: bool = True,
             export_notem_segmentation: bool = True,
@@ -679,32 +673,24 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         -------
         None
         """
-        # Initialise timing
-        # TODO(BT): Properly integrate logging
+        # Initialise timing        
         start_time = timing.current_milli_time()
-        du.print_w_toggle(
-            "Starting NHB Attraction Model at: %s" % timing.get_datetime(),
-            verbose=verbose
-        )
+        self._logger.info("Starting NHB Attraction Model")
 
         # Generate the nhb attractions for each year
         for year in self.years:
             year_start_time = timing.current_milli_time()
 
             # ## GENERATE PURE ATTRACTIONS ## #
-            du.print_w_toggle("Loading the HB attraction data...", verbose=verbose)
+            self._logger.info("Loading the HB attraction data")
             pure_nhb_attr = self._create_nhb_attraction_data(year, verbose=verbose)
 
             if export_nhb_pure_attractions:
-                du.print_w_toggle("Exporting NHB pure attractions to disk...", verbose=verbose)
+                self._logger.info("Exporting NHB pure attractions to disk")
                 pure_nhb_attr.to_pickle(self.export_paths.pure_demand[year])
 
             if export_reports:
-                du.print_w_toggle(
-                    "Exporting pure NHB attractions reports to disk...",
-                    verbose=verbose
-                )
-
+                self._logger.info("Exporting pure NHB attractions reports to disk")
                 pure_demand_paths = self.report_paths.pure_demand
                 pure_nhb_attr.write_sector_reports(
                     segment_totals_path=pure_demand_paths.segment_total[year],
@@ -719,18 +705,11 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             )
 
             if export_notem_segmentation:
-                du.print_w_toggle(
-                    "Exporting notem segmented attractions to disk...",
-                    verbose=verbose
-                )
+                self._logger.info("Exporting notem segmented attractions to disk")
                 notem_segmented.to_pickle(self.export_paths.notem_segmented[year])
 
             if export_reports:
-                du.print_w_toggle(
-                    "Exporting notem segmented attractions reports to disk...",
-                    verbose=verbose
-                )
-
+                self._logger.info("Exporting notem segmented attractions reports to disk")
                 notem_segmented_paths = self.report_paths.notem_segmented
                 notem_segmented.write_sector_reports(
                     segment_totals_path=notem_segmented_paths.segment_total[year],
@@ -742,26 +721,20 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             #  Output some audits of what attractions was before and after control
             #  By segment.
             if self.constraint_paths is not None:
-                raise NotImplemented(
-                    "No code implemented to constrain attractions."
-                )
-
+                msg = "No code implemented to constrain productions"                              
+                self._logger.error(msg)
+                raise NotImplementedError(msg)            
+                
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
-            du.print_w_toggle(
-                "NHB Attraction in year %s took: %s\n" % (year, time_taken),
-                verbose=verbose
-            )
+            self._logger.info("NHB Attraction in year %s took: %s\n" % (year, time_taken))
 
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        du.print_w_toggle(
-            "NHB Attraction Model took: %s\n"
-            "Finished at: %s" % (time_taken, end_time),
-            verbose=verbose
-        )
+        self._logger.info("NHB Attraction Model took:" % time_taken)
+        self._logger.info("NHB Attraction Model Finished")
 
     def _create_nhb_attraction_data(self,
                                     year: int,
