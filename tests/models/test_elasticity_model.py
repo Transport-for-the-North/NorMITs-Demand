@@ -324,31 +324,3 @@ def fixture_cost_changes(tmp_path_factory: pytest.TempPathFactory) -> Path:
     path = folder / "cost_changes.csv"
     COST_CHANGES.to_csv(path, index=False)
     return path
-
-
-@pytest.mark.parametrize("years", (["2018"], ["2018", "2019"]))
-@pytest.mark.parametrize("missing_type", (True, False))
-def test_read_cost_changes(monkeypatch,
-                           cost_changes: Path,
-                           years: List[str],
-                           missing_type: bool
-                           ) -> None:
-    """Test that `read_cost_changes` reads the file and performs checks."""
-    if missing_type:
-        monkeypatch.delitem(ec.GC_ELASTICITY_TYPES, "Car_RUC")
-        with pytest.raises(KeyError) as e:
-            em.read_cost_changes(cost_changes, years)
-        msg = (
-            "Unknown elasticity_type: ['Car_RUC'], available types "
-            "are: ['Car_JourneyTime', 'Car_FuelCost', 'Rail_Fare', "
-            "'Rail_IVTT', 'Bus_Fare', 'Bus_IVTT']"
-        )
-        assert e.value.args[0] == msg, "Unknown elasticity type"
-    elif years != ["2018"]:
-        with pytest.raises(ValueError) as e:
-            em.read_cost_changes(cost_changes, years)
-        msg = "Cost change not present for years: ['2019']"
-        assert e.value.args[0] == msg, "Missing year data"
-    else:
-        data = em.read_cost_changes(cost_changes, years)
-        pd.testing.assert_frame_equal(data, COST_CHANGES)

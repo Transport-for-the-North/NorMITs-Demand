@@ -11,9 +11,6 @@ from normits_demand.core.segments import get_segmentation_level
 # ## EXPOSE USEFUL FUNCTIONALITY ## #
 from normits_demand.core.data_structures import multiply_and_aggregate_dvectors
 from normits_demand.core.data_structures import read_compressed_dvector
-from normits_demand.core.data_structures import from_pickle
-from normits_demand.core.data_structures import DVector
-
 
 # ## EXPOSE ERRORS ## #
 from normits_demand.core.zoning import ZoningError

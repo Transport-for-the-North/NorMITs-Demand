@@ -1332,6 +1332,7 @@ class ExternalForecastSystem:
                 years_needed=years_needed,
                 p_needed=sub_p_needed,
                 m_needed=m_needed,
+                ca_needed=self.ca_needed,
                 round_dp=round_dp,
             )
 
@@ -1344,12 +1345,10 @@ class ExternalForecastSystem:
         }
 
         # Convert HB to OD via tour proportions
-        pa2od.build_od_from_tour_proportions(
+        pa2od.build_od_from_fh_th_factors(
             pa_import=self.exports['aggregated_pa'],
             od_export=self.exports['od'],
-            tour_proportions_dir=self.imports['post_me_tours'],
-            zone_translate_dir=self.imports['zone_translation']['one_to_one'],
-            model_name=self.model_name,
+            fh_th_factors_dir=self.imports['post_me_fh_th_factors'],
             years_needed=years_needed,
             seg_level=seg_level,
             seg_params=seg_params

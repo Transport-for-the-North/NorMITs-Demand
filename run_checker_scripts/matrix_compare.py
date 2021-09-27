@@ -14,12 +14,15 @@ a report on their similarity
 
 import os
 import re
-
-from collections import defaultdict
+import sys
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+
+sys.path.append('..')
+from normits_demand.concurrency import multiprocessing
+from normits_demand import constants as consts
 
 # Post-ME output
 # base_path = r'E:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3b\Matrices\Post-ME Matrices'
@@ -39,7 +42,7 @@ from tqdm import tqdm
 
 # ## COMPARE POST_ME INPUT TO 2018 OUTPUT ## #
 TRIP_ORIGIN = None
-OUTPUT_DIR = r'I:\NorMITs Demand\noham\EFS\iter3g\NTEM\Reports\EFS Reporter'
+# OUTPUT_DIR = r'I:\NorMITs Demand\noham\EFS\iter3g\NTEM\Reports\EFS Reporter'
 
 # Compare EFS output to post-ME PA
 # ORIGINAL_DIR = r'I:\NorMITs Demand\import\noham\decompiled_post_me'
@@ -69,11 +72,10 @@ OUTPUT_DIR = r'I:\NorMITs Demand\noham\EFS\iter3g\NTEM\Reports\EFS Reporter'
 # REPORT_FNAME = 'efs_named_report.csv'
 
 # Compare NoRMS compiled to post-ME
-ORIGINAL_DIR = r'I:\NorMITs Demand\import\norms\post_me\renamed'
-COMPARE_DIR = r'F:\NorMITs Demand\norms\EFS\iter3g\NTEM\Matrices\Compiled PA Matrices'
-OUTPUT_DIR = r'F:/'
+ORIGINAL_DIR = r'E:\NorMITs Demand\noham\EFS\iter3i\SC04_UZC\Matrices\OD Matrices'
+COMPARE_DIR = r'E:\NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\OD Matrices'
+OUTPUT_DIR = r'E:/'
 REPORT_FNAME = 'compiled_report.csv'
-
 
 
 def list_files(path):
@@ -84,6 +86,55 @@ def list_files(path):
 def starts_with(s, x):
     search_string = '^' + x
     return re.search(search_string, s) is not None
+
+
+def compare_mats_fn(mat_fname):
+    report = dict()
+
+    orig = pd.read_csv(os.path.join(ORIGINAL_DIR, mat_fname), index_col=0)
+    comp = pd.read_csv(os.path.join(COMPARE_DIR, mat_fname), index_col=0)
+
+    # Check the dimensions
+    # noinspection PyTypeChecker
+    if all(orig.columns != comp.columns):
+        raise ValueError(
+            "The column names of matrix %s do not match in the original "
+            "and compare directories. Please check manually."
+            % mat_fname
+        )
+
+    # noinspection PyTypeChecker
+    if all(orig.index != comp.index):
+        raise ValueError(
+            "The index names of matrix %s do not match in the original "
+            "and compare directories. Please check manually."
+            % mat_fname
+        )
+
+    # extract just the values
+    orig = orig.values
+    comp = comp.values
+
+    # Get the absolute difference
+    diff = np.absolute(orig - comp)
+
+    # Store the comparison into a report
+    report['matrix_name'] = mat_fname
+    report['mean_diff'] = diff.mean()
+    report['max_diff'] = diff.max()
+    report['absolute_diff'] = diff.sum()
+    report['actual_diff'] = comp.sum() - orig.sum()
+    report['% actual_diff'] = (comp.sum() - orig.sum()) / orig.sum() * 100
+
+    # # ## ERROR CHECKING ## #
+    # max_idx = np.where(diff == diff.max())
+    # max_row, max_col = max_idx[0][0], max_idx[1][0]
+    # report['spacer'].append('')
+    # report['max_OD'].append((max_row+1, max_col+1))
+    # report['original_value'].append(orig[max_row, max_col])
+    # report['test_value'].append(comp[max_row, max_col])
+
+    return report
 
 
 def main():
@@ -130,55 +181,22 @@ def main():
         raise ValueError("After all the checks, the list of matrices does not "
                          "match. Not sure what's gone wrong here.")
 
+    # ## MULTIPROCESS MATRIX COMPARISON ## #
     print("Checks complete. Comparing matrices...")
-    report = defaultdict(list)
-    for mat_fname in tqdm(original_mats):
-        orig = pd.read_csv(os.path.join(ORIGINAL_DIR, mat_fname), index_col=0)
-        comp = pd.read_csv(os.path.join(COMPARE_DIR, mat_fname), index_col=0)
+    kwarg_list = [{'mat_fname': x} for x in original_mats]
+    pbar_kwargs = {'desc': 'Comparing Matrices'}
 
-        # Check the dimensions
-        # noinspection PyTypeChecker
-        if all(orig.columns != comp.columns):
-            raise ValueError(
-                "The column names of matrix %s do not match in the original "
-                "and compare directories. Please check manually."
-                % mat_fname
-            )
+    reports = multiprocessing.multiprocess(
+        fn=compare_mats_fn,
+        kwargs=kwarg_list,
+        pbar_kwargs=pbar_kwargs,
+        process_count=consts.PROCESS_COUNT,
 
-        # noinspection PyTypeChecker
-        if all(orig.index != comp.index):
-            raise ValueError(
-                "The index names of matrix %s do not match in the original "
-                "and compare directories. Please check manually."
-                % mat_fname
-            )
-
-        # extract just the values
-        orig = orig.values
-        comp = comp.values
-
-        # Get the absolute difference
-        diff = np.absolute(orig - comp)
-
-        # Store the comparison into a report
-        report['matrix_name'].append(mat_fname)
-        report['mean_diff'].append(diff.mean())
-        report['max_diff'].append(diff.max())
-        report['absolute_diff'].append(diff.sum())
-        report['actual_diff'].append(comp.sum() - orig.sum())
-        report['% actual_diff'].append((comp.sum() - orig.sum()) / orig.sum() * 100)
-
-        # # ## ERROR CHECKING ## #
-        # max_idx = np.where(diff == diff.max())
-        # max_row, max_col = max_idx[0][0], max_idx[1][0]
-        # report['spacer'].append('')
-        # report['max_OD'].append((max_row+1, max_col+1))
-        # report['original_value'].append(orig[max_row, max_col])
-        # report['test_value'].append(comp[max_row, max_col])
+    )
 
     # Write the report to disk
-    pd.DataFrame(report).to_csv(os.path.join(OUTPUT_DIR, REPORT_FNAME),
-                                index=False)
+    df = pd.DataFrame(reports)
+    df.to_csv(os.path.join(OUTPUT_DIR, REPORT_FNAME), index=False)
 
 
 if __name__ == '__main__':
