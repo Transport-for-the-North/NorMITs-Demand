@@ -700,7 +700,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         # Initialise timing
 
         start_time = timing.current_milli_time()
-        self._logger.info("Starting NHB Production Model " )
+        self._logger.info("Starting NHB Production Model")
 
         # Generate the nhb productions for each year
         for year in self.years:
