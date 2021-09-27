@@ -288,8 +288,7 @@ class HBProductionModel(HBProductionModelPaths):
                     "Expected %f\n"
                     "Got %f"
                     % (pure_demand.sum(), fully_segmented.sum())
-                )
-                self._logger.debug(msg)
+                )                
                 self._logger.warning(msg)
 
             # Output productions before any aggregation
@@ -739,8 +738,7 @@ class NHBProductionModel(NHBProductionModelPaths):
                     "Expected %f\n"
                     "Got %f"
                     % (pure_nhb_demand.sum(), fully_segmented.sum())
-                )
-                self._logger.debug(msg)
+                )               
                 self._logger.warning(msg)
 
             if export_fully_segmented:
