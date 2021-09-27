@@ -249,9 +249,9 @@ class HBProductionModel(HBProductionModelPaths):
         None
         """
         # Initialise timing
-        # TODO(BT): Properly integrate logging#Logging Intiated by HM#
+
         start_time = timing.current_milli_time()
-        self._logger.info("Starting HB Production Model at: %s" % timing.get_datetime())
+        self._logger.info("Starting HB Production Model at:" )
 
         # Generate the productions for each year
         for year in self.years:
@@ -272,13 +272,13 @@ class HBProductionModel(HBProductionModelPaths):
                 report_seg = nd.get_segmentation_level('notem_hb_productions_pure_report')
                 pure_demand_paths = self.report_paths.pure_demand
                 pure_demand.aggregate(report_seg).write_sector_reports(
-                segment_totals_path=pure_demand_paths.segment_total[year],
-                ca_sector_path=pure_demand_paths.ca_sector[year],
-                ie_sector_path=pure_demand_paths.ie_sector[year],
+                    segment_totals_path=pure_demand_paths.segment_total[year],
+                    ca_sector_path=pure_demand_paths.ca_sector[year],
+                    ie_sector_path=pure_demand_paths.ie_sector[year],
                 )
 
             # ## SPLIT PURE DEMAND BY MODE AND TIME ## #
-            self._logger.info("Splitting by mode and time..." )
+            self._logger.info("Splitting by mode and time" )
             fully_segmented = self._split_by_tp_and_mode(pure_demand)
 
             # ## PRODUCTIONS TOTAL CHECK ## #
@@ -292,7 +292,7 @@ class HBProductionModel(HBProductionModelPaths):
                 self._logger.debug(msg)
                 warnings.warn(msg)
 
-            # ## Output productions before any aggregation ## #
+            # Output productions before any aggregation
             if export_fully_segmented:
                 self._logger.info("Exporting fully segmented productions to disk.")
                 fully_segmented.to_pickle(self.export_paths.fully_segmented[year])
@@ -322,9 +322,7 @@ class HBProductionModel(HBProductionModelPaths):
             #  Output some audits of what demand was before and after control
             #  By segment.
             if self.constraint_paths is not None:
-                msg=(
-                    "No code implemented to constrain productions."
-                )
+                msg= "No code implemented to constrain productions"
                 self._logger.debug(msg)
                 warnings.warn(msg)
                 raise NotImplemented(
@@ -703,9 +701,9 @@ class NHBProductionModel(NHBProductionModelPaths):
         None
         """
         # Initialise timing
-        # TODO(BT): Properly integrate logging
+
         start_time = timing.current_milli_time()
-        self._logger.info("Starting NHB Production Model at: %s" % timing.get_datetime())
+        self._logger.info("Starting NHB Production Model at: " )
 
         # Generate the nhb productions for each year
         for year in self.years:
@@ -772,9 +770,7 @@ class NHBProductionModel(NHBProductionModelPaths):
             #  Output some audits of what demand was before and after control
             #  By segment.
             if self.constraint_paths is not None:
-                msg=(
-                    "No code implemented to constrain productions."
-                )
+                msg= "No code implemented to constrain productions"
                 self._logger.debug(msg)
                 warnings.warn(msg)
                 raise NotImplemented(
