@@ -133,7 +133,7 @@ def tms_segmentation_tests(model_name,
             ca_needed=ca_needed,
         )
 
-        pa2od.build_od_from_tour_proportions(
+        pa2od.build_od_from_fh_th_factors(
             pa_import=os.path.join(base_path, '24hr PA Matrices'),
             od_export=os.path.join(base_path, 'Test OD Matrices'),
             tour_proportions_dir=r'I:\NorMITs Demand\import\noham\post_me_tour_proportions',
@@ -328,7 +328,7 @@ def vdm_segmentation_tests(model_name,
             **seg_params
         )
 
-        pa2od.build_od_from_tour_proportions(
+        pa2od.build_od_from_fh_th_factors(
             pa_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
             od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM Test OD Matrices',
             tour_proportions_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',

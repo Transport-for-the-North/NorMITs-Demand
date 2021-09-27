@@ -12,8 +12,10 @@ A collections of utility functions for file operations
 """
 # builtins
 import os
+import pickle
 import pathlib
 
+from typing import Any
 from typing import List
 
 # Third Party
@@ -760,3 +762,51 @@ def create_folder(folder_path: nd.PathLike,
         "New project folder created at %s" % folder_path,
         verbose=verbose_create,
     )
+
+
+def to_pickle(obj: object,
+              path: nd.PathLike,
+              protocol: int = pickle.HIGHEST_PROTOCOL,
+              **kwargs,
+              ) -> None:
+    """Load any pickled object from disk at path.
+
+    Parameters
+    ----------
+    obj:
+        The object to pickle and write to disk
+
+    path:
+        Filepath to write obj to
+
+    protocol:
+        The pickle protocol to use when dumping to disk
+
+    **kwargs:
+        Any additional arguments to pass to pickle.dump()
+
+    Returns
+    -------
+    None
+    """
+    with open(path, 'wb') as f:
+        pickle.dump(obj, f, protocol=protocol, **kwargs)
+
+
+def from_pickle(path: nd.PathLike) -> Any:
+    """Load any pickled object from disk at path.
+
+    Parameters
+    ----------
+    path:
+        Filepath to the object to read in and unpickle
+
+    Returns
+    -------
+    unpickled:
+        Same type as object stored in file.
+    """
+    # TODO(BT): VALIDATE PATH
+    with open(path, 'rb') as f:
+        obj = pickle.load(f)
+    return obj

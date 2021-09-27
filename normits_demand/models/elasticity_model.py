@@ -10,9 +10,8 @@ Other updates made by:
 File purpose:
 Module containing the functions for applying elasticities to demand matrices.
 """
-
-
 # Built-in imports
+import copy
 import functools
 import operator
 
@@ -51,18 +50,37 @@ class ElasticityModel:
     _valid_mode_names = list(ec.MODE_ID.keys())
     _valid_mode_nums = list(ec.MODE_ID.values())
 
+    # Define some filenames the elasticty model needs
+    _segments_filename = "elasticity_segments.csv"
+    _elasticities_filename = "elasticity_values.csv"
+    _constraints_folder = "constraint_matrices"
+
+    _base_costs_fname = "{mode}_costs_p{purpose}.csv"
+
     def __init__(self,
-                 input_folders: Dict[str, Path],
-                 input_files: Dict[str, Path],
-                 output_folders: Dict[str, Path],
-                 output_years: List[int],
                  base_year: int,
+                 future_years: List[int],
+                 import_home: nd.PathLike,
+                 translation_home: nd.PathLike,
+                 car_demand_import: nd.PathLike,
+                 rail_demand_import: nd.PathLike,
+                 car_costs_import: nd.PathLike,
+                 rail_costs_import: nd.PathLike,
+                 vot_voc_values_path: nd.PathLike,
+                 cost_adjustments_path: nd.PathLike,
+                 car_demand_export: nd.PathLike,
+                 rail_demand_export: nd.PathLike,
+                 other_demand_export: nd.PathLike,
+                 reports_export: nd.PathLike,
                  common_zone_system: str = None,
                  ):
         """Check input files and folders exist and create output folders.
 
         Parameters
         ----------
+        import_home:
+
+
         input_folders : Dict[str, Path]
             Paths to the input folders, expects the following keys:
             - elasticity
@@ -84,7 +102,7 @@ class ElasticityModel:
             - others
 
         output_years : List[int]
-            List of years to perform elasticity calculations for.
+            List of future_years to perform elasticity calculations for.
 
         base_year:
             The base year of the produced matrices. This is used to
@@ -96,40 +114,37 @@ class ElasticityModel:
             Demand will be translated into and out of this zone system if
             it is not already in this format.
         """
-        # BACKLOG: Change ElasticityModel constructor. Make arguments explicit
+        # BACKLOG: Update ElasticityModel constructor docs
         #  labels: elasticity
-        self._check_paths(
-            input_folders,
-            (
-                "elasticity",
-                "translation",
-                "rail_demand",
-                "car_demand",
-                "rail_costs",
-                "car_costs",
-            ),
-        )
-        self._check_paths(
-            input_files, ("gc_parameters", "cost_changes"), "file"
-        )
-        self.input_files = input_files
+        # ## VALIDATE INPUTS ## #
+        # Check that all directories exist
 
-        self.import_home = input_folders["elasticity"]
-        self.zone_translation_folder = input_folders["translation"]
+        # Check that paths to files exist
+
+        # Assign attributes
+        self.base_year = base_year
+        self.future_years = future_years
+
+        self.import_home = import_home
+        self.zone_translation_folder = translation_home
+        self.vot_voc_values_path = vot_voc_values_path
+        self.cost_adjustments_path = cost_adjustments_path
+
+        self.car_demand_export = car_demand_export
+        self.rail_demand_export = rail_demand_export
+        self.other_demand_export = other_demand_export
+        self.reports_export = reports_export
 
         # Assign demand and cost dirs
-        modes = ['car', 'rail']
-        self.demand_dirs = {m: input_folders[f"{m}_demand"] for m in modes}
-        self.cost_dirs = {m: input_folders[f"{m}_costs"] for m in modes}
+        self.demand_dirs = {
+            'car': car_demand_import,
+            'rail': rail_demand_import,
+        }
 
-        self._check_paths(
-            output_folders,
-            ("car", "rail", "others"),
-            create_folders=True,
-        )
-        self.output_folder = output_folders
-        self.years = output_years
-        self.base_year = base_year
+        self.cost_dirs = {
+            'car': car_costs_import,
+            'rail': rail_costs_import,
+        }
 
         if common_zone_system is None:
             self.common_zone_system = self._default_common_zone_system
@@ -139,72 +154,13 @@ class ElasticityModel:
         # Set up the cost builder
         self.cost_builder = gc.CostBuilder(
             base_year=self.base_year,
-            years=self.years,
+            years=self.future_years,
             modes=list(ec.MODE_ID.keys()),
             purposes=ec.PURPOSES,
-            vot_voc_path=self.input_files["gc_parameters"],
-            cost_adj_path=self.input_files["cost_changes"],
+            vot_voc_path=self.vot_voc_values_path,
+            cost_adj_path=self.cost_adjustments_path,
             elasticity_types_path=self.import_home / ec.ETYPES_FNAME,
         )
-
-    @staticmethod
-    def _check_paths(paths: Dict[str, Path],
-                     expected: List[str],
-                     path_type: str = "folder",
-                     create_folders: bool = False,
-                     ) -> None:
-        """Check if expected paths are given and exist.
-
-        Parameters
-        ----------
-        paths : Dict[str, Path]
-            Dictionary containing paths to the expected folders
-            (or files).
-        expected : List[str]
-            List of expected keys in the `paths` dictionary.
-        path_type : str, optional
-            Type of paths being provided either 'folder' (default)
-            or 'file'.
-        create_folders : bool, optional
-            If True will create folders that don't exist, if False
-            (default) raises FileNotFoundError. If `path_type` is
-            'file' then this parameter is ignored.
-
-        Raises
-        ------
-        KeyError
-            If any `expected` folders are missing from `folders`.
-        FileNotFoundError
-            If any of the paths in `folders` aren't directories
-            and `create_folders` is False.
-        """
-        path_type = path_type.lower()
-        if path_type == "folder":
-            def check(p): return p.is_dir()
-        elif path_type == "file":
-            def check(p): return p.is_file()
-        else:
-            raise ValueError(
-                f"path_type should be 'folder' or 'file' not '{path_type}'"
-            )
-
-        missing = list()
-        not_dir = dict()
-        for i in expected:
-            if i not in paths.keys():
-                missing.append(i)
-                continue
-            if not check(paths[i]):
-                if create_folders and path_type == "folder":
-                    paths[i].mkdir(parents=True)
-                else:
-                    not_dir[i] = paths[i]
-        if missing:
-            raise KeyError(f"Missing input {path_type}s: {missing}")
-        if not_dir:
-            raise FileNotFoundError(
-                f"{path_type.capitalize()}s could not be found: {not_dir}"
-            )
 
     def apply_all_MP(self, process_count: int = consts.PROCESS_COUNT):
         """Performs elasticity calculations for all segments provided.
@@ -218,13 +174,13 @@ class ElasticityModel:
         cost_changes = self.cost_builder.get_cost_changes()
 
         # Read in the segments to loop around
-        segments = eu.read_segments_file(self.import_home / ec.SEGMENTS_FILE)
+        segments = eu.read_segments_file(self.import_home / self._segments_filename)
 
         # Set up the arguments for each iteration
         kwarg_list = list()
         print("Setting up arguments...")
         for _, row in segments.iterrows():
-            for yr in self.years:
+            for yr in self.future_years:
                 # Grab the elasticity params from the file
                 elasticity_params = {
                     "purpose": str(row["elast_p"]),
@@ -263,7 +219,7 @@ class ElasticityModel:
 
         # Set up progress bar kwargs to track
         pbar_kwargs = {
-            'total': len(segments) * len(self.years),
+            'total': len(segments) * len(self.future_years),
             'desc': "Applying elasticities to segments",
             'unit': "segment",
             'colour': 'cyan',
@@ -293,11 +249,11 @@ class ElasticityModel:
         with du.std_out_err_redirect_tqdm() as orig_stdout:
 
             # Read in the segments to loop around
-            segments = eu.read_segments_file(self.import_home / ec.SEGMENTS_FILE)
+            segments = eu.read_segments_file(self.import_home / self._segments_filename)
 
             # Set up pbar
             pbar = tqdm.tqdm(
-                total=len(segments) * len(self.years),
+                total=len(segments) * len(self.future_years),
                 desc="Applying elasticities to segments",
                 file=orig_stdout,
                 dynamic_ncols=True,
@@ -306,7 +262,7 @@ class ElasticityModel:
 
             # Loop through all of the defined segments
             for _, row in segments.iterrows():
-                for yr in self.years:
+                for yr in self.future_years:
                     # Grab the elasticity params from the file
                     elasticity_params = {
                         "purpose": str(row["elast_p"]),
@@ -433,7 +389,7 @@ class ElasticityModel:
         """
         # Init
         elasticities = eu.read_elasticity_file(
-            self.import_home / ec.ELASTICITIES_FILE,
+            self.import_home / self._elasticities_filename,
             **elasticity_params,
         )
 
@@ -444,12 +400,12 @@ class ElasticityModel:
 
         if missing != list():
             raise ValueError(
-                f"Elasticity values in {ec.ELASTICITIES_FILE} "
+                f"Elasticity values in {self._elasticities_filename} "
                 f"missing for the following types: {missing}"
             )
 
         # ## LOAD IN THE CONSTRAINT MATRICES ## #
-        path = self.import_home / ec.CONSTRAINTS_FOLDER
+        path = self.import_home / self._constraints_folder
         needed_mats = cost_changes["adj_type"].unique().tolist()
         constraint_mats = eu.get_constraint_mats(path, needed_mats)
 
@@ -478,6 +434,8 @@ class ElasticityModel:
 
         # Loop setup
         cols = [
+            "mode",
+            "cost_component",
             "e_type",
             "adj_type",
             "change",
@@ -486,12 +444,14 @@ class ElasticityModel:
         demand_adjustment = defaultdict(list)
 
         # Loop through cost changes file and calculate demand adjustment
-        for elast_type, cstr_name, change in iterator:
+        for mode, cost, elast_type, cstr_name, change in iterator:
             adj_dem = calculate_own_cost_adjustment(
                 demand=base_demand,
                 base_costs=base_costs,
                 base_year_gc=base_year_gc,
-                elasticities=elasticities.loc[elasticities["type"] == elast_type],
+                elasticities=elasticities[elasticities["type"] == elast_type],
+                changing_mode=mode,
+                changing_cost=cost,
                 elasticity_type=elast_type,
                 cost_constraint=constraint_mats[cstr_name],
                 cost_change=change,
@@ -780,7 +740,7 @@ class ElasticityModel:
         costs = dict()
         for m, zone in ec.MODE_ZONE_SYSTEM.items():
             # Get the path for this mode and purpose
-            fname = ec.COST_NAMES.format(mode=m, purpose=purpose)
+            fname = self._base_costs_fname.format(mode=m, purpose=purpose)
             path = self.cost_dirs[m] / fname
 
             # Load in the costs, translate if needed
@@ -878,7 +838,7 @@ class ElasticityModel:
         # car availabilities (ca1 and ca2)
         for k in car_keys:
             mode = 'car'
-            folder = self.output_folder[mode]
+            folder = self.car_demand_export
             name = du.get_dist_name(
                 **demand_params,
                 mode=str(ec.MODE_ID[mode]),
@@ -890,7 +850,7 @@ class ElasticityModel:
         for k in rail_keys:
             mode = 'rail'
             ca = k
-            folder = self.output_folder[mode]
+            folder = self.rail_demand_export
             name = du.get_dist_name(
                 **demand_params,
                 mode=str(ec.MODE_ID[mode]),
@@ -901,7 +861,7 @@ class ElasticityModel:
             du.safe_dataframe_to_csv(adjusted_demand[k], folder / name)
 
         # Write other modes to a single file
-        folder = self.output_folder["others"]
+        folder = self.other_demand_export
         name = du.get_dist_name(**demand_params, csv=True)
         df = pd.DataFrame(
             [
@@ -918,6 +878,8 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
                                   base_costs: Dict[str, pd.DataFrame],
                                   base_year_gc: Dict[str, pd.DataFrame],
                                   elasticities: pd.DataFrame,
+                                  changing_mode: str,
+                                  changing_cost: str,
                                   elasticity_type: str,
                                   cost_constraint: np.array,
                                   cost_change: float,
@@ -946,9 +908,17 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
     elasticities : pd.DataFrame
         Elasticity values for all mode combinations.
 
+    changing_mode:
+        The mode that changing_cost is being applied to. This must be a valid
+        cost component for that mode!
+
+    changing_cost:
+        The cost that we are changing. This cost change must be a valid
+        component of changing_mode.
+
     elasticity_type : str
-        The name of the elasticity cost change being
-        applied.
+        The name of the elasticity type to use when applying changing_cost
+        to changing_mode.
 
     cost_constraint : np.array
         An array to define where the cost is applied,
@@ -982,26 +952,21 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
         If an `elasticity_type` not present in the
         `GC_ELASTICITY_TYPES` lookup is given.
     """
-    if elasticity_type not in ec.GC_ELASTICITY_TYPES:
-        raise KeyError(
-            f"Unknown elasticity_type: '{elasticity_type}', "
-            f"expected one of {list(ec.GC_ELASTICITY_TYPES.keys())}"
-        )
-
-    chg_mode, cost_type = ec.GC_ELASTICITY_TYPES[elasticity_type]
-
-    # Filter only elasticities involving the mode that changes
-    elasticities = elasticities.loc[
-        elasticities["changing_mode"].str.lower() == chg_mode
-    ]
+    # Filter elasticities to only relevant ones
+    mask = (
+        (elasticities["changing_mode"].str.lower() == changing_mode)
+        & (elasticities["type"].str.lower() == elasticity_type)
+    )
+    elasticities = elasticities[mask].copy()
 
     # Figure out the GC ratio of change
-    if cost_type != "gc":
+    if changing_cost != "gc":
         # Adjust the costs of the changing mode
         adj_cost, _ = adjust_cost(
-            base_costs=base_costs[chg_mode],
-            gc_params=future_scalar_costs.get(chg_mode, {}),
-            elasticity_type=elasticity_type,
+            base_costs=base_costs[changing_mode],
+            gc_params=future_scalar_costs.get(changing_mode, {}),
+            changing_mode=changing_mode,
+            changing_cost=changing_cost,
             cost_change=cost_change,
             constraint_matrix=cost_constraint,
             base_year=base_year,
@@ -1011,15 +976,15 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
         # calculate the new adjusted GC
         adj_gc = gc.gen_cost_mode(
             adj_cost,
-            chg_mode,
-            **future_scalar_costs.get(chg_mode, {})
+            changing_mode,
+            **future_scalar_costs.get(changing_mode, {})
         )
 
         # Calculate the ratio of chance in GC
         gc_ratio = np.divide(
             adj_gc,
-            base_year_gc[chg_mode],
-            where=base_year_gc[chg_mode] > 0,
+            base_year_gc[changing_mode],
+            where=base_year_gc[changing_mode] > 0,
             out=np.full_like(adj_gc, 1.0),
         )
 
@@ -1028,15 +993,16 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
         gc_ratio = np.where(gc_ratio <= 0, 1, gc_ratio)
 
     else:
-        adj_cost = base_costs[chg_mode].copy()
-        adj_gc = base_year_gc[chg_mode].copy()
+        adj_cost = copy.copy(base_costs[changing_mode])
+        adj_gc = copy.copy(base_year_gc[changing_mode])
         gc_ratio = np.where(cost_constraint == 1, cost_change, 1)
 
     # Grab the cost that we are changing as a square matrix
     cost, cost_factor = _elasticity_gc_factors(
-        adj_cost,
-        future_scalar_costs.get(chg_mode, {}),
-        elasticity_type,
+        base_costs=adj_cost,
+        gc_params=future_scalar_costs.get(changing_mode, {}),
+        changing_mode=changing_mode,
+        changing_cost=changing_cost,
     )
 
     # Initialise the adjustment matrices for each affected mode
@@ -1049,13 +1015,13 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
     # Calculate the own cost elasticity adjustments
     for aff_mode, elast in elasticities[cols].itertuples(index=False, name=None):
         aff_mode = aff_mode.lower()
-        if cost_type != "gc":
+        if changing_cost != "gc":
             # Calculate the demand weighted generalised cost of the elasticity
             gc_elast = gc.gen_cost_elasticity_mins(
                 elasticity=elast,
                 gen_cost=adj_gc,
                 cost=cost,
-                demand=demand[chg_mode],
+                demand=demand[changing_mode],
                 cost_factor=cost_factor,
             )
         else:
@@ -1080,7 +1046,8 @@ def calculate_own_cost_adjustment(demand: Dict[str, pd.DataFrame],
 
 def adjust_cost(base_costs: Union[pd.DataFrame, float],
                 gc_params: Dict[str, float],
-                elasticity_type: str,
+                changing_mode: str,
+                changing_cost: str,
                 cost_change: float,
                 base_year: int,
                 future_year: int,
@@ -1099,9 +1066,13 @@ def adjust_cost(base_costs: Union[pd.DataFrame, float],
     gc_params : Dict[str, float]
         Generalised cost parameters to be adjusted.
 
-    elasticity_type : str
-        Elasticity type used with `GC_ELASTICITY_TYPES` lookup to
-        determine the type of cost changes being applied.
+    changing_mode:
+        The changing_mode that changing_cost is being applied to. This must be a valid
+        cost component for that changing_mode!
+
+    changing_cost:
+        The cost that we are changing. This cost change must be a valid
+        component of changing_mode.
 
     cost_change : float
         The cost change value to apply to `base_costs` or
@@ -1134,8 +1105,6 @@ def adjust_cost(base_costs: Union[pd.DataFrame, float],
         If the cost to be adjusted isn't present in the `base_costs`
         or `gc_params`.
     """
-    # Init
-    mode, cost_type = ec.GC_ELASTICITY_TYPES[elasticity_type]
 
     # Other modes have scalar costs and no GC params so are just
     # multiplied by change
@@ -1148,38 +1117,34 @@ def adjust_cost(base_costs: Union[pd.DataFrame, float],
     # # TODO(BT): THIS IS A TEST!!
     # # Adjust time to reflect congestion relative to base
     # # Adjust toll in line with inflation
-    # if mode == 'car':
+    # if changing_mode == 'car':
     #     adj_cost['time'] *= 1.01 ** (future_year - base_year)
     #     adj_cost['toll'] *= 1.02 ** (future_year - base_year)
 
     adj_gc_params = gc_params.copy()
     # If cost component
-    if cost_type in base_costs.columns:
+    if changing_cost in base_costs.columns:
         if constraint_matrix is None:
             constraint_matrix = 1.0
 
         np.multiply(
-            adj_cost[cost_type].values,
+            adj_cost[changing_cost].values,
             cost_change,
-            out=adj_cost[cost_type].values,
+            out=adj_cost[changing_cost].values,
             where=constraint_matrix.flatten() == 1,
             casting="unsafe",
         )
 
-    # if vot/voc
-    # TODO(BT): Remove this later when we know it's never needed!
-    elif cost_type in ['vot', 'voc']:
+    elif changing_cost in ['vot', 'voc']:
         # WE SHOULD NEVER ADJUST THESE OTHERWISE DOUBLE COUNTING LATER ON!
-        raise nd.NormitsDemandError(
+        raise nd.ElasticityError(
             "Scalar generalised cost parameters (vot/voc) should not be "
             "adjusted in the elasticity! DOUBLE COUNTING!!!"
         )
-        # adj_gc_params[cost_type] = adj_gc_params[cost_type] * cost_change
-
     else:
         raise KeyError(
-            f"Cost type to be changed ({cost_type}) isn't present "
-            f"in the base_costs or gc_params for {mode}"
+            f"Cost type to be changed ({changing_cost}) isn't present "
+            f"in the base_costs or gc_params for {changing_mode}"
         )
 
     return adj_cost, adj_gc_params
@@ -1187,7 +1152,8 @@ def adjust_cost(base_costs: Union[pd.DataFrame, float],
 
 def _elasticity_gc_factors(base_costs: pd.DataFrame,
                            gc_params: Dict[str, float],
-                           elasticity_type: str,
+                           changing_mode: str,
+                           changing_cost: str,
                            ) -> Tuple[np.array, float]:
     """Return cost and cost_factor values for use in `gen_cost_elasticity_mins`.
 
@@ -1197,13 +1163,18 @@ def _elasticity_gc_factors(base_costs: pd.DataFrame,
     Parameters
     ----------
     base_costs : pd.DataFrame
-        Base costs data for single mode.
+        Base costs data for single changing_mode.
 
     gc_params : Dict[str, float]
-        Generalised cost calculation parameters for single mode.
+        Generalised cost calculation parameters for single changing_mode.
 
-    elasticity_type : str
-        The name of the elasticity type.
+    changing_mode:
+        The changing_mode that changing_cost is being applied to. This must be a valid
+        cost component for that changing_mode!
+
+    changing_cost:
+        The cost that we are changing. This cost change must be a valid
+        component of changing_mode.
 
 
     Returns
@@ -1220,8 +1191,8 @@ def _elasticity_gc_factors(base_costs: pd.DataFrame,
     Raises
     ------
     ValueError
-        If the elasticitytype given leads to an unknown combination
-        of cost_type and mode.
+        If the elasticity type given leads to an unknown combination
+        of changing_cost and changing_mode.
     """
 
     def square_matrix(values_col: str) -> pd.DataFrame:
@@ -1232,33 +1203,42 @@ def _elasticity_gc_factors(base_costs: pd.DataFrame,
             values=values_col,
         )
 
-    mode, cost_type = ec.GC_ELASTICITY_TYPES[elasticity_type]
     cost, factor = None, None
-    if cost_type == "gc":
+    if changing_cost == "gc":
         cost = 1.0
 
-    elif mode == "car":
-        if cost_type == "time":
-            cost = square_matrix(cost_type)
+    elif changing_cost in ['vot', 'voc']:
+        # WE SHOULD NEVER ADJUST THESE OTHERWISE DOUBLE COUNTING LATER ON!
+        raise nd.ElasticityError(
+            "Scalar generalised cost parameters (vot/voc) should not be "
+            "adjusted in the elasticity! DOUBLE COUNTING!!!"
+        )
+
+    elif changing_mode == "car":
+        if changing_cost == "time":
+            cost = square_matrix(changing_cost)
             factor = 1
-        elif cost_type == "voc":
+        elif changing_cost == "voc":
             cost = square_matrix("dist")
             factor = (gc_params["voc"] / gc_params["vot"])
 
-    elif mode == "rail":
-        if cost_type == "ride":
-            cost = square_matrix(cost_type)
-        elif cost_type == "fare":
-            cost = square_matrix(cost_type)
+    elif changing_mode == "rail":
+        if changing_cost == "ride":
+            cost = square_matrix(changing_cost)
+        elif changing_cost == "fare":
+            cost = square_matrix(changing_cost)
             factor = 1 / gc_params["vot"]
+        elif changing_cost == "walk":
+            cost = square_matrix(changing_cost)
 
-    elif mode in ec.OTHER_MODES:
+    elif changing_mode in ec.OTHER_MODES:
         cost = 1.0
 
     if cost is None:
         raise ValueError(
-            f"Unknown cost_type/mode combination: {cost_type}, {mode} not "
-            "sure what factors are required for GC elasticity calculation"
+            f"Unknown changing_cost/changing_mode combination: {changing_cost}, "
+            f"{changing_mode} not sure what factors are required for GC "
+            f"elasticity calculation"
         )
     return cost, factor
 
@@ -1271,7 +1251,7 @@ def read_cost_changes(path: Path, years: List[str]) -> pd.DataFrame:
     path : Path
         Path to the cost changes file.
     years : List[str]
-        List of years to be checked there is data for.
+        List of future_years to be checked there is data for.
 
     Returns
     -------
@@ -1282,11 +1262,8 @@ def read_cost_changes(path: Path, years: List[str]) -> pd.DataFrame:
 
     Raises
     ------
-    KeyError
-        If an elasticity_type is given that is not present
-        in `GC_ELASTICITY_TYPES` lookup.
     ValueError
-        If no data is present for one, or more, `years`.
+        If no data is present for one, or more, `future_years`.
     """
     dtypes = {
         "year": str,
@@ -1296,17 +1273,8 @@ def read_cost_changes(path: Path, years: List[str]) -> pd.DataFrame:
     }
     df = pd.read_csv(path, usecols=dtypes.keys(), dtype=dtypes)
 
-    unknown_types = []
-    for i in df["elasticity_type"].unique():
-        if i not in ec.GC_ELASTICITY_TYPES.keys():
-            unknown_types.append(i)
-    if unknown_types:
-        raise KeyError(
-            f"Unknown elasticity_type: {unknown_types}, "
-            f"available types are: {list(ec.GC_ELASTICITY_TYPES.keys())}"
-        )
     missing_years = [i for i in years if i not in df["year"].unique().tolist()]
     if missing_years:
-        raise ValueError(f"Cost change not present for years: {missing_years}")
+        raise ValueError(f"Cost change not present for future_years: {missing_years}")
 
     return df

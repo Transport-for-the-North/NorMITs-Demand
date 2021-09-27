@@ -507,6 +507,7 @@ def build_efs_io_paths(import_location: str,
         'params': model_param_home,
         'post_me_factors': os.path.join(model_param_home, 'post_me_tms_decompile_factors.pkl'),
         'post_me_tours': model_tour_prop_home,
+        'post_me_fh_th_factors': os.path.join(model_tour_prop_home, 'fh_th_factors'),
         'decomp_post_me': os.path.join(import_home, model_name, 'decompiled_post_me'),
 
     }
@@ -3050,7 +3051,9 @@ def is_almost_equal(v1: float,
         The second value to compare
 
     significant:
-        The number of significant bits to compare over
+        The number of significant bits to compare over. If negative,
+        then this represents rounding.
+        i.e. -1 is same up until 10s, -2 100s etc
 
     Returns
     -------
