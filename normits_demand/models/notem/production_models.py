@@ -251,7 +251,7 @@ class HBProductionModel(HBProductionModelPaths):
         # Initialise timing
 
         start_time = timing.current_milli_time()
-        self._logger.info("Starting HB Production Model at:" )
+        self._logger.info("Starting HB Production Model" )
 
         # Generate the productions for each year
         for year in self.years:
@@ -323,12 +323,8 @@ class HBProductionModel(HBProductionModelPaths):
             #  By segment.
             if self.constraint_paths is not None:
                 msg= "No code implemented to constrain productions"
-                self._logger.debug(msg)
-                warnings.warn(msg)
-                raise NotImplemented(
-                    "No code implemented to constrain productions."
-                )
-
+                raise NotImplementedError(msg)
+                
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
@@ -337,8 +333,8 @@ class HBProductionModel(HBProductionModelPaths):
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("HB Production Model took: %s" % time_taken)
-        self._logger.info("HB Production Model Finished at: %s" % timing.get_datetime())
+        self._logger.info("HB Production Model took:" % time_taken)
+        self._logger.info("HB Production Model Finished ")
 
     def _read_land_use_data(self,
                             year: int,
@@ -372,7 +368,7 @@ class HBProductionModel(HBProductionModelPaths):
         pop = pd_utils.reindex_cols(pop, self._target_col_dtypes['pop'].keys())
         for col, dt in self._target_col_dtypes['pop'].items():
             pop[col] = pop[col].astype(dt)
-        self._logger.info("Reading the land use data .")
+        
         # Instantiate
         return nd.DVector(
             zoning_system=msoa_zoning,
@@ -408,8 +404,7 @@ class HBProductionModel(HBProductionModelPaths):
         # Define the zoning and segmentations we want to use
         pure_hb_prod = nd.get_segmentation_level('notem_hb_productions_pure')
 
-        # Reading trip rates
-        self._logger.info("Reading trip rate files")
+        # Reading trip rates        
         trip_rates = du.safe_read_csv(
             self.trip_rates_path,
             usecols=self._target_col_dtypes['trip_rate'].keys(),
@@ -635,7 +630,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         self._logger = nd.get_logger(
             logger_name=logger_name,
             log_file_path=log_file_path,
-            instantiate_msg="Initialised NHB Production",
+            instantiate_msg="Initialised NHB Production Model",
         )
 
     def run(self,
@@ -703,7 +698,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         # Initialise timing
 
         start_time = timing.current_milli_time()
-        self._logger.info("Starting NHB Production Model at: " )
+        self._logger.info("Starting NHB Production Model " )
 
         # Generate the nhb productions for each year
         for year in self.years:
@@ -770,13 +765,9 @@ class NHBProductionModel(NHBProductionModelPaths):
             #  Output some audits of what demand was before and after control
             #  By segment.
             if self.constraint_paths is not None:
-                msg= "No code implemented to constrain productions"
-                self._logger.debug(msg)
-                warnings.warn(msg)
-                raise NotImplemented(
-                    "No code implemented to constrain productions."
-                )
-
+                msg= "No code implemented to constrain productions"                              
+                raise NotImplementedError(msg)               
+               
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
@@ -786,8 +777,8 @@ class NHBProductionModel(NHBProductionModelPaths):
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("NHB Production Model took: %s" %time_taken)
-        self._logger.info("NHB Production Model Finished at: %s" % timing.get_datetime())
+        self._logger.info("NHB Production Model took:" %time_taken)
+        self._logger.info("NHB Production Model Finished " )
 
     def _transform_attractions(self,
                                year: int,
@@ -901,8 +892,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         nhb_trip_rate_seg = nd.get_segmentation_level('notem_nhb_trip_rate')
         pure_seg = nd.get_segmentation_level('notem_nhb_productions_pure')
 
-        # Reading NHB trip rates
-        self._logger.info("Reading in files(NHB Trip Rates)..")
+        # Reading NHB trip rates        
         trip_rates = du.safe_read_csv(
             file_path=self.trip_rates_path,
             usecols=self._target_col_dtypes['nhb_trip_rate'].keys(),
