@@ -6,3 +6,5 @@ from normits_demand.models.notem import HBAttractionModel
 from normits_demand.models.notem import NHBAttractionModel
 from normits_demand.models.notem import NoTEM
 
+# TMS
+from normits_demand.models.travel_market_synthesiser import TravelMarketSynthesiser

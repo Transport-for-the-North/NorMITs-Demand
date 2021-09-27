@@ -7,20 +7,50 @@ import pandas as pd
 import importlib as ri
 
 import normits_demand.build.tms_pathing as tms
-import normits_demand.models.production_model as pm
-import normits_demand.models.attraction_model as am
 import normits_demand.models.external_model as em
 import normits_demand.models.distribution_model as dm
-from normits_demand import version
+import normits_demand.matrices.tms_pa_to_od as pa2od
+import normits_demand.reports.reports_audits as ra
+from normits_demand.utils import vehicle_occupancy as vo
+from normits_demand.utils import utils as nup
+from normits_demand.utils import file_ops
 
-class TmsParameterBuilder():
+
+# GLOBAL VARIABLES
+years = [2018]
+scenario = "NTEM"
+notem_iter = '4'
+lu_drive = "I:/"
+by_iteration = "iter3d"
+fy_iteration = "iter3d"
+notem_import_home = r"I:\NorMITs Demand\import\NoTEM"
+# notem_export_home = r"C:\Data\Nirmal_Atkins"
+notem_export_home = r"E:\NoTEM"
+output_file = "%s_msoa_notem_segmented_%d_dvec.pkl"
+
+
+def check_notem_run_status() -> None:
+    hb_fname = output_file % ('hb', years)
+    nhb_fname = output_file % ('nhb', years)
+    hb_trip_ends = ['HB_Productions', 'HB_Attractions']
+    nhb_trip_ends = ['NHB_Productions', 'NHB_Attractions']
+    for trip in hb_trip_ends:
+        file = os.path.join(notem_export_home, trip, hb_fname)
+        file_ops.check_file_exists(file)
+    for trip in nhb_trip_ends:
+        file = os.path.join(notem_export_home, trip, nhb_fname)
+        file_ops.check_file_exists(file)
+
+
+class TmsParameterBuilder:
     """
     - get_model_name() module gets the model name from the user and returns model name
         It also does input validation of the user input
     - assign_param() module saves the parameters required for model runs based on the model name entered by user
         It returns a dictionary params
     """
-    def get_model_name():
+
+    def get_model_name(self):
         model_list = {1: 'noham', 2: 'norms'}
         print(model_list)
         try:
@@ -34,188 +64,172 @@ class TmsParameterBuilder():
             else:
                 print("Invalid input")
 
+    def assign_param(self, model: str):
 
-    def assign_param():
-
-        if model_name == 'noham':
+        if model == 'noham':
             params = {
-                'base_directory': 'Y: /',
-                'iteration': 'iter8c',
+                'base_directory': 'I:/NorMITs Synthesiser',
+                'model_name': 'noham',
+                'iteration': 'iter_test',
+                'model_zoning': 'Noham',
                 'segmentation_type': 'tfn',
                 'hb_output_segments': ['p', 'm'],
                 'nhb_output_segments': ['area_type', 'p', 'm', 'ca', 'tp'],
-                'land_use_path': 'Y: / NorMITs Land Use / iter3 / land_use_output_msoa.csv',
+                'land_use_path': 'I: / NorMITs Land Use / iter3 / land_use_output_msoa.csv',
                 'control_production_to_ntem': True,
                 'k_factor_path': None,
                 'export_msoa_productions': False,
                 'attraction_segment_type': 'ntem',
                 'cjtw_path': None,
-                ##can be moved
                 'hb_distribution_segments': ['p', 'm'],
                 'nhb_distribution_segments': ['p', 'm', 'tp'],
+                'distribution_segmentation': ['p', 'm'],
+                'external_tlb_area': 'gb',
+                'external_tlb_name': 'external_ph_segments',
+                'external_segmentation': ['p', 'm'],
+                'external_export_modes': [3],
                 'output_modes': 3,
+                'non_dist_export_modes': None,
+                'intrazonal_modes': [1, 2],
+                'infill_modes': 6,
+                'synthetic_modes': 3,
                 'rail_fusion': False,
                 'compile_pa': False,
                 'compile_od': True,
                 'vehicle_demand': True
             }
-            return (params)
+            return params
         else:
             params = {
-            'base_directory' :  'I:/NorMITs Synthesiser',
-            'iteration' :  'iter6',
-            'model_zoning' :  'Norms',
-            'land_use_version' : 3,
-            'resi_land_use_path' :  'Y:/NorMITs Land Use/iter3b/outputs/land_use_output_safe_msoa.csv',
-            'non_resi_land_use_path' :  'Y:/NorMITs Land Use/iter3b/outputs/land_use_2018_emp.csv',
-            'land_use_zoning' :  'MSOA',
-            'run_trip_ends' :  True,
-            'hb_trip_rates' :  'tfn_hb_trip_rates_18_0620.csv',
-            'hb_time_split' :  'tfn_hb_time_split_18_0620.csv',
-            'hb_ave_time_split' :  'hb_ave_time_split.csv',
-            'hb_mode_split' :  'tfn_hb_mode_split_18_0620.csv',
-            'nhb_trip_rates' :  'tfn_nhb_ave_wday_trip_rates_18.csv',
-            'nhb_time_split' :  'tfn_nhb_ave_wday_time_split_18.csv',
-            'nhb_mode_split' :  'tfn_nhb_ave_wday_mode_split_18.csv',
-            'hb_trip_end_segmentation' :  ['p, m, area_type, ca, soc, ns, g'],
-            'nhb_trip_end_segmentation' :  ['p, m, area_type, ca, soc, ns, g'],
-            'hb_attraction_weights' :  'hb_attraction_weights.csv',
-            'nhb_attraction_weights' :  'nhb_attraction_weights.csv',
-            'attraction_mode_split' :  'attraction_mode_split.csv',
-            'production_ntem_control' :  True,
-            'attraction_ntem_control' :  True,
-            'ntem_control_path' :  'I:/NorMITs Synthesiser/import/ntem_constraints/ntem_pa_ave_wday_2018.csv',
-            'production_k_factor_control' :  False,
-            'production_k_factor_path' :  False,
-            'attraction_k_factor_control' :  False,
-            'attraction_k_factor_path' :  False,
-            'export_msoa' :  True,
-            'export_uncorrected' :  False,
-            'export_lad' :  False,
-            'export_model_zoning' :  True,
-            'run_external_models' :  True,
-            'external_tlb_area' :  'gb',
-            'external_tlb_name' :  'standard_plus_ca_segments',
-            'external_segmentation' :  ['p','m','ca'],
-            'external_export_modes' : 6,
-            'non_dist_export_modes' :  None,
-            'run_distribution' :  True,
-            'distribution_segmentation' :  ['p','m','ca'],
-            'cjtw_modes' :  None,
-            'intrazonal_modes' :  [1,2],
-            'infill_modes' : 3,
-            'synthetic_modes' : 6,
-            'fusion_modes' : 6,
-            'cost_method' :  'distance',
-            'distribution_tlb_area' :  'north',
-            'distribution_function' :  'ln',
-            'furness_loops' : 2000,
-            'fitting_loops' : 100,
-            'compile_pa' :  True,
-            'pa_compilation_index' :  'pa_compilation_params.csv',
-            'compile_od' :  True,
-            'od_compilation_index' :  'od_compilation_params.csv',
-            'disaggregate_segments' :  True,
-            'segments_to_add' :  ['soc', 'ns'],
-            'vehicle_demand' :  False,
+                'base_directory': 'I:/NorMITs Synthesiser',
+                'model_name': 'norms',
+                'iteration': 'iter7',
+                'model_zoning': 'Norms',
+                'land_use_version': 3,
+                'hb_output_segments': ['p', 'm'],
+                'hb_attraction_weights': 'hb_attraction_weights.csv',
+                'nhb_attraction_weights': 'nhb_attraction_weights.csv',
+                'attraction_mode_split': 'attraction_mode_split.csv',
+                'production_ntem_control': True,
+                'attraction_ntem_control': True,
+                'ntem_control_path': 'I:/NorMITs Synthesiser/import/ntem_constraints/ntem_pa_ave_wday_2018.csv',
+                'production_k_factor_control': False,
+                'production_k_factor_path': False,
+                'attraction_k_factor_control': False,
+                'attraction_k_factor_path': False,
+                'export_msoa': True,
+                'export_uncorrected': False,
+                'export_lad': False,
+                'export_model_zoning': True,
+                'run_external_models': True,
+                'external_tlb_area': 'gb',
+                'external_tlb_name': 'standard_plus_ca_segments',
+                'external_segmentation': ['p', 'm', 'ca'],
+                'external_export_modes': [6],
+                'non_dist_export_modes': None,
+                'run_distribution': True,
+                'hb_distribution_segmentation': ['p', 'm', 'ca'],
+                'nhb_distribution_segmentation': ['p', 'm', 'ca', 'tp'],
+                'output_modes': [6],
+                'cjtw_modes': None,
+                'intrazonal_modes': [1, 2],
+                'infill_modes': 3,
+                'synthetic_modes': 6,
+                'fusion_modes': 6,
+                'cost_method': 'distance',
+                'distribution_tlb_area': 'north',
+                'distribution_function': 'ln',
+                'furness_loops': 2000,
+                'fitting_loops': 100,
+                'compile_pa': True,
+                'pa_compilation_index': 'pa_compilation_params.csv',
+                'compile_od': True,
+                'od_compilation_index': 'od_compilation_params.csv',
+                'disaggregate_segments': True,
+                'segments_to_add': ['soc', 'ns'],
+                'vehicle_demand': False,
             }
-            return (params)
+            return params
+
 
 if __name__ == '__main__':
-
+    # Checks whether NoTEM trip end runs are completed
+    #check_notem_run_status()
 
     config_path = 'I:/NorMITs Synthesiser/config/'
+    tmsparam = TmsParameterBuilder()
 
-    # Ask user which config file to use
-    # params_file = prj.select_params_file(config_path)
-    """
-    Gets model name from the user using the module
-    """
-    model_name = GetParam.get_model_name()
-    """
-    Assigns the various model parameters required based on model_name
-    """
-    params_file = GetParam.assign_param()
+    # Gets model name from the user using the module
+    model_name = tmsparam.get_model_name()
+
+    # Assigns the various model parameters required based on model_name
+    params = tmsparam.assign_param(model_name)
 
     # TODO: Building loose folders for External model paths
     tms_run = tms.TMSPathing(config_path,
-                             params_file)
+                             params)
 
     # Check status of lookup folder
     tms_run.lookups = tms_run.lookup_audit()
 
+    # Update project status
     # BACKLOG: Project status
     tms_run.project_status = tms_run.project_check()
 
-    # BACKLOG: Do this stuff based on the project status
-    p = pm.ProductionModel(config_path, params_file)
-
-    hb_p_out = p.run_hb(verbose=True)
-    p.ping_outpath()
-
-    a = am.AttractionModel(config_path, params_file)
-    hb_a_out = a.run(trip_origin='hb',
-                     control_to_productions=True,
-                     productions_path=p.export['in_hb'])
-    a.ping_outpath()
-
-    nhb_p_out = p.run_nhb(
-        attraction_vector=a.export['in_hb'])
-    p.ping_outpath()
-
-    nhb_a_out = a.run(trip_origin='nhb',
-                    control_to_productions = True,
-                    productions_path = p.export['in_nhb'])
-
-    # Delete trip end models
-    del p, a
-    # Update project status
-    # BACKLOG: Project status
 
     # TODO: Define init params
 
-    # Run HB external model
+    #Run HB external model
     ext = em.ExternalModel(
         config_path,
-        params_file)
+        params)
+
     hb_ext_out = ext.run(
         trip_origin='hb',
-        cost_type='24hr')
-    nhb_ext_out = ext.run(
-        trip_origin='nhb',
-        cost_type = '24hr')
-
+        cost_type='24hr',
+    )
+    # nhb_ext_out = ext.run(
+    #     trip_origin='nhb',
+    #     cost_type='24hr',
+    # )
+    #
     dist = dm.DistributionModel(
         config_path,
-        params_file)
+        params)
 
-    int_hb = dist.run(
-        tlb_area='north',
-        segmentation='tfn',
-        distribution_segments=params['hb_distribution_segments'],
-        dist_function='ln',
-        trip_origin='hb',
-        cost_type='24hr',
-        furness_loops=1999,
-        fitting_loops=100,
-        iz_cost_infill=.5,
-        export_modes=params['output_modes'],
-        echo=True,
-        mp_threads=-1)
+    # int_hb = dist.run_distribution_model(
+    #     file_drive=params['base_directory'],
+    #     model_name=params['model_name'],
+    #     iteration=params['iteration'],
+    #     tlb_area='north',
+    #     segmentation='tfn',
+    #     distribution_segments=params['hb_distribution_segmentation'],
+    #     dist_function='tanner',
+    #     trip_origin='hb',
+    #     cost_type='24hr',
+    #     furness_loops=1999,
+    #     fitting_loops=100,
+    #     iz_cost_infill=.5,
+    #     export_modes=params['synthetic_modes'],
+    #     mp_threads=-2)
 
-    int_nhb = dist.run(
-        tlb_area='north',
-        segmentation='tfn',
-        distribution_segments=params['nhb_distribution_segments'],
-        dist_function='ln',
-        trip_origin='nhb',
-        cost_type='tp',
-        furness_loops=1999,
-        fitting_loops=100,
-        iz_cost_infill=.5,
-        export_modes=params['output_modes'],
-        echo=True,
-        mp_threads=-1)
+    # int_nhb = dist.run_distribution_model(
+    #     file_drive=params['base_directory'],
+    #     model_name=params['model_name'],
+    #     iteration=params['iteration'],
+    #     tlb_area='north',
+    #     segmentation='tfn',
+    #     distribution_segments=params['nhb_distribution_segmentation'],
+    #     dist_function='tanner',
+    #     trip_origin='nhb',
+    #     cost_type='tp',
+    #     furness_loops=1999,
+    #     fitting_loops=100,
+    #     iz_cost_infill=.5,
+    #     export_modes=params['synthetic_modes'],
+    #     verbose=True,
+    #     mp_threads=-2)
+
 
     # Compile tp pa
     pa2od.build_tp_pa(file_drive=params['base_directory'],
@@ -224,18 +238,18 @@ if __name__ == '__main__':
                       distribution_segments=params['hb_output_segments'],
                       internal_input='synthetic',
                       external_input='synthetic',
-                      write_modes=[3],
+                      write_modes=params['output_modes'],
                       arrivals=False,
                       write=True)
 
     # *Compile tp pa @ 24hr
-    f.build_tp_pa(file_drive=params['base_directory'],
+    pa2od.build_tp_pa(file_drive=params['base_directory'],
                       model_name=params['model_name'],
                       iteration=params['iteration'],
                       distribution_segments=params['hb_output_segments'],
                       internal_input='synthetic',
                       external_input='synthetic',
-                      write_modes=[3],
+                      write_modes=params['output_modes'],
                       arrivals=False,
                       export_24hr=True,
                       write=True)
@@ -251,7 +265,6 @@ if __name__ == '__main__':
                       arrivals=False,
                       export_24hr=False,
                       write=True)
-
 
     # Build OD
     od_audit = pa2od.build_od(file_drive=params['base_directory'],
@@ -344,12 +357,26 @@ if __name__ == '__main__':
                            internal_reports=True,
                            write=True)
 
+    lookup_folder = os.path.join(params['base_directory'],
+                                 params['model_name'],
+                                 'Model Zone Lookups')
+    o_paths_pa = os.path.join(params['base_directory'],
+                              params['model_name'],
+                              params['iteration'],
+                              'Distribution Outputs',
+                              'PA Matrices')
+    o_paths_c_pa_export = os.path.join(params['base_directory'],
+                                       params['model_name'],
+                                       params['iteration'],
+                                       'Distribution Outputs',
+                                       'Compiled PA Matrices')
+
     # Import compilation params
     pa_compilation_params, od_compilation_params = nup.get_compilation_params(lookup_folder)
 
     if params['compile_pa']:
-        compiled_pa_matrices = nup.compile_pa(o_paths['pa'],
-                                              (i_paths['lookups'] +
+        compiled_pa_matrices = nup.compile_pa(o_paths_pa,
+                                              (lookup_folder +
                                                '/' +
                                                pa_compilation_params))  # Split time = true
 
@@ -357,7 +384,7 @@ if __name__ == '__main__':
         for mat in compiled_pa_matrices:
             for key, value in mat.items():
                 print(key)
-                c_pa_out = (o_paths['c_pa_export'] +
+                c_pa_out = (o_paths_c_pa_export +
                             '/' +
                             key +
                             '.csv')
@@ -434,12 +461,12 @@ if __name__ == '__main__':
 
     # Convert to vehicles
     if params['vehicle_demand']:
-        vo.people_vehicle_conversion(input_folder=os.path.join(params['base_directory'],
-                                                               'NorMITs Synthesiser',
-                                                               params['model_name'],
-                                                               params['iteration'],
-                                                               'Distribution Outputs',
-                                                               'Compiled OD Matrices'),
+        vo.people_vehicle_conversion(import_folder=os.path.join(params['base_directory'],
+                                                                'NorMITs Synthesiser',
+                                                                params['model_name'],
+                                                                params['iteration'],
+                                                                'Distribution Outputs',
+                                                                'Compiled OD Matrices'),
                                      export_folder='D:/',
                                      mode='3',
                                      method='to_vehicles',
@@ -449,28 +476,3 @@ if __name__ == '__main__':
                                      header=False,
                                      write=True)
         # TODO: add 3 sectore report call
-    # ## PREPARE OUTPUTS ## #
-    print("Initialising outputs...")
-    write_input_info(
-        os.path.join(params['base_directory'], "input_parameters.txt"),
-        version.__version__,
-        params['iteration'],
-        params['model_name'],
-        params['land_use_zoning']
-    )
-    def write_input_info(output_path: str,
-                     tms_version: str,
-                     model_name: str,
-                     land_use_zoning: str,
-                     ) -> None:
-
-        out_lines = [
-            'TMS version: ' + str(tms_version),
-            'Model Name: ' + str(model_name),
-            'Run Date: ' + str(time.strftime('%D').replace('/', '_')),
-            'Start Time: ' + str(time.strftime('%T').replace('/', '_')),
-            "Land Use Zoning System: " + str(land_use_zoning),
-       
-        ]
-        with open(output_path, 'w') as out:
-            out.write('\n'.join(out_lines))

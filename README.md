@@ -116,13 +116,6 @@ as part of their file name in distribution reports
     - Note that this is no longer backwards compatible. If old (pre iter3d)
       land use inputs are needed, you need to revert to an older version of 
       NorMITs Demand.
-       
-### v0.3.7
-- Updates to the elasticity model
-    - Fix Access/Egress costs changes
-    - Update parameters as we are now benchmarking OD matrices against
-      NELUM
-    - Hopefully find some time to optimise the PA2OD process 
       
 ### v0.3.7
 - Updated the Furness so productions are done last in each iteration. This 
@@ -148,9 +141,23 @@ as part of their file name in distribution reports
 - Added a new NoTEM wrapper around the new production and attraction models 
 - Added new pathing module, which can be used to access NoTEM output paths
 
+
 ### v0.4.1 (NoTEM Enhancements)
 - SegmentationLevel and ZoningSystem have been fully documented
 - SegmentationLevel and ZoningSystem have had read only properties added
 - Segmentation names have changed. NoTEM specific segmentations now have 
   'notem_' prefixed onto their name
 - Logging module has been added to codebase. Partially integrated into NoTEM 
+
+
+### v0.4.2
+- A number of minor fixes have been added to get TMS up and running again
+
+### v0.4.3
+- Updates to the elasticity model
+    - Fix Access/Egress costs changes
+    - Update parameters as we are now benchmarking OD matrices against
+      NELUM
+    - Optimised PA2OD Process
+    - Tour Proportions generated for rail PA2OD
+     

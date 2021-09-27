@@ -7,7 +7,7 @@ Original author: Sneezy
 Last Update Made by: Ben Taylor
 
 File purpose:
-
+Home of the NorMITs External Forecast System
 """
 # Built-ins
 import os

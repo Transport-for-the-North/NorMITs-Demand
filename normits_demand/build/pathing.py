@@ -6,14 +6,16 @@ Normits Demand class wrapper
 import os
 import pandas as pd
 
+from normits_demand.utils import general as du
+
+
 # TODO: define run as class
 # class TMS_Run()
 
-
 class Pathing:
-
     """
     """
+    input_request = "input_reqs.csv"
 
     def __init__(self,
                  config_path='I:/NorMITs Synthesiser/config/',
@@ -21,11 +23,9 @@ class Pathing:
         """
         """
         # Set config path
-        self.config_path = config_path
+        config_path_fname = os.path.join(config_path, self.input_request)
         # Import lookup requirements
-        self.input_reqs = pd.read_csv(os.path.join(config_path,
-                                                   'input_reqs.csv'),
-                                      squeeze=True)
+        self.input_reqs = du.safe_read_csv(config_path_fname, squeeze=True)
         """
         Commented as of now but can be removed if not required
             # Import and parse run parameters
@@ -44,7 +44,7 @@ class Pathing:
     
             #self.params = self.params_to_dict(params)
         """
-        self.params= params_file
+        self.params = params_file
         # param_dict = params_to_dict(params)
 
         mlz_folder = 'Model Zone Lookups'
@@ -137,11 +137,11 @@ class Pathing:
             status = True
         else:
             status = False
-    
-        return(status)
+
+        return status
 
     def lookup_audit(self,
-                     run_missing = True):
+                     run_missing=True):
         """
         Go through config list of lookups and config data required to run model
     
@@ -171,9 +171,9 @@ class Pathing:
 
                 # Change pass status - need them all!
                 pass_status = False
-            pass_dict.update({l:exists})
-    
-        return(pass_status, pass_dict)
+            pass_dict.update({l: exists})
+
+        return (pass_status, pass_dict)
 
     def run_lookup(self, lookup):
         """
@@ -198,7 +198,7 @@ class Pathing:
         """
         """
         status = False
-        
+
         run_dict = {}
-        
+
         return status, run_dict

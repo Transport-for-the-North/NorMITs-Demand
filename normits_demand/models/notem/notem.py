@@ -82,7 +82,7 @@ class NoTEM(NoTEMExportPaths):
         self.scenario = scenario
         self.import_builder = import_builder
 
-        # Generate the import and export paths
+        # Generate the export paths
         super().__init__(
             export_home=export_home,
             path_years=self.years,
