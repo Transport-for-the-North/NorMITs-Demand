@@ -290,7 +290,7 @@ class HBProductionModel(HBProductionModelPaths):
                     % (pure_demand.sum(), fully_segmented.sum())
                 )
                 self._logger.debug(msg)
-                warnings.warn(msg)
+                self._logger.warning(msg)
 
             # Output productions before any aggregation
             if export_fully_segmented:
@@ -322,7 +322,8 @@ class HBProductionModel(HBProductionModelPaths):
             #  Output some audits of what demand was before and after control
             #  By segment.
             if self.constraint_paths is not None:
-                msg= "No code implemented to constrain productions"
+                msg = "No code implemented to constrain productions"
+                self._logger.error(msg)
                 raise NotImplementedError(msg)
                 
             # Print timing stats for the year
@@ -334,7 +335,7 @@ class HBProductionModel(HBProductionModelPaths):
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
         self._logger.info("HB Production Model took:" % time_taken)
-        self._logger.info("HB Production Model Finished ")
+        self._logger.info("HB Production Model Finished")
 
     def _read_land_use_data(self,
                             year: int,
@@ -442,6 +443,7 @@ class HBProductionModel(HBProductionModelPaths):
         """
         # Define the segmentation we want to use
         m_tp_splits_seg = nd.get_segmentation_level('notem_hb_productions_full_tfnat')
+        
         full_seg = nd.get_segmentation_level('notem_hb_productions_full')
         # Create the mode-time splits DVector
         mode_time_splits = pd.read_csv(
@@ -739,7 +741,7 @@ class NHBProductionModel(NHBProductionModelPaths):
                     % (pure_nhb_demand.sum(), fully_segmented.sum())
                 )
                 self._logger.debug(msg)
-                warnings.warn(msg)
+                self._logger.warning(msg)
 
             if export_fully_segmented:
                 self._logger.info("Exporting fully segmented demand to disk" )
@@ -765,20 +767,20 @@ class NHBProductionModel(NHBProductionModelPaths):
             #  Output some audits of what demand was before and after control
             #  By segment.
             if self.constraint_paths is not None:
-                msg= "No code implemented to constrain productions"                              
+                msg = "No code implemented to constrain productions"                              
+                self._logger.error(msg)
                 raise NotImplementedError(msg)               
                
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
-            self._logger.info("NHB Production in Year: %s" % year)
-            self._logger.info("NHB Production Model took: %s" %time_taken)
+            self._logger.info("NHB Productions in year %s took: %s\n" % (year, time_taken))            
 
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("NHB Production Model took:" %time_taken)
-        self._logger.info("NHB Production Model Finished " )
+        self._logger.info("NHB Production Model took:" % time_taken)
+        self._logger.info("NHB Production Model Finished")
 
     def _transform_attractions(self,
                                year: int,
@@ -929,6 +931,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         """
         # Define the segmentation we want to use
         nhb_time_splits_seg = nd.get_segmentation_level('notem_nhb_tfnat_p_m_tp')
+        
         full_seg = nd.get_segmentation_level('notem_nhb_productions_full')
 
         # Read the time splits factor
