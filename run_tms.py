@@ -196,7 +196,7 @@ if __name__ == '__main__':
     internal_tld_path = os.path.join(tld_dir, params['internal_tld_bands'])
     external_tld_path = os.path.join(tld_dir, params['external_tld_bands'])
 
-    # Run HB external model
+    # # Run HB external model
     # ext = em.ExternalModel(
     #     config_path,
     #     params,
@@ -215,6 +215,9 @@ if __name__ == '__main__':
     #     internal_tld_path=internal_tld_path,
     #     external_tld_path=external_tld_path,
     # )
+    #
+    # print("External Model DOne")
+    # exit()
 
     dist = dm.DistributionModel(
         config_path,
@@ -237,9 +240,6 @@ if __name__ == '__main__':
         mp_threads=0,
     )
 
-    print("hb dist done")
-    exit()
-
     dist.run_distribution_model(
         file_drive=params['base_directory'],
         model_name=params['model_name'],
@@ -258,88 +258,21 @@ if __name__ == '__main__':
         mp_threads=-2,
     )
 
+    # PA RUN REPORTS
+    # Matrix Trip ENd totals
+    # Sector Reports Dvec style
+    # TLD curve
+    #   single mile bands - p/m (ca ) segments full matrix
+    #   NorMITs Vis
 
-    # Compile tp pa
-    pa2od.build_tp_pa(file_drive=params['base_directory'],
-                      model_name=params['model_name'],
-                      iteration=params['iteration'],
-                      distribution_segments=params['hb_output_segments'],
-                      internal_input='synthetic',
-                      external_input='synthetic',
-                      write_modes=params['output_modes'],
-                      arrivals=False,
-                      write=True)
 
-    # *Compile tp pa @ 24hr
-    pa2od.build_tp_pa(file_drive=params['base_directory'],
-                      model_name=params['model_name'],
-                      iteration=params['iteration'],
-                      distribution_segments=params['hb_output_segments'],
-                      internal_input='synthetic',
-                      external_input='synthetic',
-                      write_modes=params['output_modes'],
-                      arrivals=False,
-                      export_24hr=True,
-                      write=True)
+    # DO PA TO OD
 
-    # Build any non dist tps as required
-    pa2od.build_tp_pa(file_drive=params['base_directory'],
-                      model_name=params['model_name'],
-                      iteration=params['iteration'],
-                      distribution_segments=params['hb_output_segments'],
-                      internal_input='non_dist',
-                      external_input='non_dist',
-                      write_modes=[6],
-                      arrivals=False,
-                      export_24hr=False,
-                      write=True)
-
-    # Build OD
-    od_audit = pa2od.build_od(file_drive=params['base_directory'],
-                              model_name=params['model_name'],
-                              iteration=params['iteration'],
-                              distribution_segments=params['hb_output_segments'],
-                              internal_input='synthetic',
-                              external_input='synthetic',
-                              phi_type='fhp_tp',
-                              export_modes=[3],
-                              write=True)
-
-    # Export other modes from non-compiled
-    pa2od.build_od(file_drive=params['base_directory'],
-                   model_name=params['model_name'],
-                   iteration=params['iteration'],
-                   distribution_segments=params['hb_output_segments'],
-                   internal_input='non_dist',
-                   external_input='non_dist',
-                   phi_type='fhp_tp',
-                   export_modes=[6],  # Define as parameter
-                   write=True)
-
-    print(od_audit)
-
-    pa2od.compile_nhb_pa(file_drive=params['base_directory'],
-                         model_name=params['model_name'],
-                         iteration=params['iteration'],
-                         distribution_segments=['p', 'm', 'tp'],
-                         internal_input='synthetic',
-                         external_input='synthetic',
-                         export_modes=[3],
-                         write=True)
-
-    # TODO: This needs some attention to work with non-dist segs
-    pa2od.compile_nhb_pa(file_drive=params['base_directory'],
-                         model_name=params['model_name'],
-                         iteration=params['iteration'],
-                         distribution_segments=['p', 'm', 'tp'],
-                         internal_input='non_dist',
-                         external_input='non_dist',
-                         export_modes=[1, 2, 5],
-                         write=True)
+    # OD RUN REPORTS
 
     # Copy across and rename pa
     # TODO: Should do these at the start and have as references
-    pa_folder = od_folder = os.path.join(params['base_directory'],
+    pa_folder = os.path.join(params['base_directory'],
                                          'NorMITs Synthesiser',
                                          params['model_name'],
                                          params['iteration'],
@@ -353,37 +286,14 @@ if __name__ == '__main__':
                              'Distribution Outputs',
                              'OD Matrices')
 
-    nhb_pa = [x for x in [x for x in os.listdir(
-        pa_folder) if '.csv' in x] if 'nhb' in x]
+    nhb_pa = [x for x in [x for x in os.listdir(pa_folder) if '.csv' in x] if 'nhb' in x]
 
+    # REname PA to OD
     for nhb_mat in nhb_pa:
         od_mat = nhb_mat.replace('pa', 'od')
         od_out = pd.read_csv(os.path.join(pa_folder, nhb_mat))
         print(od_mat)
         od_out.to_csv(os.path.join(od_folder, od_mat), index=False)
-
-    # Run reports
-    ra.distribution_report(params['base_directory'],
-                           params['model_name'],
-                           params['iteration'],
-                           params['hb_output_segments'],
-                           distributions='Distribution Outputs/OD Matrices',
-                           matrix_format='wide',
-                           report_tp='24hr',
-                           internal_reports=True,
-                           write=True)
-
-    # PA distribution reports (production audit)
-    # TODO: Get to work with new outputs
-    ra.distribution_report(params['base_directory'],
-                           params['model_name'],
-                           params['iteration'],
-                           params['hb_output_segments'],
-                           distributions='Distribution Outputs/PA Matrices',
-                           matrix_format='wide',
-                           report_tp='24hr',
-                           internal_reports=True,
-                           write=True)
 
     lookup_folder = os.path.join(params['base_directory'],
                                  params['model_name'],
@@ -399,108 +309,6 @@ if __name__ == '__main__':
                                        'Distribution Outputs',
                                        'Compiled PA Matrices')
 
-    # Import compilation params
-    pa_compilation_params, od_compilation_params = nup.get_compilation_params(lookup_folder)
 
-    if params['compile_pa']:
-        compiled_pa_matrices = nup.compile_pa(o_paths_pa,
-                                              (lookup_folder +
-                                               '/' +
-                                               pa_compilation_params))  # Split time = true
 
-        # Export compiled PA
-        for mat in compiled_pa_matrices:
-            for key, value in mat.items():
-                print(key)
-                c_pa_out = (o_paths_c_pa_export +
-                            '/' +
-                            key +
-                            '.csv')
-                value.to_csv(c_pa_out, index=False)
-
-        # Reports on compiled PA and OD
-        ra.distribution_report(params['base_directory'],
-                               params['model_name'],
-                               params['iteration'],
-                               ['p', 'm', 'ca'],
-                               distributions='Distribution Outputs/Compiled PA Matrices',
-                               matrix_format='long',
-                               report_tp='tp',
-                               internal_reports=False,
-                               write=True)
-
-    # TODO: Export factors
-    # TODO: Export from function
-    if params['compile_od']:
-        compiled_od_matrices = nup.compile_od(
-            od_folder=os.path.join(params['base_directory'],
-                                   'NorMITs Synthesiser',
-                                   params['model_name'],
-                                   params['iteration'],
-                                   'Distribution Outputs',
-                                   'OD Matrices'),
-            write_folder=os.path.join(params['base_directory'],
-                                      'NorMITs Synthesiser',
-                                      params['model_name'],
-                                      params['iteration'],
-                                      'Distribution Outputs',
-                                      'Compiled OD Matrices'),
-            compile_param_path=os.path.join(lookup_folder,
-                                            params['model_name'].lower() +
-                                            '_od_matrix_params.csv'),
-            build_factor_pickle=True)
-
-        # Build compiled od for non dist segs
-        # TODO: if statement
-        nup.compile_od(
-            od_folder=os.path.join(params['base_directory'],
-                                   'NorMITs Synthesiser',
-                                   params['model_name'],
-                                   params['iteration'],
-                                   'Distribution Outputs',
-                                   'OD Matrices Non Dist'),
-            write_folder='C:/Users/genie/Documents/Nelum frh',  # Write fast
-            compile_param_path=os.path.join(
-                lookup_folder,
-                params['model_name'].lower() +
-                '_non_dist_od_frh_matrix_params.csv'),
-            build_factor_pickle=False)
-
-        # Run audit on compiled OD
-        ra.distribution_report(params['base_directory'],
-                               params['model_name'],
-                               params['iteration'],
-                               params['hb_output_segments'],
-                               distributions='Distribution Outputs/Compiled OD Matrices',
-                               matrix_format='wide',
-                               report_tp='tp',
-                               internal_reports=False,
-                               write=True)
-
-        # *Translate trips to vehicles
-
-    # Export should be:
-    os.path.join(params['base_directory'],
-                 'NorMITs Synthesiser',
-                 params['model_name'],
-                 params['iteration'],
-                 'PCU Outputs',
-                 'PCU OD Matrices')
-
-    # Convert to vehicles
-    if params['vehicle_demand']:
-        vo.people_vehicle_conversion(import_folder=os.path.join(params['base_directory'],
-                                                                'NorMITs Synthesiser',
-                                                                params['model_name'],
-                                                                params['iteration'],
-                                                                'Distribution Outputs',
-                                                                'Compiled OD Matrices'),
-                                     export_folder='D:/',
-                                     mode='3',
-                                     method='to_vehicles',
-                                     hourly_average=True,
-                                     out_format='long',
-                                     rounding_factor=None,
-                                     header=False,
-                                     write=True)
-        # TODO: add 3 sectore report call
+    # COMPILE TO ASSIGNMENT MODEL SEGMENTATION

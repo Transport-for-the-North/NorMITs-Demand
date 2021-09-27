@@ -707,11 +707,6 @@ class DistributionModel(tms.TMSPathing):
         else:
             Warning('Some betas dropped')
 
-        print("inital betas", initial_betas,
-              "transalated dists", translated_dists,
-              "intra_zonal_dists", intra_zonal_dists,
-              "cjtw_dists", cjtw_dists,
-              "null_dists", null_dists)
         return (initial_betas,
                 translated_dists,
                 intra_zonal_dists,
@@ -920,6 +915,7 @@ class DistributionModel(tms.TMSPathing):
         # Loop over the distributions until beta gives:
         # 1. a decent average trip length by band
         # 2. decent proportions within the segments
+        # Get internal and external area
 
         # TODO: Filter should be done outside of function and passed as np vector, still inside atm
         #  - this applies to intra & cjtw too
@@ -930,6 +926,7 @@ class DistributionModel(tms.TMSPathing):
             init_param_b=init_param_b,
             productions=productions,
             attractions=attractions,
+            internal_zones=nup.get_internal_area(self.lookup_folder),
             model_lookup_path=i_paths['lookups'],
             target_tld=target_tld,
             dist_log_path=o_paths['reports'],
@@ -950,7 +947,7 @@ class DistributionModel(tms.TMSPathing):
         dist_path = os.path.join(o_paths['summaries'],
                                  trip_origin + '_synthetic')
         dist_path = nup.build_path(dist_path, calib_params)
-        hb_distribution[0].to_csv(dist_path, index=False)
+        hb_distribution[0].to_csv(dist_path)
 
         # Export trip length bins
         bin_path = os.path.join(o_paths['tld'],

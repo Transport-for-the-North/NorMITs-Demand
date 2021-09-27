@@ -28,6 +28,7 @@ def run_gravity_model(zone_col,
                       init_param_b: float,
                       productions,
                       attractions,
+                      internal_zones,
                       model_lookup_path,
                       target_tld,
                       dist_log_path,
@@ -134,11 +135,6 @@ def run_gravity_model(zone_col,
     new_beta:
         beta to do another distribution with.
     """
-    # Get unique zones for numpy placeholder
-    # TODO: Safer to pass the internal area?
-    # TODO: Maybe go in the distribution model loop instead? // Yes
-    unq_internal_zones = productions[zone_col].unique()
-
     # Filter P/A Vectors
     productions = pd_utils.filter_df(productions, segment_params)
     attractions = pd_utils.filter_df(attractions, segment_params)
@@ -152,7 +148,7 @@ def run_gravity_model(zone_col,
         productions,
         v_heading=zone_col,
         values=production_val_col,
-        unq_internal_zones=unq_internal_zones,
+        unq_internal_zones=internal_zones,
     )
     p = p.astype(np.float64, copy=True)
 
@@ -161,7 +157,7 @@ def run_gravity_model(zone_col,
         attractions,
         v_heading=zone_col,
         values=attraction_val_col,
-        unq_internal_zones=unq_internal_zones,
+        unq_internal_zones=internal_zones,
     )
     a = a.astype(np.float64, copy=True)
 
@@ -181,7 +177,7 @@ def run_gravity_model(zone_col,
         v_heading='p_zone',
         h_heading='a_zone',
         values='cost',
-        unq_internal_zones=unq_internal_zones,
+        unq_internal_zones=internal_zones,
     )
     cost = cost.astype(np.float64, copy=True)
 
@@ -272,7 +268,6 @@ def run_gravity_model(zone_col,
     if len(out_para) == 0:
         out_para, bs_con = grav_run[1], grav_run[6][4]
     internal_pa = grav_run[0]
-
 
     # Refine values
     print("Length of out_para:", len(out_para))
@@ -391,17 +386,18 @@ def run_gravity_model(zone_col,
     # ########## End of alpha/beta search ########## #
 
     # TODO: Add indices, back to pandas
-    internal_pa = pd.DataFrame(internal_pa,
-                               index=productions[zone_col],
-                               columns=attractions[zone_col]).reset_index()
+    internal_pa = pd.DataFrame(
+        internal_pa,
+        index=internal_zones,
+        columns=internal_zones,
+    )
 
     # ## GENERATE A TLD REPORT ## #
     # Get distance into the right format
-    distance = internal_costs.pivot(index='p_zone', columns='a_zone', values='cost')
     distance = pd.DataFrame(
-        data=distance.values[:internal_pa.shape[0], :internal_pa.shape[1]],
-        index=internal_pa.index,
-        columns=internal_pa.columns,
+        data=cost,
+        index=internal_zones,
+        columns=internal_zones,
     )
 
     _, d_bin, _ = ra.get_trip_length_by_band(
@@ -522,6 +518,10 @@ def gravity_model(dist_log_path: str,
     # Create the output path
     dist_log_path = os.path.join(dist_log_path, dist_log_fname)
     dist_log_path = nup.build_path(dist_log_path, calib_params)
+
+    # Replace the log if it already exists
+    if os.path.isfile(dist_log_path):
+        os.remove(dist_log_path)
 
     # Build min max vectors
     # Convert miles from raw NTS to km
