@@ -1644,7 +1644,7 @@ def weekly_to_weekday(df, trip_origin, model_zone) -> pd.DataFrame:
 
 
 def get_trip_length_bands(import_folder,
-                          calib_params,
+                          segment_params,
                           segmentation,
                           trip_origin,
                           replace_nan=False,
@@ -1661,9 +1661,9 @@ def get_trip_length_bands(import_folder,
     # Define file contents, should just be target files - should fix.
     import_files = target_files.copy()
 
-    print("calib_params", calib_params)
+    print("calib_params", segment_params)
 
-    for key, value in calib_params.items():
+    for key, value in segment_params.items():
         # Don't want empty segments, don't want ca
         if value != 'none' and key != 'mat_type':
             # print_w_toggle(key + str(value), echo=echo)
@@ -1685,7 +1685,7 @@ def get_trip_length_bands(import_folder,
             % (trip_origin, import_folder)
         )
 
-    for key, value in calib_params.items():
+    for key, value in segment_params.items():
         # Don't want empty segments, don't want ca
         if value != 'none' and key != 'mat_type':
             # print_w_toggle(key + str(value), echo=echo)
@@ -1697,7 +1697,7 @@ def get_trip_length_bands(import_folder,
             "Cannot find any import files matching the given criteria.\n"
             'Import folder: %s\n'
             'Search criteria: %s'
-            % (import_folder, calib_params)
+            % (import_folder, segment_params)
         )
 
     if len(import_files) > 1:
@@ -1706,7 +1706,7 @@ def get_trip_length_bands(import_folder,
             'Search criteria: %s\n'
             'Import folder: %s\n'
             'Viable files: %s'
-            % (calib_params, import_folder, import_files)
+            % (segment_params, import_folder, import_files)
         )
 
     # Import

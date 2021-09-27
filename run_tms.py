@@ -122,12 +122,16 @@ class TmsParameterBuilder:
                 'export_uncorrected': False,
                 'export_lad': False,
                 'export_model_zoning': True,
+
+                # EXTERNAL MODEL
                 'run_external_models': True,
-                'external_tlb_area': 'gb',
-                'external_tlb_name': 'standard_plus_ca_segments',
+                'tld_area': 'gb',
+                'internal_tld_bands': 'p_m_ca_standard_bands',
+                'external_tld_bands': 'p_m_ca_large_bands',
                 'external_segmentation': ['p', 'm', 'ca'],
                 'external_export_modes': [6],
                 'non_dist_export_modes': None,
+
                 'run_distribution': True,
                 'hb_distribution_segmentation': ['p', 'm', 'ca'],
                 'nhb_distribution_segmentation': ['p', 'm', 'ca', 'tp'],

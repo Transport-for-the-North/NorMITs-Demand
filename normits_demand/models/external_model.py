@@ -129,11 +129,10 @@ class ExternalModel(tms.TMSPathing):
         ei = init_params.index
 
         # Path tlb folder
-        tlb_folder = os.path.join(
+        tld_dir = os.path.join(
             self.import_folder,
             'trip_length_bands',
-            self.params['external_tlb_area'],
-            self.params['external_tlb_name'],
+            self.params['tld_area'],
         )
 
         # Loop through each of the segments
@@ -146,49 +145,29 @@ class ExternalModel(tms.TMSPathing):
                 segment_params.update({ds: init_params[ds][ed]})
 
             # Get target trip length distribution
-            trip_length_dist = nup.get_trip_length_bands(
-                tlb_folder,
-                segment_params,
-                segmentation=self.params['external_tlb_name'],
+            internal_tld = nup.get_trip_length_bands(
+                import_folder=os.path.join(tld_dir, self.params['internal_tld_bands']),
+                segment_params=segment_params,
+                segmentation=None,
                 trip_origin=trip_origin,
             )
 
-            # TODO(BT): READ IN EXTERNAL TLD FROM FILE
-            # Aggregate some bands for external
-            new_bands = [
-                ([0, 1, 2, 3, 5, 10], 15),
-                ([15], 25),
-                ([25, 35], 50),
-                ([50], 75),
-                ([75], 100),
-                ([100], 150),
-                ([150], 200),
-                ([200], 199),
-            ]
-
-            ext_ph = list()
-            for lower_nums, upper in new_bands:
-                mask = trip_length_dist['lower'].isin(lower_nums)
-                ext_ph.append({
-                    'lower': min(lower_nums),
-                    'upper': upper,
-                    'trips': np.sum(trip_length_dist[mask]['trips'].values),
-                    'ave_km': 0,
-                    'band_share': np.sum(trip_length_dist[mask]['band_share'].values),
-
-                })
-
-            ext_trip_length_dist = pd.DataFrame(ext_ph)
+            external_tld = nup.get_trip_length_bands(
+                import_folder=os.path.join(tld_dir, self.params['external_tld_bands']),
+                segment_params=segment_params,
+                segmentation=None,
+                trip_origin=trip_origin,
+            )
 
             # Convert from miles to KM
-            trip_length_dist = trip_length_dist.reset_index(drop=True)
-            trip_length_dist['min'] = trip_length_dist['lower'] * 1.61
-            trip_length_dist['max'] = trip_length_dist['upper'] * 1.61
+            internal_tld = internal_tld.reset_index(drop=True)
+            internal_tld['min'] = internal_tld['lower'] * 1.61
+            internal_tld['max'] = internal_tld['upper'] * 1.61
 
             # Convert from miles to KM
-            ext_trip_length_dist = ext_trip_length_dist.reset_index(drop=True)
-            ext_trip_length_dist['min'] = ext_trip_length_dist['lower'] * 1.61
-            ext_trip_length_dist['max'] = ext_trip_length_dist['upper'] * 1.61
+            external_tld = external_tld.reset_index(drop=True)
+            external_tld['min'] = external_tld['lower'] * 1.61
+            external_tld['max'] = external_tld['upper'] * 1.61
 
             # ## GET P/A VECTORS FOR THIS SEGMENT ## #
             # Filter productions to target distribution type
@@ -261,14 +240,14 @@ class ExternalModel(tms.TMSPathing):
                 os.remove(log_path)
 
             # Run
-            gb_pa, bs_con = self._external_model(
+            gb_pa, int_bs_con, ext_bs_con, overall_bs_con = self._external_model(
                 p=sub_p,
                 a=sub_a,
                 base_matrix=cjtw,
                 costs=costs,
                 convergence_target=0.9,
-                int_target_tld=trip_length_dist,
-                ext_target_tld=ext_trip_length_dist,
+                int_target_tld=internal_tld,
+                ext_target_tld=external_tld,
                 internal_index=internal_index,
                 external_index=external_index,
                 log_path=log_path,
@@ -278,9 +257,11 @@ class ExternalModel(tms.TMSPathing):
 
             # ## WRITE A REPORT OF HOW THE EXTERNAL MODEL DID ## #
             # Build a report from external model
-            _, tlb_con, _ = ra.get_trip_length_by_band(trip_length_dist, costs, gb_pa)
+            _, tlb_con, _ = ra.get_trip_length_by_band(internal_tld, costs, gb_pa)
             report = tlb_con
-            report['bs_con'] = bs_con
+            report['int_bs_con'] = int_bs_con
+            report['ext_bs_con'] = ext_bs_con
+            report['overall_bs_con'] = overall_bs_con
 
             # Build the output path
             fname = trip_origin + '_external_report'
@@ -422,6 +403,7 @@ class ExternalModel(tms.TMSPathing):
         # Calibrate
         int_bs_con = 0
         ext_bs_con = 0
+        overall_bs_con = 0
         for iter_num in range(max_iters):
             iter_start_time = timing.current_milli_time()
 
@@ -434,8 +416,6 @@ class ExternalModel(tms.TMSPathing):
                 int_index=internal_index,
                 ext_index=external_index,
             )
-
-            print(gb_pa.shape)
 
             # Furness across the other 2 dimensions
             gb_pa, furn_iters, furn_r2 = furness.doubly_constrained_furness(
@@ -455,24 +435,24 @@ class ExternalModel(tms.TMSPathing):
 
             # Internal vals
             _, tlb_con, _ = ra.get_trip_length_by_band(int_target_tld, internal_dist, internal_pa)
-            prior_int_bs_con = int_bs_con
             int_bs_con = math_utils.curve_convergence(tlb_con['tbs'], tlb_con['bs'])
+            int_mse = math_utils.vector_mean_squared_error(
+                vector1=tlb_con['tbs'].values,
+                vector2=tlb_con['bs'].values,
+            )
 
             # External vals
             _, tlb_con, _ = ra.get_trip_length_by_band(ext_target_tld, external_dist, external_pa)
-            prior_ext_bs_con = ext_bs_con
             ext_bs_con = math_utils.curve_convergence(tlb_con['tbs'], tlb_con['bs'])
+            ext_mse = math_utils.vector_mean_squared_error(
+                vector1=tlb_con['tbs'].values,
+                vector2=tlb_con['bs'].values,
+            )
 
-            # Get convergence
-            # _, tlb_con, _ = ra.get_trip_length_by_band(int_target_tld, costs, gb_pa)
-            # mse = math_utils.vector_mean_squared_error(
-            #     vector1=tlb_con['tbs'].values,
-            #     vector2=tlb_con['bs'].values,
-            # )
-            #
-            # prior_bs_con = bs_con
-            # bs_con = math_utils.curve_convergence(tlb_con['tbs'], tlb_con['bs'])
-            #
+            # Overall
+            _, tlb_con, _ = ra.get_trip_length_by_band(int_target_tld, costs, gb_pa)
+            overall_bs_con = math_utils.curve_convergence(tlb_con['tbs'], tlb_con['bs'])
+
             iter_end_time = timing.current_milli_time()
             time_taken = iter_end_time - iter_start_time
 
@@ -491,9 +471,11 @@ class ExternalModel(tms.TMSPathing):
                 'furness_loops': furn_iters,
                 'furness_r2': furn_r2,
                 'pa_diff': np.round(pa_diff, 6),
-                'int_bs_con': np.round(int_bs_con, 6),
-                'ext_bs_con': np.round(ext_bs_con, 6),
-                # 'bs_mse': np.round(mse, 8),
+                'internal_bs_con': np.round(int_bs_con, 6),
+                'external_bs_con': np.round(ext_bs_con, 6),
+                'overall_bs_con': np.round(overall_bs_con, 6),
+                'internal_bs_mse': np.round(int_mse, 8),
+                'external_bs_mse': np.round(ext_mse, 8),
             }
 
             # Append this iteration to log file
@@ -506,15 +488,10 @@ class ExternalModel(tms.TMSPathing):
             )
 
             # ## EXIT EARLY IF CONDITIONS MET ## #
-            # # If we're stuck near the target, exit early
-            # diff = np.abs(bs_con - prior_bs_con)
-            # if diff < .0001 and bs_con > convergence_target - 0.1:
-            #     break
-
             if int_bs_con > convergence_target and ext_bs_con > convergence_target:
                 break
 
-        return gb_pa, int_bs_con
+        return gb_pa, int_bs_con, ext_bs_con, overall_bs_con
 
     @staticmethod
     def adjust_trip_length_by_band(band_atl,

@@ -914,12 +914,8 @@ class DistributionModel(tms.TMSPathing):
         temp_calib_params = calib_params.copy()
         if calib_params['m'] != 6:
             temp_calib_params.pop('ca', None)
-        tlb = nup.get_trip_length_bands(tlb_folder,
-                                        temp_calib_params,
-                                        segmentation,
-                                        trip_origin=trip_origin,
-                                        replace_nan=True,
-                                        )
+        tlb = nup.get_trip_length_bands(tlb_folder, temp_calib_params, segmentation,
+                                        trip_origin=trip_origin, replace_nan=True)
 
         calib_params.update({'tlb': tlb})
 
