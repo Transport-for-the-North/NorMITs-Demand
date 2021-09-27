@@ -16,6 +16,7 @@ import operator
 from typing import Any
 from typing import List
 from typing import Dict
+from typing import Union
 from typing import Callable
 
 # Third Party
@@ -99,6 +100,9 @@ def get_wide_mask(df: pd.DataFrame,
             % str(df.index.dtype)
         )
 
+    print(df)
+    print(df.shape)
+
     # Create square masks for the rows and cols
     col_mask = np.broadcast_to(df.columns.isin(col_zones), df.shape)
     index_mask = np.broadcast_to(df.index.isin(index_zones), df.shape).T
@@ -107,8 +111,63 @@ def get_wide_mask(df: pd.DataFrame,
     return join_fn(col_mask, index_mask)
 
 
-def get_internal_mask(df: pd.DataFrame,
-                      zones: List[Any] = None,
+def get_wide_mask_np(a: pd.DataFrame,
+                     zones: List[Any] = None,
+                     col_zones: List[Any] = None,
+                     index_zones: List[Any] = None,
+                     join_fn: Callable = operator.and_
+                     ) -> np.ndarray:
+    """
+    Generates a mask for a wide matrix. Returned mask will be same shape as a
+
+    The zones the set the mask for can be set individually with col_zones and
+    index_zones, or to the same value with zones.
+
+    Parameters
+    ----------
+    a:
+        The array to generate the mask for
+
+    zones:
+        The zones to match to in both the columns and index. If this value
+        is set it will overwrite anything passed into col_zones and
+        index_zones.
+
+    col_zones:
+        The zones to match to in the columns. This value is ignored if
+        zones is set.
+
+    index_zones:
+        The zones to match to in the index. This value is ignored if
+        zones is set.
+
+    join_fn:
+        The function to call on the column and index masks to join them.
+        By default, a bitwise and is used. See pythons builtin operator
+        library for more options.
+
+    Returns
+    -------
+    mask:
+        A mask of true and false values. Will be the same shape as df.
+    """
+    # Init DF args
+    n_rows, n_cols = a.shape
+    index = range(n_rows)
+    cols = range(n_cols)
+
+    # Call pandas function
+    return get_wide_mask(
+        df=pd.DataFrame(data=a, index=index, columns=cols),
+        zones=zones,
+        col_zones=col_zones,
+        index_zones=index_zones,
+        join_fn=join_fn,
+    )
+
+
+def get_internal_mask(df: Union[pd.DataFrame, np.array],
+                      zones: List[Any],
                       ) -> np.ndarray:
     """
     Generates a mask for a wide matrix. Returned mask will be same shape as df
@@ -126,11 +185,16 @@ def get_internal_mask(df: pd.DataFrame,
     mask:
         A mask of true and false values. Will be the same shape as df.
     """
-    return get_wide_mask(df=df, zones=zones, join_fn=operator.and_)
+    if isinstance(df, np.ndarray):
+        fn = get_wide_mask_np
+    else:
+        fn = get_wide_mask
+
+    return fn(df=df, zones=zones, join_fn=operator.and_)
 
 
-def get_external_mask(df: pd.DataFrame,
-                      zones: List[Any] = None,
+def get_external_mask(df: Union[pd.DataFrame, np.array],
+                      zones: List[Any],
                       ) -> np.ndarray:
     """
     Generates a mask for a wide matrix. Returned mask will be same shape as df
@@ -148,7 +212,12 @@ def get_external_mask(df: pd.DataFrame,
     mask:
         A mask of true and false values. Will be the same shape as df.
     """
-    return get_wide_mask(df=df, zones=zones, join_fn=operator.or_)
+    if isinstance(df, np.ndarray):
+        fn = get_wide_mask_np
+    else:
+        fn = get_wide_mask
+
+    return fn(df=df, zones=zones, join_fn=operator.or_)
 
 
 def check_fh_th_factors(factor_dict: Dict[int, np.array],

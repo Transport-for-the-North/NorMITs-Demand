@@ -71,6 +71,7 @@ class HBProductionModel(HBProductionModelPaths):
         "path_years, export_home, report_home, export_paths, report_paths"
     """
     # Constants
+    __version__ = nd.__version__
     _return_segmentation_name = 'notem_hb_output'
 
     # Define wanted columns
@@ -304,7 +305,7 @@ class HBProductionModel(HBProductionModelPaths):
                 out_segmentation=return_seg,
                 split_tfntt_segmentation=True
             )
-
+            productions.ag
             if export_notem_segmentation:
                 du.print_w_toggle(
                     "Exporting notem segmented demand to disk...",
@@ -470,6 +471,7 @@ class HBProductionModel(HBProductionModelPaths):
         mode_time_splits_dvec = nd.DVector(
             zoning_system=None,
             segmentation=m_tp_splits_seg,
+            time_format='avg_week',
             import_data=mode_time_splits,
             val_col="split",
         )
@@ -518,6 +520,7 @@ class NHBProductionModel(NHBProductionModelPaths):
             "path_years, export_home, report_home, export_paths, report_paths"
         """
     # Constants
+    __version__ = nd.__version__
     _return_segmentation_name = 'notem_nhb_output'
 
     # Define wanted columns
@@ -971,6 +974,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         time_splits_dvec = nd.DVector(
             zoning_system=None,
             segmentation=nhb_time_splits_seg,
+            time_format='avg_week',
             import_data=time_splits,
             val_col="split",
         )

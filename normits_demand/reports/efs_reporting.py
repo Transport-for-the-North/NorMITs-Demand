@@ -480,13 +480,10 @@ class EfsReporter:
         )
 
     def _get_hb_trip_length_bands(self, p: int) -> pd.DataFrame:
-        tlb = tms_utils.get_trip_length_bands(
-            import_folder=self.imports['tlb'],
-            calib_params={'p': p, 'm': consts.MODEL_MODES[self.model_name][0]},
-            trip_origin='hb',
-            segmentation=None,  # Not used!
-            echo=False,
-        )
+        tlb = tms_utils.get_trip_length_bands(import_folder=self.imports['tlb'],
+                                              segment_params={'p': p, 'm':
+                                                  consts.MODEL_MODES[self.model_name][0]},
+                                              segmentation=None, trip_origin='hb')
 
         return tlb
 

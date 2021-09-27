@@ -19,6 +19,7 @@ import shutil
 import random
 import inspect
 import operator
+import itertools
 import contextlib
 
 import pandas as pd
@@ -3063,6 +3064,13 @@ def is_almost_equal(v1: float,
     return isclose(v1, v2, abs_tol=10 ** -significant)
 
 
+def pairwise(iterable):
+    """s -> (s0,s1), (s1,s2), (s2, s3), ..."""
+    a, b = itertools.tee(iterable)
+    next(b, None)
+    return zip(a, b)
+
+
 def remove_all_commute_cat(df: pd.DataFrame,
                            emp_cat_col: str,
                            all_commute_name: str = 'E01'
@@ -3486,11 +3494,34 @@ def sum_dict_list(dict_list: List[Dict[Any, Any]]) -> Dict[Any, Any]:
     summed_dict:
         A single dictionary of all the dicts in dict_list summed together.
     """
+    return combine_dict_list(dict_list, operator.add)
 
+
+def combine_dict_list(dict_list: List[Dict[Any, Any]],
+                      operation: Callable,
+                      ) -> Dict[Any, Any]:
+    """
+    Sums all dictionaries in dict_list together.
+
+    Parameters
+    ----------
+    dict_list:
+        A list of dictionaries to sum together.
+
+    operation:
+        the operation to use to combine values at keys.
+        The operator library defines functions to do this.
+        Function should take two values, and return one.
+
+    Returns
+    -------
+    summed_dict:
+        A single dictionary of all the dicts in dict_list summed together.
+    """
     # Define the accumulator function to call in functools.reduce
     def reducer(accumulator, item):
         for key, value in item.items():
-            accumulator[key] = accumulator.get(key, 0) + value
+            accumulator[key] = operation(accumulator.get(key, 0), value)
         return accumulator
 
     return functools.reduce(reducer, dict_list)
