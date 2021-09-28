@@ -712,7 +712,6 @@ class NHBProductionModel(NHBProductionModelPaths):
             self._logger.info("Applying trip rates")
             pure_nhb_demand = self._generate_nhb_productions(hb_attr_dvec, verbose)
 
-
             if export_nhb_pure_demand:
                 self._logger.info("Exporting NHB pure demand to disk")
                 pure_nhb_demand.to_pickle(self.export_paths.pure_demand[year])
@@ -733,7 +732,7 @@ class NHBProductionModel(NHBProductionModelPaths):
 
             # ## PRODUCTIONS TOTAL CHECK ## #
             if not pure_nhb_demand.sum_is_close(fully_segmented):
-                msg=(
+                msg = (
                     "The NHB production totals before and after time split are not same.\n"
                     "Expected %f\n"
                     "Got %f"
