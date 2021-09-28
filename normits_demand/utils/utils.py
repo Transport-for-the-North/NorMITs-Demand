@@ -15,10 +15,13 @@ import pickle
 import numpy as np
 import pandas as pd
 
+import normits_demand as nd
+
 _default_home_dir = 'C:/'
 _default_iter = 'iter0'
 
 _M_KM = 1.609344
+
 
 # Index functions - functions to aggregate columns into new category variables
 def create_project_folder(projectName, echo=True):
@@ -62,10 +65,10 @@ def set_time():
         Day and time in format 'hour:minute:second'
     """
     time_stamp = time.strftime('%H:%M:%S')
-    return(time_stamp)
+    return (time_stamp)
 
 
-def set_wd(home_dir = _default_home_dir, iteration=_default_iter):
+def set_wd(home_dir=_default_home_dir, iteration=_default_iter):
     # TODO: I've written so many of these it should go into Utils
     """
     This function sets a working directory and creates a project folder
@@ -85,7 +88,7 @@ def set_wd(home_dir = _default_home_dir, iteration=_default_iter):
     """
     os.chdir(home_dir)
     create_project_folder(iteration)
-    return()
+    return ()
 
 
 # Index functions
@@ -116,18 +119,18 @@ def build_index(dataframe,
         index lookup.
     """
     new_index = dataframe.reindex(
-            index_cols,
-            axis=1
-            ).drop_duplicates(
-                    ).sort_values(
-                            by=index_cols
-                            ).reset_index(
-                                    drop=True
-                                    )
-    new_index.index = new_index.index+1
+        index_cols,
+        axis=1
+    ).drop_duplicates(
+    ).sort_values(
+        by=index_cols
+    ).reset_index(
+        drop=True
+    )
+    new_index.index = new_index.index + 1
     new_index = new_index.reset_index()
-    new_index = new_index.rename(columns={'index':new_index_name})
-    return(new_index)
+    new_index = new_index.rename(columns={'index': new_index_name})
+    return (new_index)
 
 
 def replace_index_columns(dataframe,
@@ -154,10 +157,11 @@ def replace_index_columns(dataframe,
     drop_cols = list(index)[1:]
     dataframe = dataframe.merge(index,
                                 how='left',
-                                on = drop_cols)
+                                on=drop_cols)
     for col in drop_cols:
-        del(dataframe[col])
-    return(dataframe)
+        del (dataframe[col])
+    return (dataframe)
+
 
 def reapply_index(dataframe, index):
     """
@@ -182,8 +186,9 @@ def reapply_index(dataframe, index):
     dataframe = dataframe.merge(index,
                                 how='left',
                                 on=id_col)
-    del(dataframe[id_col])
-    return(dataframe)
+    del (dataframe[id_col])
+    return (dataframe)
+
 
 # Optimise functions
 
@@ -214,7 +219,7 @@ def optimise_data_types(dataframe, verbose=True):
     # Get in-memory size of dataframe to be optimised in bytes
     before = sys.getsizeof(dataframe)
     # Define long threshold
-    long_df = np.power(10,7)
+    long_df = np.power(10, 7)
     # Iterate over column names
     for col in lu_cols:
         # Get col type (numpy data type)
@@ -250,7 +255,8 @@ def optimise_data_types(dataframe, verbose=True):
     # Get improvement value (bytes)
     shrink = before - after
     print_w_toggle('optimised for', shrink, 'bytes', verbose=verbose)
-    return(dataframe)
+    return (dataframe)
+
 
 def refresh():
     """
@@ -266,7 +272,8 @@ def refresh():
 
     """
     gc.collect()
-    return()
+    return ()
+
 
 def frame_audit(dataframe, trips_var=None):
     """
@@ -313,7 +320,7 @@ def frame_audit(dataframe, trips_var=None):
     # Get df size
     size = sys.getsizeof(dataframe)
     # Change size from bytes to GB
-    size_gb = size/1073741824
+    size_gb = size / 1073741824
     # Get size of a row in bytes
     row_size = sys.getsizeof(dataframe[:1])
     # Get time at audit
@@ -335,7 +342,6 @@ def aggregate_merger(dataframe,
                      join_type,
                      join_cols,
                      drop_cols=False):
-
     """
     Placeholder for a one stop that breaks up dataframes to aggregate,
     assigns to a pot and recomplies with thinner segments.
@@ -344,13 +350,13 @@ def aggregate_merger(dataframe,
     unique segments and decides which ones to to.
     """
     unq_segs = dataframe.reindex(
-            [target_segments],axis=1).drop_duplicates().reset_index(drop=True)
+        [target_segments], axis=1).drop_duplicates().reset_index(drop=True)
 
     df_bin = []
 
-    for index,row in unq_segs.iterrows():
+    for index, row in unq_segs.iterrows():
 
-        print('subsetting segment', index+1)
+        print('subsetting segment', index + 1)
         subset = dataframe.copy()
 
         for col in row:
@@ -358,17 +364,17 @@ def aggregate_merger(dataframe,
 
         print('merging time splits')
         subset = subset.merge(merge_dat,
-                              how = join_type,
-                              on = join_cols)
+                              how=join_type,
+                              on=join_cols)
 
         if drop_cols:
             for col in drop_cols:
-                del()
-        del(subset['purpose'], subset['time'])
-        subset = subset.rename(columns={'purpose_to_home':'purpose',
-                                        'time_to_home':'time'})
+                del ()
+        del (subset['purpose'], subset['time'])
+        subset = subset.rename(columns={'purpose_to_home': 'purpose',
+                                        'time_to_home': 'time'})
         subset['dt'] = subset['dt'].values * subset['direction_factor'].values
-        del(subset['direction_factor'])
+        del (subset['direction_factor'])
         print('re-aggregating with new mode and time')
 
         # TODO: Another loop here to recompile?
@@ -378,12 +384,13 @@ def aggregate_merger(dataframe,
         print(len(subset))
         print('subset dt', subset['dt'].sum())
         df_bin.append(subset)
-        del(subset)
+        del (subset)
 
     dataframe = pd.concat(df_bin, sort=True)
-    del(df_bin)
+    del (df_bin)
 
-    return(dataframe)
+    return (dataframe)
+
 
 def df_to_np(df,
              values,
@@ -411,7 +418,7 @@ def df_to_np(df,
 
     if h_heading is None:
         placeholder = placeholder.rename(columns={
-                list(placeholder)[0]:v_heading})
+            list(placeholder)[0]: v_heading})
         full_placeholder = placeholder.merge(df,
                                              how='left',
                                              on=[v_heading])
@@ -512,8 +519,8 @@ def n_matrix_split(matrix,
     ind_dict = {}
     n_i = 0
     for i in indices:
-        ind_dict.update({index_names[n_i]:i})
-        n_i = n_i+1
+        ind_dict.update({index_names[n_i]: i})
+        n_i = n_i + 1
 
     mats = []
 
@@ -528,19 +535,20 @@ def n_matrix_split(matrix,
             out_mat = out_mat.take(dat_b, axis=1)
             if summarise:
                 out_mat = out_mat.sum()
-            ret_dict = {'name':label,
-                        'dat':out_mat}
+            ret_dict = {'name': label,
+                        'dat': out_mat}
             mats.append(ret_dict)
     # TODO: Can you give me in a matrix??
 
-    return(mats)
+    return (mats)
+
 
 # BACKLOG: Replace compile_od() with mat_p.compile_matrices()
 #  labels: demand merge, EFS, TMS
 def compile_od(od_folder,
                write_folder,
                compile_param_path,
-               build_factor_pickle = False,
+               build_factor_pickle=False,
                factor_pickle_path=None):
     """
     Function to compile model format od matrices to a given specification
@@ -549,8 +557,8 @@ def compile_od(od_folder,
 
     # Define cols
     compilations = import_params.drop(
-            'distribution_name',
-            axis=1).drop_duplicates().reset_index(drop=True)
+        'distribution_name',
+        axis=1).drop_duplicates().reset_index(drop=True)
 
     # Some sort of check on the files
     files = os.listdir(od_folder)
@@ -559,7 +567,7 @@ def compile_od(od_folder,
 
     comp_ph = []
     od_pickle = {}
-    for index,row in compilations.iterrows():
+    for index, row in compilations.iterrows():
         compilation_name = row['compilation']
 
         if row['format'] == 'long':
@@ -567,7 +575,7 @@ def compile_od(od_folder,
         else:
             target_format = 'wide'
 
-        subset = import_params[import_params['compilation']==compilation_name]
+        subset = import_params[import_params['compilation'] == compilation_name]
         import_me = subset['distribution_name'].drop_duplicates()
 
         ph = []
@@ -579,11 +587,11 @@ def compile_od(od_folder,
             temp = pd.read_csv(reader)
 
             if build_factor_pickle:
-                square = temp.copy().drop(list(temp)[0],axis=1).values
-                squares.append({each_one.replace('.csv',''):square})
-                del(square)
+                square = temp.copy().drop(list(temp)[0], axis=1).values
+                squares.append({each_one.replace('.csv', ''): square})
+                del (square)
 
-            temp = temp.rename(columns={list(temp)[0]:'o_zone'})
+            temp = temp.rename(columns={list(temp)[0]: 'o_zone'})
 
             temp = pd.melt(temp, id_vars=['o_zone'],
                            var_name='d_zone', value_name='dt', col_level=0)
@@ -595,22 +603,22 @@ def compile_od(od_folder,
             # Get size of first square matrix
             for key, dat in squares[0].items():
                 ms = len(dat)
-            ph_sq = np.zeros([ms,ms])
+            ph_sq = np.zeros([ms, ms])
             # Build empty matrix
             for square in squares:
                 for key, dat in square.items():
                     ph_sq = ph_sq + dat
             # If nothing: nothing, just dont div0
-            ph_sq = np.where(ph_sq==0,0.0001,ph_sq)
+            ph_sq = np.where(ph_sq == 0, 0.0001, ph_sq)
             # Divide each matrix by total
             for square in squares:
                 for key, dat in square.items():
-                    od_factors = dat/ph_sq
+                    od_factors = dat / ph_sq
                     od_factors = np.float64(od_factors)
-                    compilation_dict.update({key:od_factors})
+                    compilation_dict.update({key: od_factors})
 
             od_pickle.update({row['compilation'].replace('.csv',
-                              ''):compilation_dict})
+                                                         ''): compilation_dict})
 
         # Copy the od columns over to a placeholder for joins
         final = ph[0].copy()
@@ -620,17 +628,17 @@ def compile_od(od_folder,
 
         loop = 1
         for mat in ph:
-            mat = mat.rename(columns={'dt':'dt_'+str(loop)})
-            final = final.merge(mat, how = 'left',
-                                on = ['o_zone', 'd_zone'])
-            loop = loop +1
+            mat = mat.rename(columns={'dt': 'dt_' + str(loop)})
+            final = final.merge(mat, how='left',
+                                on=['o_zone', 'd_zone'])
+            loop = loop + 1
 
         final['dt'] = 0
 
         for add in range(mat_len):
-            print('adding dt_' + str(add+1))
-            final['dt'] = final['dt'] + final['dt_'+str(add+1)]
-            final = final.drop('dt_'+str(add+1), axis=1)
+            print('adding dt_' + str(add + 1))
+            final['dt'] = final['dt'] + final['dt_' + str(add + 1)]
+            final = final.drop('dt_' + str(add + 1), axis=1)
 
         # Change to numeric to order columns properly
         final['o_zone'] = final['o_zone'].astype('int32')
@@ -638,16 +646,16 @@ def compile_od(od_folder,
 
         final = final.reindex(['o_zone', 'd_zone', 'dt'],
                               axis=1).groupby(['o_zone', 'd_zone']).sum(
-                                      ).sort_values(
-                                              ['o_zone', 'd_zone']).reset_index()
+        ).sort_values(
+            ['o_zone', 'd_zone']).reset_index()
 
         if target_format == 'wide':
             print('translating back to wide')
-            final = final.pivot(index = 'o_zone',
-                                columns = 'd_zone',
-                                values = 'dt')
+            final = final.pivot(index='o_zone',
+                                columns='d_zone',
+                                values='dt')
 
-        export_dict = {compilation_name:final}
+        export_dict = {compilation_name: final}
 
         comp_ph.append(export_dict)
 
@@ -655,7 +663,7 @@ def compile_od(od_folder,
         if write_folder is not None:
             for mat in comp_ph:
                 # Write compiled od
-                for key,value in mat.items():
+                for key, value in mat.items():
                     print(key)
                     if key[-4:] == '.csv':
                         c_od_out = os.path.join(write_folder, key)
@@ -673,11 +681,11 @@ def compile_od(od_folder,
                 with open(p_path, 'wb') as handle:
                     pickle.dump(od_pickle, handle,
                                 protocol=pickle.HIGHEST_PROTOCOL)
-    return(comp_ph)
+    return (comp_ph)
+
 
 def compile_pa(pa_folder,
                compile_param_path):
-
     """
     Function to compile pa matrices to a given specification
 
@@ -689,8 +697,8 @@ def compile_pa(pa_folder,
 
     # Define cols
     compilations = import_params.drop(
-            'distribution_name',
-            axis=1).drop_duplicates().reset_index(drop=True)
+        'distribution_name',
+        axis=1).drop_duplicates().reset_index(drop=True)
 
     if 'split_time' in list(compilations):
         split_time = True
@@ -704,13 +712,13 @@ def compile_pa(pa_folder,
     print(files)
 
     comp_ph = []
-    for index,row in compilations.iterrows():
+    for index, row in compilations.iterrows():
         compilation_name = row['compilation']
 
         print('Compiling ' + compilation_name)
 
         # Get files to import
-        subset = import_params[import_params['compilation']==compilation_name]
+        subset = import_params[import_params['compilation'] == compilation_name]
         # Get rid of any duplicates?
         import_list = subset['distribution_name'].drop_duplicates()
 
@@ -719,7 +727,7 @@ def compile_pa(pa_folder,
             reader = (pa_folder + '/' + import_file)
             print('Importing ' + reader)
             temp = pd.read_csv(reader)
-            temp = temp.rename(columns={list(temp)[0]:'p_zone'})
+            temp = temp.rename(columns={list(temp)[0]: 'p_zone'})
             temp = pd.melt(temp, id_vars=['p_zone'],
                            var_name='a_zone', value_name='dt', col_level=0)
             ph.append(temp)
@@ -730,32 +738,32 @@ def compile_pa(pa_folder,
         if split_time:
             # Get time params
             unq_time = current_comp['time'].drop_duplicates(
-                    ).reset_index(drop=True)
+            ).reset_index(drop=True)
 
             # Loop over unique times
             for time_period in unq_time:
                 print(time_period)
                 # Subset
-                time_sub = current_comp[current_comp['time']==time_period]
+                time_sub = current_comp[current_comp['time'] == time_period]
                 # Group and sum
                 time_sub = time_sub.drop('time', axis=1)
                 time_sub = time_sub.groupby(
-                        ['p_zone', 'a_zone']).sum().reset_index()
+                    ['p_zone', 'a_zone']).sum().reset_index()
                 # Reset name
-                time_sub_name = compilation_name.replace('*',str(time_period))
+                time_sub_name = compilation_name.replace('*', str(time_period))
                 # Append to output pot
-                comp_ph.append({time_sub_name:time_sub})
+                comp_ph.append({time_sub_name: time_sub})
         else:
             current_comp['p_zone'] = current_comp['p_zone'].astype(int)
             current_comp['a_zone'] = current_comp['a_zone'].astype(int)
 
             current_comp = current_comp.groupby(
-                    ['p_zone', 'a_zone']).sum().sort_values(
-                            ['p_zone', 'a_zone']).reset_index()
+                ['p_zone', 'a_zone']).sum().sort_values(
+                ['p_zone', 'a_zone']).reset_index()
             # Append to output pot
-            comp_ph.append({compilation_name:current_comp})
+            comp_ph.append({compilation_name: current_comp})
 
-    return(comp_ph)
+    return (comp_ph)
 
 
 def get_attraction_type(calib_params,
@@ -842,7 +850,7 @@ def get_attraction_type(calib_params,
         print_w_toggle('balancing to holiday, day trip attractions', verbose=echo)
         a_t = 'Holiday_day_trip'
 
-    return(a_t)
+    return (a_t)
 
 
 def print_w_toggle(*args, verbose):
@@ -901,7 +909,7 @@ def filter_distribution_p(internal_24hr_productions,
                 # Ignore nulled out segments (soc or ns)
                 # Force the parameter to integer, or it drops trips
                 param = cp
-                dp = dp[dp[index]==param]
+                dp = dp[dp[index] == param]
                 if verbose:
                     print(index, cp)
             else:
@@ -927,7 +935,7 @@ def filter_distribution_p(internal_24hr_productions,
     else:
         total_dp = None
 
-    return(dp, total_dp)
+    return (dp, total_dp)
 
 
 def filter_pa_vector(pa_vector,
@@ -935,8 +943,9 @@ def filter_pa_vector(pa_vector,
                      calib_params,
                      value_var='trips',
                      round_val=3,
-                     echo=True):
+                     verbose=False):
     """
+    Filter productions to target distribution type.
 
     Parameters
     ----------
@@ -952,11 +961,11 @@ def filter_pa_vector(pa_vector,
     value_var:
         name of total to sum
 
-    echo = True:
+    verbose:
         Indicates whether to print a log of the process to the terminal.
-        Useful to set echo=False when using multi-threaded loops
+        Useful to set verbose=False when using multi-threaded loops
 
-    Returns:
+    Return
     ----------
     distribution_p:
         Filtered DataFrame of distributed productions.
@@ -972,12 +981,12 @@ def filter_pa_vector(pa_vector,
                 # Force the parameter to integer, or it drops trips
                 param = cp
                 dp = dp[dp[index] == param]
-                if echo:
+                if verbose:
                     print(index, cp)
             else:
-                print_w_toggle('Ignoring ' + index, verbose=echo)
+                print_w_toggle('Ignoring ' + index, verbose=verbose)
         else:
-            print_w_toggle('Ignoring trip length bands', verbose=echo)
+            print_w_toggle('Ignoring trip length bands', verbose=verbose)
 
     dp_ri = [ia_name, value_var]
     dp = dp.reindex(dp_ri, axis=1)
@@ -990,7 +999,7 @@ def filter_pa_vector(pa_vector,
         total_dp = dp[value_var].sum()
         dp[value_var] = dp[value_var].round(round_val)
 
-        if echo:
+        if verbose:
             print('Values=%f before rounding.' % total_dp)
             print('Values=%f after rounding.' % (dp[value_var].sum()))
             print('Same=%s' % str(total_dp == dp[value_var].sum()))
@@ -1017,7 +1026,7 @@ def filter_pa_cols(pa_frame,
     for index, cp in calib_params.items():
         if index != 'tlb':
             prior = target_col
-            target_col = [x for x in target_col if (index+str(cp)) in x]
+            target_col = [x for x in target_col if (index + str(cp)) in x]
             if len(target_col) == 0:
                 print_w_toggle('Col lookup %s failed' % index, verbose=verbose)
                 target_col = prior
@@ -1034,13 +1043,13 @@ def filter_pa_cols(pa_frame,
 
     return dp, total_dp
 
+
 def get_costs(model_lookup_path,
               calib_params,
-              tp = '24hr',
-              iz_infill = 0.5,
-              replace_nhb_with_hb = False,
+              tp='24hr',
+              iz_infill=0.5,
+              replace_nhb_with_hb=False,
               ):
-
     # units takes different parameters
     # TODO: Needs a config guide for the costs somewhere
     """
@@ -1082,7 +1091,6 @@ def get_costs(model_lookup_path,
                                    'costs',
                                    tp_path[0]))
     cols = list(dat)
-    print("cols",cols)
 
     # Get purpose and direction from calib_params
     ca = None
@@ -1138,8 +1146,6 @@ def get_costs(model_lookup_path,
     target_cols = ['p_zone', 'a_zone']
     for col in cost_cols:
         target_cols.append(col)
-
-    print("cost_cols", cost_cols)
     cost_return_name = cost_cols[0]
 
     dat = dat.reindex(target_cols, axis=1)
@@ -1150,25 +1156,25 @@ def get_costs(model_lookup_path,
 
     if iz_infill is not None:
         dat = dat.copy()
-        min_inter_dat = dat[dat[cols[2]]>0]
+        min_inter_dat = dat[dat[cols[2]] > 0]
         # Derive minimum intrazonal
-        min_inter_dat = min_inter_dat.groupby(
-                cols[0]).min().reset_index().drop(cols[1],axis=1)
+        min_inter_dat = min_inter_dat.groupby(cols[0]).min().reset_index().drop(cols[1], axis=1)
         intra_dat = min_inter_dat.copy()
-        intra_dat[cols[2]] = intra_dat[cols[2]]*iz_infill
+        intra_dat[cols[2]] = intra_dat[cols[2]] * iz_infill
         iz = dat[dat[cols[0]] == dat[cols[1]]]
         non_iz = dat[dat[cols[0]] != dat[cols[1]]]
-        iz = iz.drop(cols[2],axis=1)
+        iz = iz.drop(cols[2], axis=1)
         # Rejoin
         iz = iz.merge(intra_dat, how='inner', on=cols[0])
-        dat = pd.concat([iz, non_iz],axis=0,sort=True).reset_index(drop=True)
+        dat = pd.concat([iz, non_iz], axis=0, sort=True).reset_index(drop=True)
 
-    return(dat, cost_return_name)
+    return (dat, cost_return_name)
+
 
 def get_distance(model_lookup_path,
                  journey_purpose=None,
                  direction=None,
-                 seed_intrazonal = True):
+                 seed_intrazonal=True):
     """
     This function imports distances or costs from a given path.
 
@@ -1202,26 +1208,26 @@ def get_distance(model_lookup_path,
 
     if seed_intrazonal:
         dat = dat.copy()
-        min_inter_dat = dat[dat[cols[2]]>0]
+        min_inter_dat = dat[dat[cols[2]] > 0]
         # Derive minimum intrazonal
         min_inter_dat = min_inter_dat.groupby(
-                cols[0]).min().reset_index().drop(cols[1],axis=1)
+            cols[0]).min().reset_index().drop(cols[1], axis=1)
         intra_dat = min_inter_dat.copy()
-        intra_dat[cols[2]] = intra_dat[cols[2]]/2
+        intra_dat[cols[2]] = intra_dat[cols[2]] / 2
         iz = dat[dat[cols[0]] == dat[cols[1]]]
         non_iz = dat[dat[cols[0]] != dat[cols[1]]]
-        iz = iz.drop(cols[2],axis=1)
+        iz = iz.drop(cols[2], axis=1)
         # Rejoin
         iz = iz.merge(intra_dat, how='inner', on=cols[0])
-        dat = pd.concat([iz, non_iz],axis=0,sort=True).reset_index(drop=True)
+        dat = pd.concat([iz, non_iz], axis=0, sort=True).reset_index(drop=True)
 
-    return(dat)
+    return (dat)
+
 
 def balance_by_band(band_atl,
                     distance,
                     internal_pa,
                     echo=True):
-
     """
     Balance based on segments.
     A lot of duplication from trip length by band
@@ -1239,12 +1245,12 @@ def balance_by_band(band_atl,
         band_atl['max'] = ph[1].str.replace('[', '')
         band_atl['min'] = band_atl['min'].str.replace('(', '').values
         band_atl['max'] = band_atl['max'].str.replace(']', '').values
-        del(ph)
+        del (ph)
     elif 'lower' in list(band_atl):
         # Python built
         # Convert bands to km
-        band_atl['min'] = band_atl['lower']*1.61
-        band_atl['max'] = band_atl['upper']*1.61
+        band_atl['min'] = band_atl['lower'] * 1.61
+        band_atl['max'] = band_atl['upper'] * 1.61
 
     round_mat = []
     for index, row in band_atl.iterrows():
@@ -1252,14 +1258,14 @@ def balance_by_band(band_atl,
         # Get total distance
         band_mat = np.where(
             (
-                (distance >= float(row['min']))
-                &
-                (distance < float(row['max']))
+                    (distance >= float(row['min']))
+                    &
+                    (distance < float(row['max']))
             ),
             distance,
             0)
 
-        distance_bool = np.where(band_mat==0, band_mat, 1)
+        distance_bool = np.where(band_mat == 0, band_mat, 1)
         band_trips = internal_pa * distance_bool
 
         band_p = band_trips.sum(axis=1).round(3)
@@ -1270,9 +1276,9 @@ def balance_by_band(band_atl,
         balance_p = round_trips.sum(axis=1).sum().round(3)
 
         if balance_p.sum() > 0:
-            refactor = band_p/balance_p
+            refactor = band_p / balance_p
             print_w_toggle(refactor, echo=echo)
-            round_trips = round_trips*refactor.round(3)
+            round_trips = round_trips * refactor.round(3)
 
         round_mat.append(round_trips)
 
@@ -1291,7 +1297,7 @@ def balance_by_band(band_atl,
         print('Attractions were: ' + str(total_a))
         print('Attractions now:  ' + str(final_a))
 
-    return(balanced_pa)
+    return (balanced_pa)
 
 
 def single_balance(achieved_pa,
@@ -1314,21 +1320,21 @@ def single_balance(achieved_pa,
     # TODO: Check
 
     curr_a = achieved_pa.sum(axis=0)
-    curr_a = np.where(curr_a==0, 0.0001, curr_a)
+    curr_a = np.where(curr_a == 0, 0.0001, curr_a)
 
     # Fill in target attractions
-    targ_a = np.where(target_attractions==0,
+    targ_a = np.where(target_attractions == 0,
                       0.0001,
                       target_attractions)
 
     # Target over current, multiply across rows by factor
-    corr_fac_a = targ_a/curr_a
+    corr_fac_a = targ_a / curr_a
     corr_fac_a = np.broadcast_to(corr_fac_a,
                                  (len(corr_fac_a),
                                   len(corr_fac_a)))
 
     # Apply
-    achieved_pa = achieved_pa*corr_fac_a
+    achieved_pa = achieved_pa * corr_fac_a
 
     # Sometimes this contains NaN and outputs empty matrices. Warn the user
     if np.isnan(achieved_pa).any():
@@ -1345,21 +1351,21 @@ def single_balance(achieved_pa,
         print('Target ' + str(targ_a.sum()))
 
     curr_p = achieved_pa.sum(axis=1)
-    curr_p = np.where(curr_p==0, 0.0001, curr_p)
+    curr_p = np.where(curr_p == 0, 0.0001, curr_p)
 
-    targ_p = np.where(target_productions==0,
+    targ_p = np.where(target_productions == 0,
                       0.0001,
                       target_productions)
 
     # Target over current, multiply across rows by factor
-    corr_fac_p = targ_p/curr_p
+    corr_fac_p = targ_p / curr_p
     # Same as before but transposed to rows
     corr_fac_p = np.broadcast_to(corr_fac_p,
                                  (len(corr_fac_p),
                                   len(corr_fac_p))).T
 
     # Apply
-    achieved_pa = achieved_pa*corr_fac_p
+    achieved_pa = achieved_pa * corr_fac_p
 
     if echo:
         # Check and print totals
@@ -1367,11 +1373,12 @@ def single_balance(achieved_pa,
         print('Current ' + str(achieved_pa.sum(axis=1)))
         print('Target ' + str(targ_p.sum()))
 
-    return(achieved_pa)
+    return (achieved_pa)
 
 
 def build_distribution_bins(internal_distance,
                             distribution,
+                            cost_col='cost',
                             verbose=True):
     """
     This takes a distribution and rounds the trip lengths to the nearest
@@ -1399,97 +1406,13 @@ def build_distribution_bins(internal_distance,
                                       how='left',
                                       on=['p_zone', 'a_zone'])
     # Output trips by target trip length distribution
-    dist_cols = ['dt','distance']
-    dist_bins = distribution.reindex(dist_cols,axis=1)
-    dist_bins['distance'] = dist_bins['distance'].round(0)
-    dist_bins = dist_bins.groupby('distance').sum().reset_index()
+    dist_cols = ['dt', cost_col]
+    dist_bins = distribution.reindex(dist_cols, axis=1)
+    dist_bins[cost_col] = dist_bins[cost_col].round(0)
+    dist_bins = dist_bins.groupby(cost_col).sum().reset_index()
     print_w_toggle('outputting distribution bin', verbose=verbose)
-    return(dist_bins)
+    return dist_bins
 
-
-def balance_a_to_p(ia_name,
-                   productions,
-                   attractions,
-                   p_var_name='productions',
-                   a_var_name='attractions',
-                   round_val=None,
-                   verbose=True):
-
-    """
-    This function takes a set of attractions, selects the relevant attractions
-    for the required distribution and balances attractions to productions.
-    Parameters
-    ----------
-    ia_name:
-        The name of the internal area of the model in use. Required for
-        ensuring the right columns come through.
-
-    productions:
-        Total number of productions by zone. For balancing.
-
-    attractions:
-        Attractions for internal area of model. Should be pre-filtered to
-        internal area before coming into the function.
-
-    p_var_name:
-        Production name for col handling
-
-    a_var_name:
-        Attraction name for col handling
-
-    round_val:
-        Number of dp to round attractions to. Defaults to None.
-
-    verbose:
-        Indicates whether to print a log of the process to the terminal.
-        Useful to set verbose=False when using multi-threaded loops.
-        Default to True.
-
-    Returns
-    ----------
-    [0] internal_attractions
-    """
-    dp = productions.copy()
-    ia = attractions.copy()
-
-    total_internal_productions = dp['productions'].sum()
-    # Add total attraction column for balancing
-    ia['total_attractions'] = ia[a_var_name].sum()
-    ia['total_productions'] = dp[p_var_name].sum()
-
-    # Balance internal productions and attractions
-    a_factors = ia.copy()
-    a_factors[a_var_name] /= a_factors['total_attractions']
-
-    if (len(dp[ia_name].drop_duplicates()) != len(a_factors[ia_name])):
-        # Always print as it's a warning of future problems
-        print('WARNING: Not the same number of zones')
-
-    print_w_toggle('Balancing internal attractions to productions', verbose=verbose)
-    a_factors[a_var_name] = (
-        a_factors[a_var_name]
-        *
-        a_factors['total_productions']
-    )
-
-    total_balanced_attractions = sum(a_factors[a_var_name])
-
-    # Check
-    if verbose:
-        if round(total_balanced_attractions) == round(total_internal_productions):
-            print('attractions successfully balanced to productions')
-        else:
-            print("WARNING: Productions and attractions didn't balance")
-
-    ia = a_factors.copy()
-    ia = ia.drop(['total_attractions', 'total_productions'], axis=1)
-
-    ia = ia.reset_index(drop=True)
-
-    # Round
-    ia[a_var_name] = ia[a_var_name].round(round_val)
-
-    return ia
 
 def define_internal_external_areas(model_lookup_path):
     """
@@ -1517,8 +1440,11 @@ def define_internal_external_areas(model_lookup_path):
 
     return internal_area, external_area
 
+
 def import_pa(production_import_path,
-              attraction_import_path):
+              attraction_import_path,
+              model_zone,
+              trip_origin):
     """
     This function imports productions and attractions from given paths.
 
@@ -1530,6 +1456,9 @@ def import_pa(production_import_path,
     attraction_import_path:
         Path to import attractions from.
 
+    model_zone:
+        Type of model zoning system. norms or noham
+
     Returns
     ----------
     [0] productions:
@@ -1538,17 +1467,104 @@ def import_pa(production_import_path,
     [1] attractions:
         Mainland GB attractions.
     """
-    productions = pd.read_csv(production_import_path)
-    attractions = pd.read_csv(attraction_import_path)
-    return(productions, attractions)
+    p_cache = "E:/%s_productions.csv" % model_zone
+    a_cache = "E:/%s_attractions.csv" % model_zone
+
+    if os.path.exists(p_cache) and os.path.exists(a_cache):
+        return pd.read_csv(p_cache), pd.read_csv(a_cache)
+
+    # Reading pickled Dvector
+    prod_dvec = nd.read_pickle(production_import_path)
+
+    # Aggregate to the required segmentation
+    if trip_origin == 'hb':
+        if model_zone == 'noham':
+            agg_seg = nd.get_segmentation_level('hb_p_m_6tp')
+        elif model_zone == 'norms':
+            agg_seg = nd.get_segmentation_level('hb_p_m_ca_6tp')
+        else:
+            raise ValueError("Invalid model name")
+    elif trip_origin == 'nhb':
+        if model_zone == 'noham':
+            agg_seg = nd.get_segmentation_level('nhb_p_m_6tp')
+        elif model_zone == 'norms':
+            agg_seg = nd.get_segmentation_level('nhb_p_m_ca_6tp')
+        else:
+            raise ValueError("Invalid model name")
+    else:
+        raise ValueError("Invalid trip origin")
+
+    # Aggregate and translate for norms/noham
+    prod_dvec_agg = prod_dvec.aggregate(out_segmentation=agg_seg)
+    model_zoning = nd.get_zoning_system(model_zone)
+    prod_dvec = prod_dvec_agg.translate_zoning(model_zoning, "population")
+
+    # Weekly trips to weekday trips conversion
+    prod_df = prod_dvec.to_df()
+    prod_wd = weekly_to_weekday(prod_df, trip_origin, model_zone)
+
+    # Reading pickled Dvector
+    attr_dvec = nd.read_pickle(attraction_import_path)
+
+    # Aggregate and translate for norms/noham
+    attr_dvec_agg = attr_dvec.aggregate(out_segmentation=agg_seg)
+    model_zoning = nd.get_zoning_system(model_zone)
+    attr_dvec = attr_dvec_agg.translate_zoning(model_zoning, "employment")
+
+    # Weekly trips to weekday trips conversion
+    attr_df = attr_dvec.to_df()
+    attr_wd = weekly_to_weekday(attr_df, trip_origin, model_zone)
+
+    # TODO(BT): Sort zoning system into order
+    prod_wd.to_csv(p_cache)
+    attr_wd.to_csv(a_cache)
+
+    return prod_wd, attr_wd
+
+
+def weekly_to_weekday(df, trip_origin, model_zone) -> pd.DataFrame:
+    """
+    Convert weekly trips to weekday trips.
+
+    Removes tp5 and tp6 from the time period column and
+    divides trips by 5 to convert them from weekly to weekday.
+
+    Parameters
+    ----------
+    df:
+    Dataframe (either productions or attractions) containing notem segmented weekly trips.
+
+    trip_origin:
+    Whether the trip origin is hb or nhb.
+
+    Return
+    ----------
+    df:
+    Dataframe (either productions or attractions) containing notem segmented weekday trips.
+    """
+    if model_zone == 'norms':
+        df[["p", "m", "ca", "tp"]] = df[["p", "m", "ca", "tp"]].apply(pd.to_numeric)
+    else:
+        df[["p", "m", "tp"]] = df[["p", "m", "tp"]].apply(pd.to_numeric)
+    df = df.drop(df[df.tp >= 5].index)
+    df['val'] = df['val'] / 5
+    df_index_cols = list(df)
+    df_index_cols.remove('tp')
+    df_group_cols = df_index_cols.copy()
+    df_group_cols.remove('val')
+
+    # Time period removed for hb based trips
+    if trip_origin == 'hb':
+        df = df.reindex(df_index_cols, axis=1).groupby(df_group_cols).sum().reset_index()
+    return df
 
 
 def get_trip_length_bands(import_folder,
-                          calib_params,
+                          segment_params,
                           segmentation,
                           trip_origin,
                           replace_nan=False,
-                          verbose=False): # 'hb' or 'nhb'
+                          verbose=True):  # 'hb' or 'nhb'
 
     """
     Function to check a folder for trip length band parameters.
@@ -1561,9 +1577,9 @@ def get_trip_length_bands(import_folder,
     # Define file contents, should just be target files - should fix.
     import_files = target_files.copy()
 
-    print("calib_params", calib_params)
+    print("calib_params", segment_params)
 
-    for key, value in calib_params.items():
+    for key, value in segment_params.items():
         # Don't want empty segments, don't want ca
         if value != 'none' and key != 'mat_type':
             # print_w_toggle(key + str(value), echo=echo)
@@ -1585,7 +1601,7 @@ def get_trip_length_bands(import_folder,
             % (trip_origin, import_folder)
         )
 
-    for key, value in calib_params.items():
+    for key, value in segment_params.items():
         # Don't want empty segments, don't want ca
         if value != 'none' and key != 'mat_type':
             # print_w_toggle(key + str(value), echo=echo)
@@ -1597,7 +1613,7 @@ def get_trip_length_bands(import_folder,
             "Cannot find any import files matching the given criteria.\n"
             'Import folder: %s\n'
             'Search criteria: %s'
-            % (import_folder, calib_params)
+            % (import_folder, segment_params)
         )
 
     if len(import_files) > 1:
@@ -1606,7 +1622,7 @@ def get_trip_length_bands(import_folder,
             'Search criteria: %s\n'
             'Import folder: %s\n'
             'Viable files: %s'
-            % (calib_params, import_folder, import_files)
+            % (segment_params, import_folder, import_files)
         )
 
     # Import
@@ -1645,9 +1661,9 @@ def get_init_params(path,
     chunk:
         Number of chunk to take if importing by chunks. This is designed to
         make it easy to multi-process in future, and can be used to run
-        distributions in parralell IDEs now.
+        distributions in parallel IDEs now.
 
-    Returns:
+    Return
     ----------
     initial_betas:
         DataFrame containing target betas for distribution.
@@ -1667,10 +1683,10 @@ def get_init_params(path,
 
     if mode_subset:
         init_params = init_params[
-                init_params['m'].isin(mode_subset)]
+            init_params['m'].isin(mode_subset)]
     if purpose_subset:
         init_params = init_params[
-                init_params['p'].isin(purpose_subset)]
+            init_params['p'].isin(purpose_subset)]
 
     return init_params
 
@@ -1678,7 +1694,7 @@ def get_init_params(path,
 def get_cjtw(model_lookup_path,
              model_name,
              subset=None,
-             reduce_to_pa_factors = True):
+             reduce_to_pa_factors=True):
     """
     This function imports census journey to work and converts types
     to ntem journey types
@@ -1719,33 +1735,33 @@ def get_cjtw(model_lookup_path,
         cjtw = cjtw[cjtw['1_' + mn + 'Areaofresidence'].isin(sub_zones)]
         cjtw = cjtw[cjtw['2_' + mn + 'Areaofworkplace'].isin(sub_zones)]
 
-    method_to_mode = {'4_Workmainlyatorfromhome':'1_walk',
-                      '5_Undergroundmetrolightrailtram':'6_rail_ug',
-                      '6_Train':'6_rail_ug',
-                      '7_Busminibusorcoach':'5_bus',
-                      '8_Taxi':'3_car',
-                      '9_Motorcyclescooterormoped':'2_cycle',
-                      '10_Drivingacarorvan':'3_car',
-                      '11_Passengerinacarorvan':'3_car',
-                      '12_Bicycle':'2_cycle',
-                      '13_Onfoot':'1_walk',
-                      '14_Othermethodoftraveltowork':'1_walk'}
+    method_to_mode = {'4_Workmainlyatorfromhome': '1_walk',
+                      '5_Undergroundmetrolightrailtram': '6_rail_ug',
+                      '6_Train': '6_rail_ug',
+                      '7_Busminibusorcoach': '5_bus',
+                      '8_Taxi': '3_car',
+                      '9_Motorcyclescooterormoped': '2_cycle',
+                      '10_Drivingacarorvan': '3_car',
+                      '11_Passengerinacarorvan': '3_car',
+                      '12_Bicycle': '2_cycle',
+                      '13_Onfoot': '1_walk',
+                      '14_Othermethodoftraveltowork': '1_walk'}
     modeCols = list(method_to_mode.keys())
 
     for col in modeCols:
-        cjtw = cjtw.rename(columns={col:method_to_mode.get(col)})
+        cjtw = cjtw.rename(columns={col: method_to_mode.get(col)})
 
-    cjtw = cjtw.drop('3_Allcategories_Methodoftraveltowork',axis=1)
+    cjtw = cjtw.drop('3_Allcategories_Methodoftraveltowork', axis=1)
     cjtw = cjtw.groupby(cjtw.columns, axis=1).sum()
     cjtw = cjtw.reindex(['1_' + mn + 'Areaofresidence',
                          '2_' + mn + 'Areaofworkplace',
                          '1_walk', '2_cycle', '3_car',
-                         '5_bus', '6_rail_ug'],axis=1)
+                         '5_bus', '6_rail_ug'], axis=1)
     # Redefine mode cols for new aggregated modes
     modeCols = ['1_walk', '2_cycle', '3_car', '5_bus', '6_rail_ug']
     # Pivot
-    cjtw = pd.melt(cjtw,id_vars=['1_' + mn + 'Areaofresidence',
-                                 '2_' + mn + 'Areaofworkplace'],
+    cjtw = pd.melt(cjtw, id_vars=['1_' + mn + 'Areaofresidence',
+                                  '2_' + mn + 'Areaofworkplace'],
                    var_name='mode', value_name='trips')
     cjtw['mode'] = cjtw['mode'].str[0]
 
@@ -1770,12 +1786,12 @@ def get_cjtw(model_lookup_path,
     # Divide by total trips to get distribution factors
 
     if reduce_to_pa_factors:
-        cjtw['distribution'] = cjtw['trips']/cjtw['zonal_mode_total_trips']
+        cjtw['distribution'] = cjtw['trips'] / cjtw['zonal_mode_total_trips']
         cjtw = cjtw.drop(['trips', 'zonal_mode_total_trips'], axis=1)
     else:
-         cjtw = cjtw.drop(['zonal_mode_total_trips'], axis=1)
+        cjtw = cjtw.drop(['zonal_mode_total_trips'], axis=1)
 
-    return(cjtw)
+    return cjtw
 
 
 def single_constraint(balance,
@@ -1808,7 +1824,7 @@ def single_constraint(balance,
     """
 
     if alpha is not None and beta is not None and cost is not None:
-        t = (cost**alpha)*np.exp(beta*cost)
+        t = (cost ** alpha) * np.exp(beta * cost)
     else:
         t = 1
     dt = balance * constraint * t
@@ -1818,7 +1834,7 @@ def single_constraint(balance,
     # 1/(Cij*sigma*(2pi)**0.5)*exp(-nlog(Cij)-mu)**2/(2/sigma**2)
     # TODO: Look at graph
 
-    return(dt)
+    return (dt)
 
 
 def double_constraint(ba,
@@ -1848,7 +1864,7 @@ def double_constraint(ba,
     dt = Distributed trips for a given interzonal.
     """
     if alpha is not None and beta is not None and cost is not None:
-        t = (cost**alpha)*np.exp(beta*cost)
+        t = (cost ** alpha) * np.exp(beta * cost)
     else:
         t = 1
     dt = p * ba * a * bb * t
@@ -1865,7 +1881,12 @@ def get_internal_area(lookup_folder):
     int_path = [x for x in directory if 'internal_area' in x][0]
     int_area = pd.read_csv(os.path.join(lookup_folder, int_path))
 
-    return(int_area)
+    # Assume first col it model zone
+    zone_col = int_area.columns[0]
+    int_area = int_area[zone_col].tolist()
+
+    return int_area
+
 
 def get_external_area(lookup_folder):
     """
@@ -1876,7 +1897,12 @@ def get_external_area(lookup_folder):
     ext_path = [x for x in directory if 'external_area' in x][0]
     ext_area = pd.read_csv(os.path.join(lookup_folder, ext_path))
 
-    return(ext_area)
+    # Assume first col it model zone
+    zone_col = ext_area.columns[0]
+    ext_area = ext_area[zone_col].tolist()
+
+    return ext_area
+
 
 def get_zone_range(zone_vector):
     """
@@ -1885,7 +1911,7 @@ def get_zone_range(zone_vector):
     """
     min_zone = int(zone_vector.min())
     max_zone = int(zone_vector.max())
-    unq_zones = [i for i in range(min_zone, max_zone+1)]
+    unq_zones = [i for i in range(min_zone, max_zone + 1)]
 
     return unq_zones
 
@@ -2059,12 +2085,12 @@ def convert_table_desc_to_min_max(band_atl, in_place=False):
         band_atl['max'] = ph[1].str.replace('[', '')
         band_atl['min'] = band_atl['min'].str.replace('(', '').values
         band_atl['max'] = band_atl['max'].str.replace(']', '').values
-        del(ph)
+        del (ph)
     elif 'lower' in list(band_atl):
         # Python built
         # Convert bands to km
-        band_atl['min'] = band_atl['lower']*1.61
-        band_atl['max'] = band_atl['upper']*1.61
+        band_atl['min'] = band_atl['lower'] * 1.61
+        band_atl['max'] = band_atl['upper'] * 1.61
 
     return band_atl
 
@@ -2173,11 +2199,11 @@ def r_squared(estimated, observed):
         The R squared value of estimated against observed
     """
     x = (
-        1
-        -
-        np.sum((estimated - observed) ** 2)
-        /
-        np.sum((observed - np.sum(observed) / len(observed)) ** 2)
+            1
+            -
+            np.sum((estimated - observed) ** 2)
+            /
+            np.sum((observed - np.sum(observed) / len(observed)) ** 2)
     )
     return max(x, 0)
 
@@ -2207,162 +2233,12 @@ def least_squares(df, achieved_col, target_col):
     return r_squared(estimated, target)
 
 
-def balance_rows(matrix,
-                 target_po,
-                 infill=None):
-    """
-    Balance rows of a matrix.
-    This will be P for PA or O for OD.
-    infill takes a number
-    """
-    curr_p = matrix.sum(axis=1)
-
-    if infill is not None:
-        curr_p = np.where(curr_p == 0, infill, curr_p)
-        target_po = np.where(target_po == 0,
-                             infill,
-                             target_po)
-
-    # Target over current, multiply across rows by factor
-    corr_fac_p = target_po/curr_p
-
-    # Transpose to rows
-    corr_fac_p = np.broadcast_to(corr_fac_p,
-                                 (len(corr_fac_p),
-                                  len(corr_fac_p))).T
-    # Apply
-    po_matrix = matrix*corr_fac_p
-
-    return po_matrix
-
-
-def balance_columns(matrix,
-                    target_ad,
-                    infill = None):
-    """
-    Balance columns of a matrix
-    This will be A for PA or D for OD.
-    infill takes a number
-    """
-    curr_a = matrix.sum(axis=0)
-
-    if infill is not None:
-        # Infill current
-        curr_a = np.where(curr_a == 0, infill, curr_a)
-        # Infill target
-        target_ad = np.where(target_ad == 0,
-                             infill,
-                             target_ad)
-
-    # Target over current, multiply across rows by factor
-    corr_fac_a = target_ad/curr_a
-    corr_fac_a = np.broadcast_to(corr_fac_a,
-                                 (len(corr_fac_a),
-                                  len(corr_fac_a)))
-    # Apply
-    ad_matrix = matrix*corr_fac_a
-
-    return ad_matrix
-
-
 def get_pa_diff(new_p,
                 p_target,
                 new_a,
                 a_target):
-    pa_diff = (
-        (
-            (
-                sum((new_p-p_target)**2)
-                +
-                sum((new_a-a_target)**2)
-            )
-            /
-            len(p_target))
-        ** .5
-    )
-
+    pa_diff = (((sum((new_p - p_target) ** 2) + sum((new_a - a_target) ** 2))/len(p_target)) ** .5)
     return pa_diff
-
-    """
-    def get_pa_diff(new_p,
-                    p_target,
-                    new_a,
-                    a_target):
-
-    """
-    """
-    pa_diff = (
-        (
-            (
-                (new_p-p_target)**2
-                +
-                (new_a-a_target)**2
-            )
-            /
-            len(p_target))
-        ** .5
-    )
-
-    return pa_diff
-
-"""
-
-def correct_band_share(external_pa,
-                       tbs,
-                       band_totals,
-                       seed_infill=.001,
-                       axis=1,
-                       echo=False):
-    """
-    Adjust band shares of rows or columnns
-
-    external pa:
-        Square matrix
-    band_totals:
-        list of dictionaries of trip lenth bands
-    seed_infill = .0001:
-        Seed in fill to balance
-    axis = 1:
-        Axis to adjust band share, takes 0 or 1
-    """
-    if not len(tbs.index) == len(band_totals):
-        raise Warning('Adjustment factors and trip vectors not aligned')
-
-    v_totals = external_pa.sum(axis = axis)
-
-    out_mat = np.zeros((len(band_totals[0]['totals']),
-                        len(band_totals[0]['totals'])))
-
-    for index, row in tbs.iterrows():
-        target_band = index
-        target_band_share = row['band_share']
-        for b in band_totals:
-            if b['tlb_index'] == target_band:
-                v_mat = b['totals']
-        target_v = v_totals * target_band_share
-        current_v = v_mat.sum(axis=axis)
-        # infill
-        current_v = np.where(current_v==0,
-                             seed_infill,
-                             current_v)
-        adj_v = target_v/current_v
-        adj_v = np.broadcast_to(adj_v,
-                                (len(band_totals[0]['totals']),
-                                 len(band_totals[0]['totals'])))
-        if axis == 1:
-            adj_v = adj_v.T
-
-        new_v_mat = v_mat * adj_v
-
-        out_mat = out_mat + new_v_mat
-
-    v_vec = out_mat.sum(axis=axis)
-
-    if echo:
-        print(v_vec)
-        print(v_totals)
-
-    return out_mat
 
 
 def get_band_adjustment_factors(band_df):
@@ -2370,16 +2246,17 @@ def get_band_adjustment_factors(band_df):
     Take output DF of band shares and multiply to get adjustment factors.
     """
 
-    band_df['adj_fac'] = band_df['tbs']/band_df['bs']
+    band_df['adj_fac'] = band_df['tbs'] / band_df['bs']
     adj_fac = band_df.drop(['tbs', 'bs'], axis=1)
     # Fill na with 0
     adj_fac['adj_fac'] = adj_fac['adj_fac'].replace(np.inf, 0)
 
     return adj_fac
 
+
 def get_compilation_params(lookup_folder,
-                           get_pa = True,
-                           get_od = True):
+                           get_pa=True,
+                           get_od=True):
     """
     """
     out_dict = []
@@ -2400,15 +2277,15 @@ def get_compilation_params(lookup_folder,
 
 
 def parse_mat_output(list_dir,
-                     sep = '_',
-                     mat_type = 'dat',
-                     file_format = '.csv',
-                     file_name = 'file'):
+                     sep='_',
+                     mat_type='dat',
+                     file_format='.csv',
+                     file_name='file'):
     """
     """
 
     # Define UC format
-    uc = ['commute','business','other',
+    uc = ['commute', 'business', 'other',
           'Commute', 'Business', 'Other']
 
     # Get target file format only
@@ -2418,8 +2295,8 @@ def parse_mat_output(list_dir,
 
     split_list = []
     for file in unq_files:
-        split_dict = {file_name:file}
-        file = file.replace(file_format,'')
+        split_dict = {file_name: file}
+        file = file.replace(file_format, '')
         test = str(file).split('_')
         for item in test:
             if 'hb' in item:
@@ -2443,18 +2320,17 @@ def parse_mat_output(list_dir,
             # Return None not nan
             if len(dat) == 0:
                 dat = 'none'
-            split_dict.update({name:dat})
+            split_dict.update({name: dat})
         split_list.append(split_dict)
 
     segments = pd.DataFrame(split_list)
-    segments = segments.replace({np.nan:'none'})
+    segments = segments.replace({np.nan: 'none'})
 
     return segments
 
 
 def unpack_tlb(tlb,
                ):
-
     """
     Function to unpack a trip length band table into constituents.
     Parameters
@@ -2472,27 +2348,11 @@ def unpack_tlb(tlb,
     obs_dist:
 
     """
-    print("tlb:", tlb)
-
     # Convert miles from raw NTS to km
-    min_dist = tlb['lower'].astype('float').to_numpy()*_M_KM
-    max_dist = tlb['upper'].astype('float').to_numpy()*_M_KM
+    min_dist = tlb['lower'].astype('float').to_numpy() * _M_KM
+    max_dist = tlb['upper'].astype('float').to_numpy() * _M_KM
     obs_trip = tlb['band_share'].astype('float').to_numpy()
     # TODO: Check that this works!!
     obs_dist = tlb['ave_km'].astype(float).to_numpy()
 
     return min_dist, max_dist, obs_trip, obs_dist
-
-def iz_costs_to_mean(costs):
-    """
-    Sort bands that are too big outside of the north
-    - nudge towards intrazonal
-    """
-    # Get mean
-    diag_mean = np.mean(np.diag(costs))
-    diag = costs.diagonal()
-    diag = np.where(diag > diag_mean, diag_mean, diag)
-
-    np.fill_diagonal(costs, diag)
-
-    return costs

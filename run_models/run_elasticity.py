@@ -4,11 +4,9 @@
     which will eventually be supersceded by a wrapper script
     which will run the whole ESF process.
 """
-
-##### imports #####
 # Standard imports
-import sys
 import os
+import sys
 import configparser
 
 from pathlib import Path
@@ -17,6 +15,7 @@ from typing import Tuple, List, Dict
 # Third party imports
 
 # Local imports
+sys.path.append("..")
 import normits_demand as nd
 
 from normits_demand import constants as consts
@@ -25,16 +24,17 @@ from normits_demand.utils import file_ops
 
 from normits_demand.matrices import matrix_processing as mat_p
 
+# #### CONSTANTS #### #
+CONFIG_FILE = "../config/setup/elasticity_config.txt"
 
-##### CONSTANTS #####
-CONFIG_FILE = "config/setup/elasticity_config.txt"
 
-
-##### FUNCTIONS #####
+# #### FUNCTIONS #### #
 def get_inputs() -> Tuple[Dict[str, Path],
                           Dict[str, Path],
                           Dict[str, Path],
-                          List[str]]:
+                          int,
+                          List[str],
+                          ]:
     """Read config file to get the input and output paths and information.
 
     The config file requires the following sections, with
@@ -43,7 +43,7 @@ def get_inputs() -> Tuple[Dict[str, Path],
         rail_costs, car_costs
     - input_files: gc_parameters, cost_changes
     - output_folders: car, rail, others
-    - other: output_folder, years
+    - other: output_folder, future_years
 
     Returns
     -------
@@ -54,7 +54,7 @@ def get_inputs() -> Tuple[Dict[str, Path],
     Dict[str, Path]
         Paths to the ouput folders.
     List[str]
-        List of the model years.
+        List of the model future_years.
 
     Raises
     ------
@@ -76,11 +76,16 @@ def get_inputs() -> Tuple[Dict[str, Path],
     if missing_sections:
         raise configparser.NoSectionError(missing_sections)
 
+    # Extract the groups of inputs
     input_folders = {k: Path(p) for k, p in config.items("input_folders")}
     input_files = {k: Path(p) for k, p in config.items("input_files")}
     output_folders = {k: Path(p) for k, p in config.items("output_folders")}
-    years = config.get("other", "years").split(",")
-    return input_folders, input_files, output_folders, years
+
+    # Extract the individual inputs
+    base_year = config.get("other", "base_year")
+    future_years = config.get("other", "future_years").split(",")
+
+    return input_folders, input_files, output_folders, base_year, future_years
 
 
 def _create_input_paths(noham_efs, norms_efs, use_bespoke_zones, use_wfh_adj):
@@ -102,12 +107,12 @@ def _create_input_paths(noham_efs, norms_efs, use_bespoke_zones, use_wfh_adj):
 
     # Build the dictionary
     input_dict = {
-        'elasticity': os.path.join(noham_efs.imports['home'], 'elasticities'),
-        'translation': noham_efs.imports['zone_translation']['one_to_one'],
-        'rail_demand': os.path.join(rail_demand, 'internal'),
-        'car_demand': os.path.join(car_demand, 'internal'),
-        'rail_costs': os.path.join(norms_efs.imports['costs'], 'elasticity_model_format'),
-        'car_costs': os.path.join(noham_efs.imports['costs'], 'elasticity_model_format'),
+        'import_home': os.path.join(noham_efs.imports['home'], 'elasticities'),
+        'translation_home': noham_efs.imports['zone_translation']['one_to_one'],
+        'rail_demand_import': os.path.join(rail_demand, 'internal'),
+        'car_demand_import': os.path.join(car_demand, 'internal'),
+        'rail_costs_import': os.path.join(norms_efs.imports['costs'], 'elasticity_model_format'),
+        'car_costs_import': os.path.join(noham_efs.imports['costs'], 'elasticity_model_format'),
     }
 
     return input_dict
@@ -123,8 +128,8 @@ def _create_input_files(efs, scenario):
 
     # Build the dictionary
     input_dict = {
-        'gc_parameters': os.path.join(scenario_cost_home, 'vot_voc_values.csv'),
-        'cost_changes': os.path.join(scenario_cost_home, 'cost_adjustments.csv'),
+        'vot_voc_values_path': os.path.join(scenario_cost_home, 'vot_voc_values.csv'),
+        'cost_adjustments_path': os.path.join(scenario_cost_home, 'cost_adjustments.csv'),
     }
 
     return input_dict
@@ -141,34 +146,35 @@ def _create_output_files(noham_efs, norms_efs, iteration, scenario):
 
     # Build the dictionary
     output_dict = {
-        'car': os.path.join(noham_efs.exports['pa_24_elast'], 'internal'),
-        'rail': os.path.join(norms_efs.exports['pa_24_elast'], 'internal'),
-        'others': others,
+        'car_demand_export': os.path.join(noham_efs.exports['pa_24_elast'], 'internal'),
+        'rail_demand_export': os.path.join(norms_efs.exports['pa_24_elast'], 'internal'),
+        'other_demand_export': others,
+        'reports_export': os.path.join(others, 'Reports'),
     }
 
     # Make sure all the paths exits
     for _, v in output_dict.items():
-        file_ops.create_folder(v, verbose=False)
+        file_ops.create_folder(v)
 
     return output_dict
 
 
-def _create_other_args(years):
-    return {'years': ','.join([str(x) for x in years])}
+def _create_other_args(base_year, future_years):
+    return {
+        'base_year': base_year,
+        'future_years': ','.join([str(x) for x in future_years])
+    }
 
 
 def initialise(scenario,
                iter_num,
                import_home,
                export_home,
-               years,
+               base_year,
+               future_years,
                use_bespoke_zones,
                use_wfh_adj,
                ):
-    # Where to write the config file
-    fname = 'elasticity_config.txt'
-    config_path = os.path.join(os.getcwd(), 'config', 'setup', fname)
-
     # ## INITIALISE EFS TO GET PATHS ## #
     efs_params = {
         'iter_num': iter_num,
@@ -185,7 +191,7 @@ def initialise(scenario,
     input_paths = _create_input_paths(noham_efs, norms_efs, use_bespoke_zones, use_wfh_adj)
     input_files = _create_input_files(noham_efs, scenario)
     output_paths = _create_output_files(noham_efs, norms_efs, iter_num, scenario)
-    other_args = _create_other_args(years)
+    other_args = _create_other_args(base_year, future_years)
 
     # ## WRITE OUR THE CONFIG FILE ## #
     # Create the object
@@ -196,23 +202,20 @@ def initialise(scenario,
     config['other'] = other_args
 
     # Write out to disk
-    with open(config_path, 'w') as f:
+    with open(CONFIG_FILE, 'w') as f:
         config.write(f)
 
 
 def run_elasticity():
     """Runs the elasticity model using parameters from the config file."""
 
-    # TODO(BT): Add as a param to the elasticity
-    base_year = 2018
-
-    input_folders, input_files, output_folder, years = get_inputs()
+    input_folders, input_files, output_folders, base_year, future_years = get_inputs()
     elast_model = nd.ElasticityModel(
-        input_folders=input_folders,
-        input_files=input_files,
-        output_folders=output_folder,
-        output_years=years,
         base_year=base_year,
+        future_years=future_years,
+        **input_folders,
+        **input_files,
+        **output_folders,
     )
     elast_model.apply_all_MP()
 
@@ -224,6 +227,7 @@ def merge_internal_external(scenario,
                             base_year,
                             future_years,
                             use_bespoke_zones,
+                            use_wfh_adj,
                             ):
     # Init
     valid_ftypes = ['.csv', consts.COMPRESSION_SUFFIX]
@@ -231,6 +235,8 @@ def merge_internal_external(scenario,
     # Set up some paths
     if use_bespoke_zones:
         external_key = 'pa_24_bespoke'
+    elif use_wfh_adj:
+        external_key = 'pa_24_wfh'
     else:
         external_key = 'pa_24'
 
@@ -281,13 +287,14 @@ def merge_internal_external(scenario,
 
 def main():
     # Controls I/O
-    scenario = efs_consts.SC01_JAM
-    iter_num = '3i'
+    scenario = efs_consts.SC04_UZC
+    iter_num = '3k'
     import_home = "I:/"
     export_home = "I:/"
 
     base_year = 2018
-    years = [2033, 2040, 2050]
+    # future_years = [2033, 2040, 2050]
+    future_years = [2050]
     use_bespoke_zones = False
     use_wfh_adj = True
 
@@ -296,7 +303,8 @@ def main():
         iter_num=iter_num,
         import_home=import_home,
         export_home=export_home,
-        years=years,
+        base_year=base_year,
+        future_years=future_years,
         use_bespoke_zones=use_bespoke_zones,
         use_wfh_adj=use_wfh_adj,
     )
@@ -309,8 +317,9 @@ def main():
         import_home=import_home,
         export_home=export_home,
         base_year=base_year,
-        future_years=years,
+        future_years=future_years,
         use_bespoke_zones=use_bespoke_zones,
+        use_wfh_adj=use_wfh_adj,
     )
 
 

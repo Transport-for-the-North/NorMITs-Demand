@@ -360,8 +360,7 @@ class DistributionModel(tms.TMSPathing):
         # Build a trip length curve
         # TODO: Failing for some reason
         d_bin = nup.build_distribution_bins(internal_costs,
-                                            long_pa,
-                                            verbose=verbose)
+                                            long_pa)
 
         return commute_pa, d_bin
 
@@ -708,11 +707,6 @@ class DistributionModel(tms.TMSPathing):
         else:
             Warning('Some betas dropped')
 
-        print("inital betas", initial_betas,
-              "transalated dists", translated_dists,
-              "intra_zonal_dists", intra_zonal_dists,
-              "cjtw_dists", cjtw_dists,
-              "null_dists", null_dists)
         return (initial_betas,
                 translated_dists,
                 intra_zonal_dists,
@@ -812,7 +806,7 @@ class DistributionModel(tms.TMSPathing):
                            tlb_area,
                            trip_origin,
                            target_trip_lengths,
-                           ia_name,
+                           zone_col,
                            productions,
                            attractions,
                            cost_type,
@@ -821,7 +815,8 @@ class DistributionModel(tms.TMSPathing):
                            i_paths,
                            o_paths,
                            iz_cost_infill,
-                           verbose=True) -> None:
+                           verbose=True,
+                           ) -> None:
         """
         Distributes the synthetic distributions, producing 24hr PA Matrices
 
@@ -914,29 +909,26 @@ class DistributionModel(tms.TMSPathing):
         temp_calib_params = calib_params.copy()
         if calib_params['m'] != 6:
             temp_calib_params.pop('ca', None)
-        tlb = nup.get_trip_length_bands(tlb_folder,
-                                        temp_calib_params,
-                                        segmentation,
-                                        trip_origin=trip_origin,
-                                        replace_nan=True,
-                                        )
-
-        calib_params.update({'tlb': tlb})
+        target_tld = nup.get_trip_length_bands(tlb_folder, temp_calib_params, segmentation,
+                                               trip_origin=trip_origin, replace_nan=True)
 
         # Loop over the distributions until beta gives:
         # 1. a decent average trip length by band
         # 2. decent proportions within the segments
+        # Get internal and external area
 
         # TODO: Filter should be done outside of function and passed as np vector, still inside atm
         #  - this applies to intra & cjtw too
         hb_distribution = gm.run_gravity_model(
-            ia_name,
-            calib_params,
-            init_param_a,
-            init_param_b,
-            productions,
-            attractions,
+            zone_col=zone_col,
+            segment_params=calib_params,
+            init_param_a=init_param_a,
+            init_param_b=init_param_b,
+            productions=productions,
+            attractions=attractions,
+            internal_zones=nup.get_internal_area(self.lookup_folder),
             model_lookup_path=i_paths['lookups'],
+            target_tld=target_tld,
             dist_log_path=o_paths['reports'],
             dist_log_fname=trip_origin + '_internal_distribution',
             dist_function=dist_function,
@@ -951,36 +943,16 @@ class DistributionModel(tms.TMSPathing):
             verbose=verbose
         )
 
-        # Print calib outputs - append calib outputs
-
-        # Export 24hr distribution
-        # Generate distribution name
+        # Export distribution
         dist_path = os.path.join(o_paths['summaries'],
                                  trip_origin + '_synthetic')
-
         dist_path = nup.build_path(dist_path, calib_params)
+        hb_distribution[0].to_csv(dist_path)
 
-        # Generate trip length bin name
+        # Export trip length bins
         bin_path = os.path.join(o_paths['tld'],
                                 trip_origin + '_synthetic_bin')
-
         bin_path = nup.build_path(bin_path, calib_params)
-
-        # Generate trip length band name
-        tlb_path = os.path.join(o_paths['reports'],
-                                trip_origin + '_trip_length_bands')
-
-        tlb_path = nup.build_path(tlb_path, calib_params)
-
-        # Generate band distribution name
-        tbd_path = os.path.join(o_paths['reports'],
-                                trip_origin + '_band_distribution')
-
-        tbd_path = nup.build_path(tbd_path, calib_params)
-
-        # Export distribution
-        hb_distribution[0].to_csv(dist_path, index=False)
-        # Export trip length bins
         hb_distribution[1].to_csv(bin_path, index=False)
 
         del hb_distribution
@@ -1118,17 +1090,6 @@ class DistributionModel(tms.TMSPathing):
         # Print a message telling the user which matrix is being worked on
         dist_name = nup.generate_distribution_name(calib_params)
         print("INFO: Creating the synthetic distribution for %s..." % dist_name)
-
-        # Doesn't look like this is used?
-        # tlb_folder = os.path.join(i_paths['imports'],
-        #                           'trip_length_bands',
-        #                           tlb_area,
-        #                           'standard_segments')
-        # Get trip length bands
-        # tlb = nup.get_trip_length_bands(tlb_folder,
-        #                                 calib_params,
-        #                                 segmentation,
-        #                                 trip_origin = trip_origin)
 
         if cost_type != '24hr':
             print('WARNING: Costs are not 24hr, trip length band audit may not work.')
@@ -1271,18 +1232,12 @@ class DistributionModel(tms.TMSPathing):
         print('productions from:' + i_paths['production_import'])
         print('attractions from:' + i_paths['attraction_import'])
 
-        # Import productions and attractions
-        pa = nup.import_pa(i_paths['production_import'],  # p import path
-                           i_paths['attraction_import'])  # a import path
-        productions = pa[0]
-        attractions = pa[1]
-        del pa
+        productions = pd.read_csv(i_paths['production_import'])
+        attractions = pd.read_csv(i_paths['attraction_import'])
 
         ia_areas = nup.define_internal_external_areas(i_paths['lookups'])
         internal_area = ia_areas[0]
-        ia_name = list(internal_area)[0]
-        print("ia_name", ia_name)
-        external_area = ia_areas[1]
+        zone_col = list(internal_area)[0]
 
         ### TODO: Distribution model is an object and this is the end of the _init_
         ### End of production core, ready for all homebased runs.
@@ -1339,7 +1294,7 @@ class DistributionModel(tms.TMSPathing):
                              'tlb_area': tlb_area,
                              'trip_origin': trip_origin,
                              'target_trip_lengths': target_trip_lengths,
-                             'ia_name': ia_name,
+                             'zone_col': zone_col,
                              'productions': productions,
                              'attractions': attractions,
                              'cost_type': cost_type,
@@ -1414,7 +1369,7 @@ class DistributionModel(tms.TMSPathing):
                              'distribution_segments': distribution_segments,
                              'trip_origin': trip_origin,
                              'internal_24hr_productions': productions,
-                             'ia_name': ia_name,
+                             'ia_name': zone_col,
                              'o_paths': o_paths,
                              'verbose': verbose}
 
@@ -1446,7 +1401,7 @@ class DistributionModel(tms.TMSPathing):
                              'trip_origin': trip_origin,
                              'internal_24hr_productions': productions,
                              'cost_type': cost_type,
-                             'ia_name': ia_name,
+                             'ia_name': zone_col,
                              'i_paths': i_paths,
                              'o_paths': o_paths,
                              'verbose': verbose}

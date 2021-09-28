@@ -25,8 +25,8 @@ lu_drive = "I:/"
 by_iteration = "iter3d"
 fy_iteration = "iter3d"
 notem_import_home = r"I:\NorMITs Demand\import\NoTEM"
-# notem_export_home = r"C:\Data\Nirmal_Atkins"
-notem_export_home = r"E:\NoTEM"
+notem_export_home = r"C:\Data\Nirmal_Atkins"
+#notem_export_home = r"E:\NoTEM"
 
 
 def main():
@@ -54,13 +54,13 @@ def main():
         export_home=notem_export_home,
     )
     n.run(
-        generate_all=True,
+        generate_all=False,
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,
         generate_hb_attraction=False,
         generate_nhb_production=False,
-        generate_nhb_attraction=False,
+        generate_nhb_attraction=True,
     )
 
 

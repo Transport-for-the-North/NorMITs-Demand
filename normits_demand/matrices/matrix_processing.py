@@ -385,7 +385,9 @@ def aggregate_matrices(import_dir: str,
     multiprocessing.multiprocess(
         fn=_aggregate_matrices_internal,
         kwargs=kwarg_list,
-        process_count=process_count
+        process_count=process_count,
+        # process_count=0,
+
     )
 
 
@@ -428,7 +430,7 @@ def get_tour_proportion_seed_values(m: int,
         aggregate_to_wday=aggregate_to_wday,
         lookup_folder=phi_lookup_folder
     )
-    phi_factors = pa2od.simplify_time_period_splits(phi_factors)
+    phi_factors = pa2od.simplify_phi_factors(phi_factors)
     phi_factors = phi_factors[phi_factors['purpose_from_home'] == p]
 
     # Get the time period splits

@@ -13,6 +13,7 @@ from normits_demand.utils.general import NormitsDemandError
 from normits_demand.utils.general import ExternalForecastSystemError
 from normits_demand.utils.general import InitialisationError
 from normits_demand.audits.audits import AuditError
+from normits_demand.elasticity import ElasticityError
 from normits_demand.core import ZoningError
 from normits_demand.core import SegmentationError
 from normits_demand.core import DVectorError
@@ -35,7 +36,6 @@ from normits_demand.core import DVector
 
 # Core functionality
 from normits_demand.core import read_compressed_dvector
-from normits_demand.core import from_pickle
 
 # Core Object Getters
 from normits_demand.core import get_zoning_system
@@ -44,6 +44,8 @@ from normits_demand.core import get_segmentation_level
 # Useful utilities
 from normits_demand.utils import read_df
 from normits_demand.utils import write_df
+from normits_demand.utils import to_pickle
+from normits_demand.utils import from_pickle
 
 # Audit classes
 from normits_demand.reports.efs_reporting import EfsReporter

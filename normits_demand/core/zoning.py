@@ -47,6 +47,8 @@ class ZoningSystem:
     n_zones:
         The number of zones in this zoning system
     """
+    # Constants
+    __version__ = nd.__version__
 
     _zoning_system_import_fname = "zoning_systems"
     _zones_csv_fname = "zones.csv"

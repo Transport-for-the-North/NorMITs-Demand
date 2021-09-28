@@ -150,6 +150,9 @@ def filter_df(df: pd.DataFrame,
         A copy of df, filtered down to df_filter.
 
     """
+    # Init
+    df_filter = df_filter.copy()
+
     # Wrap each item if a list to avoid errors
     for k, v in df_filter.items():
         if not pd.api.types.is_list_like(v):
@@ -157,7 +160,7 @@ def filter_df(df: pd.DataFrame,
 
     needed_cols = list(df_filter.keys())
     mask = df[needed_cols].isin(df_filter).all(axis='columns')
-    return df[mask]
+    return df[mask].copy()
 
 
 def str_join_cols(df: pd.DataFrame,

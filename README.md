@@ -152,3 +152,20 @@ as part of their file name in distribution reports
 
 ### v0.4.2
 - A number of minor fixes have been added to get TMS up and running again
+
+### v0.4.3
+- Updates to the elasticity model
+    - Fix Access/Egress costs changes
+    - Update parameters as we are now benchmarking OD matrices against
+      NELUM
+    - Optimised PA2OD Process
+    - Tour Proportions generated for rail PA2OD
+    
+### v0.4.4
+- Integrating NoTEM outputs into TMS
+- Number of minor fixes to TMS
+    - TMS codebase has been marginally tidied up
+    - External model has been updated to use 2 TLD instead of 1
+    - External model has been optimised in some places
+    - Gravity Model has been update to work with new External Model
+     
