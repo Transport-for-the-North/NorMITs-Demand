@@ -314,7 +314,7 @@ class HBAttractionModel(HBAttractionModelPaths):
                     % (pure_attractions.sum(), fully_segmented.sum())
                 )                
                 self._logger.warning(msg)
-                raise warnings.warn(msg)
+                warnings.warn(msg)
 
             # Output attractions before any aggregation
             if export_fully_segmented:
