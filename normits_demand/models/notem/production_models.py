@@ -37,7 +37,7 @@ from normits_demand.pathing import NHBProductionModelPaths
 
 
 class HBProductionModel(HBProductionModelPaths):
-    _log_fname = "NoTEM_log.log"
+    _log_fname = "HBProductionMModel_log.log"
     """The Home-Based Production Model of NoTEM
 
     The production model can be ran by calling the class run() method.
@@ -252,7 +252,7 @@ class HBProductionModel(HBProductionModelPaths):
         # Initialise timing
 
         start_time = timing.current_milli_time()
-        self._logger.info("Starting HB Production Model" )
+        self._logger.info("Starting HB Production Model")
 
         # Generate the productions for each year
         for year in self.years:
@@ -279,18 +279,19 @@ class HBProductionModel(HBProductionModelPaths):
                 )
 
             # ## SPLIT PURE DEMAND BY MODE AND TIME ## #
-            self._logger.info("Splitting by mode and time" )
+            self._logger.info("Splitting by mode and time")
             fully_segmented = self._split_by_tp_and_mode(pure_demand)
 
             # ## PRODUCTIONS TOTAL CHECK ## #
             if not pure_demand.sum_is_close(fully_segmented):
-                msg=(
+                msg = (
                     "The production totals before and after mode time split are not same.\n"
                     "Expected %f\n"
                     "Got %f"
                     % (pure_demand.sum(), fully_segmented.sum())
                 )                
                 self._logger.warning(msg)
+                raise warnings.warn(msg)
 
             # Output productions before any aggregation
             if export_fully_segmented:
@@ -307,7 +308,6 @@ class HBProductionModel(HBProductionModelPaths):
             if export_notem_segmentation:
                 self._logger.info("Exporting notem segmented demand to disk")
                 productions.to_pickle(self.export_paths.notem_segmented[year])
-
 
             if export_reports:
                 self._logger.info("Exporting notem segmented reports to disk")
@@ -467,7 +467,7 @@ class HBProductionModel(HBProductionModelPaths):
 
 
 class NHBProductionModel(NHBProductionModelPaths):
-    _log_fname = "NoTEM_log.log"
+    _log_fname = "NHBProductionMModel_log.log"
     """The Non Home-Based Production Model of NoTEM
 
         The production model can be ran by calling the class run() method.
@@ -720,7 +720,7 @@ class NHBProductionModel(NHBProductionModelPaths):
                 pure_nhb_demand.to_pickle(self.export_paths.pure_demand[year])
 
             if export_reports:
-                self._logger.info("Exporting NHB pure demand reports to disk" )
+                self._logger.info("Exporting NHB pure demand reports to disk")
                 report_seg = nd.get_segmentation_level('notem_nhb_productions_pure_report')
                 pure_demand_paths = self.report_paths.pure_demand
                 pure_nhb_demand.aggregate(report_seg).write_sector_reports(
@@ -742,16 +742,17 @@ class NHBProductionModel(NHBProductionModelPaths):
                     % (pure_nhb_demand.sum(), fully_segmented.sum())
                 )               
                 self._logger.warning(msg)
+                raise warnings.warn(msg)
 
             if export_fully_segmented:
-                self._logger.info("Exporting fully segmented demand to disk" )
+                self._logger.info("Exporting fully segmented demand to disk")
                 fully_segmented.to_pickle(self.export_paths.fully_segmented[year])
 
             # Renaming
             notem_segmented = self._rename(fully_segmented)
 
             if export_notem_segmentation:
-                self._logger.info("Exporting notem segmented demand to disk" )
+                self._logger.info("Exporting notem segmented demand to disk")
                 notem_segmented.to_pickle(self.export_paths.notem_segmented[year])
 
             if export_reports:
