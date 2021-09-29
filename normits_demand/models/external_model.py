@@ -1,46 +1,78 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Feb 27 13:45:03 2020
+Created on: 27/02/2020
+Updated on:
 
-@author: cruella
+Original author: Chris Storey
+Last update made by: Ben Taylor
+Other updates made by:
+
+File purpose:
+
 """
+# Built-Ins
 import os
 
 from typing import List
 from typing import Union
 
+# Third Party
 import pandas as pd
 import numpy as np
 
-
+# Local Imports
 import normits_demand as nd
-import normits_demand.build.tms_pathing as tms
 
+from normits_demand.distribution import furness
+from normits_demand.matrices import utils as mat_utils
 from normits_demand.reports import reports_audits as ra
+
 from normits_demand.utils import utils as nup
 from normits_demand.utils import general as du
 from normits_demand.utils import timing
 from normits_demand.utils import math_utils
-from normits_demand.matrices import utils as mat_utils
-from normits_demand.distribution import furness
-
-# TODO: Object layer
-
-# Folder management, reindexing, optimisation
-
-_default_pld_path = ('Y:/NorMITs Synthesiser/import/' +
-                     'pld_od_matrices/external_pa_pld.csv')
+from normits_demand.utils import costs as costs_utils
+from normits_demand.utils import trip_length_distributions as tld_utils
 
 
-class ExternalModel(tms.TMSPathing):
-    pass
+# import normits_demand.build.tms_pathing as tms
+# class ExternalModel(tms.TMSPathing):
+class ExternalModel():
+    _base_zone_col = "%s_zone_id"
+
+    def __init__(self,
+                 zoning_system: nd.core.ZoningSystem,
+                 zone_col: str = None,
+                 ):
+        # Validate inputs
+        if not isinstance(zoning_system, nd.core.zoning.ZoningSystem):
+            raise ValueError(
+                "Expected and instance of a normits_demand ZoningSystem. "
+                "Got a %s instance instead."
+                % type(zoning_system)
+            )
+
+        # Assign attributes
+        self.zoning_system = zoning_system
+        self.zone_col = zone_col
+
+        if self.zone_col is None:
+            self.zone_col = zoning_system.col_name
 
     def run(self,
             trip_origin: str,
             cost_type: str,
-            internal_tld_path: nd.PathLike,
-            external_tld_path: nd.PathLike,
-            seed_infill=.1,
+            productions: pd.DataFrame,
+            attractions: pd.DataFrame,
+            seed_matrix: np.ndarray,
+            internal_tld_dir: nd.PathLike,
+            external_tld_dir: nd.PathLike,
+            costs_dir: nd.PathLike,
+            reports_dir: nd.PathLike,
+            production_out: nd.PathLike,
+            attraction_out: nd.PathLike,
+            external_dist_out: nd.PathLike,
+            running_segmentation: nd.core.SegmentationLevel,
             ):
         """
 
@@ -50,121 +82,30 @@ class ExternalModel(tms.TMSPathing):
         cost_type: '24hr'
         internal_tld_path
         external_tld_path
-        seed_infill
 
         Returns
         -------
 
         """
+        # TODO(BT): Make sure the P/A vectors are the right zoning system
         # Define internal name
-        zoning_name = self.params['model_zoning'].lower()
-        zone_col = (zoning_name + '_zone_id')
         val_col = 'val'
-
-        # INIT
-        # Get internal and external area
-        int_zones = nup.get_internal_area(self.lookup_folder)
-        ext_zones = nup.get_external_area(self.lookup_folder)
-        all_zones = int_zones + ext_zones
-
-        internal_index = np.array(int_zones) - 1
-        external_index = np.array(ext_zones) - 1
-
-        # Pick different imports if it's HB or NHB
-        if trip_origin == 'hb':
-            in_list = ['hb_p', 'hb_a']
-        elif trip_origin == 'nhb':
-            in_list = ['nhb_p', 'nhb_a']
-        else:
-            raise ValueError(
-                "Don't know what the trip origin is!"
-            )
-
-        # ## IMPORT PA ## #
-        print("Reading in P/A from NoTEM...")
-        productions, attractions = nup.import_pa(
-            self.tms_in[in_list[0]],
-            self.tms_in[in_list[1]],
-            zoning_name,
-            trip_origin,
-        )
-
-        # ## GET DISTRIBUTION PARAMETERS ## #
-        init_params = nup.get_init_params(
-            self.lookup_folder,
-            distribution_type=trip_origin,
-            model_name=self.params['model_zoning'],
-            mode_subset=None,
-            purpose_subset=None,
-        )
-
-        # Drop any sic or soc segments from init params - not needed for externals
-        # Also alert and error if there are any differences
-        for ts in self.params['external_segmentation']:
-            if ts not in list(init_params):
-                raise ValueError('Init params and segmentation misaligned')
-
-        init_params = init_params.reindex(self.params['external_segmentation'], axis=1)
-        init_params = init_params.drop_duplicates().reset_index(drop=True)
-
-        print('init_params:\n %s\n' % init_params)
-
-        # Define mode subset
-        unq_mode = self.params['external_export_modes']
-
-        # Append non dist modes to list for init params
-        if self.params['non_dist_export_modes'] is not None:
-            [unq_mode.append(x) for x in self.params['non_dist_export_modes'] if x not in unq_mode]
-        init_params = init_params[init_params['m'].isin(unq_mode)].reset_index(drop=True)
-
-        # ## GET CJTW ## #
-        print('Importing cjtw...')
-        cjtw = nup.get_cjtw(self.lookup_folder,
-                            self.params['model_zoning'].lower(),
-                            subset=None,
-                            reduce_to_pa_factors=False)
-        # Aggregate mode
-        p_col = list(cjtw)[0]
-        a_col = list(cjtw)[1]
-        cjtw = cjtw.reindex([p_col, a_col, 'trips'], axis=1)
-        cjtw = cjtw.groupby([p_col, a_col]).sum().reset_index()
-
-        # Handle cols - transpose
-        print('cjtw:\n %s\n' % cjtw)
-        unq_zones = nup.get_zone_range(productions[zone_col])
-        cjtw = nup.df_to_np(cjtw,
-                            v_heading=p_col,
-                            h_heading=a_col,
-                            values='trips',
-                            unq_internal_zones=unq_zones)
-
-        # Small infill
-        cjtw = np.where(cjtw == 0, seed_infill, cjtw)
-
-        # ## DO THE EXTERNAL DISTRIBUTION ## #
-        ei = init_params.index
 
         # Loop through each of the segments
         internal_p_vector_eff_df = list()
         internal_a_vector_eff_df = list()
-        for ed in ei:
-            # Get segment_params from table
-            segment_params = {}
-            for ds in self.params['external_segmentation']:
-                segment_params.update({ds: init_params[ds][ed]})
+        for segment_params in running_segmentation:
 
             # Get target trip length distribution
-            internal_tld = nup.get_trip_length_bands(
-                import_folder=internal_tld_path,
+            internal_tld = tld_utils.get_trip_length_distributions(
+                import_dir=internal_tld_dir,
                 segment_params=segment_params,
-                segmentation=None,
                 trip_origin=trip_origin,
             )
 
-            external_tld = nup.get_trip_length_bands(
-                import_folder=external_tld_path,
+            external_tld = tld_utils.get_trip_length_distributions(
+                import_dir=external_tld_dir,
                 segment_params=segment_params,
-                segmentation=None,
                 trip_origin=trip_origin,
             )
 
@@ -182,7 +123,7 @@ class ExternalModel(tms.TMSPathing):
             # Filter productions to target distribution type
             sub_p, _ = nup.filter_pa_vector(
                 productions,
-                zone_col,
+                self.zone_col,
                 segment_params,
                 value_var='val',
                 verbose=False,
@@ -192,14 +133,12 @@ class ExternalModel(tms.TMSPathing):
             # Work out which attractions to use from purpose
             sub_a, _ = nup.filter_pa_vector(
                 attractions,
-                zone_col,
+                self.zone_col,
                 segment_params,
                 value_var='val',
                 verbose=False,
             )
             sub_a = sub_a.rename(columns={'val': 'attractions'})
-
-            print('attraction type: ', nup.get_attraction_type(segment_params))
 
             # Balance A to P
             adj_factor = sub_p['productions'].sum() / sub_a['attractions'].sum()
@@ -208,10 +147,10 @@ class ExternalModel(tms.TMSPathing):
             # ## GET THE COSTS FOR THIS SEGMENT ## #
             print('Importing costs...')
             print("cost type: %s" % cost_type)
-            print("Getting costs from: %s" % self.lookup_folder,)
+            print("Getting costs from: %s" % costs_dir)
 
-            int_costs, cost_name = nup.get_costs(
-                self.lookup_folder,
+            int_costs, cost_name = costs_utils.get_costs(
+                costs_dir,
                 segment_params,
                 tp=cost_type,
                 iz_infill=0.5,
@@ -225,7 +164,7 @@ class ExternalModel(tms.TMSPathing):
                 v_heading='p_zone',
                 h_heading='a_zone',
                 values='cost',
-                unq_internal_zones=unq_zones,
+                unq_internal_zones=self.zoning_system.unique_zones,
             )
 
             # ## RUN THE EXTERNAL MODEL ## #
@@ -236,7 +175,7 @@ class ExternalModel(tms.TMSPathing):
                 calib_params=segment_params,
                 csv=True,
             )
-            log_path = os.path.join(self.tms_out['reports'], log_fname)
+            log_path = os.path.join(reports_dir, log_fname)
 
             # Replace the log if it already exists
             if os.path.isfile(log_path):
@@ -246,7 +185,7 @@ class ExternalModel(tms.TMSPathing):
             gb_pa, int_bs_con, ext_bs_con, overall_bs_con = self._external_model(
                 p=sub_p,
                 a=sub_a,
-                base_matrix=cjtw,
+                base_matrix=seed_matrix,
                 costs=costs,
                 convergence_target=0.9,
                 int_target_tld=internal_tld,
@@ -268,7 +207,7 @@ class ExternalModel(tms.TMSPathing):
 
             # Build the output path
             fname = trip_origin + '_external_report'
-            audit_path = os.path.join(self.tms_out['reports'], fname)
+            audit_path = os.path.join(reports_dir, fname)
             audit_path = nup.build_path(audit_path, segment_params)
             report.to_csv(audit_path, index=False)
 
@@ -280,22 +219,24 @@ class ExternalModel(tms.TMSPathing):
                 index_names=['i', 'e'],
                 summarise=True,
             )
+            # Dictionary of ii, ie, ei, and ee trips
             ie_report = pd.DataFrame(ie_report)
 
             # Build the output path
             fname = trip_origin + '_ie_report'
-            ie_path = os.path.join(self.tms_out['reports'], fname)
+            ie_path = os.path.join(reports_dir, fname)
             ie_path = nup.build_path(ie_path, segment_params)
             ie_report.to_csv(ie_path, index=False)
 
             # ## WRITE FULL DEMAND TO DISK ## #
             # Append zone names
-            gb_pa = pd.DataFrame(gb_pa, index=unq_zones, columns=unq_zones)
-            gb_pa = gb_pa.rename(columns={'index': zone_col})
+            all_zones = self.zoning_system.unique_zones
+            gb_pa = pd.DataFrame(gb_pa, index=all_zones, columns=all_zones)
+            gb_pa = gb_pa.rename(columns={'index': self.zone_col})
 
             # Generate the path
             fname = trip_origin + '_external'
-            ext_path = os.path.join(self.tms_out['external'], fname)
+            ext_path = os.path.join(external_dist_out, fname)
             ext_path = nup.build_path(ext_path, segment_params)
             gb_pa.to_csv(ext_path)
 
@@ -303,12 +244,12 @@ class ExternalModel(tms.TMSPathing):
             # Get the internal only demand
             internal_mask = mat_utils.get_internal_mask(
                 df=pd.DataFrame(data=gb_pa, index=all_zones, columns=all_zones),
-                zones=int_zones,
+                zones=self.zoning_system.internal_zones,
             )
             internal_pa = np.where(internal_mask, gb_pa, 0)
 
             # Create an index for the dataframes
-            zone_index = pd.Index(all_zones, name=zone_col)
+            zone_index = pd.Index(all_zones, name=self.zone_col)
 
             # Production vector
             prods_eff_df = segment_params.copy()
@@ -331,18 +272,19 @@ class ExternalModel(tms.TMSPathing):
         # ## EXTERNAL DISTRIBUTION DONE WRITE OUTPUTS ## #
         # Build base names
         base_fname = "%s_%s_internal_%s.csv"
-        col_names = [zone_col] + list(init_params) + [val_col]
+        segment_names = running_segmentation.naming_order
+        col_names = [self.zone_col] + segment_names + [val_col]
 
         # Write out productions
         internal_productions = du.compile_efficient_df(internal_p_vector_eff_df, col_names)
-        fname = base_fname % (zoning_name, trip_origin, 'productions')
-        out_path = os.path.join(self.tms_out['p'], fname)
+        fname = base_fname % (self.zoning_system.name, trip_origin, 'productions')
+        out_path = os.path.join(production_out, fname)
         internal_productions.to_csv(out_path, index=False)
 
         # Write out attractions
         internal_attractions = du.compile_efficient_df(internal_a_vector_eff_df, col_names)
-        fname = base_fname % (zoning_name, trip_origin, 'attractions')
-        out_path = os.path.join(self.tms_out['a'], fname)
+        fname = base_fname % (self.zoning_system.name, trip_origin, 'attractions')
+        out_path = os.path.join(attraction_out, fname)
         internal_attractions.to_csv(out_path, index=False)
 
     @staticmethod
@@ -539,138 +481,6 @@ class ExternalModel(tms.TMSPathing):
             out_mat = out_mat + o_mat
 
         return out_mat
-
-    def pld_infill(self,
-                   external_pa,
-                   pld_path=_default_pld_path,
-                   infill_mode=6):
-        """
-        external_pa:
-            Full set of external pa before infill
-    
-        pld_path:
-            Path to pld_data. Auto fills from script. Just keep an eye on it.
-    
-        infill_mode:
-            mode to apply the infill to.
-    
-        """
-        pld_pa = pd.read_csv(pld_path)
-
-        # Translate the ca/nca to 2,1
-        ca_mat = pd.DataFrame({'ca': ['ca', 'nca'],
-                               'ca_code': [2, 1]})
-        pld_pa = pld_pa.merge(ca_mat,
-                              how='left',
-                              on='ca')
-        del (pld_pa['ca'])
-        pld_pa = pld_pa.rename(columns={'ca_code': 'ca',
-                                        'purpose': 'ap'})
-        pld_pa = pld_pa.reindex(['p_zone',
-                                 'a_zone',
-                                 'ap',
-                                 'ca',
-                                 'dt'], axis=1)
-
-        # Get original total
-        pld_total = pld_pa['dt'].sum()
-
-        # Get external pa
-        w_external_pa = external_pa.copy()
-
-        # Isolate mode to be infilled
-        infill_subset = w_external_pa[
-            w_external_pa['m'] == infill_mode].copy()
-        other_mode = w_external_pa[
-            w_external_pa['m'] != infill_mode].copy()
-
-        # Get original pa total    
-        opa_total = infill_subset['dt'].sum()
-
-        # Get shares by zone for infill
-        infill_subset = infill_subset.reindex(['p_zone',
-                                               'p',
-                                               'ca',
-                                               'dt'],
-                                              axis=1).groupby(
-            ['p_zone',
-             'p',
-             'ca']).sum().reset_index()
-
-        # Build aggregate purpose
-        agg_purp = pd.DataFrame({'p': [1, 2, 3, 4, 5, 6, 7, 8],
-                                 'ap': ['commute',
-                                        'business',
-                                        'other',
-                                        'other',
-                                        'other',
-                                        'other',
-                                        'other',
-                                        'other']})
-
-        infill_subset = infill_subset.merge(agg_purp,
-                                            how='left',
-                                            on='p')
-
-        # Get zone totals by aggregate purpose and ca
-        zone_totals = infill_subset.reindex(
-            ['p_zone', 'ap', 'ca', 'dt'],
-            axis=1).groupby(
-            ['p_zone', 'ap', 'ca']).sum().reset_index()
-        zone_totals = zone_totals.rename(columns={'dt': 'total'})
-
-        infill_subset = infill_subset.merge(zone_totals,
-                                            how='left',
-                                            on=['p_zone', 'ap', 'ca'])
-        infill_subset['factor'] = infill_subset['dt'] / infill_subset['total']
-        infill_subset = infill_subset.drop(['dt', 'total'], axis=1)
-
-        # Factor test
-        factor_test = infill_subset.reindex(
-            ['p_zone', 'ap', 'ca', 'factor'],
-            axis=1).groupby(['p_zone', 'ap', 'ca']).sum().reset_index()
-
-        print('Min factor: ' + str(min(factor_test['factor'])))
-        print('Max factor: ' + str(max(factor_test['factor'])))
-
-        # Gonna be:
-        # Infill left = [p_zone, a_zone, ap, ca, dt]
-        # Infill right = [p_zone, ap, ca, p, factor]]
-        # On = [p_zone, ap, ca]
-        # dt * factor
-        infill_output = pld_pa.merge(infill_subset,
-                                     how='left',
-                                     on=['p_zone', 'ap', 'ca'])
-        infill_output['dt'] = infill_output['dt'] * infill_output['factor']
-        infill_output['m'] = infill_mode
-        list(infill_output)
-
-        # Get original cols
-        org_cols = list(other_mode)
-        og_cols = org_cols.copy()
-        og_cols.remove('dt')
-
-        # Reindex for reentry
-        infill_output = infill_output.reindex(org_cols,
-                                              axis=1).groupby(
-            og_cols).sum(
-        ).reset_index(
-        )
-
-        # Correct
-        corr_fac = pld_total / infill_output['dt'].sum()
-        infill_output['dt'] = (infill_output['dt'] * corr_fac).round(3)
-        new_total = infill_output['dt'].sum()
-
-        # Benchmark
-        print('Orignal pld total: ' + str(pld_total))
-        print('Original external total: ' + str(opa_total))
-        print('New total: ' + str(new_total))
-
-        # Reappend
-        w_external_pa = pd.concat([infill_output, other_mode], sort=True)
-
-        return w_external_pa
 
 
 def correct_band_share(pa_mat,

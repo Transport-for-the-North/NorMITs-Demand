@@ -11,8 +11,10 @@ File purpose:
 Home of the NorMITs Travel Market Synthesiser
 """
 # Built-Ins
+import os
 
 # Third Party
+import pandas as pd
 
 # Local Imports
 import normits_demand as nd
@@ -29,10 +31,18 @@ class TravelMarketSynthesiser(TMSExportPaths):
     __version__ = nd.version.__version__
     out_dir = "NorMITs Demand"
 
-    def __init__(self):
+    def __init__(self,
+                 zoning_system: nd.core.zoning.ZoningSystem,
+                 argument_builder: nd.pathing.TMSArgumentBuilderBase,
+                 ):
 
         # Generate export paths
         super().__init__()
+
+        # Assign attributes
+        self.zoning_system = zoning_system
+        # Validate this is correct type
+        self.argument_builder = argument_builder
 
         # Create a logger
         # TODO (BT): Determine output file path
@@ -119,19 +129,29 @@ class TravelMarketSynthesiser(TMSExportPaths):
 
     def _run_external_model(self):
 
-        # Run HB external model
-        ext = em.ExternalModel(
-            config_path,
-            params,
+        args = self.argument_builder.build_hb_external_model_arguments()
+
+        hb_ext_out = ext.run(trip_origin='hb', **args)
+
+        # Run NHB External Model
+        print("Reading in P/A from NoTEM...")
+        productions, attractions = import_pa(
+            pa_paths['hb_p'],
+            pa_paths['hb_a'],
+            zoning_name,
+            'nhb',
         )
 
-        hb_ext_out = ext.run(
-            trip_origin='hb',
-            cost_type='24hr',
-        )
         nhb_ext_out = ext.run(
             trip_origin='nhb',
             cost_type='24hr',
+            productions=productions,
+            attractions=attractions,
+            seed_matrix=cjtw,
+            costs_dir=costs_dir,
+            reports_dir=reports_dir,
+            internal_tld_dir=internal_tld_dir,
+            external_tld_dir=external_tld_dir,
         )
 
 
@@ -140,4 +160,3 @@ class TravelMarketSynthesiser(TMSExportPaths):
 
     def _run_pa_to_od(self):
         pass
-

@@ -168,4 +168,8 @@ as part of their file name in distribution reports
     - External model has been updated to use 2 TLD instead of 1
     - External model has been optimised in some places
     - Gravity Model has been update to work with new External Model
+    
+### v0.4.5
+- Added internal and external zone definitions into ZoningSystem Class
+- Object Orientation of TMS
      

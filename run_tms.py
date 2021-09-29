@@ -15,6 +15,9 @@ from normits_demand.utils import vehicle_occupancy as vo
 from normits_demand.utils import utils as nup
 from normits_demand.utils import file_ops
 
+from normits_demand.matrices import pa_to_od as pa2od
+from normits_demand.matrices import matrix_processing as mat_p
+
 
 # GLOBAL VARIABLES
 years = [2018]
@@ -159,8 +162,63 @@ class TmsParameterBuilder:
                 'disaggregate_segments': True,
                 'segments_to_add': ['soc', 'ns'],
                 'vehicle_demand': False,
+
+                # PA2OD params
+                'hb_p_needed': [1, 2, 3, 4, 5, 6, 7, 8],
+                'nhb_p_needed': [12, 13, 14, 15, 16, 18],
+                'm_needed': [6],
+                'ca_needed': [1, 2],
             }
             return params
+
+
+def pa_to_od(params):
+    # DONT HARDCODE THIS IN OO
+    out_home = os.path.join(
+        params['base_directory'],
+        params['model_name'],
+        params['iteration'],
+        'Distribution Outputs',
+    )
+    external_out = os.path.join(out_home, 'External Distributions')
+    internal_out = os.path.join(out_home, '24hr PA Distributions')
+    gb_out = os.path.join(out_home, '24hr PA Distributions - GB')
+    od_out = os.path.join(out_home, 'OD Matrices')
+    # Combine internal and external
+
+
+    # Set up the segmentation params
+    seg_level = 'tms'
+    seg_params = {
+        'p_needed': params['hb_p_needed'],
+        'm_needed': params['m_needed'],
+        'ca_needed': params['ca_needed'],
+    }
+
+    # Convert HB to OD via tour proportions
+    pa2od.build_od_from_fh_th_factors(
+        pa_import=gb_out,
+        od_export=od_out,
+        fh_th_factors_dir=self.imports['post_me_fh_th_factors'],
+        years_needed=[2018],
+        seg_level=seg_level,
+        seg_params=seg_params
+    )
+
+    # Convert NHB to tp split via factors
+    nhb_seg_params = seg_params.copy()
+    nhb_seg_params['p_needed'] = params['nhb_p_needed']
+
+    mat_p.nhb_tp_split_via_factors(
+        import_dir=gb_out,
+        export_dir=od_out,
+        import_matrix_format='pa',
+        export_matrix_format='od',
+        tour_proportions_dir=self.imports['post_me_tours'],
+        model_name=params['model_name'],
+        years_needed=[2018],
+        **nhb_seg_params,
+    )
 
 
 if __name__ == '__main__':
@@ -266,6 +324,7 @@ if __name__ == '__main__':
     #   NorMITs Vis
 
 
+    pa_to_od()
     # DO PA TO OD
 
     # OD RUN REPORTS

@@ -290,6 +290,10 @@ class SegmentationLevel:
 
         return multiply_dict, return_seg
 
+    def __iter__(self):
+        """Overrides the default implementation"""
+        return self._segments.to_dict(orient='records').__iter__()
+
     def _read_multiply_definitions(self) -> pd.DataFrame:
         """
         Returns the multiplication definitions for segments as a pd.DataFrame
