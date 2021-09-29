@@ -291,7 +291,7 @@ class HBProductionModel(HBProductionModelPaths):
                     % (pure_demand.sum(), fully_segmented.sum())
                 )                
                 self._logger.warning(msg)
-                raise warnings.warn(msg)
+                warnings.warn(msg)
 
             # Output productions before any aggregation
             if export_fully_segmented:
@@ -304,7 +304,7 @@ class HBProductionModel(HBProductionModelPaths):
                 out_segmentation=return_seg,
                 split_tfntt_segmentation=True
             )
-            productions.ag
+            
             if export_notem_segmentation:
                 self._logger.info("Exporting notem segmented demand to disk")
                 productions.to_pickle(self.export_paths.notem_segmented[year])
@@ -742,7 +742,7 @@ class NHBProductionModel(NHBProductionModelPaths):
                     % (pure_nhb_demand.sum(), fully_segmented.sum())
                 )               
                 self._logger.warning(msg)
-                raise warnings.warn(msg)
+                warnings.warn(msg)
 
             if export_fully_segmented:
                 self._logger.info("Exporting fully segmented demand to disk")
