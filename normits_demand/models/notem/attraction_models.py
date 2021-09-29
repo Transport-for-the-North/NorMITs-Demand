@@ -39,7 +39,7 @@ from normits_demand.pathing import NHBAttractionModelPaths
 
 
 class HBAttractionModel(HBAttractionModelPaths):
-    _log_fname = "NoTEM_log.log"
+    _log_fname = "HBAttractionModel_log.log"
     """The Home-Based Attraction Model of NoTEM
 
         The attraction model can be ran by calling the class run() method.
@@ -213,6 +213,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             log_file_path=log_file_path,
             instantiate_msg="Initialised HB Attraction Model",
         )
+
     def run(self,
             export_pure_attractions: bool = True,
             export_fully_segmented: bool = False,
@@ -274,7 +275,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         # Initialise timing
         
         start_time = timing.current_milli_time()
-        self._logger.info("Starting HB Attraction Model" )        
+        self._logger.info("Starting HB Attraction Model")
 
         # Generate the attractions for each year
         for year in self.years:
@@ -292,8 +293,7 @@ class HBAttractionModel(HBAttractionModelPaths):
                 pure_attractions.to_pickle(self.export_paths.pure_demand[year])
 
             if export_reports:
-                self._logger.info("Exporting pure demand reports to disk")                  
-                report_seg = nd.get_segmentation_level('notem_hb_attractions_pure_report')   
+                self._logger.info("Exporting pure demand reports to disk")               
                 pure_demand_paths = self.report_paths.pure_demand
                 pure_attractions.write_sector_reports(
                     segment_totals_path=pure_demand_paths.segment_total[year],
@@ -307,13 +307,14 @@ class HBAttractionModel(HBAttractionModelPaths):
 
             # ## ATTRACTIONS TOTAL CHECK ## #
             if not pure_attractions.sum_is_close(fully_segmented):
-                msg=(
+                msg = (
                     "The attraction totals before and after mode split are not same.\n"
                     "Expected %f\n"
                     "Got %f"
                     % (pure_attractions.sum(), fully_segmented.sum())
                 )                
                 self._logger.warning(msg)
+                raise warnings.warn(msg)
 
             # Output attractions before any aggregation
             if export_fully_segmented:
@@ -518,7 +519,7 @@ class HBAttractionModel(HBAttractionModelPaths):
 
 
 class NHBAttractionModel(NHBAttractionModelPaths):
-    _log_fname = "NoTEM_log.log"
+    _log_fname = "NHBAttractionModel_log.log"
     """The Non Home-Based Attraction Model of NoTEM
 
         The attraction model can be ran by calling the class run() method.
@@ -634,6 +635,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             log_file_path=log_file_path,
             instantiate_msg="Initialised NHB Attraction Model",
         )
+
     def run(self,
             export_nhb_pure_attractions: bool = True,
             export_notem_segmentation: bool = True,
