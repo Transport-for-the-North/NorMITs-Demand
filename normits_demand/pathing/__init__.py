@@ -13,7 +13,11 @@ from normits_demand.pathing.notem import NHBProductionModelPaths
 from normits_demand.pathing.notem import NHBAttractionModelPaths
 
 # TMS paths
-from normits_demand.pathing.travel_market_synthesiser import TMSArgumentBuilderBase
-from normits_demand.pathing.travel_market_synthesiser import TMSArgumentBuilder
+from normits_demand.pathing.travel_market_synthesiser import ExternalModelArgumentBuilderBase
+from normits_demand.pathing.travel_market_synthesiser import GravityModelArgumentBuilderBase
+
+from normits_demand.pathing.travel_market_synthesiser import ExternalModelArgumentBuilder
+from normits_demand.pathing.travel_market_synthesiser import GravityModelArgumentBuilder
 
 from normits_demand.pathing.travel_market_synthesiser import TMSExportPaths
+from normits_demand.pathing.travel_market_synthesiser import ExternalModelExportPaths

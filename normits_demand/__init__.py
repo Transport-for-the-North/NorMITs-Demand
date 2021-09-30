@@ -31,15 +31,13 @@ from normits_demand.models.elasticity_model import ElasticityModel
 # NoTEM Class Layer
 from normits_demand.models.notem import NoTEM
 
-# Core Objects
-from normits_demand.core import DVector
-
-# Core functionality
-from normits_demand.core import read_compressed_dvector
-
-# Core Object Getters
+# Core getters
 from normits_demand.core import get_zoning_system
 from normits_demand.core import get_segmentation_level
+
+# Core enumerations
+from normits_demand.core import Mode
+
 
 # Useful utilities
 from normits_demand.utils import read_df

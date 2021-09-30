@@ -59,8 +59,6 @@ def get_trip_length_distributions(import_dir: nd.PathLike,
     # Define file contents, should just be target files - should fix.
     import_files = target_files.copy()
 
-    print("calib_params", segment_params)
-
     for key, value in segment_params.items():
         # Don't want empty segments, don't want ca
         if value != 'none' and key != 'mat_type':

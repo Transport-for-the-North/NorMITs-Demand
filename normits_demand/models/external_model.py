@@ -27,6 +27,8 @@ from normits_demand.distribution import furness
 from normits_demand.matrices import utils as mat_utils
 from normits_demand.reports import reports_audits as ra
 
+from normits_demand.pathing import ExternalModelExportPaths
+
 from normits_demand.utils import utils as nup
 from normits_demand.utils import general as du
 from normits_demand.utils import timing
@@ -37,11 +39,12 @@ from normits_demand.utils import trip_length_distributions as tld_utils
 
 # import normits_demand.build.tms_pathing as tms
 # class ExternalModel(tms.TMSPathing):
-class ExternalModel():
+class ExternalModel(ExternalModelExportPaths):
     _base_zone_col = "%s_zone_id"
 
     def __init__(self,
                  zoning_system: nd.core.ZoningSystem,
+                 export_home: nd.PathLike,
                  zone_col: str = None,
                  ):
         # Validate inputs
@@ -59,34 +62,29 @@ class ExternalModel():
         if self.zone_col is None:
             self.zone_col = zoning_system.col_name
 
+        # Make sure the reports paths exists
+        report_home = os.path.join(export_home, "Logs & Reports")
+
+        # Build the output paths
+        super().__init__(
+            export_home=export_home,
+            report_home=report_home,
+        )
+
     def run(self,
             trip_origin: str,
-            cost_type: str,
             productions: pd.DataFrame,
             attractions: pd.DataFrame,
             seed_matrix: np.ndarray,
             internal_tld_dir: nd.PathLike,
             external_tld_dir: nd.PathLike,
-            costs_dir: nd.PathLike,
+            costs_path: nd.PathLike,
             reports_dir: nd.PathLike,
-            production_out: nd.PathLike,
-            attraction_out: nd.PathLike,
-            external_dist_out: nd.PathLike,
+            # production_out: nd.PathLike,
+            # attraction_out: nd.PathLike,
+            # external_dist_out: nd.PathLike,
             running_segmentation: nd.core.SegmentationLevel,
-            ):
-        """
-
-        Parameters
-        ----------
-        trip_origin: 'hb'
-        cost_type: '24hr'
-        internal_tld_path
-        external_tld_path
-
-        Returns
-        -------
-
-        """
+            ) -> None:
         # TODO(BT): Make sure the P/A vectors are the right zoning system
         # Define internal name
         val_col = 'val'
@@ -146,17 +144,18 @@ class ExternalModel():
 
             # ## GET THE COSTS FOR THIS SEGMENT ## #
             print('Importing costs...')
-            print("cost type: %s" % cost_type)
-            print("Getting costs from: %s" % costs_dir)
+            print("Getting costs from: %s" % costs_path)
 
             int_costs, cost_name = costs_utils.get_costs(
-                costs_dir,
+                costs_path,
                 segment_params,
-                tp=cost_type,
                 iz_infill=0.5,
                 replace_nhb_with_hb=(trip_origin == 'nhb'),
             )
             print('Retrieved costs: %s' % cost_name)
+
+            print(int_costs)
+            exit()
 
             # Translate costs to array
             costs = nup.df_to_np(

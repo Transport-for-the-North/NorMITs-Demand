@@ -286,3 +286,59 @@ def long_to_wide_infill(df: pd.DataFrame,
     )
 
     return df
+
+
+def long_df_to_wide_ndarray(df: pd.DataFrame,
+                            index_col: str,
+                            columns_col: str,
+                            values_col: str,
+                            index_vals: List[str] = None,
+                            column_vals: List[str] = None,
+                            infill: Any = 0,
+                            ) -> pd.DataFrame:
+    """
+    Converts a DataFrame from long to wide format, infilling missing values.
+
+    Parameters
+    ----------
+    df:
+        The dataframe, in long format, to convert to wide ndarray ndarray.
+
+    index_col:
+        The column of df to use as the index of the return ndarray.
+
+    columns_col:
+        The column of df to use as the columns of the return ndarray.
+
+    values_col:
+        The column of df to use as the values of the return ndarray.
+
+    index_vals:
+        The unique values, and their order, to use as the implicit index
+        of the wide return ndarray.
+        If left as None, df[columns_col].unique() will be used.
+
+    column_vals:
+        The unique values, and their order, to use as the implicit column
+        headers of the wide return ndarray.
+        If left as None, df[columns_col].unique() will be used.
+
+    infill:
+        The value to use to infill any missing cells in the wide DataFrame.
+
+    Returns
+    -------
+    wide_ndarray:
+        An ndarray, in wide format, with index_col as the index,
+        columns_col as the column names, and values_col as the values.
+    """
+    df = long_to_wide_infill(
+        df=df,
+        index_col=index_col,
+        columns_col=columns_col,
+        values_col=values_col,
+        index_vals=index_vals,
+        column_vals=column_vals,
+        infill=infill,
+    )
+    return df.values

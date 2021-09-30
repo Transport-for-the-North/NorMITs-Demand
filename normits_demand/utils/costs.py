@@ -20,28 +20,24 @@ import pandas as pd
 import normits_demand as nd
 
 
-def get_costs(import_dir: nd.PathLike,
+def get_costs(import_path: nd.PathLike,
               segment_params: nd.SegmentParams,
-              tp: str = '24hr',
               iz_infill: float = 0.5,
               replace_nhb_with_hb: bool  = False,
               ):
     # units takes different parameters
-    # TODO(BT): Stop calling this function. Move to new method in utils.costs
+    # TODO(BT): Stop calling this function. Replace with NorMITs Supply
     # TODO: Needs a config guide for the costs somewhere
     """
     This function imports distances or costs from a given path.
 
     Parameters
     ----------
-    import_dir:
+    import_path:
         Model folder to look in for distances/costs. Should be in call or global.
 
     segment_params:
         Calibration parameters dictionary'
-
-    tp:
-        Should ultimately take 24hr & tp, usually 24hr for hb and tp for NHB.
 
     iz_infill:
         whether to add a value half the minimum
@@ -55,11 +51,7 @@ def get_costs(import_dir: nd.PathLike,
     """
     # TODO: Adapt model input costs to take time periods
     # TODO: The name cost_cols is misleading
-    tp_path = [x for x in os.listdir(import_dir) if tp in x]
-
-    dat = pd.read_csv(os.path.join(import_dir,
-                                   'costs',
-                                   tp_path[0]))
+    dat = pd.read_csv(import_path)
     cols = list(dat)
 
     # Get purpose and direction from calib_params

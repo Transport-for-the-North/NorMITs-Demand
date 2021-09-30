@@ -8,9 +8,8 @@ from normits_demand.core.data_structures import DVector
 from normits_demand.core.zoning import get_zoning_system
 from normits_demand.core.segments import get_segmentation_level
 
-# ## EXPOSE USEFUL FUNCTIONALITY ## #
-from normits_demand.core.data_structures import multiply_and_aggregate_dvectors
-from normits_demand.core.data_structures import read_compressed_dvector
+# ## ENUMERATIONS ## #
+from normits_demand.core.enumerations import Mode
 
 # ## EXPOSE ERRORS ## #
 from normits_demand.core.zoning import ZoningError

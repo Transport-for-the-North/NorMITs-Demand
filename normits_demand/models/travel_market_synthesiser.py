@@ -19,6 +19,8 @@ import pandas as pd
 # Local Imports
 import normits_demand as nd
 
+from normits_demand import models
+
 from normits_demand.pathing import TMSExportPaths
 
 from normits_demand.utils import timing
@@ -33,7 +35,9 @@ class TravelMarketSynthesiser(TMSExportPaths):
 
     def __init__(self,
                  zoning_system: nd.core.zoning.ZoningSystem,
-                 argument_builder: nd.pathing.TMSArgumentBuilderBase,
+                 external_model_arg_builder: nd.pathing.ExternalModelArgumentBuilderBase,
+                 gravity_model_arg_builder: nd.pathing.GravityModelArgumentBuilderBase,
+                 export_home: nd.PathLike,
                  ):
 
         # Generate export paths
@@ -41,8 +45,11 @@ class TravelMarketSynthesiser(TMSExportPaths):
 
         # Assign attributes
         self.zoning_system = zoning_system
-        # Validate this is correct type
-        self.argument_builder = argument_builder
+        self.export_home = export_home
+
+        # TODO(BT): Validate this is correct type
+        self.external_model_arg_builder = external_model_arg_builder
+        self.gravity_model_arg_builder = gravity_model_arg_builder
 
         # Create a logger
         # TODO (BT): Determine output file path
@@ -107,7 +114,7 @@ class TravelMarketSynthesiser(TMSExportPaths):
         self._logger.debug("")
 
         # Check that we are actually running something
-        if not all([run_external_model, run_gravity_model, run_pa_to_od]):
+        if not any([run_external_model, run_gravity_model, run_pa_to_od]):
             self._logger.info(
                 "All run args set to False. Not running anything"
             )
@@ -129,18 +136,30 @@ class TravelMarketSynthesiser(TMSExportPaths):
 
     def _run_external_model(self):
 
-        args = self.argument_builder.build_hb_external_model_arguments()
-
-        hb_ext_out = ext.run(trip_origin='hb', **args)
-
-        # Run NHB External Model
-        print("Reading in P/A from NoTEM...")
-        productions, attractions = import_pa(
-            pa_paths['hb_p'],
-            pa_paths['hb_a'],
-            zoning_name,
-            'nhb',
+        self._logger.info("Initialising the External Model")
+        external_model = models.ExternalModel(
+            zoning_system=self.zoning_system,
+            export_home=os.path.join(self.export_home, "External Model")
         )
+
+        # Replace above with something like this
+        # export_home = self.hb_attraction.export_paths.home
+
+        self._logger.info("Building home-based arguments for external model")
+        args = self.external_model_arg_builder.build_hb_external_model_arguments()
+
+        # build this in export paths
+        reports_dir = 'E:/'
+
+        self._logger.info("Executing a home-based run of external model")
+        external_model.run(
+            trip_origin='hb',
+            reports_dir=reports_dir,
+            **args,
+        )
+
+        print("HB External model done!")
+        exit()
 
         nhb_ext_out = ext.run(
             trip_origin='nhb',
