@@ -99,23 +99,19 @@ class TramInclusion:
             verbose=verbose
         )
 
-        # Generate the productions for each year
-        # for year in self.years:
         year_start_time = timing.current_milli_time()
-
-        # ## GENERATE PURE DEMAND ## #
-        du.print_w_toggle("Loading the tram data...", verbose=verbose)
-        tram_data, notem_tram_seg = self._read_tram_data(verbose)
-        tram_msoa, tram_zone_wo_infill = self._tram_infill_msoa(notem_tram_seg, tram_data, verbose)
+        # Read tram and notem output data
+        tram_data, notem_tram_seg = self._read_tram_and_notem_data(verbose=verbose)
+        tram_msoa, notem_msoa_wo_infill = self._tram_infill_msoa(notem_tram_seg, tram_data, verbose)
         north_msoa, north_wo_infill = self._tram_infill_north(notem_tram_seg, tram_msoa, verbose)
-        abc = self._non_tram_infill(tram_zone_wo_infill, north_wo_infill, tram_msoa, north_msoa, tram_data,
+        abc = self._non_tram_infill(notem_msoa_wo_infill, north_wo_infill, tram_msoa, north_msoa, tram_data,
                                     notem_tram_seg)
 
-    def _read_tram_data(self,
-                        verbose: bool,
-                        ) -> Tuple[pd.DataFrame, nd.DVector]:
+    def _read_tram_and_notem_data(self,
+                                  verbose: bool,
+                                  ) -> Tuple[pd.DataFrame, nd.DVector]:
         """
-        Reads in the tram data.
+        Reads in the tram and notem data.
 
         Parameters
         ----------
@@ -124,18 +120,23 @@ class TramInclusion:
 
         Returns
         -------
-        tram_dvec:
-            Returns the tram Dvector
+        tram_data:
+            Returns the tram data as dataframe.
+
+        notem_tram_seg:
+            Returns the notem output dvector in tram segmentation.
         """
         # Define the zoning and segmentations we want to use
         tram_zoning = nd.get_zoning_system('tram')
         tram_seg = nd.get_segmentation_level('hb_p_m7_ca')
 
-        # Read the tram data
+        # Reads the tram data
+        du.print_w_toggle("Loading the tram data...", verbose=verbose)
         tram_data = file_ops.read_df(
             path=self.tram_data_paths,
             find_similar=True,
         )
+        # Adds tram as mode 7
         cols = list(tram_data)
         cols.insert(2, 'm')
         tram_data['m'] = 7
@@ -145,72 +146,80 @@ class TramInclusion:
 
         tram_data = tram_data.reindex(cols, axis=1)
         tram_data.rename(columns={'trips': 'val'}, inplace=True)
+        # Reads the corresponding notem output
+        du.print_w_toggle("Loading the notem output data...", verbose=verbose)
         notem_output_dvec = nd.from_pickle(self.notem_outputs['hb_p'])
+        # Aggregates the dvector to the required segmentation
         notem_tram_seg = notem_output_dvec.aggregate(out_segmentation=nd.get_segmentation_level('hb_p_m_ca'))
 
         return tram_data, notem_tram_seg
 
-    def _tram_infill_msoa(self, notem_tram_seg, tram_data, verbose):
+    def _tram_infill_msoa(self,
+                          notem_tram_seg: nd.DVector,
+                          tram_data: pd.DataFrame,
+                          verbose: bool
+                          ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Tram infill for the msoa's having tram data in the north.
 
+        Parameters
+        ----------
+        notem_tram_seg:
+            DVector containing notem trip end output in revised segmentation(p,m,ca).
+            
+        tram_data:
+            Dataframe containing tram data at msoa level for the north.
+
+        Returns
+        -------
+        tram_data:
+            Returns the tram data as dataframe.
+
+        notem_tram_seg:
+            Returns the notem output dvector in tram segmentation.
+        """
+
+        # Converts DVector to dataframe
         notem_df = notem_tram_seg.to_df()
 
         for col, dt in self._target_col_dtypes['notem'].items():
             notem_df[col] = notem_df[col].astype(dt)
-        # tram = nd.read_compressed_dvector(r"C:\Users\Godzilla\Documents\GitHub\NorMITs-Demand\normits_demand\core\definitions\zoning_systems\tram\zones.pbz2")
 
+        # Retains only msoa zones that have tram data
         notem_df = notem_df.loc[notem_df['msoa_zone_id'].isin(tram_data['msoa_zone_id'])]
-        tram_zone_wo_infill = notem_df.copy()
+        notem_msoa_wo_infill = notem_df.copy()
+        # Adds tram data to the notem dataframe
         notem_df = notem_df.append(tram_data)
 
         notem_df['c_uniq_id'] = notem_df['msoa_zone_id'].astype(str) + '_' + notem_df['p'].astype(str) + '_' + \
                                 notem_df['ca'].astype(str)
-        notem_df['uniq_id'] = notem_df['msoa_zone_id'].astype(str) + '_' + notem_df['p'].astype(str) + '_' + \
-                              notem_df['m'].astype(str) + '_' + notem_df['ca'].astype(str)
+
         notem_df.sort_values(by='msoa_zone_id')
-        print(notem_df)
-        print(notem_df.dtypes)
-        notem_train = notem_df.loc[notem_df['m'] == 6]
-        notem_train = notem_train.sort_values(by='c_uniq_id')
-        notem_train.reset_index(inplace=True)
-
-        # notem_train.reset_index(inplace=True)
-        notem_tram = notem_df.loc[notem_df['m'] == 7]
-        notem_tram = notem_tram.sort_values(by='c_uniq_id')
-        notem_tram.reset_index(inplace=True)
-        print(notem_train)
-        print(notem_tram)
-
+        # create subset of the notem dataframe for train and tram modes
+        notem_train = self._create_df_subset(notem_df=notem_df, mode=6)
+        notem_tram = self._create_df_subset(notem_df=notem_df, mode=7)
+        # Checks whether train trips are higher and if so subtracts tram trips from train trips
         notem_train['new_value'] = np.where(
             (notem_train['c_uniq_id'].isin(notem_tram['c_uniq_id'])) & (notem_train['val'] > notem_tram['val']),
             (notem_train['val'] - notem_tram['val']), 0)
-
+        # Checks whether tram trips are higher and if so curtails them to train trips
         notem_tram['new_value'] = np.where(
             (notem_train['c_uniq_id'].isin(notem_tram['c_uniq_id'])) & (notem_train['val'] > notem_tram['val']),
             notem_tram['val'], notem_train['val'])
-        print(notem_df)
-        pivot = pd.pivot_table(notem_df, values='val', index=['m'], aggfunc='count')
-        print(pivot)
+
         notem_df = notem_df[notem_df.m < 6]
-        print(notem_df)
         notem_df['new_value'] = notem_df['val']
-        # notem_train['val']=notem_train['new_value']
-        # notem_train.drop(columns='new_value',inplace=True)
-        # notem_tram['val'] = notem_tram['new_value']
-        # notem_tram.drop(columns='new_value', inplace=True)
-        print(notem_df)
-        # print(notem_train)
-        # notem_df.loc[notem_df['uniq_id'].isin(notem_train['uniq_id']), 'val'] = notem_train['new_value']
+
         notem_df = notem_df.append([notem_train, notem_tram])
-        # notem_df = notem_df.append(notem_tram)
+
         notem_df.drop(columns='index', inplace=True)
-        print(notem_df)
 
         notem_df = notem_df.sort_values(by=['msoa_zone_id', 'p', 'ca', 'm'])
         notem_df.to_csv(r"I:\Data\Light Rail\notem_df.csv", index=False)
-        print(notem_df)
+
         uniq_id = notem_df['c_uniq_id'].drop_duplicates()
         notem_new_df = pd.DataFrame()
-        # uniq_id = 'E02001023_1_1'
+
         for id in uniq_id:
             new_df = notem_df.loc[notem_df['c_uniq_id'] == id]
 
@@ -226,7 +235,7 @@ class TramInclusion:
             notem_new_df = notem_new_df.append(new_df)
         print(notem_new_df)
         notem_new_df.to_csv(r"I:\Data\Light Rail\notem_new_df.csv", index=False)
-        return notem_new_df, tram_zone_wo_infill
+        return notem_new_df, notem_msoa_wo_infill
 
     def _tram_infill_north(self, notem_tram_seg, tram_msoa, verbose):
 
@@ -261,12 +270,9 @@ class TramInclusion:
         notem_train = notem_train.sort_values(by='c_uniq_id')
         notem_train.reset_index(inplace=True)
 
-        # notem_train.reset_index(inplace=True)
         notem_tram = notem_df.loc[notem_df['m'] == 7]
         notem_tram = notem_tram.sort_values(by='c_uniq_id')
         notem_tram.reset_index(inplace=True)
-        print(notem_train)
-        print(notem_tram)
 
         notem_train['new_value'] = np.where(
             (notem_train['c_uniq_id'].isin(notem_tram['c_uniq_id'])) & (notem_train['val'] > notem_tram['val']),
@@ -275,25 +281,19 @@ class TramInclusion:
         notem_tram['new_value'] = np.where(
             (notem_train['c_uniq_id'].isin(notem_tram['c_uniq_id'])) & (notem_train['val'] > notem_tram['val']),
             notem_tram['val'], notem_train['val'])
-        print(notem_df)
-        notem_df = notem_df[notem_df.m < 6]
-        print(notem_df)
-        notem_df['new_value'] = notem_df['val']
 
-        print(notem_df)
-        # print(notem_train)
-        # notem_df.loc[notem_df['uniq_id'].isin(notem_train['uniq_id']), 'val'] = notem_train['new_value']
+        notem_df = notem_df[notem_df.m < 6]
+
+        notem_df['new_value'] = notem_df['val']
         notem_df = notem_df.append([notem_train, notem_tram])
-        # notem_df = notem_df.append(notem_tram)
         notem_df.drop(columns='index', inplace=True)
-        print(notem_df)
 
         notem_df = notem_df.sort_values(by=['p', 'ca', 'm'])
         notem_df.to_csv(r"I:\Data\Light Rail\notem_msoa_df.csv", index=False)
-        print(notem_df)
+
         uniq_id = notem_df['c_uniq_id'].drop_duplicates()
         notem_new_df = pd.DataFrame()
-        # uniq_id = 'E02001023_1_1'
+
         for id in uniq_id:
             new_df = notem_df.loc[notem_df['c_uniq_id'] == id]
 
@@ -311,8 +311,9 @@ class TramInclusion:
         notem_new_df.to_csv(r"I:\Data\Light Rail\notem_new_msoa_df.csv", index=False)
         return notem_new_df, north_wo_infill
 
-    def _non_tram_infill(self, tram_zone_wo_infill, north_wo_infill, notem_df, notem_new_df, tram_data, notem_tram_seg):
-        tram=tram_data.copy()
+    def _non_tram_infill(self, notem_msoa_wo_infill, north_wo_infill, notem_df, notem_new_df, tram_data,
+                         notem_tram_seg):
+        tram = tram_data.copy()
         tram_data.rename(columns={'val': 'final_val'}, inplace=True)
         df_index_cols = ['p', 'm', 'ca', 'final_val']
         df_group_cols = df_index_cols.copy()
@@ -325,26 +326,26 @@ class TramInclusion:
         notem_df[['North', 'Non-Tram', 'Non-Tram adjusted']] = 0.0
         # notem_df['Non-Tram'] = notem_df['North']
         print('raw')
-        print(tram_zone_wo_infill)
+        print(notem_msoa_wo_infill)
         print(north_wo_infill)
         index_cols = ['p', 'm', 'ca', 'val']
         group_cols = index_cols.copy()
         group_cols.remove('val')
-        tram_zone_wo_infill = tram_zone_wo_infill.reindex(index_cols, axis=1).groupby(
+        notem_msoa_wo_infill = notem_msoa_wo_infill.reindex(index_cols, axis=1).groupby(
             group_cols).sum().reset_index()
-        tram_zone_wo_infill = tram_zone_wo_infill.append(tram_data)
-        tram_zone_wo_infill = tram_zone_wo_infill.sort_values(by=['p', 'ca', 'm']).reset_index()
+        notem_msoa_wo_infill = notem_msoa_wo_infill.append(tram_data)
+        notem_msoa_wo_infill = notem_msoa_wo_infill.sort_values(by=['p', 'ca', 'm']).reset_index()
         # notem_df['c_uniq_id'] = notem_df['p'].astype(str) + '_' + notem_df['m'].astype(str) + '_' + notem_df['ca'].astype(str)
         # uniq_id = notem_df['c_uniq_id'].drop_duplicates()
         north_wo_infill = north_wo_infill.append(tram_data)
         north_wo_infill = north_wo_infill.sort_values(by=['p', 'ca', 'm']).reset_index()
-        print(tram_zone_wo_infill)
+        print(notem_msoa_wo_infill)
         # uniq_id = [ids for ids in uniq_id if "_7_" not in ids]
         # print(uniq_id)
         # for id in uniq_id:
-        #     notem_df.loc[notem_df['c_uniq_id'] == id, 'Non-Tram'] = north_wo_infill['val']-tram_zone_wo_infill['val']
-        #     #notem_df['Non-Tram'] = np.where(notem_df[notem_df['c_uniq_id'] == id, (tram_zone_wo_infill['val']-north_wo_infill['val']),0.0)
-        notem_df['Non-Tram'] = north_wo_infill['val'] - tram_zone_wo_infill['val']
+        #     notem_df.loc[notem_df['c_uniq_id'] == id, 'Non-Tram'] = north_wo_infill['val']-notem_msoa_wo_infill['val']
+        #     #notem_df['Non-Tram'] = np.where(notem_df[notem_df['c_uniq_id'] == id, (notem_msoa_wo_infill['val']-north_wo_infill['val']),0.0)
+        notem_df['Non-Tram'] = north_wo_infill['val'] - notem_msoa_wo_infill['val']
         notem_df['North'] = notem_new_df['final_val'].to_numpy()
         notem_df['Non-Tram adjusted'] = notem_df['North'] - notem_df['final_val']
         notem_df.rename(columns={'final_val': 'Tram_zones'}, inplace=True)
@@ -375,28 +376,58 @@ class TramInclusion:
                                                    (new_df['Non-Tram adjusted'] / ntram_adj_sum), 0)
             for ids in uni_id:
                 if id in ids:
+                    print(id)
                     n_df = ntram_notem.loc[ntram_notem['c_uniq_id'] == ids]
 
-                    last_row=n_df.tail(n=1).reset_index()
+                    last_row = n_df.tail(n=1).reset_index()
 
-                    last_row['m']=7
+                    last_row['m'] = 7
                     last_row['val'] = 0.0
 
-                    n_df=n_df.append(last_row)
+                    n_df = n_df.append(last_row)
 
-                    n_df[['ntram_percent', 'ntram_adj_percent','ntram_new_percent', 'First_adj', 'Final_adj']] = 0.0
+                    n_df[['ntram_percent', 'ntram_adj_percent', 'ntram_new_percent', 'First_adj', 'Final_adj']] = 0.0
                     n_df['ntram_percent'] = new_df['ntram_percent'].to_numpy()
                     n_df['ntram_adj_percent'] = new_df['ntram_adj_percent'].to_numpy()
-                    #n_df['First_adj'] = n_df['val'].to_numpy()
-                    n_df['First_adj'] = np.where((n_df['m'] > 2) & (n_df['m'] < 7),(n_df['val']*(n_df['ntram_adj_percent'] / n_df['ntram_percent'])), n_df['val'])
+
+                    n_df['First_adj'] = np.where((n_df['m'] > 2) & (n_df['m'] < 7),
+                                                 (n_df['val'] * (n_df['ntram_adj_percent'] / n_df['ntram_percent'])),
+                                                 n_df['val'])
                     ntram_new_sum = n_df.loc[n_df['m'] > 2, 'First_adj'].sum()
                     val_sum = n_df.loc[n_df['m'] > 2, 'val'].sum()
 
                     n_df['ntram_new_percent'] = np.where((n_df['m'] > 2) & (n_df['m'] < 7),
-                                                   (n_df['First_adj'] / ntram_new_sum), 0)
-                    n_df['Final_adj'] = np.where((n_df['m'] > 2) & (n_df['m'] < 7),(val_sum*n_df['ntram_new_percent']), n_df['First_adj'])
+                                                         (n_df['First_adj'] / ntram_new_sum), 0)
+                    n_df['Final_adj'] = np.where((n_df['m'] > 2) & (n_df['m'] < 7),
+                                                 (val_sum * n_df['ntram_new_percent']), n_df['First_adj'])
 
                     notem_df_new = notem_df_new.append(n_df)
-                    print(notem_df_new)
+                    # print(notem_df_new)
 
-                    notem_df_new.to_csv(r"I:\Data\Light Rail\test1.csv", index=False)
+        notem_df_new.to_csv(r"I:\Data\Light Rail\test1.csv", index=False)
+
+    def _create_df_subset(self,
+                          notem_df: pd.DataFrame,
+                          mode: int,
+                          ) -> pd.DataFrame:
+        """
+        Creates a subset of the given dataframe using a condition.
+
+        Parameters
+        ----------
+        notem_df:
+            The original dataframe that needs to be subset.
+
+        mode:
+            Condition for slicing
+
+        Returns
+        -------
+        notem_sub_df:
+            Returns the subset of the original dataframe.
+
+        """
+        notem_sub_df = notem_df.loc[notem_df['m'] == mode]
+        notem_sub_df = notem_sub_df.sort_values(by='c_uniq_id')
+        notem_sub_df.reset_index(inplace=True)
+        return notem_sub_df
