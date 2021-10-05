@@ -962,6 +962,35 @@ def calib_params_to_dist_name(trip_origin: str,
                               ) -> str:
     """
     Wrapper for get_distribution_name() using calib params
+
+    DEPRECATED! Use segment_params_to_dist_name instead
+    """
+    segment_str = 'soc' if calib_params['p'] in efs_consts.SOC_P else 'ns'
+
+    return get_dist_name(
+        trip_origin=trip_origin,
+        matrix_format=matrix_format,
+        year=str(calib_params.get('yr')),
+        purpose=str(calib_params.get('p')),
+        mode=str(calib_params.get('m')),
+        segment=str(calib_params.get(segment_str)),
+        car_availability=str(calib_params.get('ca')),
+        tp=str(calib_params.get('tp')),
+        csv=csv,
+        compressed=compressed,
+        suffix=suffix,
+    )
+
+
+def segment_params_to_dist_name(trip_origin: str,
+                                matrix_format: str,
+                                calib_params: Dict[str, int],
+                                csv: bool = False,
+                                compressed: bool = False,
+                                suffix: str = None,
+                                ) -> str:
+    """
+    Wrapper for get_distribution_name() using calib params
     """
     segment_str = 'soc' if calib_params['p'] in efs_consts.SOC_P else 'ns'
 

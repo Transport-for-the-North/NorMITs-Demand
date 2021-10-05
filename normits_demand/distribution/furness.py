@@ -748,8 +748,8 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     col_targets = col_targets.copy()
     seed_values = seed_values.copy()
 
-    row_targets = row_targets.reindex([idx_col, unique_col], axis='columns')
-    col_targets = col_targets.reindex([idx_col, unique_col], axis='columns')
+    row_targets = row_targets.reindex(columns=[idx_col, unique_col])
+    col_targets = col_targets.reindex(columns=[idx_col, unique_col])
     row_targets = row_targets.set_index(idx_col)
     col_targets = col_targets.set_index(idx_col)
 
@@ -774,7 +774,7 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
 
     # ## TIDY AND INFILL SEED ## #
     # Infill the 0 zones
-    seed_values = seed_values.where(seed_values > 0, seed_infill)
+    seed_values = seed_values.mask(seed_values <= 0, seed_infill)
     if normalise_seeds:
         seed_values /= seed_values.sum()
 

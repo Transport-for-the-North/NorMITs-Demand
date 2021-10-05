@@ -148,13 +148,9 @@ class TravelMarketSynthesiser(TMSExportPaths):
         self._logger.info("Building home-based arguments for external model")
         args = self.external_model_arg_builder.build_hb_external_model_arguments()
 
-        # build this in export paths
-        reports_dir = 'E:/'
-
         self._logger.info("Executing a home-based run of external model")
         external_model.run(
             trip_origin='hb',
-            reports_dir=reports_dir,
             **args,
         )
 

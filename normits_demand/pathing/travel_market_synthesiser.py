@@ -173,19 +173,16 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         cjtw = cjtw.reindex([p_col, a_col, 'trips'], axis=1)
         cjtw = cjtw.groupby([p_col, a_col]).sum().reset_index()
 
-        # Convert to a numpy array
-        cjtw = pd_utils.long_df_to_wide_ndarray(
+        # Convert to a wide matrix
+        return pd_utils.long_to_wide_infill(
             df=cjtw,
             index_col=p_col,
             columns_col=a_col,
             values_col='trips',
             index_vals=self.zoning_system.unique_zones,
             column_vals=self.zoning_system.unique_zones,
-            infill=0,
+            infill=self._cjtw_infill,
         )
-
-        # Finally, infill any 0
-        return np.where(cjtw == 0, self._cjtw_infill, cjtw)
 
     def build_external_model_arguments(self,
                                        trip_origin: str,
@@ -303,7 +300,7 @@ class ExternalModelExportPaths:
     # Report dir names
     _log_dir_name = 'Logs'
     _tld_report_dir = 'TLD Reports'
-    _ie_report_dir = 'IR Reports'
+    _ie_report_dir = 'IE Reports'
 
     # Output path classes
     ExportPaths = collections.namedtuple(
@@ -394,14 +391,14 @@ class ExternalModelExportPaths:
 
         # Create the export_paths class
         self.report_paths = self.ReportPaths(
-            home=self.export_home,
-            model_log_dir=os.path.join(self.export_home, self._log_dir_name),
-            tld_report_dir=os.path.join(self.export_home, self._tld_report_dir),
-            ie_report_dir=os.path.join(self.export_home, self._ie_report_dir),
+            home=self.report_home,
+            model_log_dir=os.path.join(self.report_home, self._log_dir_name),
+            tld_report_dir=os.path.join(self.report_home, self._tld_report_dir),
+            ie_report_dir=os.path.join(self.report_home, self._ie_report_dir),
         )
 
         # Make paths that don't exist
-        for path in self.export_paths:
+        for path in self.report_paths:
             file_ops.create_folder(path)
 
 
@@ -436,7 +433,7 @@ def import_pa(production_import_path,
     a_cache = "E:/%s_attractions.csv" % model_zone
 
     if os.path.exists(p_cache) and os.path.exists(a_cache):
-        return pd.read_csv(p_cache), pd.read_csv(a_cache)
+        return pd.read_csv(p_cache, index_col=0), pd.read_csv(a_cache, index_col=0)
 
     # Reading pickled Dvector
     prod_dvec = nd.from_pickle(production_import_path)

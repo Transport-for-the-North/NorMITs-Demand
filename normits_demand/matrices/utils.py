@@ -100,9 +100,6 @@ def get_wide_mask(df: pd.DataFrame,
             % str(df.index.dtype)
         )
 
-    print(df)
-    print(df.shape)
-
     # Create square masks for the rows and cols
     col_mask = np.broadcast_to(df.columns.isin(col_zones), df.shape)
     index_mask = np.broadcast_to(df.index.isin(index_zones), df.shape).T
