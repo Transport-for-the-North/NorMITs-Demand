@@ -425,6 +425,12 @@ class ExternalModelExportPaths:
             file_ops.create_folder(path)
 
 
+class GravityModelExportPaths:
+
+    def __init__(self):
+        pass
+
+
 def import_pa(production_import_path,
               attraction_import_path,
               model_zone,
