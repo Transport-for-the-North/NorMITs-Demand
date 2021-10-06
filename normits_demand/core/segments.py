@@ -1431,8 +1431,8 @@ class SegmentationLevel:
         return tp_dict
 
     def generate_file_name(self,
-                           file_desc: str,
                            segment_params: Dict[str, Any],
+                           file_desc: Optional[str] = None,
                            trip_origin: Optional[str] = None,
                            year: Optional[str] = None,
                            suffix: Optional[str] = None,
@@ -1489,7 +1489,8 @@ class SegmentationLevel:
         if trip_origin is not None:
             name_parts += [trip_origin]
 
-        name_parts += [file_desc]
+        if file_desc is not None:
+            name_parts += [file_desc]
 
         if year is not None:
             name_parts += [year]

@@ -21,8 +21,8 @@ import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand.models import TravelMarketSynthesiser
 
-from normits_demand.pathing import ExternalModelArgumentBuilder
-from normits_demand.pathing import GravityModelArgumentBuilder
+from normits_demand.pathing.travel_market_synthesiser import ExternalModelArgumentBuilder
+from normits_demand.pathing.travel_market_synthesiser import GravityModelArgumentBuilder
 
 # Constants
 base_year = 2018
@@ -34,18 +34,26 @@ notem_export_home = r"I:\NorMITs Demand\NoTEM"
 
 
 def main():
-    run_type = 'car'
+    mode = nd.Mode.CAR
+    # mode = nd.Mode.BUS
 
-    if run_type == 'car':
-        mode = nd.Mode.CAR
+    if mode == nd.Mode.CAR:
         zoning_system = nd.get_zoning_system('noham')
         internal_tld_name = 'p_m_standard_bands'
         external_tld_name = 'p_m_large_bands'
         hb_running_seg = nd.get_segmentation_level('hb_p_m_car')
         nhb_running_seg = nd.get_segmentation_level('nhb_p_m_car')
+        intrazonal_cost_infill = 0.5
+    elif mode == nd.Mode.BUS:
+        zoning_system = nd.get_zoning_system('noham')
+        internal_tld_name = 'p_m_standard_bands'
+        external_tld_name = 'p_m_large_bands'
+        hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
+        nhb_running_seg = nd.get_segmentation_level('nhb_p_m_bus')
+        intrazonal_cost_infill = 0.4
     else:
         raise ValueError(
-            "Don't know what mode %s is!" % run_type
+            "Don't know what mode %s is!" % mode
         )
 
     em_arg_builder = ExternalModelArgumentBuilder(
@@ -55,6 +63,7 @@ def main():
         zoning_system=zoning_system,
         internal_tld_name=internal_tld_name,
         external_tld_name=external_tld_name,
+        intrazonal_cost_infill=intrazonal_cost_infill,
         hb_running_segmentation=hb_running_seg,
         nhb_running_segmentation=nhb_running_seg,
         notem_iteration_name=notem_iteration_name,
@@ -64,6 +73,8 @@ def main():
     gm_arg_builder = GravityModelArgumentBuilder()
 
     tms = TravelMarketSynthesiser(
+        year=base_year,
+        running_mode=mode,
         zoning_system=zoning_system,
         external_model_arg_builder=em_arg_builder,
         gravity_model_arg_builder=gm_arg_builder,

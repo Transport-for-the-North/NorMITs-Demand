@@ -132,6 +132,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
                  nhb_running_segmentation: nd.core.segments.SegmentationLevel,
                  notem_iteration_name: str,
                  notem_export_home: str,
+                 intrazonal_cost_infill: float = 0.5,
                  ):
         # Check paths exist
         file_ops.check_path_exists(import_home)
@@ -145,6 +146,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         self.external_tld_name = external_tld_name
         self.hb_running_segmentation = hb_running_segmentation
         self.nhb_running_segmentation = nhb_running_segmentation
+        self.intrazonal_cost_infill = intrazonal_cost_infill
 
         # Generate the NoTEM export paths
         self.notem_exports = nd.pathing.NoTEMExportPaths(
@@ -259,6 +261,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
             'costs_path': costs_path,
             'internal_tld_dir': internal_tld_path,
             'external_tld_dir': external_tld_path,
+            'intrazonal_cost_infill': self.intrazonal_cost_infill,
             'running_segmentation': running_segmentation,
         }
 
@@ -288,47 +291,54 @@ class TMSExportPaths:
         pass
 
 
+# ## EXTERNAL MODEL CLASSES ## #
+EM_ExportPaths_NT = collections.namedtuple(
+    typename='EM_ExportPaths_NT',
+    field_names=[
+        'home',
+        'hb_internal_productions',
+        'nhb_internal_productions',
+        'hb_internal_attractions',
+        'nhb_internal_attractions',
+        'external_distribution_dir',
+        'full_distribution_dir',
+    ]
+)
+
+EM_ReportPaths_NT = collections.namedtuple(
+    typename='EM_ReportPaths_NT',
+    field_names=[
+        'home',
+        'model_log_dir',
+        'tld_report_dir',
+        'ie_report_dir',
+    ]
+)
+
+
 class ExternalModelExportPaths:
     _productions_dir_name = 'Productions'
     _attractions_dir_name = 'Attractions'
-    _distributions_dir_name = 'External'
+    _external_dist_dir_name = 'External Matrices'
+    _full_dist_dir_name = 'Full PA Matrices'
 
-    _int_productions_base_name = '{trip_origin}_internal_productions.csv'
-    _int_attractions_base_name = '{trip_origin}_internal_attractions.csv'
+    _int_productions_base_name = '{trip_origin}_{mode}_{year}_internal_productions.csv'
+    _int_attractions_base_name = '{trip_origin}_{mode}_{year}_internal_attractions.csv'
 
     # Report dir names
     _log_dir_name = 'Logs'
     _tld_report_dir = 'TLD Reports'
     _ie_report_dir = 'IE Reports'
 
-    # Output path classes
-    ExportPaths = collections.namedtuple(
-        typename='ExportPaths',
-        field_names=[
-            'home',
-            'hb_internal_productions',
-            'nhb_internal_productions',
-            'hb_internal_attractions',
-            'nhb_internal_attractions',
-            'external_distribution_dir',
-        ]
-    )
-
-    ReportPaths = collections.namedtuple(
-        typename='ReportPaths',
-        field_names=[
-            'home',
-            'model_log_dir',
-            'tld_report_dir',
-            'ie_report_dir',
-        ]
-    )
-
     def __init__(self,
+                 year: int,
+                 running_mode: nd.Mode,
                  export_home: nd.PathLike,
                  report_home: nd.PathLike,
                  ):
         # Assign attributes
+        self.year = year
+        self.running_mode = running_mode
         self.export_home = export_home  # Something like I:\NorMITs Demand\noham\TMS\iter8\External Model
         self.report_home = report_home
 
@@ -349,47 +359,59 @@ class ExternalModelExportPaths:
 
     def _create_export_paths(self) -> None:
         """Creates self.export_paths"""
+        # Init
+        kwargs = {'mode': self.running_mode.value, 'year': self.year}
 
         # Generate production and paths
         production_out = os.path.join(self.export_home, self._productions_dir_name)
+        file_ops.create_folder(production_out)
 
-        fname = self._int_productions_base_name.format(trip_origin='hb')
+        fname = self._int_productions_base_name.format(trip_origin='hb', **kwargs)
         hb_internal_productions = os.path.join(production_out, fname)
 
-        fname = self._int_productions_base_name.format(trip_origin='nhb')
+        fname = self._int_productions_base_name.format(trip_origin='nhb', **kwargs)
         nhb_internal_productions = os.path.join(production_out, fname)
 
         # Generate attraction and paths
         attraction_out = os.path.join(self.export_home, self._attractions_dir_name)
+        file_ops.create_folder(attraction_out)
 
-        fname = self._int_attractions_base_name.format(trip_origin='hb')
+        fname = self._int_attractions_base_name.format(trip_origin='hb', **kwargs)
         hb_internal_attractions = os.path.join(attraction_out, fname)
 
-        fname = self._int_attractions_base_name.format(trip_origin='nhb')
+        fname = self._int_attractions_base_name.format(trip_origin='nhb', **kwargs)
         nhb_internal_attractions = os.path.join(attraction_out, fname)
 
         # Generate external distribution path
         external_distribution_dir = os.path.join(
             self.export_home,
-            self._distributions_dir_name,
+            self._external_dist_dir_name,
         )
         file_ops.create_folder(external_distribution_dir)
 
+        # Generate full distribution path
+        full_distribution_dir = os.path.join(
+            self.export_home,
+            self._full_dist_dir_name,
+        )
+        file_ops.create_folder(full_distribution_dir)
+
         # Create the export_paths class
-        self.export_paths = self.ExportPaths(
+        self.export_paths = EM_ExportPaths_NT(
             home=self.export_home,
             hb_internal_productions=hb_internal_productions,
             nhb_internal_productions=nhb_internal_productions,
             hb_internal_attractions=hb_internal_attractions,
             nhb_internal_attractions=nhb_internal_attractions,
             external_distribution_dir=external_distribution_dir,
+            full_distribution_dir=full_distribution_dir,
         )
 
     def _create_report_paths(self) -> None:
         """Creates self.report_paths"""
 
         # Create the export_paths class
-        self.report_paths = self.ReportPaths(
+        self.report_paths = EM_ReportPaths_NT(
             home=self.report_home,
             model_log_dir=os.path.join(self.report_home, self._log_dir_name),
             tld_report_dir=os.path.join(self.report_home, self._tld_report_dir),

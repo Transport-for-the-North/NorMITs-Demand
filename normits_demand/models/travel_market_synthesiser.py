@@ -21,11 +21,12 @@ import normits_demand as nd
 
 from normits_demand import models
 
-from normits_demand.pathing import TMSExportPaths
+from normits_demand.pathing.travel_market_synthesiser import TMSExportPaths
 
 from normits_demand.utils import timing
 
-import normits_demand.models.external_model as em
+# Alias for shorter name
+tms_arg_builders = nd.pathing.travel_market_synthesiser
 
 
 class TravelMarketSynthesiser(TMSExportPaths):
@@ -34,9 +35,11 @@ class TravelMarketSynthesiser(TMSExportPaths):
     out_dir = "NorMITs Demand"
 
     def __init__(self,
+                 year: int,
+                 running_mode: nd.Mode,
                  zoning_system: nd.core.zoning.ZoningSystem,
-                 external_model_arg_builder: nd.pathing.ExternalModelArgumentBuilderBase,
-                 gravity_model_arg_builder: nd.pathing.GravityModelArgumentBuilderBase,
+                 external_model_arg_builder: tms_arg_builders.ExternalModelArgumentBuilderBase,
+                 gravity_model_arg_builder: tms_arg_builders.GravityModelArgumentBuilderBase,
                  export_home: nd.PathLike,
                  ):
 
@@ -44,6 +47,8 @@ class TravelMarketSynthesiser(TMSExportPaths):
         super().__init__()
 
         # Assign attributes
+        self.year = year
+        self.running_mode = running_mode
         self.zoning_system = zoning_system
         self.export_home = export_home
 
@@ -138,6 +143,8 @@ class TravelMarketSynthesiser(TMSExportPaths):
 
         self._logger.info("Initialising the External Model")
         external_model = models.ExternalModel(
+            year=self.year,
+            running_mode=self.running_mode,
             zoning_system=self.zoning_system,
             export_home=os.path.join(self.export_home, "External Model")
         )
