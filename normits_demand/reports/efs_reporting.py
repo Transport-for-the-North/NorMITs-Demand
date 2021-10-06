@@ -34,11 +34,11 @@ from normits_demand.validation import checks
 from normits_demand.constraints import ntem_control
 
 from normits_demand.matrices import matrix_processing as mat_p
-from normits_demand.matrices import utils as mat_utils
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
 from normits_demand.utils import utils as tms_utils
+from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.reports import reports_audits as tms_reports
 
@@ -588,7 +588,7 @@ class EfsReporter:
                 df = file_ops.read_df(path, index_col=0)
 
                 # filter to just the internal area
-                int_mask = mat_utils.get_internal_mask(df, self.model_internal_zones)
+                int_mask = pd_utils.get_internal_mask(df, self.model_internal_zones)
                 internal_pa = int_mask * df
 
                 # Read in the trip length bands

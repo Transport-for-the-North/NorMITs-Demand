@@ -12,13 +12,17 @@ Collection of utility functions specifically for manipulating pandas
 """
 # Builtins
 import functools
+import operator
 
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Union
+from typing import Callable
 from typing import Generator
 
 # Third Party
+import numpy as np
 import pandas as pd
 
 # Local
@@ -342,3 +346,232 @@ def long_df_to_wide_ndarray(df: pd.DataFrame,
         infill=infill,
     )
     return df.values
+
+
+def get_wide_mask(df: pd.DataFrame,
+                  zones: List[Any] = None,
+                  col_zones: List[Any] = None,
+                  index_zones: List[Any] = None,
+                  join_fn: Callable = operator.and_
+                  ) -> np.ndarray:
+    """
+    Generates a mask for a wide matrix. Returned mask will be same shape as df
+
+    The zones the set the mask for can be set individually with col_zones and
+    index_zones, or to the same value with zones.
+
+
+    Parameters
+    ----------
+    df:
+        The dataframe to generate the mask for
+
+    zones:
+        The zones to match to in both the columns and index. If this value
+        is set it will overwrite anything passed into col_zones and
+        index_zones.
+
+    col_zones:
+        The zones to match to in the columns. This value is ignored if
+        zones is set.
+
+    index_zones:
+        The zones to match to in the index. This value is ignored if
+        zones is set.
+
+    join_fn:
+        The function to call on the column and index masks to join them.
+        By default, a bitwise and is used. See pythons builtin operator
+        library for more options.
+
+    Returns
+    -------
+    mask:
+        A mask of true and false values. Will be the same shape as df.
+    """
+    # Validate input args
+    if zones is None:
+        if col_zones is None or index_zones is None:
+            raise ValueError(
+                "If zones is not set, both col_zones and row_zones need "
+                "to be set."
+            )
+    else:
+        col_zones = zones
+        index_zones = zones
+
+    # Try and cast to the correct types for rows/cols
+    try:
+        # Assume columns are strings if they are an object
+        col_dtype = df.columns.dtype
+        col_dtype = str if col_dtype == object else col_dtype
+        col_zones = np.array(col_zones, col_dtype)
+    except ValueError:
+        raise ValueError(
+            "Cannot cast the col_zones to the required dtype to match the "
+            "dtype of the given df columns. Tried to cast to: %s"
+            % str(df.columns.dtype)
+        )
+
+    try:
+        index_zones = np.array(index_zones, df.index.dtype)
+    except ValueError:
+        raise ValueError(
+            "Cannot cast the index_zones to the required dtype to match the "
+            "dtype of the given df index. Tried to cast to: %s"
+            % str(df.index.dtype)
+        )
+
+    # Create square masks for the rows and cols
+    col_mask = np.broadcast_to(df.columns.isin(col_zones), df.shape)
+    index_mask = np.broadcast_to(df.index.isin(index_zones), df.shape).T
+
+    # Combine together to get the full mask
+    return join_fn(col_mask, index_mask)
+
+
+def get_internal_mask(df: pd.DataFrame,
+                      zones: List[Any],
+                      ) -> np.ndarray:
+    """
+    Generates a mask for a wide matrix. Returned mask will be same shape as df
+
+    Parameters
+    ----------
+    df:
+        The dataframe to generate the mask for
+
+    zones:
+        A list of zone numbers that make up the internal zones
+
+    Returns
+    -------
+    mask:
+        A mask of true and false values. Will be the same shape as df.
+    """
+    return get_wide_mask(df=df, zones=zones, join_fn=operator.and_)
+
+
+def get_external_mask(df: pd.DataFrame,
+                      zones: List[Any],
+                      ) -> np.ndarray:
+    """
+    Generates a mask for a wide matrix. Returned mask will be same shape as df
+
+    Parameters
+    ----------
+    df:
+        The dataframe to generate the mask for
+
+    zones:
+        A list of zone numbers that make up the external zones
+
+    Returns
+    -------
+    mask:
+        A mask of true and false values. Will be the same shape as df.
+    """
+    return get_wide_mask(df=df, zones=zones, join_fn=operator.or_)
+
+
+def get_external_values(df: pd.DataFrame,
+                        zones: List[Any],
+                        ) -> pd.DataFrame:
+    """Get only the external values in df
+
+    External values contains internal-external, external-internal, and
+    external-external. All values not meeting this criteria will be set
+    to 0.
+
+    Parameters
+    ----------
+    df:
+        The dataframe to get the external values from
+
+    zones:
+        A list of zone numbers that make up the external zones
+
+    Returns
+    -------
+    external_df:
+        A dataframe containing only the external demand from df.
+        Will be the same shape as df.
+    """
+    return df * get_external_mask(df, zones)
+
+
+def get_internal_values(df: pd.DataFrame,
+                        zones: List[Any],
+                        ) -> pd.DataFrame:
+    """Get only the internal values in df
+
+    Internal values contains internal-internal. All values not
+    meeting this criteria will be set to 0.
+
+    Parameters
+    ----------
+    df:
+        The dataframe to get the external values from
+
+    zones:
+        A list of zone numbers that make up the internal zones
+
+    Returns
+    -------
+    internal_df:
+        A dataframe containing only the internal demand from df.
+        Will be the same shape as df.
+    """
+    return df * get_internal_mask(df, zones)
+
+
+def internal_external_report(df: pd.DataFrame,
+                             internal_zones: List[Any],
+                             external_zones: List[Any],
+                             ) -> pd.DataFrame:
+    """Generates a report df of values in internal/external zones
+
+    Generates a dataframe with 4 rows, each showing the total across
+    that portion of the matrix. The dataframe is split into:
+    internal-internal
+    internal-external
+    external-internal
+    external-external
+
+    Parameters
+    ----------
+    df:
+        The dataframe to generate the report on.
+
+    internal_zones:
+        A list of the internal zones of the zoning system used by df
+
+    external_zones
+        A list of the external zones of the zoning system used by df
+
+    Returns
+    -------
+    report:
+        A report of internal and external demand in df.
+    """
+    # Generate the kwargs to iterate over
+    report_kwargs = {
+        'internal-internal': {'index_zones': internal_zones, 'col_zones': internal_zones},
+        'internal-external': {'index_zones': internal_zones, 'col_zones': external_zones},
+        'external-internal': {'index_zones': external_zones, 'col_zones': internal_zones},
+        'external-external': {'index_zones': external_zones, 'col_zones': external_zones},
+    }
+
+    # Generate the report
+    report = list()
+    for name, kwargs in report_kwargs.items():
+        # Pull out just the trips for this section
+        mask = get_wide_mask(
+            df=df,
+            join_fn=operator.and_,
+            **kwargs,
+        )
+        total = (df * mask).values.sum()
+        report.append({'name': name, 'total': total})
+
+    return pd.DataFrame(report)

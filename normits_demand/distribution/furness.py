@@ -24,7 +24,6 @@ from typing import Callable
 
 # self imports
 from normits_demand import constants as consts
-from normits_demand import efs_constants as efs_consts
 
 from normits_demand.matrices import utils as mat_utils
 
@@ -349,8 +348,8 @@ def distribute_pa(productions: pd.DataFrame,
                   compress_out: bool = True,
                   echo: bool = False,
                   report_out: str = None,
-                  round_dp: int = efs_consts.DEFAULT_ROUNDING,
-                  process_count: int = efs_consts.PROCESS_COUNT
+                  round_dp: int = consts.DEFAULT_ROUNDING,
+                  process_count: int = consts.PROCESS_COUNT
                   ) -> None:
     """
     Furnesses the given productions and attractions
@@ -613,9 +612,9 @@ def distribute_pa(productions: pd.DataFrame,
         kwargs_list = list()
         for calib_params in loop_generator:
             # Set the column name of the ns/soc column
-            if calib_params['p'] in efs_consts.SOC_P:
+            if calib_params['p'] in consts.SOC_P:
                 seg_col = soc_col
-            elif calib_params['p'] in efs_consts.NS_P:
+            elif calib_params['p'] in consts.NS_P:
                 seg_col = ns_col
             else:
                 raise ValueError("'%s' does not seem to be a valid soc or ns "
@@ -668,7 +667,7 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
                            tol: float = 1e-9,
                            idx_col: str = 'model_zone_id',
                            unique_col: str = 'trips',
-                           round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                           round_dp: int = consts.DEFAULT_ROUNDING,
                            unique_zones: List[int] = None,
                            unique_zones_join_fn: Callable = operator.and_,
                            ) -> Tuple[pd.DataFrame, int, float]:

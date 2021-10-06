@@ -24,10 +24,10 @@ import numpy as np
 import normits_demand as nd
 
 from normits_demand.distribution import furness
-from normits_demand.matrices import utils as mat_utils
 from normits_demand.reports import reports_audits as ra
 
 from normits_demand.pathing import ExternalModelExportPaths
+from normits_demand.validation import checks
 
 from normits_demand.utils import utils as nup
 from normits_demand.utils import general as du
@@ -81,7 +81,7 @@ class ExternalModel(ExternalModelExportPaths):
         self._logger = nd.get_logger(
             logger_name=logger_name,
             log_file_path=log_file_path,
-            instantiate_msg="Initialised new TMS Logger",
+            instantiate_msg="Initialised new External Model Logger",
         )
 
     def run(self,
@@ -97,10 +97,15 @@ class ExternalModel(ExternalModelExportPaths):
             ) -> None:
         # TODO(BT): Make sure the P/A vectors are the right zoning system
         # TODO(BT): Make sure pa_val_col is in P/A vectors
+        # Validate the trip origin
+        trip_origin = checks.validate_trip_origin(trip_origin)
+
         # Loop through each of the segments
         internal_p_vector_eff_df = list()
         internal_a_vector_eff_df = list()
         for segment_params in running_segmentation:
+            name = running_segmentation.generate_file_name('', segment_params=segment_params)
+            self._logger.info("Running for %s" % name)
 
             # Get target trip length distribution
             internal_tld = tld_utils.get_trip_length_distributions(
@@ -156,7 +161,6 @@ class ExternalModel(ExternalModelExportPaths):
             attractions[self._pa_val_col] *= adj_factor
 
             # ## GET THE COSTS FOR THIS SEGMENT ## #
-            self._logger.info('Importing costs')
             self._logger.debug("Getting costs from: %s" % costs_path)
 
             int_costs, cost_name = costs_utils.get_costs(
@@ -205,95 +209,115 @@ class ExternalModel(ExternalModelExportPaths):
                 furness_max_iters=5000,
             )
 
-            # TODO: CHNAGE HOW OUTPUT PATHS ARE GENERATED
-            # ## WRITE A REPORT OF HOW THE EXTERNAL MODEL DID ## #
-            # Build the output path
-            fname = trip_origin + '_internal_report'
+            # ## WRITE REPORTS ON HOW THE EXTERNAL MODEL DID ## #
+            # Internal TLD Report
+            fname = running_segmentation.generate_file_name(
+                trip_origin=trip_origin,
+                file_desc='internal_tld_report',
+                segment_params=segment_params,
+                csv=True,
+            )
             path = os.path.join(self.report_paths.tld_report_dir, fname)
-            path = nup.build_path(path, segment_params)  # TODO: CHANGE
             int_report.to_csv(path, index=False)
 
-            # Build the output path
-            fname = trip_origin + '_external_report'
+            # External TLD Report
+            fname = running_segmentation.generate_file_name(
+                trip_origin=trip_origin,
+                file_desc='external_tld_report',
+                segment_params=segment_params,
+                csv=True,
+            )
             path = os.path.join(self.report_paths.tld_report_dir, fname)
-            path = nup.build_path(path, segment_params) # TODO: CHANGE
             ext_report.to_csv(path, index=False)
 
             # Build an IE report
-            # Do int-ext report
-            ie_report = nup.n_matrix_split(
-                gb_pa,
-                indices=[internal_index, external_index],
-                index_names=['i', 'e'],
-                summarise=True,
+            ie_report = pd_utils.internal_external_report(
+                df=gb_pa,
+                internal_zones=self.zoning_system.internal_zones,
+                external_zones=self.zoning_system.external_zones,
             )
-            # Dictionary of ii, ie, ei, and ee trips
-            ie_report = pd.DataFrame(ie_report)
 
             # Build the output path
-            fname = trip_origin + '_ie_report'
-            ie_path = os.path.join(self.report_paths.ie_report_dir, fname)
-            ie_path = nup.build_path(ie_path, segment_params)
-            ie_report.to_csv(ie_path, index=False)
+            fname = running_segmentation.generate_file_name(
+                trip_origin=trip_origin,
+                file_desc='ie_report',
+                segment_params=segment_params,
+                csv=True,
+            )
+            path = os.path.join(self.report_paths.ie_report_dir, fname)
+            ie_report.to_csv(path, index=False)
 
-            # ## WRITE FULL DEMAND TO DISK ## #
-            # Append zone names
-            all_zones = self.zoning_system.unique_zones
-            gb_pa = pd.DataFrame(gb_pa, index=all_zones, columns=all_zones)
-            gb_pa = gb_pa.rename(columns={'index': self.zone_col})
+            # ## WRITE EXTERNAL DEMAND TO DISK ## #
+            # Get just the external
+            external_demand = pd_utils.get_external_values(
+                df=gb_pa,
+                zones=self.zoning_system.external_zones,
+            )
 
-            # Generate the path
-            fname = trip_origin + '_external'
-            ext_path = os.path.join(self.export_paths.external_distribution_dir, fname)
-            ext_path = nup.build_path(ext_path, segment_params)
-            gb_pa.to_csv(ext_path)
+            # Generate path and write out
+            fname = running_segmentation.generate_file_name(
+                trip_origin=trip_origin,
+                file_desc='pa',
+                segment_params=segment_params,
+                suffix='external',
+                csv=True,
+            )
+            path = os.path.join(self.export_paths.external_distribution_dir, fname)
+            external_demand.to_csv(path)
 
             # ## BUILD THE INTERNAL ONLY VECTORS ## #
-            # Get the internal only demand
-            internal_mask = mat_utils.get_internal_mask(
-                df=pd.DataFrame(data=gb_pa, index=all_zones, columns=all_zones),
+            # Get just the internal
+            internal_demand = pd_utils.get_internal_values(
+                df=gb_pa,
                 zones=self.zoning_system.internal_zones,
             )
-            internal_pa = np.where(internal_mask, gb_pa, 0)
-
-            # Create an index for the dataframes
-            zone_index = pd.Index(all_zones, name=self.zone_col)
 
             # Production vector
             prods_eff_df = segment_params.copy()
             prods_eff_df['df'] = pd.DataFrame(
-                data=np.sum(internal_pa, axis=1),
-                index=zone_index,
-                columns=[val_col],
+                data=internal_demand.values.sum(axis=1),
+                index=internal_demand.index,
+                columns=[pa_val_col],
             ).reset_index()
             internal_p_vector_eff_df.append(prods_eff_df)
 
             # Attraction Vector
             attrs_eff_df = segment_params.copy()
             attrs_eff_df['df'] = pd.DataFrame(
-                data=np.sum(internal_pa, axis=0),
-                index=zone_index,
-                columns=[val_col],
+                data=internal_demand.values.sum(axis=0),
+                index=internal_demand.index,
+                columns=[pa_val_col],
             ).reset_index()
             internal_a_vector_eff_df.append(attrs_eff_df)
 
+            break
+
         # ## EXTERNAL DISTRIBUTION DONE WRITE OUTPUTS ## #
-        # Build base names
-        base_fname = "%s_%s_internal_%s.csv"
+        # Choose which dirs to use
+        if trip_origin == 'hb':
+            productions_path = self.export_paths.hb_internal_productions
+            attractions_path = self.export_paths.hb_internal_attractions
+        elif trip_origin == 'nhb':
+            productions_path = self.export_paths.hb_internal_productions
+            attractions_path = self.export_paths.hb_internal_attractions
+        else:
+            raise ValueError(
+                "'%s' is not a valid trip origin! How did this error happen? "
+                "Trip origin should have already been validated in this "
+                "function.s"
+            )
+
+        # Build col names
         segment_names = running_segmentation.naming_order
-        col_names = [self.zone_col] + segment_names + [val_col]
+        col_names = [self.zone_col] + segment_names + [pa_val_col]
 
         # Write out productions
         internal_productions = du.compile_efficient_df(internal_p_vector_eff_df, col_names)
-        fname = base_fname % (self.zoning_system.name, trip_origin, 'productions')
-        out_path = os.path.join(production_out, fname)
-        internal_productions.to_csv(out_path, index=False)
+        internal_productions.to_csv(productions_path, index=False)
 
         # Write out attractions
         internal_attractions = du.compile_efficient_df(internal_a_vector_eff_df, col_names)
-        fname = base_fname % (self.zoning_system.name, trip_origin, 'attractions')
-        out_path = os.path.join(attraction_out, fname)
-        internal_attractions.to_csv(out_path, index=False)
+        internal_attractions.to_csv(attractions_path, index=False)
 
     def _external_model(self,
                         productions,

@@ -38,6 +38,9 @@ from normits_demand.core import get_segmentation_level
 # Core enumerations
 from normits_demand.core import Mode
 
+# Core classes
+from normits_demand.core import DVector
+
 
 # Useful utilities
 from normits_demand.utils import read_df

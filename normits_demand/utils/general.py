@@ -3208,7 +3208,7 @@ def trip_origin_to_purposes(trip_origin: str) -> List[int]:
         A list of integers representing purposes
     """
     # TODO Validate trip origin
-    return efs_consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
+    return consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
 
 
 def purpose_to_user_class(purpose: Union[int, str]) -> str:

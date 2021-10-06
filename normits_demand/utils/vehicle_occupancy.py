@@ -14,7 +14,7 @@ import pandas as pd
 from tqdm import tqdm
 
 # Local imports
-from normits_demand import efs_constants as consts
+from normits_demand import constants as consts
 
 from normits_demand.concurrency import multiprocessing
 

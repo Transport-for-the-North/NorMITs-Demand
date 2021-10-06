@@ -7,7 +7,8 @@ from typing import List
 from functools import reduce
 
 # Self imports
-from normits_demand import efs_constants as consts
+from normits_demand import constants as consts
+from normits_demand import efs_constants as efs_consts
 from normits_demand.utils import general as du
 from normits_demand.utils import vehicle_occupancy as vo
 from normits_demand import AuditError
@@ -223,7 +224,7 @@ def convert_to_efs_matrices(import_path: str,
                             wide_col_name: str = 'zone_id',
                             from_pcu: bool = False,
                             vehicle_occupancy_import: str = None,
-                            m_needed: List[int] = consts.MODES_NEEDED
+                            m_needed: List[int] = efs_consts.MODES_NEEDED
                             ) -> None:
     """
     Converts matrices from TfN models into a format that EFS uses.

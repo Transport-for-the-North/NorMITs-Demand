@@ -27,7 +27,8 @@ from tqdm import tqdm
 # self imports
 import normits_demand as nd
 
-from normits_demand import efs_constants as consts
+from normits_demand import constants as consts
+from normits_demand import efs_constants as efs_consts
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 from normits_demand.concurrency import multiprocessing
@@ -962,14 +963,14 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
 def _tms_od_from_fh_th_factors(pa_import: str,
                                od_export: str,
                                fh_th_factors_dir: str,
-                               base_year: str = consts.BASE_YEAR,
-                               years_needed: List[int] = consts.FUTURE_YEARS,
+                               base_year: str = efs_consts.BASE_YEAR,
+                               years_needed: List[int] = efs_consts.FUTURE_YEARS,
                                p_needed: List[int] = consts.ALL_HB_P,
-                               m_needed: List[int] = consts.MODES_NEEDED,
+                               m_needed: List[int] = efs_consts.MODES_NEEDED,
                                soc_needed: List[int] = None,
                                ns_needed: List[int] = None,
                                ca_needed: List[int] = None,
-                               tp_needed: List[int] = consts.TIME_PERIODS,
+                               tp_needed: List[int] = efs_consts.TIME_PERIODS,
                                process_count: int = consts.PROCESS_COUNT,
                                ) -> None:
     """Internal function of build_od_from_fh_th_factors to handle 'tms' seg_level
@@ -1153,13 +1154,13 @@ def _vdm_od_from_fh_th_factors_internal(pa_import,
 def _vdm_od_from_fh_th_factors(pa_import: str,
                                od_export: str,
                                fh_th_factors_dir: str,
-                               base_year: str = consts.BASE_YEAR,
-                               years_needed: List[int] = consts.FUTURE_YEARS,
-                               to_needed: List[str] = consts.VDM_TRIP_ORIGINS,
-                               uc_needed: List[str] = consts.USER_CLASSES,
-                               m_needed: List[int] = consts.MODES_NEEDED,
+                               base_year: str = efs_consts.BASE_YEAR,
+                               years_needed: List[int] = efs_consts.FUTURE_YEARS,
+                               to_needed: List[str] = efs_consts.VDM_TRIP_ORIGINS,
+                               uc_needed: List[str] = efs_consts.USER_CLASSES,
+                               m_needed: List[int] = efs_consts.MODES_NEEDED,
                                ca_needed: List[int] = None,
-                               tp_needed: List[int] = consts.TIME_PERIODS,
+                               tp_needed: List[int] = efs_consts.TIME_PERIODS,
                                process_count: int = os.cpu_count() - 2
                                ):
     # TODO: Write _vdm_od_from_tour_props() docs
@@ -1209,8 +1210,8 @@ def build_od_from_fh_th_factors(pa_import: str,
                                 fh_th_factors_dir: str,
                                 seg_level: str,
                                 seg_params: Dict[str, Any],
-                                base_year: str = consts.BASE_YEAR,
-                                years_needed: List[int] = consts.FUTURE_YEARS,
+                                base_year: str = efs_consts.BASE_YEAR,
+                                years_needed: List[int] = efs_consts.FUTURE_YEARS,
                                 process_count: int = consts.PROCESS_COUNT,
                                 ) -> None:
     """Builds OD Matrices from PA using the factors in fh_th_factors_dir

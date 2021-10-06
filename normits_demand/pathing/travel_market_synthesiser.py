@@ -289,10 +289,9 @@ class TMSExportPaths:
 
 
 class ExternalModelExportPaths:
-    # Constants - some for TMS parent?
     _productions_dir_name = 'Productions'
     _attractions_dir_name = 'Attractions'
-    _distributions_dir_name = 'Attractions'
+    _distributions_dir_name = 'External'
 
     _int_productions_base_name = '{trip_origin}_internal_productions.csv'
     _int_attractions_base_name = '{trip_origin}_internal_attractions.csv'
