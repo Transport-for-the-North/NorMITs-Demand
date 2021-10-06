@@ -427,7 +427,39 @@ class ExternalModelExportPaths:
 
 class GravityModelExportPaths:
 
-    def __init__(self):
+    def __init__(self,
+                 year: int,
+                 running_mode: nd.Mode,
+                 export_home: nd.PathLike,
+                 report_home: nd.PathLike,
+                 ):
+        # Assign attributes
+        self.year = year
+        self.running_mode = running_mode
+        self.export_home = export_home  # Something like I:\NorMITs Demand\noham\TMS\iter8\Gravity Model
+        self.report_home = report_home
+
+        # Make sure paths exist
+        try:
+            file_ops.check_path_exists(export_home)
+            file_ops.check_path_exists(report_home)
+        except IOError as e:
+            raise type(e)(
+                "Got the following error while checking if the export_home and "
+                "report_home paths exist:\n%s"
+                % str(e)
+            )
+
+        # Generate the paths
+        self._create_export_paths()
+        self._create_report_paths()
+
+    def _create_export_paths(self) -> None:
+        """Creates self.export_paths"""
+        pass
+
+    def _create_report_paths(self) -> None:
+        """Creates self.export_paths"""
         pass
 
 
