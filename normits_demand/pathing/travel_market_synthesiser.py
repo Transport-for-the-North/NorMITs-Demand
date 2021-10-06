@@ -452,8 +452,8 @@ def import_pa(production_import_path,
     [1] attractions:
         Mainland GB attractions.
     """
-    p_cache = "E:/%s_productions.csv" % model_zone
-    a_cache = "E:/%s_attractions.csv" % model_zone
+    p_cache = "E:/%s_%s_productions.csv" % (trip_origin, model_zone)
+    a_cache = "E:/%s_%s_attractions.csv" % (trip_origin, model_zone)
 
     if os.path.exists(p_cache) and os.path.exists(a_cache):
         return pd.read_csv(p_cache, index_col=0), pd.read_csv(a_cache, index_col=0)

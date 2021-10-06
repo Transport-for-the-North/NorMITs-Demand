@@ -156,6 +156,19 @@ class ExternalModel(ExternalModelExportPaths):
                 fill_value=0,
             ).reset_index()
 
+            # Check we actually got something
+            production_sum = seg_productions.values.sum()
+            attraction_sum = seg_attractions.values.sum()
+            if production_sum <= 0 or attraction_sum <= 0:
+                raise nd.NormitsDemandError(
+                    "Missing productions and/or attractions after filtering to "
+                    "this segment.\n"
+                    "\tSegment: %s\n"
+                    "\tProductions sum: %s\n"
+                    "\tAttractions sum: %s"
+                    % (segment_params, production_sum, attraction_sum)
+                )
+
             # Balance A to P
             adj_factor = seg_productions[self._pa_val_col].sum() / seg_attractions[
                 self._pa_val_col].sum()
