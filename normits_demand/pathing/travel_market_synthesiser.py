@@ -141,6 +141,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
 
         # Assign attributes
         self.import_home = import_home
+        self.base_year = base_year
         self.zoning_system = zoning_system
         self.internal_tld_name = internal_tld_name
         self.external_tld_name = external_tld_name
@@ -193,13 +194,14 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         trip_origin = trip_origin.lower()
 
         # ## READ IN PRODUCTIONS AND ATTRACTIONS ## #
+        exports = self.notem_exports
         if trip_origin == 'hb':
-            productions_path = self.notem_exports.hb_production.export_paths.notem_segmented
-            attractions_path = self.notem_exports.hb_attraction.export_paths.notem_segmented
+            productions_path = exports.hb_production.export_paths.notem_segmented[self.base_year]
+            attractions_path = exports.hb_attraction.export_paths.notem_segmented[self.base_year]
             running_segmentation = self.hb_running_segmentation
         elif trip_origin == 'nhb':
-            productions_path = self.notem_exports.nhb_production.export_paths.notem_segmented
-            attractions_path = self.notem_exports.nhb_attraction.export_paths.notem_segmented
+            productions_path = exports.nhb_production.export_paths.notem_segmented[self.base_year]
+            attractions_path = exports.nhb_attraction.export_paths.notem_segmented[self.base_year]
             running_segmentation = self.nhb_running_segmentation
         else:
             raise ValueError(
