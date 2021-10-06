@@ -41,8 +41,6 @@ from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.utils import trip_length_distributions as tld_utils
 
 
-# import normits_demand.build.tms_pathing as tms
-# class ExternalModel(tms.TMSPathing):
 class ExternalModel(ExternalModelExportPaths):
     _log_fname = "External_Model_log.log"
 

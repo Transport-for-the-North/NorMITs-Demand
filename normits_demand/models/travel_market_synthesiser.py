@@ -149,9 +149,6 @@ class TravelMarketSynthesiser(TMSExportPaths):
             export_home=os.path.join(self.export_home, "External Model")
         )
 
-        # Replace above with something like this
-        # export_home = self.hb_attraction.export_paths.home
-
         self._logger.info("Building home-based arguments for external model")
         args = self.external_model_arg_builder.build_hb_external_model_arguments()
 
@@ -161,21 +158,16 @@ class TravelMarketSynthesiser(TMSExportPaths):
             **args,
         )
 
-        print("HB External model done!")
-        exit()
+        self._logger.info("Building non-home-based arguments for external model")
+        args = self.external_model_arg_builder.build_nhb_external_model_arguments()
 
-        nhb_ext_out = ext.run(
+        self._logger.info("Executing a non-home-based run of external model")
+        external_model.run(
             trip_origin='nhb',
-            cost_type='24hr',
-            productions=productions,
-            attractions=attractions,
-            seed_matrix=cjtw,
-            costs_dir=costs_dir,
-            reports_dir=reports_dir,
-            internal_tld_dir=internal_tld_dir,
-            external_tld_dir=external_tld_dir,
+            **args,
         )
 
+        self._logger.info("External Model Done!")
 
     def _run_gravity_model(self):
         pass
