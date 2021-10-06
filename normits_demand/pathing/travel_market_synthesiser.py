@@ -494,7 +494,7 @@ def import_pa(production_import_path,
     a_cache = "E:/%s_%s_attractions.csv" % (trip_origin, model_zone)
 
     if os.path.exists(p_cache) and os.path.exists(a_cache):
-        return pd.read_csv(p_cache, index_col=0), pd.read_csv(a_cache, index_col=0)
+        return pd.read_csv(p_cache), pd.read_csv(a_cache)
 
     # Reading pickled Dvector
     prod_dvec = nd.from_pickle(production_import_path)
@@ -539,8 +539,8 @@ def import_pa(production_import_path,
     attr_wd = weekly_to_weekday(attr_df, trip_origin, model_zone)
 
     # TODO(BT): Sort zoning system into order
-    prod_wd.to_csv(p_cache)
-    attr_wd.to_csv(a_cache)
+    prod_wd.to_csv(p_cache, index=False)
+    attr_wd.to_csv(a_cache, index=False)
 
     return prod_wd, attr_wd
 
