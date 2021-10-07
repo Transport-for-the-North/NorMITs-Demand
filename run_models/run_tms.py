@@ -34,8 +34,8 @@ notem_export_home = r"I:\NorMITs Demand\NoTEM"
 
 
 def main():
-    mode = nd.Mode.CAR
-    # mode = nd.Mode.BUS
+    # mode = nd.Mode.CAR
+    mode = nd.Mode.BUS
 
     if mode == nd.Mode.CAR:
         zoning_system = nd.get_zoning_system('noham')
@@ -53,7 +53,7 @@ def main():
         intrazonal_cost_infill = 0.4
     else:
         raise ValueError(
-            "Don't know what mode %s is!" % mode
+            "Don't know what mode %s is!" % mode.value
         )
 
     em_arg_builder = ExternalModelArgumentBuilder(
@@ -66,6 +66,8 @@ def main():
         intrazonal_cost_infill=intrazonal_cost_infill,
         hb_running_segmentation=hb_running_seg,
         nhb_running_segmentation=nhb_running_seg,
+        hb_cost_type='24hr',
+        nhb_cost_type='tp',
         notem_iteration_name=notem_iteration_name,
         notem_export_home=notem_export_home,
     )
@@ -79,6 +81,7 @@ def main():
         external_model_arg_builder=em_arg_builder,
         gravity_model_arg_builder=gm_arg_builder,
         export_home=tms_export_home,
+        process_count=-2,
     )
 
     tms.run(

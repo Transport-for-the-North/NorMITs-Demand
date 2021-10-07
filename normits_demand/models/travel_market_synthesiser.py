@@ -18,6 +18,7 @@ import pandas as pd
 
 # Local Imports
 import normits_demand as nd
+from normits_demand import constants
 
 from normits_demand import models
 
@@ -41,6 +42,7 @@ class TravelMarketSynthesiser(TMSExportPaths):
                  external_model_arg_builder: tms_arg_builders.ExternalModelArgumentBuilderBase,
                  gravity_model_arg_builder: tms_arg_builders.GravityModelArgumentBuilderBase,
                  export_home: nd.PathLike,
+                 process_count: int = constants.PROCESS_COUNT,
                  ):
 
         # Generate export paths
@@ -51,6 +53,7 @@ class TravelMarketSynthesiser(TMSExportPaths):
         self.running_mode = running_mode
         self.zoning_system = zoning_system
         self.export_home = export_home
+        self.process_count = process_count
 
         # TODO(BT): Validate this is correct type
         self.external_model_arg_builder = external_model_arg_builder
@@ -146,7 +149,8 @@ class TravelMarketSynthesiser(TMSExportPaths):
             year=self.year,
             running_mode=self.running_mode,
             zoning_system=self.zoning_system,
-            export_home=os.path.join(self.export_home, "External Model")
+            export_home=os.path.join(self.export_home, "External Model"),
+            process_count=self.process_count,
         )
 
         # self._logger.info("Building home-based arguments for external model")

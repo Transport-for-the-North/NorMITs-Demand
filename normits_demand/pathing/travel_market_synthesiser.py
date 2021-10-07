@@ -108,7 +108,6 @@ class GravityModelArgumentBuilderBase(abc.ABC):
 
 class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
     # Costs constants
-    _cost_type = '24hr'
     _cost_dir_name = 'costs'
     _cost_base_fname = "{zoning_name}_{cost_type}_costs.csv"
 
@@ -130,6 +129,8 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
                  external_tld_name: str,
                  hb_running_segmentation: nd.core.segments.SegmentationLevel,
                  nhb_running_segmentation: nd.core.segments.SegmentationLevel,
+                 hb_cost_type: str,
+                 nhb_cost_type: str,
                  notem_iteration_name: str,
                  notem_export_home: str,
                  intrazonal_cost_infill: float = 0.5,
@@ -147,6 +148,8 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         self.external_tld_name = external_tld_name
         self.hb_running_segmentation = hb_running_segmentation
         self.nhb_running_segmentation = nhb_running_segmentation
+        self.hb_cost_type = hb_cost_type
+        self.nhb_cost_type = nhb_cost_type
         self.intrazonal_cost_infill = intrazonal_cost_infill
 
         # Generate the NoTEM export paths
@@ -199,10 +202,12 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
             productions_path = exports.hb_production.export_paths.notem_segmented[self.base_year]
             attractions_path = exports.hb_attraction.export_paths.notem_segmented[self.base_year]
             running_segmentation = self.hb_running_segmentation
+            cost_type = self.hb_cost_type
         elif trip_origin == 'nhb':
             productions_path = exports.nhb_production.export_paths.notem_segmented[self.base_year]
             attractions_path = exports.nhb_attraction.export_paths.notem_segmented[self.base_year]
             running_segmentation = self.nhb_running_segmentation
+            cost_type = self.nhb_cost_type
         else:
             raise ValueError(
                 "Received an unexpected value for trip origin. Expected one of "
@@ -230,7 +235,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         # Build costs path
         fname = self._cost_base_fname.format(
             zoning_name=self.zoning_system.name,
-            cost_type=self._cost_type,
+            cost_type=cost_type,
         )
         costs_path = os.path.join(
             self.import_home,

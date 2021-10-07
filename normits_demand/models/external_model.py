@@ -53,6 +53,7 @@ class ExternalModel(ExternalModelExportPaths):
                  zoning_system: nd.core.ZoningSystem,
                  export_home: nd.PathLike,
                  zone_col: str = None,
+                 process_count: Optional[int] = consts.PROCESS_COUNT,
                  ):
         # Validate inputs
         if not isinstance(zoning_system, nd.core.zoning.ZoningSystem):
@@ -65,6 +66,7 @@ class ExternalModel(ExternalModelExportPaths):
         # Assign attributes
         self.zoning_system = zoning_system
         self.zone_col = zone_col
+        self.process_count = process_count
 
         if self.zone_col is None:
             self.zone_col = zoning_system.col_name
@@ -101,7 +103,6 @@ class ExternalModel(ExternalModelExportPaths):
             running_segmentation: nd.core.SegmentationLevel,
             intrazonal_cost_infill: Optional[float] = 0.5,
             pa_val_col: Optional[str] = 'val',
-            process_count: Optional[int] = consts.PROCESS_COUNT,
             ) -> None:
         # TODO(BT): Make sure the P/A vectors are the right zoning system
         # TODO(BT): Make sure pa_val_col is in P/A vectors
@@ -185,7 +186,7 @@ class ExternalModel(ExternalModelExportPaths):
         return_vals = multiprocessing.multiprocess(
             fn=self._run_internal,
             kwargs=kwarg_list,
-            process_count=process_count,
+            process_count=self.process_count,
             pbar_kwargs=pbar_kwargs,
         )
 
