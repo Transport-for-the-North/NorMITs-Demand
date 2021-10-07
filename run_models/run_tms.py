@@ -42,14 +42,14 @@ def main():
         internal_tld_name = 'p_m_standard_bands'
         external_tld_name = 'p_m_large_bands'
         hb_running_seg = nd.get_segmentation_level('hb_p_m_car')
-        nhb_running_seg = nd.get_segmentation_level('nhb_p_m_car')
+        nhb_running_seg = nd.get_segmentation_level('nhb_p_m_tp_wday_car')
         intrazonal_cost_infill = 0.5
     elif mode == nd.Mode.BUS:
         zoning_system = nd.get_zoning_system('noham')
         internal_tld_name = 'p_m_standard_bands'
         external_tld_name = 'p_m_large_bands'
         hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
-        nhb_running_seg = nd.get_segmentation_level('nhb_p_m_bus')
+        nhb_running_seg = nd.get_segmentation_level('nhb_p_m_tp_wday_bus')
         intrazonal_cost_infill = 0.4
     else:
         raise ValueError(
