@@ -81,3 +81,11 @@ def curve_convergence(target: np.array,
 
     # Limit between 0 and 1
     return max(1 - convergence, 0)
+
+
+def get_pa_diff(new_p,
+                p_target,
+                new_a,
+                a_target):
+    pa_diff = (((sum((new_p - p_target) ** 2) + sum((new_a - a_target) ** 2))/len(p_target)) ** .5)
+    return pa_diff

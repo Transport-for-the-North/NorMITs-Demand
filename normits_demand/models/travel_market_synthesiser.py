@@ -33,20 +33,27 @@ tms_arg_builders = nd.pathing.travel_market_synthesiser
 class TravelMarketSynthesiser(TMSExportPaths):
     # ## Class Constants ## #
     __version__ = nd.version.__version__
-    out_dir = "NorMITs Demand"
+
+    _running_report_fname = 'running_parameters.txt'
+    _log_fname = "TMS_log.log"
 
     def __init__(self,
                  year: int,
                  running_mode: nd.Mode,
+                 iteration_name: str,
                  zoning_system: nd.core.zoning.ZoningSystem,
                  external_model_arg_builder: tms_arg_builders.ExternalModelArgumentBuilderBase,
                  gravity_model_arg_builder: tms_arg_builders.GravityModelArgumentBuilderBase,
                  export_home: nd.PathLike,
                  process_count: int = constants.PROCESS_COUNT,
                  ):
-
         # Generate export paths
-        super().__init__()
+        super().__init__(
+            year=year,
+            iteration_name=iteration_name,
+            running_mode=running_mode,
+            export_home=export_home,
+        )
 
         # Assign attributes
         self.year = year
@@ -59,15 +66,45 @@ class TravelMarketSynthesiser(TMSExportPaths):
         self.external_model_arg_builder = external_model_arg_builder
         self.gravity_model_arg_builder = gravity_model_arg_builder
 
+        # Build export paths for sub-models
+        self.ext_export_home = os.path.join(self.export_home, "External Model")
+        self.grav_export_home = os.path.join(self.export_home, "Gravity Model")
+
         # Create a logger
         # TODO (BT): Determine output file path
         logger_name = "%s.%s" % (__name__, self.__class__.__name__)
-        # log_file_path = os.path.join(self.export_home, self._log_fname)
+        log_file_path = os.path.join(self.export_home, self._log_fname)
         self._logger = nd.get_logger(
             logger_name=logger_name,
-            # log_file_path=log_file_path,
+            log_file_path=log_file_path,
             instantiate_msg="Initialised new TMS Logger",
         )
+
+        self._write_running_report()
+
+    def _write_running_report(self):
+        """
+        Outputs a simple report detailing inputs and outputs
+        """
+        # Define the lines to output
+        out_lines = [
+            'Code Version: %s' % str(nd.__version__),
+            'TMS Iteration: %s' % str(self.iteration_name),
+            '',
+            '### External Model ###',
+            'vector_export: %s' % self.external_model.export_paths.home,
+            'report_export: %s' % self.external_model.report_paths.home,
+            '',
+            '### Gravity Model ###',
+            'vector_export: %s' % self.gravity_model.export_paths.home,
+            'report_export: %s' % self.gravity_model.report_paths.home,
+            '',
+        ]
+
+        # Write out to disk
+        output_path = os.path.join(self.export_home, self._running_report_fname)
+        with open(output_path, 'w') as out:
+            out.write('\n'.join(out_lines))
 
     def run(self,
             run_all: bool = False,
@@ -149,18 +186,18 @@ class TravelMarketSynthesiser(TMSExportPaths):
             year=self.year,
             running_mode=self.running_mode,
             zoning_system=self.zoning_system,
-            export_home=os.path.join(self.export_home, "External Model"),
+            export_home=self.ext_export_home,
             process_count=self.process_count,
         )
 
-        # self._logger.info("Building home-based arguments for external model")
-        # args = self.external_model_arg_builder.build_hb_external_model_arguments()
-        #
-        # self._logger.info("Executing a home-based run of external model")
-        # external_model.run(trip_origin='hb', **args)
+        self._logger.info("Building home-based arguments for external model")
+        args = self.external_model_arg_builder.build_hb_arguments()
+
+        self._logger.info("Executing a home-based run of external model")
+        external_model.run(trip_origin='hb', **args)
 
         self._logger.info("Building non-home-based arguments for external model")
-        args = self.external_model_arg_builder.build_nhb_external_model_arguments()
+        args = self.external_model_arg_builder.build_nhb_arguments()
 
         self._logger.info("Executing a non-home-based run of external model")
         external_model.run(trip_origin='nhb', **args)
@@ -168,7 +205,27 @@ class TravelMarketSynthesiser(TMSExportPaths):
         self._logger.info("External Model Done!")
 
     def _run_gravity_model(self):
-        pass
+        self._logger.info("Initialising the Gravity Model")
+        gravity_model = models.GravityModel(
+            year=self.year,
+            running_mode=self.running_mode,
+            zoning_system=self.zoning_system,
+            export_home=self.grav_export_home,
+        )
+
+        self._logger.info("Building home-based arguments for gravity model")
+        args = self.gravity_model_arg_builder.build_hb_arguments()
+
+        self._logger.info("Executing a home-based run of gravity model")
+        gravity_model.run(trip_origin='hb', **args)
+
+        # self._logger.info("Building non-home-based arguments for gravity model")
+        # args = self.gravity_model_arg_builder.build_nhb_arguments()
+        #
+        # self._logger.info("Executing a non-home-based run of gravity model")
+        # gravity_model.run(trip_origin='nhb', **args)
+
+        self._logger.info("Gravity Model Done!")
 
     def _run_pa_to_od(self):
         pass

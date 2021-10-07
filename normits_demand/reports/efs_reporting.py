@@ -40,7 +40,7 @@ from normits_demand.utils import general as du
 from normits_demand.utils import utils as tms_utils
 from normits_demand.utils import pandas_utils as pd_utils
 
-from normits_demand.reports import reports_audits as tms_reports
+from normits_demand.utils import trip_length_distributions as tld_utils
 
 
 class EfsReporter:
@@ -595,7 +595,7 @@ class EfsReporter:
                 trip_len_bands = self._get_hb_trip_length_bands(p)
 
                 # Generate trip length data
-                reports = tms_reports.get_trip_length_by_band(
+                reports = tld_utils.get_trip_length_by_band(
                     trip_len_bands,
                     distance.values,
                     internal_pa.values,

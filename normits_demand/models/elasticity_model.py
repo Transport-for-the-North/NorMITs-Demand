@@ -845,7 +845,7 @@ class ElasticityModel:
                 suffix=fname_suffix,
                 csv=True,
             )
-            du.safe_dataframe_to_csv(adjusted_demand[k], folder / name)
+            file_ops.safe_dataframe_to_csv(adjusted_demand[k], folder / name)
 
         for k in rail_keys:
             mode = 'rail'
@@ -858,7 +858,7 @@ class ElasticityModel:
                 suffix=fname_suffix,
                 csv=True,
             )
-            du.safe_dataframe_to_csv(adjusted_demand[k], folder / name)
+            file_ops.safe_dataframe_to_csv(adjusted_demand[k], folder / name)
 
         # Write other modes to a single file
         folder = self.other_demand_export
@@ -870,7 +870,7 @@ class ElasticityModel:
             ],
             columns=["mode", "mean_demand_adjustment"],
         )
-        du.safe_dataframe_to_csv(df, folder / name, index=False)
+        file_ops.safe_dataframe_to_csv(df, folder / name, index=False)
 
 
 ##### FUNCTIONS #####

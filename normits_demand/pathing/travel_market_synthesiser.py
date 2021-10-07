@@ -16,6 +16,7 @@ import abc
 import collections
 
 from typing import Dict
+from typing import Optional
 
 # Third Party
 import numpy as np
@@ -25,6 +26,7 @@ import pandas as pd
 import normits_demand as nd
 
 from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
 
@@ -37,7 +39,7 @@ class ExternalModelArgumentBuilderBase(abc.ABC):
     """
 
     @abc.abstractmethod
-    def build_hb_external_model_arguments(self) -> Dict[str, nd.PathLike]:
+    def build_hb_arguments(self) -> Dict[str, nd.PathLike]:
         """
         Definition of function that needs to be overwritten
 
@@ -52,7 +54,7 @@ class ExternalModelArgumentBuilderBase(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def build_nhb_external_model_arguments(self) -> Dict[str, nd.PathLike]:
+    def build_nhb_arguments(self) -> Dict[str, nd.PathLike]:
         """
         Definition of function that needs to be overwritten
 
@@ -76,7 +78,7 @@ class GravityModelArgumentBuilderBase(abc.ABC):
     """
 
     @abc.abstractmethod
-    def build_hb_gravity_model_arguments(self) -> Dict[str, nd.PathLike]:
+    def build_hb_arguments(self) -> Dict[str, nd.PathLike]:
         """
         Definition of function that needs to be overwritten
 
@@ -91,7 +93,7 @@ class GravityModelArgumentBuilderBase(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def build_nhb_gravity_model_arguments(self) -> Dict[str, nd.PathLike]:
+    def build_nhb_arguments(self) -> Dict[str, nd.PathLike]:
         """
         Definition of function that needs to be overwritten
 
@@ -106,6 +108,7 @@ class GravityModelArgumentBuilderBase(abc.ABC):
         pass
 
 
+# ## EXTERNAL MODEL CLASSES ## #
 class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
     # Costs constants
     _cost_dir_name = 'costs'
@@ -190,13 +193,11 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
             infill=self._cjtw_infill,
         )
 
-    def build_external_model_arguments(self,
-                                       trip_origin: str,
-                                       ) -> Dict[str, nd.PathLike]:
+    def build_arguments(self, trip_origin: str) -> Dict[str, nd.PathLike]:
         # Init
         trip_origin = trip_origin.lower()
 
-        # ## READ IN PRODUCTIONS AND ATTRACTIONS ## #
+        # Set trip origin specific stuff
         exports = self.notem_exports
         if trip_origin == 'hb':
             productions_path = exports.hb_production.export_paths.notem_segmented[self.base_year]
@@ -215,6 +216,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
                 % trip_origin
             )
 
+        # read in productions and attractions
         # TODO(BT): Tidy up this function - no cache!
         productions, attractions = import_pa(
             production_import_path=productions_path,
@@ -272,35 +274,15 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
             'running_segmentation': running_segmentation,
         }
 
-    def build_hb_external_model_arguments(self) -> Dict[str, nd.PathLike]:
-        return self.build_external_model_arguments(trip_origin='hb')
+    def build_hb_arguments(self) -> Dict[str, nd.PathLike]:
+        return self.build_arguments(trip_origin='hb')
 
-    def build_nhb_external_model_arguments(self) -> Dict[str, nd.PathLike]:
-        return self.build_external_model_arguments(trip_origin='nhb')
-
-
-class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
-    def __init__(self):
-        pass
-
-    def build_hb_gravity_model_arguments(self) -> Dict[str, nd.PathLike]:
-        raise NotImplementedError()
-
-    def build_nhb_gravity_model_arguments(self) -> Dict[str, nd.PathLike]:
-        raise NotImplementedError()
+    def build_nhb_arguments(self) -> Dict[str, nd.PathLike]:
+        return self.build_arguments(trip_origin='nhb')
 
 
-class TMSExportPaths:
-    # TODO(BT): Finalise TMS exports structure
-
-    def __init__(self):
-        # We would assign export paths here
-        pass
-
-
-# ## EXTERNAL MODEL CLASSES ## #
-EM_ExportPaths_NT = collections.namedtuple(
-    typename='EM_ExportPaths_NT',
+_EM_ExportPaths_NT = collections.namedtuple(
+    typename='_EM_ExportPaths_NT',
     field_names=[
         'home',
         'hb_internal_productions',
@@ -312,8 +294,8 @@ EM_ExportPaths_NT = collections.namedtuple(
     ]
 )
 
-EM_ReportPaths_NT = collections.namedtuple(
-    typename='EM_ReportPaths_NT',
+_EM_ReportPaths_NT = collections.namedtuple(
+    typename='_EM_ReportPaths_NT',
     field_names=[
         'home',
         'model_log_dir',
@@ -324,6 +306,8 @@ EM_ReportPaths_NT = collections.namedtuple(
 
 
 class ExternalModelExportPaths:
+    _reports_dirname = 'Logs & Reports'
+
     _productions_dir_name = 'Productions'
     _attractions_dir_name = 'Attractions'
     _external_dist_dir_name = 'External Matrices'
@@ -341,24 +325,17 @@ class ExternalModelExportPaths:
                  year: int,
                  running_mode: nd.Mode,
                  export_home: nd.PathLike,
-                 report_home: nd.PathLike,
                  ):
+        # Init
+        file_ops.check_path_exists(export_home)
+
         # Assign attributes
         self.year = year
         self.running_mode = running_mode
         self.export_home = export_home  # Something like I:\NorMITs Demand\noham\TMS\iter8\External Model
-        self.report_home = report_home
+        self.report_home = os.path.join(self.export_home, self._reports_dirname)
 
-        # Make sure paths exist
-        try:
-            file_ops.check_path_exists(export_home)
-            file_ops.check_path_exists(report_home)
-        except IOError as e:
-            raise type(e)(
-                "Got the following error while checking if the export_home and "
-                "report_home paths exist:\n%s"
-                % str(e)
-            )
+        file_ops.create_folder(self.report_home)
 
         # Generate the paths
         self._create_export_paths()
@@ -404,7 +381,7 @@ class ExternalModelExportPaths:
         file_ops.create_folder(full_distribution_dir)
 
         # Create the export_paths class
-        self.export_paths = EM_ExportPaths_NT(
+        self.export_paths = _EM_ExportPaths_NT(
             home=self.export_home,
             hb_internal_productions=hb_internal_productions,
             nhb_internal_productions=nhb_internal_productions,
@@ -418,7 +395,7 @@ class ExternalModelExportPaths:
         """Creates self.report_paths"""
 
         # Create the export_paths class
-        self.report_paths = EM_ReportPaths_NT(
+        self.report_paths = _EM_ReportPaths_NT(
             home=self.report_home,
             model_log_dir=os.path.join(self.report_home, self._log_dir_name),
             tld_report_dir=os.path.join(self.report_home, self._tld_report_dir),
@@ -430,30 +407,211 @@ class ExternalModelExportPaths:
             file_ops.create_folder(path)
 
 
+# ## GRAVITY MODEL CLASSES ## #
+class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
+    # Costs constants
+    _cost_dir_name = 'costs'
+    _cost_base_fname = "{zoning_name}_{cost_type}_costs.csv"
+
+    # Initial Parameters consts
+    _gravity_model_dir = 'gravity model'
+
+    # Trip Length Distribution constants
+    _tld_dir_name = 'trip_length_distributions'
+    _tld_area_dir_name = 'gb'
+
+    def __init__(self,
+                 import_home: nd.PathLike,
+                 target_tld_name: str,
+                 cost_function: str,
+                 running_mode: nd.core.enumerations.Mode,
+                 zoning_system: nd.core.zoning.ZoningSystem,
+                 hb_running_segmentation: nd.core.segments.SegmentationLevel,
+                 nhb_running_segmentation: nd.core.segments.SegmentationLevel,
+                 hb_cost_type: str,
+                 nhb_cost_type: str,
+                 hb_init_params_fname: str,
+                 nhb_init_params_fname: str,
+                 external_model_exports: ExternalModelExportPaths,
+                 intrazonal_cost_infill: float = 0.5,
+                 pa_val_col: Optional[str] = 'val',
+                 apply_k_factoring: Optional[bool] = True,
+                 furness_loops: Optional[int] = 2000,
+                 fitting_loops: Optional[int] = 100,
+                 bs_con_target: Optional[float] = 0.95,
+                 target_r_gap: Optional[float] = 1.0,
+                 ):
+        # Check paths exist
+        file_ops.check_path_exists(import_home)
+
+        # TODO(BT): Validate segments and zones are the correct types
+
+        # Assign attributes
+        self.import_home = import_home
+        self.target_tld_name = target_tld_name
+        self.cost_function = cost_function
+        self.running_mode = running_mode
+        self.zoning_system = zoning_system
+        self.hb_running_segmentation = hb_running_segmentation
+        self.nhb_running_segmentation = nhb_running_segmentation
+        self.hb_cost_type = hb_cost_type
+        self.nhb_cost_type = nhb_cost_type
+        self.hb_init_params_fname = hb_init_params_fname
+        self.nhb_init_params_fname = nhb_init_params_fname
+        self.external_model_exports = external_model_exports
+
+        self.intrazonal_cost_infill = intrazonal_cost_infill
+        self.pa_val_col = pa_val_col
+        self.apply_k_factoring = apply_k_factoring
+        self.furness_loops = furness_loops
+        self.fitting_loops = fitting_loops
+        self.bs_con_target = bs_con_target
+        self.target_r_gap = target_r_gap
+
+    def build_arguments(self, trip_origin: str) -> Dict[str, nd.PathLike]:
+        # Init
+        trip_origin = trip_origin.lower()
+
+        # Set trip origin specific stuff
+        exports = self.external_model_exports
+        if trip_origin == 'hb':
+            productions_path = exports.export_paths.hb_internal_productions
+            attractions_path = exports.export_paths.hb_internal_attractions
+            cost_type = self.hb_cost_type
+            init_params_fname = self.hb_init_params_fname
+            running_segmentation = self.hb_running_segmentation
+        elif trip_origin == 'nhb':
+            productions_path = exports.export_paths.nhb_internal_productions
+            attractions_path = exports.export_paths.nhb_internal_attractions
+            cost_type = self.nhb_cost_type
+            init_params_fname = self.nhb_init_params_fname
+            running_segmentation = self.nhb_running_segmentation
+        else:
+            raise ValueError(
+                "Received an unexpected value for trip origin. Expected one of "
+                "'hb' or 'nhb'. Got %s"
+                % trip_origin
+            )
+
+        # Make sure the productions and attractions exist
+        if not os.path.isfile(productions_path):
+            raise nd.NormitsDemandError(
+                "Cannot find any internal productions at '%s'.\n"
+                "Has the External Model been run?"
+                % productions_path
+            )
+
+        if not os.path.isfile(attractions_path):
+            raise nd.NormitsDemandError(
+                "Cannot find any internal productions at '%s'.\n"
+                "Has the External Model been run?"
+                % attractions_path
+            )
+
+        # Build TLD directory paths
+        base_tld_path = os.path.join(
+            self.import_home,
+            self._tld_dir_name,
+            self._tld_area_dir_name,
+        )
+        target_tld_dir = os.path.join(base_tld_path, self.target_tld_name)
+
+        # Build costs path
+        fname = self._cost_base_fname.format(
+            zoning_name=self.zoning_system.name,
+            cost_type=cost_type,
+        )
+        costs_path = os.path.join(
+            self.import_home,
+            self.running_mode.value,
+            self._cost_dir_name,
+            fname,
+        )
+
+        # Load in the initial parameters for gravity model
+        path = os.path.join(
+            self.import_home,
+            self._gravity_model_dir,
+            init_params_fname,
+        )
+        init_params = file_ops.read_df(path)
+
+        # Check paths exist
+        paths = [
+            target_tld_dir,
+            costs_path,
+        ]
+
+        for path in paths:
+            if not os.path.exists(path):
+                raise IOError(
+                    "Generated path doesn't exist!\nGenerated the following "
+                    "path that does not exist while building Gravity "
+                    "Model arguments.\n %s"
+                    % path
+                )
+
+        return {
+            'running_segmentation': running_segmentation,
+            'productions': file_ops.read_df(productions_path),
+            'attractions': file_ops.read_df(attractions_path),
+            'init_params': init_params,
+            'target_tld_dir': target_tld_dir,
+            'costs_path': costs_path,
+            'cost_function': self.cost_function,
+            'intrazonal_cost_infill': self.intrazonal_cost_infill,
+            'pa_val_col': self.pa_val_col,
+            'apply_k_factoring': self.apply_k_factoring,
+            'furness_loops': self.furness_loops,
+            'fitting_loops': self.fitting_loops,
+            'bs_con_target': self.bs_con_target,
+            'target_r_gap': self.target_r_gap,
+        }
+
+    def build_hb_arguments(self) -> Dict[str, nd.PathLike]:
+        return self.build_arguments(trip_origin='hb')
+
+    def build_nhb_arguments(self) -> Dict[str, nd.PathLike]:
+        return self.build_arguments(trip_origin='nhb')
+
+
+_GM_ExportPaths_NT = collections.namedtuple(
+    typename='_GM_ExportPaths_NT',
+    field_names=[
+        'home',
+    ]
+)
+
+_GM_ReportPaths_NT = collections.namedtuple(
+    typename='_GM_ReportPaths_NT',
+    field_names=[
+        'home',
+        'model_log_dir',
+    ]
+)
+
+
 class GravityModelExportPaths:
+    _reports_dirname = 'Logs & Reports'
+
+    # Report dir names
+    _log_dir_name = 'Logs'
 
     def __init__(self,
                  year: int,
                  running_mode: nd.Mode,
                  export_home: nd.PathLike,
-                 report_home: nd.PathLike,
                  ):
+        # Init
+        file_ops.check_path_exists(export_home)
+
         # Assign attributes
         self.year = year
         self.running_mode = running_mode
         self.export_home = export_home  # Something like I:\NorMITs Demand\noham\TMS\iter8\Gravity Model
-        self.report_home = report_home
+        self.report_home = os.path.join(self.export_home, self._reports_dirname)
 
-        # Make sure paths exist
-        try:
-            file_ops.check_path_exists(export_home)
-            file_ops.check_path_exists(report_home)
-        except IOError as e:
-            raise type(e)(
-                "Got the following error while checking if the export_home and "
-                "report_home paths exist:\n%s"
-                % str(e)
-            )
+        file_ops.create_folder(self.report_home)
 
         # Generate the paths
         self._create_export_paths()
@@ -461,13 +619,88 @@ class GravityModelExportPaths:
 
     def _create_export_paths(self) -> None:
         """Creates self.export_paths"""
-        pass
+
+        # Create the export_paths class
+        self.export_paths = _GM_ExportPaths_NT(
+            home=self.export_home,
+        )
 
     def _create_report_paths(self) -> None:
-        """Creates self.export_paths"""
-        pass
+        """Creates self.report_paths"""
+
+        # Create the export_paths class
+        self.report_paths = _GM_ReportPaths_NT(
+            home=self.report_home,
+            model_log_dir=os.path.join(self.report_home, self._log_dir_name),
+        )
+
+        # Make paths that don't exist
+        for path in self.report_paths:
+            file_ops.create_folder(path)
 
 
+# ## TMS CLASSES ## #
+class TMSExportPaths:
+
+    # Define the names of the export dirs
+    _external_model_dir = 'External Model'
+    _gravity_model_dir = 'Gravity Model'
+    _final_outputs_dir = 'Final Outputs'
+
+    def __init__(self,
+                 year: int,
+                 iteration_name: str,
+                 running_mode: nd.core.enumerations.Mode,
+                 export_home: nd.PathLike,
+                 ):
+        """
+        Builds the export paths for all the TMS sub-models
+
+        Parameters
+        ----------
+        iteration_name:
+            The name of this iteration of the TMS models. Will have 'iter'
+            pre-pended to create the folder name. e.g. if iteration_name was
+            set to '3i' the iteration folder would be called 'iter3i'.
+
+        export_home:
+            The home directory of all the export paths. A sub-directory will
+            be made for each of the TMS sub models and outputs.
+        """
+        # Init
+        file_ops.check_path_exists(export_home)
+
+        self.year = year
+        self.iteration_name = du.create_iter_name(iteration_name)
+        self.running_mode = running_mode
+        self.export_home = os.path.join(export_home, self.iteration_name, self.running_mode.value)
+        file_ops.create_folder(self.export_home)
+
+        # ## BUILD ALL MODEL PATHS ## #
+        # External Model
+        em_export_home = os.path.join(self.export_home, self._external_model_dir)
+        file_ops.create_folder(em_export_home)
+
+        self.external_model = ExternalModelExportPaths(
+            year=self.year,
+            running_mode=self.running_mode,
+            export_home=em_export_home,
+        )
+
+        # Gravity Model
+        gm_export_home = os.path.join(self.export_home, self._gravity_model_dir)
+        file_ops.create_folder(gm_export_home)
+
+        self.gravity_model = GravityModelExportPaths(
+            year=self.year,
+            running_mode=self.running_mode,
+            export_home=gm_export_home,
+        )
+
+        # Final Output Paths
+        # TODO(BT): Determine where the final outputs are going
+
+# ## FUNCTIONS ## #
 def import_pa(production_import_path,
               attraction_import_path,
               model_zone,

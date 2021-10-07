@@ -20,6 +20,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 import normits_demand as nd
 from normits_demand import efs_constants as consts
 from normits_demand.utils import general as du, sector_reporter_v2 as sr_v2
+from normits_demand.utils import file_ops
 from normits_demand.models import efs_production_model as pm
 from normits_demand.models import efs_attraction_model as am
 
@@ -511,7 +512,7 @@ class PopEmpComparator:
                     df = df[col_order + missing]
                 # Write to csv if df too large for excel sheet, or csv output type selected
                 if output_as == 'csv' or len(df) > EXCEL_MAX[0] or len(df.columns) > EXCEL_MAX[1]:
-                    du.safe_dataframe_to_csv(df, output_dir / f'{nm}.csv', flatten_header=True)
+                    file_ops.safe_dataframe_to_csv(df, output_dir / f'{nm}.csv', flatten_header=True)
                 else: # Save to dict ready to write to spreadsheet
                     outputs[nm] = df
 

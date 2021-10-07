@@ -1741,40 +1741,6 @@ def log_change_generator(max_val, min_val, n_iters, increase=False):
             yield min_val + (factor_change * (max_val - min_val))
 
 
-def safe_dataframe_to_csv(df, out_path, **to_csv_kwargs):
-    """
-    Wrapper around df.to_csv. Gives the user a chance to close the open file.
-
-    Parameters
-    ----------
-    df:
-        pandas.DataFrame to write to call to_csv on
-
-    out_path:
-        Where to write the file to. TO first argument to df.to_csv()
-
-    to_csv_kwargs:
-        Any other kwargs to be passed straight to df.to_csv()
-
-    Returns
-    -------
-        None
-    """
-    written_to_file = False
-    waiting = False
-    while not written_to_file:
-        try:
-            df.to_csv(out_path, **to_csv_kwargs)
-            written_to_file = True
-        except PermissionError:
-            if not waiting:
-                print("Cannot write to file at %s.\n" % out_path +
-                      "Please ensure it is not open anywhere.\n" +
-                      "Waiting for permission to write...\n")
-                waiting = True
-            time.sleep(1)
-
-
 def convert_table_desc_to_min_max(band_atl, in_place=False):
     """
     Returns a copy of the dataframe with added min and max columns taken from
@@ -1950,14 +1916,6 @@ def least_squares(df, achieved_col, target_col):
     estimated = np.array(df[achieved_col].values)
     target = np.array(df[target_col].values)
     return r_squared(estimated, target)
-
-
-def get_pa_diff(new_p,
-                p_target,
-                new_a,
-                a_target):
-    pa_diff = (((sum((new_p - p_target) ** 2) + sum((new_a - a_target) ** 2))/len(p_target)) ** .5)
-    return pa_diff
 
 
 def get_band_adjustment_factors(band_df):

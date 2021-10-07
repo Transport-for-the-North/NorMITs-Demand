@@ -24,7 +24,6 @@ import normits_demand as nd
 from normits_demand import constants as consts
 
 from normits_demand.distribution import furness
-from normits_demand.reports import reports_audits as ra
 
 from normits_demand.pathing.travel_market_synthesiser import ExternalModelExportPaths
 from normits_demand.validation import checks
@@ -80,7 +79,6 @@ class ExternalModel(ExternalModelExportPaths):
             year=year,
             running_mode=running_mode,
             export_home=export_home,
-            report_home=report_home,
         )
 
         # Create a logger
@@ -476,10 +474,6 @@ class ExternalModel(ExternalModelExportPaths):
                 % (self.zoning_system.n_zones, len(attractions))
             )
 
-        # Infill zeroes
-        # productions = productions.mask(productions == 0, 1e-9)
-        # attractions = attractions.mask(attractions == 0, 1e-9)
-
         # Seed base
         gb_pa = base_matrix.copy()
 
@@ -525,7 +519,7 @@ class ExternalModel(ExternalModelExportPaths):
             external_dist = costs[external_mask].values
 
             # Internal vals
-            _, int_tlb_con, _ = ra.get_trip_length_by_band(int_target_tld, internal_dist, internal_pa)
+            _, int_tlb_con, _ = tld_utils.get_trip_length_by_band(int_target_tld, internal_dist, internal_pa)
             int_bs_con = math_utils.curve_convergence(int_tlb_con['tbs'], int_tlb_con['bs'])
             int_mse = math_utils.vector_mean_squared_error(
                 vector1=int_tlb_con['tbs'].values,
@@ -533,7 +527,7 @@ class ExternalModel(ExternalModelExportPaths):
             )
 
             # External vals
-            _, ext_tlb_con, _ = ra.get_trip_length_by_band(ext_target_tld, external_dist, external_pa)
+            _, ext_tlb_con, _ = tld_utils.get_trip_length_by_band(ext_target_tld, external_dist, external_pa)
             ext_bs_con = math_utils.curve_convergence(ext_tlb_con['tbs'], ext_tlb_con['bs'])
             ext_mse = math_utils.vector_mean_squared_error(
                 vector1=ext_tlb_con['tbs'].values,
@@ -543,7 +537,7 @@ class ExternalModel(ExternalModelExportPaths):
             iter_end_time = timing.current_milli_time()
             time_taken = iter_end_time - iter_start_time
 
-            pa_diff = nup.get_pa_diff(
+            pa_diff = math_utils.get_pa_diff(
                 gb_pa.values.sum(axis=1),
                 productions[self._pa_val_col].values,
                 gb_pa.values.sum(axis=0),
@@ -565,7 +559,7 @@ class ExternalModel(ExternalModelExportPaths):
             }
 
             # Append this iteration to log file
-            nup.safe_dataframe_to_csv(
+            file_ops.safe_dataframe_to_csv(
                 pd.DataFrame(log_dict, index=[0]),
                 log_path,
                 mode='a',
@@ -595,10 +589,6 @@ class ExternalModel(ExternalModelExportPaths):
         # TODO: Drop averages of nothing in trip length band
         # reset index, needed or not
         band_atl = band_atl.reset_index(drop=True)
-
-        # Get global atl
-        global_atl = ra.get_trip_length(distance,
-                                        base_matrix)
 
         # Get min max for each
         ph = band_atl['tlb_desc'].str.split('-', n=1, expand=True)

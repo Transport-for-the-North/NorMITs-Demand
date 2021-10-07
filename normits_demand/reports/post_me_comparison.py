@@ -17,6 +17,8 @@ import os
 import numpy as np
 import pandas as pd
 
+from normits_demand.utils import trip_length_distributions as tld_utils
+
 _post_me_path = 'Y:/NorMITs Synthesiser/Noham/Matrix_Checks/Post ME'
 _prior_path = 'Y:/NorMITs Synthesiser/Noham/iter7b/PCU Outputs/PCU OD Matrices'
 _noham_internal_path = 'Y:/NorMITs Synthesiser/Noham/Model Zone Lookups/noham_internal_area.csv'
@@ -149,7 +151,7 @@ def post_me_comparison(post_me_path = _post_me_path,
         for split in i_e_splits:
             ie_row.update({split['name']:split['dat'].sum()})
 
-        atl = ra.get_trip_length(distances, dist['dat'].values)
+        atl = tld_utils.get_trip_length(distances, dist['dat'].values)
         atl_row = {'tp':dist['tp'], 'p':dist['p'], 'atl':atl}
         prior_atl.append(atl_row)
         
@@ -198,7 +200,7 @@ def post_me_comparison(post_me_path = _post_me_path,
             ie_row.update({split['name']:split['dat'].sum()})
         post_ie.append(ie_row)
 
-        atl = ra.get_trip_length(distances, dist['dat'].values)
+        atl = tld_utils.get_trip_length(distances, dist['dat'].values)
         atl_row = {'tp':dist['tp'], 'p':dist['p'], 'atl':atl}
         post_atl.append(atl_row)
         
