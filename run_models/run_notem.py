@@ -25,8 +25,8 @@ lu_drive = "I:/"
 by_iteration = "iter3d"
 fy_iteration = "iter3d"
 notem_import_home = r"I:\NorMITs Demand\import\NoTEM"
-# notem_export_home = r"C:\Data\Nirmal_Atkins"
-notem_export_home = r"E:\NoTEM"
+notem_export_home = r"C:\Data\Nirmal_Atkins"
+#notem_export_home = r"E:\NoTEM"
 
 
 def main():

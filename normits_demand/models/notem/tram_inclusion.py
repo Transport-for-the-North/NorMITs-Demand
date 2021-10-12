@@ -69,28 +69,29 @@ class TramInclusion:
     }
 
     def __init__(self,
-                 tram_data_paths: Dict[str, nd.PathLike],
-                 notem_outputs: Dict[str, nd.PathLike],
+                 tram_data: nd.PathLike,
+                 notem_output: Dict[int, nd.PathLike],
                  export_home: nd.PathLike,
                  ) -> None:
         """
 
         Parameters
         ----------
-        tram_data_paths:
+        tram_data:
             The path to the tram data.
 
 
         """
         # Check that the paths we need exist!
-        [file_ops.check_file_exists(x) for x in tram_data_paths.values()]
-        [file_ops.check_file_exists(x) for x in notem_outputs.values()]
+        file_ops.check_file_exists(tram_data)
+        [file_ops.check_file_exists(x) for x in notem_output.values()]
         file_ops.check_path_exists(export_home)
 
         # Assign
-        self.tram_data_paths = tram_data_paths
-        self.notem_outputs = notem_outputs
+        self.tram_data = tram_data
+        self.notem_output = notem_output
         self.export_home = export_home
+        self.years = list(self.notem_output.keys())
 
     def run(self,
             verbose: bool = True) -> None:
@@ -105,25 +106,22 @@ class TramInclusion:
             verbose=verbose
         )
 
-        # Run tram inclusion for each trip end model
-        for key in self.tram_data_paths.keys():
+        # Run tram inclusion for each year in trip end model
+        for year in self.years:
             trip_end_start = timing.current_milli_time()
-            tram_path = self.tram_data_paths[key]
-            notem_data = self.notem_outputs[key]
-            out_path = os.path.join(self.export_home, self._trip_ends[key])
             file_ops.create_folder(out_path)
             # Read tram and notem output data
-            tram_data, notem_tram_seg = self._read_tram_and_notem_data(tram_path, notem_data, verbose)
-            tram_msoa, notem_msoa_wo_infill = self._tram_infill_msoa(notem_tram_seg, tram_data, out_path, verbose)
-            north_msoa, north_wo_infill = self._tram_infill_north(notem_tram_seg, tram_msoa, out_path, verbose)
+            tram_data, notem_tram_seg = self._read_tram_and_notem_data(year, verbose)
+            tram_msoa, notem_msoa_wo_infill = self._tram_infill_msoa(notem_tram_seg, tram_data, verbose)
+            north_msoa, north_wo_infill = self._tram_infill_north(notem_tram_seg, tram_msoa, verbose)
             abc = self._non_tram_infill(notem_msoa_wo_infill, north_wo_infill, tram_msoa, north_msoa, tram_data,
-                                        notem_tram_seg, out_path, verbose)
+                                        notem_tram_seg, verbose)
             # Print timing for each trip end model
             trip_end_end = timing.current_milli_time()
             time_taken = timing.time_taken(trip_end_start, trip_end_end)
             du.print_w_toggle(
-                "%s tram inclusion took: %s\n"
-                % (self._trip_ends[key], time_taken),
+                "Tram inclusion for year %d took: %s\n"
+                % (year,time_taken),
                 verbose=verbose
             )
         # End timing
@@ -136,8 +134,7 @@ class TramInclusion:
         )
 
     def _read_tram_and_notem_data(self,
-                                  tram_path: nd.PathLike,
-                                  notem_data: nd.PathLike,
+                                  year: int,
                                   verbose: bool,
                                   ) -> Tuple[pd.DataFrame, nd.DVector]:
         """
@@ -145,6 +142,9 @@ class TramInclusion:
 
         Parameters
         ----------
+        year:
+            The year for which the data needs to be imported.
+
         verbose:
             If set to True, it will print out progress updates while
         running.
@@ -164,7 +164,7 @@ class TramInclusion:
         # Reads the tram data
         du.print_w_toggle("Loading the tram data...", verbose=verbose)
         tram_data = file_ops.read_df(
-            path=tram_path,
+            path=self.tram_data,
             find_similar=True,
         )
         # Adds tram as mode 7
@@ -179,9 +179,12 @@ class TramInclusion:
         tram_data.rename(columns={'trips': 'val'}, inplace=True)
         # Reads the corresponding notem output
         du.print_w_toggle("Loading the notem output data...", verbose=verbose)
-        notem_output_dvec = nd.from_pickle(notem_data)
+        notem_output_dvec = nd.from_pickle(self.notem_output[year])
         # Aggregates the dvector to the required segmentation
-        notem_tram_seg = notem_output_dvec.aggregate(out_segmentation=nd.get_segmentation_level('hb_p_m_ca'))
+        if 'nhb' in self.notem_output[year]:
+            notem_tram_seg = notem_output_dvec.aggregate(out_segmentation=nd.get_segmentation_level('nhb_p_m_ca'))
+        else:
+            notem_tram_seg = notem_output_dvec.aggregate(out_segmentation=nd.get_segmentation_level('hb_p_m_ca'))
 
         return tram_data, notem_tram_seg
 
@@ -408,7 +411,7 @@ class TramInclusion:
                                                    (new_df['Non-Tram adjusted'] / ntram_adj_sum), 0)
             for ids in uni_id:
                 if id in ids:
-                    print(id)
+                    #print(id)
                     n_df = ntram_notem.loc[ntram_notem['c_uniq_id'] == ids]
 
                     last_row = n_df.tail(n=1).reset_index()
