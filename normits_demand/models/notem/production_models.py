@@ -37,7 +37,7 @@ from normits_demand.pathing import NHBProductionModelPaths
 
 
 class HBProductionModel(HBProductionModelPaths):
-    _log_fname = "HBProductionMModel_log.log"
+    _log_fname = "HBProductionModel_log.log"
     """The Home-Based Production Model of NoTEM
 
     The production model can be ran by calling the class run() method.
@@ -86,7 +86,7 @@ class HBProductionModel(HBProductionModelPaths):
             'tfn_tt': int,
             'tfn_at': int,
             'p': int,
-            'trip_rate': float
+            'trip_rates': float
         },
         'm_tp': {
             'p': int,
@@ -334,7 +334,7 @@ class HBProductionModel(HBProductionModelPaths):
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("HB Production Model took:" % time_taken)
+        self._logger.info("HB Production Model took:%s" % time_taken)
         self._logger.info("HB Production Model Finished")
 
     def _read_land_use_data(self,
@@ -419,7 +419,7 @@ class HBProductionModel(HBProductionModelPaths):
             zoning_system=None,
             segmentation=pure_hb_prod,
             import_data=trip_rates.rename(columns=self._seg_rename),
-            val_col="trip_rate",
+            val_col="trip_rates",
             verbose=verbose,
         )
         # ## MULTIPLY TOGETHER ## #
@@ -467,7 +467,7 @@ class HBProductionModel(HBProductionModelPaths):
 
 
 class NHBProductionModel(NHBProductionModelPaths):
-    _log_fname = "NHBProductionMModel_log.log"
+    _log_fname = "NHBProductionModel_log.log"
     """The Non Home-Based Production Model of NoTEM
 
         The production model can be ran by calling the class run() method.
@@ -519,7 +519,6 @@ class NHBProductionModel(NHBProductionModelPaths):
             'nhb_m': int,
             'p': int,
             'm': int,
-            'tfn_at': int,
             'nhb_trip_rate': float
         },
         'tp': {
@@ -780,7 +779,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("NHB Production Model took:" % time_taken)
+        self._logger.info("NHB Production Model took:%s" % time_taken)
         self._logger.info("NHB Production Model Finished")
 
     def _transform_attractions(self,

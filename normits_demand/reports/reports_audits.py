@@ -8,7 +8,7 @@ Created on Thu Feb 27 14:22:56 2020
 import os
 import pandas as pd
 import numpy as np
-import geopandas as gpd
+#import geopandas as gpd
 
 from normits_demand.matrices import matrix_processing as mp
 from normits_demand import version

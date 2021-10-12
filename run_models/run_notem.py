@@ -25,14 +25,14 @@ lu_drive = "I:/"
 by_iteration = "iter3d"
 fy_iteration = "iter3d"
 notem_import_home = r"I:\NorMITs Demand\import\NoTEM"
-notem_export_home = r"C:\Data\Nirmal_Atkins"
+notem_export_home = r"C:\Data_test"
 #notem_export_home = r"E:\NoTEM"
 
 
 def main():
-    hb_production_import_version = '2.0'
+    hb_production_import_version = '2.1'
     hb_attraction_import_version = '1.5'
-    nhb_production_import_version = '1.5'
+    nhb_production_import_version = '2.0'
 
     import_builder = NoTEMImportPaths(
         import_home=notem_import_home,
@@ -59,8 +59,8 @@ def main():
         generate_nhb=False,
         generate_hb_production=False,
         generate_hb_attraction=False,
-        generate_nhb_production=False,
-        generate_nhb_attraction=True,
+        generate_nhb_production=True,
+        generate_nhb_attraction=False,
     )
 
 
