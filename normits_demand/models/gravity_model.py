@@ -13,6 +13,8 @@ File purpose:
 # Built-Ins
 import os
 
+from typing import Any
+from typing import Dict
 from typing import Optional
 
 # Third Party
@@ -21,6 +23,7 @@ import pandas as pd
 
 # Local Imports
 import normits_demand as nd
+from normits_demand import constants
 
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
@@ -29,8 +32,10 @@ from normits_demand.utils import costs as cost_utils
 from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.utils import trip_length_distributions as tld_utils
 
+from normits_demand.validation import checks
+from normits_demand.concurrency import multiprocessing
+
 from normits_demand.pathing.travel_market_synthesiser import GravityModelExportPaths
-from normits_demand.pathing.travel_market_synthesiser import ExternalModelExportPaths
 
 # BACKLOG: Re-write Gravity Model to use scipy.optimize.curve_fit
 #  and numpy based furness
@@ -49,6 +54,7 @@ class GravityModel(GravityModelExportPaths):
                  zoning_system: nd.core.ZoningSystem,
                  export_home: nd.PathLike,
                  zone_col: str = None,
+                 process_count: Optional[int] = constants.PROCESS_COUNT,
                  ):
         # Validate inputs
         if not isinstance(zoning_system, nd.core.zoning.ZoningSystem):
@@ -61,6 +67,7 @@ class GravityModel(GravityModelExportPaths):
         # Assign attributes
         self.zoning_system = zoning_system
         self.zone_col = zone_col
+        self.process_count = process_count
 
         if self.zone_col is None:
             self.zone_col = zoning_system.col_name
@@ -104,11 +111,32 @@ class GravityModel(GravityModelExportPaths):
             init_param_1_col: str = 'init_param_a',
             init_param_2_col: str = 'init_param_b',
             ):
+        # Validate the trip origin
+        trip_origin = checks.validate_trip_origin(trip_origin)
 
+        # ## MULTIPROCESS ACROSS SEGMENTS ## #
+        unchanging_kwargs = {
+            'trip_origin': trip_origin,
+            'running_segmentation': running_segmentation,
+            'target_tld_dir': target_tld_dir,
+            'costs_path': costs_path,
+            'cost_function': cost_function,
+            'intrazonal_cost_infill': intrazonal_cost_infill,
+            'apply_k_factoring': apply_k_factoring,
+            'furness_loops': furness_loops,
+            'fitting_loops': fitting_loops,
+            'bs_con_target': bs_con_target,
+            'target_r_gap': target_r_gap,
+        }
+
+        pbar_kwargs = {
+            'desc': 'Gravity model',
+            'unit': 'segment',
+        }
+
+        # Build a list of kwargs
+        kwarg_list = list()
         for segment_params in running_segmentation:
-            seg_name = running_segmentation.generate_file_name(segment_params)
-            self._logger.info("Running for %s" % seg_name)
-
             # ## GET P/A VECTORS FOR THIS SEGMENT ## #
             # Figure out which columns we need
             segments = list(segment_params.keys())
@@ -160,38 +188,11 @@ class GravityModel(GravityModelExportPaths):
             adj_factor = production_sum / attraction_sum
             seg_attractions[self._pa_val_col] *= adj_factor
 
-            # ## READ IN TLD FOR THIS SEGMENT ## #
-            target_tld = tld_utils.get_trip_length_distributions(
-                import_dir=target_tld_dir,
-                segment_params=segment_params,
-                trip_origin=trip_origin,
-            )
-
-            # ## GET THE COSTS FOR THIS SEGMENT ## #
-            self._logger.debug("Getting costs from: %s" % costs_path)
-
-            int_costs, cost_name = cost_utils.get_costs(
-                costs_path,
-                segment_params,
-                iz_infill=intrazonal_cost_infill,
-                replace_nhb_with_hb=(trip_origin == 'nhb'),
-            )
-
-            # Translate costs to wide - filter to only internal
-            costs = pd_utils.long_to_wide_infill(
-                df=int_costs,
-                index_col='p_zone',
-                columns_col='a_zone',
-                values_col='cost',
-                index_vals=self.zoning_system.unique_zones,
-                column_vals=self.zoning_system.unique_zones,
-                infill=0,
-            )
-
             # ## GET INIT PARAMS FOP THIS SEGMENT ## #
             seg_init_params = pd_utils.filter_df(init_params, segment_params)
 
             if len(seg_init_params) > 1:
+                seg_name = running_segmentation.generate_file_name(segment_params)
                 raise ValueError(
                     "%s rows found in init_params for segment %s. "
                     "Expecting only 1 row."
@@ -205,66 +206,134 @@ class GravityModel(GravityModelExportPaths):
                 dataframe_name='init_params',
             )
 
-            # ## SET UP LOG AND RUN ## #
-            # Logging set up
-            log_fname = running_segmentation.generate_file_name(
-                trip_origin=trip_origin,
-                file_desc='gravity_log',
-                segment_params=segment_params,
-                csv=True,
-            )
-            log_path = os.path.join(self.report_paths.model_log_dir, log_fname)
+            # Build the kwargs
+            kwargs = unchanging_kwargs.copy()
+            kwargs.update({
+                'segment_params': segment_params,
+                'seg_productions': seg_productions,
+                'seg_attractions': seg_attractions,
+                'init_param_a': seg_init_params[init_param_1_col].squeeze(),
+                'init_param_b': seg_init_params[init_param_2_col].squeeze(),
+            })
+            kwarg_list.append(kwargs)
 
-            # Need to convert into numpy vectors to work with old code
-            seg_productions = seg_productions[self._pa_val_col].values
-            seg_attractions = seg_attractions[self._pa_val_col].values
-            costs = costs.values
+        # Multiprocess
+        multiprocessing.multiprocess(
+            fn=self._run_internal,
+            kwargs=kwarg_list,
+            process_count=self.process_count,
+            pbar_kwargs=pbar_kwargs,
+        )
 
-            # Replace the log if it already exists
-            if os.path.isfile(log_path):
-                os.remove(log_path)
+    def _run_internal(self,
+                      segment_params: Dict[str, Any],
+                      trip_origin: str,
+                      running_segmentation: nd.core.segments.SegmentationLevel,
+                      seg_productions: pd.DataFrame,
+                      seg_attractions: pd.DataFrame,
+                      init_param_a: float,
+                      init_param_b: float,
+                      target_tld_dir: pd.DataFrame,
+                      costs_path: nd.PathLike,
+                      cost_function: str,
+                      intrazonal_cost_infill: Optional[float] = 0.5,
+                      apply_k_factoring: bool = True,
+                      furness_loops: int = 2000,
+                      fitting_loops: int = 100,
+                      bs_con_target: float = 0.95,
+                      target_r_gap: float = 1.0,
+                      ):
+        seg_name = running_segmentation.generate_file_name(segment_params)
+        self._logger.info("Running for %s" % seg_name)
 
-            internal_pa_mat, tld_report = calibrate_gravity_model(
-                init_param_a=seg_init_params[init_param_1_col].squeeze(),
-                init_param_b=seg_init_params[init_param_2_col].squeeze(),
-                productions=seg_productions,
-                attractions=seg_attractions,
-                costs=costs,
-                zones=self.zoning_system.unique_zones,
-                target_tld=target_tld,
-                log_path=log_path,
-                cost_function=cost_function,
-                apply_k_factoring=apply_k_factoring,
-                furness_loops=furness_loops,
-                fitting_loops=fitting_loops,
-                bs_con_target=bs_con_target,
-                target_r_gap=target_r_gap,
-            )
+        # ## READ IN TLD FOR THIS SEGMENT ## #
+        target_tld = tld_utils.get_trip_length_distributions(
+            import_dir=target_tld_dir,
+            segment_params=segment_params,
+            trip_origin=trip_origin,
+        )
 
-            # ## WRITE OUT GRAVITY MODEL OUTPUTS ## #
-            # Write out tld report
-            fname = running_segmentation.generate_file_name(
-                trip_origin=trip_origin,
-                year=str(self.year),
-                file_desc='tld_report',
-                segment_params=segment_params,
-                csv=True,
-            )
-            path = os.path.join(self.report_paths.tld_report_dir, fname)
-            tld_report.to_csv(path, index=False)
+        # ## GET THE COSTS FOR THIS SEGMENT ## #
+        self._logger.debug("Getting costs from: %s" % costs_path)
 
-            # ## WRITE DISTRIBUTED DEMAND ## #
-            # Generate path and write out
-            fname = running_segmentation.generate_file_name(
-                trip_origin=trip_origin,
-                year=str(self.year),
-                file_desc='synthetic_pa',
-                segment_params=segment_params,
-                suffix='internal',
-                compressed=True,
-            )
-            path = os.path.join(self.export_paths.distribution_dir, fname)
-            nd.write_df(internal_pa_mat, path)
+        int_costs, cost_name = cost_utils.get_costs(
+            costs_path,
+            segment_params,
+            iz_infill=intrazonal_cost_infill,
+            replace_nhb_with_hb=(trip_origin == 'nhb'),
+        )
+
+        # Translate costs to wide - filter to only internal
+        costs = pd_utils.long_to_wide_infill(
+            df=int_costs,
+            index_col='p_zone',
+            columns_col='a_zone',
+            values_col='cost',
+            index_vals=self.zoning_system.unique_zones,
+            column_vals=self.zoning_system.unique_zones,
+            infill=0,
+        )
+
+        # ## SET UP LOG AND RUN ## #
+        # Logging set up
+        log_fname = running_segmentation.generate_file_name(
+            trip_origin=trip_origin,
+            file_desc='gravity_log',
+            segment_params=segment_params,
+            csv=True,
+        )
+        log_path = os.path.join(self.report_paths.model_log_dir, log_fname)
+
+        # Need to convert into numpy vectors to work with old code
+        seg_productions = seg_productions[self._pa_val_col].values
+        seg_attractions = seg_attractions[self._pa_val_col].values
+        costs = costs.values
+
+        # Replace the log if it already exists
+        if os.path.isfile(log_path):
+            os.remove(log_path)
+
+        internal_pa_mat, tld_report = calibrate_gravity_model(
+            init_param_a=init_param_a,
+            init_param_b=init_param_b,
+            productions=seg_productions,
+            attractions=seg_attractions,
+            costs=costs,
+            zones=self.zoning_system.unique_zones,
+            target_tld=target_tld,
+            log_path=log_path,
+            cost_function=cost_function,
+            apply_k_factoring=apply_k_factoring,
+            furness_loops=furness_loops,
+            fitting_loops=fitting_loops,
+            bs_con_target=bs_con_target,
+            target_r_gap=target_r_gap,
+        )
+
+        # ## WRITE OUT GRAVITY MODEL OUTPUTS ## #
+        # Write out tld report
+        fname = running_segmentation.generate_file_name(
+            trip_origin=trip_origin,
+            year=str(self.year),
+            file_desc='tld_report',
+            segment_params=segment_params,
+            csv=True,
+        )
+        path = os.path.join(self.report_paths.tld_report_dir, fname)
+        tld_report.to_csv(path, index=False)
+
+        # ## WRITE DISTRIBUTED DEMAND ## #
+        # Generate path and write out
+        fname = running_segmentation.generate_file_name(
+            trip_origin=trip_origin,
+            year=str(self.year),
+            file_desc='synthetic_pa',
+            segment_params=segment_params,
+            suffix='internal',
+            compressed=True,
+        )
+        path = os.path.join(self.export_paths.distribution_dir, fname)
+        nd.write_df(internal_pa_mat, path)
 
 
 def calibrate_gravity_model(init_param_a: float,
