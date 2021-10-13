@@ -17,6 +17,7 @@ from typing import Any
 from typing import Optional
 
 # Third Party
+import numpy as np
 import pandas as pd
 
 # Local Imports

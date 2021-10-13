@@ -30,7 +30,6 @@ from normits_demand.validation import checks
 
 from normits_demand.concurrency import multiprocessing
 
-from normits_demand.utils import utils as nup
 from normits_demand.utils import general as du
 from normits_demand.utils import timing
 from normits_demand.utils import math_utils
@@ -134,7 +133,11 @@ class ExternalModel(ExternalModelExportPaths):
             rename_cols = {pa_val_col: self._pa_val_col}
 
             # Filter productions
-            seg_productions = pd_utils.filter_df(productions, segment_params)
+            seg_productions = pd_utils.filter_df(
+                df=productions,
+                df_filter=segment_params,
+                throw_error=True,
+            )
             seg_productions = seg_productions.rename(columns=rename_cols)
             seg_productions = seg_productions.set_index(self.zone_col)
             seg_productions = seg_productions.reindex(
@@ -144,7 +147,11 @@ class ExternalModel(ExternalModelExportPaths):
             ).reset_index()
 
             # Filter attractions
-            seg_attractions = pd_utils.filter_df(attractions, segment_params)
+            seg_attractions = pd_utils.filter_df(
+                df=attractions,
+                df_filter=segment_params,
+                throw_error=True,
+            )
             seg_attractions = seg_attractions.rename(columns=rename_cols)
             seg_attractions = seg_attractions.set_index(self.zone_col)
             seg_attractions = seg_attractions.reindex(
@@ -154,8 +161,8 @@ class ExternalModel(ExternalModelExportPaths):
             ).reset_index()
 
             # Check we actually got something
-            production_sum = seg_productions.values.sum()
-            attraction_sum = seg_attractions.values.sum()
+            production_sum = seg_productions[self._pa_val_col].values.sum()
+            attraction_sum = seg_attractions[self._pa_val_col].values.sum()
             if production_sum <= 0 or attraction_sum <= 0:
                 raise nd.NormitsDemandError(
                     "Missing productions and/or attractions after filtering to "
@@ -167,8 +174,7 @@ class ExternalModel(ExternalModelExportPaths):
                 )
 
             # Balance A to P
-            adj_factor = seg_productions[self._pa_val_col].sum() / seg_attractions[
-                self._pa_val_col].sum()
+            adj_factor = production_sum / attraction_sum
             seg_attractions[self._pa_val_col] *= adj_factor
 
             # Build the kwargs
@@ -197,8 +203,8 @@ class ExternalModel(ExternalModelExportPaths):
             productions_path = self.export_paths.hb_internal_productions
             attractions_path = self.export_paths.hb_internal_attractions
         elif trip_origin == 'nhb':
-            productions_path = self.export_paths.hb_internal_productions
-            attractions_path = self.export_paths.hb_internal_attractions
+            productions_path = self.export_paths.nhb_internal_productions
+            attractions_path = self.export_paths.nhb_internal_attractions
         else:
             raise ValueError(
                 "'%s' is not a valid trip origin! How did this error happen? "

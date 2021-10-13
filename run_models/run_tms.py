@@ -30,7 +30,7 @@ base_year = 2018
 scenario = consts.SC00_NTEM
 tms_iteration_name = '9'
 tms_import_home = r"I:\NorMITs Demand\import"
-tms_export_home = r"I:\NorMITs Demand\TMS"
+tms_export_home = r"E:\NorMITs Demand\TMS"
 notem_iteration_name = '4'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
 

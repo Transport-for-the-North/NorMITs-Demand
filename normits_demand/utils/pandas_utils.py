@@ -32,6 +32,7 @@ from normits_demand.utils import general as du
 def reindex_cols(df: pd.DataFrame,
                  columns: List[str],
                  throw_error: bool = True,
+                 dataframe_name: str = None,
                  **kwargs,
                  ) -> pd.DataFrame:
     """
@@ -49,6 +50,10 @@ def reindex_cols(df: pd.DataFrame,
         Whether to throw and error or not if the given columns don't exist in
         df. If False, then operates exactly like calling df.reindex directly.
 
+    dataframe_name:
+        The name to give to the dataframe in the error message being thrown.
+        If left as none "the given dataframe" is used instead.
+
     kwargs:
         Any extra arguments to pass into df.reindex
 
@@ -63,14 +68,17 @@ def reindex_cols(df: pd.DataFrame,
         If any of the given columns don't exists within df and throw_error is
         True.
     """
+    if dataframe_name is None:
+        dataframe_name = 'the given dataframe'
+
     if throw_error:
         # Check that all columns actually exist in df
         for col in columns:
             if col not in df:
                 raise ValueError(
-                    "No columns named '%s' in the given dataframe.\n"
+                    "No columns named '%s' in %s.\n"
                     "Only found the following columns: %s"
-                    % (col, list(df))
+                    % (dataframe_name, col, list(df))
                 )
 
     return df.reindex(columns=columns, **kwargs)
@@ -135,6 +143,7 @@ def reindex_and_groupby(df: pd.DataFrame,
 
 def filter_df(df: pd.DataFrame,
               df_filter: Dict[str, Any],
+              throw_error: bool = False,
               ) -> pd.DataFrame:
     """
     Filters a DataFrame by df_filter.
@@ -147,6 +156,10 @@ def filter_df(df: pd.DataFrame,
     df_filter:
         Dictionary of {column: valid_value} pairs to define the filter to be
         applied. Will return only where all column conditions are met.
+
+    throw_error:
+        Whether to throw an error if the filtered dataframe has no
+        rows left
 
     Returns
     -------
@@ -164,7 +177,18 @@ def filter_df(df: pd.DataFrame,
 
     needed_cols = list(df_filter.keys())
     mask = df[needed_cols].isin(df_filter).all(axis='columns')
-    return df[mask].copy()
+    return_df = df[mask].copy()
+
+    if throw_error:
+        if return_df.empty:
+            raise ValueError(
+                "An empty dataframe was returned after applying the filter. "
+                "Are you sure the correct data was passed in?\n"
+                "Given filter: %s"
+                % (df_filter)
+            )
+
+    return return_df
 
 
 def str_join_cols(df: pd.DataFrame,

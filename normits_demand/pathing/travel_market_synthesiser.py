@@ -579,6 +579,7 @@ _GM_ExportPaths_NT = collections.namedtuple(
     typename='_GM_ExportPaths_NT',
     field_names=[
         'home',
+        'distribution_dir',
     ]
 )
 
@@ -587,6 +588,7 @@ _GM_ReportPaths_NT = collections.namedtuple(
     field_names=[
         'home',
         'model_log_dir',
+        'tld_report_dir',
     ]
 )
 
@@ -594,8 +596,12 @@ _GM_ReportPaths_NT = collections.namedtuple(
 class GravityModelExportPaths:
     _reports_dirname = 'Logs & Reports'
 
+    # Export dir names
+    _dist_out_dir = 'Internal Matrices'
+
     # Report dir names
     _log_dir_name = 'Logs'
+    _tld_report_dir = 'TLD Reports'
 
     def __init__(self,
                  year: int,
@@ -620,9 +626,18 @@ class GravityModelExportPaths:
     def _create_export_paths(self) -> None:
         """Creates self.export_paths"""
 
+        # Build the matrix output path
+        distribution_dir = os.path.join(self.export_home, self._dist_out_dir)
+
+        # Make paths that don't exist
+        dir_paths = [distribution_dir]
+        for path in dir_paths:
+            file_ops.create_folder(path)
+
         # Create the export_paths class
         self.export_paths = _GM_ExportPaths_NT(
             home=self.export_home,
+            distribution_dir=os.path.join(self.export_home, distribution_dir),
         )
 
     def _create_report_paths(self) -> None:
@@ -632,6 +647,7 @@ class GravityModelExportPaths:
         self.report_paths = _GM_ReportPaths_NT(
             home=self.report_home,
             model_log_dir=os.path.join(self.report_home, self._log_dir_name),
+            tld_report_dir=os.path.join(self.report_home, self._tld_report_dir),
         )
 
         # Make paths that don't exist

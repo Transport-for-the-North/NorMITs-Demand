@@ -101,24 +101,26 @@ class GravityModel(GravityModelExportPaths):
             fitting_loops: int = 100,
             bs_con_target: float = 0.95,
             target_r_gap: float = 1.0,
+            init_param_1_col: str = 'init_param_a',
+            init_param_2_col: str = 'init_param_b',
             ):
 
-        print("MADE IT IN!!!")
-        print(init_params)
-        exit()
-
         for segment_params in running_segmentation:
-            name = running_segmentation.generate_file_name(segment_params)
-            self._logger.info("Running for %s" % name)
+            seg_name = running_segmentation.generate_file_name(segment_params)
+            self._logger.info("Running for %s" % seg_name)
 
             # ## GET P/A VECTORS FOR THIS SEGMENT ## #
             # Figure out which columns we need
             segments = list(segment_params.keys())
-            needed_cols = segments + [self._pa_val_col]
             rename_cols = {pa_val_col: self._pa_val_col}
+            needed_cols = segments + [self._pa_val_col]
 
             # Filter productions
-            seg_productions = pd_utils.filter_df(productions, segment_params)
+            seg_productions = pd_utils.filter_df(
+                df=productions,
+                df_filter=segment_params,
+                throw_error=True,
+            )
             seg_productions = seg_productions.rename(columns=rename_cols)
             seg_productions = seg_productions.set_index(self.zone_col)
             seg_productions = seg_productions.reindex(
@@ -128,7 +130,11 @@ class GravityModel(GravityModelExportPaths):
             ).reset_index()
 
             # Filter attractions
-            seg_attractions = pd_utils.filter_df(attractions, segment_params)
+            seg_attractions = pd_utils.filter_df(
+                df=attractions,
+                df_filter=segment_params,
+                throw_error=True,
+            )
             seg_attractions = seg_attractions.rename(columns=rename_cols)
             seg_attractions = seg_attractions.set_index(self.zone_col)
             seg_attractions = seg_attractions.reindex(
@@ -138,8 +144,8 @@ class GravityModel(GravityModelExportPaths):
             ).reset_index()
 
             # Check we actually got something
-            production_sum = seg_productions.values.sum()
-            attraction_sum = seg_attractions.values.sum()
+            production_sum = seg_productions[self._pa_val_col].values.sum()
+            attraction_sum = seg_attractions[self._pa_val_col].values.sum()
             if production_sum <= 0 or attraction_sum <= 0:
                 raise nd.NormitsDemandError(
                     "Missing productions and/or attractions after filtering to "
@@ -151,13 +157,15 @@ class GravityModel(GravityModelExportPaths):
                 )
 
             # Balance A to P
-            adj_factor = seg_productions[self._pa_val_col].sum() / seg_attractions[
-                self._pa_val_col].sum()
+            adj_factor = production_sum / attraction_sum
             seg_attractions[self._pa_val_col] *= adj_factor
 
-            # TODO: MIGHT NEED TO GET P?A AS NUMPY
-
             # ## READ IN TLD FOR THIS SEGMENT ## #
+            target_tld = tld_utils.get_trip_length_distributions(
+                import_dir=target_tld_dir,
+                segment_params=segment_params,
+                trip_origin=trip_origin,
+            )
 
             # ## GET THE COSTS FOR THIS SEGMENT ## #
             self._logger.debug("Getting costs from: %s" % costs_path)
@@ -169,7 +177,7 @@ class GravityModel(GravityModelExportPaths):
                 replace_nhb_with_hb=(trip_origin == 'nhb'),
             )
 
-            # Translate costs to array
+            # Translate costs to wide - filter to only internal
             costs = pd_utils.long_to_wide_infill(
                 df=int_costs,
                 index_col='p_zone',
@@ -181,7 +189,21 @@ class GravityModel(GravityModelExportPaths):
             )
 
             # ## GET INIT PARAMS FOP THIS SEGMENT ## #
+            seg_init_params = pd_utils.filter_df(init_params, segment_params)
 
+            if len(seg_init_params) > 1:
+                raise ValueError(
+                    "%s rows found in init_params for segment %s. "
+                    "Expecting only 1 row."
+                    % (len(seg_init_params), seg_name)
+                )
+
+            # Make sure the columns we need do exist
+            seg_init_params = pd_utils.reindex_cols(
+                df=seg_init_params,
+                columns=[init_param_1_col, init_param_2_col],
+                dataframe_name='init_params',
+            )
 
             # ## SET UP LOG AND RUN ## #
             # Logging set up
@@ -193,17 +215,22 @@ class GravityModel(GravityModelExportPaths):
             )
             log_path = os.path.join(self.report_paths.model_log_dir, log_fname)
 
+            # Need to convert into numpy vectors to work with old code
+            seg_productions = seg_productions[self._pa_val_col].values
+            seg_attractions = seg_attractions[self._pa_val_col].values
+            costs = costs.values
+
             # Replace the log if it already exists
             if os.path.isfile(log_path):
                 os.remove(log_path)
 
-            calibrate_gravity_model(
-                init_param_a=init_param_a,
-                init_param_b=init_param_b,
-                productions=productions,
-                attractions=attractions,
+            internal_pa_mat, tld_report = calibrate_gravity_model(
+                init_param_a=seg_init_params[init_param_1_col].squeeze(),
+                init_param_b=seg_init_params[init_param_2_col].squeeze(),
+                productions=seg_productions,
+                attractions=seg_attractions,
                 costs=costs,
-                internal_zones=self.zoning_system.internal_zones,
+                zones=self.zoning_system.unique_zones,
                 target_tld=target_tld,
                 log_path=log_path,
                 cost_function=cost_function,
@@ -214,13 +241,38 @@ class GravityModel(GravityModelExportPaths):
                 target_r_gap=target_r_gap,
             )
 
+            # ## WRITE OUT GRAVITY MODEL OUTPUTS ## #
+            # Write out tld report
+            fname = running_segmentation.generate_file_name(
+                trip_origin=trip_origin,
+                year=str(self.year),
+                file_desc='tld_report',
+                segment_params=segment_params,
+                csv=True,
+            )
+            path = os.path.join(self.report_paths.tld_report_dir, fname)
+            tld_report.to_csv(path, index=False)
+
+            # ## WRITE DISTRIBUTED DEMAND ## #
+            # Generate path and write out
+            fname = running_segmentation.generate_file_name(
+                trip_origin=trip_origin,
+                year=str(self.year),
+                file_desc='synthetic_pa',
+                segment_params=segment_params,
+                suffix='internal',
+                compressed=True,
+            )
+            path = os.path.join(self.export_paths.distribution_dir, fname)
+            nd.write_df(internal_pa_mat, path)
+
 
 def calibrate_gravity_model(init_param_a: float,
                             init_param_b: float,
                             productions,
                             attractions,
                             costs,
-                            internal_zones,
+                            zones,
                             target_tld,
                             log_path,
                             cost_function,
@@ -230,8 +282,33 @@ def calibrate_gravity_model(init_param_a: float,
                             bs_con_target=.95,
                             target_r_gap=1
                             ):
-    ### Start of parameter search ###
+    # ## VALIDATE INPUTS ## #
+    # Make sure the costs and P/A are the same shape
+    n_prod = len(productions)
+    n_attr = len(attractions)
+    n_zones = len(zones)
+    if n_prod != n_zones:
+        raise ValueError(
+            "Productions are not the expected length based on given zones."
+            "Got %s productions, expected %s."
+            % (n_prod, len(zones))
+        )
 
+    if n_attr != n_zones:
+        raise ValueError(
+            "Attractions are not the expected length based on given zones."
+            "Got %s attractions, expected %s."
+            % (n_attr, len(zones))
+        )
+
+    if (n_zones, n_zones) != costs.shape:
+        raise ValueError(
+            "Costs are not the expected shape based on given zones. "
+            "Got %s costs, expected %s."
+            % (costs.shape, (n_zones, n_zones))
+        )
+
+    ### Start of parameter search ###
     min_dist, max_dist, obs_trip, obs_dist = unpack_tlb(target_tld)
 
     # Initial Search Loop - looking for OK values
@@ -246,9 +323,6 @@ def calibrate_gravity_model(init_param_a: float,
     max_r_sqr = [a_search[0], b_search[0], m_search[0], s_search[0], 0]
     k_factors = costs ** 0
 
-    productions = productions
-    attractions = attractions
-
     out_loop = 0
     out_para = list()
     for asv in a_search:
@@ -257,8 +331,7 @@ def calibrate_gravity_model(init_param_a: float,
                 for ssv in s_search:
                     print('New search')
                     # Test we're running a sensible value
-                    if param_check(min_para, max_para,
-                                   asv, bsv, msv, ssv):
+                    if param_check(min_para, max_para, asv, bsv, msv, ssv):
                         # Run gravity model
                         out_loop += 1
                         print("Running for loop gravity model")
@@ -441,25 +514,27 @@ def calibrate_gravity_model(init_param_a: float,
     # TODO: Add indices, back to pandas
     internal_pa = pd.DataFrame(
         internal_pa,
-        index=internal_zones,
-        columns=internal_zones,
+        index=zones,
+        columns=zones,
     )
 
     # ## GENERATE A TLD REPORT ## #
     # Get distance into the right format
     distance = pd.DataFrame(
         data=costs,
-        index=internal_zones,
-        columns=internal_zones,
+        index=zones,
+        columns=zones,
     )
 
-    _, d_bin, _ = tld_utils.get_trip_length_by_band(
+    _, tld_report, _ = tld_utils.get_trip_length_by_band(
         band_atl=target_tld,
         distance=distance,
         internal_pa=internal_pa,
     )
 
-    return internal_pa, d_bin
+    tld_report['bs_con'] = bs_con
+
+    return internal_pa, tld_report
 
 
 def gravity_model(log_path: nd.PathLike,
@@ -936,9 +1011,9 @@ def param_check(min_para,
     """
     return (
         min_para[0] <= alpha <= max_para[0]
-        and min_para[0] <= beta <= max_para[0]
-        and min_para[0] <= mu <= max_para[0]
-        and min_para[0] <= sig <= max_para[0]
+        and min_para[1] <= beta <= max_para[1]
+        and min_para[2] <= mu <= max_para[2]
+        and min_para[3] <= sig <= max_para[3]
     )
 
 

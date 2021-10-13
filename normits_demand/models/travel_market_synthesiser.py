@@ -56,19 +56,12 @@ class TravelMarketSynthesiser(TMSExportPaths):
         )
 
         # Assign attributes
-        self.year = year
-        self.running_mode = running_mode
         self.zoning_system = zoning_system
-        self.export_home = export_home
         self.process_count = process_count
 
         # TODO(BT): Validate this is correct type
         self.external_model_arg_builder = external_model_arg_builder
         self.gravity_model_arg_builder = gravity_model_arg_builder
-
-        # Build export paths for sub-models
-        self.ext_export_home = os.path.join(self.export_home, "External Model")
-        self.grav_export_home = os.path.join(self.export_home, "Gravity Model")
 
         # Create a logger
         # TODO (BT): Determine output file path
@@ -186,7 +179,7 @@ class TravelMarketSynthesiser(TMSExportPaths):
             year=self.year,
             running_mode=self.running_mode,
             zoning_system=self.zoning_system,
-            export_home=self.ext_export_home,
+            export_home=self.external_model.export_paths.home,
             process_count=self.process_count,
         )
 
@@ -210,7 +203,7 @@ class TravelMarketSynthesiser(TMSExportPaths):
             year=self.year,
             running_mode=self.running_mode,
             zoning_system=self.zoning_system,
-            export_home=self.grav_export_home,
+            export_home=self.gravity_model.export_paths.home,
         )
 
         self._logger.info("Building home-based arguments for gravity model")
