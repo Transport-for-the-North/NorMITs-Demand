@@ -121,7 +121,7 @@ def main():
 
     tms.run(
         run_all=False,
-        run_external_model=False,
+        run_external_model=True,
         run_gravity_model=True,
         run_pa_to_od=False,
     )

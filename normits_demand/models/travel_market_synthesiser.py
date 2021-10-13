@@ -64,7 +64,6 @@ class TravelMarketSynthesiser(TMSExportPaths):
         self.gravity_model_arg_builder = gravity_model_arg_builder
 
         # Create a logger
-        # TODO (BT): Determine output file path
         logger_name = "%s.%s" % (__name__, self.__class__.__name__)
         log_file_path = os.path.join(self.export_home, self._log_fname)
         self._logger = nd.get_logger(
@@ -212,11 +211,11 @@ class TravelMarketSynthesiser(TMSExportPaths):
         self._logger.info("Executing a home-based run of gravity model")
         gravity_model.run(trip_origin='hb', **args)
 
-        # self._logger.info("Building non-home-based arguments for gravity model")
-        # args = self.gravity_model_arg_builder.build_nhb_arguments()
-        #
-        # self._logger.info("Executing a non-home-based run of gravity model")
-        # gravity_model.run(trip_origin='nhb', **args)
+        self._logger.info("Building non-home-based arguments for gravity model")
+        args = self.gravity_model_arg_builder.build_nhb_arguments()
+
+        self._logger.info("Executing a non-home-based run of gravity model")
+        gravity_model.run(trip_origin='nhb', **args)
 
         self._logger.info("Gravity Model Done!")
 
