@@ -92,6 +92,7 @@ class TramInclusion:
         self.notem_output = notem_output
         self.export_home = export_home
         self.years = list(self.notem_output.keys())
+        self.base_year = min(self.years)
 
     def run(self,
             verbose: bool = True) -> None:
@@ -109,10 +110,10 @@ class TramInclusion:
         # Run tram inclusion for each year in trip end model
         for year in self.years:
             trip_end_start = timing.current_milli_time()
-            file_ops.create_folder(out_path)
+
             # Read tram and notem output data
             tram_data, notem_tram_seg = self._read_tram_and_notem_data(year, verbose)
-            tram_msoa, notem_msoa_wo_infill = self._tram_infill_msoa(notem_tram_seg, tram_data, verbose)
+            tram_msoa, notem_msoa_wo_infill = self._tram_infill_msoa(notem_tram_seg, tram_data, year, verbose)
             north_msoa, north_wo_infill = self._tram_infill_north(notem_tram_seg, tram_msoa, verbose)
             abc = self._non_tram_infill(notem_msoa_wo_infill, north_wo_infill, tram_msoa, north_msoa, tram_data,
                                         notem_tram_seg, verbose)
@@ -121,7 +122,7 @@ class TramInclusion:
             time_taken = timing.time_taken(trip_end_start, trip_end_end)
             du.print_w_toggle(
                 "Tram inclusion for year %d took: %s\n"
-                % (year,time_taken),
+                % (year, time_taken),
                 verbose=verbose
             )
         # End timing
@@ -157,10 +158,6 @@ class TramInclusion:
         notem_tram_seg:
             Returns the notem output dvector in tram segmentation.
         """
-        # Define the zoning and segmentations we want to use
-        tram_zoning = nd.get_zoning_system('tram')
-        tram_seg = nd.get_segmentation_level('hb_p_m7_ca')
-
         # Reads the tram data
         du.print_w_toggle("Loading the tram data...", verbose=verbose)
         tram_data = file_ops.read_df(
@@ -191,7 +188,7 @@ class TramInclusion:
     def _tram_infill_msoa(self,
                           notem_tram_seg: nd.DVector,
                           tram_data: pd.DataFrame,
-                          out_path: nd.PathLike,
+                          year: int,
                           verbose: bool
                           ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -204,9 +201,6 @@ class TramInclusion:
             
         tram_data:
             Dataframe containing tram data at msoa level for the north.
-
-        out_path:
-            Path where output files need to be stored.
 
         verbose:
             If set to True, it will print out progress updates while running.
@@ -229,6 +223,11 @@ class TramInclusion:
         # Retains only msoa zones that have tram data
         notem_df = notem_df.loc[notem_df['msoa_zone_id'].isin(tram_data['msoa_zone_id'])]
         notem_msoa_wo_infill = notem_df.copy()
+        notem_train = self._create_df_subset(notem_df=notem_df, mode=6)
+        if year == self.base_year:
+            base_train = notem_train
+
+        tram_data = self._tram_growth_rate(base_rail=base_train, future_rail=notem_train, base_tram=tram_data)
         # Adds tram data to the notem dataframe
         notem_df = notem_df.append(tram_data)
         # Creates unique id
@@ -237,14 +236,23 @@ class TramInclusion:
         du.print_w_toggle("Starting tram infill for msoa zones with tram data...", verbose=verbose)
         # Infills tram data
         notem_new_df = self._infill_internal(notem_df=notem_df, sort_order=self._sort_msoa)
-        path = os.path.join(out_path, "tram_msoa.csv")
-        notem_new_df.to_csv(path, index=False)
         return notem_new_df, notem_msoa_wo_infill
+
+    def _tram_growth_rate(self,
+                          base_rail: pd.DataFrame,
+                          future_rail: pd.DataFrame,
+                          base_tram: pd.DataFrame):
+        base_rail.sort_values(by=self._sort_msoa)
+        future_rail.sort_values(by=self._sort_msoa)
+        future_rail['growth_rate'] = ((future_rail['val'] - base_rail['val']) / base_rail['val']) + 1
+        base_tram['future_trips'] = base_tram['trips'] * future_rail['growth_rate']
+        base_tram.drop(['trips'], axis=1)
+        base_tram.rename(columns={'future_trips': 'trips'}, inplace=True)
+        return base_tram
 
     def _tram_infill_north(self,
                            notem_tram_seg: nd.DVector,
                            tram_msoa: pd.DataFrame,
-                           out_path: nd.PathLike,
                            verbose: bool = True
                            ) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
@@ -258,9 +266,6 @@ class TramInclusion:
 
         tram_msoa:
             Dataframe containing tram data at msoa level for the north.
-
-        out_path:
-            Path where output files need to be stored.
 
         verbose:
             If set to True, it will print out progress updates while
@@ -298,8 +303,6 @@ class TramInclusion:
         du.print_w_toggle("Starting tram infill at north level...", verbose=verbose)
         # Infills tram data
         notem_new_df = self._infill_internal(notem_df=notem_df, sort_order=self._sort_north)
-        path = os.path.join(out_path, "tram_north.csv")
-        notem_new_df.to_csv(path, index=False)
         return notem_new_df, north_wo_infill
 
     def _non_tram_infill(self,
@@ -309,7 +312,6 @@ class TramInclusion:
                          notem_new_df: pd.DataFrame,
                          tram_data: pd.DataFrame,
                          notem_tram_seg: nd.DVector,
-                         out_path: nd.PathLike,
                          verbose: bool = True,
                          ):
         """
@@ -335,9 +337,6 @@ class TramInclusion:
         notem_tram_seg:
             DVector containing notem trip end output in revised segmentation(p,m,ca).
 
-        out_path:
-            Path where output files need to be stored.
-
         verbose:
             If set to True, it will print out progress updates while running.
 
@@ -354,13 +353,13 @@ class TramInclusion:
         df_index_cols = ['p', 'm', 'ca', 'final_val']
         df_group_cols = df_index_cols.copy()
         df_group_cols.remove('final_val')
-        print('notem_df before grouping',notem_df)
+        print('notem_df before grouping', notem_df)
         notem_df = pd_utils.reindex_and_groupby(notem_df, df_index_cols, ['final_val'])
         print('notem_df after grouping', notem_df)
         tram_data = pd_utils.reindex_and_groupby(tram_data, df_index_cols, ['final_val'])
         tram_data['final_val'] = 0
         notem_df = notem_df.sort_values(by=self._sort_north).reset_index()
-        print('notem_df',notem_df)
+        print('notem_df', notem_df)
         # Creates new columns to store results
         notem_df[['North', 'Non-Tram', 'Non-Tram adjusted']] = 0.0
 
@@ -374,17 +373,15 @@ class TramInclusion:
         notem_msoa_wo_infill = notem_msoa_wo_infill.sort_values(by=self._sort_north).reset_index()
         north_wo_infill = north_wo_infill.append(tram_data)
         north_wo_infill = north_wo_infill.sort_values(by=self._sort_north).reset_index()
-        print('notem_msoa_wo_infill',notem_msoa_wo_infill)
-        print('notem_new_df',notem_new_df)
+        print('notem_msoa_wo_infill', notem_msoa_wo_infill)
+        print('notem_new_df', notem_new_df)
         # Calculations for North, Non-tram and non-tram adjusted
         notem_df['Non-Tram'] = north_wo_infill['val'] - notem_msoa_wo_infill['val']
         notem_df['North'] = notem_new_df['final_val'].to_numpy()
         notem_df['Non-Tram adjusted'] = notem_df['North'] - notem_df['final_val']
         notem_df.rename(columns={'final_val': 'Tram_zones'}, inplace=True)
         notem_df.drop(['index'], axis=1)
-        print('notem_df',notem_df)
-        path = os.path.join(out_path, "non_tram_north.csv")
-        notem_df.to_csv(path, index=False)
+        print('notem_df', notem_df)
 
         # TODO: find a way to bring in internal zone data
         du.print_w_toggle("Starting tram adjustment for non tram zones...", verbose=verbose)
@@ -411,7 +408,7 @@ class TramInclusion:
                                                    (new_df['Non-Tram adjusted'] / ntram_adj_sum), 0)
             for ids in uni_id:
                 if id in ids:
-                    #print(id)
+                    # print(id)
                     n_df = ntram_notem.loc[ntram_notem['c_uniq_id'] == ids]
 
                     last_row = n_df.tail(n=1).reset_index()
@@ -438,9 +435,6 @@ class TramInclusion:
 
                     notem_df_new = notem_df_new.append(n_df)
                     # print(notem_df_new)
-
-        path_new = os.path.join(out_path, "non_tram_msoa.csv")
-        notem_new_df.to_csv(path_new, index=False)
 
     def _infill_internal(self,
                          notem_df: pd.DataFrame,

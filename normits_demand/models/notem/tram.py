@@ -181,7 +181,7 @@ class Tram(NoTEMExportPaths):
         self._logger.debug("Instantiating Home-Based Production Model")
         hb_prod = TramInclusion(
             tram_data=tram_data,
-            notem_outputs=hb_production_paths,
+            notem_output=hb_production_paths,
             export_home=self.hb_production.export_paths.home,
         )
 
@@ -203,7 +203,7 @@ class Tram(NoTEMExportPaths):
         self._logger.debug("Instantiating Home-Based Attraction Model")
         hb_attr = TramInclusion(
             tram_data=tram_data,
-            notem_outputs=hb_attraction_paths,
+            notem_output=hb_attraction_paths,
             export_home=self.hb_attraction.export_paths.home,
         )
 
@@ -225,7 +225,7 @@ class Tram(NoTEMExportPaths):
         self._logger.debug("Instantiating Non-Home-Based Production Model")
         nhb_prod = TramInclusion(
             tram_data=tram_data,
-            notem_outputs=nhb_production_paths,
+            notem_output=nhb_production_paths,
             export_home=self.nhb_production.export_paths.home,
         )
 
@@ -247,7 +247,7 @@ class Tram(NoTEMExportPaths):
         self._logger.debug("Instantiating Non-Home-Based Attraction Model")
         nhb_attr = TramInclusion(
             tram_data=tram_data,
-            notem_outputs=nhb_attraction_paths,
+            notem_output=nhb_attraction_paths,
             export_home=self.nhb_attraction.export_paths.home,
         )
 
@@ -256,19 +256,4 @@ class Tram(NoTEMExportPaths):
             verbose=verbose,
         )
 
-export_home = r"C:\Data\Nirmal_Atkins"
 
-
-def main():
-    n = TramInclusion(
-        tram_data_paths=tram_paths,
-        notem_outputs=notem_outputs,
-        export_home=export_home,
-    )
-    n.run(
-        verbose=True
-    )
-
-
-if __name__ == '__main__':
-    main()
