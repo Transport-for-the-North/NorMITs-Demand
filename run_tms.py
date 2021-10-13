@@ -323,7 +323,6 @@ if __name__ == '__main__':
     #   single mile bands - p/m (ca ) segments full matrix
     #   NorMITs Vis
 
-
     pa_to_od()
     # DO PA TO OD
 

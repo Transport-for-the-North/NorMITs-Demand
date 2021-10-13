@@ -3480,7 +3480,7 @@ def recombine_internal_external(internal_import: nd.PathLike,
 
         # Check the external file actually exists
         try:
-            path = file_ops.find_filename(
+            file_ops.find_filename(
                 path=os.path.join(external_import, ext_fname),
                 alt_types=['.csv', consts.COMPRESSION_SUFFIX]
             )

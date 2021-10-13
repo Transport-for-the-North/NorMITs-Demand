@@ -84,8 +84,6 @@ def main():
         internal_tld_name=internal_tld_name,
         external_tld_name=external_tld_name,
         intrazonal_cost_infill=intrazonal_cost_infill,
-        hb_running_segmentation=hb_running_seg,
-        nhb_running_segmentation=nhb_running_seg,
         hb_cost_type=hb_cost_type,
         nhb_cost_type=nhb_cost_type,
         notem_iteration_name=notem_iteration_name,
@@ -98,8 +96,6 @@ def main():
         cost_function=cost_function,
         running_mode=mode,
         zoning_system=zoning_system,
-        hb_running_segmentation=hb_running_seg,
-        nhb_running_segmentation=nhb_running_seg,
         hb_cost_type=hb_cost_type,
         nhb_cost_type=nhb_cost_type,
         hb_init_params_fname=hb_init_params_fname,
@@ -111,6 +107,8 @@ def main():
     tms = TravelMarketSynthesiser(
         year=base_year,
         running_mode=mode,
+        hb_running_segmentation=hb_running_seg,
+        nhb_running_segmentation=nhb_running_seg,
         iteration_name=tms_iteration_name,
         zoning_system=zoning_system,
         external_model_arg_builder=em_arg_builder,
@@ -121,9 +119,11 @@ def main():
 
     tms.run(
         run_all=False,
-        run_external_model=True,
-        run_gravity_model=True,
-        run_pa_to_od=False,
+        run_external_model=False,
+        run_gravity_model=False,
+        run_pa_matrix_reports=False,
+        run_pa_to_od=True,
+        run_od_matrix_reports=False,
     )
 
 

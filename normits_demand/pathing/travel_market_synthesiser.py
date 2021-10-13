@@ -130,8 +130,6 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
                  zoning_system: nd.core.zoning.ZoningSystem,
                  internal_tld_name: str,
                  external_tld_name: str,
-                 hb_running_segmentation: nd.core.segments.SegmentationLevel,
-                 nhb_running_segmentation: nd.core.segments.SegmentationLevel,
                  hb_cost_type: str,
                  nhb_cost_type: str,
                  notem_iteration_name: str,
@@ -149,8 +147,6 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         self.zoning_system = zoning_system
         self.internal_tld_name = internal_tld_name
         self.external_tld_name = external_tld_name
-        self.hb_running_segmentation = hb_running_segmentation
-        self.nhb_running_segmentation = nhb_running_segmentation
         self.hb_cost_type = hb_cost_type
         self.nhb_cost_type = nhb_cost_type
         self.intrazonal_cost_infill = intrazonal_cost_infill
@@ -202,12 +198,10 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         if trip_origin == 'hb':
             productions_path = exports.hb_production.export_paths.notem_segmented[self.base_year]
             attractions_path = exports.hb_attraction.export_paths.notem_segmented[self.base_year]
-            running_segmentation = self.hb_running_segmentation
             cost_type = self.hb_cost_type
         elif trip_origin == 'nhb':
             productions_path = exports.nhb_production.export_paths.notem_segmented[self.base_year]
             attractions_path = exports.nhb_attraction.export_paths.notem_segmented[self.base_year]
-            running_segmentation = self.nhb_running_segmentation
             cost_type = self.nhb_cost_type
         else:
             raise ValueError(
@@ -271,7 +265,6 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
             'internal_tld_dir': internal_tld_path,
             'external_tld_dir': external_tld_path,
             'intrazonal_cost_infill': self.intrazonal_cost_infill,
-            'running_segmentation': running_segmentation,
         }
 
     def build_hb_arguments(self) -> Dict[str, nd.PathLike]:
@@ -426,8 +419,6 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
                  cost_function: str,
                  running_mode: nd.core.enumerations.Mode,
                  zoning_system: nd.core.zoning.ZoningSystem,
-                 hb_running_segmentation: nd.core.segments.SegmentationLevel,
-                 nhb_running_segmentation: nd.core.segments.SegmentationLevel,
                  hb_cost_type: str,
                  nhb_cost_type: str,
                  hb_init_params_fname: str,
@@ -452,8 +443,6 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
         self.cost_function = cost_function
         self.running_mode = running_mode
         self.zoning_system = zoning_system
-        self.hb_running_segmentation = hb_running_segmentation
-        self.nhb_running_segmentation = nhb_running_segmentation
         self.hb_cost_type = hb_cost_type
         self.nhb_cost_type = nhb_cost_type
         self.hb_init_params_fname = hb_init_params_fname
@@ -479,13 +468,11 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
             attractions_path = exports.export_paths.hb_internal_attractions
             cost_type = self.hb_cost_type
             init_params_fname = self.hb_init_params_fname
-            running_segmentation = self.hb_running_segmentation
         elif trip_origin == 'nhb':
             productions_path = exports.export_paths.nhb_internal_productions
             attractions_path = exports.export_paths.nhb_internal_attractions
             cost_type = self.nhb_cost_type
             init_params_fname = self.nhb_init_params_fname
-            running_segmentation = self.nhb_running_segmentation
         else:
             raise ValueError(
                 "Received an unexpected value for trip origin. Expected one of "
@@ -552,7 +539,6 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
                 )
 
         return {
-            'running_segmentation': running_segmentation,
             'productions': file_ops.read_df(productions_path),
             'attractions': file_ops.read_df(attractions_path),
             'init_params': init_params,
@@ -637,7 +623,7 @@ class GravityModelExportPaths:
         # Create the export_paths class
         self.export_paths = _GM_ExportPaths_NT(
             home=self.export_home,
-            distribution_dir=os.path.join(self.export_home, distribution_dir),
+            distribution_dir=distribution_dir,
         )
 
     def _create_report_paths(self) -> None:
@@ -656,12 +642,42 @@ class GravityModelExportPaths:
 
 
 # ## TMS CLASSES ## #
+_TMS_ExportPaths_NT = collections.namedtuple(
+    typename='_TMS_ExportPaths_NT',
+    field_names=[
+        'home',
+        'full_pa_dir',
+        'full_od_dir',
+        'compiled_od_dir',
+    ]
+)
+
+_TMS_ReportPaths_NT = collections.namedtuple(
+    typename='_TMS_ReportPaths_NT',
+    field_names=[
+        'home',
+        'pa_reports_dir',
+        'od_reports_dir',
+    ]
+)
+
+
 class TMSExportPaths:
 
     # Define the names of the export dirs
     _external_model_dir = 'External Model'
     _gravity_model_dir = 'Gravity Model'
     _final_outputs_dir = 'Final Outputs'
+
+    # Export dir names
+    _full_pa_out_dir = 'Full PA Matrices'
+    _full_od_out_dir = 'Full OD Matrices'
+    _compiled_od_out_dir = 'Compiled OD Matrices'
+
+    # Report dir names
+    _reports_dirname = 'Reports'
+    _pa_report_dir = 'PA Reports'
+    _od_report_dir = 'OD Reports'
 
     def __init__(self,
                  year: int,
@@ -714,7 +730,50 @@ class TMSExportPaths:
         )
 
         # Final Output Paths
-        # TODO(BT): Determine where the final outputs are going
+        export_home = os.path.join(self.export_home, self._final_outputs_dir)
+        report_home = os.path.join(export_home, self._reports_dirname)
+        file_ops.create_folder(export_home)
+        file_ops.create_folder(report_home)
+
+        # Generate the paths
+        self._create_export_paths(export_home)
+        self._create_report_paths(report_home)
+
+    def _create_export_paths(self, export_home: str) -> None:
+        """Creates self.export_paths"""
+
+        # Build the matrix output path
+        full_pa_dir = os.path.join(export_home, self._full_pa_out_dir)
+        full_od_dir = os.path.join(export_home, self._full_od_out_dir)
+        compiled_od_dir = os.path.join(export_home, self._compiled_od_out_dir)
+
+        # Make paths that don't exist
+        dir_paths = [full_pa_dir, full_od_dir, compiled_od_dir]
+        for path in dir_paths:
+            file_ops.create_folder(path)
+
+        # Create the export_paths class
+        self.export_paths = _TMS_ExportPaths_NT(
+            home=export_home,
+            full_pa_dir=full_pa_dir,
+            full_od_dir=full_od_dir,
+            compiled_od_dir=compiled_od_dir,
+        )
+
+    def _create_report_paths(self, report_home: str) -> None:
+        """Creates self.report_paths"""
+
+        # Create the export_paths class
+        self.report_paths = _TMS_ReportPaths_NT(
+            home=report_home,
+            pa_reports_dir=os.path.join(report_home, self._pa_report_dir),
+            od_reports_dir=os.path.join(report_home, self._od_report_dir),
+        )
+
+        # Make paths that don't exist
+        for path in self.report_paths:
+            file_ops.create_folder(path)
+
 
 # ## FUNCTIONS ## #
 def import_pa(production_import_path,
