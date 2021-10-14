@@ -1493,7 +1493,7 @@ class SegmentationLevel:
             name_parts += [file_desc]
 
         if year is not None:
-            name_parts += [year]
+            name_parts += ["yr%s" % year]
 
         for segment_name in self.naming_order:
             name_parts += ["%s%s" % (segment_name, segment_params[segment_name])]
