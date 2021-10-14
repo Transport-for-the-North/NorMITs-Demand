@@ -2303,7 +2303,6 @@ def copy_nhb_matrices(import_dir: str,
     """
     # Find the .csv nhb mats
     mats = du.list_files(import_dir)
-    mats = [x for x in mats if '.csv' in x]
     nhb_mats = [x for x in mats if du.starts_with(x, 'nhb')]
 
     pa_nm = '_%s_' % pa_matrix_desc

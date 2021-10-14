@@ -339,9 +339,6 @@ class TravelMarketSynthesiser(TMSExportPaths):
             od_matrix_desc='synthetic_od',
         )
 
-        # ## COMPILE TO OUTPUT SEGMENTATION ## #
-        # Compile to output segmentation
-
     def run_od_matrix_reports(self):
         # PA RUN REPORTS
         # Matrix Trip ENd totals

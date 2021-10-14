@@ -36,8 +36,8 @@ notem_export_home = r"I:\NorMITs Demand\NoTEM"
 
 
 def main():
-    mode = nd.Mode.CAR
-    # mode = nd.Mode.BUS
+    # mode = nd.Mode.CAR
+    mode = nd.Mode.BUS
 
     if mode == nd.Mode.CAR:
         zoning_system = nd.get_zoning_system('noham')
@@ -120,11 +120,14 @@ def main():
     tms.run(
         run_all=False,
         run_external_model=False,
-        run_gravity_model=False,
+        run_gravity_model=True,
         run_pa_matrix_reports=False,
-        run_pa_to_od=True,
+        run_pa_to_od=False,
         run_od_matrix_reports=False,
     )
+
+    # ## COMPILE TO OUTPUT SEGMENTATION ## #
+    # Compile to output segmentation
 
 
 if __name__ == '__main__':

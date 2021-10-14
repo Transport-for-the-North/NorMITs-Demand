@@ -223,8 +223,8 @@ class GravityModel(GravityModelExportPaths):
         multiprocessing.multiprocess(
             fn=self._run_internal,
             kwargs=kwarg_list,
-            process_count=self.process_count,
             pbar_kwargs=pbar_kwargs,
+            process_count=self.process_count,
         )
 
     def _run_internal(self,
@@ -379,7 +379,7 @@ def calibrate_gravity_model(init_param_a: float,
             % (costs.shape, (n_zones, n_zones))
         )
 
-    ### Start of parameter search ###
+    # ## Start of parameter search ## #
     min_dist, max_dist, obs_trip, obs_dist = unpack_tlb(target_tld)
 
     # Initial Search Loop - looking for OK values
@@ -400,12 +400,10 @@ def calibrate_gravity_model(init_param_a: float,
         for bsv in b_search:
             for msv in m_search:
                 for ssv in s_search:
-                    print('New search')
                     # Test we're running a sensible value
                     if param_check(min_para, max_para, asv, bsv, msv, ssv):
                         # Run gravity model
                         out_loop += 1
-                        print("Running for loop gravity model")
                         grav_run = gravity_model(
                             log_path=log_path,
                             target_tld=target_tld,
@@ -426,27 +424,20 @@ def calibrate_gravity_model(init_param_a: float,
                             optimise=True
                         )
 
-                        # Check convergence criteria
-                        print('achieved bs_con: %s' % grav_run[6][4])
-                        print('achieved params: %s' % grav_run[6])
-                        print()
-                        print('prev best bs_con: %s' % max_r_sqr[4])
-
                         if max_r_sqr[4] < grav_run[6][4]:
-                            print('This is better')
                             max_r_sqr = grav_run[6]
                             # This will pass an out para even if it's not doing a great job
                             # TODO: if it's not doing a good job, search more and better!
+
+                        if max_r_sqr[4] > bs_con_target:
                             out_para, bs_con = grav_run[1], grav_run[6][4]
+
                         if (check_con_val(grav_run[3], target_r_gap) or
                                 # Over 90
-                                (grav_run[5] >= bs_con_target - .05)):
+                                (grav_run[6][4] >= bs_con_target - .05)):
                             # Assign success values and leave loop - well done!
                             out_para, bs_con = grav_run[1], grav_run[6][4]
                             break
-
-                    else:
-                        print("Parameters outside of min max range")
 
                     if len(out_para) != 0:
                         break
@@ -461,13 +452,10 @@ def calibrate_gravity_model(init_param_a: float,
     internal_pa = grav_run[0]
 
     # Refine values
-    print("Length of out_para:", len(out_para))
     if len(list(set(out_para) - set(max_r_sqr))) > 0:
         # Restore best R-squared loop
-        out_loop = out_loop + 1
         # Run gravity model
         # Set total runs to 1
-        print("Running len(out_para) != 0 gravity model")
         grav_run = gravity_model(
             log_path=log_path,
             target_tld=target_tld,
@@ -484,7 +472,7 @@ def calibrate_gravity_model(init_param_a: float,
             k_factors=k_factors,  # 1s
             furness_loops=furness_loops,
             fitting_loops=1,
-            loop_number=str(out_loop),
+            loop_number='2.0',
             optimise=True,
         )
         out_para, bs_con, max_r_sqr = grav_run[1], grav_run[5], grav_run[6]
@@ -533,7 +521,6 @@ def calibrate_gravity_model(init_param_a: float,
                                          min(max(obs_trip[row] / est_trip[row], .2), 5), 1)
                 k_factors = np.where((costs >= min_dist[row]) & (costs < max_dist[row]),
                                      kfc_dist[row], k_factors)
-            print("Running third gravity model")
             grav_run = gravity_model(
                 log_path=log_path,
                 target_tld=target_tld,
@@ -550,7 +537,7 @@ def calibrate_gravity_model(init_param_a: float,
                 k_factors=k_factors,
                 furness_loops=furness_loops,
                 fitting_loops=1,
-                loop_number=str(out_loop + 1),
+                loop_number="3.0",
                 optimise=True,
             )
 
@@ -578,7 +565,7 @@ def calibrate_gravity_model(init_param_a: float,
                 kfc_stdv = (np.sum(internal_pa * (costs - kfc_mean) ** 2) / np.sum(
                     internal_pa)) ** 0.5
     else:
-        print('Grav model netherworld - what did you do?')
+        raise ValueError('Grav model netherworld - what did you do?')
 
     # ########## End of alpha/beta search ########## #
 
@@ -734,7 +721,6 @@ def gravity_model(log_path: nd.PathLike,
     obs_dist, est_trip, est_dist = np.array(obs_dist), np.array(est_trip), np.array(est_dist)
 
     for ft_loop in range(fitting_loops):
-        print('fit loop ' + str(ft_loop))
         gm_start = timing.current_milli_time()
 
         if dist_function.lower() == 'tanner':  # x1, x2 - Tanner
@@ -821,9 +807,6 @@ def gravity_model(log_path: nd.PathLike,
         bs_con = max(1 - np.sum((est_trip - obs_trip) ** 2) / np.sum(
             (obs_trip[1:] - np.sum(obs_trip) / (len(obs_trip) - 1)) ** 2), 0)
 
-        print('Achieved Rsqr: ' + str(bs_con))
-        print('Achieved PA diff: ' + str(round(pa_diff, 4)))
-
         # Check if this coinvergence is better than previous best
         if bs_con > max_r_sqr[4]:
             if dist_function.lower() == 'tanner':
@@ -893,7 +876,6 @@ def gravity_model(log_path: nd.PathLike,
                 if opt_loop == 15:
                     pre_val1, pre_val2 = gra_val1, gra_val2
                     pre_data = par_data * 1
-            print("par_temp", par_temp)
             par_data = par_temp
 
     return [
