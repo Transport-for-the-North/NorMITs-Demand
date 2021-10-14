@@ -23,6 +23,7 @@ from normits_demand import constants
 from normits_demand import models
 
 from normits_demand.utils import timing
+from normits_demand.utils import vehicle_occupancy as vehicle_occupancy_utils
 from normits_demand.pathing.travel_market_synthesiser import TMSExportPaths
 
 from normits_demand.matrices import matrix_processing
@@ -348,3 +349,62 @@ class TravelMarketSynthesiser(TMSExportPaths):
         #   NorMITs Vis
 
         pass
+
+    def compile_to_assignment_format(self):
+        """TfN Specific helper function to compile outputs into assignment format
+
+        This should really be the job of NorMITs Matrix tools! Move there
+        once we create an object of it.
+
+        Returns
+        -------
+
+        """
+        # TODO(BT): UPDATE build_compile_params() to use segmentation levels
+        # Imply params from hb. Not ideal but right 99% of time
+        m_needed = self.hb_running_segmentation.segments['m'].unique()
+
+        # NoHAM should be tp split
+        tp_needed = [1, 2, 3, 4]
+
+        if self.running_mode == nd.Mode.CAR:
+            # Compile to NoHAM format
+            compile_params_paths = matrix_processing.build_compile_params(
+                import_dir=self.export_paths.full_od_dir,
+                export_dir=self.export_paths.compiled_od_dir,
+                matrix_format='synthetic_od',
+                years_needed=[self.year],
+                m_needed=m_needed,
+                tp_needed=tp_needed,
+            )
+
+            matrix_processing.compile_matrices(
+                mat_import=self.export_paths.full_od_dir,
+                mat_export=self.export_paths.compiled_od_dir,
+                compile_params_path=compile_params_paths[0],
+            )
+
+            # TODO(BT): Build in TMS imports!
+            car_occupancies = pd.read_csv(os.path.join(
+                r'I:\NorMITs Demand\import',
+                'vehicle_occupancies',
+                'car_vehicle_occupancies.csv',
+            ))
+
+            # Need to convert into hourly average PCU for noham
+            vehicle_occupancy_utils.people_vehicle_conversion(
+                mat_import=self.export_paths.compiled_od_dir,
+                mat_export=self.export_paths.compiled_od_dir_pcu,
+                car_occupancies=car_occupancies,
+                mode=m_needed[0],
+                method='to_vehicles',
+                out_format='wide',
+                hourly_average=True,
+            )
+
+        else:
+            raise ValueError(
+                "I don't know how to compile mode %s into an assignment model "
+                "format :("
+                % self.running_mode.value
+            )

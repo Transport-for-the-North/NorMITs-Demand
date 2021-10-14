@@ -1579,12 +1579,18 @@ class ExternalForecastSystem:
                 compile_params_path=compile_params_paths[0],
                 round_dp=round_dp,
             )
+            
+            car_occupancies = pd.read_csv(os.path.join(
+                self.imports['home'],
+                'vehicle_occupancies',
+                'car_vehicle_occupancies.csv',
+            ))
 
             # Need to convert into hourly average PCU for noham
             vo.people_vehicle_conversion(
                 mat_import=self.exports['compiled_od'],
                 mat_export=self.exports['compiled_od_pcu'],
-                import_folder=self.imports['home'],
+                car_occupancies=car_occupancies,
                 mode=m_needed[0],
                 method='to_vehicles',
                 out_format='wide',

@@ -365,7 +365,7 @@ class ExternalModel(ExternalModelExportPaths):
             csv=True,
         )
         path = os.path.join(self.report_paths.ie_report_dir, fname)
-        ie_report.to_csv(path, index=False)
+        ie_report.to_csv(path)
 
         # ## WRITE EXTERNAL DEMAND TO DISK ## #
         # Write out full demand

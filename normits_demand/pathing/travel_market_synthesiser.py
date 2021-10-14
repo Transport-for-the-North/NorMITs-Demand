@@ -649,6 +649,7 @@ _TMS_ExportPaths_NT = collections.namedtuple(
         'full_pa_dir',
         'full_od_dir',
         'compiled_od_dir',
+        'compiled_od_dir_pcu',
     ]
 )
 
@@ -673,6 +674,7 @@ class TMSExportPaths:
     _full_pa_out_dir = 'Full PA Matrices'
     _full_od_out_dir = 'Full OD Matrices'
     _compiled_od_out_dir = 'Compiled OD Matrices'
+    _compiled_od_out_dir_pcu = 'PCU'
 
     # Report dir names
     _reports_dirname = 'Reports'
@@ -746,9 +748,10 @@ class TMSExportPaths:
         full_pa_dir = os.path.join(export_home, self._full_pa_out_dir)
         full_od_dir = os.path.join(export_home, self._full_od_out_dir)
         compiled_od_dir = os.path.join(export_home, self._compiled_od_out_dir)
+        compiled_od_dir_pcu = os.path.join(compiled_od_dir, self._compiled_od_out_dir_pcu)
 
         # Make paths that don't exist
-        dir_paths = [full_pa_dir, full_od_dir, compiled_od_dir]
+        dir_paths = [full_pa_dir, full_od_dir, compiled_od_dir, compiled_od_dir_pcu]
         for path in dir_paths:
             file_ops.create_folder(path)
 
@@ -758,6 +761,7 @@ class TMSExportPaths:
             full_pa_dir=full_pa_dir,
             full_od_dir=full_od_dir,
             compiled_od_dir=compiled_od_dir,
+            compiled_od_dir_pcu=compiled_od_dir_pcu,
         )
 
     def _create_report_paths(self, report_home: str) -> None:

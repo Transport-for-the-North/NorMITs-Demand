@@ -302,11 +302,17 @@ def convert_to_efs_matrices(import_path: str,
     if not from_pcu:
         return
 
+    car_occupancies = pd.read_csv(os.path.join(
+        vehicle_occupancy_import,
+        'vehicle_occupancies',
+        'car_vehicle_occupancies.csv',
+    ))
+
     # Only get here if we need to convert from PCU format
     vo.people_vehicle_conversion(
         mat_import=temp_export_path,
         mat_export=export_path,
-        import_folder=vehicle_occupancy_import,
+        car_occupancies=car_occupancies,
         mode=str(m_needed[0]),
         method='to_people',
         out_format='wide'

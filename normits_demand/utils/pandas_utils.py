@@ -578,17 +578,24 @@ def internal_external_report(df: pd.DataFrame,
     report:
         A report of internal and external demand in df.
     """
-    # Generate the kwargs to iterate over
+    # Build the initial report
+    index = pd.Index(['internal', 'external'])
+    report = pd.DataFrame(
+        index=index,
+        columns=index,
+        data=np.zeros((len(index), len(index)))
+    )
+
+    # Build the kwargs to iterate over
     report_kwargs = {
-        'internal-internal': {'index_zones': internal_zones, 'col_zones': internal_zones},
-        'internal-external': {'index_zones': internal_zones, 'col_zones': external_zones},
-        'external-internal': {'index_zones': external_zones, 'col_zones': internal_zones},
-        'external-external': {'index_zones': external_zones, 'col_zones': external_zones},
+        ('internal', 'internal'): {'index_zones': internal_zones, 'col_zones': internal_zones},
+        ('internal', 'external'): {'index_zones': internal_zones, 'col_zones': external_zones},
+        ('external', 'internal'): {'index_zones': external_zones, 'col_zones': internal_zones},
+        ('external', 'external'): {'index_zones': external_zones, 'col_zones': external_zones},
     }
 
-    # Generate the report
-    report = list()
-    for name, kwargs in report_kwargs.items():
+    # Build the report from the kwargs
+    for (row_idx, col_idx), kwargs in report_kwargs.items():
         # Pull out just the trips for this section
         mask = get_wide_mask(
             df=df,
@@ -596,6 +603,12 @@ def internal_external_report(df: pd.DataFrame,
             **kwargs,
         )
         total = (df * mask).values.sum()
-        report.append({'name': name, 'total': total})
 
-    return pd.DataFrame(report)
+        # Feel like this indexing is backwards...
+        report[col_idx][row_idx] = total
+
+    # Add a total row and column
+    report['total'] = report.values.sum(axis=1)
+    report.loc['total'] = report.values.sum(axis=0)
+
+    return report
