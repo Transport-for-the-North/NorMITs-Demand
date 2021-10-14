@@ -330,12 +330,17 @@ class TravelMarketSynthesiser(TMSExportPaths):
         )
 
         # ## MOVE NHB TO OD DIR ## #
-        # (they're already OD anyway)
+        # they're already OD anyway, just need a little name change
+        matrix_processing.copy_nhb_matrices(
+            import_dir=self.export_paths.full_pa_dir,
+            export_dir=self.export_paths.full_od_dir,
+            replace_pa_with_od=True,
+            pa_matrix_desc='synthetic_pa',
+            od_matrix_desc='synthetic_od',
+        )
 
         # ## COMPILE TO OUTPUT SEGMENTATION ## #
         # Compile to output segmentation
-
-        pass
 
     def run_od_matrix_reports(self):
         # PA RUN REPORTS

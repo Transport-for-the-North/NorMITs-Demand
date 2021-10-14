@@ -2264,6 +2264,8 @@ def copy_nhb_matrices(import_dir: str,
                       export_dir: str,
                       replace_pa_with_od: bool = False,
                       replace_od_with_pa: bool = False,
+                      pa_matrix_desc: str = 'pa',
+                      od_matrix_desc: str = 'od',
                       ) -> None:
     """
     Copies NHB matrices from import dir to export dir.
@@ -2280,10 +2282,20 @@ def copy_nhb_matrices(import_dir: str,
         Path to the directory to copy the nhb matrices to.
     
     replace_pa_with_od:
-        Whether to replace the '_pa_' in the matrix names with '_od_'.
+        Whether to replace pa_matrix_desc in the matrix names with od_matrix_desc.
 
     replace_od_with_pa:
-        Whether to replace the '_od_' in the matrix names with '_pa_'.
+        Whether to replace od_matrix_desc in the matrix names with pa_matrix_desc.
+
+    pa_matrix_desc:
+        The name used to describe the pa matrices. Usually just 'pa', but
+        will sometimes be 'synthetic_pa' when dealing with TMS synthetic
+        matrices.
+
+    od_matrix_desc:
+        The name used to describe the od matrices. Usually just 'od', but
+        will sometimes be 'synthetic_od' when dealing with TMS synthetic
+        matrices.
 
     Returns
     -------
@@ -2294,6 +2306,9 @@ def copy_nhb_matrices(import_dir: str,
     mats = [x for x in mats if '.csv' in x]
     nhb_mats = [x for x in mats if du.starts_with(x, 'nhb')]
 
+    pa_nm = '_%s_' % pa_matrix_desc
+    od_nm = '_%s_' % od_matrix_desc
+
     # Copy them over without a rename
     for mat_fname in nhb_mats:
         # Deal with the simple case
@@ -2302,18 +2317,20 @@ def copy_nhb_matrices(import_dir: str,
 
         # Try to rename if needed
         elif replace_pa_with_od:
-            if '_pa_' not in mat_fname:
+            if pa_nm not in mat_fname:
                 raise ValueError(
-                    "Cannot find '_pa_' in '%s' to replace." % mat_fname
+                    "Cannot find '%s' in '%s' to replace."
+                    % (pa_nm, mat_fname)
                 )
-            out_mat_fname = mat_fname.replace('_pa_', '_od_')
+            out_mat_fname = mat_fname.replace(pa_nm, od_nm)
 
         elif replace_od_with_pa:
-            if '_od_' not in mat_fname:
+            if od_nm not in mat_fname:
                 raise ValueError(
-                    "Cannot find '_od_' in '%s' to replace." % mat_fname
+                    "Cannot find '%s' in '%s' to replace."
+                    % (od_nm, mat_fname)
                 )
-            out_mat_fname = mat_fname.replace('_od_', '_pa_')
+            out_mat_fname = mat_fname.replace(od_nm, pa_nm)
         else:
             raise ValueError(
                 "This shouldn't happen! Somehow replace_od_with_pa and "
