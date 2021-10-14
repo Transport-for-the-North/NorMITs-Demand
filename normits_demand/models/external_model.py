@@ -45,6 +45,8 @@ class ExternalModel(ExternalModelExportPaths):
     _base_zone_col = "%s_zone_id"
     _pa_val_col = 'trips'
 
+    _external_only_suffix = consts.EXTERNAL_SUFFIX
+
     def __init__(self,
                  year: int,
                  running_mode: nd.Mode,
@@ -390,7 +392,7 @@ class ExternalModel(ExternalModelExportPaths):
             year=str(self.year),
             file_desc='synthetic_pa',
             segment_params=segment_params,
-            suffix='external',
+            suffix=self._external_only_suffix,
             compressed=True,
         )
         path = os.path.join(self.export_paths.external_distribution_dir, fname)

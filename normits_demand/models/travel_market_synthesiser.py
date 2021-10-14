@@ -283,7 +283,9 @@ class TravelMarketSynthesiser(TMSExportPaths):
         pass
 
     def run_pa_to_od(self):
-        # Combine internal and external
+        # TODO(BT): Make sure the internal and external matrices exist!
+
+        # ## COMBINE INTERNAL AND EXTERNAL MATRICES ## #
         self._logger.info("Recombining internal and external matrices")
         matrix_processing.recombine_internal_external(
             internal_import=self.gravity_model.export_paths.distribution_dir,
@@ -293,7 +295,8 @@ class TravelMarketSynthesiser(TMSExportPaths):
             years=[self.year],
         )
 
-        # Convert hb PA to OD matrices
+        # ## CONVERT HB PA TO OD ## #
+        self._logger.info("Converting HB PA matrices to OD")
         # Set up the segmentation params
         # TODO(BT): UPDATE build_od_from_fh_th_factors() to use segmentation levels
         seg_level = 'tms'
@@ -318,13 +321,18 @@ class TravelMarketSynthesiser(TMSExportPaths):
             pa_import=self.export_paths.full_pa_dir,
             od_export=self.export_paths.full_od_dir,
             fh_th_factors_dir=fh_th_factors_dir,
+            pa_matrix_desc='synthetic_pa',
+            od_to_matrix_desc='synthetic_od_to',
+            od_from_matrix_desc='synthetic_od_from',
             years_needed=[self.year],
             seg_level=seg_level,
-            seg_params=seg_params
+            seg_params=seg_params,
         )
 
-        # Move NHB to OD folder (they're already OD anyway)
+        # ## MOVE NHB TO OD DIR ## #
+        # (they're already OD anyway)
 
+        # ## COMPILE TO OUTPUT SEGMENTATION ## #
         # Compile to output segmentation
 
         pass

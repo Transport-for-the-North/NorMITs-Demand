@@ -875,6 +875,9 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
                                         od_export,
                                         fh_th_factors_dir,
                                         trip_origin,
+                                        pa_matrix_desc,
+                                        od_to_matrix_desc,
+                                        od_from_matrix_desc,
                                         base_year,
                                         year,
                                         p,
@@ -887,7 +890,7 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
     # Load in 24hr PA
     input_dist_name = du.get_dist_name(
         trip_origin=trip_origin,
-        matrix_format='pa',
+        matrix_format=pa_matrix_desc,
         year=str(year),
         purpose=str(p),
         mode=str(m),
@@ -895,7 +898,8 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
         car_availability=str(ca),
         csv=True
     )
-    pa_24 = pd.read_csv(os.path.join(pa_import, input_dist_name), index_col=0)
+    path = os.path.join(pa_import, input_dist_name)
+    pa_24 = nd.read_df(path, index_col=0, find_similar=True)
     pa_24.columns = pa_24.columns.astype(int)
     pa_24.index = pa_24.index.astype(int)
 
@@ -932,7 +936,7 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
     for tp, mat in fh_mats.items():
         dist_name = du.get_dist_name(
             trip_origin=trip_origin,
-            matrix_format='od_from',
+            matrix_format=od_from_matrix_desc,
             year=str(year),
             purpose=str(p),
             mode=str(m),
@@ -947,7 +951,7 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
     for tp, mat in th_mats.items():
         dist_name = du.get_dist_name(
             trip_origin=trip_origin,
-            matrix_format='od_to',
+            matrix_format=od_to_matrix_desc,
             year=str(year),
             purpose=str(p),
             mode=str(m),
@@ -971,6 +975,9 @@ def _tms_od_from_fh_th_factors(pa_import: str,
                                ns_needed: List[int] = None,
                                ca_needed: List[int] = None,
                                tp_needed: List[int] = efs_consts.TIME_PERIODS,
+                               pa_matrix_desc: str = 'pa',
+                               od_to_matrix_desc: str = 'od_to',
+                               od_from_matrix_desc: str = 'od_from',
                                process_count: int = consts.PROCESS_COUNT,
                                ) -> None:
     """Internal function of build_od_from_fh_th_factors to handle 'tms' seg_level
@@ -1037,6 +1044,9 @@ def _tms_od_from_fh_th_factors(pa_import: str,
             'od_export': od_export,
             'fh_th_factors_dir': fh_th_factors_dir,
             'trip_origin': trip_origin,
+            'pa_matrix_desc': pa_matrix_desc,
+            'od_to_matrix_desc': od_to_matrix_desc,
+            'od_from_matrix_desc': od_from_matrix_desc,
             'base_year': base_year,
             'year': year,
             'tp_needed': tp_needed
@@ -1067,6 +1077,9 @@ def _vdm_od_from_fh_th_factors_internal(pa_import,
                                         od_export,
                                         fh_th_factors_dir,
                                         trip_origin,
+                                        pa_matrix_desc,
+                                        od_to_matrix_desc,
+                                        od_from_matrix_desc,
                                         base_year,
                                         year,
                                         uc,
@@ -1080,14 +1093,15 @@ def _vdm_od_from_fh_th_factors_internal(pa_import,
     # Load in 24hr PA
     input_dist_name = du.get_vdm_dist_name(
         trip_origin=trip_origin,
-        matrix_format='pa',
+        matrix_format=pa_matrix_desc,
         year=str(year),
         user_class=str(uc),
         mode=str(m),
         ca=ca,
         csv=True
     )
-    pa_24 = pd.read_csv(os.path.join(pa_import, input_dist_name), index_col=0)
+    path = os.path.join(pa_import, input_dist_name)
+    pa_24 = nd.read_df(path, index_col=0, find_similar=True)
     pa_24.columns = pa_24.columns.astype(int)
     pa_24.index = pa_24.index.astype(int)
 
@@ -1125,7 +1139,7 @@ def _vdm_od_from_fh_th_factors_internal(pa_import,
     for tp, mat in fh_mats.items():
         dist_name = du.get_vdm_dist_name(
             trip_origin=trip_origin,
-            matrix_format='od_from',
+            matrix_format=od_from_matrix_desc,
             year=str(year),
             user_class=str(uc),
             mode=str(m),
@@ -1139,7 +1153,7 @@ def _vdm_od_from_fh_th_factors_internal(pa_import,
     for tp, mat in th_mats.items():
         dist_name = du.get_vdm_dist_name(
             trip_origin=trip_origin,
-            matrix_format='od_to',
+            matrix_format=od_to_matrix_desc,
             year=str(year),
             user_class=str(uc),
             mode=str(m),
@@ -1161,6 +1175,9 @@ def _vdm_od_from_fh_th_factors(pa_import: str,
                                m_needed: List[int] = efs_consts.MODES_NEEDED,
                                ca_needed: List[int] = None,
                                tp_needed: List[int] = efs_consts.TIME_PERIODS,
+                               pa_matrix_desc: str = 'pa',
+                               od_to_matrix_desc: str = 'od_to',
+                               od_from_matrix_desc: str = 'od_from',
                                process_count: int = os.cpu_count() - 2
                                ):
     # TODO: Write _vdm_od_from_tour_props() docs
@@ -1182,6 +1199,9 @@ def _vdm_od_from_fh_th_factors(pa_import: str,
             'od_export': od_export,
             'fh_th_factors_dir': fh_th_factors_dir,
             'year': year,
+            'pa_matrix_desc': pa_matrix_desc,
+            'od_to_matrix_desc': od_to_matrix_desc,
+            'od_from_matrix_desc': od_from_matrix_desc,
             'tp_needed': tp_needed
         }
 
@@ -1212,6 +1232,9 @@ def build_od_from_fh_th_factors(pa_import: str,
                                 seg_params: Dict[str, Any],
                                 base_year: str = efs_consts.BASE_YEAR,
                                 years_needed: List[int] = efs_consts.FUTURE_YEARS,
+                                pa_matrix_desc: str = 'pa',
+                                od_to_matrix_desc: str = 'od_to',
+                                od_from_matrix_desc: str = 'od_from',
                                 process_count: int = consts.PROCESS_COUNT,
                                 ) -> None:
     """Builds OD Matrices from PA using the factors in fh_th_factors_dir
@@ -1252,6 +1275,21 @@ def build_od_from_fh_th_factors(pa_import: str,
     years_needed:
         The year of the matrices that need to be converted from PA to OD
 
+    pa_matrix_desc:
+        The name used to describe the pa matrices. Usually just 'pa', but
+        will sometimes be 'synthetic_pa' when dealing with TMS synthetic
+        matrices.
+
+    od_to_matrix_desc:
+        The name used to describe the od to matrices. Usually just 'od_to', but
+        will sometimes be 'synthetic_od_to' when dealing with TMS synthetic
+        matrices.
+
+    od_from_matrix_desc:
+        The name used to describe the od from matrices. Usually just
+        'od_from', but will sometimes be 'synthetic_od_from' when dealing
+        with TMS synthetic matrices.
+
     process_count:
         The number of processes to use when multiprocessing. Set to 0 to not
         use multiprocessing at all. Set to -1 to use all expect 1 available
@@ -1282,6 +1320,9 @@ def build_od_from_fh_th_factors(pa_import: str,
         fh_th_factors_dir=fh_th_factors_dir,
         base_year=base_year,
         years_needed=years_needed,
+        pa_matrix_desc=pa_matrix_desc,
+        od_to_matrix_desc=od_to_matrix_desc,
+        od_from_matrix_desc=od_from_matrix_desc,
         process_count=process_count,
         **seg_params
     )

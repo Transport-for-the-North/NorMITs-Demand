@@ -48,6 +48,8 @@ class GravityModel(GravityModelExportPaths):
     _base_zone_col = "%s_zone_id"
     _pa_val_col = 'trips'
 
+    _internal_only_suffix = constants.INTERNAL_SUFFIX
+
     def __init__(self,
                  year: int,
                  running_mode: nd.Mode,
@@ -329,7 +331,7 @@ class GravityModel(GravityModelExportPaths):
             year=str(self.year),
             file_desc='synthetic_pa',
             segment_params=segment_params,
-            suffix='internal',
+            suffix=self._internal_only_suffix,
             compressed=True,
         )
         path = os.path.join(self.export_paths.distribution_dir, fname)
