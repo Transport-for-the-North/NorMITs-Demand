@@ -127,6 +127,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
                  import_home: nd.PathLike,
                  base_year: int,
                  scenario: str,
+                 running_mode: nd.core.enumerations.Mode,
                  zoning_system: nd.core.zoning.ZoningSystem,
                  internal_tld_name: str,
                  external_tld_name: str,
@@ -144,6 +145,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         # Assign attributes
         self.import_home = import_home
         self.base_year = base_year
+        self.running_mode = running_mode
         self.zoning_system = zoning_system
         self.internal_tld_name = internal_tld_name
         self.external_tld_name = external_tld_name
@@ -235,7 +237,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         )
         costs_path = os.path.join(
             self.import_home,
-            self.zoning_system.name,
+            self.running_mode.value,
             self._cost_dir_name,
             fname,
         )

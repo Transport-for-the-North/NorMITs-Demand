@@ -37,7 +37,8 @@ notem_export_home = r"I:\NorMITs Demand\NoTEM"
 
 def main():
     mode = nd.Mode.CAR
-    # mode = nd.Mode.BUS
+    mode = nd.Mode.BUS
+    mode = nd.Mode.RAIL
 
     if mode == nd.Mode.CAR:
         zoning_system = nd.get_zoning_system('noham')
@@ -63,6 +64,18 @@ def main():
         nhb_init_params_fname = 'nhb_init_params_p_m_tp.csv'
         hb_cost_type = '24hr'
         nhb_cost_type = 'tp'
+    elif mode == nd.Mode.RAIL:
+        zoning_system = nd.get_zoning_system('norms')
+        internal_tld_name = 'p_m_ca_internal_norms'
+        external_tld_name = 'p_m_ca_external_norms'
+        hb_running_seg = nd.get_segmentation_level('hb_p_m_ca_rail')
+        nhb_running_seg = nd.get_segmentation_level('nhb_p_m_ca_tp_wday_rail')
+        intrazonal_cost_infill = 0.5
+        cost_function = 'ln'
+        hb_init_params_fname = 'hb_init_params_p_m_ca.csv'
+        nhb_init_params_fname = 'nhb_init_params_p_m_ca_tp.csv'
+        hb_cost_type = '24hr'
+        nhb_cost_type = 'tp'
     else:
         raise ValueError(
             "Don't know what mode %s is!" % mode.value
@@ -80,6 +93,7 @@ def main():
         import_home=tms_import_home,
         base_year=base_year,
         scenario=scenario,
+        running_mode=mode,
         zoning_system=zoning_system,
         internal_tld_name=internal_tld_name,
         external_tld_name=external_tld_name,
@@ -114,15 +128,16 @@ def main():
         external_model_arg_builder=em_arg_builder,
         gravity_model_arg_builder=gm_arg_builder,
         export_home=tms_export_home,
-        process_count=-2,
+        # process_count=-2,
+        process_count=0,
     )
 
     tms.run(
         run_all=False,
-        run_external_model=False,
+        run_external_model=True,
         run_gravity_model=False,
         run_pa_matrix_reports=False,
-        run_pa_to_od=True,
+        run_pa_to_od=False,
         run_od_matrix_reports=False,
     )
 

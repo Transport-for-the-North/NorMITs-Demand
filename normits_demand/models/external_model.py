@@ -632,15 +632,14 @@ def correct_band_share(pa_mat,
                        ext_tld_band,
                        internal_zones,
                        external_zones,
-                       seed_infill=.001,
                        ):
     """
-    Adjust band shares of rows or columnns
+    Adjust band shares of rows or columns
 
     pa_mat pa:
         Square matrix
     band_totals:
-        list of dictionaries of trip lenth bands
+        list of dictionaries of trip length bands
     seed_infill = .0001:
         Seed in fill to balance
     axis = 1:
@@ -671,12 +670,14 @@ def correct_band_share(pa_mat,
             band_trips = trips * distance_bool
             ach_band_trips = band_trips.values.sum()
 
-            # # infill
-            # ach_band_trips = ach_band_trips.mask(ach_band_trips == 0, seed_infill)
+            # We can't adjust if there are no trips in this band
+            if ach_band_trips <= 0:
+                adj_mat = band_trips
 
-            # Adjust the matrix by difference
-            adjustment = target_band_trips / ach_band_trips
-            adj_mat = band_trips * adjustment
+            # Adjust the matrix towards target
+            else:
+                adjustment = target_band_trips / ach_band_trips
+                adj_mat = band_trips * adjustment
 
             # Add into the return matrix
             out += adj_mat

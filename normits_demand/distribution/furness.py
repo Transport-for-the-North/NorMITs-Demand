@@ -11,6 +11,7 @@ Module of all distribution functions for EFS
 """
 import os
 import operator
+import warnings
 
 import pandas as pd
 import numpy as np
@@ -24,8 +25,6 @@ from typing import Callable
 
 # self imports
 from normits_demand import constants as consts
-
-from normits_demand.matrices import utils as mat_utils
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
@@ -85,14 +84,16 @@ def doubly_constrained_furness(seed_vals: np.array,
             % (str(seed_vals.shape), len(row_targets), len(col_targets))
         )
 
-    if row_targets.sum() == 0 or col_targets.sum() == 0:
-        return np.zeros(seed_vals.shape)
-
     # Init
     furnessed_mat = seed_vals.copy()
     early_exit = False
-    cur_diff = tol + 10
+    cur_diff = np.inf
     iter_num = 0
+
+    # Can return early if all 0 - probably shouldn't happen!
+    if row_targets.sum() == 0 or col_targets.sum() == 0:
+        warnings.warn("Furness given targets of 0. Returning all 0's")
+        return np.zeros(seed_vals.shape), iter_num, cur_diff
 
     for iter_num in range(max_iters):
         # ## COL CONSTRAIN ## #
@@ -121,8 +122,9 @@ def doubly_constrained_furness(seed_vals: np.array,
             early_exit = True
             break
 
+        # We got a NaN! Make sure to point out we didn't converge
         if np.isnan(cur_diff):
-            return np.zeros(furnessed_mat.shape)
+            return np.zeros(furnessed_mat.shape), iter_num, np.inf
 
     # Warn the user if we exhausted our number of loops
     if not early_exit:
