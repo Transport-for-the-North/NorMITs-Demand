@@ -119,7 +119,7 @@ def main():
 
     tms.run(
         run_all=False,
-        run_external_model=True,
+        run_external_model=False,
         run_gravity_model=False,
         run_pa_matrix_reports=False,
         run_pa_to_od=True,

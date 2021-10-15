@@ -45,7 +45,7 @@ class ExternalModel(ExternalModelExportPaths):
     _base_zone_col = "%s_zone_id"
     _pa_val_col = 'trips'
 
-    _external_only_suffix = consts.EXTERNAL_SUFFIX
+    _external_only_suffix = 'ext'
 
     def __init__(self,
                  year: int,

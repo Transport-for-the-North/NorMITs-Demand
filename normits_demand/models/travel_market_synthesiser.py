@@ -360,6 +360,8 @@ class TravelMarketSynthesiser(TMSExportPaths):
         -------
 
         """
+        # TODO(BT): NEED TO OUTPUT SPLITTING FACTORS
+
         # TODO(BT): UPDATE build_compile_params() to use segmentation levels
         # Imply params from hb. Not ideal but right 99% of time
         m_needed = self.hb_running_segmentation.segments['m'].unique()

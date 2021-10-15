@@ -48,7 +48,7 @@ class GravityModel(GravityModelExportPaths):
     _base_zone_col = "%s_zone_id"
     _pa_val_col = 'trips'
 
-    _internal_only_suffix = constants.INTERNAL_SUFFIX
+    _internal_only_suffix = 'int'
 
     def __init__(self,
                  year: int,
