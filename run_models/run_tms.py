@@ -33,6 +33,7 @@ tms_import_home = r"I:\NorMITs Demand\import"
 tms_export_home = r"E:\NorMITs Demand\TMS"
 notem_iteration_name = '4'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
+notem_cache_path = "E:/"
 
 
 def main():
@@ -109,6 +110,7 @@ def main():
         nhb_cost_type=nhb_cost_type,
         notem_iteration_name=notem_iteration_name,
         notem_export_home=notem_export_home,
+        cache_path=notem_cache_path,
     )
 
     gm_arg_builder = GravityModelArgumentBuilder(

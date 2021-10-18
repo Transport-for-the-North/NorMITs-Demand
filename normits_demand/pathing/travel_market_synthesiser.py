@@ -135,6 +135,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
                  nhb_cost_type: str,
                  notem_iteration_name: str,
                  notem_export_home: str,
+                 cache_path: nd.PathLike = None,
                  intrazonal_cost_infill: float = 0.5,
                  convergence_target: float = 0.9,
                  furness_tol: float = 0.1,
@@ -155,6 +156,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         self.external_tld_name = external_tld_name
         self.hb_cost_type = hb_cost_type
         self.nhb_cost_type = nhb_cost_type
+        self.cache_path = cache_path
         self.intrazonal_cost_infill = intrazonal_cost_infill
         self.convergence_target = convergence_target
         self.furness_tol = furness_tol
@@ -227,6 +229,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
             attraction_import_path=attractions_path,
             model_zone=self.zoning_system.name,
             trip_origin=trip_origin,
+            cache_path=self.cache_path,
         )
 
         # Build TLD directory paths
@@ -804,6 +807,7 @@ def import_pa(production_import_path,
               attraction_import_path,
               model_zone,
               trip_origin,
+              cache_path=None,
               ):
     """
     This function imports productions and attractions from given paths.
@@ -827,11 +831,20 @@ def import_pa(production_import_path,
     [1] attractions:
         Mainland GB attractions.
     """
-    p_cache = "E:/%s_%s_productions.csv" % (trip_origin, model_zone)
-    a_cache = "E:/%s_%s_attractions.csv" % (trip_origin, model_zone)
+    # Init
+    p_cache = None
+    a_cache = None
 
-    if os.path.exists(p_cache) and os.path.exists(a_cache):
-        return pd.read_csv(p_cache), pd.read_csv(a_cache)
+    # handle cache
+    if cache_path is not None:
+        p_fname = "%s_%s_productions.csv" % (trip_origin, model_zone)
+        a_fname = "%s_%s_attractions.csv" % (trip_origin, model_zone)
+
+        p_cache = os.path.join(cache_path, p_fname)
+        a_cache = os.path.join(cache_path, a_fname)
+
+        if os.path.exists(p_cache) and os.path.exists(a_cache):
+            return pd.read_csv(p_cache), pd.read_csv(a_cache)
 
     # Reading pickled Dvector
     prod_dvec = nd.from_pickle(production_import_path)
@@ -876,8 +889,9 @@ def import_pa(production_import_path,
     attr_wd = weekly_to_weekday(attr_df, trip_origin, model_zone)
 
     # TODO(BT): Sort zoning system into order
-    prod_wd.to_csv(p_cache, index=False)
-    attr_wd.to_csv(a_cache, index=False)
+    if p_cache is not None and a_cache is not None:
+        prod_wd.to_csv(p_cache, index=False)
+        attr_wd.to_csv(a_cache, index=False)
 
     return prod_wd, attr_wd
 
