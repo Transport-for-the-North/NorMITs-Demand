@@ -90,7 +90,7 @@ class ExternalForecastSystem:
         print("Initiating External Forecast System...")
 
         if modes_needed is None:
-            modes_needed = consts.MODEL_MODES[model_name]
+            modes_needed = efs_consts.MODEL_MODES[model_name]
 
         # Initialise
         du.validate_model_name_and_mode(model_name, modes_needed)
@@ -886,7 +886,7 @@ class ExternalForecastSystem:
         """
         # TODO(BT): This is a quick write - revisit when we have time
         # Init
-        all_mats = file_ops.list_files(import_dir, consts.VALID_MATRIX_FORMATS)
+        all_mats = file_ops.list_files(import_dir, efs_consts.VALID_MATRIX_FORMATS)
         wfh_adj = pd.read_csv(self.imports['wfh_adj'])
         unq_soc = wfh_adj['soc'].unique()
 
@@ -1271,8 +1271,8 @@ class ExternalForecastSystem:
     def pa_to_od(self,
                  years_needed: List[int] = efs_consts.ALL_YEARS,
                  m_needed: List[int] = efs_consts.MODES_NEEDED,
-                 p_needed: List[int] = efs_consts.ALL_P,
-                 round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                 p_needed: List[int] = consts.ALL_P,
+                 round_dp: int = consts.DEFAULT_ROUNDING,
                  use_bespoke_pa: bool= False,
                  use_elasticity_pa: bool= True,
                  verbose: bool = True
@@ -1372,11 +1372,11 @@ class ExternalForecastSystem:
     def old_pa_to_od(self,
                      years_needed: List[int] = efs_consts.ALL_YEARS,
                      m_needed: List[int] = efs_consts.MODES_NEEDED,
-                     p_needed: List[int] = efs_consts.ALL_P,
+                     p_needed: List[int] = consts.ALL_P,
                      soc_needed: List[int] = efs_consts.SOC_NEEDED,
                      ns_needed: List[int] = efs_consts.NS_NEEDED,
                      ca_needed: List[int] = efs_consts.CA_NEEDED,
-                     round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                     round_dp: int = consts.DEFAULT_ROUNDING,
                      use_bespoke_pa: bool= True,
                      overwrite_hb_tp_pa: bool = True,
                      overwrite_hb_tp_od: bool = True,
@@ -1443,9 +1443,9 @@ class ExternalForecastSystem:
         hb_p_needed = list()
         nhb_p_needed = list()
         for p in p_needed:
-            if p in efs_consts.ALL_HB_P:
+            if p in consts.ALL_HB_P:
                 hb_p_needed.append(p)
-            elif p in efs_consts.ALL_NHB_P:
+            elif p in consts.ALL_NHB_P:
                 nhb_p_needed.append(p)
             else:
                 raise ValueError(
@@ -1517,7 +1517,7 @@ class ExternalForecastSystem:
                          year: int,
                          m_needed: List[int] = efs_consts.MODES_NEEDED,
                          tp_needed: List[int] = efs_consts.TIME_PERIODS,
-                         round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                         round_dp: int = consts.DEFAULT_ROUNDING,
                          use_bespoke_pa: bool = False,
                          use_elasticity_pa: bool = False,
                          ) -> None:
@@ -1579,12 +1579,18 @@ class ExternalForecastSystem:
                 compile_params_path=compile_params_paths[0],
                 round_dp=round_dp,
             )
+            
+            car_occupancies = pd.read_csv(os.path.join(
+                self.imports['home'],
+                'vehicle_occupancies',
+                'car_vehicle_occupancies.csv',
+            ))
 
             # Need to convert into hourly average PCU for noham
             vo.people_vehicle_conversion(
                 mat_import=self.exports['compiled_od'],
                 mat_export=self.exports['compiled_od_pcu'],
-                import_folder=self.imports['home'],
+                car_occupancies=car_occupancies,
                 mode=m_needed[0],
                 method='to_vehicles',
                 out_format='wide',
@@ -1676,7 +1682,7 @@ class ExternalForecastSystem:
             # Build the segmentation parameters for OD2PA
             # TODO(BT): Convert to use class arguments once implemented
             seg_params = {
-                'p_needed': efs_consts.ALL_P,
+                'p_needed': consts.ALL_P,
                 'm_needed': m_needed,
                 'ca_needed': self.ca_needed,
             }

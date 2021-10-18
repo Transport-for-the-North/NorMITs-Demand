@@ -11,6 +11,7 @@ File purpose:
 Collections of math based utils for normits demand
 """
 # Built-Ins
+import warnings
 
 # Third Party
 import numpy as np
@@ -73,6 +74,18 @@ def curve_convergence(target: np.array,
             % (target.shape, achieved.shape)
         )
 
+    # Always return 0 if we achieved NaN
+    if np.isnan(achieved).sum() > 0:
+        return 0
+
+    # If NaN in our target, raise a warning too
+    if np.isnan(target).sum() > 0:
+        warnings.warn(
+            "Found NaN in the target while calculating curve_convergence. "
+            "A NaN value in target will mean 0 is always returned."
+        )
+        return 0
+
     # Calculate convergence
     convergence = (
         np.sum((achieved - target) ** 2)
@@ -81,3 +94,11 @@ def curve_convergence(target: np.array,
 
     # Limit between 0 and 1
     return max(1 - convergence, 0)
+
+
+def get_pa_diff(new_p,
+                p_target,
+                new_a,
+                a_target):
+    pa_diff = (((sum((new_p - p_target) ** 2) + sum((new_a - a_target) ** 2))/len(p_target)) ** .5)
+    return pa_diff

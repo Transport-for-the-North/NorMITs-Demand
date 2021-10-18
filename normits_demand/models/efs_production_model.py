@@ -28,7 +28,8 @@ from tqdm import tqdm
 
 # Local Imports
 import normits_demand as nd
-from normits_demand import efs_constants as consts
+from normits_demand import constants as consts
+from normits_demand import efs_constants as efs_consts
 
 from normits_demand.utils import general as du
 from normits_demand.utils import timing
@@ -50,7 +51,7 @@ class EFSProductionGenerator:
                  model_name: str,
                  seg_level: str = 'tfn',
                  zoning_system: str = 'msoa',
-                 tag_certainty_bounds=consts.TAG_CERTAINTY_BOUNDS
+                 tag_certainty_bounds=efs_consts.TAG_CERTAINTY_BOUNDS
                  ):
         """
         #TODO
@@ -68,7 +69,7 @@ class EFSProductionGenerator:
         self.zoning_system = zoning_system
         self.zone_col = '%s_zone_id' % zoning_system
 
-        self.pop_fname = consts.POP_FNAME % zoning_system
+        self.pop_fname = efs_consts.POP_FNAME % zoning_system
 
         # Define the segmentation we're using
         if seg_level == 'tfn':
@@ -126,7 +127,7 @@ class EFSProductionGenerator:
             designated_area: pd.DataFrame = None,
 
             # Segmentation Controls
-            m_needed: List[int] = consts.MODES_NEEDED,
+            m_needed: List[int] = efs_consts.MODES_NEEDED,
             segmentation_cols: List[str] = None,
             external_zone_col: str = 'model_zone_id',
 
@@ -270,7 +271,7 @@ class EFSProductionGenerator:
             in the input data.
         """
         # Return previously created productions if we can
-        fname = consts.PRODS_FNAME % (self.zoning_system, 'hb')
+        fname = efs_consts.PRODS_FNAME % (self.zoning_system, 'hb')
         final_output_path = os.path.join(out_path, fname)
 
         if not recreate_productions and os.path.isfile(final_output_path):
@@ -430,7 +431,7 @@ class EFSProductionGenerator:
 
         # Optionally control to ntem
         lad_lookup_path = os.path.join(imports['lad_lookup'],
-                                       consts.DEFAULT_LAD_LOOKUP)
+                                       efs_consts.DEFAULT_LAD_LOOKUP)
 
         productions = ntem.control_vector_to_ntem(
             vector=productions,
@@ -449,7 +450,7 @@ class EFSProductionGenerator:
 
         # Write productions to file
         print("Writing productions to file...")
-        fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_hb')
+        fname = efs_consts.PRODS_FNAME % (self.zoning_system, 'raw_hb')
         path = os.path.join(out_path, fname)
         productions.to_csv(path, index=False)
 
@@ -476,7 +477,7 @@ class EFSProductionGenerator:
         productions = productions.groupby(group_cols).sum().reset_index()
 
         print("Writing HB productions to disk...")
-        fname = consts.PRODS_FNAME % (self.zoning_system, 'hb')
+        fname = efs_consts.PRODS_FNAME % (self.zoning_system, 'hb')
         path = os.path.join(out_path, fname)
         productions.to_csv(path, index=False)
 
@@ -493,9 +494,9 @@ class NhbProductionModel:
                  seg_level: str = 'tfn',
                  return_segments: List[str] = None,
 
-                 base_year: str = consts.BASE_YEAR_STR,
-                 future_years: List[str] = consts.FUTURE_YEARS_STR,
-                 m_needed: List[int] = consts.MODES_NEEDED,
+                 base_year: str = efs_consts.BASE_YEAR_STR,
+                 future_years: List[str] = efs_consts.FUTURE_YEARS_STR,
+                 m_needed: List[int] = efs_consts.MODES_NEEDED,
 
                  # Alternate input paths
                  hb_prods_path: str = None,
@@ -749,30 +750,30 @@ class NhbProductionModel:
         """
         # Set all unset import paths to default values
         if hb_prods_path is None:
-            fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_hb')
+            fname = efs_consts.PRODS_FNAME % (self.zoning_system, 'raw_hb')
             hb_prods_path = os.path.join(export_home,
-                                         consts.PRODUCTIONS_DIRNAME,
+                                         efs_consts.PRODUCTIONS_DIRNAME,
                                          fname)
 
         if hb_attrs_path is None:
-            fname = consts.ATTRS_FNAME % (self.zoning_system, 'raw_hb')
+            fname = efs_consts.ATTRS_FNAME % (self.zoning_system, 'raw_hb')
             hb_attrs_path = os.path.join(export_home,
-                                         consts.ATTRACTIONS_DIRNAME,
+                                         efs_consts.ATTRACTIONS_DIRNAME,
                                          fname)
 
         if trip_rates_path is None:
             trip_rates_path = os.path.join(import_home,
-                                           consts.NHB_PARAMS_DIRNAME,
+                                           efs_consts.NHB_PARAMS_DIRNAME,
                                            'nhb_ave_wday_enh_trip_rates.csv')
 
         if mode_splits_path is None:
             mode_splits_path = os.path.join(import_home,
-                                            consts.NHB_PARAMS_DIRNAME,
+                                            efs_consts.NHB_PARAMS_DIRNAME,
                                             'nhb_ave_wday_mode_split.csv')
 
         if time_splits_path is None:
             time_splits_path = os.path.join(import_home,
-                                            consts.NHB_PARAMS_DIRNAME,
+                                            efs_consts.NHB_PARAMS_DIRNAME,
                                             'nhb_ave_wday_time_split.csv')
 
         if ntem_control_dir is None:
@@ -785,7 +786,7 @@ class NhbProductionModel:
 
         if audit_write_dir is None:
             audit_write_dir = os.path.join(export_home,
-                                           consts.AUDITS_DIRNAME,
+                                           efs_consts.AUDITS_DIRNAME,
                                            'Productions')
         du.create_folder(audit_write_dir, chDir=False)
 
@@ -810,8 +811,8 @@ class NhbProductionModel:
 
         # Build the efs_exports dictionary
         exports = {
-            'productions': os.path.join(export_home, consts.PRODUCTIONS_DIRNAME),
-            'attractions': os.path.join(export_home, consts.ATTRACTIONS_DIRNAME),
+            'productions': os.path.join(export_home, efs_consts.PRODUCTIONS_DIRNAME),
+            'attractions': os.path.join(export_home, efs_consts.ATTRACTIONS_DIRNAME),
             'audits': audit_write_dir
         }
 
@@ -1097,7 +1098,7 @@ class NhbProductionModel:
             class constructor
         """
         # Return previously created productions if we can
-        fname = consts.PRODS_FNAME % (self.zoning_system, 'nhb')
+        fname = efs_consts.PRODS_FNAME % (self.zoning_system, 'nhb')
         final_output_path = os.path.join(self.exports['productions'], fname)
 
         if not recreate_productions and os.path.isfile(final_output_path):
@@ -1152,7 +1153,7 @@ class NhbProductionModel:
 
         # ## OPTIONALLY CONSTRAIN TO NTEM ## #
         lad_lookup_path = os.path.join(self.imports['lad_lookup'],
-                                       consts.DEFAULT_LAD_LOOKUP)
+                                       efs_consts.DEFAULT_LAD_LOOKUP)
 
         nhb_prods = ntem.control_vector_to_ntem(
             vector=nhb_prods,
@@ -1172,7 +1173,7 @@ class NhbProductionModel:
         # Output productions before any aggregation
         if output_raw:
             print("Writing raw NHB Productions to disk...")
-            fname = consts.PRODS_FNAME % (self.zoning_system, 'raw_nhb')
+            fname = efs_consts.PRODS_FNAME % (self.zoning_system, 'raw_nhb')
             path = os.path.join(self.exports['productions'], fname)
             nhb_prods.to_csv(path, index=False)
 
@@ -1197,7 +1198,7 @@ class NhbProductionModel:
 
         # Output the aggregated productions
         print("Writing NHB Productions to disk...")
-        fname = consts.PRODS_FNAME % (self.zoning_system, 'nhb')
+        fname = efs_consts.PRODS_FNAME % (self.zoning_system, 'nhb')
         path = os.path.join(self.exports['productions'], fname)
         nhb_prods.to_csv(path, index=False)
 
@@ -1461,7 +1462,7 @@ def build_production_exports(export_home: str,
     # Set all unset export paths to default values
     if audit_write_dir is None:
         audit_write_dir = os.path.join(export_home,
-                                       consts.AUDITS_DIRNAME,
+                                       efs_consts.AUDITS_DIRNAME,
                                        'Productions')
     du.create_folder(audit_write_dir, chDir=False)
 
@@ -1565,7 +1566,7 @@ def get_pop_data_from_land_use(by_pop_import_path: nd.PathLike,
             year_pop = year_pop.rename(columns={base_year_data_col: base_year})
         else:
             # Build the path to this years data
-            fname = consts.LU_POP_FNAME % str(year)
+            fname = efs_consts.LU_POP_FNAME % str(year)
             lu_path = os.path.join(fy_pop_import_dir, fname)
             year_pop = file_ops.read_df(lu_path, find_similar=True)
 
@@ -1608,7 +1609,7 @@ def merge_pop_trip_rates(population: pd.DataFrame,
                          mean_time_splits_path: str,
                          mode_share_path: str,
                          audit_out: str,
-                         tp_needed: List[int] = consts.TP_NEEDED,
+                         tp_needed: List[int] = efs_consts.TP_NEEDED,
                          traveller_type_col: str = 'traveller_type',
                          ) -> Tuple[pd.DataFrame, Dict[str, float]]:
     """
@@ -1682,7 +1683,7 @@ def merge_pop_trip_rates(population: pd.DataFrame,
         trip_rate_subset = trip_rates[trip_rates['p'] == p].copy()
         ph = population.copy()
 
-        if p in consts.SOC_P:
+        if p in efs_consts.SOC_P:
             # Update ns with none
             ph['ns'] = 'none'
             ph['soc'] = ph['soc'].astype(float).astype(int)
@@ -1690,7 +1691,7 @@ def merge_pop_trip_rates(population: pd.DataFrame,
             trip_rate_subset['ns'] = 'none'
             trip_rate_subset['soc'] = trip_rate_subset['soc'].astype(int)
 
-        elif p in consts.NS_P:
+        elif p in efs_consts.NS_P:
             # Update soc with none
             ph['soc'] = 'none'
             ph['ns'] = ph['ns'].astype(float).astype(int)

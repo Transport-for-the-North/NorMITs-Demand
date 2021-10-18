@@ -23,6 +23,7 @@ from typing import Any
 from typing import List
 from typing import Dict
 from typing import Tuple
+from typing import Optional
 
 # Third Party
 import pandas as pd
@@ -289,6 +290,10 @@ class SegmentationLevel:
             )
 
         return multiply_dict, return_seg
+
+    def __iter__(self):
+        """Overrides the default implementation"""
+        return self._segments.to_dict(orient='records').__iter__()
 
     def _read_multiply_definitions(self) -> pd.DataFrame:
         """
@@ -1214,12 +1219,12 @@ class SegmentationLevel:
         Parameters
         ----------
         lst:
-            A list of segment names to check
+            A list of segmentation names to check
 
         Returns
         -------
         is_correct_naming:
-            True if all names in lst are valid, and lst contains all segment
+            True if all names in lst are valid, and lst contains all segmentation
             names. Otherwise False.
         """
         # Init
@@ -1235,6 +1240,66 @@ class SegmentationLevel:
 
         # If we are here, then must be True
         return True
+
+    def contains_all_segments(self, lst: List[str]) -> bool:
+        """Checks whether lst is a complete list of all segments in this segmentation.
+
+        Parameters
+        ----------
+        lst:
+            A list of segmentation names to check.
+
+        Returns
+        -------
+        contains_all_segments:
+            True if all names in lst are valid, and lst contains all segment
+            names. Otherwise False.
+        """
+        # Init
+        names = set(lst)
+
+        # Return False if not all names are valid
+        if len(names - set(self.naming_order)) > 0:
+            return False
+
+        # Return False if some names are missing
+        if len(set(self.naming_order) - names) > 0:
+            return False
+
+        # If we are here, then must be True
+        return True
+
+    def validate_contains_all_segments(self, lst: List[str]) -> None:
+        """Raises an error is lst is not valid
+
+        Raises an error if lst is not a complete list of all segments in
+        this segmentation.
+
+        Parameters
+        ----------
+        lst:
+            A list of segmentation names to check.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError:
+            If self.contains_all_segments(lst) returns False.
+        """
+        if not self.contains_all_segments(lst):
+            additional = set(lst) - set(self.naming_order)
+            missing = set(self.naming_order) - set(lst)
+
+            raise ValueError(
+                "Not all segments for this segmentation are contained in "
+                "segment_params.\n"
+                "\tAdditional segments: %s\n"
+                "\tMissing segments: %s"
+                % (additional, missing)
+            )
 
     def get_grouped_weekday_segments(self) -> List[List[str]]:
         """
@@ -1364,6 +1429,88 @@ class SegmentationLevel:
             tp_dict[tp] = tp_segments['name'].to_list()
 
         return tp_dict
+
+    def generate_file_name(self,
+                           segment_params: Dict[str, Any],
+                           file_desc: Optional[str] = None,
+                           trip_origin: Optional[str] = None,
+                           year: Optional[str] = None,
+                           suffix: Optional[str] = None,
+                           csv: Optional[bool] = False,
+                           compressed: Optional[bool] = False,
+                           ) -> str:
+        """Generate a file name from segment_params
+
+        Builds a underscore separated file name based on the segments
+        passed in via segment params. Filename is built in the following
+        order, missing any arguments that haven't been defined.
+        trip_origin, file_desc, year, segment_params (in naming_order order),
+        suffix.
+
+        Parameters
+        ----------
+        file_desc:
+            A string describing the file. For matrices, this is usually 'pa'
+            or 'od'. For other files it is a description of their contents.
+
+        segment_params:
+            A dictionary of {segment_name: segment_value}. All segment_names
+            from this segmentation must be contained in segment_params. An
+            error will be thrown if any are missing.
+
+        trip_origin:
+            The trip origin to add to the filename. Usually 'hb' or 'nhb'.
+
+        year:
+            The year to add to the filename.
+
+        suffix:
+            An optional suffix to add to the end of the filename. Could be
+            something like 'internal' or 'external'. Optionally can be used
+            to add a custom filetype suffix. The dot would need to be passed
+            in too.
+
+        csv:
+            Whether the return should be a csv filetype or not.
+
+        compressed:
+            Whether the return should be a compressed filetype or not.
+
+        Returns
+        -------
+        file_name:
+            The generated file_name for this segmentation.
+        """
+        # Make sure all segments are in segment_params
+        self.validate_contains_all_segments(segment_params.keys())
+
+        # Build the filename in order, and store in list
+        name_parts = list()
+        if trip_origin is not None:
+            name_parts += [trip_origin]
+
+        if file_desc is not None:
+            name_parts += [file_desc]
+
+        if year is not None:
+            name_parts += ["yr%s" % year]
+
+        for segment_name in self.naming_order:
+            name_parts += ["%s%s" % (segment_name, segment_params[segment_name])]
+
+        if suffix is not None:
+            name_parts += [suffix]
+
+        # Create name string
+        final_name = '_'.join(name_parts)
+
+        # Optionally add on a file_type
+        if csv:
+            final_name += '.csv'
+        elif compressed:
+            final_name += consts.COMPRESSION_SUFFIX
+
+        return final_name
 
 
 class SegmentationError(nd.NormitsDemandError):

@@ -49,14 +49,13 @@ from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
 from normits_demand.validation import checks
 
-
 from normits_demand.matrices.tms_matrix_processing import *
 
 
 def _aggregate(import_dir: str,
                in_fnames: List[str],
                export_path: str,
-               round_dp: int = efs_consts.DEFAULT_ROUNDING,
+               round_dp: int = consts.DEFAULT_ROUNDING,
                ) -> str:
     """
     Loads the given files, aggregates together and saves in given location
@@ -96,7 +95,7 @@ def _recursive_aggregate(candidates: List[str],
                          import_dir: str,
                          export_path: str,
                          compress_out: bool = False,
-                         round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                         round_dp: int = consts.DEFAULT_ROUNDING,
                          ) -> None:
     """
     The internal function of aggregate_matrices(). Recursively steps through
@@ -258,7 +257,7 @@ def aggregate_matrices(import_dir: str,
                        ca_needed: List[int] = None,
                        tp_needed: List[int] = None,
                        compress_out: bool = False,
-                       round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                       round_dp: int = consts.DEFAULT_ROUNDING,
                        process_count: int = consts.PROCESS_COUNT,
                        ):
     """
@@ -358,13 +357,13 @@ def aggregate_matrices(import_dir: str,
     kwarg_list = list()
     for year, m, p in product(years_needed, m_needed, p_needed):
         # Init
-        if p in efs_consts.SOC_P:
+        if p in consts.SOC_P:
             segment_needed = soc_needed
             segment_str = soc_strs
-        elif p in efs_consts.NS_P:
+        elif p in consts.NS_P:
             segment_needed = ns_needed
             segment_str = ns_strs
-        elif p in efs_consts.ALL_NHB_P:
+        elif p in consts.ALL_NHB_P:
             segment_needed = None
             segment_str = list()
         else:
@@ -861,7 +860,7 @@ def _tms_seg_tour_props(od_import: str,
                         pa_export: str,
                         model_name: str,
                         year: int = efs_consts.BASE_YEAR,
-                        p_needed: List[int] = efs_consts.ALL_HB_P,
+                        p_needed: List[int] = consts.ALL_HB_P,
                         m_needed: List[int] = efs_consts.MODES_NEEDED,
                         soc_needed: List[int] = None,
                         ns_needed: List[int] = None,
@@ -1977,9 +1976,9 @@ def build_24hr_mats(import_dir: str,
 
     for p, m, seg, ca in loop_generator:
         # Figure out trip origin
-        if p in efs_consts.ALL_HB_P:
+        if p in consts.ALL_HB_P:
             trip_origin = 'hb'
-        elif p in efs_consts.ALL_NHB_P:
+        elif p in consts.ALL_NHB_P:
             trip_origin = 'nhb'
         else:
             raise ValueError("'%s' is not a valid purpose. Don't know if it "
@@ -2265,6 +2264,8 @@ def copy_nhb_matrices(import_dir: str,
                       export_dir: str,
                       replace_pa_with_od: bool = False,
                       replace_od_with_pa: bool = False,
+                      pa_matrix_desc: str = 'pa',
+                      od_matrix_desc: str = 'od',
                       ) -> None:
     """
     Copies NHB matrices from import dir to export dir.
@@ -2281,10 +2282,20 @@ def copy_nhb_matrices(import_dir: str,
         Path to the directory to copy the nhb matrices to.
     
     replace_pa_with_od:
-        Whether to replace the '_pa_' in the matrix names with '_od_'.
+        Whether to replace pa_matrix_desc in the matrix names with od_matrix_desc.
 
     replace_od_with_pa:
-        Whether to replace the '_od_' in the matrix names with '_pa_'.
+        Whether to replace od_matrix_desc in the matrix names with pa_matrix_desc.
+
+    pa_matrix_desc:
+        The name used to describe the pa matrices. Usually just 'pa', but
+        will sometimes be 'synthetic_pa' when dealing with TMS synthetic
+        matrices.
+
+    od_matrix_desc:
+        The name used to describe the od matrices. Usually just 'od', but
+        will sometimes be 'synthetic_od' when dealing with TMS synthetic
+        matrices.
 
     Returns
     -------
@@ -2292,8 +2303,10 @@ def copy_nhb_matrices(import_dir: str,
     """
     # Find the .csv nhb mats
     mats = du.list_files(import_dir)
-    mats = [x for x in mats if '.csv' in x]
     nhb_mats = [x for x in mats if du.starts_with(x, 'nhb')]
+
+    pa_nm = '_%s_' % pa_matrix_desc
+    od_nm = '_%s_' % od_matrix_desc
 
     # Copy them over without a rename
     for mat_fname in nhb_mats:
@@ -2303,18 +2316,20 @@ def copy_nhb_matrices(import_dir: str,
 
         # Try to rename if needed
         elif replace_pa_with_od:
-            if '_pa_' not in mat_fname:
+            if pa_nm not in mat_fname:
                 raise ValueError(
-                    "Cannot find '_pa_' in '%s' to replace." % mat_fname
+                    "Cannot find '%s' in '%s' to replace."
+                    % (pa_nm, mat_fname)
                 )
-            out_mat_fname = mat_fname.replace('_pa_', '_od_')
+            out_mat_fname = mat_fname.replace(pa_nm, od_nm)
 
         elif replace_od_with_pa:
-            if '_od_' not in mat_fname:
+            if od_nm not in mat_fname:
                 raise ValueError(
-                    "Cannot find '_od_' in '%s' to replace." % mat_fname
+                    "Cannot find '%s' in '%s' to replace."
+                    % (od_nm, mat_fname)
                 )
-            out_mat_fname = mat_fname.replace('_od_', '_pa_')
+            out_mat_fname = mat_fname.replace(od_nm, pa_nm)
         else:
             raise ValueError(
                 "This shouldn't happen! Somehow replace_od_with_pa and "
@@ -2383,7 +2398,7 @@ def compile_matrices(mat_import: str,
                      mat_export: str,
                      compile_params_path: str,
                      factor_pickle_path: str = None,
-                     round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                     round_dp: int = consts.DEFAULT_ROUNDING,
                      factors_fname: str = 'od_compilation_factors.pickle',
                      avoid_zero_splits: bool = False,
                      process_count: int = consts.PROCESS_COUNT,
@@ -2717,10 +2732,10 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
         matrix_format = checks.validate_matrix_format(temp_seg_dict['matrix_format'])
 
         # Figure out which column names we should use
-        if matrix_format in efs_consts.PA_MATRIX_FORMATS:
+        if matrix_format in consts.PA_MATRIX_FORMATS:
             p_or_o_val_name = 'productions'
             a_or_d_val_name = 'attractions'
-        elif matrix_format in efs_consts.OD_MATRIX_FORMATS:
+        elif matrix_format in consts.OD_MATRIX_FORMATS:
             p_or_o_val_name = 'origin'
             a_or_d_val_name = 'destination'
         else:
@@ -2866,7 +2881,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
         vector = du.merge_df_list(yearly_vec, on=segment_col_names)
 
         # Split out the HB and NHB, add to return
-        hb_mask = vector['p'].isin(efs_consts.ALL_HB_P)
+        hb_mask = vector['p'].isin(consts.ALL_HB_P)
         return_values.append(vector[hb_mask].copy())
         return_values.append(vector[~hb_mask].copy())
 
@@ -2956,15 +2971,15 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
 
     # Figure out the file paths we should be using
     if matrix_format == 'pa':
-        hb_p_or_o_fname = efs_consts.PRODS_FNAME % ('cache', 'hb')
-        nhb_p_or_o_fname = efs_consts.PRODS_FNAME % ('cache', 'nhb')
-        hb_a_or_o_fname = efs_consts.ATTRS_FNAME % ('cache', 'hb')
-        nhb_a_or_o_fname = efs_consts.ATTRS_FNAME % ('cache', 'nhb')
+        hb_p_or_o_fname = consts.PRODS_FNAME % ('cache', 'hb')
+        nhb_p_or_o_fname = consts.PRODS_FNAME % ('cache', 'nhb')
+        hb_a_or_o_fname = consts.ATTRS_FNAME % ('cache', 'hb')
+        nhb_a_or_o_fname = consts.ATTRS_FNAME % ('cache', 'nhb')
     elif matrix_format == 'od':
-        hb_p_or_o_fname = efs_consts.ORIGS_FNAME % ('cache', 'hb')
-        nhb_p_or_o_fname = efs_consts.ORIGS_FNAME % ('cache', 'nhb')
-        hb_a_or_o_fname = efs_consts.DESTS_FNAME % ('cache', 'hb')
-        nhb_a_or_o_fname = efs_consts.DESTS_FNAME % ('cache', 'nhb')
+        hb_p_or_o_fname = consts.ORIGS_FNAME % ('cache', 'hb')
+        nhb_p_or_o_fname = consts.ORIGS_FNAME % ('cache', 'nhb')
+        hb_a_or_o_fname = consts.DESTS_FNAME % ('cache', 'hb')
+        nhb_a_or_o_fname = consts.DESTS_FNAME % ('cache', 'nhb')
     else:
         raise ValueError(
             "%s seems to be a valid matrix format, but I don't know what to "
@@ -3481,7 +3496,7 @@ def recombine_internal_external(internal_import: nd.PathLike,
 
         # Check the external file actually exists
         try:
-            path = file_ops.find_filename(
+            file_ops.find_filename(
                 path=os.path.join(external_import, ext_fname),
                 alt_types=['.csv', consts.COMPRESSION_SUFFIX]
             )

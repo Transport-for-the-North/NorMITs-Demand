@@ -11,6 +11,7 @@ Module of all distribution functions for EFS
 """
 import os
 import operator
+import warnings
 
 import pandas as pd
 import numpy as np
@@ -24,12 +25,10 @@ from typing import Callable
 
 # self imports
 from normits_demand import constants as consts
-from normits_demand import efs_constants as efs_consts
-
-from normits_demand.matrices import utils as mat_utils
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
+from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.concurrency import multiprocessing
 from normits_demand.audits import audits
@@ -85,14 +84,16 @@ def doubly_constrained_furness(seed_vals: np.array,
             % (str(seed_vals.shape), len(row_targets), len(col_targets))
         )
 
-    if row_targets.sum() == 0 or col_targets.sum() == 0:
-        return np.zeros(seed_vals.shape)
-
     # Init
     furnessed_mat = seed_vals.copy()
     early_exit = False
-    cur_diff = tol + 10
+    cur_diff = np.inf
     iter_num = 0
+
+    # Can return early if all 0 - probably shouldn't happen!
+    if row_targets.sum() == 0 or col_targets.sum() == 0:
+        warnings.warn("Furness given targets of 0. Returning all 0's")
+        return np.zeros(seed_vals.shape), iter_num, cur_diff
 
     for iter_num in range(max_iters):
         # ## COL CONSTRAIN ## #
@@ -121,8 +122,9 @@ def doubly_constrained_furness(seed_vals: np.array,
             early_exit = True
             break
 
+        # We got a NaN! Make sure to point out we didn't converge
         if np.isnan(cur_diff):
-            return np.zeros(furnessed_mat.shape)
+            return np.zeros(furnessed_mat.shape), iter_num, np.inf
 
     # Warn the user if we exhausted our number of loops
     if not early_exit:
@@ -196,7 +198,7 @@ def _distribute_pa_internal(productions,
     # Pull the seed matrix into line with unique zones
     if unique_zones is not None:
         # Get the mask and extract the data
-        mask = mat_utils.get_wide_mask(
+        mask = pd_utils.get_wide_mask(
             df=seed_dist,
             zones=unique_zones,
             join_fn=unique_zones_join_fn,
@@ -349,8 +351,8 @@ def distribute_pa(productions: pd.DataFrame,
                   compress_out: bool = True,
                   echo: bool = False,
                   report_out: str = None,
-                  round_dp: int = efs_consts.DEFAULT_ROUNDING,
-                  process_count: int = efs_consts.PROCESS_COUNT
+                  round_dp: int = consts.DEFAULT_ROUNDING,
+                  process_count: int = consts.PROCESS_COUNT
                   ) -> None:
     """
     Furnesses the given productions and attractions
@@ -613,9 +615,9 @@ def distribute_pa(productions: pd.DataFrame,
         kwargs_list = list()
         for calib_params in loop_generator:
             # Set the column name of the ns/soc column
-            if calib_params['p'] in efs_consts.SOC_P:
+            if calib_params['p'] in consts.SOC_P:
                 seg_col = soc_col
-            elif calib_params['p'] in efs_consts.NS_P:
+            elif calib_params['p'] in consts.NS_P:
                 seg_col = ns_col
             else:
                 raise ValueError("'%s' does not seem to be a valid soc or ns "
@@ -668,7 +670,7 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
                            tol: float = 1e-9,
                            idx_col: str = 'model_zone_id',
                            unique_col: str = 'trips',
-                           round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                           round_dp: int = consts.DEFAULT_ROUNDING,
                            unique_zones: List[int] = None,
                            unique_zones_join_fn: Callable = operator.and_,
                            ) -> Tuple[pd.DataFrame, int, float]:
@@ -748,8 +750,8 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     col_targets = col_targets.copy()
     seed_values = seed_values.copy()
 
-    row_targets = row_targets.reindex([idx_col, unique_col], axis='columns')
-    col_targets = col_targets.reindex([idx_col, unique_col], axis='columns')
+    row_targets = row_targets.reindex(columns=[idx_col, unique_col])
+    col_targets = col_targets.reindex(columns=[idx_col, unique_col])
     row_targets = row_targets.set_index(idx_col)
     col_targets = col_targets.set_index(idx_col)
 
@@ -774,14 +776,14 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
 
     # ## TIDY AND INFILL SEED ## #
     # Infill the 0 zones
-    seed_values = seed_values.where(seed_values > 0, seed_infill)
+    seed_values = seed_values.mask(seed_values <= 0, seed_infill)
     if normalise_seeds:
         seed_values /= seed_values.sum()
 
     # If we were given certain zones, make sure everything else is 0
     if unique_zones is not None:
         # Get the mask and extract the data
-        mask = mat_utils.get_wide_mask(
+        mask = pd_utils.get_wide_mask(
             df=seed_values,
             zones=unique_zones,
             join_fn=unique_zones_join_fn,
