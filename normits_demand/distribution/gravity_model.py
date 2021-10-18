@@ -106,10 +106,10 @@ class GravityModel(GravityModelExportPaths):
             intrazonal_cost_infill: Optional[float] = 0.5,
             pa_val_col: Optional[str] = 'val',
             apply_k_factoring: bool = True,
-            furness_loops: int = 2000,
+            convergence_target: float = 0.95,
             fitting_loops: int = 100,
-            bs_con_target: float = 0.95,
-            target_r_gap: float = 1.0,
+            furness_max_iters: int = 2000,
+            furness_tol: float = 1.0,
             init_param_1_col: str = 'init_param_a',
             init_param_2_col: str = 'init_param_b',
             ):
@@ -125,10 +125,10 @@ class GravityModel(GravityModelExportPaths):
             'cost_function': cost_function,
             'intrazonal_cost_infill': intrazonal_cost_infill,
             'apply_k_factoring': apply_k_factoring,
-            'furness_loops': furness_loops,
+            'furness_max_iters': furness_max_iters,
             'fitting_loops': fitting_loops,
-            'bs_con_target': bs_con_target,
-            'target_r_gap': target_r_gap,
+            'convergence_target': convergence_target,
+            'furness_tol': furness_tol,
         }
 
         pbar_kwargs = {
@@ -240,10 +240,10 @@ class GravityModel(GravityModelExportPaths):
                       cost_function: str,
                       intrazonal_cost_infill: Optional[float] = 0.5,
                       apply_k_factoring: bool = True,
-                      furness_loops: int = 2000,
+                      convergence_target: float = 0.95,
                       fitting_loops: int = 100,
-                      bs_con_target: float = 0.95,
-                      target_r_gap: float = 1.0,
+                      furness_max_iters: int = 2000,
+                      furness_tol: float = 1.0,
                       ):
         seg_name = running_segmentation.generate_file_name(segment_params)
         self._logger.info("Running for %s" % seg_name)
@@ -306,10 +306,10 @@ class GravityModel(GravityModelExportPaths):
             log_path=log_path,
             cost_function=cost_function,
             apply_k_factoring=apply_k_factoring,
-            furness_loops=furness_loops,
+            furness_loops=furness_max_iters,
             fitting_loops=fitting_loops,
-            bs_con_target=bs_con_target,
-            target_r_gap=target_r_gap,
+            bs_con_target=convergence_target,
+            target_r_gap=furness_tol,
         )
 
         # ## WRITE OUT GRAVITY MODEL OUTPUTS ## #

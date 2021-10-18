@@ -102,6 +102,9 @@ class ExternalModel(ExternalModelExportPaths):
             running_segmentation: nd.core.SegmentationLevel,
             intrazonal_cost_infill: Optional[float] = 0.5,
             pa_val_col: Optional[str] = 'val',
+            convergence_target: float = 0.9,
+            furness_tol: float = 0.1,
+            furness_max_iters: int = 5000,
             ) -> None:
         # TODO(BT): Make sure the P/A vectors are the right zoning system
         # TODO(BT): Make sure pa_val_col is in P/A vectors
@@ -118,6 +121,9 @@ class ExternalModel(ExternalModelExportPaths):
             'costs_path': costs_path,
             'intrazonal_cost_infill': intrazonal_cost_infill,
             'seed_matrix': seed_matrix,
+            'convergence_target': convergence_target,
+            'furness_tol': furness_tol,
+            'furness_max_iters': furness_max_iters,
         }
 
         pbar_kwargs = {
@@ -238,6 +244,9 @@ class ExternalModel(ExternalModelExportPaths):
                       segment_params,
                       seg_productions,
                       seg_attractions,
+                      convergence_target,
+                      furness_tol,
+                      furness_max_iters,
                       ):
         """Internal looping function of self.run
 
@@ -318,12 +327,12 @@ class ExternalModel(ExternalModelExportPaths):
             attractions=seg_attractions,
             base_matrix=seed_matrix,
             costs=costs,
-            convergence_target=0.9,
             int_target_tld=internal_tld,
             ext_target_tld=external_tld,
             log_path=log_path,
-            furness_tol=0.1,
-            furness_max_iters=5000,
+            convergence_target=convergence_target,
+            furness_tol=furness_tol,
+            furness_max_iters=furness_max_iters,
         )
 
         # ## WRITE REPORTS ON HOW THE EXTERNAL MODEL DID ## #

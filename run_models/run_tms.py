@@ -47,6 +47,8 @@ def main():
         hb_running_seg = nd.get_segmentation_level('hb_p_m_car')
         nhb_running_seg = nd.get_segmentation_level('nhb_p_m_tp_wday_car')
         intrazonal_cost_infill = 0.5
+        em_convergence_target = 0.9
+        gm_convergence_target = 0.95
         cost_function = 'ln'
         hb_init_params_fname = 'hb_init_params_p_m.csv'
         nhb_init_params_fname = 'nhb_init_params_p_m_tp.csv'
@@ -59,6 +61,8 @@ def main():
         hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
         nhb_running_seg = nd.get_segmentation_level('nhb_p_m_tp_wday_bus')
         intrazonal_cost_infill = 0.4
+        em_convergence_target = 0.8
+        gm_convergence_target = 0.85
         cost_function = 'ln'
         hb_init_params_fname = 'hb_init_params_p_m.csv'
         nhb_init_params_fname = 'nhb_init_params_p_m_tp.csv'
@@ -71,6 +75,8 @@ def main():
         hb_running_seg = nd.get_segmentation_level('hb_p_m_ca_rail')
         nhb_running_seg = nd.get_segmentation_level('nhb_p_m_ca_tp_wday_rail')
         intrazonal_cost_infill = 0.5
+        em_convergence_target = 0.9
+        gm_convergence_target = 0.95
         cost_function = 'ln'
         hb_init_params_fname = 'hb_init_params_p_m_ca.csv'
         nhb_init_params_fname = 'nhb_init_params_p_m_ca_tp.csv'
@@ -98,6 +104,7 @@ def main():
         internal_tld_name=internal_tld_name,
         external_tld_name=external_tld_name,
         intrazonal_cost_infill=intrazonal_cost_infill,
+        convergence_target=em_convergence_target,
         hb_cost_type=hb_cost_type,
         nhb_cost_type=nhb_cost_type,
         notem_iteration_name=notem_iteration_name,
@@ -112,6 +119,7 @@ def main():
         zoning_system=zoning_system,
         hb_cost_type=hb_cost_type,
         nhb_cost_type=nhb_cost_type,
+        convergence_target=gm_convergence_target,
         hb_init_params_fname=hb_init_params_fname,
         nhb_init_params_fname=nhb_init_params_fname,
         external_model_exports=tms_exports.external_model,
@@ -133,7 +141,7 @@ def main():
 
     tms.run(
         run_all=False,
-        run_external_model=True,
+        run_external_model=False,
         run_gravity_model=False,
         run_pa_matrix_reports=False,
         run_pa_to_od=False,

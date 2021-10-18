@@ -136,6 +136,10 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
                  notem_iteration_name: str,
                  notem_export_home: str,
                  intrazonal_cost_infill: float = 0.5,
+                 convergence_target: float = 0.9,
+                 furness_tol: float = 0.1,
+                 furness_max_iters: int = 5000,
+                 **kwargs,
                  ):
         # Check paths exist
         file_ops.check_path_exists(import_home)
@@ -152,6 +156,10 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         self.hb_cost_type = hb_cost_type
         self.nhb_cost_type = nhb_cost_type
         self.intrazonal_cost_infill = intrazonal_cost_infill
+        self.convergence_target = convergence_target
+        self.furness_tol = furness_tol
+        self.furness_max_iters = furness_max_iters
+        self.kwargs = kwargs
 
         # Generate the NoTEM export paths
         self.notem_exports = nd.pathing.NoTEMExportPaths(
@@ -259,7 +267,8 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
                 )
 
         # Return the generated arguments
-        return {
+        final_kwargs = self.kwargs.copy()
+        final_kwargs.update({
             'productions': productions,
             'attractions': attractions,
             'seed_matrix': self._read_and_convert_cjtw(),
@@ -267,7 +276,11 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
             'internal_tld_dir': internal_tld_path,
             'external_tld_dir': external_tld_path,
             'intrazonal_cost_infill': self.intrazonal_cost_infill,
-        }
+            'convergence_target': self.convergence_target,
+            'furness_tol': self.furness_tol,
+            'furness_max_iters': self.furness_max_iters,
+        })
+        return final_kwargs
 
     def build_hb_arguments(self) -> Dict[str, nd.PathLike]:
         return self.build_arguments(trip_origin='hb')
@@ -429,10 +442,11 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
                  intrazonal_cost_infill: float = 0.5,
                  pa_val_col: Optional[str] = 'val',
                  apply_k_factoring: Optional[bool] = True,
-                 furness_loops: Optional[int] = 2000,
+                 convergence_target: Optional[float] = 0.95,
                  fitting_loops: Optional[int] = 100,
-                 bs_con_target: Optional[float] = 0.95,
-                 target_r_gap: Optional[float] = 1.0,
+                 furness_max_iters: Optional[int] = 2000,
+                 furness_tol: Optional[float] = 1.0,
+                 **kwargs
                  ):
         # Check paths exist
         file_ops.check_path_exists(import_home)
@@ -454,10 +468,11 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
         self.intrazonal_cost_infill = intrazonal_cost_infill
         self.pa_val_col = pa_val_col
         self.apply_k_factoring = apply_k_factoring
-        self.furness_loops = furness_loops
+        self.convergence_target = convergence_target
         self.fitting_loops = fitting_loops
-        self.bs_con_target = bs_con_target
-        self.target_r_gap = target_r_gap
+        self.furness_max_iters = furness_max_iters
+        self.furness_tol = furness_tol
+        self.kwargs = kwargs
 
     def build_arguments(self, trip_origin: str) -> Dict[str, nd.PathLike]:
         # Init
@@ -540,7 +555,9 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
                     % path
                 )
 
-        return {
+        # Return the built arguments
+        final_kwargs = self.kwargs.copy()
+        final_kwargs.update({
             'productions': file_ops.read_df(productions_path),
             'attractions': file_ops.read_df(attractions_path),
             'init_params': init_params,
@@ -550,11 +567,12 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
             'intrazonal_cost_infill': self.intrazonal_cost_infill,
             'pa_val_col': self.pa_val_col,
             'apply_k_factoring': self.apply_k_factoring,
-            'furness_loops': self.furness_loops,
+            'convergence_target': self.convergence_target,
             'fitting_loops': self.fitting_loops,
-            'bs_con_target': self.bs_con_target,
-            'target_r_gap': self.target_r_gap,
-        }
+            'furness_max_iters': self.furness_max_iters,
+            'furness_tol': self.furness_tol,
+        })
+        return final_kwargs
 
     def build_hb_arguments(self) -> Dict[str, nd.PathLike]:
         return self.build_arguments(trip_origin='hb')
