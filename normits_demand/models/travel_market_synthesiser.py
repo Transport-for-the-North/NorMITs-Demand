@@ -20,7 +20,7 @@ import pandas as pd
 import normits_demand as nd
 from normits_demand import constants
 
-from normits_demand import models
+from normits_demand import distribution
 
 from normits_demand.utils import timing
 from normits_demand.utils import vehicle_occupancy as vehicle_occupancy_utils
@@ -212,7 +212,7 @@ class TravelMarketSynthesiser(TMSExportPaths):
     def run_external_model(self):
 
         self._logger.info("Initialising the External Model")
-        external_model = models.ExternalModel(
+        external_model = distribution.ExternalModel(
             year=self.year,
             running_mode=self.running_mode,
             zoning_system=self.zoning_system,
@@ -244,7 +244,7 @@ class TravelMarketSynthesiser(TMSExportPaths):
 
     def run_gravity_model(self):
         self._logger.info("Initialising the Gravity Model")
-        gravity_model = models.GravityModel(
+        gravity_model = distribution.GravityModel(
             year=self.year,
             running_mode=self.running_mode,
             zoning_system=self.zoning_system,

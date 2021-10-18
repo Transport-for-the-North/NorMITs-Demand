@@ -128,8 +128,7 @@ def main():
         external_model_arg_builder=em_arg_builder,
         gravity_model_arg_builder=gm_arg_builder,
         export_home=tms_export_home,
-        # process_count=-2,
-        process_count=0,
+        process_count=-2,
     )
 
     tms.run(
