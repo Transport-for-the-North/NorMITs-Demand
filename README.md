@@ -169,7 +169,26 @@ as part of their file name in distribution reports
     - External model has been optimised in some places
     - Gravity Model has been update to work with new External Model
     
-### v0.4.5
+### v0.4.5 (TMS Overhaul)
 - Added internal and external zone definitions into ZoningSystem Class
 - Object Orientation of TMS
+    - Can now run full multi-modal
+    - Added constants class in to define running Mode
+- External Model Updates to target a different TLD for internal and external
+- Gravity Model code updates to bring in line with OO structure
+  (still awaiting full re-write)
+- Updated filenames and output paths for TMS
+    - A path class is now used for imports and exports, making it easier
+      for other models to interact with TMS
+    - filenames have been updated to bring in line with EFS naming, forming
+      the standard NorMITs Demand naming
+- PA to OD process updated to use tour proportions and standard code shared
+  with EFS
+- Assignment model code updated to use standard code shared with EFS.
+- Various tidy ups
+    - Constants moved around to make more sense
+    - Some utils have been given dedicated utils files to make them easier
+      to find.
+    - A lot of legacy code has been removed
+
      
