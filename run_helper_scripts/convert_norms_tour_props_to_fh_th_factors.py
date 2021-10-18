@@ -33,10 +33,9 @@ sys.path.append('..')
 import normits_demand as nd
 
 from normits_demand import constants as consts
-from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
-
-from normits_demand.matrices import utils as mat_utils
+from normits_demand.utils import general as du
+from normits_demand.utils import pandas_utils as pd_utils
 
 # ## GLOBALS ## #
 # Special format for NoRMS conversion
@@ -198,8 +197,8 @@ def hb_conversion(input_tour_props, efs_imports, mode):
         columns=NORMS_ZONES,
         data=np.zeros((norms_zones, norms_zones)),
     )
-    internal_mask = mat_utils.get_internal_mask(blank_norms_df, NORMS_INTERNAL_ZONES)
-    external_mask = mat_utils.get_external_mask(blank_norms_df, NORMS_EXTERNAL_ZONES)
+    internal_mask = pd_utils.get_internal_mask(blank_norms_df, NORMS_INTERNAL_ZONES)
+    external_mask = pd_utils.get_external_mask(blank_norms_df, NORMS_EXTERNAL_ZONES)
 
     # ## CONVERT PURPOSE BY PURPOSE ## #
     for p in tqdm(HB_PURPOSES, desc='Converting hb purposes to factors'):
@@ -323,8 +322,8 @@ def nhb_conversion(input_tour_props, efs_imports, mode):
         columns=NORMS_ZONES,
         data=np.zeros((norms_zones, norms_zones)),
     )
-    internal_mask = mat_utils.get_internal_mask(blank_norms_df, NORMS_INTERNAL_ZONES)
-    external_mask = mat_utils.get_external_mask(blank_norms_df, NORMS_EXTERNAL_ZONES)
+    internal_mask = pd_utils.get_internal_mask(blank_norms_df, NORMS_INTERNAL_ZONES)
+    external_mask = pd_utils.get_external_mask(blank_norms_df, NORMS_EXTERNAL_ZONES)
 
     # ## CONVERT INTO A DICTIONARY FOR OUTPUT ## #
     output_dict = dict()

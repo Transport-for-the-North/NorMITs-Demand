@@ -187,7 +187,6 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
             % (matrix.index.dtype, translation[from_zone_col].dtype)
         )
 
-
     # Check all values in matrix are in from zone col
     row_zones = matrix.index.to_list()
     col_zones = matrix.columns.to_list()

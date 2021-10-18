@@ -25,7 +25,7 @@ import pandas as pd
 
 # local imports
 import normits_demand as nd
-from normits_demand import efs_constants as consts
+from normits_demand import constants as consts
 
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
@@ -289,7 +289,7 @@ class HBProductionModel(HBProductionModelPaths):
                     "Expected %f\n"
                     "Got %f"
                     % (pure_demand.sum(), fully_segmented.sum())
-                )                
+                )
                 self._logger.warning(msg)
                 warnings.warn(msg)
 
@@ -304,7 +304,7 @@ class HBProductionModel(HBProductionModelPaths):
                 out_segmentation=return_seg,
                 split_tfntt_segmentation=True
             )
-            
+
             if export_notem_segmentation:
                 self._logger.info("Exporting notem segmented demand to disk")
                 productions.to_pickle(self.export_paths.notem_segmented[year])
@@ -325,7 +325,7 @@ class HBProductionModel(HBProductionModelPaths):
                 msg = "No code implemented to constrain productions"
                 self._logger.error(msg)
                 raise NotImplementedError(msg)
-                
+
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
@@ -369,7 +369,7 @@ class HBProductionModel(HBProductionModelPaths):
         pop = pd_utils.reindex_cols(pop, self._target_col_dtypes['pop'].keys())
         for col, dt in self._target_col_dtypes['pop'].items():
             pop[col] = pop[col].astype(dt)
-        
+
         # Instantiate
         return nd.DVector(
             zoning_system=msoa_zoning,
@@ -405,7 +405,7 @@ class HBProductionModel(HBProductionModelPaths):
         # Define the zoning and segmentations we want to use
         pure_hb_prod = nd.get_segmentation_level('notem_hb_productions_pure')
 
-        # Reading trip rates        
+        # Reading trip rates
         trip_rates = du.safe_read_csv(
             self.trip_rates_path,
             usecols=self._target_col_dtypes['trip_rate'].keys(),
@@ -443,7 +443,7 @@ class HBProductionModel(HBProductionModelPaths):
         """
         # Define the segmentation we want to use
         m_tp_splits_seg = nd.get_segmentation_level('notem_hb_productions_full_tfnat')
-        
+
         full_seg = nd.get_segmentation_level('notem_hb_productions_full')
         # Create the mode-time splits DVector
         mode_time_splits = pd.read_csv(
@@ -739,7 +739,7 @@ class NHBProductionModel(NHBProductionModelPaths):
                     "Expected %f\n"
                     "Got %f"
                     % (pure_nhb_demand.sum(), fully_segmented.sum())
-                )               
+                )
                 self._logger.warning(msg)
                 warnings.warn(msg)
 
@@ -767,14 +767,14 @@ class NHBProductionModel(NHBProductionModelPaths):
             #  Output some audits of what demand was before and after control
             #  By segment.
             if self.constraint_paths is not None:
-                msg = "No code implemented to constrain productions"                              
+                msg = "No code implemented to constrain productions"
                 self._logger.error(msg)
-                raise NotImplementedError(msg)               
-               
+                raise NotImplementedError(msg)
+
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
-            self._logger.info("NHB Productions in year %s took: %s\n" % (year, time_taken))            
+            self._logger.info("NHB Productions in year %s took: %s\n" % (year, time_taken))
 
         # End timing
         end_time = timing.current_milli_time()
@@ -894,7 +894,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         nhb_trip_rate_seg = nd.get_segmentation_level('notem_nhb_trip_rate')
         pure_seg = nd.get_segmentation_level('notem_nhb_productions_pure')
 
-        # Reading NHB trip rates        
+        # Reading NHB trip rates
         trip_rates = du.safe_read_csv(
             file_path=self.trip_rates_path,
             usecols=self._target_col_dtypes['nhb_trip_rate'].keys(),
@@ -931,7 +931,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         """
         # Define the segmentation we want to use
         nhb_time_splits_seg = nd.get_segmentation_level('notem_nhb_tfnat_p_m_tp')
-        
+
         full_seg = nd.get_segmentation_level('notem_nhb_productions_full')
 
         # Read the time splits factor

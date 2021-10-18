@@ -12,6 +12,7 @@ A collections of utility functions for file operations
 """
 # builtins
 import os
+import time
 import pickle
 import pathlib
 
@@ -810,3 +811,37 @@ def from_pickle(path: nd.PathLike) -> Any:
     with open(path, 'rb') as f:
         obj = pickle.load(f)
     return obj
+
+
+def safe_dataframe_to_csv(df, out_path, **to_csv_kwargs):
+    """
+    Wrapper around df.to_csv. Gives the user a chance to close the open file.
+
+    Parameters
+    ----------
+    df:
+        pandas.DataFrame to write to call to_csv on
+
+    out_path:
+        Where to write the file to. TO first argument to df.to_csv()
+
+    to_csv_kwargs:
+        Any other kwargs to be passed straight to df.to_csv()
+
+    Returns
+    -------
+        None
+    """
+    written_to_file = False
+    waiting = False
+    while not written_to_file:
+        try:
+            df.to_csv(out_path, **to_csv_kwargs)
+            written_to_file = True
+        except PermissionError:
+            if not waiting:
+                print("Cannot write to file at %s.\n" % out_path +
+                      "Please ensure it is not open anywhere.\n" +
+                      "Waiting for permission to write...\n")
+                waiting = True
+            time.sleep(1)

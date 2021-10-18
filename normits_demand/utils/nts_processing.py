@@ -74,9 +74,11 @@ class NTSTripLengthBuilder:
         """
 
         """
+        # TODO: Need smart aggregation based on sample size threshold
+
         north_la = con.NORTH_LA
 
-        # TODO: Traveller gender
+        # Set target cols
         target_cols = ['SurveyYear', 'TravelWeekDay_B01ID', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc_cat',
                        'ns_sec', 'main_mode', 'hb_purpose', 'nhb_purpose', 'Sex_B01ID',
                        'trip_origin', 'start_time', 'TripDisIncSW', 'TripOrigGOR_B02ID',
@@ -95,11 +97,27 @@ class NTSTripLengthBuilder:
         7	NA
         """
         ca_map = pd.DataFrame({'CarAccess_B01ID':[1, 2, 3, 4, 5, 6, 7],
-                               'ca':[2, 2, 2, 2, 1, 1, 1]})
+                               'ca': [2, 2, 2, 2, 1, 1, 1]})
 
         output_dat = output_dat.merge(ca_map,
                                       how='left',
                                       on='CarAccess_B01ID')
+
+        # map agg gor
+        a_gor_from_map = pd.DataFrame({'agg_gor_from': [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
+                                         'TripOrigGOR_B02ID': [1, 2, 3, 4, 6,
+                                                               7, 8, 5, 9, 10, 11]})
+        a_gor_to_map = pd.DataFrame({'agg_gor_to': [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
+                                       'TripDestGOR_B02ID': [1, 2, 3, 4, 6,
+                                                             7, 8, 5, 9, 10, 11]})
+
+        output_dat = output_dat.merge(a_gor_from_map,
+                                      how='left',
+                                      on='TripOrigGOR_B02ID')
+
+        output_dat = output_dat.merge(a_gor_to_map,
+                                      how='left',
+                                      on='TripDestGOR_B02ID')
 
         # Aggregate area type application
         agg_at = pd.DataFrame({'tfn_area_type': [1, 2, 3, 4, 5, 6, 7, 8],
@@ -125,8 +143,8 @@ class NTSTripLengthBuilder:
             op_sub = output_dat.copy()
 
             # Seed values so they can go MIA
-            trip_origin, purpose, mode, tp, soc, ns, tfn_at, agg_at, g, ca = [0, 0, 0, 0, 0,
-                                                                          0, 0, 0, 0, 0]
+            trip_origin, purpose, mode, tp, soc, ns = [0, 0, 0, 0, 0, 0]
+            tfn_at, agg_at, g, ca, agg_gor_from, agg_gor_to = [0, 0, 0, 0, 0, 0]
             # TODO: Use nones to bypass some of these as required - or else it'll fail except on full seg
             for subset, value in row.iteritems():
                 if subset == 'trip_origin':
@@ -183,6 +201,17 @@ class NTSTripLengthBuilder:
                     if value != 0:
                         op_sub = op_sub[
                             op_sub['Sex_B01ID'] == value].reset_index(drop=True)
+                if subset == 'agg_gor_to':
+                    agg_gor_to = value
+                    if value != 0:
+                        op_sub = op_sub[
+                            op_sub['agg_gor_to'] == value].reset_index(drop=True)
+                if subset == 'agg_gor_from':
+                    agg_gor_from = value
+                    if value != 0:
+                        op_sub = op_sub[
+                            op_sub['agg_gor_from'] == value].reset_index(drop=True)
+
             out = self.trip_length_bands.copy()
 
             out['ave_km'] = 0
@@ -227,6 +256,10 @@ class NTSTripLengthBuilder:
                 name = name + '_ns' + str(ns)
             if g != 0:
                 name = name + '_g' + str(g)
+            if agg_gor_to != 0:
+                name = name + '_gort' + str(agg_gor_to)
+            if agg_gor_from != 0:
+                name = name + '_gorf' + str(agg_gor_from)
             name += '.csv'
 
             ex_name = os.path.join(self.export, name)
@@ -242,6 +275,8 @@ class NTSTripLengthBuilder:
             out['tfn_area_type'] = tfn_at
             out['agg_tfn_area_type'] = agg_at
             out['g'] = g
+            out['agg_gor_from'] = agg_gor_from
+            out['agg_gor_to'] = agg_gor_to
 
             out_mat.append(out)
 

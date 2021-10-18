@@ -72,7 +72,7 @@ class NoTEM(NoTEMExportPaths):
         # Validate inputs
         if not isinstance(import_builder, nd.pathing.NoTEMImportPathsBase):
             raise ValueError(
-                'import_home is not the correct type. Expected '
+                'import_builder is not the correct type. Expected '
                 '"nd.pathing.NoTEMImportPathsBase", but got %s'
                 % type(import_builder)
             )
