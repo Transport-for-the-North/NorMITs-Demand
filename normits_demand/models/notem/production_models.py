@@ -146,7 +146,7 @@ class HBProductionModel(HBProductionModelPaths):
             Defaults to consts.PROCESS_COUNT.
         """
         # Check that the paths we need exist!
-        [file_ops.check_file_exists(x) for x in population_paths.values()]
+        [file_ops.find_filename(x) for x in population_paths.values()]
         file_ops.check_file_exists(trip_rates_path)
         file_ops.check_file_exists(mode_time_splits_path)
         if constraint_paths is not None:
