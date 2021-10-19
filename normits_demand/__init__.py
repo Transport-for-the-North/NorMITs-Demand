@@ -45,8 +45,8 @@ from normits_demand.core import DVector
 # Useful utilities
 from normits_demand.utils import read_df
 from normits_demand.utils import write_df
-from normits_demand.utils import to_pickle
-from normits_demand.utils import from_pickle
+from normits_demand.utils import read_pickle
+from normits_demand.utils import write_pickle
 
 # Audit classes
 from normits_demand.reports.efs_reporting import EfsReporter

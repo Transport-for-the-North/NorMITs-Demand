@@ -311,91 +311,6 @@ def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
         )
 
 
-def read_pickle(path: nd.PathLike,
-                find_similar: bool = False,
-                **kwargs,
-                ) -> pd.DataFrame:
-    """
-    Reads in the pickle at path. Decompresses the pickle if needed.
-
-    Parameters
-    ----------
-    path:
-        The full path to the dataframe to read in
-
-    find_similar:
-        If True and the given file at path cannot be found, files with the
-        same name but different extensions will be looked for and read in
-        instead. Will check for: '.pkl', '.pbz2', '.pickle', '.p'
-
-    Returns
-    -------
-    unpickled_data:
-        The read in pickle at path.
-    """
-    # Init
-    pickle_extensions = ['.pkl', '.p', '.pickle']
-
-    # Try and find similar files if we are allowed
-    if not os.path.exists(path):
-        if not find_similar:
-            raise FileNotFoundError(
-                "No such file or directory: '%s'" % path
-            )
-        alt_types = pickle_extensions + [consts.COMPRESSION_SUFFIX]
-        path = find_filename(path, alt_types=alt_types)
-
-    # Determine how to read in df
-    if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
-        return compress.read_in(path)
-
-    elif pathlib.Path(path).suffix in pickle_extensions:
-        return pd.read_pickle(path, **kwargs)
-
-    else:
-        raise ValueError(
-            "Cannot determine the filetype of the given path. Expected "
-            "either '.pkl' or '%s'" % consts.COMPRESSION_SUFFIX
-        )
-
-
-def write_pickle(obj: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
-    """
-    Reads in the dataframe at path. Decompresses the df if needed.
-
-    Parameters
-    ----------
-    obj:
-        The object to write to disk
-
-    path:
-        The full path to the dataframe to read in
-
-    **kwargs:
-        Any arguments to pass to the underlying write function.
-
-    Returns
-    -------
-    df:
-        The read in df at path.
-    """
-    # Init
-    path = cast_to_pathlib_path(path)
-
-    # Determine how to read in df
-    if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
-        compress.write_out(obj, path)
-
-    elif pathlib.Path(path).suffix == '.pkl':
-        pd.to_pickle(path, **kwargs)
-
-    else:
-        raise ValueError(
-            "Cannot determine the filetype of the given path. Expected "
-            "either '.pkl' or '%s'" % consts.COMPRESSION_SUFFIX
-        )
-
-
 def filename_in_list(filename: nd.PathLike,
                      lst: List[nd.PathLike],
                      ignore_ftype: bool = False,
@@ -765,11 +680,11 @@ def create_folder(folder_path: nd.PathLike,
     )
 
 
-def to_pickle(obj: object,
-              path: nd.PathLike,
-              protocol: int = pickle.HIGHEST_PROTOCOL,
-              **kwargs,
-              ) -> None:
+def write_pickle(obj: object,
+                 path: nd.PathLike,
+                 protocol: int = pickle.HIGHEST_PROTOCOL,
+                 **kwargs,
+                 ) -> None:
     """Load any pickled object from disk at path.
 
     Parameters
@@ -794,7 +709,7 @@ def to_pickle(obj: object,
         pickle.dump(obj, f, protocol=protocol, **kwargs)
 
 
-def from_pickle(path: nd.PathLike) -> Any:
+def read_pickle(path: nd.PathLike) -> Any:
     """Load any pickled object from disk at path.
 
     Parameters
@@ -807,7 +722,14 @@ def from_pickle(path: nd.PathLike) -> Any:
     unpickled:
         Same type as object stored in file.
     """
-    # TODO(BT): VALIDATE PATH
+    # Validate path
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            "No file to read in found at %s"
+            % path
+        )
+
+    # Read in
     with open(path, 'rb') as f:
         obj = pickle.load(f)
     return obj

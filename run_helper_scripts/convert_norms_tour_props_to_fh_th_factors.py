@@ -263,8 +263,8 @@ def hb_conversion(input_tour_props, efs_imports, mode):
                 ca=ca,
             )
 
-            file_ops.to_pickle(fh_factors_dict, fh_factor_path)
-            file_ops.to_pickle(th_factors_dict, th_factor_path)
+            file_ops.write_pickle(fh_factors_dict, fh_factor_path)
+            file_ops.write_pickle(th_factors_dict, th_factor_path)
 
             # ## VALIDATE THE GENERATED TOUR PROPS ## #
             target = norms_zones ** 2
@@ -406,7 +406,7 @@ def nhb_conversion(input_tour_props, efs_imports, mode):
 
     # ## WRITE TO DISK ## #
     output_path = get_nhb_output_path(efs_imports)
-    nd.to_pickle(output_dict, output_path)
+    nd.write_pickle(output_dict, output_path)
 
 
 def main():
