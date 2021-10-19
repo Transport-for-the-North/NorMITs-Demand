@@ -888,7 +888,12 @@ class DVector:
             # Add all segments into the df
             seg_dict = self_segmentation.get_seg_dict(segment_name)
             for col_name, col_val in seg_dict.items():
+                # Set column values
                 df[col_name] = col_val
+
+                # Set column type
+                col_type = self_segmentation.segment_types[col_name]
+                df[col_name] = df[col_name].astype(col_type)
 
             # Make sure all dfs are in the same format
             df = df.reindex(columns=col_names)

@@ -31,11 +31,6 @@ notem_export_home = r"E:\NorMITs Demand\NoTEM"
 
 
 def main():
-    # Code to capture warnings - set up root logger
-    logging.captureWarnings(True)
-    root_logger = logging.getLogger()
-    root_logger.addHandler(nd.logging.get_console_handler())
-
     hb_production_import_version = '2.1'
     hb_attraction_import_version = '1.6'
     nhb_production_import_version = '2.0'
@@ -63,7 +58,7 @@ def main():
         generate_all=False,
         generate_hb=False,
         generate_nhb=False,
-        generate_hb_production=False,
+        generate_hb_production=True,
         generate_hb_attraction=True,
         generate_nhb_production=False,
         generate_nhb_attraction=False,
