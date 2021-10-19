@@ -389,6 +389,11 @@ class HBAttractionModel(HBAttractionModelPaths):
             path=self.employment_paths[year],
             find_similar=True,
         )
+
+        # Little hack until Land Use is updated
+        if str(year) in list(emp):
+            emp = emp.rename(columns={str(year): 'people'})
+
         emp = pd_utils.reindex_cols(emp, self._target_col_dtypes['employment'].keys())
         for col, dt in self._target_col_dtypes['employment'].items():
             emp[col] = emp[col].astype(dt)
@@ -429,16 +434,15 @@ class HBAttractionModel(HBAttractionModelPaths):
         trip_weights_seg = nd.get_segmentation_level('notem_hb_attractions_trip_weights')
         pure_attractions_seg = nd.get_segmentation_level('notem_hb_attractions_pure')
 
-        # Reading trip rates        
+        # ## CREATE THE TRIP RATES DVEC ## #
+        # Reading trip rates
         trip_rates = du.safe_read_csv(
             self.trip_weights_path,
             usecols=self._target_col_dtypes['trip_weight'].keys(),
             dtype=self._target_col_dtypes['trip_weight'],
         )
 
-        # ## CREATE THE TRIP RATES DVEC ## #
-        
-        # Instantiate
+        # make DVec
         trip_weights_dvec = nd.DVector(
             zoning_system=msoa_zoning,
             segmentation=trip_weights_seg,

@@ -29,6 +29,7 @@ from typing import Dict
 from typing import List
 from typing import Union
 from typing import Callable
+from typing import Optional
 
 # Third Party
 import numpy as np
@@ -227,17 +228,17 @@ class DVector:
     _debugging_mp_code = False
 
     def __init__(self,
-                 zoning_system: core.ZoningSystem,
                  segmentation: core.SegmentationLevel,
                  import_data: Union[pd.DataFrame, nd.DVectorData],
-                 time_format: Union[str, TimeFormat] = None,
-                 zone_col: str = None,
-                 val_col: str = None,
-                 df_naming_conversion: str = None,
-                 df_chunk_size: int = None,
-                 infill: Any = 0,
-                 process_count: int = consts.PROCESS_COUNT,
-                 verbose: bool = False,
+                 zoning_system: Optional[core.ZoningSystem] = None,
+                 time_format: Optional[Union[str, TimeFormat]] = None,
+                 zone_col: Optional[str] = None,
+                 val_col: Optional[str] = None,
+                 df_naming_conversion: Optional[str] = None,
+                 df_chunk_size: Optional[int] = None,
+                 infill: Optional[Any] = 0,
+                 process_count: Optional[int] = consts.PROCESS_COUNT,
+                 verbose: Optional[bool] = False,
                  ) -> None:
         """
         Validates the input arguments and creates a DVector
