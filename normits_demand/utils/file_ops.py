@@ -15,6 +15,7 @@ import os
 import time
 import pickle
 import pathlib
+import warnings
 
 from typing import Any
 from typing import List
@@ -732,6 +733,33 @@ def read_pickle(path: nd.PathLike) -> Any:
     # Read in
     with open(path, 'rb') as f:
         obj = pickle.load(f)
+
+    # If no version, return now
+    if not hasattr(obj, '__version__'):
+        return obj
+
+    # Check if class definition has a version (should do!)
+    if not hasattr(obj.__class__, '__version__'):
+        warn_msg = (
+            "The object loaded from '%s' has a version, but the class "
+            "definition in the code does not. Aborting version check!\n"
+            "Loaded object is version %s"
+            % (path, obj.__version__)
+        )
+        warnings.warn(warn_msg, UserWarning, stacklevel=2)
+
+    # Throw warning if versions don't match
+    if obj.__version__ != obj.__class__.__version__:
+        warn_msg = (
+            "The object loaded from '%s' is not the same version as the "
+            "class definition in the code. This might cause some unexpected "
+            "problems.\n"
+            "Object Version: %s\n"
+            "Class Version: %s"
+            % (path, obj.__version__, obj.__class__.__version__)
+        )
+        warnings.warn(warn_msg, UserWarning, stacklevel=2)
+
     return obj
 
 

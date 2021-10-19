@@ -7,6 +7,7 @@ from normits_demand.types import *
 # Logging
 from normits_demand.logging import get_logger
 from normits_demand.logging import get_custom_logger
+from normits_demand.logging import get_package_logger_name
 
 # NorMITs Demand Errors
 from normits_demand.utils.general import NormitsDemandError

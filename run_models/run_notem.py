@@ -11,8 +11,10 @@ File purpose:
 Master run file to run NoTEM
 """
 import sys
+import logging
 
 sys.path.append("..")
+import normits_demand as nd
 from normits_demand.models import NoTEM
 from normits_demand.pathing import NoTEMImportPaths
 
@@ -29,6 +31,11 @@ notem_export_home = r"E:\NorMITs Demand\NoTEM"
 
 
 def main():
+    # Code to capture warnings - set up root logger
+    logging.captureWarnings(True)
+    root_logger = logging.getLogger()
+    root_logger.addHandler(nd.logging.get_console_handler())
+
     hb_production_import_version = '2.1'
     hb_attraction_import_version = '1.6'
     nhb_production_import_version = '2.0'
