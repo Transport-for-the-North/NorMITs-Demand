@@ -40,6 +40,7 @@ class Tram(NoTEMExportPaths):
     _join_cols = ['msoa_zone_id', 'p', 'ca']
     base_train = pd.DataFrame()
     _log_fname = "tram_log.log"
+    _notem_cols = ['msoa_zone_id', 'p', 'ca', 'm', 'val']
 
     # Define wanted columns
     _target_col_dtypes = {
@@ -316,7 +317,9 @@ class Tram(NoTEMExportPaths):
 
             # Bring the above Dvec back to original segmentation
             notem_output_dvec = nd.from_pickle(self.notem_output[year])
-            notem_dvec = notem_dvec.split_segmentation_like(notem_output_dvec)
+
+            #TODO: Need to figure out a way to bring back notem segmentation
+            # notem_dvec = notem_dvec.split_segmentation_like(notem_output_dvec)
             # TODO: export location need to be sorted
             notem_dvec.to_pickle(os.path.join(self.export_home, "tram_included_dvec.pkl"))
             # Print timing for each trip end model
@@ -483,6 +486,8 @@ class Tram(NoTEMExportPaths):
         base_tram['future_trips'] = base_tram['val'] * future_rail['growth_rate']
         base_tram = base_tram.drop(['val'], axis=1)
         base_tram.rename(columns={'future_trips': 'val'}, inplace=True)
+        future_rail.to_csv(r"C:\Data\Nirmal_Atkins\Home Based Productions\future rail.csv", index=False)
+        base_tram.to_csv(r"C:\Data\Nirmal_Atkins\Home Based Productions\future tram.csv", index=False)
         return base_tram
 
     def _tram_infill_north(self,
@@ -525,16 +530,16 @@ class Tram(NoTEMExportPaths):
         notem_df = notem_df.loc[notem_df['ie_sector_zone_id'] == 1]
         notem_df = notem_df.drop(['ie_sector_zone_id'], axis=1)
         north_wo_infill = notem_df.copy()
-        print(notem_df)
+
         tram_data = tram_msoa[tram_msoa.m == 7]
         df_index_cols = ['p', 'm', 'ca', 'final_val']
         df_group_cols = df_index_cols.copy()
         df_group_cols.remove('final_val')
         tram_data = tram_data.reindex(df_index_cols, axis=1).groupby(df_group_cols).sum().reset_index()
         tram_data.rename(columns={'final_val': 'val'}, inplace=True)
-        print(tram_data)
+
         notem_df = notem_df.append(tram_data).reset_index()
-        print(notem_df)
+
         notem_df['c_uniq_id'] = pd_utils.str_join_cols(notem_df, ['p', 'ca'])
         du.print_w_toggle("Starting tram infill at north level...", verbose=verbose)
         # Infills tram data
@@ -589,9 +594,9 @@ class Tram(NoTEMExportPaths):
         df_index_cols = ['p', 'm', 'ca', 'final_val']
         df_group_cols = df_index_cols.copy()
         df_group_cols.remove('final_val')
-        print('notem_df before grouping', notem_df)
+
         notem_df = pd_utils.reindex_and_groupby(notem_df, df_index_cols, ['final_val'])
-        print('notem_df after grouping', notem_df)
+
         tram_data = pd_utils.reindex_and_groupby(tram_data, df_index_cols, ['final_val'])
         tram_data['final_val'] = 0
         notem_df = notem_df.sort_values(by=self._sort_north).reset_index()
@@ -609,15 +614,14 @@ class Tram(NoTEMExportPaths):
         notem_msoa_wo_infill = notem_msoa_wo_infill.sort_values(by=self._sort_north).reset_index()
         north_wo_infill = north_wo_infill.append(tram_data)
         north_wo_infill = north_wo_infill.sort_values(by=self._sort_north).reset_index()
-        print('notem_msoa_wo_infill', notem_msoa_wo_infill)
-        print('notem_new_df', notem_new_df)
+
         # Calculations for North, Non-tram and non-tram adjusted
         notem_df['Non-Tram'] = north_wo_infill['val'] - notem_msoa_wo_infill['val']
         notem_df['North'] = notem_new_df['final_val'].to_numpy()
         notem_df['Non-Tram adjusted'] = notem_df['North'] - notem_df['final_val']
         notem_df.rename(columns={'final_val': 'Tram_zones'}, inplace=True)
         notem_df.drop(['index'], axis=1)
-        print('notem_df', notem_df)
+
 
         # TODO: find a way to bring in internal zone data
         du.print_w_toggle("Starting tram adjustment for non tram zones...", verbose=verbose)
@@ -671,6 +675,10 @@ class Tram(NoTEMExportPaths):
                                                  (val_sum * n_df['ntram_new_percent']), n_df['First_adj'])
 
                     notem_df_new = notem_df_new.append(n_df)
+
+        notem_df_new = notem_df_new.drop(['val'], axis=1)
+        notem_df_new.rename(columns={'Final_adj': 'val'}, inplace=True)
+        notem_df_new = pd_utils.reindex_and_groupby(notem_df_new, self._notem_cols, ['val'])
         return notem_df_new, external_notem
 
     def _combine_trips(self,
@@ -703,8 +711,14 @@ class Tram(NoTEMExportPaths):
             The updated Dvector after tram infill.
 
         """
-        # Combine the data together
+
+        tram_msoa= tram_msoa.drop(['val'], axis=1)
+        tram_msoa.rename(columns={'final_val': 'val'}, inplace=True)
+        tram_msoa = pd_utils.reindex_and_groupby(tram_msoa,self._notem_cols, ['val'])
         final_df = external_notem.append([tram_msoa, non_tram_msoa], ignore_index=True)
+
+        # Combine the data together
+        final_df = pd_utils.reindex_and_groupby(final_df, self._notem_cols, ['val'])
 
         # Get the zoning system
         msoa_zoning = nd.get_zoning_system('msoa')
