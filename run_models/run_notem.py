@@ -57,7 +57,7 @@ def main():
         generate_all=False,
         generate_hb=False,
         generate_nhb=False,
-        generate_hb_production=False,
+        generate_hb_production=True,
         generate_hb_attraction=False,
         generate_nhb_production=True,
         generate_nhb_attraction=False,
