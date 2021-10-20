@@ -12,8 +12,11 @@ A collections of utility functions for file operations
 """
 # builtins
 import os
+import time
+import pickle
 import pathlib
 
+from typing import Any
 from typing import List
 
 # Third Party
@@ -760,3 +763,85 @@ def create_folder(folder_path: nd.PathLike,
         "New project folder created at %s" % folder_path,
         verbose=verbose_create,
     )
+
+
+def to_pickle(obj: object,
+              path: nd.PathLike,
+              protocol: int = pickle.HIGHEST_PROTOCOL,
+              **kwargs,
+              ) -> None:
+    """Load any pickled object from disk at path.
+
+    Parameters
+    ----------
+    obj:
+        The object to pickle and write to disk
+
+    path:
+        Filepath to write obj to
+
+    protocol:
+        The pickle protocol to use when dumping to disk
+
+    **kwargs:
+        Any additional arguments to pass to pickle.dump()
+
+    Returns
+    -------
+    None
+    """
+    with open(path, 'wb') as f:
+        pickle.dump(obj, f, protocol=protocol, **kwargs)
+
+
+def from_pickle(path: nd.PathLike) -> Any:
+    """Load any pickled object from disk at path.
+
+    Parameters
+    ----------
+    path:
+        Filepath to the object to read in and unpickle
+
+    Returns
+    -------
+    unpickled:
+        Same type as object stored in file.
+    """
+    # TODO(BT): VALIDATE PATH
+    with open(path, 'rb') as f:
+        obj = pickle.load(f)
+    return obj
+
+
+def safe_dataframe_to_csv(df, out_path, **to_csv_kwargs):
+    """
+    Wrapper around df.to_csv. Gives the user a chance to close the open file.
+
+    Parameters
+    ----------
+    df:
+        pandas.DataFrame to write to call to_csv on
+
+    out_path:
+        Where to write the file to. TO first argument to df.to_csv()
+
+    to_csv_kwargs:
+        Any other kwargs to be passed straight to df.to_csv()
+
+    Returns
+    -------
+        None
+    """
+    written_to_file = False
+    waiting = False
+    while not written_to_file:
+        try:
+            df.to_csv(out_path, **to_csv_kwargs)
+            written_to_file = True
+        except PermissionError:
+            if not waiting:
+                print("Cannot write to file at %s.\n" % out_path +
+                      "Please ensure it is not open anywhere.\n" +
+                      "Waiting for permission to write...\n")
+                waiting = True
+            time.sleep(1)

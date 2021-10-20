@@ -19,6 +19,7 @@ import shutil
 import random
 import inspect
 import operator
+import itertools
 import contextlib
 
 import pandas as pd
@@ -507,6 +508,7 @@ def build_efs_io_paths(import_location: str,
         'params': model_param_home,
         'post_me_factors': os.path.join(model_param_home, 'post_me_tms_decompile_factors.pkl'),
         'post_me_tours': model_tour_prop_home,
+        'post_me_fh_th_factors': os.path.join(model_tour_prop_home, 'fh_th_factors'),
         'decomp_post_me': os.path.join(import_home, model_name, 'decompiled_post_me'),
 
     }
@@ -958,6 +960,35 @@ def calib_params_to_dist_name(trip_origin: str,
                               compressed: bool = False,
                               suffix: str = None,
                               ) -> str:
+    """
+    Wrapper for get_distribution_name() using calib params
+
+    DEPRECATED! Use segment_params_to_dist_name instead
+    """
+    segment_str = 'soc' if calib_params['p'] in efs_consts.SOC_P else 'ns'
+
+    return get_dist_name(
+        trip_origin=trip_origin,
+        matrix_format=matrix_format,
+        year=str(calib_params.get('yr')),
+        purpose=str(calib_params.get('p')),
+        mode=str(calib_params.get('m')),
+        segment=str(calib_params.get(segment_str)),
+        car_availability=str(calib_params.get('ca')),
+        tp=str(calib_params.get('tp')),
+        csv=csv,
+        compressed=compressed,
+        suffix=suffix,
+    )
+
+
+def segment_params_to_dist_name(trip_origin: str,
+                                matrix_format: str,
+                                calib_params: Dict[str, int],
+                                csv: bool = False,
+                                compressed: bool = False,
+                                suffix: str = None,
+                                ) -> str:
     """
     Wrapper for get_distribution_name() using calib params
     """
@@ -3050,7 +3081,9 @@ def is_almost_equal(v1: float,
         The second value to compare
 
     significant:
-        The number of significant bits to compare over
+        The number of significant bits to compare over. If negative,
+        then this represents rounding.
+        i.e. -1 is same up until 10s, -2 100s etc
 
     Returns
     -------
@@ -3058,6 +3091,13 @@ def is_almost_equal(v1: float,
         True if v1 and v2 are equal to significant bits, else False
     """
     return isclose(v1, v2, abs_tol=10 ** -significant)
+
+
+def pairwise(iterable):
+    """s -> (s0,s1), (s1,s2), (s2, s3), ..."""
+    a, b = itertools.tee(iterable)
+    next(b, None)
+    return zip(a, b)
 
 
 def remove_all_commute_cat(df: pd.DataFrame,
@@ -3168,7 +3208,7 @@ def trip_origin_to_purposes(trip_origin: str) -> List[int]:
         A list of integers representing purposes
     """
     # TODO Validate trip origin
-    return efs_consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
+    return consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
 
 
 def purpose_to_user_class(purpose: Union[int, str]) -> str:
@@ -3483,11 +3523,34 @@ def sum_dict_list(dict_list: List[Dict[Any, Any]]) -> Dict[Any, Any]:
     summed_dict:
         A single dictionary of all the dicts in dict_list summed together.
     """
+    return combine_dict_list(dict_list, operator.add)
 
+
+def combine_dict_list(dict_list: List[Dict[Any, Any]],
+                      operation: Callable,
+                      ) -> Dict[Any, Any]:
+    """
+    Sums all dictionaries in dict_list together.
+
+    Parameters
+    ----------
+    dict_list:
+        A list of dictionaries to sum together.
+
+    operation:
+        the operation to use to combine values at keys.
+        The operator library defines functions to do this.
+        Function should take two values, and return one.
+
+    Returns
+    -------
+    summed_dict:
+        A single dictionary of all the dicts in dict_list summed together.
+    """
     # Define the accumulator function to call in functools.reduce
     def reducer(accumulator, item):
         for key, value in item.items():
-            accumulator[key] = accumulator.get(key, 0) + value
+            accumulator[key] = operation(accumulator.get(key, 0), value)
         return accumulator
 
     return functools.reduce(reducer, dict_list)

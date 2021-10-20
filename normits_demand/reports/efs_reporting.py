@@ -34,13 +34,13 @@ from normits_demand.validation import checks
 from normits_demand.constraints import ntem_control
 
 from normits_demand.matrices import matrix_processing as mat_p
-from normits_demand.matrices import utils as mat_utils
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
 from normits_demand.utils import utils as tms_utils
+from normits_demand.utils import pandas_utils as pd_utils
 
-from normits_demand.reports import reports_audits as tms_reports
+from normits_demand.utils import trip_length_distributions as tld_utils
 
 
 class EfsReporter:
@@ -480,13 +480,10 @@ class EfsReporter:
         )
 
     def _get_hb_trip_length_bands(self, p: int) -> pd.DataFrame:
-        tlb = tms_utils.get_trip_length_bands(
-            import_folder=self.imports['tlb'],
-            calib_params={'p': p, 'm': consts.MODEL_MODES[self.model_name][0]},
-            trip_origin='hb',
-            segmentation=None,  # Not used!
-            echo=False,
-        )
+        tlb = tms_utils.get_trip_length_bands(import_folder=self.imports['tlb'],
+                                              segment_params={'p': p, 'm':
+                                                  consts.MODEL_MODES[self.model_name][0]},
+                                              segmentation=None, trip_origin='hb')
 
         return tlb
 
@@ -591,14 +588,14 @@ class EfsReporter:
                 df = file_ops.read_df(path, index_col=0)
 
                 # filter to just the internal area
-                int_mask = mat_utils.get_internal_mask(df, self.model_internal_zones)
+                int_mask = pd_utils.get_internal_mask(df, self.model_internal_zones)
                 internal_pa = int_mask * df
 
                 # Read in the trip length bands
                 trip_len_bands = self._get_hb_trip_length_bands(p)
 
                 # Generate trip length data
-                reports = tms_reports.get_trip_length_by_band(
+                reports = tld_utils.get_trip_length_by_band(
                     trip_len_bands,
                     distance.values,
                     internal_pa.values,

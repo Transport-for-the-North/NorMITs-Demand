@@ -152,3 +152,43 @@ as part of their file name in distribution reports
 
 ### v0.4.2
 - A number of minor fixes have been added to get TMS up and running again
+
+### v0.4.3
+- Updates to the elasticity model
+    - Fix Access/Egress costs changes
+    - Update parameters as we are now benchmarking OD matrices against
+      NELUM
+    - Optimised PA2OD Process
+    - Tour Proportions generated for rail PA2OD
+    
+### v0.4.4
+- Integrating NoTEM outputs into TMS
+- Number of minor fixes to TMS
+    - TMS codebase has been marginally tidied up
+    - External model has been updated to use 2 TLD instead of 1
+    - External model has been optimised in some places
+    - Gravity Model has been update to work with new External Model
+    
+### v0.4.5 (TMS Overhaul)
+- Added internal and external zone definitions into ZoningSystem Class
+- Object Orientation of TMS
+    - Can now run full multi-modal
+    - Added constants class in to define running Mode
+- External Model Updates to target a different TLD for internal and external
+- Gravity Model code updates to bring in line with OO structure
+  (still awaiting full re-write)
+- Updated filenames and output paths for TMS
+    - A path class is now used for imports and exports, making it easier
+      for other models to interact with TMS
+    - filenames have been updated to bring in line with EFS naming, forming
+      the standard NorMITs Demand naming
+- PA to OD process updated to use tour proportions and standard code shared
+  with EFS
+- Assignment model code updated to use standard code shared with EFS.
+- Various tidy ups
+    - Constants moved around to make more sense
+    - Some utils have been given dedicated utils files to make them easier
+      to find.
+    - A lot of legacy code has been removed
+
+     

@@ -428,14 +428,7 @@ def _tld_reporting_internal(mat_dict,
     # Some legacy code here - "ntem"
     # TODO Use the year here to get the forecast/base tlb when they exist
     year_tld_path = seg_tld_path
-    tlb = du.get_trip_length_bands(
-        year_tld_path,
-        mat_dict,
-        "ntem",
-        trip_origin,
-        replace_nan=False,
-        echo=False,
-    )
+    tlb = du.get_trip_length_bands(year_tld_path, mat_dict, "ntem", trip_origin, replace_nan=False)
 
     # Set the string sent to the costs function
     # BACKLOG: fix for NORMS tp costs - do not exist at the moment

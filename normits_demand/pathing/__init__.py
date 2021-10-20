@@ -11,8 +11,3 @@ from normits_demand.pathing.notem import HBProductionModelPaths
 from normits_demand.pathing.notem import HBAttractionModelPaths
 from normits_demand.pathing.notem import NHBProductionModelPaths
 from normits_demand.pathing.notem import NHBAttractionModelPaths
-
-# TMS paths
-from normits_demand.pathing.travel_market_synthesiser import TMSImportClassBase
-
-from normits_demand.pathing.travel_market_synthesiser import TMSExportPaths

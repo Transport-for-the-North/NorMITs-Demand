@@ -17,6 +17,9 @@ from __future__ import annotations
 # Builtins
 import os
 
+from typing import Tuple
+from typing import Optional
+
 # Third Party
 import numpy as np
 import pandas as pd
@@ -47,11 +50,18 @@ class ZoningSystem:
     n_zones:
         The number of zones in this zoning system
     """
+    # Constants
+    __version__ = nd.__version__
 
     _zoning_system_import_fname = "zoning_systems"
+    _base_col_name = "%s_zone_id"
+
+    # File names
+    _valid_ftypes = ['.csv', '.pbz2']
     _zones_csv_fname = "zones.csv"
     _zones_compress_fname = "zones.pbz2"
-    _base_col_name = "%s_zone_id"
+    _internal_zones_fname = "internal_zones.csv"
+    _external_zones_fname = "external_zones.csv"
 
     _zoning_definitions_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
@@ -79,6 +89,8 @@ class ZoningSystem:
     def __init__(self,
                  name: str,
                  unique_zones: np.ndarray,
+                 internal_zones: Optional[np.ndarray] = None,
+                 external_zones: Optional[np.ndarray] = None,
                  ) -> ZoningSystem:
         """Builds a ZoningSystem
 
@@ -93,12 +105,48 @@ class ZoningSystem:
 
         unique_zones:
             A numpy array of unique zone names for this zoning system.
+
+        internal_zones:
+            A numpy array of unique zone names that make up the "internal"
+            area of this zoning system. Every value in this array must also
+            be contained in unique_zones.
+
+        external_zones:
+            A numpy array of unique zone names that make up the "external"
+            area of this zoning system. Every value in this array must also
+            be contained in unique_zones.
         """
         # Init
         self._name = name
         self._col_name = self._base_col_name % name
         self._unique_zones = np.sort(unique_zones)
         self._n_zones = len(self.unique_zones)
+
+        # Validate and assign the internal and external zones
+        self._internal_zones = None
+        self._external_zones = None
+
+        if internal_zones is not None:
+            extra_internal_zones = set(internal_zones) - set(unique_zones)
+            if len(extra_internal_zones) > 0:
+                raise ValueError(
+                    "Not all of the given values for internal zones are also "
+                    "defined in the zoning system unique zones. Check the zones "
+                    "definition file for the following zones:\n%s"
+                    % extra_internal_zones
+                )
+            self._internal_zones = internal_zones
+
+        if external_zones is not None:
+            extra_external_zones = set(external_zones) - set(unique_zones)
+            if len(extra_external_zones) > 0:
+                raise ValueError(
+                    "Not all of the given values for internal zones are also "
+                    "defined in the zoning system unique zones. Check the zones "
+                    "definition file for the following zones:\n%s"
+                    % extra_external_zones
+                )
+            self._external_zones = external_zones
 
     @property
     def name(self):
@@ -115,6 +163,26 @@ class ZoningSystem:
     @property
     def n_zones(self):
         return self._n_zones
+
+    @property
+    def internal_zones(self):
+        if self._internal_zones is None:
+            raise ZoningError(
+                "No definition for internal zones has been set for this "
+                "zoning system. Name: %s"
+                % self.name
+            )
+        return self._internal_zones
+
+    @property
+    def external_zones(self):
+        if self._external_zones is None:
+            raise ZoningError(
+                "No definition for external zones has been set for this "
+                "zoning system. Name: %s"
+                % self.name
+            )
+        return self._external_zones
 
     def __copy__(self):
         """Returns a copy of this class"""
@@ -269,7 +337,7 @@ class ZoningError(nd.NormitsDemandError):
 
 
 # ## FUNCTIONS ##
-def _get_unique_zones(name: str) -> np.ndarray:
+def _get_zones(name: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Finds and reads in the unique zone data for zoning system with name
     """
@@ -310,8 +378,28 @@ def _get_unique_zones(name: str) -> np.ndarray:
     df = file_ops.read_df(file_path)
     df = pd_utils.reindex_cols(df, columns=['zone_name'])
 
-    # Sort the return to make sure it's always the same order
-    return np.sort(df['zone_name'].values)
+    # Sort to make sure it's always the same order
+    unique_zones = np.sort(df['zone_name'].values)
+
+    # ## READ IN THE INTERNAL AND EXTERNAL ZONES ## #
+    internal_zones = None
+    external_zones = None
+
+    # Read in the internal zones
+    file_path = os.path.join(import_home, ZoningSystem._internal_zones_fname)
+    file_path = file_ops.find_filename(file_path, alt_types=ZoningSystem._valid_ftypes)
+    if os.path.isfile(file_path):
+        df = file_ops.read_df(file_path)
+        internal_zones = np.sort(df['zone_name'].values)
+
+    # Read in the external zones
+    file_path = os.path.join(import_home, ZoningSystem._external_zones_fname)
+    file_path = file_ops.find_filename(file_path, alt_types=ZoningSystem._valid_ftypes)
+    if os.path.isfile(file_path):
+        df = file_ops.read_df(file_path)
+        external_zones = np.sort(df['zone_name'].values)
+
+    return unique_zones, internal_zones, external_zones
 
 
 def get_zoning_system(name: str) -> ZoningSystem:
@@ -330,8 +418,13 @@ def get_zoning_system(name: str) -> ZoningSystem:
     """
     # TODO(BT): Add some validation on the zone name
     # TODO(BT): Add some caching to this function!
+    # Look for zone definitions
+    unique, internal, external = _get_zones(name)
+
     # Create the ZoningSystem object and return
     return ZoningSystem(
         name=name,
-        unique_zones=_get_unique_zones(name)
+        unique_zones=unique,
+        internal_zones=internal,
+        external_zones=external,
     )
