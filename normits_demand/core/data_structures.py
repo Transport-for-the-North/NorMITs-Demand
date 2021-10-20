@@ -672,7 +672,6 @@ class DVector:
                         % (segment, self.segmentation.name, seg_data)
                     )
 
-
                 # TODO(BT): There's a VERY slight chance that duplicate zones
                 #  could be split across processes. Need to add a check for
                 #  this on the calling function.
@@ -872,7 +871,7 @@ class DVector:
         Internal function of self.to_df(). For multiprocessing
         """
         # Init
-        index_cols = du.list_safe_remove(col_names, [val_col])
+        # index_cols = du.list_safe_remove(col_names, [val_col])
         concat_ph = list()
 
         # Convert all given data into dataframes

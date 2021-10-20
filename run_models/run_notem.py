@@ -11,10 +11,8 @@ File purpose:
 Master run file to run NoTEM
 """
 import sys
-import logging
 
 sys.path.append("..")
-import normits_demand as nd
 from normits_demand.models import NoTEM
 from normits_demand.pathing import NoTEMImportPaths
 
@@ -58,7 +56,7 @@ def main():
         generate_all=False,
         generate_hb=False,
         generate_nhb=False,
-        generate_hb_production=True,
+        generate_hb_production=False,
         generate_hb_attraction=True,
         generate_nhb_production=False,
         generate_nhb_attraction=False,

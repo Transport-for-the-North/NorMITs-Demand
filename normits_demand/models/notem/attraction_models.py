@@ -19,7 +19,6 @@ import os
 import warnings
 
 from typing import Dict
-from typing import List
 
 # Third party imports
 import pandas as pd
@@ -515,7 +514,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             a_dvec controlled to p_dvec
         """
         # Read in the productions DVec from disk
-        p_dvec = nd.from_pickle(p_dvec_path)
+        p_dvec = nd.read_pickle(p_dvec_path)
 
         # Split a_dvec into p_dvec segments and balance
         a_dvec = a_dvec.split_segmentation_like(p_dvec)
@@ -776,7 +775,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         segmentation = nd.get_segmentation_level('notem_nhb_output')
 
         # Reading the notem segmented HB attractions compressed pickle
-        hb_attr_notem = nd.from_pickle(self.hb_attraction_paths[year])
+        hb_attr_notem = nd.read_pickle(self.hb_attraction_paths[year])
         hb_attr_notem_df = hb_attr_notem.to_df()
 
         # Removing p1 and p7
@@ -822,7 +821,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             a_dvec controlled to p_dvec
         """
         # Read in the productions DVec from disk
-        p_dvec = nd.from_pickle(p_dvec_path)
+        p_dvec = nd.read_pickle(p_dvec_path)
 
         # Balance a_dvec with p_dvec
         return a_dvec.balance_at_segments(p_dvec, split_weekday_weekend=True)

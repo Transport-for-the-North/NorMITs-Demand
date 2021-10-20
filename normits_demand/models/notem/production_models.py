@@ -18,7 +18,6 @@ import os
 import warnings
 
 from typing import Dict
-from typing import List
 
 # Third party imports
 import pandas as pd
@@ -862,7 +861,7 @@ class NHBProductionModel(NHBProductionModelPaths):
 
         # ## CONVERT THE ATTRACTIONS INTO DESIRED FORMAT ## #
         # Read the notem segmented compressed pickle
-        hb_attr_notem = nd.from_pickle(self.hb_attraction_paths[year])
+        hb_attr_notem = nd.read_pickle(self.hb_attraction_paths[year])
 
         # Remove time period and add in tfn_at
         hb_attr = hb_attr_notem.aggregate(notem_no_tp_seg)
