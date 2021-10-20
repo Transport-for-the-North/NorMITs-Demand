@@ -476,8 +476,8 @@ class Tram(NoTEMExportPaths):
             Dataframe containing future year tram data
 
         """
-        base_rail.sort_values(by=self._sort_msoa)
-        future_rail.sort_values(by=self._sort_msoa)
+        base_rail.sort_values(by=self._sort_msoa, inplace=True)
+        future_rail.sort_values(by=self._sort_msoa, inplace= True)
 
         # Calculates growth of rail
         future_rail['growth_rate'] = ((future_rail['val'] - base_rail['val']) / base_rail['val']) + 1
