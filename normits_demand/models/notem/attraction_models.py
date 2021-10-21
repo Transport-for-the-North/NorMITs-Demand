@@ -356,7 +356,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("HB Attraction Model took:%s" % time_taken)
+        self._logger.info("HB Attraction Model took: %s" % time_taken)
         self._logger.info("HB Attraction Model Finished")        
 
     def _read_land_use_data(self,
@@ -744,7 +744,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("NHB Attraction Model took:%s" % time_taken)
+        self._logger.info("NHB Attraction Model took: %s" % time_taken)
         self._logger.info("NHB Attraction Model Finished")
 
     def _create_nhb_attraction_data(self,
@@ -779,10 +779,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         hb_attr_notem_df = hb_attr_notem.to_df()
 
         # Removing p1 and p7
-        mask = (
-            (hb_attr_notem_df['p'].astype(int) == 1)
-            | (hb_attr_notem_df['p'].astype(int) == 7)
-        )
+        mask = (hb_attr_notem_df['p'].astype(int) == 7)
         hb_attr_notem_df = hb_attr_notem_df[~mask].copy().reset_index(drop=True)
 
         # Adding 10 to the remaining purposes

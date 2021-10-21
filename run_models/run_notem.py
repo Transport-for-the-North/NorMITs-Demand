@@ -26,6 +26,7 @@ by_iteration = "iter3e"
 fy_iteration = "iter3e"
 notem_import_home = r"I:\NorMITs Demand\import\NoTEM"
 notem_export_home = r"E:\NorMITs Demand\NoTEM"
+# notem_export_home = r"C:\Data_test\
 
 
 def main():
@@ -59,7 +60,7 @@ def main():
         generate_hb_production=False,
         generate_hb_attraction=True,
         generate_nhb_production=False,
-        generate_nhb_attraction=False,
+        generate_nhb_attraction=True,
     )
 
 
