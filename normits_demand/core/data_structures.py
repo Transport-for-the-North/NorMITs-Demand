@@ -1030,6 +1030,7 @@ class DVector:
     def aggregate(self,
                   out_segmentation: core.SegmentationLevel,
                   split_tfntt_segmentation: bool = False,
+                  check_same: bool = True,
                   ) -> DVector:
         """
         Aggregates (by summing) this Dvector into out_segmentation.
@@ -1047,6 +1048,11 @@ class DVector:
             If converting from the current segmentation to out_segmentation
             requires the splitting of the tfn_tt segmentation, mark this as
             True - a special type of aggregation is needed underneath.
+
+        check_same:
+            Whether to check if the DVector totals before and after
+            aggregation are the same or not. If they are not the same (or
+            very similar) a warning will be given.
 
         Returns
         -------
@@ -1075,7 +1081,7 @@ class DVector:
             in_lst = [self._data[x].flatten() for x in in_seg_names]
             dvec_data[out_seg_name] = np.sum(in_lst, axis=0)
 
-        return DVector(
+        aggregated_dvec = DVector(
             zoning_system=self.zoning_system,
             segmentation=out_segmentation,
             time_format=self.time_format,
@@ -1083,6 +1089,22 @@ class DVector:
             process_count=self.process_count,
             verbose=self.verbose,
         )
+
+        if not check_same:
+            return aggregated_dvec
+
+        # Check that we haven't dropped any values during aggregation
+        if not self.sum_is_close(aggregated_dvec):
+            warnings.warn(
+                "Total value of DVector is different before and after "
+                "aggregation. Have the aggregation segmentations and methods "
+                "been defined correctly?\n"
+                "Expected %f\n"
+                "Got %f"
+                % (self.sum(), aggregated_dvec.sum())
+            )
+
+        return aggregated_dvec
 
     def multiply_and_aggregate(self: DVector,
                                other: DVector,

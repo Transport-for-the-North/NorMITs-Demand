@@ -22,10 +22,10 @@ years = [2018]
 scenario = "NTEM"
 notem_iter = '4'
 lu_drive = "I:/"
-by_iteration = "iter3e"
-fy_iteration = "iter3e"
+by_iteration = "iter3d"
+fy_iteration = "iter3d"
 notem_import_home = r"I:\NorMITs Demand\import\NoTEM"
-notem_export_home = r"I:\NorMITs Demand\NoTEM"
+notem_export_home = r"E:\NorMITs Demand\NoTEM"
 # notem_export_home = r"C:\Data_test\
 
 
@@ -59,8 +59,8 @@ def main():
         generate_nhb=False,
         generate_hb_production=False,
         generate_hb_attraction=False,
-        generate_nhb_production=True,
-        generate_nhb_attraction=False,
+        generate_nhb_production=False,
+        generate_nhb_attraction=True,
     )
 
 

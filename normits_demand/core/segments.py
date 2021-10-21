@@ -803,7 +803,7 @@ class SegmentationLevel:
         # Check that the output segmentation has been created properly
         if not other.is_correct_naming(list(agg_dict.keys())):
             raise SegmentationError(
-                "Some segment names seem to have gone missing during"
+                "Some segment names seem to have gone missing during "
                 "aggregation.\n"
                 "Expected %s segments.\n"
                 "Found %s segments."

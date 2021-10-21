@@ -86,7 +86,7 @@ class HBProductionModel(HBProductionModelPaths):
             'tfn_tt': int,
             'tfn_at': int,
             'p': int,
-            'trip_rates': float
+            'trip_rate': float
         },
         'm_tp': {
             'p': int,
@@ -419,7 +419,7 @@ class HBProductionModel(HBProductionModelPaths):
             zoning_system=None,
             segmentation=pure_hb_prod,
             import_data=trip_rates.rename(columns=self._seg_rename),
-            val_col="trip_rates",
+            val_col="trip_rate",
             verbose=verbose,
         )
         # ## MULTIPLY TOGETHER ## #
@@ -750,6 +750,18 @@ class NHBProductionModel(NHBProductionModelPaths):
             # Renaming
             notem_segmented = self._rename(fully_segmented)
 
+            # ## PRODUCTIONS TOTAL CHECK ## #
+            if not fully_segmented.sum_is_close(notem_segmented):
+                msg = (
+                    "The NHB production totals before and after rename to "
+                    "output segmentation are not same.\n"
+                    "Expected %f\n"
+                    "Got %f"
+                    % (pure_nhb_demand.sum(), fully_segmented.sum())
+                )
+                self._logger.warning(msg)
+                warnings.warn(msg)
+
             if export_notem_segmentation:
                 self._logger.info("Exporting notem segmented demand to disk")
                 notem_segmented.to_pickle(self.export_paths.notem_segmented[year])
@@ -931,7 +943,6 @@ class NHBProductionModel(NHBProductionModelPaths):
         """
         # Define the segmentation we want to use
         nhb_time_splits_seg = nd.get_segmentation_level('notem_nhb_tfnat_p_m_tp')
-
         full_seg = nd.get_segmentation_level('notem_nhb_productions_full')
 
         # Read the time splits factor
