@@ -100,7 +100,6 @@ class Tram(NoTEMExportPaths):
             will be built.
         """
         # Validate inputs
-
         file_ops.check_path_exists(import_home)
 
         # Assign
@@ -316,7 +315,7 @@ class Tram(NoTEMExportPaths):
             notem_dvec = self._combine_trips(external_notem, tram_msoa, non_tram_msoa, year, verbose)
 
             # Bring the above Dvec back to original segmentation
-            notem_output_dvec = nd.from_pickle(self.notem_output[year])
+            notem_output_dvec = nd.read_pickle(self.notem_output[year])
 
             #TODO: Need to figure out a way to bring back notem segmentation
             # notem_dvec = notem_dvec.split_segmentation_like(notem_output_dvec)
@@ -381,7 +380,7 @@ class Tram(NoTEMExportPaths):
         tram_data.rename(columns={'trips': 'val'}, inplace=True)
         # Reads the corresponding notem output
         du.print_w_toggle("Loading the notem output data...", verbose=verbose)
-        notem_output_dvec = nd.from_pickle(self.notem_output[year])
+        notem_output_dvec = nd.read_pickle(self.notem_output[year])
         # Aggregates the dvector to the required segmentation
         if 'nhb' in self.notem_output[year]:
             notem_tram_seg = notem_output_dvec.aggregate(out_segmentation=nd.get_segmentation_level('nhb_p_m_ca'))

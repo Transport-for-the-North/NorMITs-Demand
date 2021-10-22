@@ -8,7 +8,5 @@ from normits_demand.models.notem import NoTEM
 
 from normits_demand.models.notem import Tram
 
-
 # TMS
 from normits_demand.models.travel_market_synthesiser import TravelMarketSynthesiser
-

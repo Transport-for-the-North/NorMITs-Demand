@@ -152,7 +152,6 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
         The version of inputs to use for the NHB production model.
         e.g. '2.0'
     """
-
     # Constant
     _current_base_year = 2018
 
