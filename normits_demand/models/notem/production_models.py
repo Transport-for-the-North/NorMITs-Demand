@@ -18,7 +18,6 @@ import os
 import warnings
 
 from typing import Dict
-from typing import List
 
 # Third party imports
 import pandas as pd
@@ -182,7 +181,7 @@ class HBProductionModel(HBProductionModelPaths):
             report_home=report_home,
         )
         # Create a logger
-        logger_name = "%s.%s" % (__name__, self.__class__.__name__)
+        logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
         log_file_path = os.path.join(self.export_home, self._log_fname)
         self._logger = nd.get_logger(
             logger_name=logger_name,
@@ -628,7 +627,7 @@ class NHBProductionModel(NHBProductionModelPaths):
             report_home=report_home,
         )
         # Create a logger
-        logger_name = "%s.%s" % (__name__, self.__class__.__name__)
+        logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
         log_file_path = os.path.join(self.export_home, self._log_fname)
         self._logger = nd.get_logger(
             logger_name=logger_name,
@@ -874,7 +873,7 @@ class NHBProductionModel(NHBProductionModelPaths):
 
         # ## CONVERT THE ATTRACTIONS INTO DESIRED FORMAT ## #
         # Read the notem segmented compressed pickle
-        hb_attr_notem = nd.from_pickle(self.hb_attraction_paths[year])
+        hb_attr_notem = nd.read_pickle(self.hb_attraction_paths[year])
 
         # Remove time period and add in tfn_at
         hb_attr = hb_attr_notem.aggregate(notem_no_tp_seg)

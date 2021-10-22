@@ -262,8 +262,8 @@ def main():
                 th_factors_dict[tp][orig_loc, dest_loc] = factor
 
         # ## OUTPUT FACTORS ## #
-        file_ops.to_pickle(fh_factors_dict, fh_factor_path)
-        file_ops.to_pickle(th_factors_dict, th_factor_path)
+        file_ops.write_pickle(fh_factors_dict, fh_factor_path)
+        file_ops.write_pickle(th_factors_dict, th_factor_path)
 
         # ## VALIDATE FACTORS ## #
         for factor_dict in [fh_factors_dict, th_factors_dict]:

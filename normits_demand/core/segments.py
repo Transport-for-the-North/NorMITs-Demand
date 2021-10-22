@@ -56,6 +56,11 @@ class SegmentationLevel:
         ['p', 'm'], and the segment where p=1, and m=3, would be named
         '1_3'.
 
+    segment_types:
+        A dictionary of strings (matching naming_order) -> type. Defines
+        the type of each segment internally, and also when converted to a
+        pandas.DataFrame
+
     segments:
         A pandas.DataFrame listing every single valid combination of segment
         values for this segmentation. Often this is simply to product of all
@@ -84,6 +89,7 @@ class SegmentationLevel:
     _unique_segments_csv_fname = "unique_segments.csv"
     _unique_segments_compress_fname = "unique_segments.pbz2"
     _naming_order_fname = "naming_order.csv"
+    _segment_type_fname = "types.csv"
 
     _segment_definitions_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
@@ -125,6 +131,7 @@ class SegmentationLevel:
     def __init__(self,
                  name: str,
                  naming_order: List[str],
+                 segment_types: Dict[str, type],
                  valid_segments: pd.DataFrame,
                  ):
         """Builds a SegmentationLevel
@@ -141,6 +148,10 @@ class SegmentationLevel:
         naming_order:
             The order the segments should be in when creating segment names.
 
+        segment_types:
+            The types to assign to each segment. Should be a dictionary of
+            strings (matching naming_order) -> type
+
         valid_segments:
             A pandas.DataFrame listing all the valid segments of this
             segmentation. The columns should be named after the segments
@@ -150,6 +161,7 @@ class SegmentationLevel:
         # Init
         self._name = name
         self._naming_order = naming_order
+        self._segment_types = segment_types
 
         # Retain this for copying later
         self._valid_segments = valid_segments
@@ -157,7 +169,7 @@ class SegmentationLevel:
         # Validate that naming order is in df
         for col in self.naming_order:
             if col not in valid_segments:
-                raise nd.NormitsDemandError(
+                raise SegmentationError(
                     "Error while instantiating a SegmentationLevel object."
                     "Cannot find column '%s' of naming order in the given "
                     "valid segments dataframe!"
@@ -166,6 +178,28 @@ class SegmentationLevel:
 
         # Make sure the df is just the segment columns
         self._segments = pd_utils.reindex_cols(valid_segments, self.naming_order)
+
+        # Validate that all columns are accounted for in typing
+        missing_types = set(self.naming_order) - set(self._segment_types.keys())
+        if len(missing_types) > 0:
+            raise SegmentationError(
+                "Not all columns have been accounted for in segment types. "
+                "Missing defined types for the following segments: %s"
+                % missing_types
+            )
+
+        # Convert the segment types to the defined types
+        for col, col_type in self._segment_types.items():
+            try:
+                self._segments[col] = self._segments[col].astype(col_type)
+            except ValueError:
+                raise ValueError(
+                    "Cannot convert segment values %s to type %s. "
+                    "Maybe the segment needs to be defined with a different "
+                    "type? See above for specific exception which "
+                    "caused this one."
+                    % (col, col_type)
+                )
 
         # ## BUILD SEGMENT NAMING ## #
         segments_and_names = self.segments.copy()
@@ -191,6 +225,10 @@ class SegmentationLevel:
     @property
     def segment_names(self):
         return self._segment_names
+
+    @property
+    def segment_types(self):
+        return self._segment_types
 
     @property
     def segments_and_names(self):
@@ -601,6 +639,7 @@ class SegmentationLevel:
         return SegmentationLevel(
             name=self.name,
             naming_order=self.naming_order.copy(),
+            segment_types=self.segment_types.copy(),
             valid_segments=self._valid_segments.copy()
         )
 
@@ -1530,7 +1569,7 @@ def _read_in_and_validate_naming_order(path: nd.PathLike, name: str) -> List[str
     """
     # Check the file exists
     if not os.path.isfile(path):
-        raise nd.NormitsDemandError(
+        raise FileNotFoundError(
             "We don't seem to have any naming order data for the segmentation %s.\n"
             "Tried looking for the data here: %s"
             % (name, path)
@@ -1562,6 +1601,59 @@ def _read_in_and_validate_naming_order(path: nd.PathLike, name: str) -> List[str
     return order
 
 
+def _read_in_and_validate_segment_types(path: nd.PathLike,
+                                        naming_order: List[str],
+                                        default_type: type = int,
+                                        ) -> Dict[str, type]:
+    """
+    Converts the given csv file into a Dictionary of column types names
+    """
+    # Assume all default int type if no file found
+    if not os.path.isfile(path):
+        return {x: default_type for x in naming_order}
+
+    # Read in and validate each row
+    segment_types = dict()
+    with open(path) as f:
+        for i, line in enumerate(f):
+            split_line = line.split(',')
+
+            # Make sure there is only two values on this line
+            if len(split_line) != 2:
+                raise SegmentationError(
+                    "Error while reading in the segmentation typing at: %s\n"
+                    "Expected to find two values on line %s, found %s values "
+                    "instead.\n"
+                    "The following line was read: %s"
+                    % (path, i, len(split_line), line)
+                )
+
+            col = split_line[0]
+            col_type = eval(split_line[1])
+
+            if col not in naming_order:
+                raise ValueError(
+                    "On line %s, the segment %s in the typing file does "
+                    "not exist in the naming order."
+                    % (i, col)
+                )
+
+            if type(col_type) != type:
+                raise ValueError(
+                    "On line %s, expected to find a type (such as int, or "
+                    "str), but got an object of type %s instead."
+                    % (i, type(col_type))
+                )
+
+            segment_types[col] = col_type
+
+    # Infill int where type not given
+    missing_types = set(naming_order) - set(segment_types.keys())
+    segment_types.update({x: int for x in missing_types})
+
+    return segment_types
+
+
 def _get_valid_segments(name: str) -> pd.DataFrame:
     """
     Finds and reads in the valid segments data for segmentation with name
@@ -1580,6 +1672,10 @@ def _get_valid_segments(name: str) -> pd.DataFrame:
     # ## READ IN THE NAMING ORDER ## #
     file_path = os.path.join(import_home, SegmentationLevel._naming_order_fname)
     naming_order = _read_in_and_validate_naming_order(file_path, name)
+
+    # ## READ IN THE SEGMENT TYPING ## #
+    file_path = os.path.join(import_home, SegmentationLevel._segment_type_fname)
+    segment_types = _read_in_and_validate_segment_types(file_path, naming_order)
 
     # ## READ IN THE UNIQUE SEGMENTS ## #
     # Build the two possible paths
@@ -1611,7 +1707,7 @@ def _get_valid_segments(name: str) -> pd.DataFrame:
     df = df.rename(columns=rename_cols)
     df = pd_utils.reindex_cols(df, naming_order)
 
-    return df, naming_order
+    return df, naming_order, segment_types
 
 
 def get_segmentation_level(name: str) -> SegmentationLevel:
@@ -1630,11 +1726,12 @@ def get_segmentation_level(name: str) -> SegmentationLevel:
     """
     # TODO(BT): Add some validation on the segmentation name
     # TODO(BT): Add some caching to this function!
-    valid_segments, naming_order = _get_valid_segments(name)
+    valid_segments, naming_order, segment_types = _get_valid_segments(name)
 
     # Create the SegmentationLevel object and return
     return SegmentationLevel(
         name=name,
         naming_order=naming_order,
+        segment_types=segment_types,
         valid_segments=valid_segments,
     )

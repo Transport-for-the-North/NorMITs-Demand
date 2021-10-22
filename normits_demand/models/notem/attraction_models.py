@@ -19,7 +19,6 @@ import os
 import warnings
 
 from typing import Dict
-from typing import List
 
 # Third party imports
 import pandas as pd
@@ -206,7 +205,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             report_home=report_home,
         )
         # Create a logger
-        logger_name = "%s.%s" % (__name__, self.__class__.__name__)
+        logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
         log_file_path = os.path.join(self.export_home, self._log_fname)
         self._logger = nd.get_logger(
             logger_name=logger_name,
@@ -389,6 +388,11 @@ class HBAttractionModel(HBAttractionModelPaths):
             path=self.employment_paths[year],
             find_similar=True,
         )
+
+        # Little hack until Land Use is updated
+        if str(year) in list(emp):
+            emp = emp.rename(columns={str(year): 'people'})
+
         emp = pd_utils.reindex_cols(emp, self._target_col_dtypes['employment'].keys())
         for col, dt in self._target_col_dtypes['employment'].items():
             emp[col] = emp[col].astype(dt)
@@ -429,16 +433,15 @@ class HBAttractionModel(HBAttractionModelPaths):
         trip_weights_seg = nd.get_segmentation_level('notem_hb_attractions_trip_weights')
         pure_attractions_seg = nd.get_segmentation_level('notem_hb_attractions_pure')
 
-        # Reading trip rates        
+        # ## CREATE THE TRIP RATES DVEC ## #
+        # Reading trip rates
         trip_rates = du.safe_read_csv(
             self.trip_weights_path,
             usecols=self._target_col_dtypes['trip_weight'].keys(),
             dtype=self._target_col_dtypes['trip_weight'],
         )
 
-        # ## CREATE THE TRIP RATES DVEC ## #
-        
-        # Instantiate
+        # make DVec
         trip_weights_dvec = nd.DVector(
             zoning_system=msoa_zoning,
             segmentation=trip_weights_seg,
@@ -511,7 +514,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             a_dvec controlled to p_dvec
         """
         # Read in the productions DVec from disk
-        p_dvec = nd.from_pickle(p_dvec_path)
+        p_dvec = nd.read_pickle(p_dvec_path)
 
         # Split a_dvec into p_dvec segments and balance
         a_dvec = a_dvec.split_segmentation_like(p_dvec)
@@ -628,7 +631,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             report_home=report_home,
         )
         # Create a logger
-        logger_name = "%s.%s" % (__name__, self.__class__.__name__)
+        logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
         log_file_path = os.path.join(self.export_home, self._log_fname)
         self._logger = nd.get_logger(
             logger_name=logger_name,
@@ -772,7 +775,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         segmentation = nd.get_segmentation_level('notem_nhb_output')
 
         # Reading the notem segmented HB attractions compressed pickle
-        hb_attr_notem = nd.from_pickle(self.hb_attraction_paths[year])
+        hb_attr_notem = nd.read_pickle(self.hb_attraction_paths[year])
         hb_attr_notem_df = hb_attr_notem.to_df()
 
         # Removing p1 and p7
@@ -815,7 +818,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             a_dvec controlled to p_dvec
         """
         # Read in the productions DVec from disk
-        p_dvec = nd.from_pickle(p_dvec_path)
+        p_dvec = nd.read_pickle(p_dvec_path)
 
         # Balance a_dvec with p_dvec
         return a_dvec.balance_at_segments(p_dvec, split_weekday_weekend=True)

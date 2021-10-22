@@ -394,9 +394,11 @@ def _get_zones(name: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
             df = file_ops.read_df(file_path)
             internal_zones = np.sort(df['zone_name'].values)
     except FileNotFoundError:
-        warnings.warn(
+        warn_msg = (
             "No internal zones definition found for zoning system '%s'"
-            % name)
+            % name
+        )
+        warnings.warn(warn_msg, UserWarning, stacklevel=3)
 
     # Read in the external zones
     try:
@@ -406,9 +408,11 @@ def _get_zones(name: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
             df = file_ops.read_df(file_path)
             external_zones = np.sort(df['zone_name'].values)
     except FileNotFoundError:
-        warnings.warn(
+        warn_msg = (
             "No external zones definition found for zoning system '%s'"
-            % name)
+            % name
+        )
+        warnings.warn(warn_msg, UserWarning, stacklevel=3)
 
     return unique_zones, internal_zones, external_zones
 
