@@ -197,5 +197,12 @@ as part of their file name in distribution reports
   - New HB Production Trip rates being read in
   - New NHB Production Trip rates being read in
     - NoTEM now outputs NHB Purpose 11
+  - Soc 4 Added into HB and NHB models. This describes work-based trips
+    for people without a formal job.
+  - Segmentations now have typing - meaning `DVector.to_df()` should always 
+    return in the correct datatypes.
+- When reading in pickled files, the `__version__` attribute will now be 
+  checked (if it exists). It will be compared to the version of the code being
+  run. If different, a warning will be raised.
 
      
