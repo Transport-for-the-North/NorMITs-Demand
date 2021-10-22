@@ -13,14 +13,15 @@ Master run file to run NoTEM
 import sys
 
 sys.path.append("..")
+from normits_demand import constants
 from normits_demand.models import NoTEM
 from normits_demand.pathing import NoTEMImportPaths
 
 
 # GLOBAL VARIABLES
-years = [2018]
-scenario = "NTEM"
-notem_iter = '4'
+years = [2033]
+scenario = constants.SC01_JAM
+notem_iter = '4.2'
 lu_drive = "I:/"
 by_iteration = "iter3e"
 fy_iteration = "iter3e"
@@ -54,13 +55,13 @@ def main():
         export_home=notem_export_home,
     )
     n.run(
-        generate_all=False,
+        generate_all=True,
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,
         generate_hb_attraction=False,
         generate_nhb_production=False,
-        generate_nhb_attraction=True,
+        generate_nhb_attraction=False,
     )
 
 

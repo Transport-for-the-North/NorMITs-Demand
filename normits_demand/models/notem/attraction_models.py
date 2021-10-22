@@ -389,6 +389,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             find_similar=True,
         )
 
+        # TODO(BT): Remove this in Land Use 4.0 Update
         # Little hack until Land Use is updated
         if str(year) in list(emp):
             emp = emp.rename(columns={str(year): 'people'})

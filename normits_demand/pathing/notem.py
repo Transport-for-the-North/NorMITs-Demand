@@ -284,17 +284,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
         )
 
         # Because of the way land use is written, we have this weird legacy
-        # now where NoTEM needs to base year to run correctly. If the smallest
-        # number given isn't the defined base year, we just can't run.
-        base_year, _ = du.split_base_future_years(years)
-        if base_year != self._current_base_year:
-            raise ValueError(
-                "The assumed base year (the smallest of all inputs years) is "
-                "not the same as the defined base year in this model.\n"
-                "Assumed: %s\n"
-                "Defined: %s\n"
-                % (base_year, self._current_base_year)
-            )
+        # now where NoTEM needs the base year to run correctly.
 
         # ## GENERATE FULL PATHS ## #
         self.population_paths = dict()
@@ -305,8 +295,8 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
             emp_fname = self._fy_emp_fname.format(year=str(year))
 
             # Land use gives a different pop fname in base year
-            if year == base_year:
-                year_pop = os.path.join(by_home, self._by_pop_fname)
+            if year == self._current_base_year:
+                year_pop = os.path.join(by_home, pop_fname)
                 year_emp = os.path.join(by_home, emp_fname)
             else:
                 year_pop = os.path.join(fy_home, pop_fname)

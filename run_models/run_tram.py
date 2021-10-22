@@ -19,10 +19,10 @@ from normits_demand.models import Tram
 # GLOBAL VARIABLES
 years = [2018, 2027]
 scenario = "SC01_JAM"
-notem_iter = '4'
+notem_iter = '4.1'
 tram_import_home = r"I:\Data\Light Rail"
 
-export_home = r"C:\Data\Nirmal_Atkins"
+export_home = r'E:\NorMITs Demand\NoTEM'
 
 
 def main():

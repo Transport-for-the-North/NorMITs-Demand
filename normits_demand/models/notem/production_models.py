@@ -365,6 +365,12 @@ class HBProductionModel(HBProductionModelPaths):
             path=self.population_paths[year],
             find_similar=True,
         )
+
+        # TODO(BT): Remove this in Land Use 4.0 Update
+        # Little hack until Land Use is updated
+        if str(year) in list(pop):
+            pop = pop.rename(columns={str(year): 'people'})
+
         pop = pd_utils.reindex_cols(pop, self._target_col_dtypes['pop'].keys())
         for col, dt in self._target_col_dtypes['pop'].items():
             pop[col] = pop[col].astype(dt)
