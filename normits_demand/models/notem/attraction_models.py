@@ -161,13 +161,13 @@ class HBAttractionModel(HBAttractionModelPaths):
             Defaults to consts.PROCESS_COUNT.
         """
         # Check that the paths we need exist!
-        [file_ops.check_file_exists(x) for x in employment_paths.values()]
+        [file_ops.check_file_exists(x, find_similar=True) for x in employment_paths.values()]
         [file_ops.check_file_exists(x) for x in production_balance_paths.values()]
         file_ops.check_file_exists(trip_weights_path)
         file_ops.check_file_exists(mode_splits_path)
 
         if constraint_paths is not None:
-            [file_ops.check_file_exists(x) for x in constraint_paths.values()]
+            [file_ops.check_file_exists(x, find_similar=True) for x in constraint_paths.values()]
 
         # Validate that we have data for all the years we're running for
         for year in employment_paths.keys():
@@ -595,7 +595,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         [file_ops.check_file_exists(x) for x in nhb_production_paths.values()]
 
         if constraint_paths is not None:
-            [file_ops.check_file_exists(x) for x in constraint_paths.values()]
+            [file_ops.check_file_exists(x, find_similar=True) for x in constraint_paths.values()]
 
         # Validate that we have data for all the years we're running for
         for year in hb_attraction_paths.keys():
