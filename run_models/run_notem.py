@@ -19,7 +19,7 @@ from normits_demand.pathing import NoTEMImportPaths
 
 
 # GLOBAL VARIABLES
-years = [2033]
+years = [2018, 2033]
 scenario = constants.SC01_JAM
 notem_iter = '4.2'
 lu_drive = "I:/"
@@ -55,9 +55,9 @@ def main():
         export_home=notem_export_home,
     )
     n.run(
-        generate_all=True,
+        generate_all=False,
         generate_hb=False,
-        generate_nhb=False,
+        generate_nhb=True,
         generate_hb_production=False,
         generate_hb_attraction=False,
         generate_nhb_production=False,

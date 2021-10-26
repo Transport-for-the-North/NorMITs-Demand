@@ -11,8 +11,9 @@ File purpose:
 Collection of utility functions specifically for manipulating pandas
 """
 # Builtins
-import functools
 import operator
+import warnings
+import functools
 
 from typing import Any
 from typing import Dict
@@ -27,6 +28,8 @@ import pandas as pd
 
 # Local
 from normits_demand.utils import general as du
+from normits_demand.utils import math_utils
+
 
 
 def reindex_cols(df: pd.DataFrame,
@@ -254,9 +257,10 @@ def long_to_wide_infill(df: pd.DataFrame,
                         index_col: str,
                         columns_col: str,
                         values_col: str,
-                        index_vals: List[str] = None,
-                        column_vals: List[str] = None,
+                        index_vals: List[Any] = None,
+                        column_vals: List[Any] = None,
                         infill: Any = 0,
+                        check_totals: bool = False,
                         ) -> pd.DataFrame:
     """
     Converts a DataFrame from long to wide format, infilling missing values.
@@ -286,6 +290,10 @@ def long_to_wide_infill(df: pd.DataFrame,
     infill:
         The value to use to infill any missing cells in the wide DataFrame.
 
+    check_totals:
+        Whether to check if the totals are almost equal before and after the
+        conversion.
+
     Returns
     -------
     wide_df:
@@ -295,16 +303,35 @@ def long_to_wide_infill(df: pd.DataFrame,
     # Init
     index_vals = df[index_col].unique() if index_vals is None else index_vals
     column_vals = df[columns_col].unique() if column_vals is None else column_vals
+    orig_total = df[values_col].values.sum()
     df = reindex_cols(df, [index_col, columns_col, values_col])
+
+    # Make sure were not dropping too much. Indication of problems in arguments
+    missing_idx = set(index_vals) - set(df[index_col].unique().tolist())
+    if len(missing_idx) >= len(set(index_vals)) * 0.9:
+        warnings.warn(
+            "Almost all index_vals do not exist in df[index_col]. Are the "
+            "given data types matching?\n"
+            "There are %s missing values."
+            % len(missing_idx)
+        )
+
+    missing_cols = set(column_vals) - set(df[columns_col].unique().tolist())
+    if len(missing_cols) >= len(set(column_vals)) * 0.9:
+        warnings.warn(
+            "Almost all column_vals do not exist in df[columns_col]. Are the "
+            "given data types matching?\n"
+            "There are %s missing values."
+            % len(missing_cols)
+        )
 
     # Make sure every possible combination exists
     new_index = pd.MultiIndex.from_product(
         [index_vals, column_vals],
         names=[index_col, columns_col]
     )
-
     df = df.set_index([index_col, columns_col])
-    df = df.reindex(new_index, fill_value=infill).reset_index()
+    df = df.reindex(index=new_index, fill_value=infill).reset_index()
 
     # Convert to wide
     df = df.pivot(
@@ -312,6 +339,19 @@ def long_to_wide_infill(df: pd.DataFrame,
         columns=columns_col,
         values=values_col,
     )
+
+    if not check_totals:
+        return df
+
+    # Make sure nothing was dropped
+    after_total = df.values.sum()
+    if not math_utils.is_almost_equal(after_total, orig_total):
+        raise ValueError(
+            "Values have been dropped when reindexing the given dataframe.\n"
+            "Starting total: %s\n"
+            "Ending total: %s."
+            % (orig_total, after_total)
+        )
 
     return df
 
