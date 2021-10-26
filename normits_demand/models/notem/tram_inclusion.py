@@ -25,9 +25,10 @@ import normits_demand as nd
 
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
-from normits_demand.pathing import NoTEMExportPaths
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
+
+from normits_demand.pathing import NoTEMExportPaths
 
 
 class Tram(NoTEMExportPaths):
@@ -116,12 +117,12 @@ class Tram(NoTEMExportPaths):
         )
 
         # Create a logger
-        logger_name = "%s.%s" % (__name__, self.__class__.__name__)
+        logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
         log_file_path = os.path.join(self.export_home, self._log_fname)
         self._logger = nd.get_logger(
             logger_name=logger_name,
             log_file_path=log_file_path,
-            instantiate_msg="Initialised new NoTEM Logger",
+            instantiate_msg="Initialised new Tram Logger",
         )
 
     def run_tram(self,
@@ -144,7 +145,7 @@ class Tram(NoTEMExportPaths):
         """
 
         start_time = timing.current_milli_time()
-        self._logger.info("Starting a new run of Tram Inclusion")
+        self._logger.info("Starting a new run of the Tram Model")
 
         # Run the models
         self._generate_hb_production(verbose)
@@ -154,24 +155,23 @@ class Tram(NoTEMExportPaths):
 
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("Tram Inclusion run complete! Took %s" % time_taken)
+        self._logger.info("Tram Model run complete! Took %s" % time_taken)
 
     def _generate_hb_production(self, verbose: bool) -> None:
         """
         Runs tram inclusion for home based Production trip end models
         """
-        self._logger.debug("Generating Home-Based Production Model imports")
-        tram_data = os.path.join(self.import_home, "tram_hb_productions.csv")
+        self._logger.info("Generating HB Production imports")
+        tram_data = os.path.join(self.import_home, "tram_hb_productions_v1.0.csv")
 
         export_paths = self.hb_production.export_paths
         hb_production_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
         # Runs the home based Production model
-        self._logger.debug("Instantiating and running tram inclusion for "
-                           "Home-Based Production Model")
+        self._logger.info("Adding Tram into HB Productions")
         self._tram_inclusion(
             tram_data=tram_data,
-            notem_output=hb_production_paths,
+            dvec_imports=hb_production_paths,
             export_home=self.hb_production.export_paths.home,
             verbose=verbose,
         )
@@ -180,17 +180,16 @@ class Tram(NoTEMExportPaths):
         """
         Runs tram inclusion for home based Attraction trip end model
         """
-        self._logger.debug("Generating Home-Based Attraction Model imports")
-        tram_data = os.path.join(self.import_home, "tram_hb_attractions.csv")
+        self._logger.info("Generating HB Attraction imports")
+        tram_data = os.path.join(self.import_home, "tram_hb_attractions_v1.0.csv")
 
         export_paths = self.hb_attraction.export_paths
         hb_attraction_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
-        self._logger.debug("Instantiating and running tram inclusion for "
-                           "Home-Based Attraction Model")
+        self._logger.info("Adding Tram into HB Attractions")
         self._tram_inclusion(
             tram_data=tram_data,
-            notem_output=hb_attraction_paths,
+            dvec_imports=hb_attraction_paths,
             export_home=self.hb_attraction.export_paths.home,
             verbose=verbose,
         )
@@ -199,17 +198,16 @@ class Tram(NoTEMExportPaths):
         """
         Runs tram inclusion for non-home based Production trip end model
         """
-        self._logger.debug("Generating Non-Home-Based Production Model imports")
-        tram_data = os.path.join(self.import_home, "tram_nhb_productions.csv")
+        self._logger.info("Generating NHB Production imports")
+        tram_data = os.path.join(self.import_home, "tram_nhb_productions_v1.0.csv")
 
         export_paths = self.nhb_production.export_paths
         nhb_production_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
-        self._logger.debug("Instantiating and running tram inclusion for "
-                           "Non-Home-Based Production Model")
+        self._logger.info("Adding Tram into NHB Productions")
         self._tram_inclusion(
             tram_data=tram_data,
-            notem_output=nhb_production_paths,
+            dvec_imports=nhb_production_paths,
             export_home=self.nhb_production.export_paths.home,
             verbose=verbose,
         )
@@ -218,24 +216,23 @@ class Tram(NoTEMExportPaths):
         """
         Runs tram inclusion for non home based Attraction trip end models.
         """
-        self._logger.debug("Generating Non-Home-Based Attraction Model imports")
-        tram_data = os.path.join(self.import_home, "tram_hb_attractions.csv")
+        self._logger.info("Generating NHB Production imports")
+        tram_data = os.path.join(self.import_home, "tram_hb_attractions_v1.0.csv")
 
         export_paths = self.nhb_attraction.export_paths
         nhb_attraction_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
-        self._logger.debug("Instantiating and running tram inclusion for "
-                           "Non-Home-Based Attraction Model")
+        self._logger.info("Adding Tram into NHB Attractions")
         self._tram_inclusion(
             tram_data=tram_data,
-            notem_output=nhb_attraction_paths,
+            dvec_imports=nhb_attraction_paths,
             export_home=self.nhb_attraction.export_paths.home,
             verbose=verbose,
         )
 
     def _tram_inclusion(self,
                         tram_data: nd.PathLike,
-                        notem_output: Dict[int, nd.PathLike],
+                        dvec_imports: Dict[int, nd.PathLike],
                         export_home: nd.PathLike,
                         verbose: bool = True,
                         ) -> None:
@@ -260,7 +257,7 @@ class Tram(NoTEMExportPaths):
         tram_data:
             The path to the base year tram data.
 
-        notem_output:
+        dvec_imports:
             Dictionary of {year: notem_segmented_trip_end data} pairs.
 
         export_home:
@@ -274,6 +271,8 @@ class Tram(NoTEMExportPaths):
         None
 
         """
+        notem_output = dvec_imports
+
         # Check that the paths we need exist!
         file_ops.check_file_exists(tram_data)
         [file_ops.check_file_exists(x) for x in notem_output.values()]
@@ -289,23 +288,28 @@ class Tram(NoTEMExportPaths):
         # Initialise timing
         # TODO: Properly integrate logging
         start_time = timing.current_milli_time()
-        du.print_w_toggle(
-            "Starting Tram inclusion at: %s" % timing.get_datetime(),
-            verbose=verbose
-        )
 
-        # Run tram inclusion for each year in trip end model
+        # Run tram inclusion for each given year
         for year in self.years:
             trip_end_start = timing.current_milli_time()
 
             # Read tram and notem output data
-            tram_data, notem_tram_seg = self._read_tram_and_notem_data(year, verbose)
+            tram_data, notem_tram_seg = self._read_tram_and_notem_data(year)
 
             # Runs tram infill for 275 internal tram msoa zones
-            tram_msoa, notem_msoa_wo_infill = self._tram_infill_msoa(notem_tram_seg, tram_data, year, verbose)
+            tram_msoa, notem_msoa_wo_infill = self._tram_infill_msoa(
+                notem_tram_seg,
+                tram_data,
+                year,
+                verbose,
+            )
 
             # Runs tram infill for entire north
-            north_msoa, north_wo_infill = self._tram_infill_north(notem_tram_seg, tram_msoa, verbose)
+            north_msoa, north_wo_infill = self._tram_infill_north(
+                notem_tram_seg,
+                tram_msoa,
+                verbose,
+            )
 
             # Runs tram infill for internal non tram msoa zones (internal msoa zones - 275 internal tram zones)
             non_tram_msoa, external_notem = self._non_tram_infill(notem_msoa_wo_infill, north_wo_infill, tram_msoa,
@@ -317,8 +321,8 @@ class Tram(NoTEMExportPaths):
             # Bring the above Dvec back to original segmentation
             notem_output_dvec = nd.read_pickle(self.notem_output[year])
 
-            #TODO: Need to figure out a way to bring back notem segmentation
-            # notem_dvec = notem_dvec.split_segmentation_like(notem_output_dvec)
+            # TODO: Need to figure out a way to bring back notem segmentation
+            #  notem_dvec = notem_dvec.split_segmentation_like(notem_output_dvec)
             # TODO: export location need to be sorted
             notem_dvec.to_pickle(os.path.join(self.export_home, "tram_included_dvec.pkl"))
             # Print timing for each trip end model
@@ -340,7 +344,7 @@ class Tram(NoTEMExportPaths):
 
     def _read_tram_and_notem_data(self,
                                   year: int,
-                                  verbose: bool,
+                                  verbose: bool = False,
                                   ) -> Tuple[pd.DataFrame, nd.DVector]:
         """
         Reads in the tram and notem data.
@@ -352,7 +356,7 @@ class Tram(NoTEMExportPaths):
 
         verbose:
             If set to True, it will print out progress updates while
-        running.
+            running.
 
         Returns
         -------
@@ -362,30 +366,33 @@ class Tram(NoTEMExportPaths):
         notem_tram_seg:
             Returns the notem output dvector in tram segmentation.
         """
-        # Reads the tram data
+        # Init
         du.print_w_toggle("Loading the tram data...", verbose=verbose)
-        tram_data = file_ops.read_df(
-            path=self.tram_data,
-            find_similar=True,
-        )
-        # Adds tram as mode 7
-        cols = list(tram_data)
-        cols.insert(2, 'm')
-        tram_data['m'] = 7
+        tram_target_cols = self._target_col_dtypes['tram']
 
+        # Reads the tram data
+        tram_data = file_ops.read_df(path=self.tram_data, find_similar=True)
+        tram_data = pd_utils.reindex_cols(tram_data, tram_target_cols)
+
+        # Make sure the input data is in the correct data types
         for col, dt in self._target_col_dtypes['tram'].items():
             tram_data[col] = tram_data[col].astype(dt)
 
-        tram_data = tram_data.reindex(cols, axis=1)
+        # Add tram mode
+        tram_data['m'] = 7
+
         tram_data.rename(columns={'trips': 'val'}, inplace=True)
+
         # Reads the corresponding notem output
         du.print_w_toggle("Loading the notem output data...", verbose=verbose)
         notem_output_dvec = nd.read_pickle(self.notem_output[year])
-        # Aggregates the dvector to the required segmentation
+
+        # Aggregate the dvector to the required segmentation
         if 'nhb' in self.notem_output[year]:
-            notem_tram_seg = notem_output_dvec.aggregate(out_segmentation=nd.get_segmentation_level('nhb_p_m_ca'))
+            tram_seg = nd.get_segmentation_level('nhb_p_m_ca')
         else:
-            notem_tram_seg = notem_output_dvec.aggregate(out_segmentation=nd.get_segmentation_level('hb_p_m_ca'))
+            tram_seg = nd.get_segmentation_level('hb_p_m_ca')
+        notem_tram_seg = notem_output_dvec.aggregate(tram_seg)
 
         return tram_data, notem_tram_seg
 
@@ -396,18 +403,19 @@ class Tram(NoTEMExportPaths):
                           verbose: bool
                           ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Tram infill for the msoa's having tram data in the north.
+        Tram infill for the MSOAs with tram data in the north.
 
         Parameters
         ----------
         notem_tram_seg:
-            DVector containing notem trip end output in revised segmentation(p,m,ca).
+            DVector containing notem trip end output in matching segmentation
+            to tram_data
             
         tram_data:
-            Dataframe containing tram data at msoa level for the north.
+            Dataframe containing tram data at MSOA level for the north.
 
         year:
-            The year for which the data needs to be imported.
+            The year we're currently running for
 
         verbose:
             If set to True, it will print out progress updates while running.
@@ -420,7 +428,6 @@ class Tram(NoTEMExportPaths):
         notem_msoa_wo_infill:
             Returns the dataframe before tram infill at msoa level.
         """
-
         # Converts DVector to dataframe
         notem_df = notem_tram_seg.to_df()
 
@@ -431,23 +438,32 @@ class Tram(NoTEMExportPaths):
         notem_df = notem_df.loc[notem_df['msoa_zone_id'].isin(tram_data['msoa_zone_id'])]
         notem_msoa_wo_infill = notem_df.copy()
         notem_df['c_uniq_id'] = pd_utils.str_join_cols(notem_df, self._join_cols)
+
         # Creates a subset of train mode
         notem_train = self._create_df_subset(notem_df=notem_df, mode=6)
+
         # Calculates growth factor for tram based on rail growth
         if year == self.base_year:
             self.base_train = notem_train
 
-        tram_data = self._tram_growth_rate(base_rail=self.base_train, future_rail=notem_train, base_tram=tram_data)
+        tram_data = self._tram_growth_rate(
+            base_rail=self.base_train,
+            future_rail=notem_train,
+            base_tram=tram_data,
+        )
         tram_data['c_uniq_id'] = pd_utils.str_join_cols(tram_data, self._join_cols)
 
         # Adds tram data to the notem dataframe
         notem_df = notem_df.append(tram_data)
+        
         # Creates unique id
         notem_df['c_uniq_id'] = pd_utils.str_join_cols(notem_df, self._join_cols)
         notem_df.sort_values(by='msoa_zone_id')
         du.print_w_toggle("Starting tram infill for msoa zones with tram data...", verbose=verbose)
+
         # Infills tram data
         notem_new_df = self._infill_internal(notem_df=notem_df, sort_order=self._sort_msoa)
+
         return notem_new_df, notem_msoa_wo_infill
 
     def _tram_growth_rate(self,
@@ -476,17 +492,19 @@ class Tram(NoTEMExportPaths):
 
         """
         base_rail.sort_values(by=self._sort_msoa, inplace=True)
-        future_rail.sort_values(by=self._sort_msoa, inplace= True)
+        future_rail.sort_values(by=self._sort_msoa, inplace=True)
 
         # Calculates growth of rail
         future_rail['growth_rate'] = ((future_rail['val'] - base_rail['val']) / base_rail['val']) + 1
 
         # Applies growth of rail to tram
         base_tram['future_trips'] = base_tram['val'] * future_rail['growth_rate']
+
         base_tram = base_tram.drop(['val'], axis=1)
         base_tram.rename(columns={'future_trips': 'val'}, inplace=True)
-        future_rail.to_csv(r"C:\Data\Nirmal_Atkins\Home Based Productions\future rail.csv", index=False)
-        base_tram.to_csv(r"C:\Data\Nirmal_Atkins\Home Based Productions\future tram.csv", index=False)
+
+        # future_rail.to_csv(r"C:\Data\Nirmal_Atkins\Home Based Productions\future rail.csv", index=False)
+        # base_tram.to_csv(r"C:\Data\Nirmal_Atkins\Home Based Productions\future tram.csv", index=False)
         return base_tram
 
     def _tram_infill_north(self,
@@ -771,7 +789,7 @@ class Tram(NoTEMExportPaths):
             (notem_train['c_uniq_id'].isin(notem_tram['c_uniq_id'])) & (notem_train['val'] > notem_tram['val']),
             notem_tram['val'], notem_train['val'])
 
-        notem_df = notem_df[notem_df.m < 6]
+        notem_df = notem_df[notem_df.m < 6].copy()
         notem_df['new_value'] = notem_df['val']
 
         notem_df = notem_df.append([notem_train, notem_tram])
@@ -784,7 +802,7 @@ class Tram(NoTEMExportPaths):
         notem_new_df = pd.DataFrame()
 
         for id in uniq_id:
-            new_df = notem_df.loc[notem_df['c_uniq_id'] == id]
+            new_df = notem_df[notem_df['c_uniq_id'] == id].copy()
 
             sum_trips = new_df.loc[new_df['m'] < 7, 'val'].sum() - \
                         new_df.loc[new_df['m'] == 1, 'new_value'].sum() - \
@@ -792,8 +810,11 @@ class Tram(NoTEMExportPaths):
                         new_df.loc[new_df['m'] == 7, 'new_value'].sum()
             veh_trips = new_df.loc[(new_df['m'] > 2) & (new_df['m'] < 7), 'val'].sum()
 
-            new_df['final_val'] = np.where((new_df['m'] > 2) & (new_df['m'] < 7),
-                                           ((new_df['val'] / veh_trips) * sum_trips), new_df['new_value'])
+            new_df['final_val'] = np.where(
+                (new_df['m'] > 2) & (new_df['m'] < 7),
+                (new_df['val'] / veh_trips) * sum_trips,
+                new_df['new_value'],
+            )
 
             notem_new_df = notem_new_df.append(new_df)
         return notem_new_df
@@ -819,7 +840,7 @@ class Tram(NoTEMExportPaths):
             Returns the subset of the original dataframe.
 
         """
-        notem_sub_df = notem_df.loc[notem_df['m'] == mode]
+        notem_sub_df = notem_df[notem_df['m'] == mode].copy()
         notem_sub_df = notem_sub_df.sort_values(by='c_uniq_id')
         notem_sub_df.reset_index(inplace=True)
         return notem_sub_df

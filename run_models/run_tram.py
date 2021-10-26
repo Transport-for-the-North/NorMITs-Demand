@@ -21,7 +21,7 @@ years = [2018, 2033]
 years = [2018]
 scenario = "SC01_JAM"
 notem_iter = '4.1'
-tram_import_home = r"I:\Data\Light Rail"
+tram_import_home = r"I:\NorMITs Demand\import\modal\tram\tram_pa"
 
 export_home = r'E:\NorMITs Demand\NoTEM'
 

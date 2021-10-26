@@ -239,8 +239,8 @@ class NoTEM(NoTEMExportPaths):
 
         self._logger.info("Running the Home-Based Production Model")
         hb_prod.run(
-            export_pure_demand=True,
-            export_fully_segmented=True,
+            export_pure_demand=False,
+            export_fully_segmented=False,
             export_notem_segmentation=True,
             export_reports=True,
             verbose=verbose,
@@ -268,7 +268,7 @@ class NoTEM(NoTEMExportPaths):
 
         self._logger.info("Running the Home-Based Attraction Model")
         hb_attr.run(
-            export_pure_attractions=True,
+            export_pure_attractions=False,
             export_fully_segmented=False,
             export_notem_segmentation=True,
             export_reports=True,
@@ -297,7 +297,7 @@ class NoTEM(NoTEMExportPaths):
 
         self._logger.info("Running the Non-Home-Based Production Model")
         nhb_prod.run(
-            export_nhb_pure_demand=True,
+            export_nhb_pure_demand=False,
             export_fully_segmented=False,
             export_notem_segmentation=True,
             export_reports=True,
@@ -330,7 +330,7 @@ class NoTEM(NoTEMExportPaths):
 
         self._logger.info("Running the Non-Home-Based Attraction Model")
         nhb_attr.run(
-            export_nhb_pure_attractions=True,
+            export_nhb_pure_attractions=False,
             export_notem_segmentation=True,
             export_reports=True,
             verbose=verbose,
