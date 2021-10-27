@@ -27,11 +27,11 @@ from normits_demand.pathing.travel_market_synthesiser import GravityModelArgumen
 
 # Constants
 base_year = 2018
-scenario = consts.SC00_NTEM
+scenario = consts.SC01_JAM
 tms_iteration_name = '9'
 tms_import_home = r"I:\NorMITs Demand\import"
 tms_export_home = r"E:\NorMITs Demand\TMS"
-notem_iteration_name = '4'
+notem_iteration_name = '4.2'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
 notem_cache_path = "E:/"
 
@@ -39,7 +39,7 @@ notem_cache_path = "E:/"
 def main():
     mode = nd.Mode.CAR
     mode = nd.Mode.BUS
-    mode = nd.Mode.RAIL
+    # mode = nd.Mode.TRAIN
 
     if mode == nd.Mode.CAR:
         zoning_system = nd.get_zoning_system('noham')
@@ -69,7 +69,7 @@ def main():
         nhb_init_params_fname = 'nhb_init_params_p_m_tp.csv'
         hb_cost_type = '24hr'
         nhb_cost_type = 'tp'
-    elif mode == nd.Mode.RAIL:
+    elif mode == nd.Mode.TRAIN:
         zoning_system = nd.get_zoning_system('norms')
         internal_tld_name = 'p_m_ca_internal_norms'
         external_tld_name = 'p_m_ca_external_norms'
@@ -143,7 +143,7 @@ def main():
 
     tms.run(
         run_all=False,
-        run_external_model=False,
+        run_external_model=True,
         run_gravity_model=False,
         run_pa_matrix_reports=False,
         run_pa_to_od=False,

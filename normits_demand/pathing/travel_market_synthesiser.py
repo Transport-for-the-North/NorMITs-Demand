@@ -115,7 +115,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
     _cost_base_fname = "{zoning_name}_{cost_type}_costs.csv"
 
     # CJTW constants
-    _cjtw_infill = 0.1
+    _cjtw_infill = 1e-5
     _cjtw_dir_name = 'cjtw'
     _cjtw_base_fname = 'cjtw_{zoning_name}.csv'
 
@@ -187,6 +187,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         # Aggregate mode
         p_col = list(cjtw)[0]
         a_col = list(cjtw)[1]
+        cjtw = cjtw[cjtw['mode'] == self.running_mode.get_mode_num()].copy()
         cjtw = cjtw.reindex([p_col, a_col, 'trips'], axis=1)
         cjtw = cjtw.groupby([p_col, a_col]).sum().reset_index()
 
@@ -1000,6 +1001,7 @@ def read_cjtw(file_path: nd.PathLike,
     for col in modeCols:
         cjtw = cjtw.rename(columns={col: method_to_mode.get(col)})
 
+
     cjtw = cjtw.drop('3_Allcategories_Methodoftraveltowork', axis=1)
     cjtw = cjtw.groupby(cjtw.columns, axis=1).sum()
     cjtw = cjtw.reindex(['1_' + zoning_name + 'Areaofresidence',
@@ -1009,18 +1011,19 @@ def read_cjtw(file_path: nd.PathLike,
     # Redefine mode cols for new aggregated modes
     modeCols = ['1_walk', '2_cycle', '3_car', '5_bus', '6_rail_ug']
     # Pivot
-    cjtw = pd.melt(cjtw, id_vars=['1_' + zoning_name + 'Areaofresidence',
-                                  '2_' + zoning_name + 'Areaofworkplace'],
-                   var_name='mode', value_name='trips')
+    cjtw = pd.melt(
+        cjtw,
+        id_vars=['1_' + zoning_name + 'Areaofresidence', '2_' + zoning_name + 'Areaofworkplace'],
+        var_name='mode',
+        value_name='trips',
+    )
     cjtw['mode'] = cjtw['mode'].str[0]
+    cjtw['mode'] = cjtw['mode'].astype(int)
 
     # Build distribution factors
-    hb_totals = cjtw.drop(
-        '2_' + zoning_name + 'Areaofworkplace',
-        axis=1
-    ).groupby(
-        ['1_' + zoning_name + 'Areaofresidence', 'mode']
-    ).sum().reset_index()
+    hb_totals = cjtw.drop('2_' + zoning_name + 'Areaofworkplace', axis=1)
+    hb_totals = hb_totals.groupby(['1_' + zoning_name + 'Areaofresidence', 'mode'])
+    hb_totals = hb_totals.sum().reset_index()
 
     hb_totals = hb_totals.rename(columns={'trips': 'zonal_mode_total_trips'})
     hb_totals = hb_totals.reindex(
@@ -1028,12 +1031,13 @@ def read_cjtw(file_path: nd.PathLike,
         axis=1
     )
 
-    cjtw = cjtw.merge(hb_totals,
-                      how='left',
-                      on=['1_' + zoning_name + 'Areaofresidence', 'mode'])
+    cjtw = cjtw.merge(
+        hb_totals,
+        how='left',
+        on=['1_' + zoning_name + 'Areaofresidence', 'mode'],
+    )
 
     # Divide by total trips to get distribution factors
-
     if reduce_to_pa_factors:
         cjtw['distribution'] = cjtw['trips'] / cjtw['zonal_mode_total_trips']
         cjtw = cjtw.drop(['trips', 'zonal_mode_total_trips'], axis=1)

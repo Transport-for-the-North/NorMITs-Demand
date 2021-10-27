@@ -26,6 +26,7 @@ import normits_demand as nd
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
+from normits_demand.utils import math_utils
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.pathing import NoTEMExportPaths
@@ -42,6 +43,10 @@ class Tram(NoTEMExportPaths):
     base_train = pd.DataFrame()
     _log_fname = "tram_log.log"
     _notem_cols = ['msoa_zone_id', 'p', 'ca', 'm', 'val']
+
+    _zoning_system_col = 'msoa_zone_id'
+    _tram_segment_cols = ['p', 'm', 'ca']
+    _val_col = 'val'
 
     # Define wanted columns
     _target_col_dtypes = {
@@ -278,6 +283,9 @@ class Tram(NoTEMExportPaths):
         [file_ops.check_file_exists(x) for x in notem_output.values()]
         file_ops.check_path_exists(export_home)
 
+        # TODO(BT, NK): Pass this in as an argument
+        tram_competitors = [nd.Mode.CAR, nd.Mode.BUS, nd.Mode.TRAIN]
+
         # Assign
         self.tram_data = tram_data
         self.notem_output = notem_output
@@ -301,15 +309,21 @@ class Tram(NoTEMExportPaths):
                 notem_tram_seg,
                 tram_data,
                 year,
-                verbose,
+                tram_competitors=tram_competitors,
+                verbose=verbose,
             )
 
             # Runs tram infill for entire north
             north_msoa, north_wo_infill = self._tram_infill_north(
-                notem_tram_seg,
-                tram_msoa,
-                verbose,
+                notem_tram_seg=notem_tram_seg,
+                north_tram_data=tram_data,
+                tram_competitors=tram_competitors,
+                verbose=verbose,
             )
+
+            # print(north_msoa)
+            # print(tram_msoa)
+            # exit()
 
             # Runs tram infill for internal non tram msoa zones (internal msoa zones - 275 internal tram zones)
             non_tram_msoa, external_notem = self._non_tram_infill(notem_msoa_wo_infill, north_wo_infill, tram_msoa,
@@ -372,16 +386,14 @@ class Tram(NoTEMExportPaths):
 
         # Reads the tram data
         tram_data = file_ops.read_df(path=self.tram_data, find_similar=True)
+        tram_data['m'] = 7
         tram_data = pd_utils.reindex_cols(tram_data, tram_target_cols)
 
         # Make sure the input data is in the correct data types
         for col, dt in self._target_col_dtypes['tram'].items():
             tram_data[col] = tram_data[col].astype(dt)
 
-        # Add tram mode
-        tram_data['m'] = 7
-
-        tram_data.rename(columns={'trips': 'val'}, inplace=True)
+        tram_data.rename(columns={'trips': self._val_col}, inplace=True)
 
         # Reads the corresponding notem output
         du.print_w_toggle("Loading the notem output data...", verbose=verbose)
@@ -400,7 +412,11 @@ class Tram(NoTEMExportPaths):
                           notem_tram_seg: nd.DVector,
                           tram_data: pd.DataFrame,
                           year: int,
-                          verbose: bool
+                          tram_competitors: List[nd.Mode],
+                          verbose: bool,
+                          zone_col: str = 'msoa_zone_id',
+                          mode_col: str = 'm',
+                          val_col: str = 'val',
                           ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Tram infill for the MSOAs with tram data in the north.
@@ -434,13 +450,15 @@ class Tram(NoTEMExportPaths):
         for col, dt in self._target_col_dtypes['notem'].items():
             notem_df[col] = notem_df[col].astype(dt)
 
+        notem_df = notem_df.rename(columns={val_col: self._val_col})
+
         # Retains only msoa zones that have tram data
-        notem_df = notem_df.loc[notem_df['msoa_zone_id'].isin(tram_data['msoa_zone_id'])]
+        notem_df = notem_df.loc[notem_df[zone_col].isin(tram_data[zone_col])]
         notem_msoa_wo_infill = notem_df.copy()
-        notem_df['c_uniq_id'] = pd_utils.str_join_cols(notem_df, self._join_cols)
 
         # Creates a subset of train mode
-        notem_train = self._create_df_subset(notem_df=notem_df, mode=6)
+        train_mask = notem_df[mode_col] == nd.Mode.TRAIN.get_mode_num()
+        notem_train = notem_df[train_mask].copy()
 
         # Calculates growth factor for tram based on rail growth
         if year == self.base_year:
@@ -451,18 +469,22 @@ class Tram(NoTEMExportPaths):
             future_rail=notem_train,
             base_tram=tram_data,
         )
-        tram_data['c_uniq_id'] = pd_utils.str_join_cols(tram_data, self._join_cols)
 
         # Adds tram data to the notem dataframe
         notem_df = notem_df.append(tram_data)
-        
-        # Creates unique id
-        notem_df['c_uniq_id'] = pd_utils.str_join_cols(notem_df, self._join_cols)
-        notem_df.sort_values(by='msoa_zone_id')
+
         du.print_w_toggle("Starting tram infill for msoa zones with tram data...", verbose=verbose)
 
         # Infills tram data
-        notem_new_df = self._infill_internal(notem_df=notem_df, sort_order=self._sort_msoa)
+        notem_new_df, more_tram_report = self._infill_internal(
+            df=notem_df,
+            tram_competitors=tram_competitors,
+            non_val_cols=[self._zoning_system_col] + self._tram_segment_cols,
+            mode_col=mode_col,
+        )
+
+        # TODO(BT, NK): Write out all places that tram is higher than train
+        #  to a report using more_tram_report
 
         return notem_new_df, notem_msoa_wo_infill
 
@@ -509,10 +531,12 @@ class Tram(NoTEMExportPaths):
 
     def _tram_infill_north(self,
                            notem_tram_seg: nd.DVector,
-                           tram_msoa: pd.DataFrame,
-                           verbose: bool = True
+                           north_tram_data: pd.DataFrame,
+                           tram_competitors: List[nd.Mode],
+                           verbose: bool = True,
+                           mode_col: str = 'm',
+                           val_col: str = 'val',
                            ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-
         """
         Tram infill at the internal area (north area) level.
 
@@ -536,31 +560,43 @@ class Tram(NoTEMExportPaths):
         north_wo_infill:
             Returns the dataframe before tram infill at north level.
         """
-
         # Converts Dvector to ie sector level
         ie_sectors = nd.get_zoning_system('ie_sector')
         notem_df = notem_tram_seg.translate_zoning(ie_sectors).to_df()
+        notem_df = notem_df.rename(columns={val_col: self._val_col})
 
         for col, dt in self._target_col_dtypes['notem_north'].items():
             notem_df[col] = notem_df[col].astype(dt)
-        # Retains only internal zones
+
+        # Retains only internal (North) zones
         notem_df = notem_df.loc[notem_df['ie_sector_zone_id'] == 1]
-        notem_df = notem_df.drop(['ie_sector_zone_id'], axis=1)
+        notem_df = notem_df.drop(columns=['ie_sector_zone_id'])
         north_wo_infill = notem_df.copy()
 
-        tram_data = tram_msoa[tram_msoa.m == 7]
-        df_index_cols = ['p', 'm', 'ca', 'final_val']
-        df_group_cols = df_index_cols.copy()
-        df_group_cols.remove('final_val')
-        tram_data = tram_data.reindex(df_index_cols, axis=1).groupby(df_group_cols).sum().reset_index()
-        tram_data.rename(columns={'final_val': 'val'}, inplace=True)
+        # Tidy ready for infill
+        group_cols = self._tram_segment_cols
+        index_cols = group_cols + [self._val_col]
 
-        notem_df = notem_df.append(tram_data).reset_index()
+        notem_df = notem_df.reindex(columns=index_cols)
+        notem_df = notem_df.groupby(group_cols).sum().reset_index()
 
-        notem_df['c_uniq_id'] = pd_utils.str_join_cols(notem_df, ['p', 'ca'])
+        north_tram_data = north_tram_data.reindex(columns=index_cols)
+        north_tram_data = north_tram_data.groupby(group_cols).sum().reset_index()
+
+        df = pd.concat([notem_df, north_tram_data], ignore_index=True)
+
         du.print_w_toggle("Starting tram infill at north level...", verbose=verbose)
         # Infills tram data
-        notem_new_df = self._infill_internal(notem_df=notem_df, sort_order=self._sort_north)
+        notem_new_df, more_tram_report = self._infill_internal(
+            df=df,
+            tram_competitors=tram_competitors,
+            non_val_cols=self._tram_segment_cols,
+            mode_col=mode_col,
+        )
+
+        # TODO(BT, NK): Write out all places that tram is higher than train
+        #  to a report using more_tram_report
+
         return notem_new_df, north_wo_infill
 
     def _non_tram_infill(self,
@@ -757,90 +793,133 @@ class Tram(NoTEMExportPaths):
         )
 
     def _infill_internal(self,
-                         notem_df: pd.DataFrame,
-                         sort_order: list,
+                         df: pd.DataFrame,
+                         tram_competitors: List[nd.Mode],
+                         non_val_cols: List[str],
+                         mode_col: str = 'm',
                          ) -> pd.DataFrame:
         """
         Creates a subset of the given dataframe using a condition.
 
         Parameters
         ----------
-        notem_df:
+        df:
             The original dataframe that needs to be subset.
 
-        sort_order:
-            Condition for slicing
+        tram_competitors:
+            The modes which are considered competitors of tram. These modes
+            will be adjusted to infill the tram trips
 
         Returns
         -------
         notem_sub_df:
             Returns the subset of the original dataframe.
 
+        more_tram_report:
+            A report of all the places tram trips were higher than rail trips
+
         """
-        # create subset of the notem dataframe for train and tram modes
-        notem_train = self._create_df_subset(notem_df=notem_df, mode=6)
-        notem_tram = self._create_df_subset(notem_df=notem_df, mode=7)
-        # Checks whether train trips are higher and if so subtracts tram trips from train trips
-        notem_train['new_value'] = np.where(
-            (notem_train['c_uniq_id'].isin(notem_tram['c_uniq_id'])) & (notem_train['val'] > notem_tram['val']),
-            (notem_train['val'] - notem_tram['val']), 0)
-        # Checks whether tram trips are higher and if so curtails them to train trips
-        notem_tram['new_value'] = np.where(
-            (notem_train['c_uniq_id'].isin(notem_tram['c_uniq_id'])) & (notem_train['val'] > notem_tram['val']),
-            notem_tram['val'], notem_train['val'])
+        # Init
+        df = df.copy()
+        df.reset_index(drop=True, inplace=True)
 
-        notem_df = notem_df[notem_df.m < 6].copy()
-        notem_df['new_value'] = notem_df['val']
+        # Create needed masks
+        train_mask = df[mode_col] == nd.Mode.TRAIN.get_mode_num()
+        tram_mask = df[mode_col] == nd.Mode.TRAM.get_mode_num()
 
-        notem_df = notem_df.append([notem_train, notem_tram])
+        # Get just the train and tram trips
+        train_df = df[train_mask].copy().reset_index(drop=True)
+        tram_df = df[tram_mask].copy().reset_index(drop=True)
 
-        notem_df.drop(columns='index', inplace=True)
+        # ## REMOVE TRAM TRIPS FROM TRAIN ## #
+        common_cols = du.list_safe_remove(non_val_cols, [mode_col])
 
-        notem_df = notem_df.sort_values(by=sort_order)
+        # Combine into one df for comparisons
+        train_df.drop(columns=mode_col, inplace=True)
+        train_df.rename(columns={self._val_col: 'train'}, inplace=True)
 
-        uniq_id = notem_df['c_uniq_id'].drop_duplicates()
-        notem_new_df = pd.DataFrame()
+        tram_df.drop(columns=mode_col, inplace=True)
+        tram_df.rename(columns={self._val_col: 'tram'}, inplace=True)
 
-        for id in uniq_id:
-            new_df = notem_df[notem_df['c_uniq_id'] == id].copy()
+        tram_train_df = pd.merge(
+            left=train_df,
+            right=tram_df,
+            on=common_cols,
+            how='outer',
+        ).fillna(0)
 
-            sum_trips = new_df.loc[new_df['m'] < 7, 'val'].sum() - \
-                        new_df.loc[new_df['m'] == 1, 'new_value'].sum() - \
-                        new_df.loc[new_df['m'] == 2, 'new_value'].sum() - \
-                        new_df.loc[new_df['m'] == 7, 'new_value'].sum()
-            veh_trips = new_df.loc[(new_df['m'] > 2) & (new_df['m'] < 7), 'val'].sum()
+        # Generate a report where there are more tram than train trips
+        more_tram_than_train = tram_train_df['tram'] > tram_train_df['train']
+        more_tram_report = tram_train_df[more_tram_than_train]
+        removed_tram_trips = (more_tram_report['tram'] - more_tram_report['train']).values.sum()
 
-            new_df['final_val'] = np.where(
-                (new_df['m'] > 2) & (new_df['m'] < 7),
-                (new_df['val'] / veh_trips) * sum_trips,
-                new_df['new_value'],
+        # Report where tram is > 50% rail
+
+        # Curtail tram trips where they're higher than train
+        tram_train_df['new_tram'] = tram_train_df['tram'].mask(
+            more_tram_than_train,
+            tram_train_df['train'],
+        )
+
+        # Remove tram trips from train
+        tram_train_df['new_train'] = tram_train_df['train'].copy()
+        tram_train_df['new_train'] -= tram_train_df['tram']
+
+        # Get back into input format
+        train_cols = common_cols + ['train', 'new_train']
+        train_df = pd_utils.reindex_cols(tram_train_df, train_cols)
+        train_df['m'] = nd.Mode.TRAIN.get_mode_num()
+        rename = {'train': self._val_col, 'new_train': 'new_val'}
+        train_df.rename(columns=rename, inplace=True)
+
+        tram_cols = common_cols + ['tram', 'new_tram']
+        tram_df = pd_utils.reindex_cols(tram_train_df, tram_cols)
+        tram_df['m'] = nd.Mode.TRAM.get_mode_num()
+        rename = {'tram': self._val_col, 'new_tram': 'new_val'}
+        tram_df.rename(columns=rename, inplace=True)
+
+        # ## ADD EVERYTHING TO ONE DF READY FOR MODE SHARE ADJUSTMENT ## #
+        # Get everything other than tram and train
+        other_df = df[~(train_mask | tram_mask)].copy()
+        other_df['new_val'] = other_df[self._val_col].copy()
+
+        # Stick back together
+        df_list = [other_df, train_df, tram_df]
+        new_df = pd.concat(df_list, ignore_index=True)
+
+        # ## ADJUST COMPETITOR MODES BACK TO ORIGINAL SHARES ##
+        # Split into competitor and non-competitor dfs
+        compet_mode_vals = [x.get_mode_num() for x in tram_competitors]
+        compet_mask = new_df[mode_col].isin(compet_mode_vals)
+        compet_df = new_df[compet_mask].copy()
+        non_compet_df = new_df[~compet_mask].copy()
+
+        # Calculate the old mode shares
+        temp = compet_df.groupby(common_cols)
+        compet_df['val_sum'] = temp[self._val_col].transform('sum')
+        compet_df['new_val_sum'] = temp['new_val'].transform('sum')
+        compet_df['old_mode_shares'] = compet_df[self._val_col] / compet_df['val_sum']
+
+        # Adjust new_vals to reflect old mode shares
+        compet_df['new_val'] = compet_df['old_mode_shares'] * compet_df['new_val_sum']
+
+        # ## TIDY UP DF FOR RETURN ## #
+        compet_df = compet_df.reindex(columns=list(non_compet_df))
+        new_df = pd.concat([compet_df, non_compet_df], ignore_index=True)
+
+        # Check we haven't dropped anything
+        expected_total = df[~tram_mask][self._val_col].values.sum() - removed_tram_trips
+        final_total = new_df['new_val'].values.sum()
+        if not math_utils.is_almost_equal(expected_total, final_total):
+            raise ValueError(
+                "Some demand seems to have gone missing while infilling "
+                "tram!\n"
+                "Starting demand: %s\n"
+                "Ending demand: %s"
+                % (expected_total, final_total)
             )
 
-            notem_new_df = notem_new_df.append(new_df)
-        return notem_new_df
+        new_df = new_df.drop(columns=['new_val'])
+        new_df = new_df.sort_values(non_val_cols).reset_index(drop=True)
 
-    def _create_df_subset(self,
-                          notem_df: pd.DataFrame,
-                          mode: int,
-                          ) -> pd.DataFrame:
-        """
-        Creates a subset of the given dataframe using a condition.
-
-        Parameters
-        ----------
-        notem_df:
-            The original dataframe that needs to be subset.
-
-        mode:
-            Condition for slicing.
-
-        Returns
-        -------
-        notem_sub_df:
-            Returns the subset of the original dataframe.
-
-        """
-        notem_sub_df = notem_df[notem_df['m'] == mode].copy()
-        notem_sub_df = notem_sub_df.sort_values(by='c_uniq_id')
-        notem_sub_df.reset_index(inplace=True)
-        return notem_sub_df
+        return new_df, more_tram_report
