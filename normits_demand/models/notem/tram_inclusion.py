@@ -306,9 +306,9 @@ class Tram(NoTEMExportPaths):
 
             # Runs tram infill for 275 internal tram msoa zones
             tram_msoa, notem_msoa_wo_infill = self._tram_infill_msoa(
-                notem_tram_seg,
-                tram_data,
-                year,
+                notem_tram_seg=notem_tram_seg,
+                tram_data=tram_data,
+                year=year,
                 tram_competitors=tram_competitors,
                 verbose=verbose,
             )
@@ -321,14 +321,38 @@ class Tram(NoTEMExportPaths):
                 verbose=verbose,
             )
 
-            # print(north_msoa)
-            # print(tram_msoa)
-            # exit()
-
             # Runs tram infill for internal non tram msoa zones (internal msoa zones - 275 internal tram zones)
-            non_tram_msoa, external_notem = self._non_tram_infill(notem_msoa_wo_infill, north_wo_infill, tram_msoa,
-                                                                  north_msoa, tram_data,
-                                                                  notem_tram_seg, verbose)
+            non_tram_msoa, north_adj_factor = self._non_tram_infill(
+                north_wo_infill=north_wo_infill,
+                north_w_infill=north_msoa,
+                tram_zones=tram_data['msoa_zone_id'].unique().tolist(),
+                dvec_tram_seg=notem_tram_seg,
+                tram_competitors=tram_competitors,
+                verbose=verbose,
+            )
+
+            # TODO(BT): Output report of northern adj factors - north_adj_factor
+
+            # ## STICK THINGS BACK TOGETHER ## #
+            df_list = [non_tram_msoa, tram_msoa]
+            full_tram_infill = pd.concat(df_list, ignore_index=True)
+
+            # Compare full thing to notem and make sure we haven't dropped anything
+            expected_total = notem_tram_seg.sum()
+            final_total = full_tram_infill[self._val_col].values.sum()
+            if not math_utils.is_almost_equal(expected_total, final_total, rel_tol=0.01):
+                raise ValueError(
+                    "Some demand seems to have gone missing while infilling tram!\n"
+                    "Starting demand: %s\n"
+                    "Ending demand: %s"
+                    % (expected_total, final_total)
+                )
+
+            print("SUCCESSFULLY INFILLED TRAM!")
+
+            print(full_tram_infill)
+            exit()
+
             # Combines the tram infill and converts them to Dvec
             notem_dvec = self._combine_trips(external_notem, tram_msoa, non_tram_msoa, year, verbose)
 
@@ -444,6 +468,9 @@ class Tram(NoTEMExportPaths):
         notem_msoa_wo_infill:
             Returns the dataframe before tram infill at msoa level.
         """
+        # Init
+        tram_data = tram_data.copy()
+
         # Converts DVector to dataframe
         notem_df = notem_tram_seg.to_df()
 
@@ -464,11 +491,18 @@ class Tram(NoTEMExportPaths):
         if year == self.base_year:
             self.base_train = notem_train
 
-        tram_data = self._tram_growth_rate(
+        tram_data, growth_factors = self._grow_tram_by_rail(
             base_rail=self.base_train,
             future_rail=notem_train,
             base_tram=tram_data,
+            future_tram_col='future_val',
         )
+
+        # Replace val with future val
+        tram_data = tram_data.drop(columns=self._val_col)
+        tram_data = tram_data.rename(columns={'future_val': self._val_col})
+
+        # TODO(BT, NK): Write out a report of the growth factors generated
 
         # Adds tram data to the notem dataframe
         notem_df = notem_df.append(tram_data)
@@ -488,11 +522,12 @@ class Tram(NoTEMExportPaths):
 
         return notem_new_df, notem_msoa_wo_infill
 
-    def _tram_growth_rate(self,
-                          base_rail: pd.DataFrame,
-                          future_rail: pd.DataFrame,
-                          base_tram: pd.DataFrame
-                          ) -> pd.DataFrame:
+    def _grow_tram_by_rail(self,
+                           base_rail: pd.DataFrame,
+                           future_rail: pd.DataFrame,
+                           base_tram: pd.DataFrame,
+                           future_tram_col: str = 'future_val',
+                           ) -> pd.DataFrame:
         """
         Calculation of future year tram growth
 
@@ -509,25 +544,58 @@ class Tram(NoTEMExportPaths):
 
         Returns
         -------
-        base_tram:
-            Dataframe containing future year tram data
+        future_tram:
+            base_tram with a new column added named future_tram_col. This
+            will be the same as base_tram * growth_factors. Note that the
+            return dataframe might not be in the same order as the
+            passed in base_tram
 
+        growth_factors:
+            The growth factors used to generate future year tram
         """
-        base_rail.sort_values(by=self._sort_msoa, inplace=True)
-        future_rail.sort_values(by=self._sort_msoa, inplace=True)
+        # TODO(BT): EFS style handling of growth
+        # Init
+        segment_cols = du.list_safe_remove(self._tram_segment_cols, ['m'])
+        join_cols = [self._zoning_system_col] + segment_cols
+        index_cols = join_cols + [self._val_col]
 
-        # Calculates growth of rail
-        future_rail['growth_rate'] = ((future_rail['val'] - base_rail['val']) / base_rail['val']) + 1
+        # ## GET ALL DATA INTO ONE DF ## #
+        # Tidy up
+        def tidy_df(df, name):
+            df = df.copy()
+            df = df.drop(columns=['m'])
+            df = pd_utils.reindex_cols(df, index_cols)
+            df = df.sort_values(join_cols)
+            df = df.rename(columns={self._val_col: name})
+            return df
 
-        # Applies growth of rail to tram
-        base_tram['future_trips'] = base_tram['val'] * future_rail['growth_rate']
+        base_rail = tidy_df(base_rail, 'base_rail')
+        future_rail = tidy_df(future_rail, 'future_rail')
+        base_tram = tidy_df(base_tram, 'base_tram')
 
-        base_tram = base_tram.drop(['val'], axis=1)
-        base_tram.rename(columns={'future_trips': 'val'}, inplace=True)
+        # Merge all together
+        kwargs = {'on': join_cols, 'how': 'outer'}
+        all_data = pd.merge(base_rail, future_rail, **kwargs).fillna(0)
+        all_data = pd.merge(all_data, base_tram, **kwargs).fillna(0)
 
-        # future_rail.to_csv(r"C:\Data\Nirmal_Atkins\Home Based Productions\future rail.csv", index=False)
-        # base_tram.to_csv(r"C:\Data\Nirmal_Atkins\Home Based Productions\future tram.csv", index=False)
-        return base_tram
+        # ## CALCULATE GROWTH FACTORS ## #
+        all_data['rail_growth'] = np.divide(
+            all_data['future_rail'].values,
+            all_data['base_rail'].values,
+            out=np.ones_like(all_data['base_rail'].values),
+            where=all_data['base_rail'].values != 0,
+        )
+
+        # Calculate the future tram and tidy up
+        all_data[future_tram_col] = all_data['base_tram'] * all_data['rail_growth']
+        future_tram = pd_utils.reindex_cols(all_data, join_cols + ['base_tram', future_tram_col])
+        future_tram = future_tram.rename(columns={'base_tram': self._val_col})
+        future_tram['m'] = nd.Mode.TRAM.get_mode_num()
+
+        # Extract the growth factors alone
+        growth_df = pd_utils.reindex_cols(all_data, join_cols + ['rail_growth'])
+
+        return future_tram, growth_df
 
     def _tram_infill_north(self,
                            notem_tram_seg: nd.DVector,
@@ -560,6 +628,9 @@ class Tram(NoTEMExportPaths):
         north_wo_infill:
             Returns the dataframe before tram infill at north level.
         """
+        # Init
+        north_tram_data = north_tram_data.copy()
+
         # Converts Dvector to ie sector level
         ie_sectors = nd.get_zoning_system('ie_sector')
         notem_df = notem_tram_seg.translate_zoning(ie_sectors).to_df()
@@ -600,36 +671,38 @@ class Tram(NoTEMExportPaths):
         return notem_new_df, north_wo_infill
 
     def _non_tram_infill(self,
-                         notem_msoa_wo_infill: pd.DataFrame,
                          north_wo_infill: pd.DataFrame,
-                         notem_df: pd.DataFrame,
-                         notem_new_df: pd.DataFrame,
-                         tram_data: pd.DataFrame,
-                         notem_tram_seg: nd.DVector,
+                         north_w_infill: pd.DataFrame,
+                         tram_zones: List[str],
+                         dvec_tram_seg: nd.DVector,
+                         tram_competitors: List[nd.Mode],
+                         mode_col: str = 'm',
                          verbose: bool = True,
                          ):
         """
-        Tram infill for msoa zones without tram data in the the internal area (north area).
+        Infills tram for MSOAs without tram data in the internal area (north area).
 
         Parameters
         ----------
-        notem_msoa_wo_infill:
-            Dataframe containing notem output for msoa zones with tram data before tram infill.
+        msoa_wo_infill:
+            Dataframe of MSOA zones with tram data before infill.
 
         north_wo_infill:
-            Dataframe containing notem output at internal(north) level before tram infill.
+            Dataframe of trip ends at internal(north) level before tram infill.
 
-        notem_df:
-            Dataframe containing notem output for msoa zones with tram data after tram infill.
+        msoa_w_infill:
+            Dataframe of trip ends at MSOA after tram infill. Should be same data
+            as msoa_wo_infill
 
-        notem_new_df:
-            Dataframe containing notem output at internal(north) level after tram infill.
+        north_w_infill:
+            Dataframe of trip ends at internal(north) level after tram infill.
+            Should be same data as north_wo_infill
 
         tram_data:
-            Dataframe containing tram data at msoa level for the north.
+            Dataframe of tram data at MSOA for the internal(north) area.
 
         notem_tram_seg:
-            DVector containing notem trip end output in revised segmentation(p,m,ca).
+            DVector of notem trip end output in tram segmentation(p,m,ca).
 
         verbose:
             If set to True, it will print out progress updates while running.
@@ -637,102 +710,117 @@ class Tram(NoTEMExportPaths):
         Returns
         -------
         notem_df_new:
-            Returns the dataframe after tram infill for msoa zones within internal
-            area but without tram data.
+            Returns the dataframe after non-tram infill for msoa zones for
+            all external area, but only non-tram zones for internal area
         """
         du.print_w_toggle("Starting tram adjustment for non tram areas...", verbose=verbose)
-        tram = tram_data.copy()
-        tram_data.rename(columns={'val': 'final_val'}, inplace=True)
-        # Removes msoa level disaggregation
-        df_index_cols = ['p', 'm', 'ca', 'final_val']
-        df_group_cols = df_index_cols.copy()
-        df_group_cols.remove('final_val')
+        # Init
+        compet_mode_vals = [x.get_mode_num() for x in tram_competitors]
+        non_val_cols = [self._zoning_system_col] + self._tram_segment_cols
 
-        notem_df = pd_utils.reindex_and_groupby(notem_df, df_index_cols, ['final_val'])
+        # ## STEP 1: CALCULATE NORTH AVERAGE MODE SHARE ADJUSTMENTS ## #
+        # Set up dfs for merge
+        north_w_infill = north_w_infill.copy()
+        north_w_infill = north_w_infill.rename(columns={self._val_col: 'adj_val'})
+        tram_mask = north_w_infill[mode_col] == nd.Mode.TRAM.get_mode_num()
+        north_w_infill = north_w_infill[~tram_mask]
 
-        tram_data = pd_utils.reindex_and_groupby(tram_data, df_index_cols, ['final_val'])
-        tram_data['final_val'] = 0
-        notem_df = notem_df.sort_values(by=self._sort_north).reset_index()
-        print('notem_df', notem_df)
-        # Creates new columns to store results
-        notem_df[['North', 'Non-Tram', 'Non-Tram adjusted']] = 0.0
+        # Stick into one df
+        north_df = pd.merge(
+            left=north_wo_infill,
+            right=north_w_infill,
+            how='outer',
+            on=self._tram_segment_cols,
+        ).fillna(0)
 
-        # Removes msoa level disaggregation
-        index_cols = self._sort_north + ['val']
-        group_cols = index_cols.copy()
-        group_cols.remove('val')
-        notem_msoa_wo_infill = pd_utils.reindex_and_groupby(notem_msoa_wo_infill, index_cols, ['val'])
-        # Adds tram data
-        notem_msoa_wo_infill = notem_msoa_wo_infill.append(tram_data)
-        notem_msoa_wo_infill = notem_msoa_wo_infill.sort_values(by=self._sort_north).reset_index()
-        north_wo_infill = north_wo_infill.append(tram_data)
-        north_wo_infill = north_wo_infill.sort_values(by=self._sort_north).reset_index()
+        # Filter down to just the competitor modes
+        compet_mask = north_df[mode_col].isin(compet_mode_vals)
+        north_df = north_df[compet_mask].copy()
 
-        # Calculations for North, Non-tram and non-tram adjusted
-        notem_df['Non-Tram'] = north_wo_infill['val'] - notem_msoa_wo_infill['val']
-        notem_df['North'] = notem_new_df['final_val'].to_numpy()
-        notem_df['Non-Tram adjusted'] = notem_df['North'] - notem_df['final_val']
-        notem_df.rename(columns={'final_val': 'Tram_zones'}, inplace=True)
-        notem_df.drop(['index'], axis=1)
+        # Calculate the average adjustment factor
+        north_df['adj_factor'] = north_df['adj_val'] / north_df[self._val_col]
 
+        # Filter down to all we need
+        cols = self._tram_segment_cols + ['adj_factor']
+        north_adj_factors = pd_utils.reindex_cols(north_df, cols)
 
-        # TODO: find a way to bring in internal zone data
-        du.print_w_toggle("Starting tram adjustment for non tram zones...", verbose=verbose)
-        internal = pd.read_csv(r"C:\Users\Godzilla\Documents\Internal.csv", )
-        total_notem = notem_tram_seg.to_df()
-        for col, dt in self._target_col_dtypes['notem'].items():
-            total_notem[col] = total_notem[col].astype(dt)
-        internal_notem = total_notem.loc[total_notem['msoa_zone_id'].isin(internal['msoa_zone_id'])]
-        external_notem = total_notem.loc[~total_notem['msoa_zone_id'].isin(internal['msoa_zone_id'])]
-        ntram_notem = internal_notem.loc[~internal_notem['msoa_zone_id'].isin(tram['msoa_zone_id'])]
-        ntram_notem['c_uniq_id'] = pd_utils.str_join_cols(ntram_notem, self._join_cols)
-        uni_id = ntram_notem['c_uniq_id'].drop_duplicates()
+        # ## STEP 2. ADJUST NON-TRAM MSOA BY AVERAGE NORTH ADJUSTMENT ## #
+        # TODO(BT): Make the zoning more flexible
+        # Get the internal, external, and tram zones
+        zoning_system = nd.get_zoning_system('msoa')
+        internal_zones = zoning_system.internal_zones
+        external_zones = zoning_system.external_zones
 
-        notem_df['c_uniq_id'] = pd_utils.str_join_cols(notem_df, ['p', 'ca'])
-        uniq_id = notem_df['c_uniq_id'].drop_duplicates()
-        notem_df_new = pd.DataFrame()
-        for id in uniq_id:
-            new_df = notem_df.loc[notem_df['c_uniq_id'] == id]
+        # Split the original notem data into internal and external
+        notem_df = dvec_tram_seg.to_df()
 
-            ntram_sum = new_df.loc[new_df['m'] > 2, 'Non-Tram'].sum()
-            ntram_adj_sum = new_df.loc[new_df['m'] > 2, 'Non-Tram adjusted'].sum()
-            new_df['ntram_percent'] = np.where((new_df['m'] > 2) & (new_df['m'] < 7),
-                                               (new_df['Non-Tram'] / ntram_sum), 0)
-            new_df['ntram_adj_percent'] = np.where((new_df['m'] > 2) & (new_df['m'] < 7),
-                                                   (new_df['Non-Tram adjusted'] / ntram_adj_sum), 0)
-            for ids in uni_id:
-                if id in ids:
-                    # print(id)
-                    n_df = ntram_notem.loc[ntram_notem['c_uniq_id'] == ids]
+        external_mask = notem_df['msoa_zone_id'].isin(external_zones)
+        ext_notem_df = notem_df[external_mask].copy()
 
-                    last_row = n_df.tail(n=1).reset_index()
+        internal_mask = notem_df['msoa_zone_id'].isin(internal_zones)
+        int_notem_df = notem_df[internal_mask].copy()
 
-                    last_row['m'] = 7
-                    last_row['val'] = 0.0
+        # Filter down to non-tram zones
+        tram_mask = int_notem_df['msoa_zone_id'].isin(tram_zones)
+        int_no_tram_notem = int_notem_df[~tram_mask].copy()
 
-                    n_df = n_df.append(last_row)
+        # Attach the avg north adj factors
+        int_no_tram_notem = pd.merge(
+            left=int_no_tram_notem,
+            right=north_adj_factors,
+            how='left',
+            on=self._tram_segment_cols,
+        ).fillna(1)
 
-                    n_df[['ntram_percent', 'ntram_adj_percent', 'ntram_new_percent', 'First_adj', 'Final_adj']] = 0.0
-                    n_df['ntram_percent'] = new_df['ntram_percent'].to_numpy()
-                    n_df['ntram_adj_percent'] = new_df['ntram_adj_percent'].to_numpy()
+        # Adjust!
+        int_no_tram_notem['new_val'] = int_no_tram_notem[self._val_col].copy()
+        int_no_tram_notem['new_val'] *= int_no_tram_notem['adj_factor'].copy()
+        int_no_tram_notem = int_no_tram_notem.drop(columns='adj_factor')
 
-                    n_df['First_adj'] = np.where((n_df['m'] > 2) & (n_df['m'] < 7),
-                                                 (n_df['val'] * (n_df['ntram_adj_percent'] / n_df['ntram_percent'])),
-                                                 n_df['val'])
-                    ntram_new_sum = n_df.loc[n_df['m'] > 2, 'First_adj'].sum()
-                    val_sum = n_df.loc[n_df['m'] > 2, 'val'].sum()
+        # ## STEP 3. APPLY NEW MSOA MODE SHARES TO OLD TOTALS ## #
+        # split into competitor and non-competitor
+        compet_mask = int_no_tram_notem[mode_col].isin(compet_mode_vals)
+        compet_df = int_no_tram_notem[compet_mask].copy()
+        non_compet_df = int_no_tram_notem[~compet_mask].copy()
 
-                    n_df['ntram_new_percent'] = np.where((n_df['m'] > 2) & (n_df['m'] < 7),
-                                                         (n_df['First_adj'] / ntram_new_sum), 0)
-                    n_df['Final_adj'] = np.where((n_df['m'] > 2) & (n_df['m'] < 7),
-                                                 (val_sum * n_df['ntram_new_percent']), n_df['First_adj'])
+        # Calculate the new mode shares
+        group_cols = du.list_safe_remove(non_val_cols, [mode_col])
+        temp = compet_df.groupby(group_cols)
+        compet_df['val_sum'] = temp[self._val_col].transform('sum')
+        compet_df['new_val_sum'] = temp['new_val'].transform('sum')
+        compet_df['new_mode_shares'] = compet_df['new_val'] / compet_df['new_val_sum']
 
-                    notem_df_new = notem_df_new.append(n_df)
+        # Adjust new_vals to reflect old totals and new mode shares
+        compet_df['new_val'] = compet_df['new_mode_shares'] * compet_df['val_sum']
 
-        notem_df_new = notem_df_new.drop(['val'], axis=1)
-        notem_df_new.rename(columns={'Final_adj': 'val'}, inplace=True)
-        notem_df_new = pd_utils.reindex_and_groupby(notem_df_new, self._notem_cols, ['val'])
-        return notem_df_new, external_notem
+        # Stick the competitor and non-competitor back together
+        compet_df = pd_utils.reindex_cols(compet_df, list(non_compet_df))
+        df_list = [compet_df, non_compet_df]
+        int_no_tram_notem = pd.concat(df_list, ignore_index=True)
+
+        # ## STEP 4. TIDY UP DFs. BRING EVERYTHING BACK TOGETHER ## #
+        # Add the external back on
+        ext_notem_df['new_val'] = ext_notem_df[self._val_col].copy()
+        df_list = [int_no_tram_notem, ext_notem_df]
+        no_tram_notem_df = pd.concat(df_list, ignore_index=True)
+
+        # Check we haven't dropped anything!
+        expected_total = no_tram_notem_df[self._val_col].values.sum()
+        final_total = no_tram_notem_df['new_val'].values.sum()
+        if not math_utils.is_almost_equal(expected_total, final_total):
+            raise ValueError(
+                "Some demand seems to have gone missing while infilling "
+                "non tram zones!\n"
+                "Starting demand: %s\n"
+                "Ending demand: %s"
+                % (expected_total, final_total)
+            )
+
+        new_df = no_tram_notem_df.drop(columns=[self._val_col])
+        new_df = new_df.rename(columns={'new_val': self._val_col})
+        new_df = new_df.sort_values(non_val_cols).reset_index(drop=True)
+
+        return new_df, north_adj_factors
 
     def _combine_trips(self,
                        external_notem: pd.DataFrame,
@@ -853,7 +941,7 @@ class Tram(NoTEMExportPaths):
         more_tram_report = tram_train_df[more_tram_than_train]
         removed_tram_trips = (more_tram_report['tram'] - more_tram_report['train']).values.sum()
 
-        # Report where tram is > 50% rail
+        # TODO(BT): Report where tram is > 50% rail
 
         # Curtail tram trips where they're higher than train
         tram_train_df['new_tram'] = tram_train_df['tram'].mask(
@@ -919,7 +1007,8 @@ class Tram(NoTEMExportPaths):
                 % (expected_total, final_total)
             )
 
-        new_df = new_df.drop(columns=['new_val'])
+        new_df = new_df.drop(columns=[self._val_col])
+        new_df = new_df.rename(columns={'new_val': self._val_col})
         new_df = new_df.sort_values(non_val_cols).reset_index(drop=True)
 
         return new_df, more_tram_report

@@ -42,9 +42,9 @@ def is_almost_equal(x1: Union[int, float],
 
     rel_tol:
         the relative tolerance – it is the maximum allowed difference
-        between the sum of pure_attractions and fully_segmented_attractions,
-        relative to the larger absolute value of pure_attractions or
-        fully_segmented_attractions. By default, this is set to 0.0001,
+        between the sum of x1 and x2,
+        relative to the larger absolute value of x1 or
+        x2. By default, this is set to 0.0001,
         meaning the values must be within 0.01% of each other.
 
     abs_tol:
