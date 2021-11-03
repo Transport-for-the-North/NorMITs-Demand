@@ -382,7 +382,6 @@ class HBProductionModel(HBProductionModelPaths):
             import_data=pop.rename(columns=self._seg_rename),
             zone_col="msoa_zone_id",
             val_col="people",
-            verbose=verbose,
         )
 
     def _generate_productions(self,
@@ -425,7 +424,6 @@ class HBProductionModel(HBProductionModelPaths):
             segmentation=pure_hb_prod,
             import_data=trip_rates.rename(columns=self._seg_rename),
             val_col="trip_rate",
-            verbose=verbose,
         )
         # ## MULTIPLY TOGETHER ## #
         return population * trip_rates_dvec
@@ -874,7 +872,6 @@ class NHBProductionModel(NHBProductionModelPaths):
             import_data=pop,
             zone_col="zone",
             val_col="value",
-            verbose=verbose,
         )
 
         # ## CONVERT THE ATTRACTIONS INTO DESIRED FORMAT ## #
@@ -924,7 +921,6 @@ class NHBProductionModel(NHBProductionModelPaths):
             segmentation=nhb_trip_rate_seg,
             import_data=trip_rates.rename(columns=self._seg_rename),
             val_col="nhb_trip_rate",
-            verbose=verbose,
         )
 
         # Multiply

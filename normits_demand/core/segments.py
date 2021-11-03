@@ -1003,13 +1003,131 @@ class SegmentationLevel:
 
         return agg_dict
 
+    def duplicate_like(self,
+                       segment_dict: nd.SegmentParams,
+                       like_segment_dict: nd.SegmentParams,
+                       out_segmentation: SegmentationLevel,
+                       ) -> Dict[str, List[str]]:
+        """
+        Generates a dict defining how to duplicate self into out_segmentation.
+
+        Parameters
+        ----------
+        segment_dict:
+            A dictionary defining the segment to create. This should be
+            defined as {segment_key: segment_value} pairs.
+
+        like_segment_dict:
+            A dictionary defining the segment to copy when creating the
+            segment at segment_dict. The segment defined should be of the
+            same specificity as segment_dict, i.e. contain the same segment
+            keys. This should be defined as {segment_key: segment_value} pairs.
+
+        out_segmentation:
+            The SegmentationLevel that the output should have. This
+            will be the result of duplicating the segment of
+            like_segment_dict in self with segment_dict. Self needs to be a
+            subset of out_segmentation.
+
+        Returns
+        -------
+        dupe_dict:
+            A dictionary defining how to duplicate into out_segmentation.
+            Keys will be names of out_segmentation, and values will be a
+            names of this segmentation that should become it. This will
+            be a one-to-one mapping
+
+        Raises
+        ------
+        ValueError:
+            If the given parameters are not the correct types
+
+        SegmentationError:
+            If the segmentation cannot be split. This must be
+            in a segmentation that is a subset of out_segmentation.
+        """
+        # Validate inputs
+        if not isinstance(out_segmentation, nd.core.segments.SegmentationLevel):
+            raise ValueError(
+                "out_segmentation is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(out_segmentation)
+            )
+
+        if like_segment_dict == dict() or segment_dict == dict():
+            raise ValueError(
+                "Cannot accept and empty dictionary for segment_dict "
+                "or like_segment_dict."
+            )
+
+        # ## MAKE SURE SEGMENTATION IS SUBSET ## #
+        # Format self segmentation for comparison
+        self_cols = self.naming_order
+        self_segs = self.segments.sort_values(self_cols)
+
+        # Format self segmentation for comparison
+        # out_segmentation = nd.get_segmentation_level(out_segmentation.name)
+        other_segs = out_segmentation.segments
+        mask = pd_utils.filter_df_mask(other_segs, segment_dict)
+        other_segs = other_segs[~mask].copy()
+        other_segs = other_segs.sort_values(self_cols)
+
+        # Check if self is subset of other
+        if not np.all(self_segs.values == other_segs.values):
+            raise nd.SegmentationError(
+                "Cannot split this Segmentation. "
+                "%s is not a subset segmentation of %s"
+                % (self.name, out_segmentation.name)
+            )
+
+        # ## MAKE SURE SEGMENT DICTS ARE EQUIVALENT ## #
+        equal, extra, missing = du.compare_sets(
+            set(segment_dict.keys()),
+            set(like_segment_dict.keys()),
+        )
+        if not equal:
+            raise ValueError(
+                "The given segmentations are not of the same specificity.\n"
+                "like_segment_dict contains the following segments not in "
+                "segment_dict: %s\n"
+                "segment_dict contains the following segments not in "
+                "like_segment_dict: %s"
+                % (extra, missing)
+            )
+
+        # ## GENERATE THE DUPLICATION DICT ## #
+        dupe_df = self.segments_and_names.copy()
+
+        # Duplicate and attach the new segment
+        like_df = pd_utils.filter_df(dupe_df, like_segment_dict)
+        for seg_col, seg_value in segment_dict.items():
+            like_df[seg_col] = seg_value
+        dupe_df = pd.concat([dupe_df, like_df], ignore_index=True)
+
+        # Generate new names
+        dupe_df['out_name'] = out_segmentation.create_segment_col(dupe_df)
+
+        # Convert into duplication dict
+        s = dupe_df['name']
+        o = dupe_df['out_name']
+        dupe_dict = dict(zip(o, s))
+
+        # Check that the out_segmentation has been created properly
+        out_segments = dupe_dict.keys()
+        if not out_segmentation.is_correct_naming(out_segments):
+            raise SegmentationError(
+                "Some segment names seem to have gone missing during"
+                "duplication.\n"
+                "Expected %s segments.\n"
+                "Found %s segments."
+                % (len(out_segmentation.segment_names), len(set(out_segments)))
+            )
+
+        return dupe_dict
+
     def split(self, other: SegmentationLevel) -> Dict[str, List[str]]:
         """
         Generates a dict defining how to split this segmentation into other.
-
-        Splits the tfn_tt segment into it's components and aggregates up to
-        out_segmentation. The DVector needs to be using a segmentation that
-        contains tfn_tt and p in order for this to work.
 
         Parameters
         ----------
@@ -1029,7 +1147,7 @@ class SegmentationLevel:
             If the given parameters are not the correct types
 
         SegmentationError:
-            If the segmentation cannot be split. This DVector must be
+            If the segmentation cannot be split. This must be
             in a segmentation that is a subset of other.segmentation.
         """
         # Validate inputs

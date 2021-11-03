@@ -144,6 +144,40 @@ def reindex_and_groupby(df: pd.DataFrame,
     return df.groupby(group_cols).sum().reset_index()
 
 
+def filter_df_mask(df: pd.DataFrame,
+                   df_filter: Dict[str, Any],
+                   ) -> pd.DataFrame:
+    """
+    Generates a mask for filtering df by df_filter.
+
+    Parameters
+    ----------
+    df:
+        The pandas.Dataframe to filter.
+
+    df_filter:
+        Dictionary of {column: valid_value} pairs to define the filter to be
+        applied. Will return only where all column conditions are met.
+
+    Returns
+    -------
+    filter_mask:
+        A mask, which when applied, will filter df down to df_filter.
+    """
+    # Init
+    df_filter = df_filter.copy()
+
+    # Wrap each item if a list to avoid errors
+    for k, v in df_filter.items():
+        if not pd.api.types.is_list_like(v):
+            df_filter[k] = [v]
+
+    needed_cols = list(df_filter.keys())
+    mask = df[needed_cols].isin(df_filter).all(axis='columns')
+
+    return mask
+
+
 def filter_df(df: pd.DataFrame,
               df_filter: Dict[str, Any],
               throw_error: bool = False,
@@ -170,16 +204,8 @@ def filter_df(df: pd.DataFrame,
         A copy of df, filtered down to df_filter.
 
     """
-    # Init
-    df_filter = df_filter.copy()
-
-    # Wrap each item if a list to avoid errors
-    for k, v in df_filter.items():
-        if not pd.api.types.is_list_like(v):
-            df_filter[k] = [v]
-
-    needed_cols = list(df_filter.keys())
-    mask = df[needed_cols].isin(df_filter).all(axis='columns')
+    # Generate and apply mask
+    mask = filter_df_mask(df=df, df_filter=df_filter)
     return_df = df[mask].copy()
 
     if throw_error:

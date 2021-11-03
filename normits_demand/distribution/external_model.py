@@ -111,9 +111,6 @@ class ExternalModel(ExternalModelExportPaths):
         # Validate the trip origin
         trip_origin = checks.validate_trip_origin(trip_origin)
 
-        print(seed_matrix)
-        exit()
-
         # ## MULTIPROCESS ACROSS SEGMENTS ## #
         unchanging_kwargs = {
             'trip_origin': trip_origin,

@@ -321,7 +321,8 @@ class Tram(NoTEMExportPaths):
                 verbose=verbose,
             )
 
-            # Runs tram infill for internal non tram msoa zones (internal msoa zones - 275 internal tram zones)
+            # Runs tram infill for internal non tram msoa zones
+            # Returns the untouched external zones too
             non_tram_msoa, north_adj_factor = self._non_tram_infill(
                 north_wo_infill=north_wo_infill,
                 north_w_infill=north_msoa,
@@ -337,10 +338,31 @@ class Tram(NoTEMExportPaths):
             df_list = [non_tram_msoa, tram_msoa]
             full_tram_infill = pd.concat(df_list, ignore_index=True)
 
-            # Compare full thing to notem and make sure we haven't dropped anything
+            # TODO(NK, BT): This can be done much smarter! Class variables
+            #  should know what this looks like before and after
+            # Convert back into a DVector
+            if 'nhb' in self.notem_output[year]:
+                tram_seg = nd.get_segmentation_level('nhb_p_m7_ca')
+                out_seg = nd.get_segmentation_level('tram_nhb_output')
+            else:
+                tram_seg = nd.get_segmentation_level('hb_p_m7_ca')
+                out_seg = nd.get_segmentation_level('tram_hb_output')
+
+            tram_dvec = nd.DVector(
+                zoning_system=nd.get_zoning_system('msoa'),
+                segmentation=tram_seg,
+                import_data=full_tram_infill,
+                zone_col=self._zoning_system_col,
+                val_col=self._val_col,
+            )
+
+            # ## MAKE SURE NOTHING HAS BEEN DROPPED ## #
+            # We want to do this first as it's faster with less segments
             expected_total = notem_tram_seg.sum()
-            final_total = full_tram_infill[self._val_col].values.sum()
-            if not math_utils.is_almost_equal(expected_total, final_total, rel_tol=0.01):
+            final_total = tram_dvec.sum()
+            # TODO(BT, NK): Find out where demand is going missing. Would
+            #  like to make rel_tol more restrictive
+            if not tram_dvec.sum_is_close(notem_tram_seg, rel_tol=0.01):
                 raise ValueError(
                     "Some demand seems to have gone missing while infilling tram!\n"
                     "Starting demand: %s\n"
@@ -348,21 +370,38 @@ class Tram(NoTEMExportPaths):
                     % (expected_total, final_total)
                 )
 
-            print("SUCCESSFULLY INFILLED TRAM!")
+            # ## CONVERT BACK TO ORIGINAL SEGMENTATION ## #
+            # Original DVec at full segmentation
+            orig_dvec = nd.read_pickle(self.notem_output[year])
 
-            print(full_tram_infill)
-            exit()
+            # TODO(BT): Not sure why we need to do this. Perhaps something to
+            #  do with version of code being pickled? This works for now,
+            #  but isn't ideal!
+            orig_dvec._segmentation = nd.get_segmentation_level(orig_dvec.segmentation.name)
 
-            # Combines the tram infill and converts them to Dvec
-            notem_dvec = self._combine_trips(external_notem, tram_msoa, non_tram_msoa, year, verbose)
+            # Need to add in m7 - get its segments from rail
+            orig_dvec = orig_dvec.duplicate_segment_like(
+                segment_dict={'m': nd.Mode.TRAM.get_mode_num()},
+                like_segment_dict={'m': nd.Mode.TRAIN.get_mode_num()},
+                out_segmentation=out_seg,
+            )
 
-            # Bring the above Dvec back to original segmentation
-            notem_output_dvec = nd.read_pickle(self.notem_output[year])
+            # Add segments back in from original input
+            tram_dvec = tram_dvec.split_segmentation_like(orig_dvec)
 
-            # TODO: Need to figure out a way to bring back notem segmentation
-            #  notem_dvec = notem_dvec.split_segmentation_like(notem_output_dvec)
-            # TODO: export location need to be sorted
-            notem_dvec.to_pickle(os.path.join(self.export_home, "tram_included_dvec.pkl"))
+            # Write out the produced Dvec and some reports
+            # TODO(BT, NK): export location need to be sorted
+            # tram_dvec.to_pickle(os.path.join(self.export_home, "hb_msoa_tram_segmented_2018_dvec.pkl"))
+
+            # TODO(BT, NK): Report location needs to be sorted
+            # path = r'E:\test\tram_test'
+            # tram_dvec.to_pickle(os.path.join(path, "hb_msoa_tram_segmented_2018_dvec.pkl"))
+            # tram_dvec.write_sector_reports(
+            #     segment_totals_path=os.path.join(path, 'segment_totals.csv'),
+            #     ca_sector_path=os.path.join(path, 'ca_sector_totals.csv'),
+            #     ie_sector_path=os.path.join(path, 'ie_sector_totals.csv'),
+            # )
+
             # Print timing for each trip end model
             trip_end_end = timing.current_milli_time()
             time_taken = timing.time_taken(trip_end_start, trip_end_end)
@@ -410,7 +449,7 @@ class Tram(NoTEMExportPaths):
 
         # Reads the tram data
         tram_data = file_ops.read_df(path=self.tram_data, find_similar=True)
-        tram_data['m'] = 7
+        tram_data['m'] = nd.Mode.TRAM.get_mode_num()
         tram_data = pd_utils.reindex_cols(tram_data, tram_target_cols)
 
         # Make sure the input data is in the correct data types
@@ -740,6 +779,9 @@ class Tram(NoTEMExportPaths):
         # Calculate the average adjustment factor
         north_df['adj_factor'] = north_df['adj_val'] / north_df[self._val_col]
 
+        # print(north_df)
+        # exit()
+
         # Filter down to all we need
         cols = self._tram_segment_cols + ['adj_factor']
         north_adj_factors = pd_utils.reindex_cols(north_df, cols)
@@ -821,64 +863,6 @@ class Tram(NoTEMExportPaths):
         new_df = new_df.sort_values(non_val_cols).reset_index(drop=True)
 
         return new_df, north_adj_factors
-
-    def _combine_trips(self,
-                       external_notem: pd.DataFrame,
-                       tram_msoa: pd.DataFrame,
-                       non_tram_msoa: pd.DataFrame,
-                       year: int,
-                       verbose: bool
-                       ) -> nd.DVector:
-        """
-        Combines the tram infill with the external msoa zones and converts to Dvec.
-
-        Parameters
-        ----------
-        external_notem:
-            Dataframe containing trip end data of external msoa zones.
-
-        tram_msoa:
-            Dataframe containing tram infill data for 275 internal tram msoa zones.
-
-        non_tram_msoa:
-            Dataframe containing tram infill data for internal non tram msoa zones.
-
-        year:
-            The year for which the trip end data is processed.
-
-        Returns
-        -------
-        notem_dvec:
-            The updated Dvector after tram infill.
-
-        """
-
-        tram_msoa= tram_msoa.drop(['val'], axis=1)
-        tram_msoa.rename(columns={'final_val': 'val'}, inplace=True)
-        tram_msoa = pd_utils.reindex_and_groupby(tram_msoa,self._notem_cols, ['val'])
-        final_df = external_notem.append([tram_msoa, non_tram_msoa], ignore_index=True)
-
-        # Combine the data together
-        final_df = pd_utils.reindex_and_groupby(final_df, self._notem_cols, ['val'])
-
-        # Get the zoning system
-        msoa_zoning = nd.get_zoning_system('msoa')
-
-        # Get the appropriate segmentation level
-        if 'nhb' in self.notem_output[year]:
-            msoa_seg = nd.get_segmentation_level('nhb_p_m7_ca')
-        else:
-            msoa_seg = nd.get_segmentation_level('hb_p_m7_ca')
-
-        # Create the revised DVec
-        return nd.DVector(
-            zoning_system=msoa_zoning,
-            segmentation=msoa_seg,
-            import_data=final_df,
-            zone_col="msoa_zone_id",
-            val_col="val",
-            verbose=verbose,
-        )
 
     def _infill_internal(self,
                          df: pd.DataFrame,
