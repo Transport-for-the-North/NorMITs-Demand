@@ -381,6 +381,7 @@ def write_pickle(obj: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame
     """
     # Init
     path = cast_to_pathlib_path(path)
+    print("path", path)
 
     # Determine how to read in df
     if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
