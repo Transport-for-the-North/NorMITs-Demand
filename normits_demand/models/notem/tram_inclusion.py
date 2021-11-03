@@ -310,7 +310,6 @@ class Tram(NoTEMExportPaths):
                 tram_data=tram_data,
                 year=year,
                 tram_competitors=tram_competitors,
-                verbose=verbose,
             )
 
             # Runs tram infill for entire north
@@ -474,8 +473,6 @@ class Tram(NoTEMExportPaths):
                           tram_data: pd.DataFrame,
                           year: int,
                           tram_competitors: List[nd.Mode],
-                          verbose: bool,
-                          zone_col: str = 'msoa_zone_id',
                           mode_col: str = 'm',
                           val_col: str = 'val',
                           ) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -494,8 +491,18 @@ class Tram(NoTEMExportPaths):
         year:
             The year we're currently running for
 
-        verbose:
-            If set to True, it will print out progress updates while running.
+        tram_competitors:
+            A list of the Modes which would be competing with Tram for trips.
+            These are the modes which will be used to remove trips from in
+            order to add in tram trips
+
+        mode_col:
+            The name of the columns in notem_tram_seg and tram_data that
+            refers to the mode segment.
+
+        val_col:
+            The name of the columns in notem_tram_seg that
+            refers to the value column.
 
         Returns
         -------
@@ -517,6 +524,7 @@ class Tram(NoTEMExportPaths):
         notem_df = notem_df.rename(columns={val_col: self._val_col})
 
         # Retains only msoa zones that have tram data
+        zone_col = self._zoning_system_col
         notem_df = notem_df.loc[notem_df[zone_col].isin(tram_data[zone_col])]
         notem_msoa_wo_infill = notem_df.copy()
 
@@ -544,7 +552,7 @@ class Tram(NoTEMExportPaths):
         # Adds tram data to the notem dataframe
         notem_df = notem_df.append(tram_data)
 
-        du.print_w_toggle("Starting tram infill for msoa zones with tram data...", verbose=verbose)
+        print("Starting tram infill for msoa zones with tram data...")
 
         # Infills tram data
         notem_new_df, more_tram_report = self._infill_internal(
@@ -648,6 +656,16 @@ class Tram(NoTEMExportPaths):
         notem_tram_seg:
             DVector containing notem trip end output in revised segmentation(p,m,ca).
 
+        msoa_w_tram_infill:
+            DataFrame with infilled tram data at MSOA level in
+
+        mode_col:
+            The name of the columns in notem_tram_seg and tram_data that
+            refers to the mode segment.
+
+        val_col:
+            The name of the columns in notem_tram_seg that
+            refers to the value column.
 
         Returns
         -------
@@ -718,26 +736,28 @@ class Tram(NoTEMExportPaths):
 
         Parameters
         ----------
-        msoa_wo_infill:
-            Dataframe of MSOA zones with tram data before infill.
+        north_wo_infill:
+            NoTEM data aggregated to segments only for the north level,
+            without an tram infill.
 
         non_tram_north:
             Dataframe of trip ends at internal(north) level, not including
             tram zones.
 
-        msoa_w_infill:
-            Dataframe of trip ends at MSOA after tram infill. Should be same data
-            as msoa_wo_infill
+        tram_zones:
+            A list of the zones that contain tram data
 
-        north_w_infill:
-            Dataframe of trip ends at internal(north) level after tram infill.
-            Should be same data as north_wo_infill
+        dvec_tram_seg:
+            NoTEM data at tram segmentation in a DVector
 
-        tram_data:
-            Dataframe of tram data at MSOA for the internal(north) area.
+        tram_competitors:
+            A list of the Modes which would be competing with Tram for trips.
+            These are the modes which will be used to remove trips from in
+            order to add in tram trips
 
-        notem_tram_seg:
-            DVector of notem trip end output in tram segmentation(p,m,ca).
+        mode_col:
+            The name of the columns in north_wo_infill, non_tram_north, and
+            dvec_tram_seg that refers to the mode segment.
 
         verbose:
             If set to True, it will print out progress updates while running.
