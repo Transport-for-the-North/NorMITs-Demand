@@ -31,7 +31,6 @@ from normits_demand.utils import general as du
 from normits_demand.utils import math_utils
 
 
-
 def reindex_cols(df: pd.DataFrame,
                  columns: List[str],
                  throw_error: bool = True,

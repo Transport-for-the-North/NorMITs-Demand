@@ -314,18 +314,16 @@ class Tram(NoTEMExportPaths):
             )
 
             # Runs tram infill for entire north
-            north_msoa, north_wo_infill = self._tram_infill_north(
+            non_tram_north, north_wo_infill = self._tram_infill_north(
                 notem_tram_seg=notem_tram_seg,
-                north_tram_data=tram_data,
-                tram_competitors=tram_competitors,
-                verbose=verbose,
+                msoa_w_tram_infill=tram_msoa,
             )
 
             # Runs tram infill for internal non tram msoa zones
             # Returns the untouched external zones too
             non_tram_msoa, north_adj_factor = self._non_tram_infill(
                 north_wo_infill=north_wo_infill,
-                north_w_infill=north_msoa,
+                non_tram_north=non_tram_north,
                 tram_zones=tram_data['msoa_zone_id'].unique().tolist(),
                 dvec_tram_seg=notem_tram_seg,
                 tram_competitors=tram_competitors,
@@ -638,9 +636,7 @@ class Tram(NoTEMExportPaths):
 
     def _tram_infill_north(self,
                            notem_tram_seg: nd.DVector,
-                           north_tram_data: pd.DataFrame,
-                           tram_competitors: List[nd.Mode],
-                           verbose: bool = True,
+                           msoa_w_tram_infill: pd.DataFrame,
                            mode_col: str = 'm',
                            val_col: str = 'val',
                            ) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -652,24 +648,15 @@ class Tram(NoTEMExportPaths):
         notem_tram_seg:
             DVector containing notem trip end output in revised segmentation(p,m,ca).
 
-        tram_msoa:
-            Dataframe containing tram data at msoa level for the north.
-
-        verbose:
-            If set to True, it will print out progress updates while
-        running.
 
         Returns
         -------
-        notem_new_df:
-            Returns the dataframe after tram infill at north level.
+        non_tram_north:
+            Trips for non-tram zones at the northern level.
 
         north_wo_infill:
-            Returns the dataframe before tram infill at north level.
+            Trips for all zones at the northern level.
         """
-        # Init
-        north_tram_data = north_tram_data.copy()
-
         # Converts Dvector to ie sector level
         ie_sectors = nd.get_zoning_system('ie_sector')
         notem_df = notem_tram_seg.translate_zoning(ie_sectors).to_df()
@@ -679,39 +666,47 @@ class Tram(NoTEMExportPaths):
             notem_df[col] = notem_df[col].astype(dt)
 
         # Retains only internal (North) zones
-        notem_df = notem_df.loc[notem_df['ie_sector_zone_id'] == 1]
-        notem_df = notem_df.drop(columns=['ie_sector_zone_id'])
-        north_wo_infill = notem_df.copy()
+        north_wo_infill = notem_df[notem_df['ie_sector_zone_id'] == 1]
+        north_wo_infill = north_wo_infill.drop(columns=['ie_sector_zone_id'])
 
-        # Tidy ready for infill
+        # Aggregate away zones
         group_cols = self._tram_segment_cols
         index_cols = group_cols + [self._val_col]
 
-        notem_df = notem_df.reindex(columns=index_cols)
-        notem_df = notem_df.groupby(group_cols).sum().reset_index()
+        north_wo_infill = north_wo_infill.reindex(columns=index_cols)
+        north_wo_infill = north_wo_infill.groupby(group_cols).sum().reset_index()
 
-        north_tram_data = north_tram_data.reindex(columns=index_cols)
-        north_tram_data = north_tram_data.groupby(group_cols).sum().reset_index()
+        # ## REMOVE TRAM TRIPS TO GET AVERAGE NON-TRAM DEMAND ## #
+        seg_tram_infill = msoa_w_tram_infill.reindex(columns=index_cols)
+        seg_tram_infill = seg_tram_infill.groupby(group_cols).sum().reset_index()
 
-        df = pd.concat([notem_df, north_tram_data], ignore_index=True)
+        # Drop Tram mode - we can't remove it where it doesn't exist
+        mask = seg_tram_infill[mode_col] == nd.Mode.TRAM.get_mode_num()
+        seg_tram_infill = seg_tram_infill[~mask].copy()
+        seg_tram_infill = seg_tram_infill.rename(columns={self._val_col: 'tram_val'})
 
-        du.print_w_toggle("Starting tram infill at north level...", verbose=verbose)
-        # Infills tram data
-        notem_new_df, more_tram_report = self._infill_internal(
-            df=df,
-            tram_competitors=tram_competitors,
-            non_val_cols=self._tram_segment_cols,
-            mode_col=mode_col,
+        # Stick together
+        non_tram_north = pd.merge(
+            left=north_wo_infill,
+            right=seg_tram_infill,
+            how='left',
+            on=self._tram_segment_cols,
         )
 
-        # TODO(BT, NK): Write out all places that tram is higher than train
-        #  to a report using more_tram_report
+        # Remove tram trips
+        non_tram_north['non_tram_val'] = non_tram_north[self._val_col].copy()
+        non_tram_north['non_tram_val'] -= non_tram_north['tram_val']
 
-        return notem_new_df, north_wo_infill
+        # Tidy up and return
+        return_cols = self._tram_segment_cols + ['non_tram_val']
+        non_tram_north = non_tram_north.reindex(columns=return_cols)
+        non_tram_north = non_tram_north.rename(columns={'non_tram_val': self._val_col})
+
+        return non_tram_north, north_wo_infill
 
     def _non_tram_infill(self,
                          north_wo_infill: pd.DataFrame,
-                         north_w_infill: pd.DataFrame,
+                         non_tram_north: pd.DataFrame,
                          tram_zones: List[str],
                          dvec_tram_seg: nd.DVector,
                          tram_competitors: List[nd.Mode],
@@ -726,8 +721,9 @@ class Tram(NoTEMExportPaths):
         msoa_wo_infill:
             Dataframe of MSOA zones with tram data before infill.
 
-        north_wo_infill:
-            Dataframe of trip ends at internal(north) level before tram infill.
+        non_tram_north:
+            Dataframe of trip ends at internal(north) level, not including
+            tram zones.
 
         msoa_w_infill:
             Dataframe of trip ends at MSOA after tram infill. Should be same data
@@ -759,15 +755,15 @@ class Tram(NoTEMExportPaths):
 
         # ## STEP 1: CALCULATE NORTH AVERAGE MODE SHARE ADJUSTMENTS ## #
         # Set up dfs for merge
-        north_w_infill = north_w_infill.copy()
-        north_w_infill = north_w_infill.rename(columns={self._val_col: 'adj_val'})
-        tram_mask = north_w_infill[mode_col] == nd.Mode.TRAM.get_mode_num()
-        north_w_infill = north_w_infill[~tram_mask]
+        non_tram_north = non_tram_north.copy()
+        non_tram_north = non_tram_north.rename(columns={self._val_col: 'adj_val'})
+        tram_mask = non_tram_north[mode_col] == nd.Mode.TRAM.get_mode_num()
+        non_tram_north = non_tram_north[~tram_mask]
 
         # Stick into one df
         north_df = pd.merge(
             left=north_wo_infill,
-            right=north_w_infill,
+            right=non_tram_north,
             how='outer',
             on=self._tram_segment_cols,
         ).fillna(0)
@@ -778,9 +774,6 @@ class Tram(NoTEMExportPaths):
 
         # Calculate the average adjustment factor
         north_df['adj_factor'] = north_df['adj_val'] / north_df[self._val_col]
-
-        # print(north_df)
-        # exit()
 
         # Filter down to all we need
         cols = self._tram_segment_cols + ['adj_factor']
