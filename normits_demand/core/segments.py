@@ -37,6 +37,7 @@ from normits_demand.concurrency import multiprocessing
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
+from normits_demand.utils import math_utils
 from normits_demand.utils import pandas_utils as pd_utils
 
 
@@ -108,6 +109,10 @@ class SegmentationLevel:
         _segment_definitions_path,
         "aggregate.csv",
     )
+    _reduce_definitions_path = os.path.join(
+        _segment_definitions_path,
+        "reduce.csv",
+    )
     _subset_definitions_path = os.path.join(
         _segment_definitions_path,
         "subset.csv",
@@ -125,6 +130,8 @@ class SegmentationLevel:
 
     _list_separator = ';'
     _translate_separator = ':'
+    _reduce_separator = ':'
+    _reduce_pointer = '-'
     _drop_splitter = ':'
     _segment_name_separator = '_'
 
@@ -444,13 +451,19 @@ class SegmentationLevel:
         # If empty, we don't know what to do
         if definition.empty:
             raise SegmentationError(
-                "Got no definition for aggregating '%s' into '%s'.\n"
+                "Got no definition for subset-ing '%s' into '%s'.\n"
                 "If there should be a definition, please add one in "
                 "at: %s"
                 % (self.name, other.name, self._subset_definitions_path)
             )
 
         return self._parse_drop_cols(definition['drop'].squeeze())
+
+    def _read_reduce_definitions(self) -> pd.DataFrame:
+        """
+        Returns the multiplication definitions for segments as a pd.DataFrame
+        """
+        return pd.read_csv(self._reduce_definitions_path)
 
     def _read_aggregation_definitions(self) -> pd.DataFrame:
         """
@@ -463,6 +476,49 @@ class SegmentationLevel:
         Returns the definition for expanding tfn_tt into its components.
         """
         return file_ops.read_df(self._tfn_tt_expansion_path)
+
+    def _get_reduce_definition(self,
+                               other: SegmentationLevel,
+                               ) -> Dict[str, Dict[Any, List[Any]]]:
+        """
+        Reads the reduce file and formats .csv into a dictionary
+
+        Return dictionary is in the format of:
+        {segment_name: {out_seg_val: [in_seg_val, ]}}
+        Where in_seg_val is a list of the segment values that will be combined
+        in order to create the new out_seg_val
+
+        Warning!
+        """
+        # Init
+        reduce_def = self._read_reduce_definitions()
+
+        # Try find a definition
+        df_filter = {
+            'in': self.name,
+            'out': other.name,
+        }
+        definition = pd_utils.filter_df(reduce_def, df_filter)
+
+        # If empty, we don't know what to do
+        if definition.empty:
+            raise SegmentationError(
+                "Got no definition for reducing '%s' into '%s'.\n"
+                "If there should be a definition, please add one in "
+                "at: %s"
+                % (self.name, other.name, self._reduce_definitions_path)
+            )
+
+        # If more then one, we don't know what to do
+        if len(definition) > 1:
+            raise SegmentationError(
+                "Got more than one definition for reducing '%s' into '%s'.\n"
+                "Please remove the incorrect one "
+                "at: %s"
+                % (self.name, other.name, self._reduce_definitions_path)
+            )
+
+        return self._parse_reduce_cols(definition['reduce'].squeeze())
 
     def _get_aggregation_definition(self,
                                     other: SegmentationLevel,
@@ -486,6 +542,15 @@ class SegmentationLevel:
             raise SegmentationError(
                 "Got no definition for aggregating '%s' into '%s'.\n"
                 "If there should be a definition, please add one in "
+                "at: %s"
+                % (self.name, other.name, self._aggregation_definitions_path)
+            )
+
+        # If more then one, we don't know what to do
+        if len(definition) > 1:
+            raise SegmentationError(
+                "Got more than one definition for aggregating '%s' into '%s'.\n"
+                "Please remove the incorrect one "
                 "at: %s"
                 % (self.name, other.name, self._aggregation_definitions_path)
             )
@@ -529,6 +594,46 @@ class SegmentationLevel:
         # Must exist if we are here, read in and validate
         df = file_ops.read_df(file_path)
         return pd_utils.reindex_cols(df, [col1, col2])
+
+    def _parse_reduce_cols(self, reduce_cols: str) -> Dict[str, Dict[Any, List[Any]]]:
+        """
+        Parses reduce cols from reduce.csv
+        """
+        # init
+        lst = [x.strip() for x in reduce_cols.split(self._list_separator)]
+
+        # Split into dictionary entries
+        reduce_dict = collections.defaultdict(dict)
+        for reduction in lst:
+            seg_out, seg_in = reduction.split(self._reduce_pointer, maxsplit=2)[:2]
+            seg_name, seg_out_val = seg_out.split(self._reduce_separator, maxsplit=2)[:2]
+
+            if seg_name not in self.naming_order:
+                raise ValueError(
+                    "Error when parsing reduction cols. Found '%s' as a "
+                    "segment name, but it is not a valid segment name. Valid "
+                    "segments names include: %s"
+                    % (seg_name, self.naming_order)
+                )
+
+            # Set the types
+            seg_type = self.segments.dtypes[seg_name]
+            seg_out_val = math_utils.numpy_cast(seg_out_val, seg_type)
+
+            seg_in_vals = seg_in.split(self._reduce_separator)
+            seg_in_vals = [math_utils.numpy_cast(x, seg_type) for x in seg_in_vals]
+
+            if seg_name in reduce_dict and seg_out_val in reduce_dict[seg_name]:
+                raise ValueError(
+                    "Error when parsing reduction cols. Found more than one "
+                    "reduction for %s:%s. Do not know how to handle. Please "
+                    "correct in the input file!"
+                    % (seg_name, seg_out_val)
+                )
+
+            reduce_dict[seg_name][seg_out_val] = seg_in_vals
+
+        return reduce_dict
 
     def _parse_join_cols(self, join_cols: str) -> List[str]:
         """
@@ -774,8 +879,75 @@ class SegmentationLevel:
         """
         return segment_name in self.segment_names
 
+    def reduce(self,
+               other: SegmentationLevel,
+               ) -> Dict[str, List[str]]:
+        """
+        Generates a dict defining how to reduce this segmentation into other.
+
+        Parameters
+        ----------
+        other:
+            The SegmentationLevel to reduce this segmentation into.
+
+        Returns
+        -------
+        reduce_dict:
+            A dictionary defining how to reduce self into out_segmentation.
+            Will be in the form of {out_seg: [in_seg]}.
+            Where out seg is a segment name of out_segmentation, and in_seg
+            is a list of segment names from self that should be summed to
+            generate out_seg.
+
+        Raises
+        ------
+        SegmentationError:
+            If the other is not a segmentation level.
+        """
+        # Validate input
+        if not isinstance(other, SegmentationLevel):
+            raise ValueError(
+                "out_segmentation is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(other)
+            )
+
+        reduce_cols = self._get_reduce_definition(other)
+
+        # ## FIGURE OUT HOW TO REDUCE ## #
+        reduce_df = self.segments_and_names.copy()
+
+        # Translate segments as defined by reduce_cols
+        for col, reductions in reduce_cols.items():
+            for out_val, in_vals in reductions.items():
+                mask = reduce_df[col].isin(in_vals)
+
+                new_col = reduce_df[col].copy()
+                new_col[mask] = out_val
+                reduce_df[col] = new_col
+
+        # Generate the output names
+        reduce_df['other_name'] = other.create_segment_col(reduce_df)
+
+        # Convert into the aggregation dict
+        reduce_dict = collections.defaultdict(list)
+        for o, s in zip(reduce_df['other_name'], reduce_df['name']):
+            reduce_dict[o].append(s)
+
+        # Check that the output segmentation has been created properly
+        if not other.is_correct_naming(list(reduce_dict.keys())):
+            raise SegmentationError(
+                "Some segment names seem to have gone missing during "
+                "reduction.\n"
+                "Expected %s segments.\n"
+                "Found %s segments."
+                % (len(other.segment_names), len(set(reduce_dict.keys())))
+            )
+
+        return reduce_dict
+
     def aggregate(self,
-                  other: SegmentationLevel
+                  other: SegmentationLevel,
                   ) -> Dict[str, List[str]]:
         """
         Generates a dict defining how to aggregate this segmentation into other.

@@ -836,6 +836,7 @@ def import_pa(production_import_path,
     p_cache = None
     a_cache = None
 
+    # TODO(BT): REMOVE CACHE! ONLY USED FOR TESTING
     # handle cache
     if cache_path is not None:
         p_fname = "%s_%s_productions.csv" % (trip_origin, model_zone)
@@ -847,91 +848,73 @@ def import_pa(production_import_path,
         if os.path.exists(p_cache) and os.path.exists(a_cache):
             return pd.read_csv(p_cache), pd.read_csv(a_cache)
 
-    # Reading pickled Dvector
-    prod_dvec = nd.from_pickle(production_import_path)
-
-    # Aggregate to the required segmentation
+    # Determine the required segmentation
     if trip_origin == 'hb':
+        reduce_seg = None
+        subset_seg = nd.get_segmentation_level('notem_hb_output_wday')
         if model_zone == 'noham':
-            agg_seg = nd.get_segmentation_level('hb_p_m_6tp')
+            agg_seg = nd.get_segmentation_level('hb_p_m')
         elif model_zone == 'norms':
-            agg_seg = nd.get_segmentation_level('hb_p_m_ca_6tp')
+            agg_seg = nd.get_segmentation_level('hb_p_m_ca')
         else:
             raise ValueError("Invalid model name")
     elif trip_origin == 'nhb':
+        reduce_seg = nd.get_segmentation_level('notem_nhb_output_reduced')
+        subset_seg = nd.get_segmentation_level('notem_nhb_output_reduced_wday')
         if model_zone == 'noham':
-            agg_seg = nd.get_segmentation_level('nhb_p_m_6tp')
+            agg_seg = nd.get_segmentation_level('nhb_p_m_tp_wday')
         elif model_zone == 'norms':
-            agg_seg = nd.get_segmentation_level('nhb_p_m_ca_6tp')
+            agg_seg = nd.get_segmentation_level('nhb_p_m_ca_tp_wday')
         else:
             raise ValueError("Invalid model name")
     else:
         raise ValueError("Invalid trip origin")
 
-    # Aggregate and translate for norms/noham
-    prod_dvec_agg = prod_dvec.aggregate(out_segmentation=agg_seg)
+    # Get the zoning system we're using
     model_zoning = nd.get_zoning_system(model_zone)
-    prod_dvec = prod_dvec_agg.translate_zoning(model_zoning, "population")
+
+    # Reading pickled Dvector
+    prod_dvec = nd.read_pickle(production_import_path)
+
+    # Reduce nhb 11 into 12 if needed
+    if reduce_seg is not None:
+        prod_dvec = prod_dvec.reduce(out_segmentation=reduce_seg)
+
+    # Convert from ave_week to ave_day
+    prod_dvec = prod_dvec.subset(out_segmentation=subset_seg)
+    prod_dvec = prod_dvec.convert_time_format('avg_week')
+
+    # Convert zoning and segmentation to desired
+    prod_dvec = prod_dvec.aggregate(out_segmentation=agg_seg)
+    prod_dvec = prod_dvec.translate_zoning(model_zoning, "population")
 
     # Weekly trips to weekday trips conversion
     prod_df = prod_dvec.to_df()
-    prod_wd = weekly_to_weekday(prod_df, trip_origin, model_zone)
 
     # Reading pickled Dvector
-    attr_dvec = nd.from_pickle(attraction_import_path)
+    attr_dvec = nd.read_pickle(attraction_import_path)
 
-    # Aggregate and translate for norms/noham
-    attr_dvec_agg = attr_dvec.aggregate(out_segmentation=agg_seg)
-    model_zoning = nd.get_zoning_system(model_zone)
-    attr_dvec = attr_dvec_agg.translate_zoning(model_zoning, "employment")
+    # Reduce nhb 11 into 12 if needed
+    if reduce_seg is not None:
+        attr_dvec = attr_dvec.reduce(out_segmentation=reduce_seg)
+
+    # Convert from ave_week to ave_day
+    attr_dvec = attr_dvec.subset(out_segmentation=subset_seg)
+    attr_dvec = attr_dvec.convert_time_format('avg_week')
+
+    # Convert zoning and segmentation to desired
+    attr_dvec = attr_dvec.aggregate(out_segmentation=agg_seg)
+    attr_dvec = attr_dvec.translate_zoning(model_zoning, "employment")
 
     # Weekly trips to weekday trips conversion
     attr_df = attr_dvec.to_df()
-    attr_wd = weekly_to_weekday(attr_df, trip_origin, model_zone)
 
     # TODO(BT): Sort zoning system into order
     if p_cache is not None and a_cache is not None:
-        prod_wd.to_csv(p_cache, index=False)
-        attr_wd.to_csv(a_cache, index=False)
+        prod_df.to_csv(p_cache, index=False)
+        attr_df.to_csv(a_cache, index=False)
 
-    return prod_wd, attr_wd
-
-
-def weekly_to_weekday(df, trip_origin, model_zone) -> pd.DataFrame:
-    """
-    Convert weekly trips to weekday trips.
-
-    Removes tp5 and tp6 from the time period column and
-    divides trips by 5 to convert them from weekly to weekday.
-
-    Parameters
-    ----------
-    df:
-    Dataframe (either productions or attractions) containing notem segmented weekly trips.
-
-    trip_origin:
-    Whether the trip origin is hb or nhb.
-
-    Return
-    ----------
-    df:
-    Dataframe (either productions or attractions) containing notem segmented weekday trips.
-    """
-    if model_zone == 'norms':
-        df[["p", "m", "ca", "tp"]] = df[["p", "m", "ca", "tp"]].apply(pd.to_numeric)
-    else:
-        df[["p", "m", "tp"]] = df[["p", "m", "tp"]].apply(pd.to_numeric)
-    df = df.drop(df[df.tp >= 5].index)
-    df['val'] = df['val'] / 5
-    df_index_cols = list(df)
-    df_index_cols.remove('tp')
-    df_group_cols = df_index_cols.copy()
-    df_group_cols.remove('val')
-
-    # Time period removed for hb based trips
-    if trip_origin == 'hb':
-        df = df.reindex(df_index_cols, axis=1).groupby(df_group_cols).sum().reset_index()
-    return df
+    return prod_df, attr_df
 
 
 def read_cjtw(file_path: nd.PathLike,

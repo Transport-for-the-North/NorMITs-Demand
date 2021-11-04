@@ -1024,6 +1024,82 @@ class DVector:
 
         return dvec_data
 
+    def reduce(self,
+               out_segmentation: nd.core.segments.SegmentationLevel,
+               check_same: bool = True,
+               ):
+        """
+        Reduce (by summing) this Dvector into out_segmentation
+
+        A definition of how to reduce from self.segmentation to
+        out_segmentation must exist, otherwise a SegmentationError will be
+        thrown.
+        Reduce operations are where some segments in self.segmentation are
+        combined to make less segments, but with the same total
+
+        Parameters
+        ----------
+        out_segmentation:
+            The segmentation to reduce into.
+
+        check_same:
+            Whether to check if the DVector totals before and after
+            reduce are the same or not. If they are not the same (or
+            very similar) a warning will be given.
+
+        Returns
+        -------
+        reduced_DVector:
+            a new dvector containing the same data, but reduced to
+            out_segmentation.
+
+        Raises
+        ------
+        ValueError:
+            if out_segmentation is not the correct type
+        """
+        # Validate inputs
+        if not isinstance(out_segmentation, nd.core.segments.SegmentationLevel):
+            raise ValueError(
+                "out_segmentation is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(out_segmentation)
+            )
+
+        # Get the reduction dictionary
+        reduce_dict = self.segmentation.reduce(out_segmentation)
+
+        # Reduce!
+        # TODO(BT): Add optional multiprocessing if reduce_dict is big enough
+        dvec_data = dict.fromkeys(reduce_dict.keys())
+        for out_seg_name, in_seg_names in reduce_dict.items():
+            in_lst = [self._data[x].flatten() for x in in_seg_names]
+            dvec_data[out_seg_name] = np.sum(in_lst, axis=0)
+
+        reduced_dvec = DVector(
+            zoning_system=self.zoning_system,
+            segmentation=out_segmentation,
+            time_format=self.time_format,
+            import_data=dvec_data,
+            process_count=self.process_count,
+        )
+
+        if not check_same:
+            return reduced_dvec
+
+        # Check that we haven't dropped any values during aggregation
+        if not self.sum_is_close(reduced_dvec):
+            warnings.warn(
+                "Total value of DVector is different before and after "
+                "reduction. Have the reduce segmentations and methods "
+                "been defined correctly?\n"
+                "Expected %f\n"
+                "Got %f"
+                % (self.sum(), reduced_dvec.sum())
+            )
+
+        return reduced_dvec
+
     def aggregate(self,
                   out_segmentation: core.SegmentationLevel,
                   split_tfntt_segmentation: bool = False,
@@ -1056,6 +1132,11 @@ class DVector:
         aggregated_DVector:
             a new dvector containing the same data, but aggregated to
             out_segmentation.
+
+        Raises
+        ------
+        ValueError:
+            if out_segmentation is not the correct type
         """
         # Validate inputs
         if not isinstance(out_segmentation, nd.core.segments.SegmentationLevel):

@@ -30,15 +30,15 @@ base_year = 2018
 scenario = consts.SC01_JAM
 tms_iteration_name = '9'
 tms_import_home = r"I:\NorMITs Demand\import"
-tms_export_home = r"E:\NorMITs Demand\TMS"
+tms_export_home = r"F:\NorMITs Demand\TMS"
 notem_iteration_name = '4.2'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
-notem_cache_path = "E:/"
+notem_cache_path = "F:/"
 
 
 def main():
     mode = nd.Mode.CAR
-    mode = nd.Mode.BUS
+    # mode = nd.Mode.BUS
     # mode = nd.Mode.TRAIN
 
     if mode == nd.Mode.CAR:

@@ -146,6 +146,7 @@ class ExternalModel(ExternalModelExportPaths):
                 df_filter=segment_params,
                 throw_error=True,
             )
+
             seg_productions = seg_productions.rename(columns=rename_cols)
             seg_productions = seg_productions.set_index(self.zone_col)
             seg_productions = seg_productions.reindex(

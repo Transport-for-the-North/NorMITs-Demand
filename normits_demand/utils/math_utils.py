@@ -14,12 +14,33 @@ Collections of math based utils for normits demand
 import math
 import warnings
 
+from typing import Any
 from typing import Union
 
 # Third Party
 import numpy as np
 
 # Local Imports
+
+
+def numpy_cast(x: Any, dtype: np.dtype):
+    """
+    Casts scalar x to dtype using numpy
+
+    Parameters
+    ----------
+    x:
+        The scalar value to cast
+
+    dtype:
+        The numpy data type to cast x to
+
+    Returns
+    -------
+    x_cast:
+        x, but cast to dtype
+    """
+    return np.array(x).astype(dtype).item()
 
 
 def is_almost_equal(x1: Union[int, float],
