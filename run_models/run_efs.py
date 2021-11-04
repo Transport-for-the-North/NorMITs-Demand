@@ -14,7 +14,8 @@ import sys
 
 sys.path.append("..")
 import normits_demand as nd
-from normits_demand import efs_constants as consts
+from normits_demand import constants as consts
+from normits_demand import efs_constants as efs_consts
 
 from normits_demand.utils import exceptional_growth as eg
 
@@ -33,7 +34,7 @@ def main():
     apply_wfh_adjustments = True
 
     # Base EFS
-    run_base_efs = False
+    run_base_efs = True
     recreate_productions = False
     recreate_attractions = False
     recreate_nhb_productions = False
@@ -45,21 +46,20 @@ def main():
     use_elasticity_to_od = True
 
     # Compiling matrices
-    run_pa_to_od = True
+    run_pa_to_od = False
     run_compile_mats = False
     run_decompile_post_me = False
 
     # Controls matrix conversion
-    output_years = consts.ALL_YEARS
-    output_years = consts.FUTURE_YEARS
-    output_years = [2050]
+    output_years = efs_consts.ALL_YEARS
+    output_years = efs_consts.FUTURE_YEARS
 
     # Controls I/O
     scenario = consts.SC04_UZC
     iter_num = '3j'
     import_home = "I:/"
     export_home = "E:/"
-    model_name = consts.MODEL_NAME
+    model_name = efs_consts.MODEL_NAME
 
     # ## RUN START ## #
     efs = nd.ExternalForecastSystem(
@@ -101,10 +101,10 @@ def main():
         )
 
         eg.adjust_bespoke_zones(
-            consts.BESPOKE_ZONES_INPUT_FILE,
+            efs_consts.BESPOKE_ZONES_INPUT_FILE,
             efs.exports,
             efs.model_name,
-            base_year=consts.BASE_YEAR_STR,
+            base_year=efs_consts.BASE_YEAR_STR,
             recreate_donor=True,
             audit_path=efs.exports["audits"],
         )

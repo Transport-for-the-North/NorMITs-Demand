@@ -241,7 +241,7 @@ def validate_scenario_name(scenario_name: str) -> str:
     # Init
     scenario_name = scenario_name.strip().upper()
 
-    if scenario_name not in efs_consts.SCENARIOS:
+    if scenario_name not in consts.SCENARIOS:
         raise ValueError("%s is not a valid name for a scenario."
                          % scenario_name)
     return scenario_name
