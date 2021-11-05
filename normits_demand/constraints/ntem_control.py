@@ -19,12 +19,14 @@ import pandas as pd
 # Local imports
 import normits_demand as nd
 from normits_demand import constants as consts
+from normits_demand import efs_constants as efs_consts
 from normits_demand.utils import general as du
 
 from normits_demand.validation import checks
 
 # BACKLOG: Optimise control_to_ntem()
 #  labels: optimisation
+
 
 # TODO: Allow control_to_ntem() to take flexible col names
 def new_control_to_ntem(control_df: pd.DataFrame,
@@ -622,11 +624,11 @@ def control_vector_to_ntem(vector: pd.DataFrame,
 
     # Determine report filenames
     if vector_type == 'productions':
-        gf_report_fname = consts.PRODS_MG_FNAME % (vector_zone_sys, trip_origin)
-        control_report_fname = consts.PRODS_FNAME % (vector_zone_sys, trip_origin)
+        gf_report_fname = efs_consts.PRODS_MG_FNAME % (vector_zone_sys, trip_origin)
+        control_report_fname = efs_consts.PRODS_FNAME % (vector_zone_sys, trip_origin)
     elif vector_type == 'attractions':
-        gf_report_fname = consts.ATTRS_MG_FNAME % (vector_zone_sys, trip_origin)
-        control_report_fname = consts.ATTRS_FNAME % (vector_zone_sys, trip_origin)
+        gf_report_fname = efs_consts.ATTRS_MG_FNAME % (vector_zone_sys, trip_origin)
+        control_report_fname = efs_consts.ATTRS_FNAME % (vector_zone_sys, trip_origin)
     else:
         raise ValueError(
             "Somehow my vector type is valid, but I don't know how to "
@@ -668,7 +670,7 @@ def control_vector_to_ntem(vector: pd.DataFrame,
         year_audit = {'year': year}
 
         # Setup paths
-        ntem_fname = consts.NTEM_CONTROL_FNAME % ('pa', year)
+        ntem_fname = efs_consts.NTEM_CONTROL_FNAME % ('pa', year)
         ntem_path = os.path.join(ntem_dir, ntem_fname)
 
         # Read in control files
