@@ -10,41 +10,43 @@ File purpose:
 TMS tour proportions Generation
 """
 
-# Third party imports
-import os.path
+# Built-Ins
+import os
 
+# Third party imports
 import pandas as pd
 
+# Local Imports
 import normits_demand as nd
 from normits_demand.utils import pandas_utils as pd_utils
-from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
 from normits_demand.core.data_structures import DVector
 
-modes = [3, 5, 6]
+## GLOBALS ##
+modes = [3]
 years = [2018]
 phi_import_folder = r"I:\NorMITs Demand\import\phi_factors"
 notem_import_folder = r"I:\NorMITs Demand\NoTEM\iter4.2\SC01_JAM\hb_productions"
-phi_fname = "mode_%d_fhp_tp_pa_to_od"
+phi_fname = "mode_%d_fhp_tp_pa_to_od.csv"
 prod_vec_fname = "hb_msoa_notem_segmented_%d_dvec.pkl"
+zoning_system = "noham"
+zone_translate_dir = r"I:\NorMITs Demand\import\zone_translation\one_to_one"
 
-phi_factors = {
-    'noham': r"I:\NorMITs Demand\import\phi_factors\mode_3_fhp_tp_pa_to_od.csv",
-    'norms': r"I:\NorMITs Demand\import\phi_factors\mode_6_fhp_tp_pa_to_od.csv"
-}
-out_fname = "hb_tour_proportions_yr2018%s_m%d.pkl"
-out_folder = r"I:\NorMITs Demand\import\noham\pre_me_tour_proportions\example"
+
+out_fname = "hb_tour_proportions_yr%d_p%d_m%d.pkl"
+out_folder = r"I:\NorMITs Demand\import\noham\pre_me_tour_proportions\example_new"
 
 
 def tms_tour_prop():
     for year in years:
         for mode in modes:
+            # Read phi factors for every mode
             phi_file = phi_fname % mode
-            # phi_path = os.path.join(phi_import_folder, phi_file)
             phi_df = pd.read_csv(os.path.join(phi_import_folder, phi_file))
 
             purpose = phi_df['purpose_from_home'].drop_duplicates().reset_index(drop=True)
             phi_dict = {}
-
+            # Convert the phi factors to the required format for each purpose
             for p in purpose:
                 phi_sub_df = pd_utils.filter_df(phi_df, {'purpose_from_home': p})
                 phi_pivot = pd.pivot_table(phi_sub_df, values='direction_factor', index='time_from_home',
@@ -54,29 +56,40 @@ def tms_tour_prop():
                 phi_dict[p] = phi_pivot.to_numpy()
 
             print(phi_dict)
+            ## TP Splits##
 
-    # notem = r"I:\NorMITs Demand\NoTEM\iter4.2\SC01_JAM\hb_productions\hb_msoa_notem_segmented_2018_dvec.pkl"
             notem_file = prod_vec_fname % year
+            # Convert it to the required segmentation
             return_seg = nd.get_segmentation_level("hb_p_6tp")
+            # Read the production vector
             notem_dvec = nd.from_pickle(os.path.join(notem_import_folder,notem_file))
+            # Aggregate to the required segmentation
             notem_dvec = notem_dvec.aggregate(return_seg)
-            zon_sys = nd.get_zoning_system('noham')
+
+            zon_sys = nd.get_zoning_system(zoning_system)
             notem_df = notem_dvec.translate_zoning(new_zoning=zon_sys, weighting="population").to_df()
-            notem_df['uniq_id'] = pd_utils.str_join_cols(notem_df, ['noham_zone_id', 'p'])
+            zon_col = "%s_zone_id" % zoning_system
+            notem_df['uniq_id'] = pd_utils.str_join_cols(notem_df, [zon_col, 'p'])
             print(notem_df)
             uniq = notem_df['uniq_id'].drop_duplicates().reset_index(drop=True)
             tp_split_dict = {}
             for q in uniq:
                 p = int(q.split('_')[1])
                 tp_sub_splits = pd_utils.filter_df(notem_df, {'uniq_id': q})
+                # Remove tp5 and tp6
                 tp_sub_splits = tp_sub_splits.head(-2)
+                # Recalculate tp split
                 tp_sub_splits['value1'] = (tp_sub_splits['val'] / tp_sub_splits['val'].sum())
+                # Phi_factor * tp_split
                 tp_split_dict[q] = (tp_sub_splits[['value1']].to_numpy()) * phi_dict[p]
 
+            d = {}
             for p in purpose:
                 p1 = '_' + str(p)
                 d = {key: tp_split_dict[key] for key in tp_split_dict.keys() if p1 in key}
-                out_file = out_fname % (p1, year)
+                print(d)
+
+                out_file = out_fname % (year, p, mode)
                 DVector.to_pickle(d, os.path.join(out_folder,out_file))
 
 
