@@ -265,6 +265,7 @@ class TramModel(TramExportPaths):
             **import_files,
             dvec_imports=hb_production_paths,
             export_home=self.hb_production.export_paths.home,
+            path=r'E:\test\tram_test\hbp',
         )
 
     def _generate_hb_attraction(self) -> None:
@@ -282,6 +283,7 @@ class TramModel(TramExportPaths):
             **import_files,
             dvec_imports=hb_attraction_paths,
             export_home=self.hb_attraction.export_paths.home,
+            path=r'E:\test\tram_test\hba',
         )
 
     def _generate_nhb_production(self) -> None:
@@ -299,6 +301,7 @@ class TramModel(TramExportPaths):
             **import_files,
             dvec_imports=nhb_production_paths,
             export_home=self.nhb_production.export_paths.home,
+            path=r'E:\test\tram_test\nhbp',
         )
 
     def _generate_nhb_attraction(self) -> None:
@@ -316,6 +319,7 @@ class TramModel(TramExportPaths):
             **import_files,
             dvec_imports=nhb_attraction_paths,
             export_home=self.nhb_attraction.export_paths.home,
+            path=r'E:\test\tram_test\nhba',
         )
 
     def _tram_inclusion(self,
@@ -323,6 +327,8 @@ class TramModel(TramExportPaths):
                         trip_origin: str,
                         dvec_imports: Dict[int, nd.PathLike],
                         export_home: nd.PathLike,
+                        path: str,
+                        verbose: bool = True,
                         ) -> None:
         """
         Runs the tram inclusion for the notem trip end output.
@@ -481,12 +487,12 @@ class TramModel(TramExportPaths):
 
             # TODO(BT, NK): Report location needs to be sorted
             # path = r'E:\test\tram_test'
-            # tram_dvec.to_pickle(os.path.join(path, "hb_msoa_tram_segmented_2018_dvec.pkl"))
-            # tram_dvec.write_sector_reports(
-            #     segment_totals_path=os.path.join(path, 'segment_totals.csv'),
-            #     ca_sector_path=os.path.join(path, 'ca_sector_totals.csv'),
-            #     ie_sector_path=os.path.join(path, 'ie_sector_totals.csv'),
-            # )
+            tram_dvec.to_pickle(os.path.join(path, "hb_msoa_tram_segmented_2018_dvec.pkl"))
+            tram_dvec.write_sector_reports(
+                segment_totals_path=os.path.join(path, 'segment_totals.csv'),
+                ca_sector_path=os.path.join(path, 'ca_sector_totals.csv'),
+                ie_sector_path=os.path.join(path, 'ie_sector_totals.csv'),
+            )
 
             # Print timing for each trip end model
             trip_end_end = timing.current_milli_time()

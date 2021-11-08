@@ -19,6 +19,9 @@ import enum
 
 
 # ## CLASSES ## #
+import normits_demand as nd
+
+
 @enum.unique
 class Mode(enum.Enum):
     WALK = 'walk'
@@ -44,7 +47,11 @@ class Mode(enum.Enum):
             Mode.RAIL: [6, 7],
         }
 
-        # TODO(BT): Check that self is in conversion and error
+        if self not in conversion:
+            raise nd.NormitsDemandError(
+                "No definition exists for %s mode_values"
+                % self
+            )
 
         return conversion[self]
 
@@ -73,7 +80,6 @@ class Mode(enum.Enum):
             "Check this function to make sure it is returning what it should "
             "be!"
         )
-
 
     def get_name(self):
         return self.value

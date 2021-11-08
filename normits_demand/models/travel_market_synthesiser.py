@@ -244,7 +244,7 @@ class TravelMarketSynthesiser(TMSExportPaths):
 
     def run_gravity_model(self):
         self._logger.info("Initialising the Gravity Model")
-        gravity_model = distribution.GravityModel(
+        gravity_model = distribution.TMSGravityModel(
             year=self.year,
             running_mode=self.running_mode,
             zoning_system=self.zoning_system,

@@ -145,8 +145,8 @@ def get_trip_length_by_band(band_atl,
         band_atl['min'] = band_atl['lower']*1.61
         band_atl['max'] = band_atl['upper']*1.61
 
-    dist_mat = []
-    bs_mat = []
+    dist_mat = list()
+    bs_mat = list()
 
     # Loop over rows in band_atl
     for index, row in band_atl.iterrows():
