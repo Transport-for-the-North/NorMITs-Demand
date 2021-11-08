@@ -421,6 +421,7 @@ class ExternalModelExportPaths:
 # ## GRAVITY MODEL CLASSES ## #
 class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
     # Costs constants
+    _modal_dir_name = 'modal'
     _cost_dir_name = 'costs'
     _cost_base_fname = "{zoning_name}_{cost_type}_costs.csv"
 
@@ -530,6 +531,7 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
         )
         costs_path = os.path.join(
             self.import_home,
+            self._modal_dir_name,
             self.running_mode.value,
             self._cost_dir_name,
             fname,

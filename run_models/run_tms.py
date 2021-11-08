@@ -28,12 +28,12 @@ from normits_demand.pathing.travel_market_synthesiser import GravityModelArgumen
 # Constants
 base_year = 2018
 scenario = consts.SC01_JAM
-tms_iteration_name = '9'
+tms_iteration_name = '9.1.1'
 tms_import_home = r"I:\NorMITs Demand\import"
-tms_export_home = r"F:\NorMITs Demand\TMS"
+tms_export_home = r"E:\NorMITs Demand\TMS"
 notem_iteration_name = '4.2'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
-notem_cache_path = "F:/"
+notem_cache_path = "E:/"
 
 
 def main():
@@ -143,8 +143,8 @@ def main():
 
     tms.run(
         run_all=False,
-        run_external_model=True,
-        run_gravity_model=False,
+        run_external_model=False,
+        run_gravity_model=True,
         run_pa_matrix_reports=False,
         run_pa_to_od=False,
         run_od_matrix_reports=False,
