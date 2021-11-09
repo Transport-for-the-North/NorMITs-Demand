@@ -448,7 +448,7 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
                  apply_k_factoring: Optional[bool] = True,
                  convergence_target: Optional[float] = 0.95,
                  fitting_loops: Optional[int] = 100,
-                 furness_max_iters: Optional[int] = 2000,
+                 furness_max_iters: Optional[int] = 5000,
                  furness_tol: Optional[float] = 1.0,
                  **kwargs
                  ):

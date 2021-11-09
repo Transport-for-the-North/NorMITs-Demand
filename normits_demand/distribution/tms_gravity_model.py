@@ -112,7 +112,7 @@ class GravityModel(GravityModelExportPaths):
             apply_k_factoring: bool = True,
             convergence_target: float = 0.95,
             fitting_loops: int = 100,
-            furness_max_iters: int = 2000,
+            furness_max_iters: int = 5000,
             furness_tol: float = 1.0,
             init_param_1_col: str = 'init_param_a',
             init_param_2_col: str = 'init_param_b',
@@ -247,7 +247,7 @@ class GravityModel(GravityModelExportPaths):
                       apply_k_factoring: bool = True,
                       convergence_target: float = 0.95,
                       fitting_loops: int = 100,
-                      furness_max_iters: int = 2000,
+                      furness_max_iters: int = 5000,
                       furness_tol: float = 1.0,
                       ):
         seg_name = running_segmentation.generate_file_name(segment_params)
@@ -306,16 +306,6 @@ class GravityModel(GravityModelExportPaths):
         if os.path.isfile(log_path):
             os.remove(log_path)
 
-        # gravity_model.gravity_model(
-        #     row_targets=seg_productions,
-        #     col_targets=seg_attractions,
-        #     cost_function=cost.BuiltInCostFunction.LOG_NORMAL.get_cost_function(),
-        #     costs=costs,
-        #     furness_max_iters=furness_max_iters,
-        #     furness_tol=furness_tol,
-        #     **{'sigma': init_param_a, 'mu': init_param_b},
-        # )
-
         calib = gravity_model.GravityModelCalibrator(
             row_targets=seg_productions,
             col_targets=seg_attractions,
@@ -323,16 +313,26 @@ class GravityModel(GravityModelExportPaths):
             costs=costs,
             target_cost_distribution=target_tld,
             target_convergence=convergence_target,
-            max_iters=fitting_loops,
             furness_max_iters=furness_max_iters,
             furness_tol=furness_tol,
+            running_log_path=log_path,
         )
 
-        calib.calibrate(
+        optimal_cost_params = calib.calibrate(
             init_params={'sigma': init_param_a, 'mu': init_param_b},
-            # diff_step=0.2,
+            max_iters=fitting_loops,
             verbose=2,
         )
+
+        tld_report = target_tld.copy()
+        tld_report = tld_report.rename(columns={'band_share': 'target_band_share'})
+        tld_report['ach_band_share'] = calib.achieved_band_share
+        tld_report['convergence'] = calib.achieved_convergence
+        pa_mat = calib.achieved_distribution
+
+        print(optimal_cost_params)
+        print(tld_report)
+        print(pa_mat)
 
         exit()
 
