@@ -10,6 +10,7 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+
 def cost_to_long(ntm_in,
                  echo=True):
     
@@ -37,7 +38,7 @@ def aggregate_long_cost(long_ntm: pd.DataFrame,
                         to_zone_col: str = 'noham_zone_id',
                         weighting_col: str = 'ntmv6_to_noham',
                         filter_max: bool = False,
-                        max_threshold: int = 10000,
+                        max_threshold = None, # Auto
                         method: str ='weighted_mean',
                         cost_vector_name: str = 'distance'
                         ):
@@ -79,72 +80,44 @@ def aggregate_long_cost(long_ntm: pd.DataFrame,
     # TODO: Doesn't seem to do the trick
     
     if filter_max:
-        if max_threshold is None:
-            max_threshold = long_ntm[cost_vector_name].max()
+        if max_threshold is None:    
+            max_threshold = 2000
         print('Filtering out values above %d' % max_threshold)
         long_ntm = long_ntm[long_ntm[cost_vector_name]<max_threshold]
-        
+    
+    # Prep zone correspondence
+    zone_correspondence = zone_correspondence.reindex(
+        [from_zone_col, to_zone_col], axis=1)
+    
     if method == 'weighted_mean':
         # TODO: Should be in discrete function
         
         # Translate 'from' side of the matrix
         long_ntm = long_ntm.rename(columns={'from_zone':from_zone_col})
-        
         long_ntm = long_ntm.merge(zone_correspondence,
                                   how='left',
                                   on=from_zone_col)
-        
-        # Recontrol weights to 1 where needed
-        weight_corr = long_ntm.groupby(
-            [from_zone_col, 'to_zone'])[weighting_col].sum().reset_index()
-        weight_corr['corr'] = 1/weight_corr[weighting_col]
-        weight_corr = weight_corr.drop(weighting_col, axis=1)
-        
-        long_ntm = long_ntm.merge(weight_corr,
-                                  how='left',
-                                  on=[from_zone_col, 'to_zone'])
-        long_ntm[weighting_col] *= long_ntm['corr']
-        long_ntm = long_ntm.drop('corr', axis=1)
-        
-        # Group and sum
-        long_ntm[cost_vector_name] *= long_ntm[weighting_col]
-        long_ntm = long_ntm.groupby(
-            [to_zone_col, 'to_zone'])[cost_vector_name].sum().reset_index()
-        
         long_ntm = long_ntm.rename(columns={to_zone_col:'from_zone'})
+        long_ntm = long_ntm.drop(from_zone_col, axis=1)
         
         # Translate 'to' side of the matrix
         long_ntm = long_ntm.rename(columns={'to_zone':from_zone_col})
-        
         long_ntm = long_ntm.merge(zone_correspondence,
                                   how='left',
                                   on=from_zone_col)
-        
-        # Recontrol weights to 1 where needed
-        weight_corr = long_ntm.groupby(
-            [from_zone_col, 'from_zone'])[weighting_col].sum().reset_index()
-        weight_corr['corr'] = 1/weight_corr[weighting_col]
-        weight_corr = weight_corr.drop(weighting_col, axis=1)
-        
-        long_ntm = long_ntm.merge(weight_corr,
-                                  how='left',
-                                  on=[from_zone_col, 'from_zone'])
-        long_ntm[weighting_col] *= long_ntm['corr']
-        long_ntm = long_ntm.drop('corr', axis=1)
-        
-        # Group and sum
-        long_ntm[cost_vector_name] *= long_ntm[weighting_col]
-        long_ntm = long_ntm.groupby(
-            [to_zone_col, 'from_zone'])[cost_vector_name].sum().reset_index()
-        
         long_ntm = long_ntm.rename(columns={to_zone_col:'to_zone'})
-    
+        long_ntm = long_ntm.drop(from_zone_col, axis=1)
+        
+        # Group and average
+        long_ntm = long_ntm.groupby(
+            ['from_zone', 'to_zone'])[cost_vector_name].mean().reset_index()
+                    
     return long_ntm
 
 def cost_to_wide(long_cost: pd.DataFrame,
                  initial_unq_zones: list,
                  cost_vector_name: str = 'distance',
-                 placeholder_value: int = 1000000):
+                 placeholder_value: int = 0):
     """
 
     Parameters
@@ -157,7 +130,7 @@ def cost_to_wide(long_cost: pd.DataFrame,
         Name of the cost vector, default is distance
     placeholder_value: int
         Value to default data to avoid dropping matrix size.
-        Defaults to: 10000000
+        Defaults to: 0
 
     Returns
     -------
@@ -184,9 +157,9 @@ def cost_to_wide(long_cost: pd.DataFrame,
     infill_mat[cost_vector_name] = infill_mat[cost_vector_name].fillna(
         placeholder_value)
     
-    wide_ntm = long_cost.pivot(index = 'from_zone',
-                               columns = 'to_zone',
-                               values = cost_vector_name)
+    wide_ntm = infill_mat.pivot(index = 'from_zone',
+                                columns = 'to_zone',
+                                values = cost_vector_name)
     
     return wide_ntm
 
@@ -202,6 +175,9 @@ def main():
     ntm_costs = os.listdir(cost_dir)
     target_costs = [x for x in ntm_costs if '.csv' in x]
     target_costs = [x for x in target_costs if 'Dist' in x]
+    target_costs = [x for x in target_costs if 'missing_ntm' not in x]
+    target_costs = [x for x in target_costs if 'noham' not in x]
+    target_costs = [x for x in target_costs if 'msoa' not in x]
     
     # Import ntm lookups
     ntm_msoa_path = 'I:/Data/Zone Translations/ntmv6_to_msoa_correspondence.csv'
@@ -210,7 +186,7 @@ def main():
     ntm_msoa = pd.read_csv(ntm_msoa_path)
     ntm_noham = pd.read_csv(ntm_noham_path)
     
-    unq_msoa = list(ntm_msoa['msoa_zone_id'].sort_values())
+    unq_msoa = list(ntm_msoa['msoa_zone_id'].drop_duplicates().sort_values())
     unq_noham = list(range(ntm_noham['noham_zone_id'].astype(int).min(),
                            ntm_noham['noham_zone_id'].astype(int).max()+1))
     
@@ -236,12 +212,17 @@ def main():
         long_ntm = cost_to_long(ntm_in)
         
         # Translate
-        msoa_cost = aggregate_long_cost(long_ntm, ntm_msoa)
+        msoa_cost = aggregate_long_cost(long_ntm = long_ntm,
+                                        zone_correspondence = ntm_msoa,
+                                        from_zone_col = 'ntmv6_zone_id',
+                                        to_zone_col = 'msoa_zone_id')
         noham_cost = aggregate_long_cost(long_ntm, ntm_noham) 
         
         # To wide
-        msoa_cost = cost_to_wide(msoa_cost, unq_msoa)
-        noham_cost = cost_to_wide(noham_cost, unq_noham)
+        msoa_cost = cost_to_wide(msoa_cost,
+                                 unq_msoa)
+        noham_cost = cost_to_wide(noham_cost,
+                                  unq_noham)
         
         # Out
         msoa_cost.to_csv(os.path.join(cost_dir, 'msoa_' + tc.replace(' ', '_')))
