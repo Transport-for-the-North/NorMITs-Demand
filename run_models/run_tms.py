@@ -50,7 +50,7 @@ def main():
         intrazonal_cost_infill = 0.5
         em_convergence_target = 0.9
         gm_convergence_target = 0.95
-        cost_function = 'ln'
+        cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
         hb_init_params_fname = 'hb_init_params_p_m.csv'
         nhb_init_params_fname = 'nhb_init_params_p_m_tp.csv'
         hb_cost_type = '24hr'
@@ -64,7 +64,7 @@ def main():
         intrazonal_cost_infill = 0.4
         em_convergence_target = 0.8
         gm_convergence_target = 0.85
-        cost_function = 'ln'
+        cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
         hb_init_params_fname = 'hb_init_params_p_m.csv'
         nhb_init_params_fname = 'nhb_init_params_p_m_tp.csv'
         hb_cost_type = '24hr'
@@ -78,7 +78,7 @@ def main():
         intrazonal_cost_infill = 0.5
         em_convergence_target = 0.9
         gm_convergence_target = 0.95
-        cost_function = 'ln'
+        cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
         hb_init_params_fname = 'hb_init_params_p_m_ca.csv'
         nhb_init_params_fname = 'nhb_init_params_p_m_ca_tp.csv'
         hb_cost_type = '24hr'

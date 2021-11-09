@@ -228,8 +228,8 @@ class GravityModel(GravityModelExportPaths):
             fn=self._run_internal,
             kwargs=kwarg_list,
             pbar_kwargs=pbar_kwargs,
-            process_count=0,
-            # process_count=self.process_count,
+            # process_count=0,
+            process_count=self.process_count,
         )
 
     def _run_internal(self,
@@ -306,10 +306,11 @@ class GravityModel(GravityModelExportPaths):
         if os.path.isfile(log_path):
             os.remove(log_path)
 
+        # ## CALIBRATE THE GRAVITY MODEL ## #
         calib = gravity_model.GravityModelCalibrator(
             row_targets=seg_productions,
             col_targets=seg_attractions,
-            cost_function=cost.BuiltInCostFunction.LOG_NORMAL.get_cost_function(),
+            cost_function=cost_function,
             costs=costs,
             target_cost_distribution=target_tld,
             target_convergence=convergence_target,
@@ -321,39 +322,36 @@ class GravityModel(GravityModelExportPaths):
         optimal_cost_params = calib.calibrate(
             init_params={'sigma': init_param_a, 'mu': init_param_b},
             max_iters=fitting_loops,
+            ftol=1e-5,
             verbose=2,
         )
 
-        tld_report = target_tld.copy()
+        print(optimal_cost_params)
+
+        # internal_pa_mat, tld_report = calibrate_gravity_model(
+        #     init_param_a=init_param_a,
+        #     init_param_b=init_param_b,
+        #     productions=seg_productions,
+        #     attractions=seg_attractions,
+        #     costs=costs,
+        #     zones=self.zoning_system.unique_zones,
+        #     target_tld=target_tld,
+        #     log_path=log_path,
+        #     cost_function=cost_function,
+        #     apply_k_factoring=apply_k_factoring,
+        #     furness_loops=furness_max_iters,
+        #     fitting_loops=fitting_loops,
+        #     bs_con_target=convergence_target,
+        #     target_r_gap=furness_tol,
+        # )
+
+        # ## WRITE OUT GRAVITY MODEL OUTPUTS ## #
+        # Create tld_report
+        tld_report = pd_utils.reindex_cols(target_tld, ['min', 'max', 'band_share'])
         tld_report = tld_report.rename(columns={'band_share': 'target_band_share'})
         tld_report['ach_band_share'] = calib.achieved_band_share
         tld_report['convergence'] = calib.achieved_convergence
-        pa_mat = calib.achieved_distribution
 
-        print(optimal_cost_params)
-        print(tld_report)
-        print(pa_mat)
-
-        exit()
-
-        internal_pa_mat, tld_report = calibrate_gravity_model(
-            init_param_a=init_param_a,
-            init_param_b=init_param_b,
-            productions=seg_productions,
-            attractions=seg_attractions,
-            costs=costs,
-            zones=self.zoning_system.unique_zones,
-            target_tld=target_tld,
-            log_path=log_path,
-            cost_function=cost_function,
-            apply_k_factoring=apply_k_factoring,
-            furness_loops=furness_max_iters,
-            fitting_loops=fitting_loops,
-            bs_con_target=convergence_target,
-            target_r_gap=furness_tol,
-        )
-
-        # ## WRITE OUT GRAVITY MODEL OUTPUTS ## #
         # Write out tld report
         fname = running_segmentation.generate_file_name(
             trip_origin=trip_origin,
@@ -376,7 +374,7 @@ class GravityModel(GravityModelExportPaths):
             compressed=True,
         )
         path = os.path.join(self.export_paths.distribution_dir, fname)
-        nd.write_df(internal_pa_mat, path)
+        nd.write_df(calib.achieved_distribution, path)
 
 
 def calibrate_gravity_model(init_param_a: float,
