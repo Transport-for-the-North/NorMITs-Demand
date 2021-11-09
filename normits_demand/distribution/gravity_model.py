@@ -11,6 +11,8 @@ File purpose:
 
 """
 # Built-Ins
+import os
+import warnings
 
 # Third Party
 import numpy as np
@@ -27,6 +29,9 @@ import normits_demand as nd
 
 from normits_demand import cost
 
+from normits_demand.utils import timing
+from normits_demand.utils import file_ops
+from normits_demand.utils import math_utils
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
@@ -45,9 +50,9 @@ class GravityModelCalibrator:
                  costs: np.ndarray,
                  target_cost_distribution: pd.DataFrame,
                  target_convergence: float,
-                 max_iters: int,
                  furness_max_iters: int,
                  furness_tol: float,
+                 running_log_path: nd.PathLike = None,
                  ):
         # TODO(BT): Write GravityModelCalibrator __init__ docs
         # Validate attributes
@@ -56,16 +61,44 @@ class GravityModelCalibrator:
             self._target_cost_distribution_cols,
         )
 
+        if running_log_path is not None:
+            dir_name, _ = os.path.split(running_log_path)
+            if not os.path.exists(dir_name):
+                raise FileNotFoundError(
+                    "Cannot find the defined directory to write out a"
+                    "log. Given the following path: %s"
+                    % dir_name
+                )
+
+            if os.path.isfile(running_log_path):
+                warnings.warn(
+                    "Given a log path to a file that already exists. Logs "
+                    "will be appended to the end of the file at: %s"
+                    % running_log_path
+                )
+
         # Set attributes
         self.row_targets = row_targets
         self.col_targets = col_targets
         self.cost_function = cost_function
         self.costs = costs
         self.target_cost_distribution = target_cost_distribution
-        self.target_convergence = target_convergence
-        self.max_iters = max_iters
         self.furness_max_iters = furness_max_iters
         self.furness_tol = furness_tol
+        self.running_log_path = running_log_path
+
+        self.target_convergence = target_convergence
+
+        # Running attributes
+        self._loop_num = -1
+        self._loop_start_time = None
+        self._loop_end_time = None
+
+        # Additional attributes
+        self.optimal_cost_params = None
+        self.achieved_band_share = None
+        self.achieved_convergence = None
+        self.achieved_distribution = None
 
     def _order_cost_params(self, params: Dict[str, Any]) -> List[Any]:
         """Order params into a list that self.cost_function expects"""
@@ -154,29 +187,65 @@ class GravityModelCalibrator:
 
         # Convert matrix into an achieved distribution curve
         achieved_band_shares = self._calculate_cost_distribution(matrix)
-        from normits_demand.utils import math_utils
         convergence = math_utils.curve_convergence(
             self.target_cost_distribution['band_share'].values,
             achieved_band_shares,
         )
-        print(achieved_band_shares)
-        print(self.target_cost_distribution['band_share'].values)
-        print(convergence)
-        exit()
 
-        # TODO(BT): Write out GM Logs here!? Convergence?!
+        # Calculate the time this loop took
+        self._loop_end_time = timing.current_milli_time()
+        time_taken = self._loop_end_time - self._loop_start_time
+
+        # ## LOG THIS ITERATION ## #
+        log_dict = {
+            'loop_number': str(self._loop_num),
+            'runtime (s)': time_taken / 1000,
+        }
+        log_dict.update(cost_kwargs)
+        log_dict.update({
+            'furness_iters': max_iters,
+            'furness_r2': np.round(r2, 6),
+            'bs_con': np.round(convergence, 4),
+        })
+
+        # Append this iteration to log file
+        file_ops.safe_dataframe_to_csv(
+                pd.DataFrame(log_dict, index=[0]),
+                self.running_log_path,
+                mode='a',
+                header=(not os.path.exists(self.running_log_path)),
+                index=False,
+        )
+
+        # Update loop params and return the achieved band shares
+        self._loop_num += 1
+        self._loop_start_time = timing.current_milli_time()
+        self._loop_end_time = None
+
+        # Update performance params
+        self.achieved_band_share = achieved_band_shares
+        self.achieved_convergence = convergence
+        self.achieved_distribution = matrix
 
         return achieved_band_shares
 
     def calibrate(self,
                   init_params: Dict[str, Any],
                   diff_step: float = None,
+                  ftol: float = 1e-4,
+                  max_iters: int = 100,
                   verbose: int = 0,
                   ):
         """Finds the optimal parameters for self.cost_function
 
         Optimal parameters are found using `scipy.optimize.curve_fit`
-        to fit the distributed row/col targets to self.target_tld.
+        to fit the distributed row/col targets to self.target_tld. Once
+        the optimal parameters are found, the gravity model is run one last
+        time to check the self.target_convergence has been met. This also
+        populates a number of attributes with values from the optimal run:
+        self.achieved_band_share
+        self.achieved_convergence
+        self.achieved_distribution
 
         Parameters
         ----------
@@ -193,6 +262,17 @@ class GravityModelCalibrator:
             conventional “optimal” power of machine epsilon for the finite
             difference scheme used
 
+        ftol:
+            The tolerance to pass to scipy.optimize.least_squares. The search
+            will stop once this tolerance has been met. 1e-4 By default,
+            however this is far more precise than the convergence
+            used in this code to evaluate results. 1e-4 should almost always
+            get a band share convergence of >0.99
+
+        max_iters:
+            The maximum number of calibration iterations to complete before
+            termination if the ftol has not been met.
+
         verbose:
             Copied from scipy.optimize.least_squares documentation, where it
             is passed to:
@@ -203,7 +283,10 @@ class GravityModelCalibrator:
 
         Returns
         -------
-        # TODO(BT): Determine the returns!!
+        optimal_cost_params:
+            Returns a dictionary of the same shape as init_params. The values
+            will be the optimal cost parameters to get the best band share
+            convergence.
 
         Raises
         ------
@@ -218,21 +301,40 @@ class GravityModelCalibrator:
         scipy.optimize.least_squares
         """
         # Validate init_params
-        # TODO!!!!
+        self.cost_function.validate_params(init_params)
+
+        # Initialise running params
+        self._loop_num = 1
+        self._loop_start_time = timing.current_milli_time()
 
         # Calculate the optimal cost parameters
         optimal_params, _ = optimize.curve_fit(
             self._gm_distribution,
-            0,
+            0,              # Doesn't matter what this is - it's ignored
             self.target_cost_distribution['band_share'].values,
             p0=self._order_init_params(init_params),
             bounds=self._order_bounds(),
             verbose=verbose,
             diff_step=diff_step,
+            ftol=ftol,
+            max_nfev=max_iters,
         )
 
-        # Stick optimal params back in dict??
+        # Run an optimal version of the gravity
+        self.optimal_cost_params = self._cost_params_to_kwargs(optimal_params)
+        self._gm_distribution(0, *optimal_params)
 
+        # Check the performance of the best run
+        if self.achieved_convergence < self.target_convergence:
+            warnings.warn(
+                "Calibration was not able to reach the target_convergence. "
+                "Perhaps K-Factors are needed to improve the convergence?\n"
+                "Target convergence: %s\n"
+                "Achieved convergence: %s"
+                % (self.target_convergence, self.achieved_convergence)
+            )
+
+        return self.optimal_cost_params
 
 def gravity_model(row_targets: np.ndarray,
                   col_targets: np.ndarray,
