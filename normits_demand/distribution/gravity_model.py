@@ -232,7 +232,7 @@ class GravityModelCalibrator:
     def calibrate(self,
                   init_params: Dict[str, Any],
                   diff_step: float = None,
-                  ftol: float = 1e-4,
+                  ftol: float = 1e-5,
                   max_iters: int = 100,
                   verbose: int = 0,
                   ):
@@ -264,9 +264,9 @@ class GravityModelCalibrator:
 
         ftol:
             The tolerance to pass to scipy.optimize.least_squares. The search
-            will stop once this tolerance has been met. 1e-4 By default,
+            will stop once this tolerance has been met. 1e-5 By default,
             however this is far more precise than the convergence
-            used in this code to evaluate results. 1e-4 should almost always
+            used in this code to evaluate results. 1e-5 should almost always
             get a band share convergence of >0.99
 
         max_iters:
@@ -335,6 +335,7 @@ class GravityModelCalibrator:
             )
 
         return self.optimal_cost_params
+
 
 def gravity_model(row_targets: np.ndarray,
                   col_targets: np.ndarray,

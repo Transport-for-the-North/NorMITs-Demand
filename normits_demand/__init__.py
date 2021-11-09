@@ -22,6 +22,7 @@ from normits_demand.pathing.errors import PathingError
 
 # Core enumerations
 from normits_demand.core.enumerations import Mode
+from normits_demand.cost import BuiltInCostFunction
 
 # ## EXPOSE CLASS LAYER ## #
 # EFS Class Layer
