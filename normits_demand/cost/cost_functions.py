@@ -80,7 +80,7 @@ class CostFunction:
 
         # Validate the params and cost function
         try:
-            self.function(1, **self.param_max)
+            self.function(np.array(1e-2), **self.param_max)
         except TypeError:
             raise ValueError(
                 "Received a TypeError while testing the given params "
@@ -111,7 +111,7 @@ class CostFunction:
             fall outside the min/max range defined in this class.
         """
         # Init
-        math_utils.check_numeric(param_dict)
+        # math_utils.check_numeric(param_dict)
 
         # Validate
         for name, value in param_dict.items():
@@ -240,10 +240,29 @@ def log_normal(base_cost: np.ndarray, sigma: float, mu: float) -> np.ndarray:
     - :math:`C_{ij}`: cost from i to j.
     - :math:`\sigma, \mu`: calibration parameters.
     """
+    # Init
     math_utils.check_numeric({'sigma': sigma, 'mu': mu})
+    sigma = float(sigma)
+    mu = float(mu)
 
-    frac = 1 / (base_cost * sigma * np.sqrt(2 * np.pi))
-    exp_numerator = (np.log(base_cost) - mu) ** 2
+    # We need to be careful to avoid 0 in costs
+    # First calculate the fraction
+    frac_denominator = (base_cost * sigma * np.sqrt(2 * np.pi))
+    frac = np.divide(
+        1,
+        frac_denominator,
+        where=frac_denominator != 0,
+        out=np.zeros_like(frac_denominator),
+    )
+
+    # Now calculate the exponential
+    log = np.log(
+        base_cost,
+        where=base_cost != 0,
+        out=np.zeros_like(base_cost),
+    )
+    exp_numerator = (log - mu) ** 2
     exp_denominator = 2 * sigma ** 2
-    exp = np.exp(-exp_numerator / exp_denominator)
+    exp = np.exp(exp_numerator / exp_denominator)
+
     return frac * exp
