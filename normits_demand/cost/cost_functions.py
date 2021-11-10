@@ -263,6 +263,6 @@ def log_normal(base_cost: np.ndarray, sigma: float, mu: float) -> np.ndarray:
     )
     exp_numerator = (log - mu) ** 2
     exp_denominator = 2 * sigma ** 2
-    exp = np.exp(exp_numerator / exp_denominator)
+    exp = np.exp(-exp_numerator / exp_denominator)
 
     return frac * exp

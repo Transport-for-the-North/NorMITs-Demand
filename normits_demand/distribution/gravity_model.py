@@ -232,7 +232,7 @@ class GravityModelCalibrator:
     def calibrate(self,
                   init_params: Dict[str, Any],
                   diff_step: float = None,
-                  ftol: float = 1e-5,
+                  ftol: float = 1e-8,
                   max_iters: int = 100,
                   verbose: int = 0,
                   ):
@@ -264,9 +264,9 @@ class GravityModelCalibrator:
 
         ftol:
             The tolerance to pass to scipy.optimize.least_squares. The search
-            will stop once this tolerance has been met. 1e-5 By default,
+            will stop once this tolerance has been met. 1e-8 By default,
             however this is far more precise than the convergence
-            used in this code to evaluate results. 1e-5 should almost always
+            used in this code to evaluate results. 1e-8 should almost always
             get a band share convergence of >0.99
 
         max_iters:
@@ -422,6 +422,7 @@ def gravity_model(row_targets: np.ndarray,
 
     # Calculate initial matrix through cost function
     init_matrix = cost_function.calculate(costs, **cost_params)
+    init_matrix = np.where(init_matrix == 0, 1e-7, init_matrix)
 
     # Furness trips to trip ends
     matrix, iters, r2 = furness.doubly_constrained_furness(
