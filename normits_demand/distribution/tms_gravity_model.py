@@ -101,11 +101,10 @@ class GravityModel(GravityModelExportPaths):
             attractions: pd.DataFrame,
             init_params: pd.DataFrame,
             target_tld_dir: pd.DataFrame,
-            costs_path: nd.PathLike,
+            cost_dir: nd.PathLike,
             cost_function: str,
             intrazonal_cost_infill: Optional[float] = 0.5,
             pa_val_col: Optional[str] = 'val',
-            apply_k_factoring: bool = True,
             convergence_target: float = 0.95,
             fitting_loops: int = 100,
             furness_max_iters: int = 5000,
@@ -132,11 +131,10 @@ class GravityModel(GravityModelExportPaths):
             'trip_origin': trip_origin,
             'running_segmentation': running_segmentation,
             'target_tld_dir': target_tld_dir,
-            'costs_path': costs_path,
+            'cost_dir': cost_dir,
             'cost_function': cost_function,
             'overall_log_path': overall_log_path,
             'intrazonal_cost_infill': intrazonal_cost_infill,
-            'apply_k_factoring': apply_k_factoring,
             'furness_max_iters': furness_max_iters,
             'fitting_loops': fitting_loops,
             'convergence_target': convergence_target,
@@ -249,11 +247,10 @@ class GravityModel(GravityModelExportPaths):
                       init_param_a: float,
                       init_param_b: float,
                       target_tld_dir: pd.DataFrame,
-                      costs_path: nd.PathLike,
+                      cost_dir: nd.PathLike,
                       cost_function: str,
                       overall_log_path: nd.PathLike,
                       intrazonal_cost_infill: Optional[float] = 0.5,
-                      apply_k_factoring: bool = True,
                       convergence_target: float = 0.95,
                       fitting_loops: int = 100,
                       furness_max_iters: int = 5000,
@@ -276,24 +273,24 @@ class GravityModel(GravityModelExportPaths):
         target_tld['max'] *= constants.MILES_TO_KM
 
         # ## GET THE COSTS FOR THIS SEGMENT ## #
-        self._logger.debug("Getting costs from: %s" % costs_path)
+        self._logger.debug("Getting costs from: %s" % cost_dir)
 
-        int_costs, cost_name = cost_utils.get_costs(
-            costs_path,
-            segment_params,
-            iz_infill=intrazonal_cost_infill,
-            replace_nhb_with_hb=(trip_origin == 'nhb'),
+        # Generate the fname
+        fname = running_segmentation.generate_file_name(
+            trip_origin=trip_origin,
+            file_desc="%s_cost" % self.zoning_system.name,
+            segment_params=segment_params,
         )
+        path = os.path.join(cost_dir, fname)
 
-        # Translate costs to wide - filter to only internal
-        costs = pd_utils.long_to_wide_infill(
-            df=int_costs,
-            index_col='p_zone',
-            columns_col='a_zone',
-            values_col='cost',
-            index_vals=self.zoning_system.unique_zones,
-            column_vals=self.zoning_system.unique_zones,
-            infill=0,
+        print(path)
+        exit()
+
+        # Read in the costs and infill
+        cost_df = nd.read_df(path, find_similar=True)
+        cost_df = cost_utils.iz_infill_costs(
+            cost_df,
+            iz_infill=intrazonal_cost_infill,
         )
 
         # ## SET UP LOG AND RUN ## #
@@ -309,7 +306,7 @@ class GravityModel(GravityModelExportPaths):
         # Need to convert into numpy vectors to work with old code
         seg_productions = seg_productions[self._pa_val_col].values
         seg_attractions = seg_attractions[self._pa_val_col].values
-        costs = costs.values
+        costs = cost_df.values
 
         # Replace the log if it already exists
         if os.path.isfile(log_path):
@@ -335,23 +332,6 @@ class GravityModel(GravityModelExportPaths):
             ftol=1e-5,
             verbose=2,
         )
-
-        # internal_pa_mat, tld_report = calibrate_gravity_model(
-        #     init_param_a=init_param_a,
-        #     init_param_b=init_param_b,
-        #     productions=seg_productions,
-        #     attractions=seg_attractions,
-        #     costs=costs,
-        #     zones=self.zoning_system.unique_zones,
-        #     target_tld=target_tld,
-        #     log_path=log_path,
-        #     cost_function=cost_function,
-        #     apply_k_factoring=apply_k_factoring,
-        #     furness_loops=furness_max_iters,
-        #     fitting_loops=fitting_loops,
-        #     bs_con_target=convergence_target,
-        #     target_r_gap=furness_tol,
-        # )
 
         # ## WRITE OUT GRAVITY MODEL OUTPUTS ## #
         # TODO(BT): Make this a standard function for external model too

@@ -13,11 +13,46 @@ File purpose:
 # Built-Ins
 import os
 
+from typing import Optional
+
 # Third Party
+import numpy as np
 import pandas as pd
 
 # Local Imports
 import normits_demand as nd
+
+
+def iz_infill_costs(cost: np.ndarray,
+                    iz_infill: float,
+                    min_axis: int = 1,
+                    ) -> pd.DataFrame:
+    """
+    Infills the diagonal with iz_infill * min_axis val for each item in axis
+
+    Parameters
+    ----------
+    cost:
+        The cost to infill.
+
+    iz_infill:
+        whether to add a value half the minimum
+        interzonal value to the intrazonal cells. Currently needed for distance
+        but not cost.
+
+    min_axis:
+        The axis to get the minimum value across
+
+    Returns
+    -------
+    infilled_cost:
+        cost, but with the diagonal infilled.
+    """
+    infilled_cost = cost.copy()
+    min_vals = infilled_cost.min(axis=min_axis)
+    infill = min_vals * iz_infill
+    np.fill_diagonal(infilled_cost, infill)
+    return infilled_cost
 
 
 def get_costs(import_path: nd.PathLike,
@@ -50,7 +85,6 @@ def get_costs(import_path: nd.PathLike,
         DataFrame containing required cost or distance values.
     """
     # TODO: Adapt model input costs to take time periods
-    # TODO: The name cost_cols is misleading
     dat = pd.read_csv(import_path)
     cols = list(dat)
 

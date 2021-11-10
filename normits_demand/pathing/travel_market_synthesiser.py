@@ -15,11 +15,11 @@ import os
 import abc
 import collections
 
+from typing import Any
 from typing import Dict
 from typing import Optional
 
 # Third Party
-import numpy as np
 import pandas as pd
 
 # Local Imports
@@ -126,16 +126,16 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
 
     def __init__(self,
                  import_home: nd.PathLike,
-                 base_year: int,
-                 scenario: str,
                  running_mode: nd.core.enumerations.Mode,
                  zoning_system: nd.core.zoning.ZoningSystem,
                  internal_tld_name: str,
                  external_tld_name: str,
                  hb_cost_type: str,
                  nhb_cost_type: str,
-                 notem_iteration_name: str,
-                 notem_export_home: str,
+                 hb_productions_path: nd.PathLike,
+                 hb_attractions_path: nd.PathLike,
+                 nhb_productions_path: nd.PathLike,
+                 nhb_attractions_path: nd.PathLike,
                  intrazonal_cost_infill: float = 0.5,
                  convergence_target: float = 0.9,
                  furness_tol: float = 0.1,
@@ -149,7 +149,6 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
 
         # Assign attributes
         self.import_home = import_home
-        self.base_year = base_year
         self.running_mode = running_mode
         self.zoning_system = zoning_system
         self.internal_tld_name = internal_tld_name
@@ -162,13 +161,11 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         self.furness_max_iters = furness_max_iters
         self.kwargs = kwargs
 
-        # Generate the NoTEM export paths
-        self.notem_exports = nd.pathing.NoTEMExportPaths(
-            path_years=[base_year],
-            scenario=scenario,
-            iteration_name=notem_iteration_name,
-            export_home=notem_export_home,
-        )
+        # Trip End Paths
+        self.hb_productions_path = hb_productions_path
+        self.hb_attractions_path = hb_attractions_path
+        self.nhb_productions_path = nhb_productions_path
+        self.nhb_attractions_path = nhb_attractions_path
 
     def _read_and_convert_cjtw(self):
         # Build a path to the input
@@ -206,14 +203,13 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         trip_origin = trip_origin.lower()
 
         # Set trip origin specific stuff
-        exports = self.notem_exports
         if trip_origin == 'hb':
-            productions_path = exports.hb_production.export_paths.notem_segmented[self.base_year]
-            attractions_path = exports.hb_attraction.export_paths.notem_segmented[self.base_year]
+            productions_path = self.hb_productions_path
+            attractions_path = self.hb_attractions_path
             cost_type = self.hb_cost_type
         elif trip_origin == 'nhb':
-            productions_path = exports.nhb_production.export_paths.notem_segmented[self.base_year]
-            attractions_path = exports.nhb_attraction.export_paths.notem_segmented[self.base_year]
+            productions_path = self.nhb_productions_path
+            attractions_path = self.nhb_attractions_path
             cost_type = self.nhb_cost_type
         else:
             raise ValueError(
@@ -442,10 +438,12 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
                  nhb_cost_type: str,
                  hb_init_params_fname: str,
                  nhb_init_params_fname: str,
-                 external_model_exports: ExternalModelExportPaths,
+                 hb_productions_path: nd.PathLike,
+                 hb_attractions_path: nd.PathLike,
+                 nhb_productions_path: nd.PathLike,
+                 nhb_attractions_path: nd.PathLike,
                  intrazonal_cost_infill: float = 0.5,
                  pa_val_col: Optional[str] = 'val',
-                 apply_k_factoring: Optional[bool] = True,
                  convergence_target: Optional[float] = 0.95,
                  fitting_loops: Optional[int] = 100,
                  furness_max_iters: Optional[int] = 5000,
@@ -467,11 +465,15 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
         self.nhb_cost_type = nhb_cost_type
         self.hb_init_params_fname = hb_init_params_fname
         self.nhb_init_params_fname = nhb_init_params_fname
-        self.external_model_exports = external_model_exports
+
+        # Trip End Paths
+        self.hb_productions_path = hb_productions_path
+        self.hb_attractions_path = hb_attractions_path
+        self.nhb_productions_path = nhb_productions_path
+        self.nhb_attractions_path = nhb_attractions_path
 
         self.intrazonal_cost_infill = intrazonal_cost_infill
         self.pa_val_col = pa_val_col
-        self.apply_k_factoring = apply_k_factoring
         self.convergence_target = convergence_target
         self.fitting_loops = fitting_loops
         self.furness_max_iters = furness_max_iters
@@ -483,15 +485,14 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
         trip_origin = trip_origin.lower()
 
         # Set trip origin specific stuff
-        exports = self.external_model_exports
         if trip_origin == 'hb':
-            productions_path = exports.export_paths.hb_internal_productions
-            attractions_path = exports.export_paths.hb_internal_attractions
+            productions_path = self.hb_productions_path
+            attractions_path = self.hb_attractions_path
             cost_type = self.hb_cost_type
             init_params_fname = self.hb_init_params_fname
         elif trip_origin == 'nhb':
-            productions_path = exports.export_paths.nhb_internal_productions
-            attractions_path = exports.export_paths.nhb_internal_attractions
+            productions_path = self.nhb_productions_path
+            attractions_path = self.nhb_attractions_path
             cost_type = self.nhb_cost_type
             init_params_fname = self.nhb_init_params_fname
         else:
@@ -525,16 +526,11 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
         target_tld_dir = os.path.join(base_tld_path, self.target_tld_name)
 
         # Build costs path
-        fname = self._cost_base_fname.format(
-            zoning_name=self.zoning_system.name,
-            cost_type=cost_type,
-        )
-        costs_path = os.path.join(
+        cost_dir = os.path.join(
             self.import_home,
             self._modal_dir_name,
             self.running_mode.value,
             self._cost_dir_name,
-            fname,
         )
 
         # Load in the initial parameters for gravity model
@@ -548,7 +544,7 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
         # Check paths exist
         paths = [
             target_tld_dir,
-            costs_path,
+            cost_dir,
         ]
 
         for path in paths:
@@ -567,11 +563,10 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
             'attractions': file_ops.read_df(attractions_path),
             'init_params': init_params,
             'target_tld_dir': target_tld_dir,
-            'costs_path': costs_path,
+            'cost_dir': cost_dir,
             'cost_function': self.cost_function,
             'intrazonal_cost_infill': self.intrazonal_cost_infill,
             'pa_val_col': self.pa_val_col,
-            'apply_k_factoring': self.apply_k_factoring,
             'convergence_target': self.convergence_target,
             'fitting_loops': self.fitting_loops,
             'furness_max_iters': self.furness_max_iters,
@@ -816,6 +811,111 @@ class TMSExportPaths:
             file_ops.create_folder(path)
 
 
+class TMSArgumentBuilder:
+    """
+    Builds an ExternalModelArgumentBuilder and GravityModelArgumentBuilder
+    """
+
+    def __init__(self,
+                 import_home: nd.PathLike,
+                 running_mode: nd.core.enumerations.Mode,
+                 zoning_system: nd.core.zoning.ZoningSystem,
+                 hb_cost_type: str,
+                 nhb_cost_type: str,
+                 hb_productions_path: nd.PathLike,
+                 hb_attractions_path: nd.PathLike,
+                 nhb_productions_path: nd.PathLike,
+                 nhb_attractions_path: nd.PathLike,
+                 intrazonal_cost_infill: float = 0.5,
+                 run_external_model: bool = True,
+
+                 # EM Specific
+                 tms_exports: TMSExportPaths = None,
+
+                 external_kwargs: Optional[Dict[str, Any]] = None,
+                 gravity_kwargs: Optional[Dict[str, Any]] = None,
+                 ):
+        # Check paths exist
+        file_ops.check_path_exists(import_home)
+
+        # TODO(BT): Validate segments and zones are the correct types
+
+        # Trip End Paths
+        self._hb_productions_path = hb_productions_path
+        self._hb_attractions_path = hb_attractions_path
+        self._nhb_productions_path = nhb_productions_path
+        self._nhb_attractions_path = nhb_attractions_path
+
+        # Other attributes
+        external_kwargs = dict() if external_kwargs is None else external_kwargs
+        gravity_kwargs = dict() if gravity_kwargs is None else gravity_kwargs
+        self._external_kwargs = external_kwargs
+        self._gravity_kwargs = gravity_kwargs
+
+        # Set up a dictionary of the arguments shared by both
+        self._common_kwargs = {
+            'import_home': import_home,
+            'running_mode': running_mode,
+            'zoning_system': zoning_system,
+            'hb_cost_type': hb_cost_type,
+            'nhb_cost_type': nhb_cost_type,
+            'intrazonal_cost_infill': intrazonal_cost_infill,
+        }
+
+        # Pick the arguments based on whether we're running the external model
+        if run_external_model:
+            if tms_exports is None:
+                raise ValueError(
+                    "tms_exports must be set if run_external_model id True."
+                )
+            self._build_external_model_run(tms_exports)
+        else:
+            self._build_gravity_model_only_run()
+
+    @property
+    def external_model_arg_builder(self):
+        return self._em_arg_builder
+
+    @property
+    def gravity_model_arg_builder(self):
+        return self._gm_arg_builder
+
+    def _build_external_model_run(self, tms_exports: TMSExportPaths) -> None:
+        """Build arguments for an external+gravity run"""
+
+        self._em_arg_builder = ExternalModelArgumentBuilder(
+            **self._common_kwargs,
+            **self._external_kwargs,
+            hb_productions_path=self._hb_productions_path,
+            hb_attractions_path=self._hb_attractions_path,
+            nhb_productions_path=self._nhb_productions_path,
+            nhb_attractions_path=self._nhb_attractions_path,
+        )
+
+        em_paths = tms_exports.external_model.export_paths
+        self._gm_arg_builder = GravityModelArgumentBuilder(
+            **self._common_kwargs,
+            **self._gravity_kwargs,
+            hb_productions_path=em_paths.hb_internal_productions,
+            hb_attractions_path=em_paths.hb_internal_attractions,
+            nhb_productions_path=em_paths.nhb_internal_productions,
+            nhb_attractions_path=em_paths.nhb_internal_attractions,
+        )
+
+    def _build_gravity_model_only_run(self):
+        """Build arguments for a gravity only run"""
+        self._em_arg_builder = None
+
+        self._gm_arg_builder = GravityModelArgumentBuilder(
+            **self._common_kwargs,
+            **self._gravity_kwargs,
+            hb_productions_path=self._hb_productions_path,
+            hb_attractions_path=self._hb_attractions_path,
+            nhb_productions_path=self._nhb_productions_path,
+            nhb_attractions_path=self._nhb_attractions_path,
+        )
+
+
 # ## FUNCTIONS ## #
 def import_pa(production_import_path,
               attraction_import_path,
@@ -836,6 +936,9 @@ def import_pa(production_import_path,
     model_zone:
         Type of model zoning system. norms or noham
 
+    trip_origin:
+        Trip origin
+
     Returns
     ----------
     [0] productions:
@@ -844,10 +947,6 @@ def import_pa(production_import_path,
     [1] attractions:
         Mainland GB attractions.
     """
-    # Init
-    p_cache = None
-    a_cache = None
-
     # Determine the required segmentation
     if trip_origin == 'hb':
         reduce_seg = None
@@ -914,7 +1013,7 @@ def import_pa(production_import_path,
 
 def read_cjtw(file_path: nd.PathLike,
               zoning_name: str,
-              subset: bool = None,
+              subset=None,
               reduce_to_pa_factors: bool = True,
               ) -> pd.DataFrame:
     """
@@ -974,11 +1073,10 @@ def read_cjtw(file_path: nd.PathLike,
                       '12_Bicycle': '2_cycle',
                       '13_Onfoot': '1_walk',
                       '14_Othermethodoftraveltowork': '1_walk'}
-    modeCols = list(method_to_mode.keys())
+    mode_cols = list(method_to_mode.keys())
 
-    for col in modeCols:
+    for col in mode_cols:
         cjtw = cjtw.rename(columns={col: method_to_mode.get(col)})
-
 
     cjtw = cjtw.drop('3_Allcategories_Methodoftraveltowork', axis=1)
     cjtw = cjtw.groupby(cjtw.columns, axis=1).sum()
@@ -986,8 +1084,7 @@ def read_cjtw(file_path: nd.PathLike,
                          '2_' + zoning_name + 'Areaofworkplace',
                          '1_walk', '2_cycle', '3_car',
                          '5_bus', '6_rail_ug'], axis=1)
-    # Redefine mode cols for new aggregated modes
-    modeCols = ['1_walk', '2_cycle', '3_car', '5_bus', '6_rail_ug']
+
     # Pivot
     cjtw = pd.melt(
         cjtw,
