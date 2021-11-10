@@ -116,7 +116,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
     _cost_base_fname = "{zoning_name}_{cost_type}_costs.csv"
 
     # CJTW constants
-    _cjtw_infill = 1e-5
+    _cjtw_infill = 1e-7
     _cjtw_dir_name = 'cjtw'
     _cjtw_base_fname = 'cjtw_{zoning_name}.csv'
 
