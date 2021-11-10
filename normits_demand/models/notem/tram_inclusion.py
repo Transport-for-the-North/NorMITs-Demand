@@ -13,7 +13,8 @@ from __future__ import annotations
 # Builtins
 import os
 
-from typing import Dict, Tuple
+from typing import Dict
+from typing import Tuple
 from typing import List
 
 # Third party imports
@@ -41,6 +42,7 @@ class Tram(NoTEMExportPaths):
     _sort_north = ['p', 'ca', 'm']
     _join_cols = ['msoa_zone_id', 'p', 'ca']
     base_train = pd.DataFrame()
+    _running_report_fname = 'running_parameters.txt'
     _log_fname = "tram_log.log"
     _notem_cols = ['msoa_zone_id', 'p', 'ca', 'm', 'val']
 
@@ -77,7 +79,7 @@ class Tram(NoTEMExportPaths):
                  years: List[int],
                  scenario: str,
                  iteration_name: str,
-                 import_home: nd.PathLike,
+                 import_builder: nd.pathing.TramImportPathsBase,
                  export_home: nd.PathLike,
                  ):
         """
@@ -97,8 +99,8 @@ class Tram(NoTEMExportPaths):
         scenario:
             The name of the scenario to run for.
 
-        import_home:
-            The home location where all the import files are located.
+        import_builder:
+            The home location where all the tram related import files are located.
 
         export_home:
             The home where all the export paths should be built from. See
@@ -106,12 +108,12 @@ class Tram(NoTEMExportPaths):
             will be built.
         """
         # Validate inputs
-        file_ops.check_path_exists(import_home)
+        file_ops.check_path_exists(import_builder)
 
         # Assign
         self.years = years
         self.scenario = scenario
-        self.import_home = import_home
+        self.import_builder = import_builder
 
         # Generate the export paths
         super().__init__(
@@ -129,20 +131,78 @@ class Tram(NoTEMExportPaths):
             log_file_path=log_file_path,
             instantiate_msg="Initialised new Tram Logger",
         )
+        self._write_running_report()
+
+    def _write_running_report(self):
+        """
+        Outputs a simple report detailing inputs and outputs
+        """
+        # Define the lines to output
+        out_lines = [
+            'Code Version: %s' % str(nd.__version__),
+            'NoTEM Iteration: %s' % str(self.iteration_name),
+            'Scenario: %s' % str(self.scenario),
+            '',
+            '### HB Productions ###',
+            'import_files: %s' % self.import_builder.generate_hb_production_imports(),
+            'vector_import: %s' % self.hb_production.export_paths.home,
+            'vector_export: %s' % self.hb_production.export_paths.home,
+            '',
+            '### HB Attractions ###',
+            'import_files: %s' % self.import_builder.generate_hb_attraction_imports(),
+            'vector_import: %s' % self.hb_attraction.export_paths.home,
+            'vector_export: %s' % self.hb_attraction.export_paths.home,
+            '',
+            '### NHB Productions ###',
+            'import_files: %s' % self.import_builder.generate_nhb_production_imports(),
+            'vector_import: %s' % self.nhb_production.export_paths.home,
+            'vector_export: %s' % self.nhb_production.export_paths.home,
+            '',
+            '### NHB Attractions ###',
+            'import_files: %s' % self.import_builder.generate_nhb_attraction_imports(),
+            'vector_import: %s' % self.nhb_attraction.export_paths.home,
+            'vector_export: %s' % self.nhb_attraction.export_paths.home,
+        ]
+
+        # Write out to disk
+        output_path = os.path.join(self.export_home, self._running_report_fname)
+        with open(output_path, 'w') as out:
+            out.write('\n'.join(out_lines))
 
     def run_tram(self,
-                 verbose: bool = True,
+                 generate_all: bool = False,
+                 generate_hb: bool = False,
+                 generate_hb_production: bool = False,
+                 generate_hb_attraction: bool = False,
+                 generate_nhb: bool = False,
+                 generate_nhb_production: bool = False,
+                 generate_nhb_attraction: bool = False,
                  ) -> None:
         """
         Generates the inputs required for tram inclusion run.
 
-        Runs the tram inclusion for each trip end.
-
         Parameters
         ----------
-        verbose:
-            Whether to print progress updates to the terminal while running
-            or not.
+        generate_all:
+            Runs both home based and non home based trip end models.
+
+        generate_hb:
+            Runs the home based trip end models only.
+
+        generate_hb_production:
+            Runs the home based production trip end model only.
+
+        generate_hb_attraction:
+            Runs the home based attraction trip end model only.
+
+        generate_nhb:
+            Runs the non home based trip end models only.
+
+        generate_nhb_production:
+            Runs the non home based production trip end model only.
+
+        generate_nhb_attraction:
+            Runs the non home based attraction trip end model only.
 
         Returns
         -------
@@ -152,22 +212,48 @@ class Tram(NoTEMExportPaths):
         start_time = timing.current_milli_time()
         self._logger.info("Starting a new run of the Tram Model")
 
+        # Determine which models to run
+        if generate_all:
+            generate_hb = True
+            generate_nhb = True
+
+        if generate_hb:
+            generate_hb_production = True
+            generate_hb_attraction = True
+
+        if generate_nhb:
+            generate_nhb_production = True
+            generate_nhb_attraction = True
+
+        self._logger.debug("Running hb productions: %s" % generate_hb_production)
+        self._logger.debug("Running nhb productions: %s" % generate_nhb_production)
+        self._logger.debug("Running hb attractions: %s" % generate_hb_attraction)
+        self._logger.debug("Running nhb attractions: %s" % generate_nhb_attraction)
+        self._logger.debug("")
+
         # Run the models
-        self._generate_hb_production(verbose)
-        self._generate_hb_attraction(verbose)
-        self._generate_nhb_production(verbose)
-        self._generate_nhb_attraction(verbose)
+        if generate_hb_production:
+            self._generate_hb_production()
+
+        if generate_hb_attraction:
+            self._generate_hb_attraction()
+
+        if generate_nhb_production:
+            self._generate_nhb_production()
+
+        if generate_nhb_attraction:
+            self._generate_nhb_attraction()
 
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
         self._logger.info("Tram Model run complete! Took %s" % time_taken)
 
-    def _generate_hb_production(self, verbose: bool) -> None:
+    def _generate_hb_production(self) -> None:
         """
         Runs tram inclusion for home based Production trip end models
         """
         self._logger.info("Generating HB Production imports")
-        tram_data = os.path.join(self.import_home, "tram_hb_productions_v1.0.csv")
+        tram_data = os.path.join(self.import_tram_home, "tram_hb_productions_v1.0.csv")
 
         export_paths = self.hb_production.export_paths
         hb_production_paths = {y: export_paths.notem_segmented[y] for y in self.years}
@@ -178,15 +264,14 @@ class Tram(NoTEMExportPaths):
             tram_data=tram_data,
             dvec_imports=hb_production_paths,
             export_home=self.hb_production.export_paths.home,
-            verbose=verbose,
         )
 
-    def _generate_hb_attraction(self, verbose: bool) -> None:
+    def _generate_hb_attraction(self) -> None:
         """
         Runs tram inclusion for home based Attraction trip end model
         """
         self._logger.info("Generating HB Attraction imports")
-        tram_data = os.path.join(self.import_home, "tram_hb_attractions_v1.0.csv")
+        tram_data = os.path.join(self.import_tram_home, "tram_hb_attractions_v1.0.csv")
 
         export_paths = self.hb_attraction.export_paths
         hb_attraction_paths = {y: export_paths.notem_segmented[y] for y in self.years}
@@ -196,15 +281,14 @@ class Tram(NoTEMExportPaths):
             tram_data=tram_data,
             dvec_imports=hb_attraction_paths,
             export_home=self.hb_attraction.export_paths.home,
-            verbose=verbose,
         )
 
-    def _generate_nhb_production(self, verbose: bool) -> None:
+    def _generate_nhb_production(self) -> None:
         """
         Runs tram inclusion for non-home based Production trip end model
         """
         self._logger.info("Generating NHB Production imports")
-        tram_data = os.path.join(self.import_home, "tram_nhb_productions_v1.0.csv")
+        tram_data = os.path.join(self.import_tram_home, "tram_nhb_productions_v1.0.csv")
 
         export_paths = self.nhb_production.export_paths
         nhb_production_paths = {y: export_paths.notem_segmented[y] for y in self.years}
@@ -214,15 +298,14 @@ class Tram(NoTEMExportPaths):
             tram_data=tram_data,
             dvec_imports=nhb_production_paths,
             export_home=self.nhb_production.export_paths.home,
-            verbose=verbose,
         )
 
-    def _generate_nhb_attraction(self, verbose: bool) -> None:
+    def _generate_nhb_attraction(self) -> None:
         """
         Runs tram inclusion for non home based Attraction trip end models.
         """
         self._logger.info("Generating NHB Production imports")
-        tram_data = os.path.join(self.import_home, "tram_hb_attractions_v1.0.csv")
+        tram_data = os.path.join(self.import_tram_home, "tram_hb_attractions_v1.0.csv")
 
         export_paths = self.nhb_attraction.export_paths
         nhb_attraction_paths = {y: export_paths.notem_segmented[y] for y in self.years}
@@ -232,14 +315,12 @@ class Tram(NoTEMExportPaths):
             tram_data=tram_data,
             dvec_imports=nhb_attraction_paths,
             export_home=self.nhb_attraction.export_paths.home,
-            verbose=verbose,
         )
 
     def _tram_inclusion(self,
                         tram_data: nd.PathLike,
                         dvec_imports: Dict[int, nd.PathLike],
                         export_home: nd.PathLike,
-                        verbose: bool = True,
                         ) -> None:
         """
         Runs the tram inclusion for the notem trip end output.
@@ -267,9 +348,6 @@ class Tram(NoTEMExportPaths):
 
         export_home:
             The path where the export file would be saved.
-
-        verbose:
-            If set to True, it will print out progress updates while running.
 
         Returns
         -------
@@ -326,7 +404,6 @@ class Tram(NoTEMExportPaths):
                 tram_zones=tram_data['msoa_zone_id'].unique().tolist(),
                 dvec_tram_seg=notem_tram_seg,
                 tram_competitors=tram_competitors,
-                verbose=verbose,
             )
 
             # TODO(BT): Output report of northern adj factors - north_adj_factor
@@ -402,23 +479,16 @@ class Tram(NoTEMExportPaths):
             # Print timing for each trip end model
             trip_end_end = timing.current_milli_time()
             time_taken = timing.time_taken(trip_end_start, trip_end_end)
-            du.print_w_toggle(
-                "Tram inclusion for year %d took: %s\n"
-                % (year, time_taken),
-                verbose=verbose
-            )
+            self._logger.info("Tram inclusion for year %d took: %s\n" % (year, time_taken))
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        du.print_w_toggle(
-            "Tram inclusion took: %s\n"
-            "Finished at: %s" % (time_taken, end_time),
-            verbose=verbose
-        )
+        self._logger.info("Tram inclusion took: %s\n"
+                          "Finished at: %s" % (time_taken, end_time)
+                          )
 
     def _read_tram_and_notem_data(self,
                                   year: int,
-                                  verbose: bool = False,
                                   ) -> Tuple[pd.DataFrame, nd.DVector]:
         """
         Reads in the tram and notem data.
@@ -427,10 +497,6 @@ class Tram(NoTEMExportPaths):
         ----------
         year:
             The year for which the data needs to be imported.
-
-        verbose:
-            If set to True, it will print out progress updates while
-            running.
 
         Returns
         -------
@@ -441,7 +507,6 @@ class Tram(NoTEMExportPaths):
             Returns the notem output dvector in tram segmentation.
         """
         # Init
-        du.print_w_toggle("Loading the tram data...", verbose=verbose)
         tram_target_cols = self._target_col_dtypes['tram']
 
         # Reads the tram data
@@ -456,7 +521,6 @@ class Tram(NoTEMExportPaths):
         tram_data.rename(columns={'trips': self._val_col}, inplace=True)
 
         # Reads the corresponding notem output
-        du.print_w_toggle("Loading the notem output data...", verbose=verbose)
         notem_output_dvec = nd.read_pickle(self.notem_output[year])
 
         # Aggregate the dvector to the required segmentation
@@ -551,8 +615,6 @@ class Tram(NoTEMExportPaths):
 
         # Adds tram data to the notem dataframe
         notem_df = notem_df.append(tram_data)
-
-        print("Starting tram infill for msoa zones with tram data...")
 
         # Infills tram data
         notem_new_df, more_tram_report = self._infill_internal(
@@ -729,7 +791,6 @@ class Tram(NoTEMExportPaths):
                          dvec_tram_seg: nd.DVector,
                          tram_competitors: List[nd.Mode],
                          mode_col: str = 'm',
-                         verbose: bool = True,
                          ):
         """
         Infills tram for MSOAs without tram data in the internal area (north area).
@@ -759,16 +820,12 @@ class Tram(NoTEMExportPaths):
             The name of the columns in north_wo_infill, non_tram_north, and
             dvec_tram_seg that refers to the mode segment.
 
-        verbose:
-            If set to True, it will print out progress updates while running.
-
         Returns
         -------
         notem_df_new:
             Returns the dataframe after non-tram infill for msoa zones for
             all external area, but only non-tram zones for internal area
         """
-        du.print_w_toggle("Starting tram adjustment for non tram areas...", verbose=verbose)
         # Init
         compet_mode_vals = [x.get_mode_num() for x in tram_competitors]
         non_val_cols = [self._zoning_system_col] + self._tram_segment_cols
