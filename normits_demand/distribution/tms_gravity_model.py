@@ -25,7 +25,7 @@ import pandas as pd
 import normits_demand as nd
 from normits_demand import constants
 
-from normits_demand import cost
+from normits_demand.cost import utils as cost_utils2
 
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
@@ -40,10 +40,6 @@ from normits_demand.validation import checks
 from normits_demand.concurrency import multiprocessing
 
 from normits_demand.pathing.travel_market_synthesiser import GravityModelExportPaths
-
-# BACKLOG: Re-write Gravity Model to use scipy.optimize.curve_fit
-#  and numpy based furness
-#  labels: TMS, optimisation
 
 
 class GravityModel(GravityModelExportPaths):
@@ -120,6 +116,17 @@ class GravityModel(GravityModelExportPaths):
         # Validate the trip origin
         trip_origin = checks.validate_trip_origin(trip_origin)
 
+        # Replace the overall log if it exists
+        if trip_origin == 'hb':
+            overall_log_path = self.report_paths.hb_overall_log
+        elif trip_origin == 'nhb':
+            overall_log_path = self.report_paths.nhb_overall_log
+        else:
+            raise ValueError("Don't know what trip_origin %s is" % trip_origin)
+
+        if os.path.isfile(overall_log_path):
+            os.remove(overall_log_path)
+
         # ## MULTIPROCESS ACROSS SEGMENTS ## #
         unchanging_kwargs = {
             'trip_origin': trip_origin,
@@ -127,6 +134,7 @@ class GravityModel(GravityModelExportPaths):
             'target_tld_dir': target_tld_dir,
             'costs_path': costs_path,
             'cost_function': cost_function,
+            'overall_log_path': overall_log_path,
             'intrazonal_cost_infill': intrazonal_cost_infill,
             'apply_k_factoring': apply_k_factoring,
             'furness_max_iters': furness_max_iters,
@@ -228,8 +236,8 @@ class GravityModel(GravityModelExportPaths):
             fn=self._run_internal,
             kwargs=kwarg_list,
             pbar_kwargs=pbar_kwargs,
-            # process_count=0,
-            process_count=self.process_count,
+            process_count=0,
+            # process_count=self.process_count,
         )
 
     def _run_internal(self,
@@ -243,6 +251,7 @@ class GravityModel(GravityModelExportPaths):
                       target_tld_dir: pd.DataFrame,
                       costs_path: nd.PathLike,
                       cost_function: str,
+                      overall_log_path: nd.PathLike,
                       intrazonal_cost_infill: Optional[float] = 0.5,
                       apply_k_factoring: bool = True,
                       convergence_target: float = 0.95,
@@ -319,14 +328,13 @@ class GravityModel(GravityModelExportPaths):
             running_log_path=log_path,
         )
 
+        init_cost_params = {'sigma': init_param_a, 'mu': init_param_b}
         optimal_cost_params = calib.calibrate(
-            init_params={'sigma': init_param_a, 'mu': init_param_b},
+            init_params=init_cost_params,
             max_iters=fitting_loops,
             ftol=1e-5,
             verbose=2,
         )
-
-        print(optimal_cost_params)
 
         # internal_pa_mat, tld_report = calibrate_gravity_model(
         #     init_param_a=init_param_a,
@@ -346,11 +354,52 @@ class GravityModel(GravityModelExportPaths):
         # )
 
         # ## WRITE OUT GRAVITY MODEL OUTPUTS ## #
-        # Create tld_report
-        tld_report = pd_utils.reindex_cols(target_tld, ['min', 'max', 'band_share'])
-        tld_report = tld_report.rename(columns={'band_share': 'target_band_share'})
+        # TODO(BT): Make this a standard function for external model too
+        # Create tld report
+        rename = {
+            'min': 'min (km)',
+            'max': 'max (km)',
+            'ave_km': 'target_ave_length (km)',
+            'band_share': 'target_band_share',
+        }
+        tld_report = pd_utils.reindex_cols(target_tld, rename.keys())
+        tld_report = tld_report.rename(columns=rename)
+
+        # Add in achieved values
         tld_report['ach_band_share'] = calib.achieved_band_share
         tld_report['convergence'] = calib.achieved_convergence
+        tld_report['ach_band_trips'] = tld_report['ach_band_share'].copy()
+        tld_report['ach_band_trips'] *= calib.achieved_distribution.sum()
+
+        tld_report['ach_ave_length (km)'] = tld_utils.calculate_average_trip_lengths(
+            min_bounds=tld_report['min (km)'].values,
+            max_bounds=tld_report['max (km)'].values,
+            trip_lengths=costs,
+            trips=calib.achieved_distribution,
+        )
+
+        tld_report['cell count'] = cost_utils2.cells_in_bounds(
+            min_bounds=tld_report['min (km)'].values,
+            max_bounds=tld_report['max (km)'].values,
+            cost=costs,
+        )
+        tld_report['cell proportions'] = tld_report['cell count'].copy()
+        tld_report['cell proportions'] /= tld_report['cell proportions'].values.sum()
+
+        # Order columns for output
+        col_order = [
+            'min (km)',
+            'max (km)',
+            'target_ave_length (km)',
+            'ach_ave_length (km)',
+            'target_band_share',
+            'ach_band_share',
+            'ach_band_trips',
+            'cell count',
+            'cell proportions',
+            'convergence',
+        ]
+        tld_report = pd_utils.reindex_cols(tld_report, col_order)
 
         # Write out tld report
         fname = running_segmentation.generate_file_name(
@@ -375,6 +424,27 @@ class GravityModel(GravityModelExportPaths):
         )
         path = os.path.join(self.export_paths.distribution_dir, fname)
         nd.write_df(calib.achieved_distribution, path)
+
+        # ## ADD TO THE OVERALL LOG ## #
+        # Rename keys for log
+        init_cost_params = {"init_%s" % k: v for k, v in init_cost_params.items()}
+        optimal_cost_params = {"final_%s" % k: v for k, v in optimal_cost_params.items()}
+
+        # Generate the log
+        log_dict = segment_params.copy()
+        log_dict.update(init_cost_params)
+        log_dict.update({'init_bs_con': calib.initial_convergence})
+        log_dict.update(optimal_cost_params)
+        log_dict.update({'final_bs_con': calib.achieved_convergence})
+
+        # Append this iteration to log file
+        file_ops.safe_dataframe_to_csv(
+            pd.DataFrame(log_dict, index=[0]),
+            overall_log_path,
+            mode='a',
+            header=(not os.path.exists(overall_log_path)),
+            index=False,
+        )
 
 
 def calibrate_gravity_model(init_param_a: float,

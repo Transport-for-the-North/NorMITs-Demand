@@ -95,6 +95,8 @@ class GravityModelCalibrator:
         self._loop_end_time = None
 
         # Additional attributes
+        self.initial_cost_params = None
+        self.initial_convergence = None
         self.optimal_cost_params = None
         self.achieved_band_share = None
         self.achieved_convergence = None
@@ -227,6 +229,12 @@ class GravityModelCalibrator:
         self.achieved_convergence = convergence
         self.achieved_distribution = matrix
 
+        # Store the initial values to log later
+        if self.initial_cost_params is None:
+            self.initial_cost_params = cost_kwargs
+        if self.initial_convergence is None:
+            self.initial_convergence = convergence
+
         return achieved_band_shares
 
     def calibrate(self,
@@ -306,6 +314,8 @@ class GravityModelCalibrator:
         # Initialise running params
         self._loop_num = 1
         self._loop_start_time = timing.current_milli_time()
+        self.initial_cost_params = None
+        self.initial_convergence = None
 
         # Calculate the optimal cost parameters
         optimal_params, _ = optimize.curve_fit(
