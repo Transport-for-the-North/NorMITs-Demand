@@ -127,15 +127,17 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
     def __init__(self,
                  import_home: nd.PathLike,
                  running_mode: nd.core.enumerations.Mode,
+                 hb_running_segmentation: nd.core.segments.SegmentationLevel,
+                 nhb_running_segmentation: nd.core.segments.SegmentationLevel,
                  zoning_system: nd.core.zoning.ZoningSystem,
                  internal_tld_name: str,
                  external_tld_name: str,
                  hb_cost_type: str,
                  nhb_cost_type: str,
-                 hb_productions_path: nd.PathLike,
-                 hb_attractions_path: nd.PathLike,
-                 nhb_productions_path: nd.PathLike,
-                 nhb_attractions_path: nd.PathLike,
+                 hb_productions: nd.DVector,
+                 hb_attractions: nd.DVector,
+                 nhb_productions: nd.DVector,
+                 nhb_attractions: nd.DVector,
                  intrazonal_cost_infill: float = 0.5,
                  convergence_target: float = 0.9,
                  furness_tol: float = 0.1,
@@ -150,6 +152,8 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         # Assign attributes
         self.import_home = import_home
         self.running_mode = running_mode
+        self.hb_running_segmentation = hb_running_segmentation
+        self.nhb_running_segmentation = nhb_running_segmentation
         self.zoning_system = zoning_system
         self.internal_tld_name = internal_tld_name
         self.external_tld_name = external_tld_name
@@ -161,11 +165,36 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         self.furness_max_iters = furness_max_iters
         self.kwargs = kwargs
 
-        # Trip End Paths
-        self.hb_productions_path = hb_productions_path
-        self.hb_attractions_path = hb_attractions_path
-        self.nhb_productions_path = nhb_productions_path
-        self.nhb_attractions_path = nhb_attractions_path
+        # Validate and assign trip ends
+        te_names = ['hb_production', 'hb_attraction', 'nhb_production', 'nhb_attraction']
+        te_vals = [hb_productions, hb_attractions, nhb_productions, nhb_attractions]
+        segs = [hb_running_segmentation] * 2 + [nhb_running_segmentation] * 2
+        for name, trip_end, running_seg in zip(te_names, te_vals, segs):
+            if trip_end.zoning_system != self.zoning_system:
+                raise ValueError(
+                    "The given '%s' trip ends were not in the correct zoning "
+                    "system, they need to be in the same zoning system "
+                    "that the external model is running at.\n"
+                    "External zoning: %s\n"
+                    "%s zoning: %s\n"
+                    % (name, self.zoning_system, name, trip_end.zoning_system)
+                )
+
+            if trip_end.segmentation != running_seg:
+                raise ValueError(
+                    "The given '%s' trip ends were not in the correct "
+                    "segmentation, they need to be in the same segmentation "
+                    "that the external model is running at.\n"
+                    "External segmentation: %s\n"
+                    "%s segmentation: %s\n"
+                    % (name, running_seg, name, trip_end.segmentation)
+                )
+
+        # Must all be fine if we're here. Assign.
+        self.hb_productions = hb_productions
+        self.hb_attractions = hb_attractions
+        self.nhb_productions = nhb_productions
+        self.nhb_attractions = nhb_attractions
 
     def _read_and_convert_cjtw(self):
         # Build a path to the input
@@ -204,12 +233,14 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
 
         # Set trip origin specific stuff
         if trip_origin == 'hb':
-            productions_path = self.hb_productions_path
-            attractions_path = self.hb_attractions_path
+            productions = self.hb_productions
+            attractions = self.hb_attractions
+            running_segmentation = self.hb_running_segmentation
             cost_type = self.hb_cost_type
         elif trip_origin == 'nhb':
-            productions_path = self.nhb_productions_path
-            attractions_path = self.nhb_attractions_path
+            productions = self.nhb_productions
+            attractions = self.nhb_attractions
+            running_segmentation = self.nhb_running_segmentation
             cost_type = self.nhb_cost_type
         else:
             raise ValueError(
@@ -217,15 +248,6 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
                 "'hb' or 'nhb'. Got %s"
                 % trip_origin
             )
-
-        # read in productions and attractions
-        # TODO(BT): Tidy up this function - no cache!
-        productions, attractions = import_pa(
-            production_import_path=productions_path,
-            attraction_import_path=attractions_path,
-            model_zone=self.zoning_system.name,
-            trip_origin=trip_origin,
-        )
 
         # Build TLD directory paths
         base_tld_path = os.path.join(
@@ -268,8 +290,9 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         # Return the generated arguments
         final_kwargs = self.kwargs.copy()
         final_kwargs.update({
-            'productions': productions,
-            'attractions': attractions,
+            'productions': productions.to_df(),
+            'attractions': attractions.to_df(),
+            'running_segmentation': running_segmentation,
             'seed_matrix': self._read_and_convert_cjtw(),
             'costs_path': costs_path,
             'internal_tld_dir': internal_tld_path,
@@ -433,15 +456,17 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
                  target_tld_name: str,
                  cost_function: str,
                  running_mode: nd.core.enumerations.Mode,
+                 hb_running_segmentation: nd.core.segments.SegmentationLevel,
+                 nhb_running_segmentation: nd.core.segments.SegmentationLevel,
                  zoning_system: nd.core.zoning.ZoningSystem,
                  hb_cost_type: str,
                  nhb_cost_type: str,
                  hb_init_params_fname: str,
                  nhb_init_params_fname: str,
-                 hb_productions_path: nd.PathLike,
-                 hb_attractions_path: nd.PathLike,
-                 nhb_productions_path: nd.PathLike,
-                 nhb_attractions_path: nd.PathLike,
+                 hb_productions: nd.DVector,
+                 hb_attractions: nd.DVector,
+                 nhb_productions: nd.DVector,
+                 nhb_attractions: nd.DVector,
                  intrazonal_cost_infill: float = 0.5,
                  pa_val_col: Optional[str] = 'val',
                  convergence_target: Optional[float] = 0.95,
@@ -460,17 +485,13 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
         self.target_tld_name = target_tld_name
         self.cost_function = cost_function
         self.running_mode = running_mode
+        self.hb_running_segmentation = hb_running_segmentation
+        self.nhb_running_segmentation = nhb_running_segmentation
         self.zoning_system = zoning_system
         self.hb_cost_type = hb_cost_type
         self.nhb_cost_type = nhb_cost_type
         self.hb_init_params_fname = hb_init_params_fname
         self.nhb_init_params_fname = nhb_init_params_fname
-
-        # Trip End Paths
-        self.hb_productions_path = hb_productions_path
-        self.hb_attractions_path = hb_attractions_path
-        self.nhb_productions_path = nhb_productions_path
-        self.nhb_attractions_path = nhb_attractions_path
 
         self.intrazonal_cost_infill = intrazonal_cost_infill
         self.pa_val_col = pa_val_col
@@ -480,19 +501,52 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
         self.furness_tol = furness_tol
         self.kwargs = kwargs
 
+        # Validate and assign trip ends
+        te_names = ['hb_production', 'hb_attraction', 'nhb_production', 'nhb_attraction']
+        te_vals = [hb_productions, hb_attractions, nhb_productions, nhb_attractions]
+        segs = [hb_running_segmentation] * 2 + [nhb_running_segmentation] * 2
+        for name, trip_end, running_seg in zip(te_names, te_vals, segs):
+            if trip_end.zoning_system != self.zoning_system:
+                raise ValueError(
+                    "The given '%s' trip ends were not in the correct zoning "
+                    "system, they need to be in the same zoning system "
+                    "that the gravity model is running at.\n"
+                    "Gravity zoning: %s\n"
+                    "%s zoning: %s\n"
+                    % (name, self.zoning_system, name, trip_end.zoning_system)
+                )
+
+            if trip_end.segmentation != running_seg:
+                raise ValueError(
+                    "The given '%s' trip ends were not in the correct "
+                    "segmentation, they need to be in the same segmentation "
+                    "that the gravity model is running at.\n"
+                    "Gravity segmentation: %s\n"
+                    "%s segmentation: %s\n"
+                    % (name, running_seg, name, trip_end.segmentation)
+                )
+
+        # Must all be fine if we're here. Assign.
+        self.hb_productions = hb_productions
+        self.hb_attractions = hb_attractions
+        self.nhb_productions = nhb_productions
+        self.nhb_attractions = nhb_attractions
+
     def build_arguments(self, trip_origin: str) -> Dict[str, nd.PathLike]:
         # Init
         trip_origin = trip_origin.lower()
 
         # Set trip origin specific stuff
         if trip_origin == 'hb':
-            productions_path = self.hb_productions_path
-            attractions_path = self.hb_attractions_path
+            productions = self.hb_productions
+            attractions = self.hb_attractions
+            running_segmentation = self.hb_running_segmentation
             cost_type = self.hb_cost_type
             init_params_fname = self.hb_init_params_fname
         elif trip_origin == 'nhb':
-            productions_path = self.nhb_productions_path
-            attractions_path = self.nhb_attractions_path
+            productions = self.nhb_productions
+            attractions = self.nhb_attractions
+            running_segmentation = self.nhb_running_segmentation
             cost_type = self.nhb_cost_type
             init_params_fname = self.nhb_init_params_fname
         else:
@@ -500,21 +554,6 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
                 "Received an unexpected value for trip origin. Expected one of "
                 "'hb' or 'nhb'. Got %s"
                 % trip_origin
-            )
-
-        # Make sure the productions and attractions exist
-        if not os.path.isfile(productions_path):
-            raise nd.NormitsDemandError(
-                "Cannot find any internal productions at '%s'.\n"
-                "Has the External Model been run?"
-                % productions_path
-            )
-
-        if not os.path.isfile(attractions_path):
-            raise nd.NormitsDemandError(
-                "Cannot find any internal productions at '%s'.\n"
-                "Has the External Model been run?"
-                % attractions_path
             )
 
         # Build TLD directory paths
@@ -559,8 +598,9 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
         # Return the built arguments
         final_kwargs = self.kwargs.copy()
         final_kwargs.update({
-            'productions': file_ops.read_df(productions_path),
-            'attractions': file_ops.read_df(attractions_path),
+            'productions': productions.to_df(),
+            'attractions': attractions.to_df(),
+            'running_segmentation': running_segmentation,
             'init_params': init_params,
             'target_tld_dir': target_tld_dir,
             'cost_dir': cost_dir,
@@ -819,13 +859,15 @@ class TMSArgumentBuilder:
     def __init__(self,
                  import_home: nd.PathLike,
                  running_mode: nd.core.enumerations.Mode,
+                 hb_running_segmentation: nd.core.segments.SegmentationLevel,
+                 nhb_running_segmentation: nd.core.segments.SegmentationLevel,
                  zoning_system: nd.core.zoning.ZoningSystem,
                  hb_cost_type: str,
                  nhb_cost_type: str,
-                 hb_productions_path: nd.PathLike,
-                 hb_attractions_path: nd.PathLike,
-                 nhb_productions_path: nd.PathLike,
-                 nhb_attractions_path: nd.PathLike,
+                 hb_productions: nd.DVector,
+                 hb_attractions: nd.DVector,
+                 nhb_productions: nd.DVector,
+                 nhb_attractions: nd.DVector,
                  intrazonal_cost_infill: float = 0.5,
                  run_external_model: bool = True,
 
@@ -841,10 +883,10 @@ class TMSArgumentBuilder:
         # TODO(BT): Validate segments and zones are the correct types
 
         # Trip End Paths
-        self._hb_productions_path = hb_productions_path
-        self._hb_attractions_path = hb_attractions_path
-        self._nhb_productions_path = nhb_productions_path
-        self._nhb_attractions_path = nhb_attractions_path
+        self._hb_productions = hb_productions
+        self._hb_attractions = hb_attractions
+        self._nhb_productions = nhb_productions
+        self._nhb_attractions = nhb_attractions
 
         # Other attributes
         external_kwargs = dict() if external_kwargs is None else external_kwargs
@@ -856,6 +898,8 @@ class TMSArgumentBuilder:
         self._common_kwargs = {
             'import_home': import_home,
             'running_mode': running_mode,
+            'hb_running_segmentation': hb_running_segmentation,
+            'nhb_running_segmentation': nhb_running_segmentation,
             'zoning_system': zoning_system,
             'hb_cost_type': hb_cost_type,
             'nhb_cost_type': nhb_cost_type,
@@ -886,20 +930,20 @@ class TMSArgumentBuilder:
         self._em_arg_builder = ExternalModelArgumentBuilder(
             **self._common_kwargs,
             **self._external_kwargs,
-            hb_productions_path=self._hb_productions_path,
-            hb_attractions_path=self._hb_attractions_path,
-            nhb_productions_path=self._nhb_productions_path,
-            nhb_attractions_path=self._nhb_attractions_path,
+            hb_productions=self._hb_productions,
+            hb_attractions=self._hb_attractions,
+            nhb_productions=self._nhb_productions,
+            nhb_attractions=self._nhb_attractions,
         )
 
         em_paths = tms_exports.external_model.export_paths
         self._gm_arg_builder = GravityModelArgumentBuilder(
             **self._common_kwargs,
             **self._gravity_kwargs,
-            hb_productions_path=em_paths.hb_internal_productions,
-            hb_attractions_path=em_paths.hb_internal_attractions,
-            nhb_productions_path=em_paths.nhb_internal_productions,
-            nhb_attractions_path=em_paths.nhb_internal_attractions,
+            hb_productions=em_paths.hb_internal_productions,
+            hb_attractions=em_paths.hb_internal_attractions,
+            nhb_productions=em_paths.nhb_internal_productions,
+            nhb_attractions=em_paths.nhb_internal_attractions,
         )
 
     def _build_gravity_model_only_run(self):
@@ -909,108 +953,14 @@ class TMSArgumentBuilder:
         self._gm_arg_builder = GravityModelArgumentBuilder(
             **self._common_kwargs,
             **self._gravity_kwargs,
-            hb_productions_path=self._hb_productions_path,
-            hb_attractions_path=self._hb_attractions_path,
-            nhb_productions_path=self._nhb_productions_path,
-            nhb_attractions_path=self._nhb_attractions_path,
+            hb_productions=self._hb_productions,
+            hb_attractions=self._hb_attractions,
+            nhb_productions=self._nhb_productions,
+            nhb_attractions=self._nhb_attractions,
         )
 
 
 # ## FUNCTIONS ## #
-def import_pa(production_import_path,
-              attraction_import_path,
-              model_zone,
-              trip_origin,
-              ):
-    """
-    This function imports productions and attractions from given paths.
-
-    Parameters
-    ----------
-    production_import_path:
-        Path to import productions from.
-
-    attraction_import_path:
-        Path to import attractions from.
-
-    model_zone:
-        Type of model zoning system. norms or noham
-
-    trip_origin:
-        Trip origin
-
-    Returns
-    ----------
-    [0] productions:
-        Mainland GB productions.
-
-    [1] attractions:
-        Mainland GB attractions.
-    """
-    # Determine the required segmentation
-    if trip_origin == 'hb':
-        reduce_seg = None
-        subset_seg = nd.get_segmentation_level('notem_hb_output_wday')
-        if model_zone == 'noham':
-            agg_seg = nd.get_segmentation_level('hb_p_m')
-        elif model_zone == 'norms':
-            agg_seg = nd.get_segmentation_level('hb_p_m_ca')
-        else:
-            raise ValueError("Invalid model name")
-    elif trip_origin == 'nhb':
-        reduce_seg = nd.get_segmentation_level('notem_nhb_output_reduced')
-        subset_seg = nd.get_segmentation_level('notem_nhb_output_reduced_wday')
-        if model_zone == 'noham':
-            agg_seg = nd.get_segmentation_level('nhb_p_m_tp_wday')
-        elif model_zone == 'norms':
-            agg_seg = nd.get_segmentation_level('nhb_p_m_ca_tp_wday')
-        else:
-            raise ValueError("Invalid model name")
-    else:
-        raise ValueError("Invalid trip origin")
-
-    # Get the zoning system we're using
-    model_zoning = nd.get_zoning_system(model_zone)
-
-    # Reading pickled Dvector
-    prod_dvec = nd.read_pickle(production_import_path)
-
-    # Reduce nhb 11 into 12 if needed
-    if reduce_seg is not None:
-        prod_dvec = prod_dvec.reduce(out_segmentation=reduce_seg)
-
-    # Convert from ave_week to ave_day
-    prod_dvec = prod_dvec.subset(out_segmentation=subset_seg)
-    prod_dvec = prod_dvec.convert_time_format('avg_week')
-
-    # Convert zoning and segmentation to desired
-    prod_dvec = prod_dvec.aggregate(out_segmentation=agg_seg)
-    prod_dvec = prod_dvec.translate_zoning(model_zoning, "population")
-
-    # Weekly trips to weekday trips conversion
-    prod_df = prod_dvec.to_df()
-
-    # Reading pickled Dvector
-    attr_dvec = nd.read_pickle(attraction_import_path)
-
-    # Reduce nhb 11 into 12 if needed
-    if reduce_seg is not None:
-        attr_dvec = attr_dvec.reduce(out_segmentation=reduce_seg)
-
-    # Convert from ave_week to ave_day
-    attr_dvec = attr_dvec.subset(out_segmentation=subset_seg)
-    attr_dvec = attr_dvec.convert_time_format('avg_week')
-
-    # Convert zoning and segmentation to desired
-    attr_dvec = attr_dvec.aggregate(out_segmentation=agg_seg)
-    attr_dvec = attr_dvec.translate_zoning(model_zoning, "employment")
-
-    # Weekly trips to weekday trips conversion
-    attr_df = attr_dvec.to_df()
-
-    return prod_df, attr_df
-
-
 def read_cjtw(file_path: nd.PathLike,
               zoning_name: str,
               subset=None,

@@ -224,21 +224,13 @@ class TravelMarketSynthesiser(TMSExportPaths):
         args = self.external_model_arg_builder.build_hb_arguments()
 
         self._logger.info("Executing a home-based run of external model")
-        external_model.run(
-            trip_origin='hb',
-            running_segmentation=self.hb_running_segmentation,
-            **args,
-        )
+        external_model.run(trip_origin='hb', **args)
 
         self._logger.info("Building non-home-based arguments for external model")
         args = self.external_model_arg_builder.build_nhb_arguments()
 
         self._logger.info("Executing a non-home-based run of external model")
-        external_model.run(
-            trip_origin='nhb',
-            running_segmentation=self.nhb_running_segmentation,
-            **args,
-        )
+        external_model.run(trip_origin='nhb', **args)
 
         self._logger.info("External Model Done!")
 
@@ -255,21 +247,13 @@ class TravelMarketSynthesiser(TMSExportPaths):
         args = self.gravity_model_arg_builder.build_hb_arguments()
 
         self._logger.info("Executing a home-based run of gravity model")
-        gravity_model.run(
-            trip_origin='hb',
-            running_segmentation=self.hb_running_segmentation,
-            **args,
-        )
+        gravity_model.run(trip_origin='hb', **args)
 
         self._logger.info("Building non-home-based arguments for gravity model")
         args = self.gravity_model_arg_builder.build_nhb_arguments()
 
         self._logger.info("Executing a non-home-based run of gravity model")
-        gravity_model.run(
-            trip_origin='nhb',
-            running_segmentation=self.nhb_running_segmentation,
-            **args,
-        )
+        gravity_model.run(trip_origin='nhb', **args)
 
         self._logger.info("Gravity Model Done!")
 

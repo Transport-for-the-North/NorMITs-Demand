@@ -24,6 +24,13 @@ from normits_demand.pathing.errors import PathingError
 from normits_demand.core.enumerations import Mode
 from normits_demand.cost import BuiltInCostFunction
 
+# Core getters
+from normits_demand.core import get_zoning_system
+from normits_demand.core import get_segmentation_level
+
+# Core classes
+from normits_demand.core import DVector
+
 # ## EXPOSE CLASS LAYER ## #
 # EFS Class Layer
 from normits_demand.models.external_forecast_system import ExternalForecastSystem
@@ -35,14 +42,6 @@ from normits_demand.models.elasticity_model import ElasticityModel
 
 # NoTEM Class Layer
 from normits_demand.models.notem import NoTEM
-
-# Core getters
-from normits_demand.core import get_zoning_system
-from normits_demand.core import get_segmentation_level
-
-# Core classes
-from normits_demand.core import DVector
-
 
 # Useful utilities
 from normits_demand.utils import read_df

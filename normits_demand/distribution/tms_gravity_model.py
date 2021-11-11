@@ -280,6 +280,7 @@ class GravityModel(GravityModelExportPaths):
             trip_origin=trip_origin,
             file_desc="%s_cost" % self.zoning_system.name,
             segment_params=segment_params,
+            csv=True,
         )
         path = os.path.join(cost_dir, fname)
 
