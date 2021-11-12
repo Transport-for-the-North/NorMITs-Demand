@@ -11,7 +11,23 @@ def noham_car_package():
     # TODO: could these be linked to some constants?
     dctmode = {3: ['Car']}
     dctday = {1: ['Weekday']}
-    dctpurp = {1: ['Purpose-1'], 2: ['Purpose-2'], 3: ['Purpose-3'], 4: ['Purpose-4'], 5: ['Purpose-5'],
+    purp_hb = [1, 2, 3, 4, 5, 6, 7, 8]
+    purp_nhb = [12, 13, 14, 15, 16, 18]
+    keys = range((len(purp_hb) * 2) + len(purp_nhb))
+    dctpurp = {}
+    for i in keys:
+        if i < len(purp_hb):
+            # print([purp_hb[i]])
+            dctpurp[i] = ['hb', 'from'] + [purp_hb[i]]
+        elif len(purp_hb) <= i < (len(purp_hb) * 2):
+            # print([purp_hb[i-len(purp_hb)]])
+            dctpurp[i] = ['hb', 'to'] + [purp_hb[i - len(purp_hb)]]
+        elif i >= (len(purp_hb) * 2):
+            # print([purp_nhb[i-(len(purp_hb)*2)]])
+            dctpurp[i] = ['nhb', ''] + [purp_nhb[i - (len(purp_hb) * 2)]]
+        else:
+            print('Value outside expected range')
+    dctpurp_ssd = {1: ['Purpose-1'], 2: ['Purpose-2'], 3: ['Purpose-3'], 4: ['Purpose-4'], 5: ['Purpose-5'],
                6: ['Purpose-6'], 7: ['Purpose-7'], 8: ['Purpose-8']}
     dcttp = {1: ['AM'], 2: ['IP'], 3: ['PM'], 4: ['OP']}
     dctnoham = {}
@@ -27,15 +43,30 @@ def noham_car_package():
                 for tp in dcttp:
                     print('+++ {} - {} - {} - {} +++'.
                           format(dctmode[md][0], dctday[wd][0], dctpurp[pp][0], dcttp[tp][0]))
-                    noham_car = np.genfromtxt(
-                        r'I:\NorMITs Demand\noham\EFS\iter3i\NTEM\Matrices\OD Matrices\hb_od_from_yr2018_p'
-                        + str(pp) + '_m' + str(md) + '_tp' + str(tp) + '.csv',
+                    if dctpurp[pp][0] == 'hb':
+                        path = ('I:/NorMITs Demand/noham/EFS/iter3i/NTEM/Matrices/OD Matrices/'
+                                + str(dctpurp[pp][0]) + '_od_'
+                                + str(dctpurp[pp][1]) + '_yr2018_p'
+                                + str(dctpurp[pp][2]) + '_m'
+                                + str(md) + '_tp'
+                                + str(tp) + '.csv')
+                    elif dctpurp[pp][0] == 'nhb':
+                        path = ('I:/NorMITs Demand/noham/EFS/iter3i/NTEM/Matrices/OD Matrices/'
+                                + str(dctpurp[pp][0]) + '_od_'
+                                + str(dctpurp[pp][1]) + 'yr2018_p'
+                                + str(dctpurp[pp][2]) + '_m'
+                                + str(md) + '_tp'
+                                + str(tp) + '.csv')
+                    else:
+                        print('Value outside expected range')
+                    print(path)
+                    noham_car = np.genfromtxt(path,
                         delimiter=',',
                         skip_header=1,
                         usecols=unq_zones)
                     dctnoham[md][wd][pp][tp] = noham_car
 
-    with open(r'Y:\Mobile Data\Processing\dctNoHAM_hbfrom.pkl', 'wb') as log:
+    with open(r'Y:\Mobile Data\Processing\dctNoHAM.pkl', 'wb') as log:
         pk.dump(dctnoham, log, pk.HIGHEST_PROTOCOL)
     print("matrices packaged")
 
@@ -108,6 +139,69 @@ def noham_nhb_car_package():
     with open(r'Y:\Mobile Data\Processing\dctNoHAM_nhb.pkl', 'wb') as log:
         pk.dump(dctnoham, log, pk.HIGHEST_PROTOCOL)
     print("matrices packaged")
+
+
+def noham_car_merge():
+    dctmode = {3: ['Car']}
+    dctday = {1: ['Weekday']}
+    purp_hb = [1, 2, 3, 4, 5, 6, 7, 8]
+    purp_nhb = [12, 13, 14, 15, 16, 18]
+    keys = range((len(purp_hb) * 2) + len(purp_nhb))
+    dctpurp = {}
+    for i in keys:
+        if i < len(purp_hb):
+            # print([purp_hb[i]])
+            dctpurp[i] = ['hb', 'from'] + [purp_hb[i]]
+        elif len(purp_hb) <= i < (len(purp_hb) * 2):
+            # print([purp_hb[i-len(purp_hb)]])
+            dctpurp[i] = ['hb', 'to'] + [purp_hb[i - len(purp_hb)]]
+        elif i >= (len(purp_hb) * 2):
+            # print([purp_nhb[i-(len(purp_hb)*2)]])
+            dctpurp[i] = ['nhb', ''] + [purp_nhb[i - (len(purp_hb) * 2)]]
+        else:
+            print('Value outside expected range')
+    dctpurp_ssd = {1: ['Purpose-1'], 2: ['Purpose-2'], 3: ['Purpose-3'], 4: ['Purpose-4'], 5: ['Purpose-5'],
+               6: ['Purpose-6'], 7: ['Purpose-7'], 8: ['Purpose-8']}
+    dcttp = {1: ['AM'], 2: ['IP'], 3: ['PM'], 4: ['OP']}
+    dctmndPurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'], 3: ['HBO', 'HBO_fr'], 4: ['HBO', 'HBO_to'],
+                  5: ['NHB', 'NHB']}
+    dctuserclass = {1: ['Commute'], 2: ['Business'], 3: ['Other']}
+    temp_array = np.zeros((2770, 2770))
+
+    dctnohamuc = {}
+    for md in dctmode:
+        dctnohamuc[md] = {}
+        for wd in dctday:
+            dctnohamuc[md][wd] = {}
+            for uc in dctmndPurp:
+                dctnohamuc[md][wd][uc] = {}
+                for tp in dcttp:
+                    dctnohamuc[md][wd][uc][tp] = temp_array
+
+    with open(r'Y:\Mobile Data\Processing\dctNoHAM.pkl', 'rb') as log:
+        dctnohampp = pk.load(log)  # [md][wd][pp][hr]
+
+    for md in dctmode:
+        for wd in dctday:
+            for pp in dctpurp:
+                uc = (1 if dctpurp[pp][2] in [1] and dctpurp[pp][1] in ['from'] else
+                      2 if dctpurp[pp][2] in [1] and dctpurp[pp][1] in ['to'] else
+                      3 if dctpurp[pp][2] in [2, 3, 4, 5, 6, 7, 8] and dctpurp[pp][1] in ['from'] else
+                      4 if dctpurp[pp][2] in [2, 3, 4, 5, 6, 7, 8] and dctpurp[pp][1] in ['to'] else
+                      5 if dctpurp[pp][2] in [12, 13, 14, 15, 16, 18] else
+                      6)
+                print(uc)
+                for tp in dcttp:
+                    print('+++ {} - {} - {} - {} +++'.
+                          format(dctmode[md][0], dctday[wd][0], dctpurp[pp][0], dcttp[tp][0]))
+                    print('+++ {} - {} - {} - {} +++'.
+                          format(dctmode[md][0], dctday[wd][0], dctmndPurp[uc][0], dcttp[tp][0]))
+                    print(str(md) + '-' + str(wd) + '-' + str(pp) + '-' + str(tp))
+                    print(str(md) + '-' + str(wd) + '-' + str(uc) + '-' + str(tp))
+                    dctnohamuc[md][wd][uc][tp] += dctnohampp[md][wd][pp][tp][:2770, :2770]
+
+    with open(r'Y:\Mobile Data\Processing\dctNoHAM_uc.pkl', 'wb') as log:
+        pk.dump(dctnohamuc, log, pk.HIGHEST_PROTOCOL)
 
 
 def noham_car_hb_from_merge():
@@ -238,9 +332,10 @@ def main():
     run_noham_car_package = False
     run_noham_hb_to_car_package = False
     run_noham_nhb_car_package = False
+    run_noham_car_merge = True
     run_noham_car_hb_from_merge = False
     run_noham_car_hb_to_merge = False
-    run_noham_car_nhb_merge = True
+    run_noham_car_nhb_merge = False
 
     if run_noham_car_package:
         noham_car_package()
@@ -250,6 +345,9 @@ def main():
 
     if run_noham_nhb_car_package:
         noham_nhb_car_package()
+
+    if run_noham_car_merge:
+        noham_car_merge()
 
     if run_noham_car_hb_from_merge:
         noham_car_hb_to_merge()
