@@ -78,7 +78,7 @@ def reindex_cols(df: pd.DataFrame,
                 raise ValueError(
                     "No columns named '%s' in %s.\n"
                     "Only found the following columns: %s"
-                    % (dataframe_name, col, list(df))
+                    % (col, dataframe_name, list(df))
                 )
 
     return df.reindex(columns=columns, **kwargs)

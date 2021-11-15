@@ -18,14 +18,12 @@ import os
 import warnings
 
 from typing import Dict
-from typing import List
 
 # Third party imports
 import pandas as pd
 
 # local imports
 import normits_demand as nd
-
 from normits_demand import constants as consts
 
 from normits_demand.utils import timing
@@ -38,6 +36,7 @@ from normits_demand.pathing import NHBProductionModelPaths
 
 
 class HBProductionModel(HBProductionModelPaths):
+    _log_fname = "HBProductionModel_log.log"
     """The Home-Based Production Model of NoTEM
 
     The production model can be ran by calling the class run() method.
@@ -181,6 +180,14 @@ class HBProductionModel(HBProductionModelPaths):
             export_home=export_home,
             report_home=report_home,
         )
+        # Create a logger
+        logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
+        log_file_path = os.path.join(self.export_home, self._log_fname)
+        self._logger = nd.get_logger(
+            logger_name=logger_name,
+            log_file_path=log_file_path,
+            instantiate_msg="Initialised HB Production Model",
+        )
 
     def run(self,
             export_pure_demand: bool = True,
@@ -242,34 +249,26 @@ class HBProductionModel(HBProductionModelPaths):
         None
         """
         # Initialise timing
-        # TODO(BT): Properly integrate logging
+
         start_time = timing.current_milli_time()
-        du.print_w_toggle(
-            "Starting HB Production Model at: %s" % timing.get_datetime(),
-            verbose=verbose
-        )
+        self._logger.info("Starting HB Production Model")
 
         # Generate the productions for each year
         for year in self.years:
             year_start_time = timing.current_milli_time()
-
             # ## GENERATE PURE DEMAND ## #
-            du.print_w_toggle("Loading the population data...", verbose=verbose)
+            self._logger.info("Loading the population data")
             pop_dvec = self._read_land_use_data(year, verbose)
 
-            du.print_w_toggle("Applying trip rates...", verbose=verbose)
+            self._logger.info("Applying trip rates")
             pure_demand = self._generate_productions(pop_dvec, verbose)
 
             if export_pure_demand:
-                du.print_w_toggle("Exporting pure demand to disk...", verbose=verbose)
+                self._logger.info("Exporting pure demand to disk")
                 pure_demand.to_pickle(self.export_paths.pure_demand[year])
 
             if export_reports:
-                du.print_w_toggle(
-                    "Exporting pure demand reports to disk...",
-                    verbose=verbose
-                )
-
+                self._logger.info("Exporting pure demand reports to disk")
                 report_seg = nd.get_segmentation_level('notem_hb_productions_pure_report')
                 pure_demand_paths = self.report_paths.pure_demand
                 pure_demand.aggregate(report_seg).write_sector_reports(
@@ -279,24 +278,23 @@ class HBProductionModel(HBProductionModelPaths):
                 )
 
             # ## SPLIT PURE DEMAND BY MODE AND TIME ## #
-            du.print_w_toggle("Splitting by mode and time...", verbose=verbose)
+            self._logger.info("Splitting by mode and time")
             fully_segmented = self._split_by_tp_and_mode(pure_demand)
 
             # ## PRODUCTIONS TOTAL CHECK ## #
             if not pure_demand.sum_is_close(fully_segmented):
-                warnings.warn(
+                msg = (
                     "The production totals before and after mode time split are not same.\n"
                     "Expected %f\n"
                     "Got %f"
                     % (pure_demand.sum(), fully_segmented.sum())
                 )
+                self._logger.warning(msg)
+                warnings.warn(msg)
 
             # Output productions before any aggregation
             if export_fully_segmented:
-                du.print_w_toggle(
-                    "Exporting fully segmented productions to disk...",
-                    verbose=verbose,
-                )
+                self._logger.info("Exporting fully segmented productions to disk.")
                 fully_segmented.to_pickle(self.export_paths.fully_segmented[year])
 
             # ## AGGREGATE INTO RETURN SEGMENTATION ## #
@@ -305,20 +303,13 @@ class HBProductionModel(HBProductionModelPaths):
                 out_segmentation=return_seg,
                 split_tfntt_segmentation=True
             )
-            productions.ag
+
             if export_notem_segmentation:
-                du.print_w_toggle(
-                    "Exporting notem segmented demand to disk...",
-                    verbose=verbose
-                )
+                self._logger.info("Exporting notem segmented demand to disk")
                 productions.to_pickle(self.export_paths.notem_segmented[year])
 
             if export_reports:
-                du.print_w_toggle(
-                    "Exporting notem segmented reports to disk...",
-                    verbose=verbose
-                )
-
+                self._logger.info("Exporting notem segmented reports to disk")
                 notem_segmented_paths = self.report_paths.notem_segmented
                 productions.write_sector_reports(
                     segment_totals_path=notem_segmented_paths.segment_total[year],
@@ -330,26 +321,20 @@ class HBProductionModel(HBProductionModelPaths):
             #  Output some audits of what demand was before and after control
             #  By segment.
             if self.constraint_paths is not None:
-                raise NotImplemented(
-                    "No code implemented to constrain productions."
-                )
+                msg = "No code implemented to constrain productions"
+                self._logger.error(msg)
+                raise NotImplementedError(msg)
 
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
-            du.print_w_toggle(
-                "HB Productions in year %s took: %s\n" % (year, time_taken),
-                verbose=verbose
-            )
+            self._logger.info("HB Productions in year %s took: %s\n" % (year, time_taken))
 
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        du.print_w_toggle(
-            "HB Production Model took: %s\n"
-            "Finished at: %s" % (time_taken, timing.get_datetime()),
-            verbose=verbose
-        )
+        self._logger.info("HB Production Model took:%s" % time_taken)
+        self._logger.info("HB Production Model Finished")
 
     def _read_land_use_data(self,
                             year: int,
@@ -420,7 +405,6 @@ class HBProductionModel(HBProductionModelPaths):
         pure_hb_prod = nd.get_segmentation_level('notem_hb_productions_pure')
 
         # Reading trip rates
-        du.print_w_toggle("Reading in files...", verbose=verbose)
         trip_rates = du.safe_read_csv(
             self.trip_rates_path,
             usecols=self._target_col_dtypes['trip_rate'].keys(),
@@ -428,7 +412,6 @@ class HBProductionModel(HBProductionModelPaths):
         )
 
         # ## CREATE THE TRIP RATES DVEC ## #
-        du.print_w_toggle("Creating trip rates DVec...", verbose=verbose)
 
         # Instantiate
         trip_rates_dvec = nd.DVector(
@@ -459,8 +442,8 @@ class HBProductionModel(HBProductionModelPaths):
         """
         # Define the segmentation we want to use
         m_tp_splits_seg = nd.get_segmentation_level('notem_hb_productions_full_tfnat')
-        full_seg = nd.get_segmentation_level('notem_hb_productions_full')
 
+        full_seg = nd.get_segmentation_level('notem_hb_productions_full')
         # Create the mode-time splits DVector
         mode_time_splits = pd.read_csv(
             self.mode_time_splits_path,
@@ -483,6 +466,7 @@ class HBProductionModel(HBProductionModelPaths):
 
 
 class NHBProductionModel(NHBProductionModelPaths):
+    _log_fname = "NHBProductionModel_log.log"
     """The Non Home-Based Production Model of NoTEM
 
         The production model can be ran by calling the class run() method.
@@ -534,7 +518,6 @@ class NHBProductionModel(NHBProductionModelPaths):
             'nhb_m': int,
             'p': int,
             'm': int,
-            'tfn_at': int,
             'nhb_trip_rate': float
         },
         'tp': {
@@ -643,6 +626,14 @@ class NHBProductionModel(NHBProductionModelPaths):
             export_home=export_home,
             report_home=report_home,
         )
+        # Create a logger
+        logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
+        log_file_path = os.path.join(self.export_home, self._log_fname)
+        self._logger = nd.get_logger(
+            logger_name=logger_name,
+            log_file_path=log_file_path,
+            instantiate_msg="Initialised NHB Production Model",
+        )
 
     def run(self,
             export_nhb_pure_demand: bool = True,
@@ -707,34 +698,27 @@ class NHBProductionModel(NHBProductionModelPaths):
         None
         """
         # Initialise timing
-        # TODO(BT): Properly integrate logging
+
         start_time = timing.current_milli_time()
-        du.print_w_toggle(
-            "Starting NHB Production Model at: %s" % timing.get_datetime(),
-            verbose=verbose
-        )
+        self._logger.info("Starting NHB Production Model")
 
         # Generate the nhb productions for each year
         for year in self.years:
             year_start_time = timing.current_milli_time()
 
             # ## GENERATE PURE DEMAND ## #
-            du.print_w_toggle("Loading the HB attraction data...", verbose=verbose)
+            self._logger.info("Loading the HB attraction data")
             hb_attr_dvec = self._transform_attractions(year, verbose)
 
-            du.print_w_toggle("Applying trip rates...", verbose=verbose)
+            self._logger.info("Applying trip rates")
             pure_nhb_demand = self._generate_nhb_productions(hb_attr_dvec, verbose)
 
             if export_nhb_pure_demand:
-                du.print_w_toggle("Exporting NHB pure demand to disk...", verbose=verbose)
+                self._logger.info("Exporting NHB pure demand to disk")
                 pure_nhb_demand.to_pickle(self.export_paths.pure_demand[year])
 
             if export_reports:
-                du.print_w_toggle(
-                    "Exporting NHB pure demand reports to disk...",
-                    verbose=verbose
-                )
-
+                self._logger.info("Exporting NHB pure demand reports to disk")
                 report_seg = nd.get_segmentation_level('notem_nhb_productions_pure_report')
                 pure_demand_paths = self.report_paths.pure_demand
                 pure_nhb_demand.aggregate(report_seg).write_sector_reports(
@@ -744,41 +728,45 @@ class NHBProductionModel(NHBProductionModelPaths):
                 )
 
             # ## SPLIT NHB PURE DEMAND BY TIME ## #
-            du.print_w_toggle("Splitting by time...", verbose=verbose)
+            self._logger.info("Splitting by time")
             fully_segmented = self._split_by_tp(pure_nhb_demand)
 
             # ## PRODUCTIONS TOTAL CHECK ## #
             if not pure_nhb_demand.sum_is_close(fully_segmented):
-                warnings.warn(
+                msg = (
                     "The NHB production totals before and after time split are not same.\n"
                     "Expected %f\n"
                     "Got %f"
                     % (pure_nhb_demand.sum(), fully_segmented.sum())
                 )
+                self._logger.warning(msg)
+                warnings.warn(msg)
 
             if export_fully_segmented:
-                du.print_w_toggle(
-                    "Exporting fully segmented demand to disk...",
-                    verbose=verbose
-                )
+                self._logger.info("Exporting fully segmented demand to disk")
                 fully_segmented.to_pickle(self.export_paths.fully_segmented[year])
 
             # Renaming
             notem_segmented = self._rename(fully_segmented)
 
-            if export_notem_segmentation:
-                du.print_w_toggle(
-                    "Exporting notem segmented demand to disk...",
-                    verbose=verbose
+            # ## PRODUCTIONS TOTAL CHECK ## #
+            if not fully_segmented.sum_is_close(notem_segmented):
+                msg = (
+                    "The NHB production totals before and after rename to "
+                    "output segmentation are not same.\n"
+                    "Expected %f\n"
+                    "Got %f"
+                    % (pure_nhb_demand.sum(), fully_segmented.sum())
                 )
+                self._logger.warning(msg)
+                warnings.warn(msg)
+
+            if export_notem_segmentation:
+                self._logger.info("Exporting notem segmented demand to disk")
                 notem_segmented.to_pickle(self.export_paths.notem_segmented[year])
 
             if export_reports:
-                du.print_w_toggle(
-                    "Exporting notem segmented reports to disk...\n",
-                    verbose=verbose
-                )
-
+                self._logger.info("Exporting notem segmented reports to disk\n")
                 notem_segmented_paths = self.report_paths.notem_segmented
                 notem_segmented.write_sector_reports(
                     segment_totals_path=notem_segmented_paths.segment_total[year],
@@ -790,26 +778,20 @@ class NHBProductionModel(NHBProductionModelPaths):
             #  Output some audits of what demand was before and after control
             #  By segment.
             if self.constraint_paths is not None:
-                raise NotImplemented(
-                    "No code implemented to constrain productions."
-                )
+                msg = "No code implemented to constrain productions"
+                self._logger.error(msg)
+                raise NotImplementedError(msg)
 
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
-            du.print_w_toggle(
-                "HB Productions in year %s took: %s\n" % (year, time_taken),
-                verbose=verbose
-            )
+            self._logger.info("NHB Productions in year %s took: %s\n" % (year, time_taken))
 
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        du.print_w_toggle(
-            "NHB Production Model took: %s\n"
-            "Finished at: %s" % (time_taken, timing.get_datetime()),
-            verbose=verbose
-        )
+        self._logger.info("NHB Production Model took:%s" % time_taken)
+        self._logger.info("NHB Production Model Finished")
 
     def _transform_attractions(self,
                                year: int,
@@ -891,7 +873,7 @@ class NHBProductionModel(NHBProductionModelPaths):
 
         # ## CONVERT THE ATTRACTIONS INTO DESIRED FORMAT ## #
         # Read the notem segmented compressed pickle
-        hb_attr_notem = nd.from_pickle(self.hb_attraction_paths[year])
+        hb_attr_notem = nd.read_pickle(self.hb_attraction_paths[year])
 
         # Remove time period and add in tfn_at
         hb_attr = hb_attr_notem.aggregate(notem_no_tp_seg)
@@ -924,7 +906,6 @@ class NHBProductionModel(NHBProductionModelPaths):
         pure_seg = nd.get_segmentation_level('notem_nhb_productions_pure')
 
         # Reading NHB trip rates
-        du.print_w_toggle("Reading in files...", verbose=verbose)
         trip_rates = du.safe_read_csv(
             file_path=self.trip_rates_path,
             usecols=self._target_col_dtypes['nhb_trip_rate'].keys(),

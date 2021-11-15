@@ -22,17 +22,17 @@ years = [2018]
 scenario = "NTEM"
 notem_iter = '4'
 lu_drive = "I:/"
-by_iteration = "iter3d"
-fy_iteration = "iter3d"
+by_iteration = "iter3e"
+fy_iteration = "iter3e"
 notem_import_home = r"I:\NorMITs Demand\import\NoTEM"
-notem_export_home = r"C:\Data\Nirmal_Atkins"
-#notem_export_home = r"E:\NoTEM"
+notem_export_home = r"E:\NorMITs Demand\NoTEM"
+# notem_export_home = r"C:\Data_test\
 
 
 def main():
-    hb_production_import_version = '2.0'
-    hb_attraction_import_version = '1.5'
-    nhb_production_import_version = '1.5'
+    hb_production_import_version = '2.1'
+    hb_attraction_import_version = '1.6'
+    nhb_production_import_version = '2.0'
 
     import_builder = NoTEMImportPaths(
         import_home=notem_import_home,

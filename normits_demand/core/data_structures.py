@@ -29,6 +29,7 @@ from typing import Dict
 from typing import List
 from typing import Union
 from typing import Callable
+from typing import Optional
 
 # Third Party
 import numpy as np
@@ -227,17 +228,17 @@ class DVector:
     _debugging_mp_code = False
 
     def __init__(self,
-                 zoning_system: core.ZoningSystem,
                  segmentation: core.SegmentationLevel,
                  import_data: Union[pd.DataFrame, nd.DVectorData],
-                 time_format: Union[str, TimeFormat] = None,
-                 zone_col: str = None,
-                 val_col: str = None,
-                 df_naming_conversion: str = None,
-                 df_chunk_size: int = None,
-                 infill: Any = 0,
-                 process_count: int = consts.PROCESS_COUNT,
-                 verbose: bool = False,
+                 zoning_system: Optional[core.ZoningSystem] = None,
+                 time_format: Optional[Union[str, TimeFormat]] = None,
+                 zone_col: Optional[str] = None,
+                 val_col: Optional[str] = None,
+                 df_naming_conversion: Optional[str] = None,
+                 df_chunk_size: Optional[int] = None,
+                 infill: Optional[Any] = 0,
+                 process_count: Optional[int] = consts.PROCESS_COUNT,
+                 verbose: Optional[bool] = False,
                  ) -> None:
         """
         Validates the input arguments and creates a DVector
@@ -671,7 +672,6 @@ class DVector:
                         % (segment, self.segmentation.name, seg_data)
                     )
 
-
                 # TODO(BT): There's a VERY slight chance that duplicate zones
                 #  could be split across processes. Need to add a check for
                 #  this on the calling function.
@@ -871,7 +871,7 @@ class DVector:
         Internal function of self.to_df(). For multiprocessing
         """
         # Init
-        index_cols = du.list_safe_remove(col_names, [val_col])
+        # index_cols = du.list_safe_remove(col_names, [val_col])
         concat_ph = list()
 
         # Convert all given data into dataframes
@@ -887,7 +887,12 @@ class DVector:
             # Add all segments into the df
             seg_dict = self_segmentation.get_seg_dict(segment_name)
             for col_name, col_val in seg_dict.items():
+                # Set column values
                 df[col_name] = col_val
+
+                # Set column type
+                col_type = self_segmentation.segment_types[col_name]
+                df[col_name] = df[col_name].astype(col_type)
 
             # Make sure all dfs are in the same format
             df = df.reindex(columns=col_names)
@@ -1030,6 +1035,7 @@ class DVector:
     def aggregate(self,
                   out_segmentation: core.SegmentationLevel,
                   split_tfntt_segmentation: bool = False,
+                  check_same: bool = True,
                   ) -> DVector:
         """
         Aggregates (by summing) this Dvector into out_segmentation.
@@ -1047,6 +1053,11 @@ class DVector:
             If converting from the current segmentation to out_segmentation
             requires the splitting of the tfn_tt segmentation, mark this as
             True - a special type of aggregation is needed underneath.
+
+        check_same:
+            Whether to check if the DVector totals before and after
+            aggregation are the same or not. If they are not the same (or
+            very similar) a warning will be given.
 
         Returns
         -------
@@ -1075,7 +1086,7 @@ class DVector:
             in_lst = [self._data[x].flatten() for x in in_seg_names]
             dvec_data[out_seg_name] = np.sum(in_lst, axis=0)
 
-        return DVector(
+        aggregated_dvec = DVector(
             zoning_system=self.zoning_system,
             segmentation=out_segmentation,
             time_format=self.time_format,
@@ -1083,6 +1094,22 @@ class DVector:
             process_count=self.process_count,
             verbose=self.verbose,
         )
+
+        if not check_same:
+            return aggregated_dvec
+
+        # Check that we haven't dropped any values during aggregation
+        if not self.sum_is_close(aggregated_dvec):
+            warnings.warn(
+                "Total value of DVector is different before and after "
+                "aggregation. Have the aggregation segmentations and methods "
+                "been defined correctly?\n"
+                "Expected %f\n"
+                "Got %f"
+                % (self.sum(), aggregated_dvec.sum())
+            )
+
+        return aggregated_dvec
 
     def multiply_and_aggregate(self: DVector,
                                other: DVector,

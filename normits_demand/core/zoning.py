@@ -16,6 +16,7 @@ from __future__ import annotations
 
 # Builtins
 import os
+import warnings
 
 from typing import Tuple
 from typing import Optional
@@ -386,18 +387,32 @@ def _get_zones(name: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     external_zones = None
 
     # Read in the internal zones
-    file_path = os.path.join(import_home, ZoningSystem._internal_zones_fname)
-    file_path = file_ops.find_filename(file_path, alt_types=ZoningSystem._valid_ftypes)
-    if os.path.isfile(file_path):
-        df = file_ops.read_df(file_path)
-        internal_zones = np.sort(df['zone_name'].values)
+    try:
+        file_path = os.path.join(import_home, ZoningSystem._internal_zones_fname)
+        file_path = file_ops.find_filename(file_path, alt_types=ZoningSystem._valid_ftypes)
+        if os.path.isfile(file_path):
+            df = file_ops.read_df(file_path)
+            internal_zones = np.sort(df['zone_name'].values)
+    except FileNotFoundError:
+        warn_msg = (
+            "No internal zones definition found for zoning system '%s'"
+            % name
+        )
+        warnings.warn(warn_msg, UserWarning, stacklevel=3)
 
     # Read in the external zones
-    file_path = os.path.join(import_home, ZoningSystem._external_zones_fname)
-    file_path = file_ops.find_filename(file_path, alt_types=ZoningSystem._valid_ftypes)
-    if os.path.isfile(file_path):
-        df = file_ops.read_df(file_path)
-        external_zones = np.sort(df['zone_name'].values)
+    try:
+        file_path = os.path.join(import_home, ZoningSystem._external_zones_fname)
+        file_path = file_ops.find_filename(file_path, alt_types=ZoningSystem._valid_ftypes)
+        if os.path.isfile(file_path):
+            df = file_ops.read_df(file_path)
+            external_zones = np.sort(df['zone_name'].values)
+    except FileNotFoundError:
+        warn_msg = (
+            "No external zones definition found for zoning system '%s'"
+            % name
+        )
+        warnings.warn(warn_msg, UserWarning, stacklevel=3)
 
     return unique_zones, internal_zones, external_zones
 

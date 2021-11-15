@@ -19,10 +19,15 @@ import logging
 import normits_demand as nd
 
 
-def initialise_parent_logger():
+def get_package_logger_name():
+    """Returns the name of the parent logger for this package"""
+    return nd.PACKAGE_NAME
+
+
+def initialise_package_logger():
 
     # Initiate logger
-    logger = logging.getLogger(nd.PACKAGE_NAME)
+    logger = logging.getLogger(get_package_logger_name())
     logger.setLevel(logging.DEBUG)
 
     # Add a default console handler

@@ -7,6 +7,7 @@ from normits_demand.types import *
 # Logging
 from normits_demand.logging import get_logger
 from normits_demand.logging import get_custom_logger
+from normits_demand.logging import get_package_logger_name
 
 # NorMITs Demand Errors
 from normits_demand.utils.general import NormitsDemandError
@@ -45,8 +46,8 @@ from normits_demand.core import DVector
 # Useful utilities
 from normits_demand.utils import read_df
 from normits_demand.utils import write_df
-from normits_demand.utils import to_pickle
-from normits_demand.utils import from_pickle
+from normits_demand.utils import read_pickle
+from normits_demand.utils import write_pickle
 
 # Audit classes
 from normits_demand.reports.efs_reporting import EfsReporter
