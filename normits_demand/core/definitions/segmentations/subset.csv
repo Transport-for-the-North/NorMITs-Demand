@@ -1,4 +1,5 @@
 in,out,drop
 notem_hb_output,notem_hb_output_wday,tp:5;tp:6
 notem_nhb_output,notem_nhb_output_wday,tp:5;tp:6
+hb_p_tp_week,hb_p_tp_wday,tp:5;tp:6
 notem_nhb_output_reduced,notem_nhb_output_reduced_wday,tp:5;tp:6
