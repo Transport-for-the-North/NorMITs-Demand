@@ -24,9 +24,7 @@ from tqdm import tqdm
 # Local Imports
 sys.path.append("..")
 import normits_demand as nd
-from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.utils import general as du
-from normits_demand.core.data_structures import DVector
 
 # ## GLOBALS ## #
 MODES = [3]
@@ -95,6 +93,9 @@ def tms_tour_prop():
             # Adjust factors back to 1
             notem_df['sum'] = notem_df.groupby([zoning.col_name, 'p'])['val'].transform('sum')
             notem_df['val'] /= notem_df['sum']
+
+            # If val is NaN, assume even split
+            notem_df['val'] = notem_df['val'].fillna(0.25)
             notem_df = notem_df.drop(columns='sum')
 
             # ## CALCULATE TOUR PROPS PER ZONE ## #
@@ -199,7 +200,7 @@ def tms_tour_prop():
                 out_file = TFN_FNAME % (year, purpose, mode)
                 out_path = os.path.join(out_folder, out_file)
                 nd.write_pickle(tfn_tour_props, out_path)
-                
+
 
 if __name__ == '__main__':
     tms_tour_prop()
