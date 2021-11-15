@@ -13,9 +13,13 @@ TMS tour proportions Generation
 # Built-Ins
 import os
 import sys
+import collections
 
 # Third party imports
+import numpy as np
 import pandas as pd
+
+from tqdm import tqdm
 
 # Local Imports
 sys.path.append("..")
@@ -25,9 +29,10 @@ from normits_demand.utils import general as du
 from normits_demand.core.data_structures import DVector
 
 # ## GLOBALS ## #
-modes = [3]
-years = [2018]
-zoning_system = "noham"
+MODES = [3]
+YEARS = [2018]
+TPS = [1, 2, 3, 4]
+ZONING_SYSTEM = "noham"
 
 phi_import_folder = r"I:\NorMITs Demand\import\phi_factors"
 notem_import_folder = r"I:\NorMITs Demand\NoTEM\iter4.2\SC01_JAM\hb_productions"
@@ -35,15 +40,17 @@ phi_fname = "mode_%d_fhp_tp_pa_to_od.csv"
 prod_vec_fname = "hb_msoa_notem_segmented_%d_dvec.pkl"
 zone_translate_dir = r"I:\NorMITs Demand\import\zone_translation\one_to_one"
 
-out_fname = "hb_tour_proportions_yr%d_p%d_m%d.pkl"
+MODEL_FNAME = "hb_tour_proportions_yr%d_p%d_m%d.pkl"
+LAD_FNAME = "hb_lad_tour_proportions_yr%d_p%d_m%d.pkl"
+TFN_FNAME = "hb_tfn_tour_proportions_yr%d_p%d_m%d.pkl"
 # out_folder = r"I:\NorMITs Demand\import\noham\pre_me_tour_proportions\example_new"
 out_folder = r'E:\test'
 
 
 def tms_tour_prop():
 
-    for year in years:
-        for mode in modes:
+    for year in YEARS:
+        for mode in MODES:
 
             # ## GRAB PHI FACTORS BY MODE ## #
             phi_file = phi_fname % mode
@@ -54,30 +61,32 @@ def tms_tour_prop():
                 'purpose_from_home': 'p',
                 'time_from_home': 'tp',
                 'time_to_home': 'phi',
+                'direction_factor': 'factor',
             }
             phi_df = phi_df.rename(columns=rename)
 
             # Drop unneeded tps
             mask = (
-                phi_df['tp'].isin([1, 2, 3, 4])
-                & phi_df['phi'].isin([1, 2, 3, 4])
+                phi_df['tp'].isin(TPS)
+                & phi_df['phi'].isin(TPS)
             )
             phi_df = phi_df[mask].copy()
 
             # Pivot
             phi_df = phi_df.pivot(
                 index=['p', 'tp'],
-                columns=['phi'],
+                columns='phi',
+                values='factor',
             ).reset_index()
 
             # ## GRAB TP SPLITS BY PURPOSE AND ZONE ## #
             notem_file = prod_vec_fname % year
-            notem_dvec = nd.from_pickle(os.path.join(notem_import_folder, notem_file))
+            notem_dvec = nd.read_pickle(os.path.join(notem_import_folder, notem_file))
 
             # Convert to needed segments and translate
             week_seg = nd.get_segmentation_level("hb_p_tp_week")
             wday_seg = nd.get_segmentation_level("hb_p_tp_wday")
-            zoning = nd.get_zoning_system(zoning_system)
+            zoning = nd.get_zoning_system(ZONING_SYSTEM)
 
             notem_dvec = notem_dvec.aggregate(week_seg)
             notem_dvec = notem_dvec.subset(wday_seg)
@@ -88,9 +97,7 @@ def tms_tour_prop():
             notem_df['val'] /= notem_df['sum']
             notem_df = notem_df.drop(columns='sum')
 
-            print(phi_df)
-            print(notem_df)
-
+            # ## CALCULATE TOUR PROPS PER ZONE ## #
             full_df = pd.merge(
                 left=notem_df,
                 right=phi_df,
@@ -98,34 +105,101 @@ def tms_tour_prop():
                 on=['p', 'tp']
             )
 
-            print(full_df)
+            # Split tps by phis
+            for phi_col in TPS:
+                full_df[phi_col] *= full_df['val']
+            full_df = full_df.drop(columns='val')
 
+            # ## STICK INTO O/D NESTED DICT ## #
+            zones = zoning.unique_zones
+            purposes = full_df['p'].unique()
 
+            # Load the zone aggregation dictionaries for this zoning
+            model2lad = du.get_zone_translation(
+                import_dir=zone_translate_dir,
+                from_zone=ZONING_SYSTEM,
+                to_zone='lad'
+            )
+            model2tfn = du.get_zone_translation(
+                import_dir=zone_translate_dir,
+                from_zone=ZONING_SYSTEM,
+                to_zone='tfn_sectors'
+            )
 
-            exit()
+            # Define the default value for the nested defaultdict
+            def empty_tour_prop():
+                return np.zeros((len(TPS), len(TPS)))
 
+            # Do by purpose
+            desc = 'Generating tour props per purpose'
+            for purpose in tqdm(purposes, desc=desc):
+                print("Start purpose %s..." % purpose)
+                p_df = full_df[full_df['p'] == purpose].reset_index(drop=True)
+                p_df = p_df.drop(columns='p')
 
-            uniq = notem_df['uniq_id'].drop_duplicates().reset_index(drop=True)
-            tp_split_dict = {}
-            for q in uniq:
-                p = int(q.split('_')[1])
-                tp_sub_splits = pd_utils.filter_df(notem_df, {'uniq_id': q})
-                # Remove tp5 and tp6
-                tp_sub_splits = tp_sub_splits.head(-2)
-                # Recalculate tp split
-                tp_sub_splits['value1'] = (tp_sub_splits['val'] / tp_sub_splits['val'].sum())
-                # Phi_factor * tp_split
-                tp_split_dict[q] = (tp_sub_splits[['value1']].to_numpy()) * phi_dict[p]
+                # Loop through zones
+                model_tour_props = dict.fromkeys(zones)
+                lad_tour_props = collections.defaultdict(empty_tour_prop)
+                tfn_tour_props = collections.defaultdict(empty_tour_prop)
+                for orig in zones:
+                    # Extract values from the DF
+                    vals = p_df[p_df[zoning.col_name] == orig].copy()
+                    vals = vals.drop(columns=zoning.col_name)
+                    vals = vals.set_index('tp')
+                    props = vals.values
 
-            d = {}
-            for p in purpose:
-                p1 = '_' + str(p)
-                d = {key: tp_split_dict[key] for key in tp_split_dict.keys() if p1 in key}
-                print(d)
+                    # Make the nested dict - these will all be the same
+                    # due to the phi factors not being zonally split
+                    dest_dict = dict.fromkeys(zones)
+                    dest_dict = {k: props.copy() for k in dest_dict.keys()}
+                    model_tour_props[orig] = dest_dict
 
-                out_file = out_fname % (year, p, mode)
-                DVector.to_pickle(d, os.path.join(out_folder,out_file))
+                    # Aggregate the tour props
+                    lad_orig = model2lad.get(orig, -1)
+                    lad_tour_props[lad_orig] += props
 
+                    tfn_orig = model2tfn.get(orig, -1)
+                    tfn_tour_props[tfn_orig] += props
+
+                # Expand aggregated dicts  - these will all be the same
+                # due to the phi factors not being zonally split
+                dest_dict = dict.fromkeys(lad_tour_props.keys())
+                for orig, props in lad_tour_props.items():
+                    dest_dict = {k: props.copy() for k in dest_dict.keys()}
+                    lad_tour_props[orig] = dest_dict
+
+                dest_dict = dict.fromkeys(tfn_tour_props.keys())
+                for orig, props in tfn_tour_props.items():
+                    dest_dict = {k: props.copy() for k in dest_dict.keys()}
+                    tfn_tour_props[orig] = dest_dict
+
+                # Normalise all of the tour proportion matrices to 1
+                print("Normalising to 1...")
+                for agg_tour_props in [model_tour_props, lad_tour_props, tfn_tour_props]:
+                    for key1, inner_dict in agg_tour_props.items():
+                        for key2, mat in inner_dict.items():
+                            # Avoid warning if 0
+                            if mat.sum() == 0:
+                                continue
+                            agg_tour_props[key1][key2] = mat / mat.sum()
+
+                # Write files out
+                lad_tour_props = du.defaultdict_to_regular(lad_tour_props)
+                tfn_tour_props = du.defaultdict_to_regular(tfn_tour_props)
+
+                print("Writing files out...")
+                out_file = MODEL_FNAME % (year, purpose, mode)
+                out_path = os.path.join(out_folder, out_file)
+                nd.write_pickle(model_tour_props, out_path)
+
+                out_file = LAD_FNAME % (year, purpose, mode)
+                out_path = os.path.join(out_folder, out_file)
+                nd.write_pickle(lad_tour_props, out_path)
+
+                out_file = TFN_FNAME % (year, purpose, mode)
+                out_path = os.path.join(out_folder, out_file)
+                nd.write_pickle(tfn_tour_props, out_path)
+                
 
 if __name__ == '__main__':
     tms_tour_prop()
