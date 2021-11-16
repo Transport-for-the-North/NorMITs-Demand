@@ -18,11 +18,11 @@ from normits_demand.models import Tram
 from normits_demand.pathing import TramImportPaths
 
 # GLOBAL VARIABLES
-years = [2018, 2033]
 years = [2018]
 scenario = "SC01_JAM"
 notem_iter = '4.1'
 tram_import_home = r"I:\NorMITs Demand\import\modal\tram\tram_pa"
+notem_import_home = r"I:\NorMITs Demand\NoTEM"
 hb_prod_tram_import_version = '1.0'
 hb_attr_tram_import_version = '1.0'
 nhb_prod_tram_import_version = '1.0'
@@ -34,7 +34,8 @@ export_home = r'E:\NorMITs Demand\NoTEM'
 def main():
 
     import_builder = TramImportPaths(
-        import_home=tram_import_home,
+        tram_import_home=tram_import_home,
+        notem_import_home=notem_import_home,
         scenario=scenario,
         years=years,
         hb_prod_tram_import_version=hb_prod_tram_import_version,

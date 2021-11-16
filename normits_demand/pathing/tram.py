@@ -135,56 +135,46 @@ class TramImportPaths(TramImportPathsBase):
 
     Attributes
     ----------
-    import_home:
-        The home for all of the imports. This is usually a drive letter.
-        Expects to find a folder titled
-        TramImportPath._normits_land_use in there.
+    tram_import_home:
+        The home for all of the tram imports.
 
-    hb_production_import_version:
-        The version of inputs to use for the HB production model.
+    hb_prod_tram_import_version::
+        The version of tram inputs to use for the HB production model.
         e.g. '2.0'
 
-    hb_attraction_import_version:
-        The version of inputs to use for the HB attraction model.
+    hb_attr_tram_import_version::
+        The version of tram inputs to use for the HB attraction model.
         e.g. '2.0'
 
-    nhb_production_import_version:
-        The version of inputs to use for the NHB production model.
+    nhb_prod_tram_import_version::
+        The version of tram inputs to use for the NHB production model.
+        e.g. '2.0'
+
+    nhb_attr_tram_import_version::
+        The version of tram inputs to use for the NHB attraction model.
         e.g. '2.0'
     """
     # Constant
     _current_base_year = 2018
 
-    # Land Use
-    _normits_land_use = "NorMITs Land Use"
-    _by_lu_dir = "base_land_use"
-    _fy_lu_dir = "future_land_use"
-
-    _by_pop_fname = "land_use_output_msoa.csv"
-    _fy_pop_fname = "land_use_{year}_pop.csv"
-    _fy_emp_fname = "land_use_{year}_emp.csv"
-
     # HB Productions
     _hb_productions_dname = "hb_productions"
     _hbp_tram_fname = "tram_hb_productions_v{version}.csv"
-    _hbp_m_tp_split_fname = "hb_mode_time_split_v{version}.csv"
 
     # HB Attractions
     _hb_attractions_dname = "hb_attractions"
     _hba_tram_fname = "tram_hb_attractions_v{version}.csv"
-    _hba_mode_split_fname = "hb_mode_splits_v{version}.csv"
 
     # NHB Productions
     _nhb_productions_dname = "nhb_productions"
     _nhbp_tram_fname = "tram_nhb_productions_v{version}.csv"
-    _nhbp_time_split_fname = "nhb_time_split_v{version}.csv"
 
     # NHB Attractions
+    _nhba_attractions_dname = "nhb_attractions"
     _nhba_tram_fname = "tram_nhb_attractions_v{version}.csv"
-    # None currently needed
 
     def __init__(self,
-                 import_home: nd.PathLike,
+                 tram_import_home: nd.PathLike,
                  scenario: str,
                  years: List[int],
                  hb_prod_tram_import_version: str,
@@ -197,11 +187,8 @@ class TramImportPaths(TramImportPathsBase):
 
         Parameters
         ----------
-        import_home:
-            The home for all of the imports. This is usually a drive letter.
-            Expects to find a folder titled
-            #TODO: Check here
-            TramImportPath._normits_land_use in there.
+        tram_import_home:
+            The home for all of the tram imports.
 
         scenario:
             The name of the scenario to run for.
@@ -209,9 +196,6 @@ class TramImportPaths(TramImportPathsBase):
         years:
             List of years to run Tram for. Will assume that the smallest
             year is the base year.
-
-        land_use_import_home:
-            Path to the base directory of land use outputs.
 
         hb_prod_tram_import_version:
             The version of inputs to use for the HB production tram model.
@@ -229,11 +213,12 @@ class TramImportPaths(TramImportPathsBase):
             The version of inputs to use for the NHB attraction tram model.
             e.g. '2.0'
         """
+
         # Validate inputs
-        file_ops.check_path_exists(import_home)
+        file_ops.check_path_exists(tram_import_home)
 
         # Assign attributes
-        self.import_home = import_home
+        self.tram_import_home = tram_import_home
         self.hb_prod_tram_import_version = hb_prod_tram_import_version
         self.hb_attr_tram_import_version = hb_attr_tram_import_version
         self.nhb_prod_tram_import_version = nhb_prod_tram_import_version
@@ -247,12 +232,11 @@ class TramImportPaths(TramImportPathsBase):
         documentation
         """
         # Generate the paths
-
         tram_data = self._hbp_tram_fname.format(version=self.hb_prod_tram_import_version)
 
         # Format in dictionary
         return {
-            'tram_data': os.path.join(self.import_home, tram_data),
+            'tram_data': os.path.join(self.tram_import_home, tram_data),
         }
 
     def generate_hb_attraction_imports(self) -> Dict[str, nd.PathLike]:
@@ -263,14 +247,11 @@ class TramImportPaths(TramImportPathsBase):
         documentation
         """
         # Generate the paths
-        import_home = os.path.join(self.import_home, self._hb_attractions_dname)
-        trip_weights = self._hba_trip_weight_fname.format(version=self.hb_attraction_import_version)
-        mode_split = self._hba_mode_split_fname.format(version=self.hb_attraction_import_version)
+        tram_data = self._hba_tram_fname.format(version=self.hb_attr_tram_import_version)
 
+        # Format in dictionary
         return {
-            'employment_paths': self.employment_paths,
-            'trip_weights_path': os.path.join(import_home, trip_weights),
-            'mode_splits_path': os.path.join(import_home, mode_split),
+            'tram_data': os.path.join(self.tram_import_home, tram_data),
         }
 
     def generate_nhb_production_imports(self) -> Dict[str, nd.PathLike]:
@@ -281,14 +262,11 @@ class TramImportPaths(TramImportPathsBase):
         documentation
         """
         # Generate the paths
-        import_home = os.path.join(self.import_home, self._nhb_productions_dname)
-        trip_rates = self._nhbp_trip_rates_fname.format(version=self.nhb_production_import_version)
-        time_split = self._nhbp_time_split_fname.format(version=self.nhb_production_import_version)
+        tram_data = self._nhbp_tram_fname.format(version=self.nhb_prod_tram_import_version)
 
+        # Format in dictionary
         return {
-            'population_paths': self.population_paths,
-            'trip_rates_path': os.path.join(import_home, trip_rates),
-            'time_splits_path': os.path.join(import_home, time_split),
+            'tram_data': os.path.join(self.tram_import_home, tram_data),
         }
 
     def generate_nhb_attraction_imports(self) -> Dict[str, nd.PathLike]:
@@ -300,17 +278,23 @@ class TramImportPaths(TramImportPathsBase):
         See TramImportPathsBase.generate_hb_attraction_imports() for further
         documentation
         """
-        return dict()
+        # Generate the paths
+        tram_data = self._nhba_tram_fname.format(version=self.nhb_attr_tram_import_version)
+
+        # Format in dictionary
+        return {
+            'tram_data': os.path.join(self.tram_import_home, tram_data),
+        }
 
 
 class TramExportPaths:
-    """Path Class for the NoTEM Model.
+    """Path Class for the Tram Model.
 
     This class defines and builds the export and reporting paths for
-    all NoTEM sub-models. It creates and stores an instance of:
+    all Tram sub-models. It creates and stores an instance of:
     HBProductionModelPaths, NHBProductionModelPaths,
     HBAttractionModelPaths, NHBAttractionModelPaths.
-    If the outputs of NoTEM are needed, create an instance of this
+    If the outputs of Tram are needed, create an instance of this
     class to generate all paths.
 
     Attributes
@@ -363,7 +347,7 @@ class TramExportPaths:
                  export_home: nd.PathLike,
                  ):
         """
-        Builds the export paths for all the NoTEM sub-models
+        Builds the export paths for all the Tram sub-models
 
         Parameters
         ----------
@@ -380,7 +364,7 @@ class TramExportPaths:
 
         export_home:
             The home directory of all the export paths. A sub-directory will
-            be made for each of the NoTEM sub models.
+            be made for each of the Tram sub models.
         """
         # Init
         file_ops.check_path_exists(export_home)
@@ -441,12 +425,12 @@ class TramExportPaths:
         )
 
 
-class NoTEMModelPaths:
-    """Base Path Class for all NoTEM models.
+class TramModelPaths:
+    """Base Path Class for all Tram models.
 
-    This class forms the base path class that all NoTEM model path classes
+    This class forms the base path class that all Tram model path classes
     are built off of. It defines a number of constants to ensure all
-    NoTEM models follow the same output structure and naming conventions
+    Tram models follow the same output structure and naming conventions
 
     Attributes
     ----------
@@ -466,8 +450,6 @@ class NoTEMModelPaths:
     _zoning_system = 'msoa'
 
     # Segmentation names
-    _pure_demand = 'pure_demand'
-    _fully_segmented = 'fully_segmented'
     _notem_segmented = 'notem_segmented'
 
     # Report names
@@ -478,7 +460,7 @@ class NoTEMModelPaths:
     # Output Path Classes
     ExportPaths = collections.namedtuple(
         typename='ExportPaths',
-        field_names='home, pure_demand, fully_segmented, notem_segmented',
+        field_names='home, notem_segmented',
     )
 
     ReportPaths = collections.namedtuple(
@@ -527,7 +509,7 @@ class NoTEMModelPaths:
         # Make sure variables that need to be overwritten, are
         if self._trip_origin is None:
             raise nd.PathingError(
-                "When inheriting NoTEMModelPaths the class variable "
+                "When inheriting TramModelPaths the class variable "
                 "_trip_origin needs to be set. This is usually set to "
                 "'hb', or 'nhb' to reflect the type of model being run."
             )
@@ -587,32 +569,28 @@ class NoTEMModelPaths:
         )
 
 
-class HBProductionModelPaths(NoTEMModelPaths):
-    """Path Class for the NoTEM HB Production Model.
+class HBProductionModelPaths(TramModelPaths):
+    """Path Class for the Tram HB Production Model.
 
     This class defines and builds the export and reporting paths for
-    the NoTEMModelPaths. If the outputs of HBProductionModel are needed,
+    the TramModelPaths. If the outputs of HBProductionModel are needed,
     create an instance of this class to generate all paths.
 
     Attributes
     ----------
     export_paths: nd.PathLike
-        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        A namedtuple object (TramModelPaths.ExportPaths) with the following
         attributes (dictionary keys are path_years):
         - home: The home directory of all exports
-        - pure_demand: A dictionary of export paths for pure_demand DVectors
-        - fully_segmented: A dictionary of export paths for fully_segmented DVectors
         - notem_segmented: A dictionary of export paths for notem_segmented DVectors
 
     report_paths: nd.PathLike
-        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        A namedtuple object (TramModelPaths.ExportPaths) with the following
         attributes (dictionary keys are path_years):
         - home: The home directory of all exports
-        - pure_demand: A NoTEMModelPaths.ReportPaths object
-        - fully_segmented: A NoTEMModelPaths.ReportPaths object
-        - notem_segmented: A NoTEMModelPaths.ReportPaths object
+        - notem_segmented: A TramModelPaths.ReportPaths object
 
-    See NoTEMModelPaths for documentation on:
+    See TramModelPaths for documentation on:
     path_years, export_home, report_home
     """
     # Export fname params
@@ -638,19 +616,9 @@ class HBProductionModelPaths(NoTEMModelPaths):
         base_fname = self._base_output_fname
         fname_parts = [self._trip_origin, self._zoning_system]
 
-        pure_demand_paths = dict()
-        fully_segmented_paths = dict()
         notem_segmented_paths = dict()
 
         for year in self.path_years:
-            # Pure demand path
-            fname = base_fname % (*fname_parts, self._pure_demand, year)
-            pure_demand_paths[year] = os.path.join(self.export_home, fname)
-
-            # Fully Segmented path
-            fname = base_fname % (*fname_parts, self._fully_segmented, year)
-            fully_segmented_paths[year] = os.path.join(self.export_home, fname)
-
             # NoTEM Segmented path
             fname = base_fname % (*fname_parts, self._notem_segmented, year)
             notem_segmented_paths[year] = os.path.join(self.export_home, fname)
@@ -658,38 +626,41 @@ class HBProductionModelPaths(NoTEMModelPaths):
         # Create the export_paths class
         self.export_paths = self.ExportPaths(
             home=self.export_home,
-            pure_demand=pure_demand_paths,
-            fully_segmented=fully_segmented_paths,
             notem_segmented=notem_segmented_paths,
         )
 
+    def _create_report_paths(self) -> None:
+        """
+        Creates self.report_paths
+        """
+        self.report_paths = self.ExportPaths(
+            home=self.report_home,
+            notem_segmented=self._generate_report_paths(self._notem_segmented),
+        )
 
-class HBAttractionModelPaths(NoTEMModelPaths):
-    """Path Class for the NoTEM HB Attraction Model.
+
+class HBAttractionModelPaths(TramModelPaths):
+    """Path Class for the Tram HB Attraction Model.
 
     This class defines and builds the export and reporting paths for
-    the NoTEMModelPaths. If the outputs of HBAttractionModel are needed,
+    the TramModelPaths. If the outputs of HBAttractionModel are needed,
     create an instance of this class to generate all paths.
 
     Attributes
     ----------
     export_paths: nd.PathLike
-        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        A namedtuple object (TramModelPaths.ExportPaths) with the following
         attributes (dictionary keys are path_years):
         - home: The home directory of all exports
-        - pure_demand: A dictionary of export paths for pure_demand DVectors
-        - fully_segmented: A dictionary of export paths for fully_segmented DVectors
         - notem_segmented: A dictionary of export paths for notem_segmented DVectors
 
     report_paths: nd.PathLike
-        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        A namedtuple object (TramModelPaths.ExportPaths) with the following
         attributes (dictionary keys are path_years):
         - home: The home directory of all exports
-        - pure_demand: A NoTEMModelPaths.ReportPaths object
-        - fully_segmented: A NoTEMModelPaths.ReportPaths object
-        - notem_segmented: A NoTEMModelPaths.ReportPaths object
+        - notem_segmented: A TramModelPaths.ReportPaths object
 
-    See NoTEMModelPaths for documentation on:
+    See TramModelPaths for documentation on:
     path_years, export_home, report_home
     """
     # Export fname params
@@ -715,19 +686,9 @@ class HBAttractionModelPaths(NoTEMModelPaths):
         base_fname = self._base_output_fname
         fname_parts = [self._trip_origin, self._zoning_system]
 
-        pure_demand_paths = dict()
-        fully_segmented_paths = dict()
         notem_segmented_paths = dict()
 
         for year in self.path_years:
-            # Pure demand path
-            fname = base_fname % (*fname_parts, self._pure_demand, year)
-            pure_demand_paths[year] = os.path.join(self.export_home, fname)
-
-            # Fully Segmented path
-            fname = base_fname % (*fname_parts, self._fully_segmented, year)
-            fully_segmented_paths[year] = os.path.join(self.export_home, fname)
-
             # NoTEM Segmented path
             fname = base_fname % (*fname_parts, self._notem_segmented, year)
             notem_segmented_paths[year] = os.path.join(self.export_home, fname)
@@ -735,38 +696,41 @@ class HBAttractionModelPaths(NoTEMModelPaths):
         # Create the export_paths class
         self.export_paths = self.ExportPaths(
             home=self.export_home,
-            pure_demand=pure_demand_paths,
-            fully_segmented=fully_segmented_paths,
             notem_segmented=notem_segmented_paths,
         )
 
+    def _create_report_paths(self) -> None:
+        """
+        Creates self.report_paths
+        """
+        self.report_paths = self.ExportPaths(
+            home=self.report_home,
+            notem_segmented=self._generate_report_paths(self._notem_segmented),
+        )
 
-class NHBProductionModelPaths(NoTEMModelPaths):
-    """Path Class for the NoTEM NHB Production Model.
+
+class NHBProductionModelPaths(TramModelPaths):
+    """Path Class for the Tram NHB Production Model.
 
     This class defines and builds the export and reporting paths for
-    the NoTEMModelPaths. If the outputs of NHBProductionModel are needed,
+    the TramModelPaths. If the outputs of NHBProductionModel are needed,
     create an instance of this class to generate all paths.
 
     Attributes
     ----------
     export_paths: nd.PathLike
-        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        A namedtuple object (TramModelPaths.ExportPaths) with the following
         attributes (dictionary keys are path_years):
         - home: The home directory of all exports
-        - pure_demand: A dictionary of export paths for pure_demand DVectors
-        - fully_segmented: A dictionary of export paths for fully_segmented DVectors
         - notem_segmented: A dictionary of export paths for notem_segmented DVectors
 
     report_paths: nd.PathLike
-        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        A namedtuple object (TramModelPaths.ExportPaths) with the following
         attributes (dictionary keys are path_years):
         - home: The home directory of all exports
-        - pure_demand: A NoTEMModelPaths.ReportPaths object
-        - fully_segmented: A NoTEMModelPaths.ReportPaths object
-        - notem_segmented: A NoTEMModelPaths.ReportPaths object
+        - notem_segmented: A TramModelPaths.ReportPaths object
 
-    See NoTEMModelPaths for documentation on:
+    See TramModelPaths for documentation on:
     path_years, export_home, report_home
     """
     # Export fname params
@@ -791,19 +755,9 @@ class NHBProductionModelPaths(NoTEMModelPaths):
         base_fname = self._base_output_fname
         fname_parts = [self._trip_origin, self._zoning_system]
 
-        pure_demand_paths = dict()
-        fully_segmented_paths = dict()
         notem_segmented_paths = dict()
 
         for year in self.path_years:
-            # Pure demand path
-            fname = base_fname % (*fname_parts, self._pure_demand, year)
-            pure_demand_paths[year] = os.path.join(self.export_home, fname)
-
-            # Fully Segmented path
-            fname = base_fname % (*fname_parts, self._fully_segmented, year)
-            fully_segmented_paths[year] = os.path.join(self.export_home, fname)
-
             # NoTEM Segmented path
             fname = base_fname % (*fname_parts, self._notem_segmented, year)
             notem_segmented_paths[year] = os.path.join(self.export_home, fname)
@@ -811,38 +765,40 @@ class NHBProductionModelPaths(NoTEMModelPaths):
         # Create the export_paths class
         self.export_paths = self.ExportPaths(
             home=self.export_home,
-            pure_demand=pure_demand_paths,
-            fully_segmented=fully_segmented_paths,
             notem_segmented=notem_segmented_paths,
         )
 
+    def _create_report_paths(self) -> None:
+        """
+        Creates self.report_paths
+        """
+        self.report_paths = self.ExportPaths(
+            home=self.report_home,
+            notem_segmented=self._generate_report_paths(self._notem_segmented),
+        )
 
-class NHBAttractionModelPaths(NoTEMModelPaths):
-    """Path Class for the NoTEM NHB Attraction Model.
+class NHBAttractionModelPaths(TramModelPaths):
+    """Path Class for the Tram NHB Attraction Model.
 
     This class defines and builds the export and reporting paths for
-    the NoTEMModelPaths. If the outputs of NHBAttractionModel are needed,
+    the TramModelPaths. If the outputs of NHBAttractionModel are needed,
     create an instance of this class to generate all paths.
 
     Attributes
     ----------
     export_paths: nd.PathLike
-        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        A namedtuple object (TramModelPaths.ExportPaths) with the following
         attributes (dictionary keys are path_years):
         - home: The home directory of all exports
-        - pure_demand: A dictionary of export paths for pure_demand DVectors
-        - fully_segmented: A dictionary of export paths for fully_segmented DVectors
         - notem_segmented: A dictionary of export paths for notem_segmented DVectors
 
     report_paths: nd.PathLike
-        A namedtuple object (NoTEMModelPaths.ExportPaths) with the following
+        A namedtuple object (TramModelPaths.ExportPaths) with the following
         attributes (dictionary keys are path_years):
         - home: The home directory of all exports
-        - pure_demand: A NoTEMModelPaths.ReportPaths object
-        - fully_segmented: A NoTEMModelPaths.ReportPaths object
-        - notem_segmented: A NoTEMModelPaths.ReportPaths object
+        - notem_segmented: A TramModelPaths.ReportPaths object
 
-    See NoTEMModelPaths for documentation on:
+    See TramModelPaths for documentation on:
     path_years, export_home, report_home
     """
     # Export fname params
@@ -858,6 +814,7 @@ class NHBAttractionModelPaths(NoTEMModelPaths):
 
         # Generate the paths
         self._create_export_paths()
+        self._create_report_paths()
 
     def _create_export_paths(self) -> None:
         """
@@ -867,19 +824,9 @@ class NHBAttractionModelPaths(NoTEMModelPaths):
         base_fname = self._base_output_fname
         fname_parts = [self._trip_origin, self._zoning_system]
 
-        pure_demand_paths = dict()
-        fully_segmented_paths = dict()
         notem_segmented_paths = dict()
 
         for year in self.path_years:
-            # Pure demand path
-            fname = base_fname % (*fname_parts, self._pure_demand, year)
-            pure_demand_paths[year] = os.path.join(self.export_home, fname)
-
-            # Fully Segmented path
-            fname = base_fname % (*fname_parts, self._fully_segmented, year)
-            fully_segmented_paths[year] = os.path.join(self.export_home, fname)
-
             # NoTEM Segmented path
             fname = base_fname % (*fname_parts, self._notem_segmented, year)
             notem_segmented_paths[year] = os.path.join(self.export_home, fname)
@@ -887,9 +834,14 @@ class NHBAttractionModelPaths(NoTEMModelPaths):
         # Create the export_paths class
         self.export_paths = self.ExportPaths(
             home=self.export_home,
-            pure_demand=pure_demand_paths,
-            fully_segmented=None,
             notem_segmented=notem_segmented_paths,
         )
 
-
+    def _create_report_paths(self) -> None:
+        """
+        Creates self.report_paths
+        """
+        self.report_paths = self.ExportPaths(
+            home=self.report_home,
+            notem_segmented=self._generate_report_paths(self._notem_segmented),
+        )
