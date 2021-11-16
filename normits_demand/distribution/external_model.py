@@ -13,6 +13,7 @@ File purpose:
 # Built-Ins
 import os
 
+from typing import Union
 from typing import Optional
 
 # Third Party
@@ -105,6 +106,7 @@ class ExternalModel(ExternalModelExportPaths):
             convergence_target: float = 0.9,
             furness_tol: float = 0.1,
             furness_max_iters: int = 5000,
+            time_format: Union[nd.core.TimeFormat, str] = 'avg_week',
             ) -> None:
         # TODO(BT): Make sure the P/A vectors are the right zoning system
         # TODO(BT): Make sure pa_val_col is in P/A vectors
@@ -232,6 +234,7 @@ class ExternalModel(ExternalModelExportPaths):
             zoning_system=self.zoning_system,
             import_data=internal_productions,
             zone_col=self.zoning_system.col_name,
+            time_format=time_format,
         )
         nd.write_pickle(internal_productions, productions_path)
 
@@ -242,6 +245,7 @@ class ExternalModel(ExternalModelExportPaths):
             zoning_system=self.zoning_system,
             import_data=internal_attractions,
             zone_col=self.zoning_system.col_name,
+            time_format=time_format,
         )
         nd.write_pickle(internal_attractions, attractions_path)
 

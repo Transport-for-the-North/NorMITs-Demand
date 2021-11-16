@@ -39,16 +39,16 @@ cache_path = "E:/tms_cache"
 
 
 def main():
-    mode = nd.Mode.CAR
+    # mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
-    # mode = nd.Mode.TRAIN
+    mode = nd.Mode.TRAIN
 
     use_tram = False
 
     if mode == nd.Mode.CAR:
         zoning_system = nd.get_zoning_system('noham')
-        internal_tld_name = 'p_m_standard_bands'
-        external_tld_name = 'p_m_large_bands'
+        internal_tld_name = 'north/p_m'
+        external_tld_name = 'gb/p_m'
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
         nhb_agg_seg = nd.get_segmentation_level('nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_car')
@@ -64,8 +64,8 @@ def main():
 
     elif mode == nd.Mode.BUS:
         zoning_system = nd.get_zoning_system('noham')
-        internal_tld_name = 'p_m_standard_bands'
-        external_tld_name = 'p_m_large_bands'
+        internal_tld_name = 'north/p_m'
+        external_tld_name = 'gb/p_m'
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
         nhb_agg_seg = nd.get_segmentation_level('nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
@@ -82,8 +82,8 @@ def main():
     elif mode == nd.Mode.TRAIN:
         # zoning_system = nd.get_zoning_system('msoa')
         zoning_system = nd.get_zoning_system('norms')
-        internal_tld_name = 'p_m_ca_internal_norms'
-        external_tld_name = 'p_m_ca_external_norms'
+        internal_tld_name = 'north/p_m_ca_train_bands'
+        external_tld_name = 'gb/p_m_ca_train_bands'
         hb_agg_seg = nd.get_segmentation_level('hb_p_m_ca')
         nhb_agg_seg = nd.get_segmentation_level('nhb_p_m_ca_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_ca_rail')
@@ -220,7 +220,7 @@ def main():
         run_external_model=True,
         run_gravity_model=False,
         run_pa_matrix_reports=False,
-        run_pa_to_od=True,
+        run_pa_to_od=False,
         run_od_matrix_reports=False,
     )
 

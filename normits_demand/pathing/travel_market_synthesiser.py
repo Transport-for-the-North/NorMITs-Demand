@@ -146,7 +146,6 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
 
     # Trip Length Distribution constants
     _tld_dir_name = 'trip_length_distributions'
-    _tld_area_dir_name = 'gb'
 
     def __init__(self,
                  import_home: nd.PathLike,
@@ -277,7 +276,6 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         base_tld_path = os.path.join(
             self.import_home,
             self._tld_dir_name,
-            self._tld_area_dir_name,
         )
         internal_tld_path = os.path.join(base_tld_path, self.internal_tld_name)
         external_tld_path = os.path.join(base_tld_path, self.external_tld_name)
@@ -367,8 +365,8 @@ class ExternalModelExportPaths:
     _external_dist_dir_name = 'External Matrices'
     _full_dist_dir_name = 'Full PA Matrices'
 
-    _int_productions_base_name = '{trip_origin}_{mode}_{year}_internal_productions.csv'
-    _int_attractions_base_name = '{trip_origin}_{mode}_{year}_internal_attractions.csv'
+    _int_productions_base_name = '{trip_origin}_{mode}_{year}_internal_productions.pkl'
+    _int_attractions_base_name = '{trip_origin}_{mode}_{year}_internal_attractions.pkl'
 
     # Report dir names
     _log_dir_name = 'Logs'
