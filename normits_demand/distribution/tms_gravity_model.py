@@ -284,15 +284,13 @@ class GravityModel(GravityModelExportPaths):
         )
         path = os.path.join(cost_dir, fname)
 
-        print(path)
-        exit()
-
         # Read in the costs and infill
-        cost_df = nd.read_df(path, find_similar=True)
-        cost_df = cost_utils.iz_infill_costs(
-            cost_df,
-            iz_infill=intrazonal_cost_infill,
-        )
+        cost = nd.read_df(path, find_similar=True, index_col=0).values
+        if intrazonal_cost_infill is not None:
+            cost = cost_utils.iz_infill_costs(
+                cost,
+                iz_infill=intrazonal_cost_infill,
+            )
 
         # ## SET UP LOG AND RUN ## #
         # Logging set up
@@ -307,7 +305,6 @@ class GravityModel(GravityModelExportPaths):
         # Need to convert into numpy vectors to work with old code
         seg_productions = seg_productions[self._pa_val_col].values
         seg_attractions = seg_attractions[self._pa_val_col].values
-        costs = cost_df.values
 
         # Replace the log if it already exists
         if os.path.isfile(log_path):
@@ -318,7 +315,7 @@ class GravityModel(GravityModelExportPaths):
             row_targets=seg_productions,
             col_targets=seg_attractions,
             cost_function=cost_function,
-            costs=costs,
+            costs=cost,
             target_cost_distribution=target_tld,
             target_convergence=convergence_target,
             furness_max_iters=furness_max_iters,
@@ -355,14 +352,14 @@ class GravityModel(GravityModelExportPaths):
         tld_report['ach_ave_length (km)'] = tld_utils.calculate_average_trip_lengths(
             min_bounds=tld_report['min (km)'].values,
             max_bounds=tld_report['max (km)'].values,
-            trip_lengths=costs,
+            trip_lengths=cost,
             trips=calib.achieved_distribution,
         )
 
         tld_report['cell count'] = cost_utils2.cells_in_bounds(
             min_bounds=tld_report['min (km)'].values,
             max_bounds=tld_report['max (km)'].values,
-            cost=costs,
+            cost=cost,
         )
         tld_report['cell proportions'] = tld_report['cell count'].copy()
         tld_report['cell proportions'] /= tld_report['cell proportions'].values.sum()
@@ -394,6 +391,13 @@ class GravityModel(GravityModelExportPaths):
         tld_report.to_csv(path, index=False)
 
         # ## WRITE DISTRIBUTED DEMAND ## #
+        # Put the demand into a df
+        demand_df = pd.DataFrame(
+            index=self.zoning_system.unique_zones,
+            columns=self.zoning_system.unique_zones,
+            data=calib.achieved_distribution.astype(np.float32),
+        )
+
         # Generate path and write out
         fname = running_segmentation.generate_file_name(
             trip_origin=trip_origin,
@@ -404,7 +408,7 @@ class GravityModel(GravityModelExportPaths):
             compressed=True,
         )
         path = os.path.join(self.export_paths.distribution_dir, fname)
-        nd.write_df(calib.achieved_distribution, path)
+        nd.write_df(demand_df, path)
 
         # ## ADD TO THE OVERALL LOG ## #
         # Rename keys for log

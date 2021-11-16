@@ -225,13 +225,25 @@ class ExternalModel(ExternalModelExportPaths):
         segment_names = running_segmentation.naming_order
         col_names = [self.zone_col] + segment_names + [pa_val_col]
 
-        # Write out productions
+        # Write out productions as DVector
         internal_productions = du.compile_efficient_df(internal_p_vector_eff_df, col_names)
-        internal_productions.to_csv(productions_path, index=False)
+        internal_productions = nd.DVector(
+            segmentation=running_segmentation,
+            zoning_system=self.zoning_system,
+            import_data=internal_productions,
+            zone_col=self.zoning_system.col_name,
+        )
+        nd.write_pickle(internal_productions, productions_path)
 
         # Write out attractions
         internal_attractions = du.compile_efficient_df(internal_a_vector_eff_df, col_names)
-        internal_attractions.to_csv(attractions_path, index=False)
+        internal_attractions = nd.DVector(
+            segmentation=running_segmentation,
+            zoning_system=self.zoning_system,
+            import_data=internal_attractions,
+            zone_col=self.zoning_system.col_name,
+        )
+        nd.write_pickle(internal_attractions, attractions_path)
 
     def _run_internal(self,
                       trip_origin,

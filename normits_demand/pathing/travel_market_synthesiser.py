@@ -17,6 +17,7 @@ import collections
 
 from typing import Any
 from typing import Dict
+from typing import Union
 from typing import Optional
 
 # Third Party
@@ -105,6 +106,29 @@ class GravityModelArgumentBuilderBase(abc.ABC):
             function needs to produce a dictionary with the following keys:
                 # TODO (BT) Define how this should look
         """
+        pass
+
+
+class TMSArgumentBuilderBase(abc.ABC):
+    """Abstract Class defining how the argument builder for TMS should look.
+
+    If custom import paths are needed, then a new class needs to be made
+    which inherits this abstract class. TMS can then use the defined
+    functions/properties to pick up new import files.
+    """
+
+    @property
+    @abc.abstractmethod
+    def external_model_arg_builder(self) -> ExternalModelArgumentBuilderBase:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def gravity_model_arg_builder(self) -> GravityModelArgumentBuilderBase:
+        pass
+
+    @abc.abstractmethod
+    def build_pa_to_od_arguments(self) -> Dict[str, Any]:
         pass
 
 
@@ -463,7 +487,7 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
                  nhb_cost_type: str,
                  hb_init_params_fname: str,
                  nhb_init_params_fname: str,
-                 hb_productions: nd.DVector,
+                 hb_productions: Union[nd.DVector, nd.PathLike],
                  hb_attractions: nd.DVector,
                  nhb_productions: nd.DVector,
                  nhb_attractions: nd.DVector,
@@ -501,36 +525,26 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
         self.furness_tol = furness_tol
         self.kwargs = kwargs
 
-        # Validate and assign trip ends
-        te_names = ['hb_production', 'hb_attraction', 'nhb_production', 'nhb_attraction']
-        te_vals = [hb_productions, hb_attractions, nhb_productions, nhb_attractions]
-        segs = [hb_running_segmentation] * 2 + [nhb_running_segmentation] * 2
-        for name, trip_end, running_seg in zip(te_names, te_vals, segs):
-            if trip_end.zoning_system != self.zoning_system:
-                raise ValueError(
-                    "The given '%s' trip ends were not in the correct zoning "
-                    "system, they need to be in the same zoning system "
-                    "that the gravity model is running at.\n"
-                    "Gravity zoning: %s\n"
-                    "%s zoning: %s\n"
-                    % (name, self.zoning_system, name, trip_end.zoning_system)
-                )
-
-            if trip_end.segmentation != running_seg:
-                raise ValueError(
-                    "The given '%s' trip ends were not in the correct "
-                    "segmentation, they need to be in the same segmentation "
-                    "that the gravity model is running at.\n"
-                    "Gravity segmentation: %s\n"
-                    "%s segmentation: %s\n"
-                    % (name, running_seg, name, trip_end.segmentation)
-                )
-
-        # Must all be fine if we're here. Assign.
+        # Assign the trip ends
         self.hb_productions = hb_productions
         self.hb_attractions = hb_attractions
         self.nhb_productions = nhb_productions
         self.nhb_attractions = nhb_attractions
+
+    @staticmethod
+    def _maybe_read_trip_end(trip_end: Union[nd.DVector, nd.PathLike]) -> nd.DVector:
+        """Read in a Dvector if path was give"""
+        # Just return if it's a DVector
+        if isinstance(trip_end, nd.core.data_structures.DVector):
+            return trip_end
+
+        if not os.path.exists(trip_end):
+            raise ValueError(
+                "Expected either a DVector or a path to one. No path exists at "
+                "%s" % trip_end
+            )
+
+        return nd.read_pickle(trip_end)
 
     def build_arguments(self, trip_origin: str) -> Dict[str, nd.PathLike]:
         # Init
@@ -556,6 +570,35 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
                 % trip_origin
             )
 
+        # Read and validate trip ends
+        productions = self._maybe_read_trip_end(productions)
+        attractions = self._maybe_read_trip_end(attractions)
+
+        # Validate and assign trip ends
+        te_names = ['%s_production' % trip_origin, '%s_attraction' % trip_origin]
+        te_vals = [productions, attractions]
+        segs = [running_segmentation] * 2
+        for name, trip_end, running_seg in zip(te_names, te_vals, segs):
+            if trip_end.zoning_system != self.zoning_system:
+                raise ValueError(
+                    "The given '%s' trip ends were not in the correct zoning "
+                    "system, they need to be in the same zoning system "
+                    "that the gravity model is running at.\n"
+                    "Gravity zoning: %s\n"
+                    "%s zoning: %s\n"
+                    % (name, self.zoning_system, name, trip_end.zoning_system)
+                )
+
+            if trip_end.segmentation != running_seg:
+                raise ValueError(
+                    "The given '%s' trip ends were not in the correct "
+                    "segmentation, they need to be in the same segmentation "
+                    "that the gravity model is running at.\n"
+                    "Gravity segmentation: %s\n"
+                    "%s segmentation: %s\n"
+                    % (name, running_seg, name, trip_end.segmentation)
+                )
+
         # Build TLD directory paths
         base_tld_path = os.path.join(
             self.import_home,
@@ -570,6 +613,7 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
             self._modal_dir_name,
             self.running_mode.value,
             self._cost_dir_name,
+            self.zoning_system.name,
         )
 
         # Load in the initial parameters for gravity model
@@ -851,10 +895,15 @@ class TMSExportPaths:
             file_ops.create_folder(path)
 
 
-class TMSArgumentBuilder:
+class TMSArgumentBuilder(TMSArgumentBuilderBase):
     """
     Builds an ExternalModelArgumentBuilder and GravityModelArgumentBuilder
     """
+
+    # Folder constants
+    _modal_dir_name = 'modal'
+    _tour_props_dir_name = 'pre_me_tour_proportions'
+    _fh_th_factors_dir_name = 'fh_th_factors'
 
     def __init__(self,
                  import_home: nd.PathLike,
@@ -881,6 +930,11 @@ class TMSArgumentBuilder:
         file_ops.check_path_exists(import_home)
 
         # TODO(BT): Validate segments and zones are the correct types
+
+        # Assign needed attributes
+        self.import_home = import_home
+        self.running_mode = running_mode
+        self.hb_running_segmentation = hb_running_segmentation
 
         # Trip End Paths
         self._hb_productions = hb_productions
@@ -958,6 +1012,34 @@ class TMSArgumentBuilder:
             nhb_productions=self._nhb_productions,
             nhb_attractions=self._nhb_attractions,
         )
+
+    def build_pa_to_od_arguments(self) -> Dict[str, Any]:
+
+        # TODO(BT): UPDATE build_od_from_fh_th_factors() to use segmentation levels
+        seg_level = 'tms'
+        seg_params = {
+            'p_needed': self.hb_running_segmentation.segments['p'].unique(),
+            'm_needed': self.hb_running_segmentation.segments['m'].unique(),
+        }
+        if 'ca' in self.hb_running_segmentation.segment_names:
+            seg_params.update({
+                'ca_needed': self.hb_running_segmentation.segments['ca'].unique(),
+            })
+
+        # Build the factors dir
+        fh_th_factors_dir = os.path.join(
+            self.import_home,
+            self._modal_dir_name,
+            self.running_mode.value,
+            self._tour_props_dir_name,
+            self._fh_th_factors_dir_name,
+        )
+
+        return {
+            'seg_level': seg_level,
+            'seg_params': seg_params,
+            'fh_th_factors_dir': fh_th_factors_dir,
+        }
 
 
 # ## FUNCTIONS ## #

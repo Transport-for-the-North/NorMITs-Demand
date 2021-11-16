@@ -30,10 +30,10 @@ from normits_demand.pathing.travel_market_synthesiser import TMSExportPaths
 # Constants
 base_year = 2018
 scenario = consts.SC01_JAM
-tms_iteration_name = '9.2.2'
+tms_iteration_name = '9.2.3'
 tms_import_home = r"I:\NorMITs Demand\import"
 tms_export_home = r"E:\NorMITs Demand\TMS"
-notem_iteration_name = '4.2'
+notem_iteration_name = '9.2'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
 cache_path = "E:/tms_cache"
 
@@ -46,8 +46,7 @@ def main():
     use_tram = False
 
     if mode == nd.Mode.CAR:
-        zoning_system = nd.get_zoning_system('msoa')
-        # zoning_system = nd.get_zoning_system('noham')
+        zoning_system = nd.get_zoning_system('noham')
         internal_tld_name = 'p_m_standard_bands'
         external_tld_name = 'p_m_large_bands'
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
@@ -81,6 +80,7 @@ def main():
         nhb_cost_type = 'tp'
 
     elif mode == nd.Mode.TRAIN:
+        # zoning_system = nd.get_zoning_system('msoa')
         zoning_system = nd.get_zoning_system('norms')
         internal_tld_name = 'p_m_ca_internal_norms'
         external_tld_name = 'p_m_ca_external_norms'
@@ -88,7 +88,7 @@ def main():
         nhb_agg_seg = nd.get_segmentation_level('nhb_p_m_ca_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_ca_rail')
         nhb_running_seg = nd.get_segmentation_level('nhb_p_m_ca_tp_wday_rail')
-        intrazonal_cost_infill = 0.5
+        intrazonal_cost_infill = None
         em_convergence_target = 0.9
         gm_convergence_target = 0.95
         cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
@@ -138,6 +138,7 @@ def main():
     nhbp_path = os.path.join(cache_path, base_fname % ('nhbp', zoning_system.name, mode.value))
     nhba_path = os.path.join(cache_path, base_fname % ('nhba', zoning_system.name, mode.value))
 
+    print("Getting the Production/Attraction Vectors...")
     if not os.path.exists(hbp_path) or not os.path.exists(hba_path):
         hb_productions, hb_attractions = import_pa(
             production_import_path=hb_productions_path,
@@ -209,18 +210,17 @@ def main():
         nhb_running_segmentation=nhb_running_seg,
         iteration_name=tms_iteration_name,
         zoning_system=zoning_system,
-        external_model_arg_builder=tms_arg_builder.external_model_arg_builder,
-        gravity_model_arg_builder=tms_arg_builder.gravity_model_arg_builder,
+        tms_arg_builder=tms_arg_builder,
         export_home=tms_export_home,
         process_count=-2,
     )
 
     tms.run(
         run_all=False,
-        run_external_model=False,
-        run_gravity_model=True,
+        run_external_model=True,
+        run_gravity_model=False,
         run_pa_matrix_reports=False,
-        run_pa_to_od=False,
+        run_pa_to_od=True,
         run_od_matrix_reports=False,
     )
 
