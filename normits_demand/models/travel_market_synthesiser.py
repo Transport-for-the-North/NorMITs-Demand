@@ -367,6 +367,65 @@ class TravelMarketSynthesiser(TMSExportPaths):
                 hourly_average=True,
             )
 
+        elif self.running_mode == nd.Mode.BUS:
+            # Compile to NoHAM format
+            compile_params_paths = matrix_processing.build_compile_params(
+                import_dir=self.export_paths.full_od_dir,
+                export_dir=self.export_paths.compiled_od_dir,
+                matrix_format='synthetic_od',
+                years_needed=[self.year],
+                m_needed=m_needed,
+                tp_needed=tp_needed,
+            )
+
+            matrix_processing.compile_matrices(
+                mat_import=self.export_paths.full_od_dir,
+                mat_export=self.export_paths.compiled_od_dir,
+                compile_params_path=compile_params_paths[0],
+            )
+
+            # TODO(BT): Build in TMS imports!
+            car_occupancies = pd.read_csv(os.path.join(
+                r'I:\NorMITs Demand\import',
+                'vehicle_occupancies',
+                'bus_vehicle_occupancies.csv',
+            ))
+
+            # Need to convert into hourly average PCU for noham
+            vehicle_occupancy_utils.people_vehicle_conversion(
+                mat_import=self.export_paths.compiled_od_dir,
+                mat_export=self.export_paths.compiled_od_dir_pcu,
+                car_occupancies=car_occupancies,
+                mode=m_needed[0],
+                method='to_vehicles',
+                out_format='wide',
+                hourly_average=True,
+            )
+
+        elif self.running_mode == nd.Mode.TRAIN:
+
+            ## COMBINE INTERNAL AND EXTERNAL MATRICES ## #
+            self._logger.info("Recombining internal and external matrices")
+            matrix_processing.recombine_internal_external(
+                internal_import=self.gravity_model.export_paths.distribution_dir,
+                external_import=self.external_model.export_paths.external_distribution_dir,
+                full_export=self.export_paths.full_pa_dir,
+                force_compress_out=True,
+                years=[self.year],
+            )
+
+            self._logger.info("Compiling NoRMS VDM Format")
+            matrix_processing.compile_norms_to_vdm(
+                mat_import=self.export_paths.full_pa_dir,
+                mat_export=self.export_paths.compiled_pa_dir,
+                params_export=self.export_paths.compiled_pa_dir,
+                year=self.year,
+                m_needed=m_needed,
+                internal_zones=self.zoning_system.internal_zones.tolist(),
+                external_zones=self.zoning_system.internal_zones.tolist(),
+                matrix_format='synthetic_pa',
+            )
+
         else:
             raise ValueError(
                 "I don't know how to compile mode %s into an assignment model "

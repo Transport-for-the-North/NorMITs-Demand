@@ -471,7 +471,6 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
 
     # Trip Length Distribution constants
     _tld_dir_name = 'trip_length_distributions'
-    _tld_area_dir_name = 'gb'
 
     def __init__(self,
                  import_home: nd.PathLike,
@@ -601,7 +600,6 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
         base_tld_path = os.path.join(
             self.import_home,
             self._tld_dir_name,
-            self._tld_area_dir_name,
         )
         target_tld_dir = os.path.join(base_tld_path, self.target_tld_name)
 
@@ -761,6 +759,7 @@ _TMS_ExportPaths_NT = collections.namedtuple(
     field_names=[
         'home',
         'full_pa_dir',
+        'compiled_pa_dir',
         'full_od_dir',
         'compiled_od_dir',
         'compiled_od_dir_pcu',
@@ -786,6 +785,7 @@ class TMSExportPaths:
 
     # Export dir names
     _full_pa_out_dir = 'Full PA Matrices'
+    compiled_pa_out_dir = 'Compiled PA Matrices'
     _full_od_out_dir = 'Full OD Matrices'
     _compiled_od_out_dir = 'Compiled OD Matrices'
     _compiled_od_out_dir_pcu = 'PCU'
@@ -860,12 +860,19 @@ class TMSExportPaths:
 
         # Build the matrix output path
         full_pa_dir = os.path.join(export_home, self._full_pa_out_dir)
+        compiled_pa_dir = os.path.join(export_home, self.compiled_pa_out_dir)
         full_od_dir = os.path.join(export_home, self._full_od_out_dir)
         compiled_od_dir = os.path.join(export_home, self._compiled_od_out_dir)
         compiled_od_dir_pcu = os.path.join(compiled_od_dir, self._compiled_od_out_dir_pcu)
 
         # Make paths that don't exist
-        dir_paths = [full_pa_dir, full_od_dir, compiled_od_dir, compiled_od_dir_pcu]
+        dir_paths = [
+            full_pa_dir,
+            compiled_pa_dir,
+            full_od_dir,
+            compiled_od_dir,
+            compiled_od_dir_pcu,
+        ]
         for path in dir_paths:
             file_ops.create_folder(path)
 
@@ -873,6 +880,7 @@ class TMSExportPaths:
         self.export_paths = _TMS_ExportPaths_NT(
             home=export_home,
             full_pa_dir=full_pa_dir,
+            compiled_pa_dir=compiled_pa_dir,
             full_od_dir=full_od_dir,
             compiled_od_dir=compiled_od_dir,
             compiled_od_dir_pcu=compiled_od_dir_pcu,

@@ -234,8 +234,8 @@ class GravityModel(GravityModelExportPaths):
             fn=self._run_internal,
             kwargs=kwarg_list,
             pbar_kwargs=pbar_kwargs,
-            process_count=0,
-            # process_count=self.process_count,
+            # process_count=0,
+            process_count=self.process_count,
         )
 
     def _run_internal(self,

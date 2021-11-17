@@ -41,6 +41,7 @@ from normits_demand import efs_constants as efs_consts
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 from normits_demand.utils import compress
+from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.matrices import utils as mat_utils
@@ -3244,7 +3245,7 @@ def _split_int_ext(mat_import,
             continue
 
         # Get the mask and extract the data
-        mask = mat_utils.get_wide_mask(full_mat, zones, join_fn=join_fn)
+        mask = pd_utils.get_wide_mask(full_mat, zones, join_fn=join_fn)
         sub_mat = full_mat.where(mask, 0)
 
         fname = du.calib_params_to_dist_name(
@@ -3261,6 +3262,7 @@ def _split_int_ext(mat_import,
 
 def split_internal_external(mat_import: nd.PathLike,
                             year: Union[int, str],
+                            matrix_format: str,
                             internal_zones: List[int] = None,
                             external_zones: List[int] = None,
                             internal_export: nd.PathLike = None,
@@ -3296,8 +3298,9 @@ def split_internal_external(mat_import: nd.PathLike,
         seg_vals = du.fname_to_calib_params(
             path,
             get_trip_origin=True,
-            get_matrix_format=True
+            get_matrix_format=False
         )
+        seg_vals['matrix_format'] = matrix_format
 
         # Skip over any file which is not the wanted year
         if seg_vals['yr'] != year:
@@ -3344,25 +3347,26 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
                          ) -> str:
     # TODO(BT) Write compile_norms_to_vdm() docs
     # Init
-    matrix_format = checks.validate_matrix_format(matrix_format)
+    # matrix_format = checks.validate_matrix_format(matrix_format)
 
     # Build temporary paths
     int_dir = os.path.join(mat_export, 'internal')
     ext_dir = os.path.join(mat_export, 'external')
 
     for path in [int_dir, ext_dir]:
-        file_ops.create_folder(path, verbose=False)
+        file_ops.create_folder(path)
 
     # Temporary output if we need to split from/to
     compiled_dir = mat_export
     if from_to_split_factors is not None:
         compiled_dir = os.path.join(mat_export, 'compiled_non_split')
-        file_ops.create_folder(compiled_dir, verbose=False)
+        file_ops.create_folder(compiled_dir)
 
     # Split internal and external
     print("Splitting into internal and external matrices...")
     split_internal_external(
         mat_import=mat_import,
+        matrix_format=matrix_format,
         internal_export=int_dir,
         external_export=ext_dir,
         year=year,
