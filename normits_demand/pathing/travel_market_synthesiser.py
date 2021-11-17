@@ -598,6 +598,8 @@ _GM_ReportPaths_NT = collections.namedtuple(
     typename='_GM_ReportPaths_NT',
     field_names=[
         'home',
+        'hb_overall_log',
+        'nhb_overall_log',
         'model_log_dir',
         'tld_report_dir',
     ]
@@ -611,6 +613,8 @@ class GravityModelExportPaths:
     _dist_out_dir = 'Internal Matrices'
 
     # Report dir names
+    _hb_overall_log_name = 'hb_overall_log.csv'
+    _nhb_overall_log_name = 'nhb_overall_log.csv'
     _log_dir_name = 'Logs'
     _tld_report_dir = 'TLD Reports'
 
@@ -625,7 +629,7 @@ class GravityModelExportPaths:
         # Assign attributes
         self.year = year
         self.running_mode = running_mode
-        self.export_home = export_home  # Something like I:\NorMITs Demand\noham\TMS\iter8\Gravity Model
+        self.export_home = export_home
         self.report_home = os.path.join(self.export_home, self._reports_dirname)
 
         file_ops.create_folder(self.report_home)
@@ -653,17 +657,25 @@ class GravityModelExportPaths:
 
     def _create_report_paths(self) -> None:
         """Creates self.report_paths"""
+        # Build paths
+        hb_overall_log = os.path.join(self.report_home, self._hb_overall_log_name)
+        nhb_overall_log = os.path.join(self.report_home, self._nhb_overall_log_name)
+        model_log_dir = os.path.join(self.report_home, self._log_dir_name)
+        tld_report_dir = os.path.join(self.report_home, self._tld_report_dir)
+
+        # Make paths that don't exist
+        dir_paths = [self.report_home, model_log_dir, tld_report_dir]
+        for path in dir_paths:
+            file_ops.create_folder(path)
 
         # Create the export_paths class
         self.report_paths = _GM_ReportPaths_NT(
             home=self.report_home,
-            model_log_dir=os.path.join(self.report_home, self._log_dir_name),
-            tld_report_dir=os.path.join(self.report_home, self._tld_report_dir),
+            hb_overall_log=hb_overall_log,
+            nhb_overall_log=nhb_overall_log,
+            model_log_dir=model_log_dir,
+            tld_report_dir=tld_report_dir,
         )
-
-        # Make paths that don't exist
-        for path in self.report_paths:
-            file_ops.create_folder(path)
 
 
 # ## TMS CLASSES ## #
