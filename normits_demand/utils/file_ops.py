@@ -268,7 +268,7 @@ def read_df(path: nd.PathLike,
         if index_col is not None and not is_index_set(df):
             df = df.set_index(list(df)[index_col])
 
-        # Unset the index col if it is set
+        # Unset the index col if it is set - this is how pd.read_csv() works
         if index_col is None and df.index.name is not None:
             df = df.reset_index()
 

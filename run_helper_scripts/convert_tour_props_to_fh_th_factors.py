@@ -22,7 +22,6 @@ from itertools import product
 
 # Third Party
 import numpy as np
-import pandas as pd
 
 from tqdm import tqdm
 
@@ -30,41 +29,26 @@ from tqdm import tqdm
 sys.path.append('..')
 import normits_demand as nd
 
-from normits_demand import constants as consts
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 
 # ## GLOBALS ## #
-# Currently only have tour proportions for Noham
+# Running variables
 MODEL_NAME = 'noham'
-MODE = consts.MODEL_MODES[MODEL_NAME][0]
+MODE = 3
 
+TOUR_PROP_DIR = r'I:\NorMITs Demand\import\modal\car_and_passenger\pre_me_tour_proportions'
+TOUR_FACTOR_DIR = r'I:\NorMITs Demand\import\modal\car_and_passenger\pre_me_tour_proportions\fh_th_factors'
+
+# CONSTANTS
 BASE_YEAR = 2018
 TRIP_ORIGIN = 'hb'
 PURPOSES = [1, 2, 3, 4, 5, 6, 7, 8]
 TP_NEEDED = [1, 2, 3, 4]
+ZONE_TRANSLATION_DIR = r'I:\NorMITs Demand\import\zone_translation\one_to_one'
 
 
-def get_io(model_name,
-           iter_num,
-           scenario_name,
-           import_home,
-           export_home,
-           purpose,
-           mode,
-           ):
-
-    # Build the import paths
-    efs = nd.ExternalForecastSystem(
-        model_name=model_name,
-        iter_num=iter_num,
-        scenario_name=scenario_name,
-        import_home=import_home,
-        export_home=export_home,
-        verbose=False,
-    )
-    tour_prop_dir = efs.imports['post_me_tours']
-    tour_factor_dir = efs.imports['post_me_fh_th_factors']
+def get_io(purpose, mode):
 
     # Generate the output factor paths
     fh_factor_fname = du.get_dist_name(
@@ -75,10 +59,10 @@ def get_io(model_name,
         mode=str(mode),
         suffix='.pkl'
     )
-    fh_factor_path = os.path.join(tour_factor_dir, fh_factor_fname)
+    fh_factor_path = os.path.join(TOUR_FACTOR_DIR, fh_factor_fname)
 
     th_factor_fname = fh_factor_fname.replace('fh_factors', 'th_factors')
-    th_factor_path = os.path.join(tour_factor_dir, th_factor_fname)
+    th_factor_path = os.path.join(TOUR_FACTOR_DIR, th_factor_fname)
 
     # ## Load the tour proportions - always generated on base year ## #
     # Load the model zone tour proportions
@@ -90,14 +74,14 @@ def get_io(model_name,
         mode=str(mode),
         suffix='.pkl'
     )
-    model_tour_props = nd.from_pickle(os.path.join(tour_prop_dir, tour_prop_fname))
+    model_tour_props = nd.read_pickle(os.path.join(TOUR_PROP_DIR, tour_prop_fname))
 
     # Load the aggregated tour props
     lad_fname = tour_prop_fname.replace('tour_proportions', 'lad_tour_proportions')
-    lad_tour_props = nd.from_pickle(os.path.join(tour_prop_dir, lad_fname))
+    lad_tour_props = nd.read_pickle(os.path.join(TOUR_PROP_DIR, lad_fname))
 
     tfn_fname = tour_prop_fname.replace('tour_proportions', 'tfn_tour_proportions')
-    tfn_tour_props = nd.from_pickle(os.path.join(tour_prop_dir, tfn_fname))
+    tfn_tour_props = nd.read_pickle(os.path.join(TOUR_PROP_DIR, tfn_fname))
 
     return (
         model_tour_props,
@@ -105,7 +89,6 @@ def get_io(model_name,
         tfn_tour_props,
         fh_factor_path,
         th_factor_path,
-        efs.imports,
     )
 
 
@@ -155,28 +138,13 @@ def maybe_get_aggregated_tour_proportions(orig: int,
 
 
 def main():
-    # Build and instance of EFS to et imports
-    iter_num = '3j'
-    scenario_name = consts.SC04_UZC
-    import_home = 'I:/'
-    export_home = 'E:/'
 
     # ## CONVERT PURPOSE BY PURPOSE ## #
     for p in PURPOSES:
         # Get the tour props and export path
-        io = get_io(
-            model_name=MODEL_NAME,
-            iter_num=iter_num,
-            scenario_name=scenario_name,
-            import_home=import_home,
-            export_home=export_home,
-            purpose=p,
-            mode=MODE,
-        )
-
+        io = get_io(purpose=p, mode=MODE)
         model_tour_props, lad_tour_props, tfn_tour_props = io[:3]
         fh_factor_path, th_factor_path = io[3:5]
-        efs_imports = io[5]
 
         # Make sure output paths exist
         out_dir, _ = os.path.split(fh_factor_path)
@@ -209,12 +177,12 @@ def main():
         # ## GET TRANSLATIONS ## #
         # Load the zone aggregation dictionaries for this model
         model2lad = du.get_zone_translation(
-            import_dir=efs_imports['zone_translation']['one_to_one'],
+            import_dir=ZONE_TRANSLATION_DIR,
             from_zone=MODEL_NAME,
             to_zone='lad'
         )
         model2tfn = du.get_zone_translation(
-            import_dir=efs_imports['zone_translation']['one_to_one'],
+            import_dir=ZONE_TRANSLATION_DIR,
             from_zone=MODEL_NAME,
             to_zone='tfn_sectors'
         )

@@ -1385,6 +1385,10 @@ class DVector:
                 "not have a zoning system to begin with."
             )
 
+        # If we're translating to the same thing, return a copy
+        if self.zoning_system == new_zoning:
+            return self.copy()
+
         # Get translation
         translation = self.zoning_system.translate(new_zoning, weighting)
 

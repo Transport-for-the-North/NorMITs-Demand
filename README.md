@@ -204,6 +204,8 @@ as part of their file name in distribution reports
 - When reading in pickled files, the `__version__` attribute will now be 
   checked (if it exists). It will be compared to the version of the code being
   run. If different, a warning will be raised.
+- Added a script to generate pre-me tour props based on NTS phis and NoTEM
+  tp splits.
 - Awaiting Tram integration before updating to next version...
 
      

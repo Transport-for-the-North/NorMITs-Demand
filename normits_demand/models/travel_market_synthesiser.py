@@ -48,8 +48,7 @@ class TravelMarketSynthesiser(TMSExportPaths):
                  nhb_running_segmentation: nd.core.segments.SegmentationLevel,
                  iteration_name: str,
                  zoning_system: nd.core.zoning.ZoningSystem,
-                 external_model_arg_builder: tms_arg_builders.ExternalModelArgumentBuilderBase,
-                 gravity_model_arg_builder: tms_arg_builders.GravityModelArgumentBuilderBase,
+                 tms_arg_builder: tms_arg_builders.TMSArgumentBuilderBase,
                  export_home: nd.PathLike,
                  process_count: int = constants.PROCESS_COUNT,
                  ):
@@ -68,8 +67,9 @@ class TravelMarketSynthesiser(TMSExportPaths):
         self.process_count = process_count
 
         # TODO(BT): Validate this is correct type
-        self.external_model_arg_builder = external_model_arg_builder
-        self.gravity_model_arg_builder = gravity_model_arg_builder
+        self.tms_arg_builder = tms_arg_builder
+        self.external_model_arg_builder = tms_arg_builder.external_model_arg_builder
+        self.gravity_model_arg_builder = tms_arg_builder.gravity_model_arg_builder
 
         # Create a logger
         logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
@@ -224,21 +224,13 @@ class TravelMarketSynthesiser(TMSExportPaths):
         args = self.external_model_arg_builder.build_hb_arguments()
 
         self._logger.info("Executing a home-based run of external model")
-        external_model.run(
-            trip_origin='hb',
-            running_segmentation=self.hb_running_segmentation,
-            **args,
-        )
+        external_model.run(trip_origin='hb', **args)
 
         self._logger.info("Building non-home-based arguments for external model")
         args = self.external_model_arg_builder.build_nhb_arguments()
 
         self._logger.info("Executing a non-home-based run of external model")
-        external_model.run(
-            trip_origin='nhb',
-            running_segmentation=self.nhb_running_segmentation,
-            **args,
-        )
+        external_model.run(trip_origin='nhb', **args)
 
         self._logger.info("External Model Done!")
 
@@ -255,21 +247,13 @@ class TravelMarketSynthesiser(TMSExportPaths):
         args = self.gravity_model_arg_builder.build_hb_arguments()
 
         self._logger.info("Executing a home-based run of gravity model")
-        gravity_model.run(
-            trip_origin='hb',
-            running_segmentation=self.hb_running_segmentation,
-            **args,
-        )
+        gravity_model.run(trip_origin='hb', **args)
 
         self._logger.info("Building non-home-based arguments for gravity model")
         args = self.gravity_model_arg_builder.build_nhb_arguments()
 
         self._logger.info("Executing a non-home-based run of gravity model")
-        gravity_model.run(
-            trip_origin='nhb',
-            running_segmentation=self.nhb_running_segmentation,
-            **args,
-        )
+        gravity_model.run(trip_origin='nhb', **args)
 
         self._logger.info("Gravity Model Done!")
 
@@ -298,36 +282,15 @@ class TravelMarketSynthesiser(TMSExportPaths):
 
         # ## CONVERT HB PA TO OD ## #
         self._logger.info("Converting HB PA matrices to OD")
-        # Set up the segmentation params
-        # TODO(BT): UPDATE build_od_from_fh_th_factors() to use segmentation levels
-        seg_level = 'tms'
-        seg_params = {
-            'p_needed': self.hb_running_segmentation.segments['p'].unique(),
-            'm_needed': self.hb_running_segmentation.segments['m'].unique(),
-        }
-        if 'ca' in self.hb_running_segmentation.segment_names:
-            seg_params.update({
-                'ca_needed': self.hb_running_segmentation.segments['ca'].unique(),
-            })
-
-        # TODO(BT): Build import paths for TMS!
-        if self.running_mode in [nd.Mode.CAR, nd.Mode.BUS]:
-            fh_th_factors_dir = r'I:\NorMITs Demand\import\noham\post_me_tour_proportions\fh_th_factors'
-        elif self.running_mode in [nd.Mode.TRAIN]:
-            fh_th_factors_dir = r'I:\NorMITs Demand\import\norms\post_me_tour_proportions\fh_th_factors'
-        else:
-            raise ValueError("Uh Oh!")
-
+        kwargs = self.tms_arg_builder.build_pa_to_od_arguments()
         pa_to_od.build_od_from_fh_th_factors(
             pa_import=self.export_paths.full_pa_dir,
             od_export=self.export_paths.full_od_dir,
-            fh_th_factors_dir=fh_th_factors_dir,
             pa_matrix_desc='synthetic_pa',
             od_to_matrix_desc='synthetic_od_to',
             od_from_matrix_desc='synthetic_od_from',
             years_needed=[self.year],
-            seg_level=seg_level,
-            seg_params=seg_params,
+            **kwargs
         )
 
         # ## MOVE NHB TO OD DIR ## #
