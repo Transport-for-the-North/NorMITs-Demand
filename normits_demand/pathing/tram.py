@@ -47,9 +47,9 @@ class TramImportPathsBase(ABC):
             This function should return a keyword argument dictionary to be
             passed straight into the production model. Specifically, this
             function needs to produce a dictionary with the following keys:
-                'population_paths'
-                'trip_rates_path'
-                'mode_time_splits_path'
+                'tram_import'
+                'trip_origin'
+                'dvec_imports'
         """
         raise NotImplementedError(
             "generate_hb_production_imports() has not been implemented! If "
@@ -70,9 +70,9 @@ class TramImportPathsBase(ABC):
             This function should return a keyword argument dictionary to be
             passed straight into the production model. Specifically, this
             function needs to produce a dictionary with the following keys:
-                'population_paths'
-                'trip_rates_path'
-                'time_splits_path'
+                'tram_import'
+                'trip_origin'
+                'dvec_imports'
         """
         raise NotImplementedError(
             "generate_nhb_production_imports() has not been implemented! If "
@@ -91,11 +91,11 @@ class TramImportPathsBase(ABC):
         -------
         kwargs:
             This function should return a keyword argument dictionary to be
-            passed straight into the production model. Specifically, this
+            passed straight into the attraction model. Specifically, this
             function needs to produce a dictionary with the following keys:
-                'employment_paths'
-                'trip_weights_path'
-                'mode_splits_path'
+                'tram_import'
+                'trip_origin'
+                'dvec_imports'
         """
         raise NotImplementedError(
             "generate_hb_attraction_imports() has not been implemented! If "
@@ -114,9 +114,11 @@ class TramImportPathsBase(ABC):
         -------
         kwargs:
             This function should return a keyword argument dictionary to be
-            passed straight into the production model. Specifically, this
+            passed straight into the attraction model. Specifically, this
             function needs to produce a dictionary with the following keys:
-               None
+                'tram_import'
+                'trip_origin'
+                'dvec_imports'
         """
         raise NotImplementedError(
             "generate_nhb_attraction_imports() has not been implemented! If "
@@ -136,47 +138,65 @@ class TramImportPaths(TramImportPathsBase):
     Attributes
     ----------
     tram_import_home:
-        The home for all of the tram imports.
+            The home for all of the tram imports.
 
-    hb_prod_tram_import_version::
-        The version of tram inputs to use for the HB production model.
+    notem_import_home:
+        The home for all of the notem outputs.
+
+    scenario:
+        The name of the scenario to run for.
+
+    years:
+        List of years to run Tram for. Will assume that the smallest
+        year is the base year.
+
+    hb_prod_tram_import_version:
+        The version of inputs to use for the HB production tram model.
         e.g. '2.0'
 
-    hb_attr_tram_import_version::
-        The version of tram inputs to use for the HB attraction model.
+    hb_attr_tram_import_version:
+        The version of inputs to use for the HB attraction tram model.
         e.g. '2.0'
 
-    nhb_prod_tram_import_version::
-        The version of tram inputs to use for the NHB production model.
+    nhb_prod_tram_import_version:
+        The version of inputs to use for the NHB production tram model.
         e.g. '2.0'
 
-    nhb_attr_tram_import_version::
-        The version of tram inputs to use for the NHB attraction model.
+    nhb_attr_tram_import_version:
+        The version of inputs to use for the NHB attraction tram model.
         e.g. '2.0'
     """
     # Constant
     _current_base_year = 2018
+    _hb_trip_origin = 'hb'
+    _nhb_trip_origin = 'nhb'
+
+    # Define input notem fnames
+    _hb_notem_fname = "hb_msoa_notem_segmented_%d_dvec.pkl"
+    _nhb_notem_fname = "nhb_msoa_notem_segmented_%d_dvec.pkl"
 
     # HB Productions
-    _hb_productions_dname = "hb_productions"
+    _hb_productions_dir = "hb_productions"
     _hbp_tram_fname = "tram_hb_productions_v{version}.csv"
 
     # HB Attractions
-    _hb_attractions_dname = "hb_attractions"
+    _hb_attractions_dir = "hb_attractions"
     _hba_tram_fname = "tram_hb_attractions_v{version}.csv"
 
     # NHB Productions
-    _nhb_productions_dname = "nhb_productions"
+    _nhb_productions_dir = "nhb_productions"
     _nhbp_tram_fname = "tram_nhb_productions_v{version}.csv"
 
     # NHB Attractions
-    _nhba_attractions_dname = "nhb_attractions"
+    _nhb_attractions_dir = "nhb_attractions"
     _nhba_tram_fname = "tram_nhb_attractions_v{version}.csv"
 
     def __init__(self,
                  tram_import_home: nd.PathLike,
+                 notem_import_home: nd.PathLike,
                  scenario: str,
                  years: List[int],
+                 iter_name: str,
                  hb_prod_tram_import_version: str,
                  hb_attr_tram_import_version: str,
                  nhb_prod_tram_import_version: str,
@@ -189,6 +209,9 @@ class TramImportPaths(TramImportPathsBase):
         ----------
         tram_import_home:
             The home for all of the tram imports.
+
+        notem_import_home:
+            The home for all of the notem outputs.
 
         scenario:
             The name of the scenario to run for.
@@ -219,6 +242,10 @@ class TramImportPaths(TramImportPathsBase):
 
         # Assign attributes
         self.tram_import_home = tram_import_home
+        self.years = years
+        self.scenario = scenario
+        self.iter_name = du.create_iter_name(iter_name)
+        self.notem_import_home = os.path.join(notem_import_home, self.iter_name, self.scenario)
         self.hb_prod_tram_import_version = hb_prod_tram_import_version
         self.hb_attr_tram_import_version = hb_attr_tram_import_version
         self.nhb_prod_tram_import_version = nhb_prod_tram_import_version
@@ -233,10 +260,16 @@ class TramImportPaths(TramImportPathsBase):
         """
         # Generate the paths
         tram_data = self._hbp_tram_fname.format(version=self.hb_prod_tram_import_version)
+        hb_production_paths = {
+            y: os.path.join(self.notem_import_home, self._hb_productions_dir, self._hb_notem_fname % y) for y in
+            self.years}
+        print(hb_production_paths)
 
         # Format in dictionary
         return {
-            'tram_data': os.path.join(self.tram_import_home, tram_data),
+            'tram_import': os.path.join(self.tram_import_home, tram_data),
+            'trip_origin': self._hb_trip_origin,
+            'dvec_imports': hb_production_paths,
         }
 
     def generate_hb_attraction_imports(self) -> Dict[str, nd.PathLike]:
@@ -248,10 +281,14 @@ class TramImportPaths(TramImportPathsBase):
         """
         # Generate the paths
         tram_data = self._hba_tram_fname.format(version=self.hb_attr_tram_import_version)
-
+        hb_attraction_paths = {
+            y: os.path.join(self.notem_import_home, self._hb_attractions_dir, self._hb_notem_fname % y) for y in
+            self.years}
         # Format in dictionary
         return {
-            'tram_data': os.path.join(self.tram_import_home, tram_data),
+            'tram_import': os.path.join(self.tram_import_home, tram_data),
+            'trip_origin': self._hb_trip_origin,
+            'dvec_imports': hb_attraction_paths,
         }
 
     def generate_nhb_production_imports(self) -> Dict[str, nd.PathLike]:
@@ -263,10 +300,15 @@ class TramImportPaths(TramImportPathsBase):
         """
         # Generate the paths
         tram_data = self._nhbp_tram_fname.format(version=self.nhb_prod_tram_import_version)
+        nhb_production_paths = {
+            y: os.path.join(self.notem_import_home, self._nhb_productions_dir, self._nhb_notem_fname % y) for y in
+            self.years}
 
         # Format in dictionary
         return {
-            'tram_data': os.path.join(self.tram_import_home, tram_data),
+            'tram_import': os.path.join(self.tram_import_home, tram_data),
+            'trip_origin': self._nhb_trip_origin,
+            'dvec_imports': nhb_production_paths,
         }
 
     def generate_nhb_attraction_imports(self) -> Dict[str, nd.PathLike]:
@@ -280,10 +322,15 @@ class TramImportPaths(TramImportPathsBase):
         """
         # Generate the paths
         tram_data = self._nhba_tram_fname.format(version=self.nhb_attr_tram_import_version)
+        nhb_attraction_paths = {
+            y: os.path.join(self.notem_import_home, self._nhb_attractions_dir, self._nhb_notem_fname % y) for y in
+            self.years}
 
         # Format in dictionary
         return {
-            'tram_data': os.path.join(self.tram_import_home, tram_data),
+            'tram_import': os.path.join(self.tram_import_home, tram_data),
+            'trip_origin': self._nhb_trip_origin,
+            'dvec_imports': nhb_attraction_paths,
         }
 
 
@@ -746,6 +793,7 @@ class NHBProductionModelPaths(TramModelPaths):
 
         # Generate the paths
         self._create_export_paths()
+        self._create_report_paths()
 
     def _create_export_paths(self) -> None:
         """
@@ -776,6 +824,7 @@ class NHBProductionModelPaths(TramModelPaths):
             home=self.report_home,
             notem_segmented=self._generate_report_paths(self._notem_segmented),
         )
+
 
 class NHBAttractionModelPaths(TramModelPaths):
     """Path Class for the Tram NHB Attraction Model.
