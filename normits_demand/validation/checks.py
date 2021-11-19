@@ -87,10 +87,10 @@ def validate_trip_origin(trip_origin: str) -> str:
     # Init
     trip_origin = trip_origin.strip().lower()
 
-    if trip_origin not in efs_consts.TRIP_ORIGINS:
+    if trip_origin not in consts.TRIP_ORIGINS:
         raise ValueError(
             "%s is not a valid trip origin. It should be one of: %s"
-            % (trip_origin, str(efs_consts.TRIP_ORIGINS))
+            % (trip_origin, str(consts.TRIP_ORIGINS))
         )
     return trip_origin
 

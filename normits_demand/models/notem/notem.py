@@ -72,7 +72,7 @@ class NoTEM(NoTEMExportPaths):
         # Validate inputs
         if not isinstance(import_builder, nd.pathing.NoTEMImportPathsBase):
             raise ValueError(
-                'import_home is not the correct type. Expected '
+                'import_builder is not the correct type. Expected '
                 '"nd.pathing.NoTEMImportPathsBase", but got %s'
                 % type(import_builder)
             )
@@ -82,7 +82,7 @@ class NoTEM(NoTEMExportPaths):
         self.scenario = scenario
         self.import_builder = import_builder
 
-        # Generate the import and export paths
+        # Generate the export paths
         super().__init__(
             export_home=export_home,
             path_years=self.years,
@@ -91,7 +91,7 @@ class NoTEM(NoTEMExportPaths):
         )
 
         # Create a logger
-        logger_name = "%s.%s" % (__name__, self.__class__.__name__)
+        logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
         log_file_path = os.path.join(self.export_home, self._log_fname)
         self._logger = nd.get_logger(
             logger_name=logger_name,

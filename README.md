@@ -141,9 +141,71 @@ as part of their file name in distribution reports
 - Added a new NoTEM wrapper around the new production and attraction models 
 - Added new pathing module, which can be used to access NoTEM output paths
 
-###v0.4.1 (NoTEM Enhancements)
+
+### v0.4.1 (NoTEM Enhancements)
 - SegmentationLevel and ZoningSystem have been fully documented
 - SegmentationLevel and ZoningSystem have had read only properties added
 - Segmentation names have changed. NoTEM specific segmentations now have 
   'notem_' prefixed onto their name
 - Logging module has been added to codebase. Partially integrated into NoTEM 
+
+
+### v0.4.2
+- A number of minor fixes have been added to get TMS up and running again
+
+### v0.4.3
+- Updates to the elasticity model
+    - Fix Access/Egress costs changes
+    - Update parameters as we are now benchmarking OD matrices against
+      NELUM
+    - Optimised PA2OD Process
+    - Tour Proportions generated for rail PA2OD
+    
+### v0.4.4
+- Integrating NoTEM outputs into TMS
+- Number of minor fixes to TMS
+    - TMS codebase has been marginally tidied up
+    - External model has been updated to use 2 TLD instead of 1
+    - External model has been optimised in some places
+    - Gravity Model has been update to work with new External Model
+    
+### v0.4.5 (TMS Overhaul)
+- Added internal and external zone definitions into ZoningSystem Class
+- Object Orientation of TMS
+    - Can now run full multi-modal
+    - Added constants class in to define running Mode
+- External Model Updates to target a different TLD for internal and external
+- Gravity Model code updates to bring in line with OO structure
+  (still awaiting full re-write)
+- Updated filenames and output paths for TMS
+    - A path class is now used for imports and exports, making it easier
+      for other models to interact with TMS
+    - filenames have been updated to bring in line with EFS naming, forming
+      the standard NorMITs Demand naming
+- PA to OD process updated to use tour proportions and standard code shared
+  with EFS
+- Assignment model code updated to use standard code shared with EFS.
+- Various tidy ups
+    - Constants moved around to make more sense
+    - Some utils have been given dedicated utils files to make them easier
+      to find.
+    - A lot of legacy code has been removed
+
+### V0.4.6
+- Minor Updates to NoTEM
+  - Logging properly integrated into NoTEM
+  - New HB Production Trip rates being read in
+  - New NHB Production Trip rates being read in
+    - NoTEM now outputs NHB Purpose 11
+  - Soc 4 Added into HB and NHB models. This describes work-based trips
+    for people without a formal job.
+  - Segmentations now have typing - meaning `DVector.to_df()` should always 
+    return in the correct datatypes.
+- When reading in pickled files, the `__version__` attribute will now be 
+  checked (if it exists). It will be compared to the version of the code being
+  run. If different, a warning will be raised.
+- Added a script to generate pre-me tour props based on NTS phis and NoTEM
+  tp splits.
+- Awaiting Tram integration before updating to next version...
+
+     

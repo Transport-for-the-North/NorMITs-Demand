@@ -13,7 +13,7 @@ Master run file to run NoTEM
 import sys
 
 sys.path.append("..")
-from normits_demand.models import notem
+from normits_demand.models import NoTEM
 from normits_demand.pathing import NoTEMImportPaths
 
 
@@ -22,17 +22,17 @@ years = [2018]
 scenario = "NTEM"
 notem_iter = '4'
 lu_drive = "I:/"
-by_iteration = "iter3d"
-fy_iteration = "iter3d"
+by_iteration = "iter3e"
+fy_iteration = "iter3e"
 notem_import_home = r"I:\NorMITs Demand\import\NoTEM"
-# notem_export_home = r"C:\Data\Nirmal_Atkins"
-notem_export_home = r"E:\NoTEM"
+notem_export_home = r"E:\NorMITs Demand\NoTEM"
+# notem_export_home = r"C:\Data_test\
 
 
 def main():
-    hb_production_import_version = '2.0'
-    hb_attraction_import_version = '1.5'
-    nhb_production_import_version = '1.5'
+    hb_production_import_version = '2.1'
+    hb_attraction_import_version = '1.6'
+    nhb_production_import_version = '2.0'
 
     import_builder = NoTEMImportPaths(
         import_home=notem_import_home,
@@ -46,7 +46,7 @@ def main():
         nhb_production_import_version=nhb_production_import_version,
     )
 
-    n = notem.NoTEM(
+    n = NoTEM(
         years=years,
         scenario=scenario,
         iteration_name=notem_iter,
@@ -54,13 +54,13 @@ def main():
         export_home=notem_export_home,
     )
     n.run(
-        generate_all=True,
+        generate_all=False,
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,
         generate_hb_attraction=False,
         generate_nhb_production=False,
-        generate_nhb_attraction=False,
+        generate_nhb_attraction=True,
     )
 
 

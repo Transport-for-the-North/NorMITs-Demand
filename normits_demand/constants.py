@@ -1,6 +1,10 @@
-from normits_demand.efs_constants import *
+# from normits_demand.efs_constants import *
 
 PACKAGE_NAME = __name__.split('.')[0]
+
+# ## RUNNING ARGUMENTS ## #
+PROCESS_COUNT = -2
+DEFAULT_ROUNDING = 8
 
 # VALID VALUES FOR ARGS
 VECTOR_TYPES = [
@@ -9,6 +13,22 @@ VECTOR_TYPES = [
     'origins',
     'destinations',
 ]
+
+# ## SCENARIO DEFINITIONS ## #
+# Valid Scenario Names
+SC00_NTEM = 'NTEM'
+SC01_JAM = 'SC01_JAM'
+SC02_PP = 'SC02_PP'
+SC03_DD = 'SC03_DD'
+SC04_UZC = 'SC04_UZC'
+
+TFN_SCENARIOS = [
+    SC01_JAM,
+    SC02_PP,
+    SC03_DD,
+    SC04_UZC
+]
+SCENARIOS = [SC00_NTEM] + TFN_SCENARIOS
 
 
 # STANDARD FILE NAMES
@@ -114,6 +134,22 @@ AGG_AT = {
     'agg_tfn_area_type': [1, 1, 2, 2, 3, 3, 4, 4]}
 
 # ## SEGMENTATIONS ## #
+ALL_HB_P = [1, 2, 3, 4, 5, 6, 7, 8]
+ALL_NHB_P = [12, 13, 14, 15, 16, 18]
+ALL_P = ALL_HB_P + ALL_NHB_P
+
+SOC_P = [1, 2, 12]
+NS_P = [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
+
+# Trip origins to purpose
+_trip_origin_purposes = [
+    ('hb', ALL_HB_P),
+    ('nhb', ALL_NHB_P),
+]
+TRIP_ORIGINS = [x[0] for x in _trip_origin_purposes]
+TRIP_ORIGIN_TO_PURPOSE = {to: p for to, p in _trip_origin_purposes}
+
+
 # Segmentation values
 VALID_CA = [1, 2]
 

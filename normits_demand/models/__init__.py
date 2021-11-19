@@ -12,3 +12,6 @@ from normits_demand.models.supply import NorMITsSupply
 # EFS
 from normits_demand.models.external_forecast_system import ExternalForecastSystem
 from normits_demand.models.elasticity_model import ElasticityModel
+
+# TMS
+from normits_demand.models.travel_market_synthesiser import TravelMarketSynthesiser

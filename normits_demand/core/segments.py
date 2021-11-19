@@ -23,6 +23,7 @@ from typing import Any
 from typing import List
 from typing import Dict
 from typing import Tuple
+from typing import Optional
 
 # Third Party
 import pandas as pd
@@ -55,6 +56,11 @@ class SegmentationLevel:
         ['p', 'm'], and the segment where p=1, and m=3, would be named
         '1_3'.
 
+    segment_types:
+        A dictionary of strings (matching naming_order) -> type. Defines
+        the type of each segment internally, and also when converted to a
+        pandas.DataFrame
+
     segments:
         A pandas.DataFrame listing every single valid combination of segment
         values for this segmentation. Often this is simply to product of all
@@ -70,6 +76,12 @@ class SegmentationLevel:
         the relevant segments. An additional column will be added titled
         'name' with the segment names in.
     """
+    # Constants
+    __version__ = nd.__version__
+
+    # Special segment names
+    _time_period_segment_name = 'tp'
+
     _weekday_time_periods = [1, 2, 3, 4]
     _weekend_time_periods = [5, 6]
 
@@ -77,6 +89,7 @@ class SegmentationLevel:
     _unique_segments_csv_fname = "unique_segments.csv"
     _unique_segments_compress_fname = "unique_segments.pbz2"
     _naming_order_fname = "naming_order.csv"
+    _segment_type_fname = "types.csv"
 
     _segment_definitions_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
@@ -95,6 +108,10 @@ class SegmentationLevel:
         _segment_definitions_path,
         "aggregate.csv",
     )
+    _subset_definitions_path = os.path.join(
+        _segment_definitions_path,
+        "subset.csv",
+    )
 
     _segment_translation_dir = os.path.join(
         _segment_definitions_path,
@@ -108,11 +125,13 @@ class SegmentationLevel:
 
     _list_separator = ';'
     _translate_separator = ':'
+    _drop_splitter = ':'
     _segment_name_separator = '_'
 
     def __init__(self,
                  name: str,
                  naming_order: List[str],
+                 segment_types: Dict[str, type],
                  valid_segments: pd.DataFrame,
                  ):
         """Builds a SegmentationLevel
@@ -129,6 +148,10 @@ class SegmentationLevel:
         naming_order:
             The order the segments should be in when creating segment names.
 
+        segment_types:
+            The types to assign to each segment. Should be a dictionary of
+            strings (matching naming_order) -> type
+
         valid_segments:
             A pandas.DataFrame listing all the valid segments of this
             segmentation. The columns should be named after the segments
@@ -138,6 +161,7 @@ class SegmentationLevel:
         # Init
         self._name = name
         self._naming_order = naming_order
+        self._segment_types = segment_types
 
         # Retain this for copying later
         self._valid_segments = valid_segments
@@ -145,7 +169,7 @@ class SegmentationLevel:
         # Validate that naming order is in df
         for col in self.naming_order:
             if col not in valid_segments:
-                raise nd.NormitsDemandError(
+                raise SegmentationError(
                     "Error while instantiating a SegmentationLevel object."
                     "Cannot find column '%s' of naming order in the given "
                     "valid segments dataframe!"
@@ -154,6 +178,28 @@ class SegmentationLevel:
 
         # Make sure the df is just the segment columns
         self._segments = pd_utils.reindex_cols(valid_segments, self.naming_order)
+
+        # Validate that all columns are accounted for in typing
+        missing_types = set(self.naming_order) - set(self._segment_types.keys())
+        if len(missing_types) > 0:
+            raise SegmentationError(
+                "Not all columns have been accounted for in segment types. "
+                "Missing defined types for the following segments: %s"
+                % missing_types
+            )
+
+        # Convert the segment types to the defined types
+        for col, col_type in self._segment_types.items():
+            try:
+                self._segments[col] = self._segments[col].astype(col_type)
+            except ValueError:
+                raise ValueError(
+                    "Cannot convert segment values %s to type %s. "
+                    "Maybe the segment needs to be defined with a different "
+                    "type? See above for specific exception which "
+                    "caused this one."
+                    % (col, col_type)
+                )
 
         # ## BUILD SEGMENT NAMING ## #
         segments_and_names = self.segments.copy()
@@ -179,6 +225,10 @@ class SegmentationLevel:
     @property
     def segment_names(self):
         return self._segment_names
+
+    @property
+    def segment_types(self):
+        return self._segment_types
 
     @property
     def segments_and_names(self):
@@ -279,6 +329,10 @@ class SegmentationLevel:
 
         return multiply_dict, return_seg
 
+    def __iter__(self):
+        """Overrides the default implementation"""
+        return self._segments.to_dict(orient='records').__iter__()
+
     def _read_multiply_definitions(self) -> pd.DataFrame:
         """
         Returns the multiplication definitions for segments as a pd.DataFrame
@@ -290,6 +344,12 @@ class SegmentationLevel:
         Returns the expansion definitions for segments as a pd.DataFrame
         """
         return pd.read_csv(self._expand_definitions_path)
+
+    def _read_subset_definitions(self) -> pd.DataFrame:
+        """
+        Returns the expansion definitions for segments as a pd.DataFrame
+        """
+        return pd.read_csv(self._subset_definitions_path)
 
     def _get_multiply_definition(self,
                                  other: SegmentationLevel,
@@ -364,6 +424,33 @@ class SegmentationLevel:
                 )
 
         return definition['out'].squeeze()
+
+    def _get_subset_definition(self,
+                               other: SegmentationLevel,
+                               ) -> Dict[str, Any]:
+        """
+        Returns the drop cols of subset-ing this segmentation into other.
+        """
+        # Init
+        subset_def = self._read_subset_definitions()
+
+        # Try find a definition
+        df_filter = {
+            'in': self.name,
+            'out': other.name,
+        }
+        definition = pd_utils.filter_df(subset_def, df_filter)
+
+        # If empty, we don't know what to do
+        if definition.empty:
+            raise SegmentationError(
+                "Got no definition for aggregating '%s' into '%s'.\n"
+                "If there should be a definition, please add one in "
+                "at: %s"
+                % (self.name, other.name, self._subset_definitions_path)
+            )
+
+        return self._parse_drop_cols(definition['drop'].squeeze())
 
     def _read_aggregation_definitions(self) -> pd.DataFrame:
         """
@@ -465,6 +552,25 @@ class SegmentationLevel:
         translate_pairs = du.list_safe_remove(translate_pairs, [''])
         return [tuple(x.split(self._translate_separator)) for x in translate_pairs]
 
+    def _parse_drop_cols(self, drop_cols: str) -> Dict[str, Any]:
+        """Parses the drop col (from subset.csv) into a Dictionary"""
+        # If not string, throw error
+        if not isinstance(drop_cols, str):
+            raise SegmentationError(
+                "No drop cols found. Not sure how to proceed. Got %s"
+                % drop_cols
+            )
+
+        # Parse into dictionary
+        drop_vals = [x.strip() for x in drop_cols.split(self._list_separator)]
+        drop_vals = [x.split(self._drop_splitter) for x in drop_vals]
+
+        drop_dict = collections.defaultdict(list)
+        for seg, val in drop_vals:
+            drop_dict[seg].append(val)
+
+        return drop_dict
+
     def rename_segment_cols(self,
                             df: pd.DataFrame,
                             naming_conversion: Dict[str, str],
@@ -528,13 +634,25 @@ class SegmentationLevel:
         rename_dict = {v: k for k, v in naming_conversion.items()}
         return df.rename(columns=rename_dict, inplace=inplace)
 
-    def copy(self):
+    def copy(self) -> SegmentationLevel:
         """Returns a copy of this class"""
         return SegmentationLevel(
             name=self.name,
             naming_order=self.naming_order.copy(),
+            segment_types=self.segment_types.copy(),
             valid_segments=self._valid_segments.copy()
         )
+
+    def has_time_period_segments(self) -> bool:
+        """Checks whether this segmentation has time period segmentation
+
+        Returns
+        -------
+        has_time_period_segments:
+            True if there is a time_period segment in this segmentation,
+            False otherwise
+        """
+        return self._time_period_segment_name in self.naming_order
 
     def create_segment_col(self,
                            df: pd.DataFrame,
@@ -724,7 +842,7 @@ class SegmentationLevel:
         # Check that the output segmentation has been created properly
         if not other.is_correct_naming(list(agg_dict.keys())):
             raise SegmentationError(
-                "Some segment names seem to have gone missing during"
+                "Some segment names seem to have gone missing during "
                 "aggregation.\n"
                 "Expected %s segments.\n"
                 "Found %s segments."
@@ -1075,6 +1193,64 @@ class SegmentationLevel:
 
         return expand_dict, return_seg
 
+    def subset(self, other: SegmentationLevel) -> List[str]:
+        """Generates a list defining which segments to keep when subset-ing to other
+
+        Parameters
+        ----------
+        other:
+            The segmentation to subset to
+
+        Returns
+        -------
+        subset_list:
+            A list defining which segments to keep when subset-ing from this
+            segmentation to other.
+
+        Raises
+        ------
+        ValueError:
+            If the given parameters are not the correct types
+
+        SegmentationError:
+            If not all of the output segments can be found in the generated
+            expansion dictionary.
+        """
+        # Validate inputs
+        if not isinstance(other, SegmentationLevel):
+            raise ValueError(
+                "other is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(other)
+            )
+
+        # Find out which segments we should be dropping
+        subset_def = self._get_subset_definition(other)
+
+        # ## FIGURE OUT THE SUBSET ## #
+        # Need to cast to match subset_def
+        segments_and_names = self.segments_and_names.copy()
+        for seg, vals in subset_def.items():
+            segments_and_names[seg] = segments_and_names[seg].astype(type(vals[0]))
+
+        # Get the rows that match the filter
+        drop_mask = segments_and_names.isin(subset_def).any(axis='columns')
+
+        # Get a list of the segments we should keep
+        keep_segments = self.segments_and_names['name'][~drop_mask].to_list()
+
+        # Check that the output segmentation has been created properly
+        if not other.is_correct_naming(keep_segments):
+            raise SegmentationError(
+                "Some segment names seem to have gone missing during "
+                "expansion.\n"
+                "Expected %s segments.\n"
+                "Found %s segments."
+                % (len(other.segment_names), len(set(keep_segments)))
+            )
+
+        return keep_segments
+
     def is_correct_naming(self, lst: List[str]) -> bool:
         """
         Checks whether lst is a complete list of all names of this segmentation.
@@ -1082,12 +1258,12 @@ class SegmentationLevel:
         Parameters
         ----------
         lst:
-            A list of segment names to check
+            A list of segmentation names to check
 
         Returns
         -------
         is_correct_naming:
-            True if all names in lst are valid, and lst contains all segment
+            True if all names in lst are valid, and lst contains all segmentation
             names. Otherwise False.
         """
         # Init
@@ -1103,6 +1279,66 @@ class SegmentationLevel:
 
         # If we are here, then must be True
         return True
+
+    def contains_all_segments(self, lst: List[str]) -> bool:
+        """Checks whether lst is a complete list of all segments in this segmentation.
+
+        Parameters
+        ----------
+        lst:
+            A list of segmentation names to check.
+
+        Returns
+        -------
+        contains_all_segments:
+            True if all names in lst are valid, and lst contains all segment
+            names. Otherwise False.
+        """
+        # Init
+        names = set(lst)
+
+        # Return False if not all names are valid
+        if len(names - set(self.naming_order)) > 0:
+            return False
+
+        # Return False if some names are missing
+        if len(set(self.naming_order) - names) > 0:
+            return False
+
+        # If we are here, then must be True
+        return True
+
+    def validate_contains_all_segments(self, lst: List[str]) -> None:
+        """Raises an error is lst is not valid
+
+        Raises an error if lst is not a complete list of all segments in
+        this segmentation.
+
+        Parameters
+        ----------
+        lst:
+            A list of segmentation names to check.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError:
+            If self.contains_all_segments(lst) returns False.
+        """
+        if not self.contains_all_segments(lst):
+            additional = set(lst) - set(self.naming_order)
+            missing = set(self.naming_order) - set(lst)
+
+            raise ValueError(
+                "Not all segments for this segmentation are contained in "
+                "segment_params.\n"
+                "\tAdditional segments: %s\n"
+                "\tMissing segments: %s"
+                % (additional, missing)
+            )
 
     def get_grouped_weekday_segments(self) -> List[List[str]]:
         """
@@ -1120,8 +1356,11 @@ class SegmentationLevel:
         ValueError:
             If this segmentation does not have a time period segment
         """
+        # Init
+        tp_segment = self._time_period_segment_name
+
         # Validate arguments
-        if 'tp' not in self.naming_order:
+        if tp_segment not in self.naming_order:
             raise ValueError(
                 "SegmentationLevel does not have a time period segment (tp). "
                 "Cannot get segments by weekday without a time period"
@@ -1130,11 +1369,11 @@ class SegmentationLevel:
 
         # Init
         no_tp_naming = self.naming_order.copy()
-        no_tp_naming.remove('tp')
+        no_tp_naming.remove(tp_segment)
 
         # Filter down to just the weekday time periods
         segments = self.segments_and_names.copy()
-        segments = segments[segments['tp'].isin(self._weekday_time_periods)]
+        segments = segments[segments[tp_segment].isin(self._weekday_time_periods)]
 
         # Generate no tp segment name
         segments['no_tp_name'] = pd_utils.str_join_cols(segments, no_tp_naming)
@@ -1163,21 +1402,23 @@ class SegmentationLevel:
         ValueError:
             If this segmentation does not have a time period segment
         """
+        # Init
+        tp_segment = self._time_period_segment_name
+
         # Validate arguments
-        if 'tp' not in self.naming_order:
+        if tp_segment not in self.naming_order:
             raise ValueError(
                 "SegmentationLevel does not have a time period segment (tp). "
                 "Cannot get segments by weekday without a time period"
                 "segment."
             )
 
-        # Init
         no_tp_naming = self.naming_order.copy()
-        no_tp_naming.remove('tp')
+        no_tp_naming.remove(tp_segment)
 
         # Filter down to just the weekday time periods
         segments = self.segments_and_names.copy()
-        segments = segments[segments['tp'].isin(self._weekend_time_periods)]
+        segments = segments[segments[tp_segment].isin(self._weekend_time_periods)]
 
         # Generate no tp segment name
         segments['no_tp_name'] = pd_utils.str_join_cols(segments, no_tp_naming)
@@ -1189,6 +1430,126 @@ class SegmentationLevel:
 
         # Grab just the values for returning
         return list(temp_dict.values())
+
+    def get_time_period_groups(self):
+        """
+        Get a dictionary of {time_period: segments} in this segmentation.
+
+        Returns
+        -------
+        time_period_dict:
+            A dictionary of {time_period: segments}, where segments is a list
+            of all the segments in that time_period.
+
+        Raises
+        ------
+        ValueError:
+            If this segmentation does not have a time period segment
+        """
+        # Init
+        tp_segment_name = self._time_period_segment_name
+
+        # Validate arguments
+        if tp_segment_name not in self.naming_order:
+            raise ValueError(
+                "SegmentationLevel does not have a time period segment (tp). "
+                "Cannot get segments by weekday without a time period"
+                "segment."
+            )
+
+        # Find out which time_periods are in this segmentation
+        unique_tp = self.segments_and_names[tp_segment_name].unique()
+
+        # Generate the dictionary
+        tp_dict = dict.fromkeys(unique_tp)
+        segments = self.segments_and_names.copy()
+        for tp in unique_tp:
+            tp_segments = segments[segments[tp_segment_name].isin([tp])]
+            tp_dict[tp] = tp_segments['name'].to_list()
+
+        return tp_dict
+
+    def generate_file_name(self,
+                           segment_params: Dict[str, Any],
+                           file_desc: Optional[str] = None,
+                           trip_origin: Optional[str] = None,
+                           year: Optional[str] = None,
+                           suffix: Optional[str] = None,
+                           csv: Optional[bool] = False,
+                           compressed: Optional[bool] = False,
+                           ) -> str:
+        """Generate a file name from segment_params
+
+        Builds a underscore separated file name based on the segments
+        passed in via segment params. Filename is built in the following
+        order, missing any arguments that haven't been defined.
+        trip_origin, file_desc, year, segment_params (in naming_order order),
+        suffix.
+
+        Parameters
+        ----------
+        file_desc:
+            A string describing the file. For matrices, this is usually 'pa'
+            or 'od'. For other files it is a description of their contents.
+
+        segment_params:
+            A dictionary of {segment_name: segment_value}. All segment_names
+            from this segmentation must be contained in segment_params. An
+            error will be thrown if any are missing.
+
+        trip_origin:
+            The trip origin to add to the filename. Usually 'hb' or 'nhb'.
+
+        year:
+            The year to add to the filename.
+
+        suffix:
+            An optional suffix to add to the end of the filename. Could be
+            something like 'internal' or 'external'. Optionally can be used
+            to add a custom filetype suffix. The dot would need to be passed
+            in too.
+
+        csv:
+            Whether the return should be a csv filetype or not.
+
+        compressed:
+            Whether the return should be a compressed filetype or not.
+
+        Returns
+        -------
+        file_name:
+            The generated file_name for this segmentation.
+        """
+        # Make sure all segments are in segment_params
+        self.validate_contains_all_segments(segment_params.keys())
+
+        # Build the filename in order, and store in list
+        name_parts = list()
+        if trip_origin is not None:
+            name_parts += [trip_origin]
+
+        if file_desc is not None:
+            name_parts += [file_desc]
+
+        if year is not None:
+            name_parts += ["yr%s" % year]
+
+        for segment_name in self.naming_order:
+            name_parts += ["%s%s" % (segment_name, segment_params[segment_name])]
+
+        if suffix is not None:
+            name_parts += [suffix]
+
+        # Create name string
+        final_name = '_'.join(name_parts)
+
+        # Optionally add on a file_type
+        if csv:
+            final_name += '.csv'
+        elif compressed:
+            final_name += consts.COMPRESSION_SUFFIX
+
+        return final_name
 
 
 class SegmentationError(nd.NormitsDemandError):
@@ -1208,7 +1569,7 @@ def _read_in_and_validate_naming_order(path: nd.PathLike, name: str) -> List[str
     """
     # Check the file exists
     if not os.path.isfile(path):
-        raise nd.NormitsDemandError(
+        raise FileNotFoundError(
             "We don't seem to have any naming order data for the segmentation %s.\n"
             "Tried looking for the data here: %s"
             % (name, path)
@@ -1240,6 +1601,59 @@ def _read_in_and_validate_naming_order(path: nd.PathLike, name: str) -> List[str
     return order
 
 
+def _read_in_and_validate_segment_types(path: nd.PathLike,
+                                        naming_order: List[str],
+                                        default_type: type = int,
+                                        ) -> Dict[str, type]:
+    """
+    Converts the given csv file into a Dictionary of column types names
+    """
+    # Assume all default int type if no file found
+    if not os.path.isfile(path):
+        return {x: default_type for x in naming_order}
+
+    # Read in and validate each row
+    segment_types = dict()
+    with open(path) as f:
+        for i, line in enumerate(f):
+            split_line = line.split(',')
+
+            # Make sure there is only two values on this line
+            if len(split_line) != 2:
+                raise SegmentationError(
+                    "Error while reading in the segmentation typing at: %s\n"
+                    "Expected to find two values on line %s, found %s values "
+                    "instead.\n"
+                    "The following line was read: %s"
+                    % (path, i, len(split_line), line)
+                )
+
+            col = split_line[0]
+            col_type = eval(split_line[1])
+
+            if col not in naming_order:
+                raise ValueError(
+                    "On line %s, the segment %s in the typing file does "
+                    "not exist in the naming order."
+                    % (i, col)
+                )
+
+            if type(col_type) != type:
+                raise ValueError(
+                    "On line %s, expected to find a type (such as int, or "
+                    "str), but got an object of type %s instead."
+                    % (i, type(col_type))
+                )
+
+            segment_types[col] = col_type
+
+    # Infill int where type not given
+    missing_types = set(naming_order) - set(segment_types.keys())
+    segment_types.update({x: int for x in missing_types})
+
+    return segment_types
+
+
 def _get_valid_segments(name: str) -> pd.DataFrame:
     """
     Finds and reads in the valid segments data for segmentation with name
@@ -1258,6 +1672,10 @@ def _get_valid_segments(name: str) -> pd.DataFrame:
     # ## READ IN THE NAMING ORDER ## #
     file_path = os.path.join(import_home, SegmentationLevel._naming_order_fname)
     naming_order = _read_in_and_validate_naming_order(file_path, name)
+
+    # ## READ IN THE SEGMENT TYPING ## #
+    file_path = os.path.join(import_home, SegmentationLevel._segment_type_fname)
+    segment_types = _read_in_and_validate_segment_types(file_path, naming_order)
 
     # ## READ IN THE UNIQUE SEGMENTS ## #
     # Build the two possible paths
@@ -1289,7 +1707,7 @@ def _get_valid_segments(name: str) -> pd.DataFrame:
     df = df.rename(columns=rename_cols)
     df = pd_utils.reindex_cols(df, naming_order)
 
-    return df, naming_order
+    return df, naming_order, segment_types
 
 
 def get_segmentation_level(name: str) -> SegmentationLevel:
@@ -1308,11 +1726,12 @@ def get_segmentation_level(name: str) -> SegmentationLevel:
     """
     # TODO(BT): Add some validation on the segmentation name
     # TODO(BT): Add some caching to this function!
-    valid_segments, naming_order = _get_valid_segments(name)
+    valid_segments, naming_order, segment_types = _get_valid_segments(name)
 
     # Create the SegmentationLevel object and return
     return SegmentationLevel(
         name=name,
         naming_order=naming_order,
+        segment_types=segment_types,
         valid_segments=valid_segments,
     )

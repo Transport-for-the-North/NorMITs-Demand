@@ -162,8 +162,8 @@ def grow_external_pa(growth_factors: pd.DataFrame,
                      csv_out: bool = True,
                      compress_out: bool = True,
                      report_out: str = None,
-                     round_dp: int = efs_consts.DEFAULT_ROUNDING,
-                     process_count: int = efs_consts.PROCESS_COUNT,
+                     round_dp: int = consts.DEFAULT_ROUNDING,
+                     process_count: int = consts.PROCESS_COUNT,
                      verbose: bool = False,
                      ) -> None:
     # TODO: Write grow_external_pa() docs

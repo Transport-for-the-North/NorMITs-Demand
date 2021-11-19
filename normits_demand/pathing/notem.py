@@ -8,7 +8,7 @@ Last update made by:
 Other updates made by:
 
 File purpose:
-Classes which build all the paths for NoTEM model outputs
+Classes which build all the paths for NoTEM model inputs and outputs
 """
 # Builtins
 import os

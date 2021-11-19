@@ -12,8 +12,12 @@ A collections of utility functions for file operations
 """
 # builtins
 import os
+import time
+import pickle
 import pathlib
+import warnings
 
+from typing import Any
 from typing import List
 
 # Third Party
@@ -305,91 +309,6 @@ def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
         raise ValueError(
             "Cannot determine the filetype of the given path. Expected "
             "either '.csv' or '%s'" % consts.COMPRESSION_SUFFIX
-        )
-
-
-def read_pickle(path: nd.PathLike,
-                find_similar: bool = False,
-                **kwargs,
-                ) -> pd.DataFrame:
-    """
-    Reads in the pickle at path. Decompresses the pickle if needed.
-
-    Parameters
-    ----------
-    path:
-        The full path to the dataframe to read in
-
-    find_similar:
-        If True and the given file at path cannot be found, files with the
-        same name but different extensions will be looked for and read in
-        instead. Will check for: '.pkl', '.pbz2', '.pickle', '.p'
-
-    Returns
-    -------
-    unpickled_data:
-        The read in pickle at path.
-    """
-    # Init
-    pickle_extensions = ['.pkl', '.p', '.pickle']
-
-    # Try and find similar files if we are allowed
-    if not os.path.exists(path):
-        if not find_similar:
-            raise FileNotFoundError(
-                "No such file or directory: '%s'" % path
-            )
-        alt_types = pickle_extensions + [consts.COMPRESSION_SUFFIX]
-        path = find_filename(path, alt_types=alt_types)
-
-    # Determine how to read in df
-    if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
-        return compress.read_in(path)
-
-    elif pathlib.Path(path).suffix in pickle_extensions:
-        return pd.read_pickle(path, **kwargs)
-
-    else:
-        raise ValueError(
-            "Cannot determine the filetype of the given path. Expected "
-            "either '.pkl' or '%s'" % consts.COMPRESSION_SUFFIX
-        )
-
-
-def write_pickle(obj: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
-    """
-    Reads in the dataframe at path. Decompresses the df if needed.
-
-    Parameters
-    ----------
-    obj:
-        The object to write to disk
-
-    path:
-        The full path to the dataframe to read in
-
-    **kwargs:
-        Any arguments to pass to the underlying write function.
-
-    Returns
-    -------
-    df:
-        The read in df at path.
-    """
-    # Init
-    path = cast_to_pathlib_path(path)
-
-    # Determine how to read in df
-    if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
-        compress.write_out(obj, path)
-
-    elif pathlib.Path(path).suffix == '.pkl':
-        pd.to_pickle(path, **kwargs)
-
-    else:
-        raise ValueError(
-            "Cannot determine the filetype of the given path. Expected "
-            "either '.pkl' or '%s'" % consts.COMPRESSION_SUFFIX
         )
 
 
@@ -760,3 +679,119 @@ def create_folder(folder_path: nd.PathLike,
         "New project folder created at %s" % folder_path,
         verbose=verbose_create,
     )
+
+
+def write_pickle(obj: object,
+                 path: nd.PathLike,
+                 protocol: int = pickle.HIGHEST_PROTOCOL,
+                 **kwargs,
+                 ) -> None:
+    """Load any pickled object from disk at path.
+
+    Parameters
+    ----------
+    obj:
+        The object to pickle and write to disk
+
+    path:
+        Filepath to write obj to
+
+    protocol:
+        The pickle protocol to use when dumping to disk
+
+    **kwargs:
+        Any additional arguments to pass to pickle.dump()
+
+    Returns
+    -------
+    None
+    """
+    with open(path, 'wb') as f:
+        pickle.dump(obj, f, protocol=protocol, **kwargs)
+
+
+def read_pickle(path: nd.PathLike) -> Any:
+    """Load any pickled object from disk at path.
+
+    Parameters
+    ----------
+    path:
+        Filepath to the object to read in and unpickle
+
+    Returns
+    -------
+    unpickled:
+        Same type as object stored in file.
+    """
+    # Validate path
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            "No file to read in found at %s"
+            % path
+        )
+
+    # Read in
+    with open(path, 'rb') as f:
+        obj = pickle.load(f)
+
+    # If no version, return now
+    if not hasattr(obj, '__version__'):
+        return obj
+
+    # Check if class definition has a version (should do!)
+    if not hasattr(obj.__class__, '__version__'):
+        warn_msg = (
+            "The object loaded from '%s' has a version, but the class "
+            "definition in the code does not. Aborting version check!\n"
+            "Loaded object is version %s"
+            % (path, obj.__version__)
+        )
+        warnings.warn(warn_msg, UserWarning, stacklevel=2)
+
+    # Throw warning if versions don't match
+    if obj.__version__ != obj.__class__.__version__:
+        warn_msg = (
+            "The object loaded from '%s' is not the same version as the "
+            "class definition in the code. This might cause some unexpected "
+            "problems.\n"
+            "Object Version: %s\n"
+            "Class Version: %s"
+            % (path, obj.__version__, obj.__class__.__version__)
+        )
+        warnings.warn(warn_msg, UserWarning, stacklevel=2)
+
+    return obj
+
+
+def safe_dataframe_to_csv(df, out_path, **to_csv_kwargs):
+    """
+    Wrapper around df.to_csv. Gives the user a chance to close the open file.
+
+    Parameters
+    ----------
+    df:
+        pandas.DataFrame to write to call to_csv on
+
+    out_path:
+        Where to write the file to. TO first argument to df.to_csv()
+
+    to_csv_kwargs:
+        Any other kwargs to be passed straight to df.to_csv()
+
+    Returns
+    -------
+        None
+    """
+    written_to_file = False
+    waiting = False
+    while not written_to_file:
+        try:
+            df.to_csv(out_path, **to_csv_kwargs)
+            written_to_file = True
+        except PermissionError:
+            if not waiting:
+                print("Cannot write to file at %s.\n" % out_path +
+                      "Please ensure it is not open anywhere.\n" +
+                      "Waiting for permission to write...\n")
+                waiting = True
+            time.sleep(1)
