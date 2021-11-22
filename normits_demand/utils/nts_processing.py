@@ -21,41 +21,51 @@ class NTSTripLengthBuilder:
 
         # Get user to select trip banding options
         band_options = [x for x in os.listdir(tlb_folder) if 'bands' in x]
+        band_options = [x for x in band_options if '.csv' in x]
         if len(band_options) == 0:
             raise ValueError('no trip length bands in folder')
-        for (i, option) in enumerate(band_options, 0):
-            print(i, option)
-        selection_b = input('Choose bands to aggregate by (index): ')
-        self.trip_length_bands = pd.read_csv(
-            os.path.join(tlb_folder,
-                         band_options[int(selection_b)])
-        )
+
+        bands_confirmed = False
+        while not bands_confirmed:
+            for (i, option) in enumerate(band_options, 0):
+                print(i, option)
+            selection_b = input('Choose bands to aggregate by (index): ')
+
+            bands = pd.read_csv(os.path.join(tlb_folder,
+                                             band_options[int(selection_b)]))
+            print('%d bands in selected' % len(bands))
+            print(bands)
+
+            if input('Keep these bands y/n').lower() == 'y':
+                bands_confirmed = True
+
+        self.trip_length_bands = bands
 
         # Get user to select segmentation
         seg_options = [x for x in os.listdir(tlb_folder) if 'segment' in x]
         if len(seg_options) == 0:
             raise ValueError('no target segmentations in folder')
-        for (i, option) in enumerate(seg_options, 0):
-            print(i, option)
-        selection_s = input('Choose segments to aggregate by (index): ')
-        self.target_segmentation = pd.read_csv(
-            os.path.join(tlb_folder,
-                         seg_options[int(selection_s)])
-        )
 
-        # Set run area gb or north
-        if 'gb_' in seg_options[int(selection_s)]:
-            geo_area = 'gb'
-        elif 'north_' in seg_options[int(selection_s)]:
-            geo_area = 'north'
-        print('Run for ' + geo_area + '?')
-        if input('y/n').lower() == 'y':
-            self.geo_area = geo_area
-        else:
-            for (i, option) in enumerate(con.GEO_AREAS, 0):
+        segments_confirmed = False
+        while not segments_confirmed:
+            for (i, option) in enumerate(seg_options, 0):
                 print(i, option)
-            selection_g = input('Choose geo-area (index): ')
-            self.geo_area = con.GEO_AREAS[int(selection_g)]
+            selection_s = input('Choose segments to aggregate by (index): ')
+            segments = pd.read_csv(os.path.join(tlb_folder,
+                                                seg_options[int(selection_s)]))
+            print('%d total segments in selected' % len(segments))
+            for index, row in segments.iterrows():
+                print(row)
+
+            if input('Keep these bands y/n') == 'y':
+                segments_confirmed = True
+
+        self.target_segmentation = segments
+
+        for (i, option) in enumerate(con.GEO_AREAS, 0):
+            print(i, option)
+        selection_g = input('Choose geo-area (index): ')
+        self.geo_area = con.GEO_AREAS[int(selection_g)]
 
         self.export = os.path.join(
             self.tlb_folder,
@@ -80,11 +90,15 @@ class NTSTripLengthBuilder:
 
         # Set target cols
         target_cols = ['SurveyYear', 'TravelWeekDay_B01ID', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc_cat',
-                       'ns_sec', 'main_mode', 'hb_purpose', 'nhb_purpose', 'Sex_B01ID',
+                       'ns_sec', 'main_mode', 'hb_purpose', 'nhb_purpose', 'nhb_purpose_hb_leg', 'Sex_B01ID',
                        'trip_origin', 'start_time', 'TripDisIncSW', 'TripOrigGOR_B02ID',
                        'TripDestGOR_B02ID', 'tfn_area_type', 'weighted_trip']
 
         output_dat = self.nts_import.reindex(target_cols, axis=1)
+
+        # Build a list to record how many records
+        records = list()
+        records.append(len(output_dat))
 
         # CA Map
         """
@@ -127,14 +141,21 @@ class NTSTripLengthBuilder:
                                       how='left',
                                       on='tfn_area_type')
 
+        records.append(len(output_dat))
+
+        # Filter to weekdays only
         output_dat = output_dat[
             output_dat['TravelWeekDay_B01ID'].isin(weekdays)].reset_index(drop=True)
+        records.append(len(output_dat))
 
         # Geo filter
         if self.geo_area == 'north':
             output_dat = output_dat[
                 output_dat['HHoldOSLAUA_B01ID'].isin(
                     north_la)].reset_index(drop=True)
+        records.append(len(output_dat))
+
+        # TODO: Process O/D to handle incl. i/e
 
         out_mat = []
         for index, row in self.target_segmentation.iterrows():
@@ -142,17 +163,35 @@ class NTSTripLengthBuilder:
             print(row)
             op_sub = output_dat.copy()
 
+            # Establish if PA cost or OD TLD
+            if 'cost_type' in list(row):
+                cost_type = row['cost_type']
+            else:
+                if 'p' in row:
+                    if int(row['p']) in con.ALL_HB_P:
+                        cost_type = 'pa'
+                    elif int(row['p']) in con.ALL_NHB_P:
+                        cost_type = 'od'
+                    else:
+                        raise ValueError('%d non-recognised purpose' % row['p'])
+
             # Seed values so they can go MIA
             trip_origin, purpose, mode, tp, soc, ns = [0, 0, 0, 0, 0, 0]
             tfn_at, agg_at, g, ca, agg_gor_from, agg_gor_to = [0, 0, 0, 0, 0, 0]
-            # TODO: Use nones to bypass some of these as required - or else it'll fail except on full seg
+
             for subset, value in row.iteritems():
                 if subset == 'trip_origin':
                     op_sub = op_sub[op_sub['trip_origin'] == value].reset_index(drop=True)
                     trip_origin = value
                 if subset == 'p':
                     if trip_origin == 'hb':
-                        op_sub = op_sub[op_sub['hb_purpose'] == value].reset_index(drop=True)
+                        if cost_type == 'pa':
+                            op_sub = op_sub[
+                                (op_sub['nhb_purpose_hb_leg'] == value) |
+                                (op_sub['hb_purpose'] == value)
+                            ]
+                        elif cost_type == 'od':
+                            op_sub = op_sub[op_sub['hb_purpose'] == value].reset_index(drop=True)
                     elif trip_origin == 'nhb':
                         op_sub = op_sub[op_sub['nhb_purpose'] == value].reset_index(drop=True)
                     purpose = value
@@ -264,7 +303,7 @@ class NTSTripLengthBuilder:
 
             ex_name = os.path.join(self.export, name)
 
-            out.to_csv(ex_name, index = False)
+            out.to_csv(ex_name, index=False)
 
             out['mode'] = mode
             out['period'] = tp

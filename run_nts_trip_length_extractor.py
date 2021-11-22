@@ -12,7 +12,12 @@ if __name__ == '__main__':
     _TLB_FOLDER = 'I:/NorMITs Synthesiser/import/trip_length_bands'
     _NTS_IMPORT = 'Y:/NTS/classified builds/cb_tfn.csv'
 
-    xtract = nts.NTSTripLengthBuilder(tlb_folder=_TLB_FOLDER,
-                                      nts_import=_NTS_IMPORT)
+    run_another = True
+    while run_another:
+        xtract = nts.NTSTripLengthBuilder(tlb_folder=_TLB_FOLDER,
+                                          nts_import=_NTS_IMPORT)
 
-    dat = xtract.run_tlb_lookups()
+        dat = xtract.run_tlb_lookups()
+
+        if input('Run another y/n').lower() == 'n':
+            run_another = False
