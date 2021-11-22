@@ -190,7 +190,7 @@ class HBProductionModel(HBProductionModelPaths):
         )
 
     def run(self,
-            export_pure_demand: bool = True,
+            export_pure_demand: bool = False,
             export_fully_segmented: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
@@ -636,7 +636,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         )
 
     def run(self,
-            export_nhb_pure_demand: bool = True,
+            export_nhb_pure_demand: bool = False,
             export_fully_segmented: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,

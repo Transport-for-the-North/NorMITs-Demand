@@ -214,7 +214,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         )
 
     def run(self,
-            export_pure_attractions: bool = True,
+            export_pure_attractions: bool = False,
             export_fully_segmented: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
@@ -640,7 +640,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         )
 
     def run(self,
-            export_nhb_pure_attractions: bool = True,
+            export_nhb_pure_attractions: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
             verbose: bool = False,
