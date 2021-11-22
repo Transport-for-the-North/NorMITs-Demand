@@ -214,7 +214,7 @@ class DVector:
     _zone_col = 'zone'
     _segment_col = 'segment'
     _val_col = 'val'
-    _zero_infill = 1e-10
+    _zero_infill = 1e-12
 
     _dvec_suffix = '_dvec%s' % consts.COMPRESSION_SUFFIX
 
@@ -1627,65 +1627,13 @@ class DVector:
             verbose=self.verbose,
         )
 
-    def balance_at_segments(self,
-                            other: DVector,
-                            split_weekday_weekend: bool = False,
-                            ) -> DVector:
-        """
-        Balance segment totals to other, ignoring zoning splits.
-
-        Essentially does
-        self[segment] *= other[segment].sum() / self[segment].sum()
-        for all segments.
-
-        Parameters
-        ----------
-        other:
-            The DVector to control this one to. Must have the same segmentation
-            as this DVector
-
-        split_weekday_weekend:
-            Whether to control the time periods as weekday and weekend splits
-            instead of each individual time period. If set to True,
-            each DVector must be at a segmentation with a 'tp' segment.
-
-        Returns
-        -------
-        controlled_dvector:
-            A copy of this DVector, controlled to other. The total of each
-            segment should be equal across self and other.
-
-        Raises
-        ------
-        ValueError:
-            If the given parameters are not the correct types.
-
-        ValueError:
-            If self and other do not have the same segmentation.
-        """
+    def _balance_at_segments_internal(self,
+                                      other: DVector,
+                                      zone_mask: np.ndarray,
+                                      split_weekday_weekend: bool = False,
+                                      ):
+        """Internal balancing function of self.balance_at_segments()"""
         # Init
-        infill = self._zero_infill
-
-        # Validate inputs
-        if not isinstance(other, DVector):
-            raise ValueError(
-                "other is not the correct type. "
-                "Expected DVector, got %s"
-                % type(other)
-            )
-
-        if self.segmentation.name != other.segmentation.name:
-            raise ValueError(
-                "Segmentation of both DVectors does not match! "
-                "Perhaps you need to call "
-                "self.split_segmentation_like(other) to bring them into "
-                "alignment?\n"
-                "self segmentation: %s\n"
-                "other segmentation: %s"
-                % (self.segmentation.name, other.segmentation.name)
-            )
-
-        # Loop through each segment and control
         dvec_data = dict.fromkeys(self.segmentation.segment_names)
 
         if split_weekday_weekend:
@@ -1705,8 +1653,12 @@ class DVector:
                         other_data = other._data[segment]
 
                         # Infill zeros
-                        self_data = np.where(self_data <= 0, infill, self_data)
-                        other_data = np.where(other_data <= 0, infill, other_data)
+                        self_data = np.where(self_data <= 0, self._zero_infill, self_data)
+                        other_data = np.where(other_data <= 0, self._zero_infill, other_data)
+
+                        # Remove the zones we don't care about
+                        self_data *= zone_mask
+                        other_data *= zone_mask
 
                         # Append
                         self_data_lst.append(self_data)
@@ -1727,11 +1679,124 @@ class DVector:
                 other_data = other._data[segment]
 
                 # Infill zeros
-                self_data = np.where(self_data <= 0, infill, self_data)
-                other_data = np.where(other_data <= 0, infill, other_data)
+                self_data = np.where(self_data <= 0, self._zero_infill, self_data)
+                other_data = np.where(other_data <= 0, self._zero_infill, other_data)
+
+                # Remove the zones we don't care about
+                self_data *= zone_mask
+                other_data *= zone_mask
 
                 # Balance
                 dvec_data[segment] = self_data * (np.sum(other_data) / np.sum(self_data))
+
+        return dvec_data
+
+    def balance_at_segments(self,
+                            other: DVector,
+                            split_weekday_weekend: bool = False,
+                            balance_zoning: nd.core.zoning.ZoningSystem = None,
+                            ) -> DVector:
+        """
+        Balance segment totals to other, ignoring zoning splits.
+
+        Essentially does
+        self[segment] *= other[segment].sum() / self[segment].sum()
+        for all segments.
+
+        Parameters
+        ----------
+        other:
+            The DVector to control this one to. Must have the same segmentation
+            as this DVector
+
+        split_weekday_weekend:
+            Whether to control the time periods as weekday and weekend splits
+            instead of each individual time period. If set to True,
+            each DVector must be at a segmentation with a 'tp' segment.
+
+
+        balance_zoning:
+            The zoning system to balance at. If not given, the balance will
+            ignore all zones and just balance segments. If given, a
+            translation needs to exist between the given DVectors zoning
+            systems, and the zoning we are balancing at.
+
+        Returns
+        -------
+        controlled_dvector:
+            A copy of this DVector, controlled to other. The total of each
+            segment should be equal across self and other.
+
+        Raises
+        ------
+        ValueError:
+            If the given parameters are not the correct types.
+
+        ValueError:
+            If self and other do not have the same segmentation.
+        """
+        # Validate inputs
+        if not isinstance(other, DVector):
+            raise ValueError(
+                "other is not the correct type. "
+                "Expected DVector, got %s"
+                % type(other)
+            )
+
+        # Validate inputs
+        if balance_zoning is not None:
+            if not isinstance(balance_zoning, nd.core.zoning.ZoningSystem):
+                raise ValueError(
+                    "balance_zoning is not the correct type. "
+                    "Expected ZoningSystem, got %s"
+                    % type(balance_zoning)
+                )
+
+            if self.zoning_system != other.zoning_system:
+                raise ValueError(
+                    "Zoning system of both DVectors does not match! "
+                    "Perhaps you need to call "
+                    "self zoning: %s\n"
+                    "other zoning: %s"
+                    % (self.zoning_system.name, other.zoning_system.name)
+                )
+
+        if self.segmentation.name != other.segmentation.name:
+            raise ValueError(
+                "Segmentation of both DVectors does not match! "
+                "Perhaps you need to call "
+                "self.split_segmentation_like(other) to bring them into "
+                "alignment?\n"
+                "self segmentation: %s\n"
+                "other segmentation: %s"
+                % (self.segmentation.name, other.segmentation.name)
+            )
+
+        # Loop through each segment and control
+        if balance_zoning is None:
+            # Ignore all zoning and balance=
+            dvec_data = self._balance_at_segments_internal(
+                other=other,
+                zone_mask=np.ones_like(self.zoning_system.unique_zones),
+                split_weekday_weekend=split_weekday_weekend,
+            )
+
+        else:
+            # Figure out the masks for zone groups
+            translation = self.zoning_system.translate(balance_zoning)
+
+            # Balance at each group
+            data_list = list()
+            for zone_mask in translation.T:
+                adjusted = self._balance_at_segments_internal(
+                    other=other,
+                    zone_mask=zone_mask,
+                    split_weekday_weekend=split_weekday_weekend,
+                )
+                data_list.append(adjusted)
+
+            # Sum the zone groups together
+            dvec_data = du.combine_dict_list(data_list, operator.add)
 
         return DVector(
             zoning_system=self.zoning_system,
