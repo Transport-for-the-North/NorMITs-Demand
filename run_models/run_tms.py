@@ -40,13 +40,14 @@ cache_path = "E:/tms_cache"
 
 def main():
     # mode = nd.Mode.CAR
-    # mode = nd.Mode.BUS
-    mode = nd.Mode.TRAIN
+    mode = nd.Mode.BUS
+    # mode = nd.Mode.TRAIN
 
     use_tram = False
 
     if mode == nd.Mode.CAR:
         zoning_system = nd.get_zoning_system('noham')
+        gm_tld_name = 'north/p_m'
         internal_tld_name = 'north/p_m'
         external_tld_name = 'gb/p_m'
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
@@ -64,6 +65,7 @@ def main():
 
     elif mode == nd.Mode.BUS:
         zoning_system = nd.get_zoning_system('noham')
+        gm_tld_name = 'north/p_m'
         internal_tld_name = 'north/p_m'
         external_tld_name = 'gb/p_m'
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
@@ -82,6 +84,7 @@ def main():
     elif mode == nd.Mode.TRAIN:
         # zoning_system = nd.get_zoning_system('msoa')
         zoning_system = nd.get_zoning_system('norms')
+        gm_tld_name = 'north/p_m_ca_train_bands'
         internal_tld_name = 'north/p_m_ca_train_bands'
         external_tld_name = 'gb/p_m_ca_train_bands'
         hb_agg_seg = nd.get_segmentation_level('hb_p_m_ca')
@@ -177,7 +180,7 @@ def main():
     }
 
     gravity_kwargs = {
-        'target_tld_name': internal_tld_name,
+        'target_tld_name': gm_tld_name,
         'cost_function': cost_function,
         'convergence_target': gm_convergence_target,
         'hb_init_params_fname': hb_init_params_fname,

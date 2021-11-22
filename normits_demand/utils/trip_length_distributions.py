@@ -222,11 +222,10 @@ def get_trip_length(distance, demand):
     distance = distance matrix as numpy ndarray
     internal_pa = demand as
     """
-
     # TODO: Just copy that bit below
     global_trips = demand.sum()
-    global_distance = demand * distance
+    global_distance = (demand * distance).sum()
 
-    global_atl = global_distance.sum() / global_trips
+    global_atl = global_distance / global_trips
 
     return global_atl

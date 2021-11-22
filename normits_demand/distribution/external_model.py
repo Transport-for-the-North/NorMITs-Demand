@@ -201,8 +201,8 @@ class ExternalModel(ExternalModelExportPaths):
         return_vals = multiprocessing.multiprocess(
             fn=self._run_internal,
             kwargs=kwarg_list,
-            process_count=self.process_count,
             pbar_kwargs=pbar_kwargs,
+            process_count=self.process_count,
         )
 
         # Unpack the return values
@@ -220,7 +220,7 @@ class ExternalModel(ExternalModelExportPaths):
             raise ValueError(
                 "'%s' is not a valid trip origin! How did this error happen? "
                 "Trip origin should have already been validated in this "
-                "function.s"
+                "function."
             )
 
         # Build col names

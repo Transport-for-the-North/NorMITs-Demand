@@ -2161,7 +2161,7 @@ def nhb_tp_split_via_factors(import_dir: nd.PathLike,
     du.print_w_toggle("Reading in the splitting factors...", verbose=verbose)
     fname = consts.POSTME_TP_SPLIT_FACTORS_FNAME
     factor_path = os.path.join(tour_proportions_dir, fname)
-    splitting_factors = file_ops.read_pickle(factor_path, find_similar=True)
+    splitting_factors = file_ops.read_pickle(factor_path)
 
     # Figure out the level of segmentation we are working at
     check_key = list(splitting_factors.keys())[0]
@@ -2365,7 +2365,9 @@ def _compile_matrices_internal(mat_import,
     in_mats = list()
     for mat_name in input_mat_names:
         in_path = os.path.join(mat_import, mat_name)
-        in_mats.append(file_ops.read_df(in_path, index_col=0))
+        df = file_ops.read_df(in_path, index_col=0)
+        df.columns = df.columns.astype(int)
+        in_mats.append(df)
 
     # Combine all matrices together
     full_mat = functools.reduce(operator.add, in_mats)
