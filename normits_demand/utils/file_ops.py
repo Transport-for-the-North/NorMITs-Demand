@@ -81,7 +81,9 @@ def file_exists(file_path: nd.PathLike) -> bool:
     return True
 
 
-def check_file_exists(file_path: nd.PathLike) -> None:
+def check_file_exists(file_path: nd.PathLike,
+                      find_similar: bool = False,
+                      ) -> None:
     """
     Checks if a file exists at the given path. Throws an error if not.
 
@@ -90,10 +92,19 @@ def check_file_exists(file_path: nd.PathLike) -> None:
     file_path:
         path to the file to check.
 
+    find_similar:
+        Whether to look for files with the same name, but a different file
+        type extension. If True, this will call find_filename() using the
+        default alternate file types: ['.pbz2', '.csv']
+
     Returns
     -------
     None
     """
+    if find_similar:
+        find_filename(file_path)
+        return
+
     if not file_exists(file_path):
         raise IOError(
             "Cannot find a path to: %s" % str(file_path)
