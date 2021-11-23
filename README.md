@@ -201,6 +201,8 @@ as part of their file name in distribution reports
     for people without a formal job.
   - Segmentations now have typing - meaning `DVector.to_df()` should always 
     return in the correct datatypes.
+  - Spatial balance added to Attraction Models. By default spatial balance 
+    covers Government Office Regions (GORs) for each spatial balance.
 - When reading in pickled files, the `__version__` attribute will now be 
   checked (if it exists). It will be compared to the version of the code being
   run. If different, a warning will be raised.
