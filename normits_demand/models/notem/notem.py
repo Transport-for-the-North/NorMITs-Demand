@@ -39,6 +39,7 @@ class NoTEM(NoTEMExportPaths):
                  iteration_name: str,
                  import_builder: nd.pathing.NoTEMImportPathsBase,
                  export_home: nd.PathLike,
+                 attraction_balance_zoning: nd.core.zoning.ZoningSystem = None,
                  ):
         """
         Assigns the attributes needed for NoTEM model.
@@ -68,6 +69,12 @@ class NoTEM(NoTEMExportPaths):
             The home where all the export paths should be built from. See
             nd.pathing.NoTEMExportPaths for more info on how these paths
             will be built.
+
+        attraction_balance_zoning:
+            The zoning system to balance the attractions to the productions at.
+            A translation must exist between this and the running zoning
+            system, which is MSOA by default. If left as None, then no spatial
+            balance is done, only a segmental balance.
         """
         # Validate inputs
         if not isinstance(import_builder, nd.pathing.NoTEMImportPathsBase):
@@ -81,6 +88,7 @@ class NoTEM(NoTEMExportPaths):
         self.years = years
         self.scenario = scenario
         self.import_builder = import_builder
+        self.attraction_balance_zoning = attraction_balance_zoning
 
         # Generate the export paths
         super().__init__(
@@ -239,8 +247,8 @@ class NoTEM(NoTEMExportPaths):
 
         self._logger.info("Running the Home-Based Production Model")
         hb_prod.run(
-            export_pure_demand=True,
-            export_fully_segmented=True,
+            export_pure_demand=False,
+            export_fully_segmented=False,
             export_notem_segmentation=True,
             export_reports=True,
             verbose=verbose,
@@ -264,11 +272,12 @@ class NoTEM(NoTEMExportPaths):
             production_balance_paths=control_production_paths,
             constraint_paths=None,
             export_home=self.hb_attraction.export_paths.home,
+            balance_zoning=self.attraction_balance_zoning,
         )
 
         self._logger.info("Running the Home-Based Attraction Model")
         hb_attr.run(
-            export_pure_attractions=True,
+            export_pure_attractions=False,
             export_fully_segmented=False,
             export_notem_segmentation=True,
             export_reports=True,
@@ -297,7 +306,7 @@ class NoTEM(NoTEMExportPaths):
 
         self._logger.info("Running the Non-Home-Based Production Model")
         nhb_prod.run(
-            export_nhb_pure_demand=True,
+            export_nhb_pure_demand=False,
             export_fully_segmented=False,
             export_notem_segmentation=True,
             export_reports=True,
@@ -325,12 +334,13 @@ class NoTEM(NoTEMExportPaths):
             hb_attraction_paths=hb_attraction_paths,
             nhb_production_paths=nhb_production_paths,
             export_home=self.nhb_attraction.export_paths.home,
-            constraint_paths=None
+            constraint_paths=None,
+            balance_zoning=self.attraction_balance_zoning,
         )
 
         self._logger.info("Running the Non-Home-Based Attraction Model")
         nhb_attr.run(
-            export_nhb_pure_attractions=True,
+            export_nhb_pure_attractions=False,
             export_notem_segmentation=True,
             export_reports=True,
             verbose=verbose,

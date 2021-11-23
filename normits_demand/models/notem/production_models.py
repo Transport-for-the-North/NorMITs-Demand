@@ -146,11 +146,11 @@ class HBProductionModel(HBProductionModelPaths):
             Defaults to consts.PROCESS_COUNT.
         """
         # Check that the paths we need exist!
-        [file_ops.check_file_exists(x) for x in population_paths.values()]
-        file_ops.check_file_exists(trip_rates_path)
-        file_ops.check_file_exists(mode_time_splits_path)
+        [file_ops.check_file_exists(x, find_similar=True) for x in population_paths.values()]
+        file_ops.check_file_exists(trip_rates_path, find_similar=True)
+        file_ops.check_file_exists(mode_time_splits_path, find_similar=True)
         if constraint_paths is not None:
-            [file_ops.check_file_exists(x) for x in constraint_paths.values()]
+            [file_ops.check_file_exists(x, find_similar=True) for x in constraint_paths.values()]
 
         # Validate that we have data for all the years we're running for
         for year in population_paths.keys():
@@ -190,7 +190,7 @@ class HBProductionModel(HBProductionModelPaths):
         )
 
     def run(self,
-            export_pure_demand: bool = True,
+            export_pure_demand: bool = False,
             export_fully_segmented: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
@@ -583,12 +583,12 @@ class NHBProductionModel(NHBProductionModelPaths):
         """
         # Check that the paths we need exist!
         [file_ops.check_file_exists(x) for x in hb_attraction_paths.values()]
-        [file_ops.check_file_exists(x) for x in population_paths.values()]
-        file_ops.check_file_exists(trip_rates_path)
-        file_ops.check_file_exists(time_splits_path)
+        [file_ops.check_file_exists(x, find_similar=True) for x in population_paths.values()]
+        file_ops.check_file_exists(trip_rates_path, find_similar=True)
+        file_ops.check_file_exists(time_splits_path, find_similar=True)
 
         if constraint_paths is not None:
-            [file_ops.check_file_exists(x) for x in constraint_paths.values()]
+            [file_ops.check_file_exists(x, find_similar=True) for x in constraint_paths.values()]
 
         # Validate that we have data for all the years we're running for
         for year in hb_attraction_paths.keys():
@@ -636,7 +636,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         )
 
     def run(self,
-            export_nhb_pure_demand: bool = True,
+            export_nhb_pure_demand: bool = False,
             export_fully_segmented: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,

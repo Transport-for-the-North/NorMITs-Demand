@@ -12,15 +12,18 @@ Master run file to run NoTEM
 """
 import sys
 
+
 sys.path.append("..")
+import normits_demand as nd
+from normits_demand import constants
 from normits_demand.models import NoTEM
 from normits_demand.pathing import NoTEMImportPaths
 
 
 # GLOBAL VARIABLES
-years = [2018]
-scenario = "NTEM"
-notem_iter = '4'
+years = [2018, 2033, 2040, 2050]
+scenario = constants.SC01_JAM
+notem_iter = '9.2'
 lu_drive = "I:/"
 by_iteration = "iter3e"
 fy_iteration = "iter3e"
@@ -33,6 +36,8 @@ def main():
     hb_production_import_version = '2.1'
     hb_attraction_import_version = '1.6'
     nhb_production_import_version = '2.0'
+
+    attraction_balance_zoning = nd.get_zoning_system('gor')
 
     import_builder = NoTEMImportPaths(
         import_home=notem_import_home,
@@ -52,15 +57,16 @@ def main():
         iteration_name=notem_iter,
         import_builder=import_builder,
         export_home=notem_export_home,
+        attraction_balance_zoning=attraction_balance_zoning,
     )
     n.run(
         generate_all=False,
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,
-        generate_hb_attraction=False,
+        generate_hb_attraction=True,
         generate_nhb_production=False,
-        generate_nhb_attraction=True,
+        generate_nhb_attraction=False,
     )
 
 
