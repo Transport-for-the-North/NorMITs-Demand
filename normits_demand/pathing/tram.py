@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on: Mon August 2 2021
-Updated on: Tue November 9 2021
+Created on: Mon November 18 2021
+Updated on: Tue November 23 2021
 
-Original author: Ben Taylor
-Last update made by: Nirmal Kumar
+Original author: Nirmal Kumar
+Last update made by: Ben Taylor
 Other updates made by:
 
 File purpose:
@@ -24,6 +24,9 @@ from typing import Tuple
 
 # Local imports
 import normits_demand as nd
+
+from normits_demand.pathing import NoTEMExportPaths
+
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
 
@@ -158,11 +161,11 @@ class TramImportPaths(TramImportPathsBase):
         The version of inputs to use for the HB attraction tram model.
         e.g. '2.0'
 
-    nhb_prod_tram_import_version:
+    nhb_production_data_version:
         The version of inputs to use for the NHB production tram model.
         e.g. '2.0'
 
-    nhb_attr_tram_import_version:
+    nhb_attraction_data_version:
         The version of inputs to use for the NHB attraction tram model.
         e.g. '2.0'
     """
@@ -192,15 +195,13 @@ class TramImportPaths(TramImportPathsBase):
     _nhba_tram_fname = "tram_nhb_attractions_v{version}.csv"
 
     def __init__(self,
-                 tram_import_home: nd.PathLike,
-                 notem_import_home: nd.PathLike,
-                 scenario: str,
                  years: List[int],
-                 iter_name: str,
-                 hb_prod_tram_import_version: str,
-                 hb_attr_tram_import_version: str,
-                 nhb_prod_tram_import_version: str,
-                 nhb_attr_tram_import_version: str,
+                 notem_exports: NoTEMExportPaths,
+                 tram_import_home: nd.PathLike,
+                 hb_production_data_version: str,
+                 hb_attraction_data_version: str,
+                 nhb_production_data_version: str,
+                 nhb_attraction_data_version: str,
                  ):
         """
         Assigns and validates attributes.
@@ -210,29 +211,27 @@ class TramImportPaths(TramImportPathsBase):
         tram_import_home:
             The home for all of the tram imports.
 
-        notem_import_home:
-            The home for all of the notem outputs.
-
-        scenario:
-            The name of the scenario to run for.
+        notem_exports:
+            An instance of NoTEMExportPaths. Used to generate the paths to
+            the NoTEM Ouputs to use as inputs for the Tram Model
 
         years:
             List of years to run Tram for. Will assume that the smallest
             year is the base year.
 
-        hb_prod_tram_import_version:
+        hb_production_data_version:
             The version of inputs to use for the HB production tram model.
             e.g. '2.0'
 
-        hb_attr_tram_import_version:
+        hb_attraction_data_version:
             The version of inputs to use for the HB attraction tram model.
             e.g. '2.0'
 
-        nhb_prod_tram_import_version:
+        nhb_production_data_version:
             The version of inputs to use for the NHB production tram model.
             e.g. '2.0'
 
-        nhb_attr_tram_import_version:
+        nhb_attraction_data_version:
             The version of inputs to use for the NHB attraction tram model.
             e.g. '2.0'
         """
@@ -241,15 +240,14 @@ class TramImportPaths(TramImportPathsBase):
         file_ops.check_path_exists(tram_import_home)
 
         # Assign attributes
-        self.tram_import_home = tram_import_home
         self.years = years
-        self.scenario = scenario
-        self.iter_name = du.create_iter_name(iter_name)
-        self.notem_import_home = os.path.join(notem_import_home, self.iter_name, self.scenario)
-        self.hb_prod_tram_import_version = hb_prod_tram_import_version
-        self.hb_attr_tram_import_version = hb_attr_tram_import_version
-        self.nhb_prod_tram_import_version = nhb_prod_tram_import_version
-        self.nhb_attr_tram_import_version = nhb_attr_tram_import_version
+        self.notem_exports = notem_exports
+        self.tram_import_home = tram_import_home
+
+        self.hb_production_data_version = hb_production_data_version
+        self.hb_attraction_data_version = hb_attraction_data_version
+        self.nhb_production_data_version = nhb_production_data_version
+        self.nhb_attraction_data_version = nhb_attraction_data_version
 
     def generate_hb_production_imports(self) -> Dict[str, nd.PathLike]:
         """
@@ -258,18 +256,18 @@ class TramImportPaths(TramImportPathsBase):
         See TramImportPathsBase.generate_hb_production_imports() for further
         documentation
         """
-        # Generate the paths
-        tram_data = self._hbp_tram_fname.format(version=self.hb_prod_tram_import_version)
-        hb_production_paths = {
-            y: os.path.join(self.notem_import_home, self._hb_productions_dir, self._hb_notem_fname % y) for y in
-            self.years}
-        print(hb_production_paths)
+        # Generate the tram data fname
+        tram_data = self._hbp_tram_fname.format(version=self.hb_production_data_version)
+
+        # Get the NoTEM paths
+        hbp_paths = self.notem_exports.hb_production
+        hb_production_paths = {x: hbp_paths.export_paths.notem_segmented[x] for x in self.years}
 
         # Format in dictionary
         return {
             'tram_import': os.path.join(self.tram_import_home, tram_data),
             'trip_origin': self._hb_trip_origin,
-            'dvec_imports': hb_production_paths,
+            'dvec_import_paths': hb_production_paths,
         }
 
     def generate_hb_attraction_imports(self) -> Dict[str, nd.PathLike]:
@@ -279,16 +277,18 @@ class TramImportPaths(TramImportPathsBase):
         See TramImportPathsBase.generate_hb_attraction_imports() for further
         documentation
         """
-        # Generate the paths
-        tram_data = self._hba_tram_fname.format(version=self.hb_attr_tram_import_version)
-        hb_attraction_paths = {
-            y: os.path.join(self.notem_import_home, self._hb_attractions_dir, self._hb_notem_fname % y) for y in
-            self.years}
+        # Generate the tram data fname
+        tram_data = self._hba_tram_fname.format(version=self.hb_attraction_data_version)
+
+        # Get the NoTEM paths
+        hba_paths = self.notem_exports.hb_attraction
+        hb_attraction_paths = {x: hba_paths.export_paths.notem_segmented[x] for x in self.years}
+
         # Format in dictionary
         return {
             'tram_import': os.path.join(self.tram_import_home, tram_data),
             'trip_origin': self._hb_trip_origin,
-            'dvec_imports': hb_attraction_paths,
+            'dvec_import_paths': hb_attraction_paths,
         }
 
     def generate_nhb_production_imports(self) -> Dict[str, nd.PathLike]:
@@ -298,17 +298,18 @@ class TramImportPaths(TramImportPathsBase):
         See TramImportPathsBase.generate_nhb_production_imports() for further
         documentation
         """
-        # Generate the paths
-        tram_data = self._nhbp_tram_fname.format(version=self.nhb_prod_tram_import_version)
-        nhb_production_paths = {
-            y: os.path.join(self.notem_import_home, self._nhb_productions_dir, self._nhb_notem_fname % y) for y in
-            self.years}
+        # Generate the tram data fname
+        tram_data = self._nhbp_tram_fname.format(version=self.nhb_production_data_version)
+
+        # Get the NoTEM paths
+        nhbp_paths = self.notem_exports.hb_production
+        nhb_production_paths = {x: nhbp_paths.export_paths.notem_segmented[x] for x in self.years}
 
         # Format in dictionary
         return {
             'tram_import': os.path.join(self.tram_import_home, tram_data),
             'trip_origin': self._nhb_trip_origin,
-            'dvec_imports': nhb_production_paths,
+            'dvec_import_paths': nhb_production_paths,
         }
 
     def generate_nhb_attraction_imports(self) -> Dict[str, nd.PathLike]:
@@ -320,17 +321,18 @@ class TramImportPaths(TramImportPathsBase):
         See TramImportPathsBase.generate_hb_attraction_imports() for further
         documentation
         """
-        # Generate the paths
-        tram_data = self._nhba_tram_fname.format(version=self.nhb_attr_tram_import_version)
-        nhb_attraction_paths = {
-            y: os.path.join(self.notem_import_home, self._nhb_attractions_dir, self._nhb_notem_fname % y) for y in
-            self.years}
+        # Generate the tram data fname
+        tram_data = self._nhba_tram_fname.format(version=self.nhb_attraction_data_version)
+
+        # Get the NoTEM paths
+        nhba_paths = self.notem_exports.hb_attraction
+        nhb_attraction_paths = {x: nhba_paths.export_paths.notem_segmented[x] for x in self.years}
 
         # Format in dictionary
         return {
             'tram_import': os.path.join(self.tram_import_home, tram_data),
             'trip_origin': self._nhb_trip_origin,
-            'dvec_imports': nhb_attraction_paths,
+            'dvec_import_paths': nhb_attraction_paths,
         }
 
 
@@ -356,7 +358,7 @@ class TramExportPaths:
     iteration_name:
         The name of this iteration of the NoTEM models. Constructor argument
         of the same name will have 'iter' prepended to create this name.
-        e.g. if '3i' was passed in, this would become 'iter3i'.
+        e.g. if '9.2' was passed in, this would become 'iter9.2'.
 
     export_home:
         The home directory of all the export paths. Nested folder of the
@@ -407,7 +409,7 @@ class TramExportPaths:
         iteration_name:
             The name of this iteration of the NoTEM models. Will have 'iter'
             prepended to create the folder name. e.g. if iteration_name was
-            set to '3i' the iteration folder would be called 'iter3i'.
+            set to '9.2' the iteration folder would be called 'iter9.2'.
 
         export_home:
             The home directory of all the export paths. A sub-directory will

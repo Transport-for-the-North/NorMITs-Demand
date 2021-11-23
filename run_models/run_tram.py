@@ -13,37 +13,46 @@ Master run file to run tram inclusion
 import sys
 
 sys.path.append("..")
-
+import normits_demand as nd
 from normits_demand.models.tram_model import TramModel
 from normits_demand.pathing import TramImportPaths
 
 # GLOBAL VARIABLES
 years = [2018, 2033]
-scenario = "SC01_JAM"
+scenario = nd.constants.SC01_JAM
 notem_iter = '9.2'
 tram_import_home = r"I:\NorMITs Demand\import\modal\tram\tram_pa"
-notem_import_home = r"I:\NorMITs Demand\NoTEM"
-hb_prod_tram_import_version = '1.0'
-hb_attr_tram_import_version = '1.0'
-nhb_prod_tram_import_version = '1.0'
-nhb_attr_tram_import_version = '1.0'
+notem_export_home = r"E:\NorMITs Demand\NoTEM"
 
-export_home = r"I:\NorMITs Demand\Tram"
+export_home = r"E:\NorMITs Demand\Tram"
 
 
 def main():
-    import_builder = TramImportPaths(
-        tram_import_home=tram_import_home,
-        notem_import_home=notem_import_home,
+    # Input versions
+    hb_production_data_version = '1.0'
+    hb_attraction_data_version = '1.0'
+    nhb_production_data_version = '1.0'
+    nhb_attraction_data_version = '1.0'
+
+    # Generate the imports
+    notem_exports = nd.pathing.NoTEMExportPaths(
+        path_years=years,
         scenario=scenario,
-        iter_name=notem_iter,
-        years=years,
-        hb_prod_tram_import_version=hb_prod_tram_import_version,
-        hb_attr_tram_import_version=hb_attr_tram_import_version,
-        nhb_prod_tram_import_version=nhb_prod_tram_import_version,
-        nhb_attr_tram_import_version=nhb_attr_tram_import_version,
+        iteration_name=notem_iter,
+        export_home=notem_export_home,
     )
 
+    import_builder = TramImportPaths(
+        years=years,
+        notem_exports=notem_exports,
+        tram_import_home=tram_import_home,
+        hb_production_data_version=hb_production_data_version,
+        hb_attraction_data_version=hb_attraction_data_version,
+        nhb_production_data_version=nhb_production_data_version,
+        nhb_attraction_data_version=nhb_attraction_data_version,
+    )
+
+    # Instantiate and run the tram model
     n = TramModel(
         years=years,
         scenario=scenario,
@@ -55,11 +64,11 @@ def main():
     n.run_tram(
         generate_all=False,
         generate_hb=False,
-        generate_hb_production=False,
-        generate_hb_attraction=False,
         generate_nhb=False,
+        generate_hb_production=True,
+        generate_hb_attraction=False,
         generate_nhb_production=False,
-        generate_nhb_attraction=True,
+        generate_nhb_attraction=False,
     )
 
 

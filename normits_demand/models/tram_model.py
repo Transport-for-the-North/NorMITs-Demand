@@ -157,7 +157,7 @@ class TramModel(TramExportPaths):
         # Define the lines to output
         out_lines = [
             'Code Version: %s' % str(nd.__version__),
-            'NoTEM Iteration: %s' % str(self.iteration_name),
+            'NoTEM/Tram Iteration: %s' % str(self.iteration_name),
             'Scenario: %s' % str(self.scenario),
             '',
             '### HB Productions ###',
@@ -271,16 +271,16 @@ class TramModel(TramExportPaths):
         """
         self._logger.info("Generating HB Production imports")
         import_files = self.import_builder.generate_hb_production_imports()
-        a = self.hb_production.export_paths.notem_segmented
-        print('notem', a)
 
         # Runs the home based Production model
         self._logger.info("Adding Tram into HB Productions")
+        paths = self.hb_production
         self._tram_inclusion(
             **import_files,
-            export_path=self.hb_production.export_paths.notem_segmented,
-            report_home=self.hb_production.report_paths.home,
-            report_paths=self._hb_reports
+            export_paths=paths.export_paths.notem_segmented,
+            report_segment_total_paths=paths.report_paths.notem_segmented.segment_total,
+            report_ca_sector_paths=paths.report_paths.notem_segmented.ca_sector,
+            report_ie_sector_paths=paths.report_paths.notem_segmented.ie_sector,
         )
 
     def _generate_hb_attraction(self) -> None:
@@ -291,11 +291,13 @@ class TramModel(TramExportPaths):
         import_files = self.import_builder.generate_hb_attraction_imports()
 
         self._logger.info("Adding Tram into HB Attractions")
+        paths = self.hb_attraction
         self._tram_inclusion(
             **import_files,
-            export_path=self.hb_attraction.export_paths.notem_segmented,
-            report_home=self.hb_attraction.report_paths.home,
-            report_paths=self._hb_reports
+            export_paths=paths.export_paths.notem_segmented,
+            report_segment_total_paths=paths.report_paths.notem_segmented.segment_total,
+            report_ca_sector_paths=paths.report_paths.notem_segmented.ca_sector,
+            report_ie_sector_paths=paths.report_paths.notem_segmented.ie_sector,
         )
 
     def _generate_nhb_production(self) -> None:
@@ -306,11 +308,13 @@ class TramModel(TramExportPaths):
         import_files = self.import_builder.generate_nhb_production_imports()
 
         self._logger.info("Adding Tram into NHB Productions")
+        paths = self.nhb_production
         self._tram_inclusion(
             **import_files,
-            export_path=self.nhb_production.export_paths.notem_segmented,
-            report_home=self.nhb_production.report_paths.home,
-            report_paths=self._nhb_reports
+            export_paths=paths.export_paths.notem_segmented,
+            report_segment_total_paths=paths.report_paths.notem_segmented.segment_total,
+            report_ca_sector_paths=paths.report_paths.notem_segmented.ca_sector,
+            report_ie_sector_paths=paths.report_paths.notem_segmented.ie_sector,
         )
 
     def _generate_nhb_attraction(self) -> None:
@@ -321,20 +325,23 @@ class TramModel(TramExportPaths):
         import_files = self.import_builder.generate_nhb_attraction_imports()
 
         self._logger.info("Adding Tram into NHB Attractions")
+        paths = self.nhb_attraction
         self._tram_inclusion(
             **import_files,
-            export_path=self.nhb_attraction.export_paths.notem_segmented,
-            report_home=self.nhb_attraction.report_paths.home,
-            report_paths=self._nhb_reports
+            export_paths=paths.export_paths.notem_segmented,
+            report_segment_total_paths=paths.report_paths.notem_segmented.segment_total,
+            report_ca_sector_paths=paths.report_paths.notem_segmented.ca_sector,
+            report_ie_sector_paths=paths.report_paths.notem_segmented.ie_sector,
         )
 
     def _tram_inclusion(self,
                         tram_import: nd.PathLike,
                         trip_origin: str,
-                        dvec_imports: Dict[int, nd.PathLike],
-                        export_path: nd.PathLike,
-                        report_home: nd.PathLike,
-                        report_paths: Dict[str, nd.PathLike],
+                        dvec_import_paths: Dict[int, nd.PathLike],
+                        export_paths: Dict[int, nd.PathLike],
+                        report_segment_total_paths: Dict[int, nd.PathLike],
+                        report_ca_sector_paths: Dict[int, nd.PathLike],
+                        report_ie_sector_paths: Dict[int, nd.PathLike],
                         ) -> None:
         """
         Runs the tram inclusion for the notem trip end output.
@@ -360,7 +367,7 @@ class TramModel(TramExportPaths):
         trip_origin:
             Whether the trip origin is 'hb' or 'nhb'.
 
-        dvec_imports:
+        dvec_import_paths:
             Dictionary of {year: notem_segmented_trip_end data} pairs.
 
         export_path:
@@ -377,12 +384,11 @@ class TramModel(TramExportPaths):
         None
 
         """
-        notem_output = dvec_imports
+        dvec_import_paths = dvec_import_paths
 
         # Check that the paths we need exist!
         file_ops.check_file_exists(tram_import)
-        [file_ops.check_file_exists(x) for x in notem_output.values()]
-        file_ops.check_path_exists(report_home)
+        [file_ops.check_file_exists(x, find_similar=True) for x in dvec_import_paths.values()]
 
         # TODO(BT, NK): Pass this in as an argument
         tram_competitors = [nd.Mode.CAR, nd.Mode.BUS, nd.Mode.TRAIN]
@@ -401,7 +407,7 @@ class TramModel(TramExportPaths):
             tram_data, notem_tram_seg = self._read_tram_and_notem_data(
                 trip_origin=trip_origin,
                 tram_data=tram_import,
-                notem_output=notem_output[year],
+                notem_output=dvec_import_paths[year],
             )
 
             # Runs tram infill for 275 internal tram msoa zones
@@ -477,7 +483,7 @@ class TramModel(TramExportPaths):
 
             # ## CONVERT BACK TO ORIGINAL SEGMENTATION ## #
             # Original DVec at full segmentation
-            orig_dvec = nd.read_pickle(notem_output[year])
+            orig_dvec = nd.read_pickle(dvec_import_paths[year])
 
             # TODO(BT): Not sure why we need to do this. Perhaps something to
             #  do with version of code being pickled? This works for now,
@@ -494,23 +500,22 @@ class TramModel(TramExportPaths):
             # Add segments back in from original input
             tram_dvec = tram_dvec.split_segmentation_like(orig_dvec)
 
-            # Write out the produced Dvec and some reports
-            # TODO(BT, NK): export location need to be sorted
-            # tram_dvec.to_pickle(self.export_paths.notem)
+            # ## WRITE OUT THE DVEC AND REPORTS ## #
+            self._logger.info("Writing Produced Tram data to disk")
+            tram_dvec.to_pickle(export_paths[year])
 
-            # TODO(BT, NK): Report location needs to be sorted
-            # path = r'E:\test\tram_test'
-            tram_dvec.to_pickle(export_path[year])
+            self._logger.info("Writing Tram reports to disk")
             tram_dvec.write_sector_reports(
-                segment_totals_path=os.path.join(report_home, report_paths['segment_total'] % year),
-                ca_sector_path=os.path.join(report_home, report_paths['ca_sector'] % year),
-                ie_sector_path=os.path.join(report_home, report_paths['ie_sector'] % year),
+                segment_totals_path=report_segment_total_paths[year],
+                ca_sector_path=report_ca_sector_paths[year],
+                ie_sector_path=report_ie_sector_paths[year],
             )
 
             # Print timing for each trip end model
             trip_end_end = timing.current_milli_time()
             time_taken = timing.time_taken(trip_end_start, trip_end_end)
             self._logger.info("Tram inclusion for year %d took: %s\n" % (year, time_taken))
+
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
