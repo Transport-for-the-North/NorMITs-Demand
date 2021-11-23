@@ -39,7 +39,7 @@ class NoTEM(NoTEMExportPaths):
                  iteration_name: str,
                  import_builder: nd.pathing.NoTEMImportPathsBase,
                  export_home: nd.PathLike,
-                 balance_zoning: nd.core.zoning.ZoningSystem = None,
+                 attraction_balance_zoning: nd.core.zoning.ZoningSystem = None,
                  ):
         """
         Assigns the attributes needed for NoTEM model.
@@ -70,7 +70,7 @@ class NoTEM(NoTEMExportPaths):
             nd.pathing.NoTEMExportPaths for more info on how these paths
             will be built.
 
-        balance_zoning:
+        attraction_balance_zoning:
             The zoning system to balance the attractions to the productions at.
             A translation must exist between this and the running zoning
             system, which is MSOA by default. If left as None, then no spatial
@@ -88,7 +88,7 @@ class NoTEM(NoTEMExportPaths):
         self.years = years
         self.scenario = scenario
         self.import_builder = import_builder
-        self.balance_zoning = balance_zoning
+        self.attraction_balance_zoning = attraction_balance_zoning
 
         # Generate the export paths
         super().__init__(
@@ -272,7 +272,7 @@ class NoTEM(NoTEMExportPaths):
             production_balance_paths=control_production_paths,
             constraint_paths=None,
             export_home=self.hb_attraction.export_paths.home,
-            balance_zoning=self.balance_zoning,
+            balance_zoning=self.attraction_balance_zoning,
         )
 
         self._logger.info("Running the Home-Based Attraction Model")
@@ -335,7 +335,7 @@ class NoTEM(NoTEMExportPaths):
             nhb_production_paths=nhb_production_paths,
             export_home=self.nhb_attraction.export_paths.home,
             constraint_paths=None,
-            balance_zoning=self.balance_zoning,
+            balance_zoning=self.attraction_balance_zoning,
         )
 
         self._logger.info("Running the Non-Home-Based Attraction Model")

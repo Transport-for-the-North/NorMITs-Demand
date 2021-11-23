@@ -1777,7 +1777,7 @@ class DVector:
             # Ignore all zoning and balance=
             dvec_data = self._balance_at_segments_internal(
                 other=other,
-                zone_mask=np.ones_like(self.zoning_system.unique_zones),
+                zone_mask=np.ones(self.zoning_system.unique_zones.shape),
                 split_weekday_weekend=split_weekday_weekend,
             )
 
@@ -1788,6 +1788,10 @@ class DVector:
             # Balance at each group
             data_list = list()
             for zone_mask in translation.T:
+                # Skip this if no zones translate
+                if zone_mask.sum() == 0:
+                    continue
+
                 adjusted = self._balance_at_segments_internal(
                     other=other,
                     zone_mask=zone_mask,

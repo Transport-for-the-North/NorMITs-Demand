@@ -543,7 +543,6 @@ class HBAttractionModel(HBAttractionModelPaths):
                 % (p_dvec.sum(), balanced_attractions.sum())
             )
             self._logger.warning(msg)
-            warnings.warn(msg)
 
         return balanced_attractions
 
@@ -855,9 +854,22 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         # Read in the productions DVec from disk
         p_dvec = nd.read_pickle(p_dvec_path)
 
-        # Balance a_dvec with p_dvec
-        return a_dvec.balance_at_segments(
+        balanced_attractions = a_dvec.balance_at_segments(
             p_dvec,
             balance_zoning=self.balance_zoning,
             split_weekday_weekend=True,
         )
+
+        # ## ATTRACTIONS TOTAL CHECK ## #
+        if not balanced_attractions.sum_is_close(p_dvec):
+            msg = (
+                "The attraction total after balancing to the productions is "
+                "not similar enough to the productions. Are some zones being "
+                "dropped in the zonal translation?\n"
+                "Expected %f\n"
+                "Got %f"
+                % (p_dvec.sum(), balanced_attractions.sum())
+            )
+            self._logger.warning(msg)
+
+        return balanced_attractions
