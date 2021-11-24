@@ -354,6 +354,10 @@ class DVector:
 
     # SETTERS AND GETTERS
     @property
+    def val_col(self):
+        return self._val_col
+
+    @property
     def zoning_system(self):
         return self._zoning_system
 

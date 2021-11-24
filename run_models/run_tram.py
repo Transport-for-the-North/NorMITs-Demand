@@ -18,9 +18,10 @@ from normits_demand.models.tram_model import TramModel
 from normits_demand.pathing import TramImportPaths
 
 # GLOBAL VARIABLES
-years = [2018, 2033]
+years = [2018, 2033, 2040, 2050]
+years = [2018]
 scenario = nd.constants.SC01_JAM
-notem_iter = '9.2'
+notem_iter = '9.3'
 tram_import_home = r"I:\NorMITs Demand\import\modal\tram\tram_pa"
 notem_export_home = r"E:\NorMITs Demand\NoTEM"
 
@@ -29,10 +30,12 @@ export_home = r"E:\NorMITs Demand\Tram"
 
 def main():
     # Input versions
-    hb_production_data_version = '1.0'
-    hb_attraction_data_version = '1.0'
-    nhb_production_data_version = '1.0'
-    nhb_attraction_data_version = '1.0'
+    hb_production_data_version = '1.1'
+    hb_attraction_data_version = '1.1'
+    nhb_production_data_version = '1.1'
+    nhb_attraction_data_version = '1.1'
+
+    tram_competitors = [nd.Mode.CAR, nd.Mode.BUS, nd.Mode.TRAIN]
 
     # Generate the imports
     notem_exports = nd.pathing.NoTEMExportPaths(
@@ -59,13 +62,14 @@ def main():
         iteration_name=notem_iter,
         import_builder=import_builder,
         export_home=export_home,
+        tram_competitors=tram_competitors,
     )
 
     n.run_tram(
         generate_all=False,
         generate_hb=False,
-        generate_nhb=False,
-        generate_hb_production=True,
+        generate_nhb=True,
+        generate_hb_production=False,
         generate_hb_attraction=False,
         generate_nhb_production=False,
         generate_nhb_attraction=False,

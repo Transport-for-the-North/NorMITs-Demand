@@ -265,9 +265,9 @@ class TramImportPaths(TramImportPathsBase):
 
         # Format in dictionary
         return {
-            'tram_import': os.path.join(self.tram_import_home, tram_data),
+            'tram_import_path': os.path.join(self.tram_import_home, tram_data),
             'trip_origin': self._hb_trip_origin,
-            'dvec_import_paths': hb_production_paths,
+            'vector_import_paths': hb_production_paths,
         }
 
     def generate_hb_attraction_imports(self) -> Dict[str, nd.PathLike]:
@@ -286,9 +286,9 @@ class TramImportPaths(TramImportPathsBase):
 
         # Format in dictionary
         return {
-            'tram_import': os.path.join(self.tram_import_home, tram_data),
+            'tram_import_path': os.path.join(self.tram_import_home, tram_data),
             'trip_origin': self._hb_trip_origin,
-            'dvec_import_paths': hb_attraction_paths,
+            'vector_import_paths': hb_attraction_paths,
         }
 
     def generate_nhb_production_imports(self) -> Dict[str, nd.PathLike]:
@@ -302,14 +302,14 @@ class TramImportPaths(TramImportPathsBase):
         tram_data = self._nhbp_tram_fname.format(version=self.nhb_production_data_version)
 
         # Get the NoTEM paths
-        nhbp_paths = self.notem_exports.hb_production
+        nhbp_paths = self.notem_exports.nhb_production
         nhb_production_paths = {x: nhbp_paths.export_paths.notem_segmented[x] for x in self.years}
 
         # Format in dictionary
         return {
-            'tram_import': os.path.join(self.tram_import_home, tram_data),
+            'tram_import_path': os.path.join(self.tram_import_home, tram_data),
             'trip_origin': self._nhb_trip_origin,
-            'dvec_import_paths': nhb_production_paths,
+            'vector_import_paths': nhb_production_paths,
         }
 
     def generate_nhb_attraction_imports(self) -> Dict[str, nd.PathLike]:
@@ -325,14 +325,14 @@ class TramImportPaths(TramImportPathsBase):
         tram_data = self._nhba_tram_fname.format(version=self.nhb_attraction_data_version)
 
         # Get the NoTEM paths
-        nhba_paths = self.notem_exports.hb_attraction
+        nhba_paths = self.notem_exports.nhb_attraction
         nhb_attraction_paths = {x: nhba_paths.export_paths.notem_segmented[x] for x in self.years}
 
         # Format in dictionary
         return {
-            'tram_import': os.path.join(self.tram_import_home, tram_data),
+            'tram_import_path': os.path.join(self.tram_import_home, tram_data),
             'trip_origin': self._nhb_trip_origin,
-            'dvec_import_paths': nhb_attraction_paths,
+            'vector_import_paths': nhb_attraction_paths,
         }
 
 
@@ -501,10 +501,22 @@ class TramModelPaths:
     # Segmentation names
     _notem_segmented = 'notem_segmented'
 
+    # Report directory names
+    _vector_report_dir = 'vector reports'
+    _tram_growth_factors_dir = 'tram growth'
+    _more_tram_msoa_dir = 'more tram msoa'
+    _more_tram_north_dir = 'more tram north'
+    _mode_adj_factors_dir = 'mode adjustment factors'
+
     # Report names
     _segment_totals_report_name = "segment_totals"
     _ca_sector_report_name = "ca_sector_totals"
     _ie_sector_report_name = "ie_sector_totals"
+
+    _tram_growth_factors_fname = 'tram_growth_factors_{year}.csv'
+    _more_tram_msoa_fname = 'more_tram_msoa_{year}.csv'
+    _more_tram_north_fname = 'more_tram_north_{year}.csv'
+    _mode_adj_factors_fname = 'mode_adjustment_factors_{year}.csv'
 
     # Output Path Classes
     ExportPaths = collections.namedtuple(
@@ -514,6 +526,18 @@ class TramModelPaths:
 
     ReportPaths = collections.namedtuple(
         typename='ReportPaths',
+        field_names=[
+            'home',
+            'vector_reports',
+            'tram_growth_factors',
+            'more_tram_msoa',
+            'more_tram_north',
+            'mode_adj_factors',
+        ]
+    )
+
+    VectorReportPaths = collections.namedtuple(
+        typename='VectorReportPaths',
         field_names='segment_total, ca_sector, ie_sector',
     )
 
@@ -563,9 +587,9 @@ class TramModelPaths:
                 "'hb', or 'nhb' to reflect the type of model being run."
             )
 
-    def _generate_report_paths(self,
-                               report_name: str,
-                               ) -> Tuple[Dict[int, str], Dict[int, str], Dict[int, str]]:
+    def _generate_vector_report_paths(self,
+                                      report_name: str,
+                                      ) -> Tuple[Dict[int, str], Dict[int, str], Dict[int, str]]:
         """
         Creates report file paths for each of years
 
@@ -593,6 +617,9 @@ class TramModelPaths:
         base_fname = self._base_report_fname
         fname_parts = [self._trip_origin, report_name]
 
+        out_dir = os.path.join(self.report_home, self._vector_report_dir)
+        file_ops.create_folder(out_dir)
+
         segment_total_paths = dict()
         ca_sector_paths = dict()
         ie_sector_paths = dict()
@@ -601,20 +628,73 @@ class TramModelPaths:
         for year in self.path_years:
             # Segment totals
             fname = base_fname % (*fname_parts, year, self._segment_totals_report_name)
-            segment_total_paths[year] = os.path.join(self.report_home, fname)
+            segment_total_paths[year] = os.path.join(out_dir, fname)
 
             # CA sector totals
             fname = base_fname % (*fname_parts, year, self._ca_sector_report_name)
-            ca_sector_paths[year] = os.path.join(self.report_home, fname)
+            ca_sector_paths[year] = os.path.join(out_dir, fname)
 
             # IE sector totals
             fname = base_fname % (*fname_parts, year, self._ie_sector_report_name)
-            ie_sector_paths[year] = os.path.join(self.report_home, fname)
+            ie_sector_paths[year] = os.path.join(out_dir, fname)
 
-        return self.ReportPaths(
+        return self.VectorReportPaths(
             segment_total=segment_total_paths,
             ca_sector=ca_sector_paths,
             ie_sector=ie_sector_paths,
+        )
+
+    def _create_report_paths(self):
+        """
+        Creates and returns self.report_paths
+        """
+        # Init
+        tram_growth_factors = dict()
+        more_tram_msoa = dict()
+        more_tram_north = dict()
+        mode_adj_factors = dict()
+
+        # Make dirs
+        tram_growth_factors_dir = os.path.join(self.report_home, self._tram_growth_factors_dir)
+        more_tram_msoa_dir = os.path.join(self.report_home, self._more_tram_msoa_dir)
+        more_tram_north_dir = os.path.join(self.report_home, self._more_tram_north_dir)
+        mode_adj_factors_dir = os.path.join(self.report_home, self._mode_adj_factors_dir)
+
+        make_dirs = [
+            tram_growth_factors_dir,
+            more_tram_msoa_dir,
+            more_tram_north_dir,
+            mode_adj_factors_dir,
+        ]
+
+        for path in make_dirs:
+            file_ops.create_folder(path)
+
+        # Create the paths for each year
+        for year in self.path_years:
+            # Growth factors
+            fname = self._tram_growth_factors_fname.format(year=year)
+            tram_growth_factors[year] = os.path.join(tram_growth_factors_dir, fname)
+
+            # More tram MSOA
+            fname = self._more_tram_msoa_fname.format(year=year)
+            more_tram_msoa[year] = os.path.join(more_tram_msoa_dir, fname)
+
+            # More tram North
+            fname = self._more_tram_north_fname.format(year=year)
+            more_tram_north[year] = os.path.join(more_tram_north_dir, fname)
+
+            # Mode Adj factors
+            fname = self._mode_adj_factors_fname.format(year=year)
+            mode_adj_factors[year] = os.path.join(mode_adj_factors_dir, fname)
+
+        return self.ReportPaths(
+                home=self.report_home,
+                vector_reports=self._generate_vector_report_paths(self._notem_segmented),
+                tram_growth_factors=tram_growth_factors,
+                more_tram_msoa=more_tram_msoa,
+                more_tram_north=more_tram_north,
+                mode_adj_factors=mode_adj_factors,
         )
 
 
@@ -682,10 +762,7 @@ class HBProductionModelPaths(TramModelPaths):
         """
         Creates self.report_paths
         """
-        self.report_paths = self.ExportPaths(
-            home=self.report_home,
-            notem_segmented=self._generate_report_paths(self._notem_segmented),
-        )
+        self.report_paths = super()._create_report_paths()
 
 
 class HBAttractionModelPaths(TramModelPaths):
@@ -752,10 +829,7 @@ class HBAttractionModelPaths(TramModelPaths):
         """
         Creates self.report_paths
         """
-        self.report_paths = self.ExportPaths(
-            home=self.report_home,
-            notem_segmented=self._generate_report_paths(self._notem_segmented),
-        )
+        self.report_paths = super()._create_report_paths()
 
 
 class NHBProductionModelPaths(TramModelPaths):
@@ -822,10 +896,7 @@ class NHBProductionModelPaths(TramModelPaths):
         """
         Creates self.report_paths
         """
-        self.report_paths = self.ExportPaths(
-            home=self.report_home,
-            notem_segmented=self._generate_report_paths(self._notem_segmented),
-        )
+        self.report_paths = super()._create_report_paths()
 
 
 class NHBAttractionModelPaths(TramModelPaths):
@@ -892,7 +963,4 @@ class NHBAttractionModelPaths(TramModelPaths):
         """
         Creates self.report_paths
         """
-        self.report_paths = self.ExportPaths(
-            home=self.report_home,
-            notem_segmented=self._generate_report_paths(self._notem_segmented),
-        )
+        self.report_paths = super()._create_report_paths()
