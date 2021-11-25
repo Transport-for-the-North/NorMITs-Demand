@@ -2134,7 +2134,7 @@ class DVector:
             return
 
         # Segment by LAD segment total reports - 1 to 1, No weighting
-        lad = nd.get_zoning_system('lad')
+        lad = nd.get_zoning_system('lad_2020')
         dvec = self.aggregate(lad_report_seg)
         dvec = dvec.translate_zoning(lad)
         dvec.to_df().to_csv(lad_report_path, index=False)
