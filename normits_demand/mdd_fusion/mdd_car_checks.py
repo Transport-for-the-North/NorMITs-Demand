@@ -41,8 +41,10 @@ print(dct_mdd_car[3][1][1][1])
 
 
 #Read in NoHAM
-with open(r'Y:/Mobile Data/Processing/dctNoHAM_uc.pkl', 'rb') as log:
+with open(r'Y:/Mobile Data/Processing/dctNoHAM_mddpurp.pkl', 'rb') as log:
         dct_noham_car = pk.load(log)
+#[md][wd][pp][hr]
+#[3][1][1-5][1-4]
         
 print(dct_noham_car.keys())
 print(dct_noham_car[3].keys())
@@ -57,6 +59,8 @@ lad_cor = pd.read_csv(lad_loc,
                       names=['lad', 'zone', 'lads_f', 'zone_f', 'internal'],
                       skiprows=1)
 lad_cor = lad_cor.drop('lads_f', axis=1)
+
+zone_int = lad_cor[['zone', 'internal']]
 
 #zone list
 unq_zones = list(range(1, 2771))
@@ -121,6 +125,10 @@ for md in dctmode:
                                        'o_nm',
                                        'd_nm']]
                     zone_te = zone_te.rename(columns = {'o_zone':'zone'})
+                    #Join internal/external marker
+                    zone_te = pd.merge(zone_te,
+                                       zone_int,
+                                       on=['zone'])
                     #Export as csv
                     zone_te.to_csv(f'Y:/Mobile Data/Processing/MDD_Check/zone_te_od_p{pp}_m{md}_tp{tp}.csv', 
                                    index = False)
@@ -131,7 +139,7 @@ for md in dctmode:
                     zone_te['tp'] = tp
                     zone_te_list.append(zone_te)
                     
-                    #add linear regression
+                    #add linear regression for zone-zone
                     d = np.polyfit(mat['nmtrip'], mat['mddtrip'], 1)
                     f = np.poly1d(d)
                     mat['linearfit'] = f(mat['nmtrip'])
@@ -144,6 +152,31 @@ for md in dctmode:
                     ax.figure.savefig(f'Y:/Mobile Data/Processing/MDD_Check/zone_od_p{pp}_m{md}_tp{tp}.png')
                     
                     #Repeat zone matrix plots, excluding External-External movements
+                    
+                    mat1 = pd.merge(mat,
+                                    zone_int,
+                                    left_on = ['o_zone'],
+                                    right_on = ['zone'])
+                    mat1 = mat1.rename(columns = {'internal':'o_int'})
+                    mat1 = pd.merge(mat1,
+                                    zone_int,
+                                    left_on = ['d_zone'],
+                                    right_on = ['zone'])
+                    mat1 = mat1.rename(columns = {'internal':'d_int'})
+                    
+                    mat1 = mat1[(mat1['o_int'] == 1) | (mat1['d_int'] == 1)]
+                    mat1.drop('linearfit', axis=1, inplace=True)
+                    #add linear regression for zone-zone
+                    d = np.polyfit(mat['nmtrip'], mat1['mddtrip'], 1)
+                    f = np.poly1d(d)
+                    mat1['linearfit'] = f(mat1['nmtrip'])
+                    #plot and export
+                    ax = mat1.plot.scatter(y='mddtrip', x='nmtrip', 
+                                          title='Regression: y = ' + str(d[0].round(2)) + 'x + ' + str(d[0].round(1)))
+                    mat1.plot(x='nmtrip', y='linearfit', color='Red', ax=ax,
+                                  xlabel='NoHAM trips',
+                                  ylabel='MDD trips')
+                    ax.figure.savefig(f'Y:/Mobile Data/Processing/MDD_Check/zone_od_xEE_p{pp}_m{md}_tp{tp}.png')
                     
                     
                     ######
@@ -193,7 +226,7 @@ for md in dctmode:
                     lad_te['tp'] = tp
                     lad_te_list.append(lad_te)
                     
-                    #add linear regression
+                    #add linear regression for LAD-LAD
                     d = np.polyfit(mat_lad['nm_lad'], mat_lad['mdd_lad'], 1)
                     f = np.poly1d(d)
                     mat_lad['linearfit'] = f(mat_lad['nm_lad'])
@@ -210,7 +243,7 @@ for md in dctmode:
                     #Repeat LAD, excluding External-External movements
                     mat_lad2 = mat_lad[(mat_lad['o_int'] == 1) | (mat_lad['d_int'] == 1)]
                     mat_lad2.drop('linearfit', axis=1, inplace=True)
-                    #add linear regression
+                    #add linear regression for LAD-LAD
                     d = np.polyfit(mat_lad2['nm_lad'], mat_lad2['mdd_lad'], 1)
                     f = np.poly1d(d)
                     mat_lad2['linearfit'] = f(mat_lad2['nm_lad'])
@@ -258,6 +291,8 @@ with pd.ExcelWriter('Y:/Mobile Data/Processing/MDD_Check/MDD-NoHAM_Summary.xlsx'
     master_lad_te.to_excel(writer, 
                            sheet_name = 'LAD_TE', 
                            index=None)
+
+
 
 
 
