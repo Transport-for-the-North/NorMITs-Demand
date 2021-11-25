@@ -152,7 +152,6 @@ for md in dctmode:
                     ax.figure.savefig(f'Y:/Mobile Data/Processing/MDD_Check/zone_od_p{pp}_m{md}_tp{tp}.png')
                     
                     #Repeat zone matrix plots, excluding External-External movements
-                    
                     mat1 = pd.merge(mat,
                                     zone_int,
                                     left_on = ['o_zone'],
@@ -283,11 +282,11 @@ master_lad.to_csv('Y:/Mobile Data/Processing/MDD_Check/lad-lad_matrices.csv',
 # save as excel file
 with pd.ExcelWriter('Y:/Mobile Data/Processing/MDD_Check/MDD-NoHAM_Summary.xlsx') as writer:
     master_lad.to_excel(writer, 
-                           sheet_name = 'LAD-LAD', 
-                           index=None)
+                        sheet_name = 'LAD-LAD', 
+                        index=None)
     master_te.to_excel(writer, 
-                           sheet_name = 'Zone_TE', 
-                           index=None)
+                       sheet_name = 'Zone_TE', 
+                       index=None)
     master_lad_te.to_excel(writer, 
                            sheet_name = 'LAD_TE', 
                            index=None)
