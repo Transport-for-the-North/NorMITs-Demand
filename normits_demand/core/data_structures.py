@@ -2082,6 +2082,8 @@ class DVector:
                              segment_totals_path: nd.PathLike,
                              ca_sector_path: nd.PathLike,
                              ie_sector_path: nd.PathLike,
+                             lad_report_path: nd.PathLike = None,
+                             lad_report_seg: nd.core.zoning.ZoningSystem = None,
                              ) -> None:
         """
         Writes segment, CA sector, and IE sector reports to disk
@@ -2097,10 +2099,23 @@ class DVector:
         ie_sector_path:
             Path to write the IE sector report to
 
+        lad_report_path:
+            Path to write the LAD report to
+
+        lad_report_seg:
+            The segmentation to output the LAD report at
+
         Returns
         -------
         None
         """
+        # Check that not just one argument has been set
+        if du.xor(lad_report_path is None, lad_report_seg is None):
+            raise ValueError(
+                "Only one of lad_report_path and lad_report_seg has been set. "
+                "Either both values need to be set, or neither."
+            )
+
         # Segment totals report
         df = self.sum_zoning().to_df()
         df.to_csv(segment_totals_path, index=False)
@@ -2114,6 +2129,15 @@ class DVector:
         ie_sectors = nd.get_zoning_system('ie_sector')
         dvec = self.translate_zoning(ie_sectors)
         dvec.to_df().to_csv(ie_sector_path, index=False)
+
+        if lad_report_seg is None:
+            return
+
+        # Segment by LAD segment total reports - 1 to 1, No weighting
+        lad = nd.get_zoning_system('lad')
+        dvec = self.aggregate(lad_report_seg)
+        dvec = dvec.translate_zoning(lad)
+        dvec.to_df().to_csv(lad_report_path, index=False)
 
 
 class DVectorError(nd.NormitsDemandError):

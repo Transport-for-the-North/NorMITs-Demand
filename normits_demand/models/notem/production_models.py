@@ -315,6 +315,8 @@ class HBProductionModel(HBProductionModelPaths):
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
+                    lad_report_path=notem_segmented_paths.lad_report[year],
+                    lad_report_seg=nd.get_segmentation_level('hb_p_m_tp_week'),
                 )
 
             # TODO: Bring in constraints (Validation)
@@ -776,6 +778,8 @@ class NHBProductionModel(NHBProductionModelPaths):
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
+                    lad_report_path=notem_segmented_paths.lad_report[year],
+                    lad_report_seg=nd.get_segmentation_level('nhb_p_m_tp_week'),
                 )
 
             # TODO: Bring in constraints (Validation)

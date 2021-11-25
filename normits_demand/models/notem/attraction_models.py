@@ -319,7 +319,7 @@ class HBAttractionModel(HBAttractionModelPaths):
                     "Expected %f\n"
                     "Got %f"
                     % (pure_attractions.sum(), fully_segmented.sum())
-                )                
+                )
                 self._logger.warning(msg)
                 warnings.warn(msg)
 
@@ -330,6 +330,7 @@ class HBAttractionModel(HBAttractionModelPaths):
 
             # Control the attractions to the productions - this also adds in
             # some segmentation to bring it in line with the productions
+            self._logger.info("Balancing to productions")
             notem_segmented = self._attractions_balance(
                 a_dvec=fully_segmented,
                 p_dvec_path=self.production_balance_paths[year],
@@ -346,6 +347,8 @@ class HBAttractionModel(HBAttractionModelPaths):
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
+                    lad_report_path=notem_segmented_paths.lad_report[year],
+                    lad_report_seg=nd.get_segmentation_level('hb_p_m_tp_week'),
                 )
 
             # TODO: Bring in constraints (Validation)
@@ -755,6 +758,8 @@ class NHBAttractionModel(NHBAttractionModelPaths):
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
+                    lad_report_path=notem_segmented_paths.lad_report[year],
+                    lad_report_seg=nd.get_segmentation_level('nhb_p_m_tp_week'),
                 )
 
             # TODO: Bring in constraints (Validation)
