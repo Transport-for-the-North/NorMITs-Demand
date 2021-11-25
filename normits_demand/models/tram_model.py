@@ -317,6 +317,7 @@ class TramModel(TramExportPaths):
             report_segment_total_paths=vector_reports.segment_total,
             report_ca_sector_paths=vector_reports.ca_sector,
             report_ie_sector_paths=vector_reports.ie_sector,
+            lad_report_paths=vector_reports.lad_report,
         )
 
     def _generate_hb_attraction(self) -> None:
@@ -339,6 +340,7 @@ class TramModel(TramExportPaths):
             report_segment_total_paths=vector_reports.segment_total,
             report_ca_sector_paths=vector_reports.ca_sector,
             report_ie_sector_paths=vector_reports.ie_sector,
+            lad_report_paths=vector_reports.lad_report,
         )
 
     def _generate_nhb_production(self) -> None:
@@ -361,6 +363,7 @@ class TramModel(TramExportPaths):
             report_segment_total_paths=vector_reports.segment_total,
             report_ca_sector_paths=vector_reports.ca_sector,
             report_ie_sector_paths=vector_reports.ie_sector,
+            lad_report_paths=vector_reports.lad_report,
         )
 
     def _generate_nhb_attraction(self) -> None:
@@ -383,6 +386,7 @@ class TramModel(TramExportPaths):
             report_segment_total_paths=vector_reports.segment_total,
             report_ca_sector_paths=vector_reports.ca_sector,
             report_ie_sector_paths=vector_reports.ie_sector,
+            lad_report_paths=vector_reports.lad_report,
         )
 
     def _infill_tram(self,
@@ -444,6 +448,7 @@ class TramModel(TramExportPaths):
                   report_segment_total_paths: Dict[int, nd.PathLike],
                   report_ca_sector_paths: Dict[int, nd.PathLike],
                   report_ie_sector_paths: Dict[int, nd.PathLike],
+                  lad_report_paths: Dict[int, nd.PathLike],
                   ) -> None:
         """
         Runs the tram inclusion for the notem trip end output.
@@ -554,10 +559,12 @@ class TramModel(TramExportPaths):
             if trip_origin == 'hb':
                 tram_seg = nd.get_segmentation_level('hb_p_m7_ca')
                 out_seg = nd.get_segmentation_level('tram_hb_output')
+                lad_report_seg = nd.get_segmentation_level('hb_p_m7_tp_week')
 
             elif trip_origin == 'nhb':
                 tram_seg = nd.get_segmentation_level('nhb_p_m7_ca')
                 out_seg = nd.get_segmentation_level('tram_nhb_output')
+                lad_report_seg = nd.get_segmentation_level('nhb_p_m7_tp_week')
 
             else:
                 raise ValueError(
@@ -597,6 +604,8 @@ class TramModel(TramExportPaths):
                 segment_totals_path=report_segment_total_paths[year],
                 ca_sector_path=report_ca_sector_paths[year],
                 ie_sector_path=report_ie_sector_paths[year],
+                lad_report_path=lad_report_paths[year],
+                lad_report_seg=lad_report_seg,
             )
 
             # Print timing for each trip end model

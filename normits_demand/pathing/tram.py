@@ -512,6 +512,7 @@ class TramModelPaths:
     _segment_totals_report_name = "segment_totals"
     _ca_sector_report_name = "ca_sector_totals"
     _ie_sector_report_name = "ie_sector_totals"
+    _lad_report_name = "lad_totals"
 
     _tram_growth_factors_fname = 'tram_growth_factors_{year}.csv'
     _more_tram_msoa_fname = 'more_tram_msoa_{year}.csv'
@@ -538,7 +539,7 @@ class TramModelPaths:
 
     VectorReportPaths = collections.namedtuple(
         typename='VectorReportPaths',
-        field_names='segment_total, ca_sector, ie_sector',
+        field_names='segment_total, ca_sector, ie_sector, lad_report',
     )
 
     # Define output fnames
@@ -623,6 +624,7 @@ class TramModelPaths:
         segment_total_paths = dict()
         ca_sector_paths = dict()
         ie_sector_paths = dict()
+        lad_paths = dict()
 
         # Create the paths for each year
         for year in self.path_years:
@@ -638,10 +640,15 @@ class TramModelPaths:
             fname = base_fname % (*fname_parts, year, self._ie_sector_report_name)
             ie_sector_paths[year] = os.path.join(out_dir, fname)
 
+            # LAD Reports
+            fname = base_fname % (*fname_parts, year, self._lad_report_name)
+            lad_paths[year] = os.path.join(out_dir, fname)
+
         return self.VectorReportPaths(
             segment_total=segment_total_paths,
             ca_sector=ca_sector_paths,
             ie_sector=ie_sector_paths,
+            lad_report=lad_paths,
         )
 
     def _create_report_paths(self):
