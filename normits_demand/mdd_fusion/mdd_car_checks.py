@@ -67,7 +67,10 @@ dctday = {1: ['Weekday']}
 dctpurp = {1: ['hbw_fr'], 2: ['hbw_to'], 3: ['hbo_fr'], 4: ['hbo_to'], 5: ['nhb']}
 dcttp = {1: ['AM'], 2: ['IP'], 3: ['PM']}
 
+zone_te_list = []
+lad_te_list = []
 lad_list = []
+sc_te_list = []
 sc_list = []
 
 
@@ -121,6 +124,12 @@ for md in dctmode:
                     #Export as csv
                     zone_te.to_csv(f'Y:/Mobile Data/Processing/MDD_Check/zone_te_od_p{pp}_m{md}_tp{tp}.csv', 
                                    index = False)
+                    #Master list
+                    zone_te['mode'] = md
+                    zone_te['weekday'] = wd
+                    zone_te['purp'] = pp
+                    zone_te['tp'] = tp
+                    zone_te_list.append(zone_te)
                     
                     #add linear regression
                     d = np.polyfit(mat['nmtrip'], mat['mddtrip'], 1)
@@ -130,9 +139,12 @@ for md in dctmode:
                     ax = mat.plot.scatter(y='mddtrip', x='nmtrip', 
                                           title='Regression: y = ' + str(d[0].round(2)) + 'x + ' + str(d[0].round(1)))
                     mat.plot(x='nmtrip', y='linearfit', color='Red', ax=ax,
-                                  xlabel='NoHAM LAD trips',
-                                  ylabel='MDD LAD trips')
+                                  xlabel='NoHAM trips',
+                                  ylabel='MDD trips')
                     ax.figure.savefig(f'Y:/Mobile Data/Processing/MDD_Check/zone_od_p{pp}_m{md}_tp{tp}.png')
+                    
+                    #Repeat zone matrix plots, excluding External-External movements
+                    
                     
                     ######
                     #LAD sectors, origins then dests for many-many relationsip
@@ -174,6 +186,12 @@ for md in dctmode:
                     #Export as csv
                     lad_te.to_csv(f'Y:/Mobile Data/Processing/MDD_Check/lad_te_od_p{pp}_m{md}_tp{tp}.csv', 
                                    index = False)
+                    #Master list
+                    lad_te['mode'] = md
+                    lad_te['weekday'] = wd
+                    lad_te['purp'] = pp
+                    lad_te['tp'] = tp
+                    lad_te_list.append(lad_te)
                     
                     #add linear regression
                     d = np.polyfit(mat_lad['nm_lad'], mat_lad['mdd_lad'], 1)
@@ -206,19 +224,40 @@ for md in dctmode:
                     plt.close('all')
                     
                     #Add LAD to master list
-                    mat_lad['purp'] = pp
                     mat_lad['mode'] = md
+                    mat_lad['weekday'] = wd
+                    mat_lad['purp'] = pp
                     mat_lad['tp'] = tp
                     lad_list.append(mat_lad)
                     
                     
                     
+#Concat and export Zone trip ends
+master_te = pd.concat(zone_te_list)
+master_te.to_csv('Y:/Mobile Data/Processing/MDD_Check/trip_ends_zone.csv', 
+                                   index = False)
+
+#Concat and export LAD trip ends
+master_lad_te = pd.concat(lad_te_list)
+master_lad_te.to_csv('Y:/Mobile Data/Processing/MDD_Check/trip_ends_lad.csv', 
+                                   index = False)
                     
 #Concat and export LAD-LAD matrix
 master_lad = pd.concat(lad_list)
 master_lad.to_csv('Y:/Mobile Data/Processing/MDD_Check/lad-lad_matrices.csv', 
                                    index = False)
 
+# save as excel file
+with pd.ExcelWriter('Y:/Mobile Data/Processing/MDD_Check/MDD-NoHAM_Summary.xlsx') as writer:
+    master_lad.to_excel(writer, 
+                           sheet_name = 'LAD-LAD', 
+                           index=None)
+    master_te.to_excel(writer, 
+                           sheet_name = 'Zone_TE', 
+                           index=None)
+    master_lad_te.to_excel(writer, 
+                           sheet_name = 'LAD_TE', 
+                           index=None)
 
 
 
