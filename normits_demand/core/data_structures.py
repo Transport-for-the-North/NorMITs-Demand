@@ -2105,15 +2105,15 @@ class DVector:
         df = self.sum_zoning().to_df()
         df.to_csv(segment_totals_path, index=False)
 
-        # Segment by CA Sector total reports
+        # Segment by CA Sector total reports - 1 to 1, No weighting
         tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-        df = self.translate_zoning(tfn_ca_sectors)
-        df.to_df().to_csv(ca_sector_path, index=False)
+        dvec = self.translate_zoning(tfn_ca_sectors)
+        dvec.to_df().to_csv(ca_sector_path, index=False)
 
-        # Segment by IE Sector total reports
+        # Segment by IE Sector total reports - 1 to 1, No weighting
         ie_sectors = nd.get_zoning_system('ie_sector')
-        df = self.translate_zoning(ie_sectors).to_df()
-        df.to_csv(ie_sector_path, index=False)
+        dvec = self.translate_zoning(ie_sectors)
+        dvec.to_df().to_csv(ie_sector_path, index=False)
 
 
 class DVectorError(nd.NormitsDemandError):
