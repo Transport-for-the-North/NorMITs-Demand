@@ -313,7 +313,7 @@ class TravelMarketSynthesiser(TMSExportPaths):
         # TODO(BT): Build import paths for TMS!
         if self.running_mode in [nd.Mode.CAR, nd.Mode.BUS]:
             fh_th_factors_dir = r'I:\NorMITs Demand\import\noham\post_me_tour_proportions\fh_th_factors'
-        elif self.running_mode in [nd.Mode.RAIL]:
+        elif self.running_mode in [nd.Mode.TRAIN]:
             fh_th_factors_dir = r'I:\NorMITs Demand\import\norms\post_me_tour_proportions\fh_th_factors'
         else:
             raise ValueError("Uh Oh!")

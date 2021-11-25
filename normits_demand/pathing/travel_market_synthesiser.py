@@ -111,11 +111,12 @@ class GravityModelArgumentBuilderBase(abc.ABC):
 # ## EXTERNAL MODEL CLASSES ## #
 class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
     # Costs constants
+    _modal_dir_name = 'modal'
     _cost_dir_name = 'costs'
     _cost_base_fname = "{zoning_name}_{cost_type}_costs.csv"
 
     # CJTW constants
-    _cjtw_infill = 0.1
+    _cjtw_infill = 1e-5
     _cjtw_dir_name = 'cjtw'
     _cjtw_base_fname = 'cjtw_{zoning_name}.csv'
 
@@ -135,7 +136,6 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
                  nhb_cost_type: str,
                  notem_iteration_name: str,
                  notem_export_home: str,
-                 cache_path: nd.PathLike = None,
                  intrazonal_cost_infill: float = 0.5,
                  convergence_target: float = 0.9,
                  furness_tol: float = 0.1,
@@ -156,7 +156,6 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         self.external_tld_name = external_tld_name
         self.hb_cost_type = hb_cost_type
         self.nhb_cost_type = nhb_cost_type
-        self.cache_path = cache_path
         self.intrazonal_cost_infill = intrazonal_cost_infill
         self.convergence_target = convergence_target
         self.furness_tol = furness_tol
@@ -187,6 +186,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         # Aggregate mode
         p_col = list(cjtw)[0]
         a_col = list(cjtw)[1]
+        cjtw = cjtw[cjtw['mode'] == self.running_mode.get_mode_num()].copy()
         cjtw = cjtw.reindex([p_col, a_col, 'trips'], axis=1)
         cjtw = cjtw.groupby([p_col, a_col]).sum().reset_index()
 
@@ -229,7 +229,6 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
             attraction_import_path=attractions_path,
             model_zone=self.zoning_system.name,
             trip_origin=trip_origin,
-            cache_path=self.cache_path,
         )
 
         # Build TLD directory paths
@@ -248,6 +247,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         )
         costs_path = os.path.join(
             self.import_home,
+            self._modal_dir_name,
             self.running_mode.value,
             self._cost_dir_name,
             fname,
@@ -807,7 +807,6 @@ def import_pa(production_import_path,
               attraction_import_path,
               model_zone,
               trip_origin,
-              cache_path=None,
               ):
     """
     This function imports productions and attractions from given paths.
@@ -835,102 +834,68 @@ def import_pa(production_import_path,
     p_cache = None
     a_cache = None
 
-    # handle cache
-    if cache_path is not None:
-        p_fname = "%s_%s_productions.csv" % (trip_origin, model_zone)
-        a_fname = "%s_%s_attractions.csv" % (trip_origin, model_zone)
-
-        p_cache = os.path.join(cache_path, p_fname)
-        a_cache = os.path.join(cache_path, a_fname)
-
-        if os.path.exists(p_cache) and os.path.exists(a_cache):
-            return pd.read_csv(p_cache), pd.read_csv(a_cache)
-
-    # Reading pickled Dvector
-    prod_dvec = nd.from_pickle(production_import_path)
-
-    # Aggregate to the required segmentation
+    # Determine the required segmentation
     if trip_origin == 'hb':
+        reduce_seg = None
+        subset_seg = nd.get_segmentation_level('notem_hb_output_wday')
         if model_zone == 'noham':
-            agg_seg = nd.get_segmentation_level('hb_p_m_6tp')
+            agg_seg = nd.get_segmentation_level('hb_p_m')
         elif model_zone == 'norms':
-            agg_seg = nd.get_segmentation_level('hb_p_m_ca_6tp')
+            agg_seg = nd.get_segmentation_level('hb_p_m_ca')
         else:
             raise ValueError("Invalid model name")
     elif trip_origin == 'nhb':
+        reduce_seg = nd.get_segmentation_level('notem_nhb_output_reduced')
+        subset_seg = nd.get_segmentation_level('notem_nhb_output_reduced_wday')
         if model_zone == 'noham':
-            agg_seg = nd.get_segmentation_level('nhb_p_m_6tp')
+            agg_seg = nd.get_segmentation_level('nhb_p_m_tp_wday')
         elif model_zone == 'norms':
-            agg_seg = nd.get_segmentation_level('nhb_p_m_ca_6tp')
+            agg_seg = nd.get_segmentation_level('nhb_p_m_ca_tp_wday')
         else:
             raise ValueError("Invalid model name")
     else:
         raise ValueError("Invalid trip origin")
 
-    # Aggregate and translate for norms/noham
-    prod_dvec_agg = prod_dvec.aggregate(out_segmentation=agg_seg)
+    # Get the zoning system we're using
     model_zoning = nd.get_zoning_system(model_zone)
-    prod_dvec = prod_dvec_agg.translate_zoning(model_zoning, "population")
+
+    # Reading pickled Dvector
+    prod_dvec = nd.read_pickle(production_import_path)
+
+    # Reduce nhb 11 into 12 if needed
+    if reduce_seg is not None:
+        prod_dvec = prod_dvec.reduce(out_segmentation=reduce_seg)
+
+    # Convert from ave_week to ave_day
+    prod_dvec = prod_dvec.subset(out_segmentation=subset_seg)
+    prod_dvec = prod_dvec.convert_time_format('avg_week')
+
+    # Convert zoning and segmentation to desired
+    prod_dvec = prod_dvec.aggregate(out_segmentation=agg_seg)
+    prod_dvec = prod_dvec.translate_zoning(model_zoning, "population")
 
     # Weekly trips to weekday trips conversion
     prod_df = prod_dvec.to_df()
-    prod_wd = weekly_to_weekday(prod_df, trip_origin, model_zone)
 
     # Reading pickled Dvector
-    attr_dvec = nd.from_pickle(attraction_import_path)
+    attr_dvec = nd.read_pickle(attraction_import_path)
 
-    # Aggregate and translate for norms/noham
-    attr_dvec_agg = attr_dvec.aggregate(out_segmentation=agg_seg)
-    model_zoning = nd.get_zoning_system(model_zone)
-    attr_dvec = attr_dvec_agg.translate_zoning(model_zoning, "employment")
+    # Reduce nhb 11 into 12 if needed
+    if reduce_seg is not None:
+        attr_dvec = attr_dvec.reduce(out_segmentation=reduce_seg)
+
+    # Convert from ave_week to ave_day
+    attr_dvec = attr_dvec.subset(out_segmentation=subset_seg)
+    attr_dvec = attr_dvec.convert_time_format('avg_week')
+
+    # Convert zoning and segmentation to desired
+    attr_dvec = attr_dvec.aggregate(out_segmentation=agg_seg)
+    attr_dvec = attr_dvec.translate_zoning(model_zoning, "employment")
 
     # Weekly trips to weekday trips conversion
     attr_df = attr_dvec.to_df()
-    attr_wd = weekly_to_weekday(attr_df, trip_origin, model_zone)
 
-    # TODO(BT): Sort zoning system into order
-    if p_cache is not None and a_cache is not None:
-        prod_wd.to_csv(p_cache, index=False)
-        attr_wd.to_csv(a_cache, index=False)
-
-    return prod_wd, attr_wd
-
-
-def weekly_to_weekday(df, trip_origin, model_zone) -> pd.DataFrame:
-    """
-    Convert weekly trips to weekday trips.
-
-    Removes tp5 and tp6 from the time period column and
-    divides trips by 5 to convert them from weekly to weekday.
-
-    Parameters
-    ----------
-    df:
-    Dataframe (either productions or attractions) containing notem segmented weekly trips.
-
-    trip_origin:
-    Whether the trip origin is hb or nhb.
-
-    Return
-    ----------
-    df:
-    Dataframe (either productions or attractions) containing notem segmented weekday trips.
-    """
-    if model_zone == 'norms':
-        df[["p", "m", "ca", "tp"]] = df[["p", "m", "ca", "tp"]].apply(pd.to_numeric)
-    else:
-        df[["p", "m", "tp"]] = df[["p", "m", "tp"]].apply(pd.to_numeric)
-    df = df.drop(df[df.tp >= 5].index)
-    df['val'] = df['val'] / 5
-    df_index_cols = list(df)
-    df_index_cols.remove('tp')
-    df_group_cols = df_index_cols.copy()
-    df_group_cols.remove('val')
-
-    # Time period removed for hb based trips
-    if trip_origin == 'hb':
-        df = df.reindex(df_index_cols, axis=1).groupby(df_group_cols).sum().reset_index()
-    return df
+    return prod_df, attr_df
 
 
 def read_cjtw(file_path: nd.PathLike,
@@ -1000,6 +965,7 @@ def read_cjtw(file_path: nd.PathLike,
     for col in modeCols:
         cjtw = cjtw.rename(columns={col: method_to_mode.get(col)})
 
+
     cjtw = cjtw.drop('3_Allcategories_Methodoftraveltowork', axis=1)
     cjtw = cjtw.groupby(cjtw.columns, axis=1).sum()
     cjtw = cjtw.reindex(['1_' + zoning_name + 'Areaofresidence',
@@ -1009,18 +975,19 @@ def read_cjtw(file_path: nd.PathLike,
     # Redefine mode cols for new aggregated modes
     modeCols = ['1_walk', '2_cycle', '3_car', '5_bus', '6_rail_ug']
     # Pivot
-    cjtw = pd.melt(cjtw, id_vars=['1_' + zoning_name + 'Areaofresidence',
-                                  '2_' + zoning_name + 'Areaofworkplace'],
-                   var_name='mode', value_name='trips')
+    cjtw = pd.melt(
+        cjtw,
+        id_vars=['1_' + zoning_name + 'Areaofresidence', '2_' + zoning_name + 'Areaofworkplace'],
+        var_name='mode',
+        value_name='trips',
+    )
     cjtw['mode'] = cjtw['mode'].str[0]
+    cjtw['mode'] = cjtw['mode'].astype(int)
 
     # Build distribution factors
-    hb_totals = cjtw.drop(
-        '2_' + zoning_name + 'Areaofworkplace',
-        axis=1
-    ).groupby(
-        ['1_' + zoning_name + 'Areaofresidence', 'mode']
-    ).sum().reset_index()
+    hb_totals = cjtw.drop('2_' + zoning_name + 'Areaofworkplace', axis=1)
+    hb_totals = hb_totals.groupby(['1_' + zoning_name + 'Areaofresidence', 'mode'])
+    hb_totals = hb_totals.sum().reset_index()
 
     hb_totals = hb_totals.rename(columns={'trips': 'zonal_mode_total_trips'})
     hb_totals = hb_totals.reindex(
@@ -1028,12 +995,13 @@ def read_cjtw(file_path: nd.PathLike,
         axis=1
     )
 
-    cjtw = cjtw.merge(hb_totals,
-                      how='left',
-                      on=['1_' + zoning_name + 'Areaofresidence', 'mode'])
+    cjtw = cjtw.merge(
+        hb_totals,
+        how='left',
+        on=['1_' + zoning_name + 'Areaofresidence', 'mode'],
+    )
 
     # Divide by total trips to get distribution factors
-
     if reduce_to_pa_factors:
         cjtw['distribution'] = cjtw['trips'] / cjtw['zonal_mode_total_trips']
         cjtw = cjtw.drop(['trips', 'zonal_mode_total_trips'], axis=1)

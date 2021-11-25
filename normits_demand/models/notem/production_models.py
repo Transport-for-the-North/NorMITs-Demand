@@ -365,6 +365,12 @@ class HBProductionModel(HBProductionModelPaths):
             path=self.population_paths[year],
             find_similar=True,
         )
+
+        # TODO(BT): Remove this in Land Use 4.0 Update
+        # Little hack until Land Use is updated
+        if str(year) in list(pop):
+            pop = pop.rename(columns={str(year): 'people'})
+
         pop = pd_utils.reindex_cols(pop, self._target_col_dtypes['pop'].keys())
         for col, dt in self._target_col_dtypes['pop'].items():
             pop[col] = pop[col].astype(dt)
@@ -376,7 +382,6 @@ class HBProductionModel(HBProductionModelPaths):
             import_data=pop.rename(columns=self._seg_rename),
             zone_col="msoa_zone_id",
             val_col="people",
-            verbose=verbose,
         )
 
     def _generate_productions(self,
@@ -419,7 +424,6 @@ class HBProductionModel(HBProductionModelPaths):
             segmentation=pure_hb_prod,
             import_data=trip_rates.rename(columns=self._seg_rename),
             val_col="trip_rate",
-            verbose=verbose,
         )
         # ## MULTIPLY TOGETHER ## #
         return population * trip_rates_dvec
@@ -868,7 +872,6 @@ class NHBProductionModel(NHBProductionModelPaths):
             import_data=pop,
             zone_col="zone",
             val_col="value",
-            verbose=verbose,
         )
 
         # ## CONVERT THE ATTRACTIONS INTO DESIRED FORMAT ## #
@@ -918,7 +921,6 @@ class NHBProductionModel(NHBProductionModelPaths):
             segmentation=nhb_trip_rate_seg,
             import_data=trip_rates.rename(columns=self._seg_rename),
             val_col="nhb_trip_rate",
-            verbose=verbose,
         )
 
         # Multiply

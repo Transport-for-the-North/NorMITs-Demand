@@ -397,6 +397,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             find_similar=True,
         )
 
+        # TODO(BT): Remove this in Land Use 4.0 Update
         # Little hack until Land Use is updated
         if str(year) in list(emp):
             emp = emp.rename(columns={str(year): 'people'})
@@ -412,7 +413,6 @@ class HBAttractionModel(HBAttractionModelPaths):
             import_data=emp.rename(columns=self._seg_rename),
             zone_col="msoa_zone_id",
             val_col="people",
-            verbose=verbose,
         )
 
     def _generate_attractions(self,
@@ -456,7 +456,6 @@ class HBAttractionModel(HBAttractionModelPaths):
             import_data=trip_rates.rename(columns=self._seg_rename),
             zone_col="msoa_zone_id",
             val_col="trip_rate",
-            verbose=verbose,
         )
 
         # ## MULTIPLY TOGETHER ## #
@@ -827,7 +826,6 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             import_data=hb_attr_notem_df,
             zone_col=hb_attr_notem.zoning_system.col_name,
             val_col="val",
-            verbose=verbose,
         )
 
     def _attractions_balance(self,
