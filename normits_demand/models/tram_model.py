@@ -764,10 +764,6 @@ class TramModel(TramExportPaths):
         tram_data:
             Dataframe containing tram data at MSOA level for the north.
 
-        tram_zones:
-            A list of the zones that contain tram data. Must be the same format
-            as vector[zone_col] and tram_data[zone_col]
-
         tram_competitors:
             A list of the Modes which would be competing with Tram for trips.
             These are the modes which will be used to remove trips from in
@@ -1174,7 +1170,7 @@ class TramModel(TramExportPaths):
         compet_df['new_val'] = compet_df['old_mode_shares'] * compet_df['new_val_sum']
 
         # ## TIDY UP DF FOR RETURN ## #
-        compet_df = pd_utils.reindex_cols(compet_df,list(non_compet_df))
+        compet_df = pd_utils.reindex_cols(compet_df, list(non_compet_df))
         new_df = pd.concat([compet_df, non_compet_df], ignore_index=True)
 
         # Check we haven't dropped anything
