@@ -194,6 +194,7 @@ as part of their file name in distribution reports
 ### V0.4.6
 - Minor Updates to NoTEM
   - Logging properly integrated into NoTEM
+  - LAD level reports added to NoTEM outputs
   - New HB Production Trip rates being read in
   - New NHB Production Trip rates being read in
     - NoTEM now outputs NHB Purpose 11
