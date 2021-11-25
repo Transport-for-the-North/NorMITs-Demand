@@ -676,7 +676,6 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             export_nhb_pure_attractions: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
-            verbose: bool = False,
             ) -> None:
         """
         Runs the NHB Attraction model.
@@ -710,9 +709,6 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             Whether to output reports while running. All reports will be
             written out to self.report_home.
 
-        verbose:
-            Whether to print progress bars during processing or not.
-
         Returns
         -------
         None
@@ -727,7 +723,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
 
             # ## GENERATE PURE ATTRACTIONS ## #
             self._logger.info("Loading the HB attraction data")
-            pure_nhb_attr = self._create_nhb_attraction_data(year, verbose=verbose)
+            pure_nhb_attr = self._create_nhb_attraction_data(year)
 
             if export_nhb_pure_attractions:
                 self._logger.info("Exporting NHB pure attractions to disk")
@@ -782,7 +778,6 @@ class NHBAttractionModel(NHBAttractionModelPaths):
 
     def _create_nhb_attraction_data(self,
                                     year: int,
-                                    verbose: bool,
                                     ) -> nd.DVector:
         """
         Reads in HB attractions converts it into a NHB attractions Dvector.
@@ -796,9 +791,6 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         ----------
         year:
             The year to get HB attractions data for.
-
-        verbose:
-            Passed into the DVector.
 
         Returns
         -------

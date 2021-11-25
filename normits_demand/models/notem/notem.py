@@ -343,5 +343,4 @@ class NoTEM(NoTEMExportPaths):
             export_nhb_pure_attractions=False,
             export_notem_segmentation=True,
             export_reports=True,
-            verbose=verbose,
         )
