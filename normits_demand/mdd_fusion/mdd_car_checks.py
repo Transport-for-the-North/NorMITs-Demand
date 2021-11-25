@@ -127,8 +127,11 @@ for md in dctmode:
                     f = np.poly1d(d)
                     mat['linearfit'] = f(mat['nmtrip'])
                     #plot and export
-                    ax = mat.plot.scatter(y='mddtrip', x='nmtrip')
-                    mat.plot(x='nmtrip', y='linearfit', color='Red', ax=ax)
+                    ax = mat.plot.scatter(y='mddtrip', x='nmtrip', 
+                                          title='Regression: y = ' + str(d[0].round(2)) + 'x + ' + str(d[0].round(1)))
+                    mat.plot(x='nmtrip', y='linearfit', color='Red', ax=ax,
+                                  xlabel='NoHAM LAD trips',
+                                  ylabel='MDD LAD trips')
                     ax.figure.savefig(f'Y:/Mobile Data/Processing/MDD_Check/zone_od_p{pp}_m{md}_tp{tp}.png')
                     
                     ######
@@ -177,8 +180,11 @@ for md in dctmode:
                     f = np.poly1d(d)
                     mat_lad['linearfit'] = f(mat_lad['nm_lad'])
                     #plot and export
-                    ax = mat_lad.plot.scatter(y='mdd_lad', x='nm_lad')
-                    mat_lad.plot(x='nm_lad', y='linearfit', color='Red', ax=ax)
+                    ax = mat_lad.plot.scatter(y='mdd_lad', x='nm_lad', 
+                                 title='Regression: y = ' + str(d[0].round(2)) + 'x + ' + str(d[0].round(1)))
+                    mat_lad.plot(x='nm_lad', y='linearfit', color='Red', ax=ax,
+                                  xlabel='NoHAM LAD trips',
+                                  ylabel='MDD LAD trips')
                     ax.figure.savefig(f'Y:/Mobile Data/Processing/MDD_Check/lad_od_p{pp}_m{md}_tp{tp}.png')
                     #Close all plots
                     plt.close('all')
@@ -191,8 +197,11 @@ for md in dctmode:
                     f = np.poly1d(d)
                     mat_lad2['linearfit'] = f(mat_lad2['nm_lad'])
                     #plot and export
-                    ax = mat_lad2.plot.scatter(y='mdd_lad', x='nm_lad')
-                    mat_lad2.plot(x='nm_lad', y='linearfit', color='Red', ax=ax)
+                    ax = mat_lad2.plot.scatter(y='mdd_lad', x='nm_lad', 
+                                  title='Regression: y = ' + str(d[0].round(2)) + 'x + ' + str(d[0].round(1)))
+                    mat_lad2.plot(x='nm_lad', y='linearfit', color='Red', ax=ax,
+                                  xlabel='NoHAM LAD trips',
+                                  ylabel='MDD LAD trips')
                     ax.figure.savefig(f'Y:/Mobile Data/Processing/MDD_Check/lad_od_xEE_p{pp}_m{md}_tp{tp}.png')
                     plt.close('all')
                     
