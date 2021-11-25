@@ -18,8 +18,8 @@ from math import floor
 from datetime import datetime
 
 
-def current_milli_time():
-    return int(time.time() * 1000)
+def current_milli_time() -> float:
+    return time.perf_counter() * 1000
 
 
 def get_datetime(time_format: str = "%d-%m-%Y  %H:%M:%S.%f",

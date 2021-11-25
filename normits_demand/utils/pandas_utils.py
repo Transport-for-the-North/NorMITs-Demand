@@ -281,6 +281,84 @@ def chunk_df(df: pd.DataFrame,
         yield df[i:chunk_end]
 
 
+def long_product_infill(df: pd.DataFrame,
+                        index_col_1: str,
+                        index_col_2: str,
+                        index_col_1_vals: List[Any] = None,
+                        index_col_2_vals: List[Any] = None,
+                        infill: Any = 0,
+                        ) -> pd.DataFrame:
+    """
+    Infills missing values of col_1 and col_2 using a product of given values.
+
+    Parameters
+    ----------
+    df:
+        The dataframe, in long format, to infill.
+
+    index_col_1:
+        The first column of df to infill. Will be infilled with
+        index_col_1_vals, repeated len(index_col_2_vals) times.
+
+    index_col_2:
+        The second column of df to infill. Will be infilled with
+        index_col_2_vals, repeated len(index_col_1_vals) times.
+
+    index_col_1_vals:
+        The unique values to use as the first index of the return dataframe.
+        These unique values will be combined with every combination of
+        index_col_2_vals to create the full index.
+        If left as None, df[index_col].unique() will be used.
+
+    index_col_2_vals:
+        The unique values to use as the first index of the return dataframe.
+        These unique values will be combined with every combination of
+        index_col_1_vals to create the full index.
+        If left as None, df[columns_col].unique() will be used.
+
+    infill:
+        The value to use to infill any missing cells in the return DataFrame.
+
+    Returns
+    -------
+    infilled_df:
+        A copy of df, in wide format, with index_col as the index,
+        columns_col as the column names, and values_col as the values.
+    """
+    # Init
+    index_col_1_vals = df[index_col_1].unique() if index_col_1_vals is None else index_col_1_vals
+    index_col_2_vals = df[index_col_2].unique() if index_col_2_vals is None else index_col_2_vals
+
+    # Make sure were not dropping too much. Indication of problems in arguments
+    missing_idx = set(index_col_1_vals) - set(df[index_col_1].unique().tolist())
+    if len(missing_idx) >= len(set(index_col_1_vals)) * 0.9:
+        warnings.warn(
+            "Almost all index_col_1_vals do not exist in df[index_col_1]. Are the "
+            "given data types matching?\n"
+            "There are %s missing values."
+            % len(missing_idx)
+        )
+
+    missing_cols = set(index_col_2_vals) - set(df[index_col_2].unique().tolist())
+    if len(missing_cols) >= len(set(index_col_2_vals)) * 0.9:
+        warnings.warn(
+            "Almost all index_col_2_vals do not exist in df[index_col_2]. Are the "
+            "given data types matching?\n"
+            "There are %s missing values."
+            % len(missing_cols)
+        )
+
+    # Make sure every possible combination exists
+    new_index = pd.MultiIndex.from_product(
+        [index_col_1_vals, index_col_2_vals],
+        names=[index_col_1, index_col_2]
+    )
+    df = df.set_index([index_col_1, index_col_2])
+    df = df.reindex(index=new_index, fill_value=infill).reset_index()
+
+    return df
+
+
 def long_to_wide_infill(df: pd.DataFrame,
                         index_col: str,
                         columns_col: str,
@@ -353,13 +431,14 @@ def long_to_wide_infill(df: pd.DataFrame,
             % len(missing_cols)
         )
 
-    # Make sure every possible combination exists
-    new_index = pd.MultiIndex.from_product(
-        [index_vals, column_vals],
-        names=[index_col, columns_col]
+    df = long_product_infill(
+        df=df,
+        index_col_1=index_col,
+        index_col_2=columns_col,
+        index_col_1_vals=index_vals,
+        index_col_2_vals=column_vals,
+        infill=infill,
     )
-    df = df.set_index([index_col, columns_col])
-    df = df.reindex(index=new_index, fill_value=infill).reset_index()
 
     # Convert to wide
     df = df.pivot(
@@ -373,6 +452,99 @@ def long_to_wide_infill(df: pd.DataFrame,
 
     # Make sure nothing was dropped
     after_total = df.values.sum()
+    if not math_utils.is_almost_equal(after_total, orig_total):
+        raise ValueError(
+            "Values have been dropped when reindexing the given dataframe.\n"
+            "Starting total: %s\n"
+            "Ending total: %s."
+            % (orig_total, after_total)
+        )
+
+    return df
+
+
+def wide_to_long_infill(df: pd.DataFrame,
+                        index_col_1_name: str,
+                        index_col_2_name: str,
+                        value_col_name: str,
+                        index_col_1_vals: List[Any] = None,
+                        index_col_2_vals: List[Any] = None,
+                        infill: Any = 0,
+                        check_totals: bool = False,
+                        ) -> pd.DataFrame:
+    """
+    Converts a DataFrame from wide to long format, infilling missing values.
+
+    Parameters
+    ----------
+    df:
+        The dataframe, in wide format, to convert to long. The index of df
+        must be the values that are to become index_col_1_name, and the
+        columns of df will be melted to become index_col_2_name.
+
+    index_col_1_name:
+        The name to give to the column that was the index in the wide df
+
+    index_col_2_name:
+        The name to give to the column that was the column names in the wide df
+
+    value_col_name:
+        The name to give to the column that was the values in the wide df
+
+    index_col_1_vals:
+        The unique values to use as the first index of the return dataframe.
+        These unique values will be combined with every combination of
+        index_col_2_vals to create the full index.
+        If left as None, melted_df[index_col_1_name].unique() will be used.
+
+    index_col_2_vals:
+        The unique values to use as the second index of the return dataframe.
+        These unique values will be combined with every combination of
+        index_col_1_vals to create the full index.
+        If left as None, melted_df[index_col_2_name].unique() will be used.
+
+    infill:
+        The value to use to infill any missing cells in the return DataFrame.
+
+    check_totals:
+        Whether to check if the totals are almost equal before and after the
+        conversion.
+
+    Returns
+    -------
+    long_df:
+        A copy of df, in wide format, with index_col as the index,
+        columns_col as the column names, and values_col as the values.
+    """
+    # Init
+    orig_total = df.values.sum()
+
+    # Assume the index is the first ID
+    df = df.reset_index()
+    df = df.rename(columns={df.columns[0]: index_col_1_name})
+
+    # Convert to long
+    df = df.melt(
+        id_vars=index_col_1_name,
+        var_name=index_col_2_name,
+        value_name=value_col_name,
+    )
+
+    # Infill anything that's missing
+    df = long_product_infill(
+        df=df,
+        index_col_1=index_col_1_name,
+        index_col_2=index_col_2_name,
+        index_col_1_vals=index_col_1_vals,
+        index_col_2_vals=index_col_2_vals,
+        infill=infill,
+    )
+
+    if not check_totals:
+        return df
+
+    # Make sure nothing was dropped
+    after_total = df[value_col_name].values.sum()
     if not math_utils.is_almost_equal(after_total, orig_total):
         raise ValueError(
             "Values have been dropped when reindexing the given dataframe.\n"

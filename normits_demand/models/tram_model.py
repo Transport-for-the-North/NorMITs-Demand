@@ -13,9 +13,10 @@ from __future__ import annotations
 # Builtins
 import os
 
+from typing import Any
+from typing import List
 from typing import Dict
 from typing import Tuple
-from typing import List
 
 # Third party imports
 import pandas as pd
@@ -30,7 +31,6 @@ from normits_demand.utils import general as du
 from normits_demand.utils import math_utils
 from normits_demand.utils import pandas_utils as pd_utils
 
-#from normits_demand.pathing import NoTEMExportPaths
 from normits_demand.pathing import TramExportPaths
 
 
@@ -39,17 +39,36 @@ class TramModel(TramExportPaths):
     Tram Inclusion on NoTEM outputs
     """
     # Constants
+    _base_year = 2018
+    _train_mode = nd.Mode.TRAIN.get_mode_num()
+    _tram_mode = nd.Mode.TRAM.get_mode_num()
+    _zoning_name = 'msoa'
+
     _sort_msoa = ['msoa_zone_id', 'p', 'ca', 'm']
     _sort_north = ['p', 'ca', 'm']
     _join_cols = ['msoa_zone_id', 'p', 'ca']
-    base_train = pd.DataFrame()
     _running_report_fname = 'running_parameters.txt'
     _log_fname = "tram_log.log"
     _notem_cols = ['msoa_zone_id', 'p', 'ca', 'm', 'val']
 
-    _zoning_system_col = 'msoa_zone_id'
     _tram_segment_cols = ['p', 'm', 'ca']
     _val_col = 'val'
+
+    # Running segmentations
+    _hb_tram_seg = 'hb_p_m_ca'
+    _nhb_tram_seg = 'nhb_p_m_ca'
+
+    # Define report names
+    _hb_reports = {
+        'segment_total': 'hb_notem_segmented_%d_segment_totals.csv',
+        'ca_sector': 'hb_notem_segmented_%d_ca_sector_totals.csv',
+        'ie_sector': 'hb_notem_segmented_%d_ie_sector_totals.csv',
+    }
+    _nhb_reports = {
+        'segment_total': 'nhb_notem_segmented_%d_segment_totals.csv',
+        'ca_sector': 'nhb_notem_segmented_%d_ca_sector_totals.csv',
+        'ie_sector': 'nhb_notem_segmented_%d_ie_sector_totals.csv',
+    }
 
     # Define wanted columns
     _target_col_dtypes = {
@@ -82,6 +101,7 @@ class TramModel(TramExportPaths):
                  iteration_name: str,
                  import_builder: nd.pathing.TramImportPathsBase,
                  export_home: nd.PathLike,
+                 tram_competitors: List[nd.Mode],
                  ):
         """
         Assigns the attributes needed for tram inclusion model.
@@ -92,13 +112,13 @@ class TramModel(TramExportPaths):
             List of years to run tram inclusion for. Will assume that the smallest
             year is the base year.
 
+        scenario:
+            The name of the scenario to run for.
+
         iteration_name:
             The name of this iteration of the NoTEM models. Will have 'iter'
             prepended to create the folder name. e.g. if iteration_name was
             set to '3i' the iteration folder would be called 'iter3i'.
-
-        scenario:
-            The name of the scenario to run for.
 
         import_builder:
             The home location where all the tram related import files are located.
@@ -107,14 +127,31 @@ class TramModel(TramExportPaths):
             The home where all the export paths should be built from. See
             nd.pathing.NoTEMExportPaths for more info on how these paths
             will be built.
+
+        tram_competitors:
+            A list of the Modes which would be competing with Tram for trips.
+            These are the modes which will be used to remove trips from in
+            order to add in tram trips
         """
         # Validate inputs
-        file_ops.check_path_exists(import_builder)
+        if not isinstance(import_builder, nd.pathing.TramImportPathsBase):
+            raise ValueError(
+                'import_builder is not the correct type. Expected '
+                '"nd.pathing.TramImportPathsBase", but got %s'
+                % type(import_builder)
+            )
 
         # Assign
         self.years = years
+        self.base_year = min(self.years)
         self.scenario = scenario
         self.import_builder = import_builder
+        self.base_train = pd.DataFrame()
+        self.tram_competitors = tram_competitors
+
+        # Generate the zoning system
+        self.zoning_system = nd.get_zoning_system(self._zoning_name)
+        self._zoning_system_col = self.zoning_system.col_name
 
         # Generate the export paths
         super().__init__(
@@ -134,6 +171,16 @@ class TramModel(TramExportPaths):
         )
         self._write_running_report()
 
+        # Validate the base year
+        base_year = min(years)
+        if base_year != self._base_year:
+            self._logger.warning(
+                "The minimum year given is not the same as the base year "
+                "defined in the model! The model says the base year is %s, "
+                "whereas the years define the base year as %s."
+                % (self._base_year, base_year)
+            )
+
     def _write_running_report(self):
         """
         Outputs a simple report detailing inputs and outputs
@@ -141,28 +188,28 @@ class TramModel(TramExportPaths):
         # Define the lines to output
         out_lines = [
             'Code Version: %s' % str(nd.__version__),
-            'NoTEM Iteration: %s' % str(self.iteration_name),
+            'NoTEM/Tram Iteration: %s' % str(self.iteration_name),
             'Scenario: %s' % str(self.scenario),
             '',
             '### HB Productions ###',
             'import_files: %s' % self.import_builder.generate_hb_production_imports(),
-            'vector_import: %s' % self.hb_production.export_paths.home,
             'vector_export: %s' % self.hb_production.export_paths.home,
+            'report_export: %s' % self.hb_production.report_paths.home,
             '',
             '### HB Attractions ###',
             'import_files: %s' % self.import_builder.generate_hb_attraction_imports(),
-            'vector_import: %s' % self.hb_attraction.export_paths.home,
             'vector_export: %s' % self.hb_attraction.export_paths.home,
+            'report_export: %s' % self.hb_attraction.report_paths.home,
             '',
             '### NHB Productions ###',
             'import_files: %s' % self.import_builder.generate_nhb_production_imports(),
-            'vector_import: %s' % self.nhb_production.export_paths.home,
             'vector_export: %s' % self.nhb_production.export_paths.home,
+            'report_export: %s' % self.nhb_production.report_paths.home,
             '',
             '### NHB Attractions ###',
             'import_files: %s' % self.import_builder.generate_nhb_attraction_imports(),
-            'vector_import: %s' % self.nhb_attraction.export_paths.home,
             'vector_export: %s' % self.nhb_attraction.export_paths.home,
+            'report_export: %s' % self.nhb_attraction.report_paths.home,
         ]
 
         # Write out to disk
@@ -256,16 +303,20 @@ class TramModel(TramExportPaths):
         self._logger.info("Generating HB Production imports")
         import_files = self.import_builder.generate_hb_production_imports()
 
-        export_paths = self.hb_production.export_paths
-        hb_production_paths = {y: export_paths.notem_segmented[y] for y in self.years}
-
         # Runs the home based Production model
         self._logger.info("Adding Tram into HB Productions")
-        self._tram_inclusion(
+        paths = self.hb_production
+        vector_reports = paths.report_paths.vector_reports
+        self._add_tram(
             **import_files,
-            dvec_imports=hb_production_paths,
-            export_home=self.hb_production.export_paths.home,
-            path=r'E:\test\tram_test\hbp',
+            export_paths=paths.export_paths.notem_segmented,
+            tram_growth_factors=paths.report_paths.tram_growth_factors,
+            more_tram_msoa=paths.report_paths.more_tram_msoa,
+            more_tram_north=paths.report_paths.more_tram_north,
+            mode_adj_factors=paths.report_paths.mode_adj_factors,
+            report_segment_total_paths=vector_reports.segment_total,
+            report_ca_sector_paths=vector_reports.ca_sector,
+            report_ie_sector_paths=vector_reports.ie_sector,
         )
 
     def _generate_hb_attraction(self) -> None:
@@ -275,15 +326,19 @@ class TramModel(TramExportPaths):
         self._logger.info("Generating HB Attraction imports")
         import_files = self.import_builder.generate_hb_attraction_imports()
 
-        export_paths = self.hb_attraction.export_paths
-        hb_attraction_paths = {y: export_paths.notem_segmented[y] for y in self.years}
-
         self._logger.info("Adding Tram into HB Attractions")
-        self._tram_inclusion(
+        paths = self.hb_attraction
+        vector_reports = paths.report_paths.vector_reports
+        self._add_tram(
             **import_files,
-            dvec_imports=hb_attraction_paths,
-            export_home=self.hb_attraction.export_paths.home,
-            path=r'E:\test\tram_test\hba',
+            export_paths=paths.export_paths.notem_segmented,
+            tram_growth_factors=paths.report_paths.tram_growth_factors,
+            more_tram_msoa=paths.report_paths.more_tram_msoa,
+            more_tram_north=paths.report_paths.more_tram_north,
+            mode_adj_factors=paths.report_paths.mode_adj_factors,
+            report_segment_total_paths=vector_reports.segment_total,
+            report_ca_sector_paths=vector_reports.ca_sector,
+            report_ie_sector_paths=vector_reports.ie_sector,
         )
 
     def _generate_nhb_production(self) -> None:
@@ -293,43 +348,103 @@ class TramModel(TramExportPaths):
         self._logger.info("Generating NHB Production imports")
         import_files = self.import_builder.generate_nhb_production_imports()
 
-        export_paths = self.nhb_production.export_paths
-        nhb_production_paths = {y: export_paths.notem_segmented[y] for y in self.years}
-
         self._logger.info("Adding Tram into NHB Productions")
-        self._tram_inclusion(
+        paths = self.nhb_production
+        vector_reports = paths.report_paths.vector_reports
+        self._add_tram(
             **import_files,
-            dvec_imports=nhb_production_paths,
-            export_home=self.nhb_production.export_paths.home,
-            path=r'E:\test\tram_test\nhbp',
+            export_paths=paths.export_paths.notem_segmented,
+            tram_growth_factors=paths.report_paths.tram_growth_factors,
+            more_tram_msoa=paths.report_paths.more_tram_msoa,
+            more_tram_north=paths.report_paths.more_tram_north,
+            mode_adj_factors=paths.report_paths.mode_adj_factors,
+            report_segment_total_paths=vector_reports.segment_total,
+            report_ca_sector_paths=vector_reports.ca_sector,
+            report_ie_sector_paths=vector_reports.ie_sector,
         )
 
     def _generate_nhb_attraction(self) -> None:
         """
         Runs tram inclusion for non home based Attraction trip end models.
         """
-        self._logger.info("Generating NHB Production imports")
+        self._logger.info("Generating NHB Attraction imports")
         import_files = self.import_builder.generate_nhb_attraction_imports()
 
-        export_paths = self.nhb_attraction.export_paths
-        nhb_attraction_paths = {y: export_paths.notem_segmented[y] for y in self.years}
-
         self._logger.info("Adding Tram into NHB Attractions")
-        self._tram_inclusion(
+        paths = self.nhb_attraction
+        vector_reports = paths.report_paths.vector_reports
+        self._add_tram(
             **import_files,
-            dvec_imports=nhb_attraction_paths,
-            export_home=self.nhb_attraction.export_paths.home,
-            path=r'E:\test\tram_test\nhba',
+            export_paths=paths.export_paths.notem_segmented,
+            tram_growth_factors=paths.report_paths.tram_growth_factors,
+            more_tram_msoa=paths.report_paths.more_tram_msoa,
+            more_tram_north=paths.report_paths.more_tram_north,
+            mode_adj_factors=paths.report_paths.mode_adj_factors,
+            report_segment_total_paths=vector_reports.segment_total,
+            report_ca_sector_paths=vector_reports.ca_sector,
+            report_ie_sector_paths=vector_reports.ie_sector,
         )
 
-    def _tram_inclusion(self,
-                        tram_data: nd.PathLike,
-                        trip_origin: str,
-                        dvec_imports: Dict[int, nd.PathLike],
-                        export_home: nd.PathLike,
-                        path: str,
-                        verbose: bool = True,
-                        ) -> None:
+    def _infill_tram(self,
+                     vector: nd.DVector,
+                     tram_data: pd.DataFrame,
+                     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """Internal function on self._add_tram()"""
+        tram_zones = tram_data['msoa_zone_id'].unique().tolist()
+        north_zones = self.zoning_system.internal_zones
+        non_north_zones = self.zoning_system.external_zones
+
+        # Runs tram infill for 275 internal tram msoa zones
+        tram_zone_infilled, more_tram_report = self._infill_tram_zones(
+            vector=vector,
+            tram_data=tram_data,
+            tram_zones=tram_zones,
+            tram_competitors=self.tram_competitors,
+        )
+
+        # Runs tram infill for entire north
+        tram_north_infilled, more_tram_north_report = self._infill_tram_north(
+            vector=vector,
+            tram_data=tram_data,
+            north_zones=north_zones,
+            tram_competitors=self.tram_competitors,
+        )
+
+        # Runs tram infill for internal non tram msoa zones
+        # Returns the untouched external zones too
+        non_tram_infilled, non_tram_adj_factors = self._infill_non_tram_zones(
+            vector=vector,
+            tram_zone_infilled=tram_zone_infilled,
+            tram_north_infilled=tram_north_infilled,
+            tram_zones=tram_zones,
+            north_zones=north_zones,
+            non_north_zones=non_north_zones,
+            tram_competitors=self.tram_competitors,
+        )
+
+        df_list = [non_tram_infilled, tram_zone_infilled]
+        tram_infilled_vector = pd.concat(df_list, ignore_index=True)
+
+        return (
+            tram_infilled_vector,
+            more_tram_report,
+            more_tram_north_report,
+            non_tram_adj_factors
+        )
+
+    def _add_tram(self,
+                  tram_import_path: nd.PathLike,
+                  trip_origin: str,
+                  vector_import_paths: Dict[int, nd.PathLike],
+                  export_paths: Dict[int, nd.PathLike],
+                  tram_growth_factors: Dict[int, nd.PathLike],
+                  more_tram_msoa: Dict[int, nd.PathLike],
+                  more_tram_north: Dict[int, nd.PathLike],
+                  mode_adj_factors: Dict[int, nd.PathLike],
+                  report_segment_total_paths: Dict[int, nd.PathLike],
+                  report_ca_sector_paths: Dict[int, nd.PathLike],
+                  report_ie_sector_paths: Dict[int, nd.PathLike],
+                  ) -> None:
         """
         Runs the tram inclusion for the notem trip end output.
 
@@ -348,83 +463,94 @@ class TramModel(TramExportPaths):
 
         Parameters
         ----------
-        tram_data:
+        tram_import_path:
             The path to the base year tram data.
 
-        dvec_imports:
+        trip_origin:
+            Whether the trip origin is 'hb' or 'nhb'.
+
+        vector_import_paths:
             Dictionary of {year: notem_segmented_trip_end data} pairs.
 
-        export_home:
-            The path where the export file would be saved.
+        export_paths:
+            Path with filename for tram included notem segmented trip end output.
+
+        report_home:
+            The path where the reports would be saved.
+
+        report_paths:
+            Dictionary of {report_name: report_path}
 
         Returns
         -------
         None
 
         """
-        notem_output = dvec_imports
-
-        # Check that the paths we need exist!
-        file_ops.check_file_exists(tram_data)
-        [file_ops.check_file_exists(x) for x in notem_output.values()]
-        file_ops.check_path_exists(export_home)
-
-        # TODO(BT, NK): Pass this in as an argument
-        tram_competitors = [nd.Mode.CAR, nd.Mode.BUS, nd.Mode.TRAIN]
-
-        # Assign
-        self.tram_data = tram_data
-        self.notem_output = notem_output
-        self.export_home = export_home
-        self.base_year = min(self.years)
-
-        # Initialise timing
-        # TODO: Properly integrate logging
+        # Init
         start_time = timing.current_milli_time()
 
-        # Run tram inclusion for each given year
+        # Check that the paths we need exist!
+        file_ops.check_file_exists(tram_import_path)
+        [file_ops.check_file_exists(x) for x in vector_import_paths.values()]
+
+        # Load in the base year data
+        base_vector = self._read_vector_data(
+            trip_origin=trip_origin,
+            vector_path=vector_import_paths[self.base_year],
+        )
+
+        # Add Tram in for each year, save the output and report
         for year in self.years:
-            trip_end_start = timing.current_milli_time()
+            year_start = timing.current_milli_time()
 
-            # Read tram and notem output data
-            tram_data, notem_tram_seg = self._read_tram_and_notem_data(
-                year=year,
+            # Load in the starting vector
+            starting_vector = self._read_vector_data(
                 trip_origin=trip_origin,
+                vector_path=vector_import_paths[year],
             )
 
-            # Runs tram infill for 275 internal tram msoa zones
-            tram_msoa, notem_msoa_wo_infill = self._tram_infill_msoa(
-                notem_tram_seg=notem_tram_seg,
+            # Load in the tram data, and grow into this year
+            tram_data = self._read_tram_data(tram_import_path)
+            tram_data, growth_factors = self._grow_tram_by_rail(
+                base_data=base_vector,
+                future_data=starting_vector,
+                base_tram=tram_data,
+            )
+
+            # Replace val with future val
+            tram_data = tram_data.drop(columns=self._val_col)
+            tram_data = tram_data.rename(columns={'future_val': self._val_col})
+
+            # Infill the tram data into tram and non-tram areas
+            returns = self._infill_tram(
+                vector=starting_vector,
                 tram_data=tram_data,
-                year=year,
-                tram_competitors=tram_competitors,
             )
 
-            # Runs tram infill for entire north
-            non_tram_north, north_wo_infill = self._tram_infill_north(
-                notem_tram_seg=notem_tram_seg,
-                msoa_w_tram_infill=tram_msoa,
-            )
+            tram_infilled_vector = returns[0]
+            more_tram_report, more_tram_north_report, non_tram_adj_factors = returns[1:]
 
-            # Runs tram infill for internal non tram msoa zones
-            # Returns the untouched external zones too
-            non_tram_msoa, north_adj_factor = self._non_tram_infill(
-                north_wo_infill=north_wo_infill,
-                non_tram_north=non_tram_north,
-                tram_zones=tram_data['msoa_zone_id'].unique().tolist(),
-                dvec_tram_seg=notem_tram_seg,
-                tram_competitors=tram_competitors,
-            )
+            # ## WRITE OUT RUNNING REPORTS ## #
+            growth_factors.to_csv(tram_growth_factors[year], index=False)
+            more_tram_report.to_csv(more_tram_msoa[year], index=False)
+            more_tram_north_report.to_csv(more_tram_north[year], index=False)
+            non_tram_adj_factors.to_csv(mode_adj_factors[year], index=False)
 
-            # TODO(BT): Output report of northern adj factors - north_adj_factor
+            # ## MAKE SURE NOTHING HAS BEEN DROPPED ## #
+            # We want to do this first as it's faster with less segments
+            expected_total = starting_vector[self._val_col].values.sum()
+            final_total = tram_infilled_vector[self._val_col].values.sum()
+            if not math_utils.is_almost_equal(expected_total, final_total, rel_tol=0.001):
+                raise ValueError(
+                    "Some demand seems to have gone missing while infilling tram!\n"
+                    "Starting demand: %s\n"
+                    "Ending demand: %s"
+                    % (expected_total, final_total)
+                )
 
-            # ## STICK THINGS BACK TOGETHER ## #
-            df_list = [non_tram_msoa, tram_msoa]
-            full_tram_infill = pd.concat(df_list, ignore_index=True)
-
+            # ## CONVERT TO DVECTOR ## #
             # TODO(NK, BT): This can be done much smarter! Class variables
             #  should know what this looks like before and after
-            # Convert back into a DVector
             if trip_origin == 'hb':
                 tram_seg = nd.get_segmentation_level('hb_p_m7_ca')
                 out_seg = nd.get_segmentation_level('tram_hb_output')
@@ -443,33 +569,14 @@ class TramModel(TramExportPaths):
             tram_dvec = nd.DVector(
                 zoning_system=nd.get_zoning_system('msoa'),
                 segmentation=tram_seg,
-                import_data=full_tram_infill,
+                import_data=tram_infilled_vector,
                 zone_col=self._zoning_system_col,
                 val_col=self._val_col,
             )
 
-            # ## MAKE SURE NOTHING HAS BEEN DROPPED ## #
-            # We want to do this first as it's faster with less segments
-            expected_total = notem_tram_seg.sum()
-            final_total = tram_dvec.sum()
-            # TODO(BT, NK): Find out where demand is going missing. Would
-            #  like to make rel_tol more restrictive
-            if not tram_dvec.sum_is_close(notem_tram_seg, rel_tol=0.01):
-                raise ValueError(
-                    "Some demand seems to have gone missing while infilling tram!\n"
-                    "Starting demand: %s\n"
-                    "Ending demand: %s"
-                    % (expected_total, final_total)
-                )
-
             # ## CONVERT BACK TO ORIGINAL SEGMENTATION ## #
             # Original DVec at full segmentation
-            orig_dvec = nd.read_pickle(self.notem_output[year])
-
-            # TODO(BT): Not sure why we need to do this. Perhaps something to
-            #  do with version of code being pickled? This works for now,
-            #  but isn't ideal!
-            orig_dvec._segmentation = nd.get_segmentation_level(orig_dvec.segmentation.name)
+            orig_dvec = nd.read_pickle(vector_import_paths[year])
 
             # Need to add in m7 - get its segments from rail
             orig_dvec = orig_dvec.duplicate_segment_like(
@@ -481,58 +588,49 @@ class TramModel(TramExportPaths):
             # Add segments back in from original input
             tram_dvec = tram_dvec.split_segmentation_like(orig_dvec)
 
-            # Write out the produced Dvec and some reports
-            # TODO(BT, NK): export location need to be sorted
-            tram_dvec.to_pickle(self.export_paths.notem)
+            # ## WRITE OUT THE DVEC AND REPORTS ## #
+            self._logger.info("Writing Produced Tram data to disk")
+            tram_dvec.to_pickle(export_paths[year])
 
-            # TODO(BT, NK): Report location needs to be sorted
-            # path = r'E:\test\tram_test'
-            tram_dvec.to_pickle(os.path.join(path, "hb_msoa_tram_segmented_2018_dvec.pkl"))
+            self._logger.info("Writing Tram reports to disk")
             tram_dvec.write_sector_reports(
-                segment_totals_path=os.path.join(path, 'segment_totals.csv'),
-                ca_sector_path=os.path.join(path, 'ca_sector_totals.csv'),
-                ie_sector_path=os.path.join(path, 'ie_sector_totals.csv'),
+                segment_totals_path=report_segment_total_paths[year],
+                ca_sector_path=report_ca_sector_paths[year],
+                ie_sector_path=report_ie_sector_paths[year],
             )
 
             # Print timing for each trip end model
             trip_end_end = timing.current_milli_time()
-            time_taken = timing.time_taken(trip_end_start, trip_end_end)
-            self._logger.info("Tram inclusion for year %d took: %s\n" % (year, time_taken))
+            time_taken = timing.time_taken(year_start, trip_end_end)
+            self._logger.info("Tram Model for year %d took: %s\n" % (year, time_taken))
+
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("Tram inclusion took: %s\n"
-                          "Finished at: %s" % (time_taken, end_time)
-                          )
+        self._logger.info("Tram Model took: %s" % time_taken)
 
-    def _read_tram_and_notem_data(self,
-                                  year: int,
-                                  trip_origin: str,
-                                  ) -> Tuple[pd.DataFrame, nd.DVector]:
+    def _read_tram_data(self,
+                        tram_data_path: nd.PathLike,
+                        ) -> pd.DataFrame:
         """
-        Reads in the tram and notem data.
+        Reads in the tram and vector data.
 
         Parameters
         ----------
-        year:
-            The year for which the data needs to be imported.
 
-        trip_origin:
-            Whether the trip origin is 'hb' or 'nhb'.
+        tram_data_path:
+            The path to the base year tram data.
 
         Returns
         -------
         tram_data:
             Returns the tram data as dataframe.
-
-        notem_tram_seg:
-            Returns the notem output dvector in tram segmentation.
         """
         # Init
         tram_target_cols = self._target_col_dtypes['tram']
 
-        # Reads the tram data
-        tram_data = file_ops.read_df(path=self.tram_data, find_similar=True)
+        # Read in dataframe
+        tram_data = file_ops.read_df(path=tram_data_path, find_similar=True)
         tram_data['m'] = nd.Mode.TRAM.get_mode_num()
         tram_data = pd_utils.reindex_cols(tram_data, tram_target_cols)
 
@@ -542,49 +640,74 @@ class TramModel(TramExportPaths):
 
         tram_data.rename(columns={'trips': self._val_col}, inplace=True)
 
-        # Reads the corresponding notem output
-        notem_output_dvec = nd.read_pickle(self.notem_output[year])
+        return tram_data
+
+    def _read_vector_data(self,
+                          trip_origin: str,
+                          vector_path: nd.PathLike
+                          ) -> pd.DataFrame:
+        """
+        Reads in the tram and vector data.
+
+        Parameters
+        ----------
+        trip_origin:
+            Whether the trip origin is 'hb' or 'nhb'.
+
+        vector_path:
+            The path to DVector pickle to read in
+
+        Returns
+        -------
+        vector:
+            Returns the DVector in tram segmentation ['p','m','ca'], converted
+            to a pandas dataframe.
+        """
+        # Read in the vector
+        vector_dvec = nd.read_pickle(vector_path)
 
         # Aggregate the dvector to the required segmentation
         if trip_origin == 'hb':
-            tram_seg = nd.get_segmentation_level('hb_p_m_ca')
-
+            seg_name = self._hb_tram_seg
         elif trip_origin == 'nhb':
-            tram_seg = nd.get_segmentation_level('nhb_p_m_ca')
-
+            seg_name = self._nhb_tram_seg
         else:
             raise ValueError(
-                "trip_origin is not the correct type. "
-                "Expected trip_origin is hb or nhb, got %s"
+                "trip_origin is not the correct type. Expected trip_origin "
+                "either 'hb' or 'nhb'. Got %s"
                 % trip_origin
             )
 
-        notem_tram_seg = notem_output_dvec.aggregate(tram_seg)
+        # Aggregate
+        segmentation = nd.get_segmentation_level(seg_name)
+        vector_dvec = vector_dvec.aggregate(segmentation)
 
-        return tram_data, notem_tram_seg
+        # Convert to a dataframe and return
+        df = vector_dvec.to_df()
+        return df.rename(columns={vector_dvec.val_col: self._val_col})
 
-    def _tram_infill_msoa(self,
-                          notem_tram_seg: nd.DVector,
-                          tram_data: pd.DataFrame,
-                          year: int,
-                          tram_competitors: List[nd.Mode],
-                          mode_col: str = 'm',
-                          val_col: str = 'val',
-                          ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def _infill_tram_zones(self,
+                           vector: pd.DataFrame,
+                           tram_data: pd.DataFrame,
+                           tram_zones: List[Any],
+                           tram_competitors: List[nd.Mode],
+                           mode_col: str = 'm',
+                           ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Tram infill for the MSOAs with tram data in the north.
 
         Parameters
         ----------
-        notem_tram_seg:
-            DVector containing notem trip end output in matching segmentation
-            to tram_data
+        vector:
+            A pandas DataFrame of the date that we should be infilling with
+            tram data
             
         tram_data:
             Dataframe containing tram data at MSOA level for the north.
 
-        year:
-            The year we're currently running for
+        tram_zones:
+            A list of the zones that contain tram data. Must be the same format
+            as vector[zone_col] and tram_data[zone_col]
 
         tram_competitors:
             A list of the Modes which would be competing with Tram for trips.
@@ -595,74 +718,98 @@ class TramModel(TramExportPaths):
             The name of the columns in notem_tram_seg and tram_data that
             refers to the mode segment.
 
-        val_col:
-            The name of the columns in notem_tram_seg that
-            refers to the value column.
-
         Returns
         -------
-        notem_new_df:
+        infilled_tram_zones:
             Returns the dataframe after tram infill.
 
-        notem_msoa_wo_infill:
-            Returns the dataframe before tram infill at msoa level.
+        more_tram_report:
+            A report showing where there was more tram predicted than rail
+            trips in vector
         """
         # Init
         tram_data = tram_data.copy()
 
-        # Converts DVector to dataframe
-        notem_df = notem_tram_seg.to_df()
-
-        for col, dt in self._target_col_dtypes['notem'].items():
-            notem_df[col] = notem_df[col].astype(dt)
-
-        notem_df = notem_df.rename(columns={val_col: self._val_col})
-
-        # Retains only msoa zones that have tram data
-        zone_col = self._zoning_system_col
-        notem_df = notem_df.loc[notem_df[zone_col].isin(tram_data[zone_col])]
-        notem_msoa_wo_infill = notem_df.copy()
-
-        # Creates a subset of train mode
-        train_mask = notem_df[mode_col] == nd.Mode.TRAIN.get_mode_num()
-        notem_train = notem_df[train_mask].copy()
-
-        # Calculates growth factor for tram based on rail growth
-        if year == self.base_year:
-            self.base_train = notem_train
-
-        tram_data, growth_factors = self._grow_tram_by_rail(
-            base_rail=self.base_train,
-            future_rail=notem_train,
-            base_tram=tram_data,
-            future_tram_col='future_val',
-        )
-
-        # Replace val with future val
-        tram_data = tram_data.drop(columns=self._val_col)
-        tram_data = tram_data.rename(columns={'future_val': self._val_col})
-
-        # TODO(BT, NK): Write out a report of the growth factors generated
-
-        # Adds tram data to the notem dataframe
-        notem_df = notem_df.append(tram_data)
+        # Keep only the vector data in tram zones
+        mask = vector[self._zoning_system_col].isin(tram_zones)
+        vector = vector[mask].copy()
 
         # Infills tram data
-        notem_new_df, more_tram_report = self._infill_internal(
-            df=notem_df,
+        infilled_tram_zones, more_tram_report = self._infill_internal(
+            vector=vector,
+            tram_vector=tram_data,
             tram_competitors=tram_competitors,
             non_val_cols=[self._zoning_system_col] + self._tram_segment_cols,
             mode_col=mode_col,
         )
 
-        # TODO(BT, NK): Write out all places that tram is higher than train
-        #  to a report using more_tram_report
+        return infilled_tram_zones, more_tram_report
 
-        return notem_new_df, notem_msoa_wo_infill
+    def _infill_tram_north(self,
+                           vector: pd.DataFrame,
+                           tram_data: pd.DataFrame,
+                           north_zones: List[Any],
+                           tram_competitors: List[nd.Mode],
+                           mode_col: str = 'm',
+                           ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Tram infill for the MSOAs with tram data in the north.
+
+        Parameters
+        ----------
+        vector:
+            A pandas DataFrame of the date that we should be infilling with
+            tram data
+
+        tram_data:
+            Dataframe containing tram data at MSOA level for the north.
+
+        tram_competitors:
+            A list of the Modes which would be competing with Tram for trips.
+            These are the modes which will be used to remove trips from in
+            order to add in tram trips
+
+        mode_col:
+            The name of the columns in notem_tram_seg and tram_data that
+            refers to the mode segment.
+
+        Returns
+        -------
+        infilled_tram_zones:
+            Returns the dataframe after tram infill.
+
+        more_tram_report:
+            A report showing where there was more tram predicted than rail
+            trips in vector
+        """
+
+        # Init
+        tram_data = tram_data.copy()
+
+        # Keep only the vector data in tram zones
+        mask = vector[self._zoning_system_col].isin(north_zones)
+        vector = vector[mask].copy()
+
+        # Aggregate tram and vector data to north level
+        index_cols = self._tram_segment_cols + [self._val_col]
+
+        vector = pd_utils.reindex_and_groupby(vector, index_cols, [self._val_col])
+        tram_data = pd_utils.reindex_and_groupby(tram_data, index_cols, [self._val_col])
+
+        # Infills tram data
+        tram_north_infilled, more_tram_report = self._infill_internal(
+            vector=vector,
+            tram_vector=tram_data,
+            tram_competitors=tram_competitors,
+            non_val_cols=self._tram_segment_cols,
+            mode_col=mode_col,
+        )
+
+        return tram_north_infilled, more_tram_report
 
     def _grow_tram_by_rail(self,
-                           base_rail: pd.DataFrame,
-                           future_rail: pd.DataFrame,
+                           base_data: pd.DataFrame,
+                           future_data: pd.DataFrame,
                            base_tram: pd.DataFrame,
                            future_tram_col: str = 'future_val',
                            ) -> pd.DataFrame:
@@ -671,14 +818,17 @@ class TramModel(TramExportPaths):
 
         Parameters
         ----------
-        base_rail:
+        base_data:
             Dataframe containing base year rail data.
 
-        future_rail:
+        future_data:
             Dataframe containing future year rail data.
 
         base_tram:
             Dataframe containing base year tram data.
+
+        future_tram_col:
+            Column name
 
         Returns
         -------
@@ -699,22 +849,22 @@ class TramModel(TramExportPaths):
 
         # ## GET ALL DATA INTO ONE DF ## #
         # Tidy up
-        def tidy_df(df, name):
+        def tidy_df(df, name, mode):
             df = df.copy()
+            df = df[df['m'] == mode].copy()
             df = df.drop(columns=['m'])
             df = pd_utils.reindex_cols(df, index_cols)
             df = df.sort_values(join_cols)
             df = df.rename(columns={self._val_col: name})
             return df
 
-        base_rail = tidy_df(base_rail, 'base_rail')
-        future_rail = tidy_df(future_rail, 'future_rail')
-        base_tram = tidy_df(base_tram, 'base_tram')
+        base_rail = tidy_df(base_data, 'base_rail', self._train_mode)
+        future_rail = tidy_df(future_data, 'future_rail', self._train_mode)
+        base_tram = tidy_df(base_tram, 'base_tram', self._tram_mode)
 
         # Merge all together
-        kwargs = {'on': join_cols, 'how': 'outer'}
-        all_data = pd.merge(base_rail, future_rail, **kwargs).fillna(0)
-        all_data = pd.merge(all_data, base_tram, **kwargs).fillna(0)
+        all_data = pd.merge(base_rail, future_rail, on=join_cols, how='outer').fillna(0)
+        all_data = pd.merge(all_data, base_tram, on=join_cols, how='right').fillna(0)
 
         # ## CALCULATE GROWTH FACTORS ## #
         all_data['rail_growth'] = np.divide(
@@ -728,119 +878,45 @@ class TramModel(TramExportPaths):
         all_data[future_tram_col] = all_data['base_tram'] * all_data['rail_growth']
         future_tram = pd_utils.reindex_cols(all_data, join_cols + ['base_tram', future_tram_col])
         future_tram = future_tram.rename(columns={'base_tram': self._val_col})
-        future_tram['m'] = nd.Mode.TRAM.get_mode_num()
+        future_tram['m'] = self._tram_mode
 
         # Extract the growth factors alone
         growth_df = pd_utils.reindex_cols(all_data, join_cols + ['rail_growth'])
 
         return future_tram, growth_df
 
-    def _tram_infill_north(self,
-                           notem_tram_seg: nd.DVector,
-                           msoa_w_tram_infill: pd.DataFrame,
-                           mode_col: str = 'm',
-                           val_col: str = 'val',
-                           ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Tram infill at the internal area (north area) level.
-
-        Parameters
-        ----------
-        notem_tram_seg:
-            DVector containing notem trip end output in revised segmentation(p,m,ca).
-
-        msoa_w_tram_infill:
-            DataFrame with infilled tram data at MSOA level in
-
-        mode_col:
-            The name of the columns in notem_tram_seg and tram_data that
-            refers to the mode segment.
-
-        val_col:
-            The name of the columns in notem_tram_seg that
-            refers to the value column.
-
-        Returns
-        -------
-        non_tram_north:
-            Trips for non-tram zones at the northern level.
-
-        north_wo_infill:
-            Trips for all zones at the northern level.
-        """
-        # Converts Dvector to ie sector level
-        ie_sectors = nd.get_zoning_system('ie_sector')
-        notem_df = notem_tram_seg.translate_zoning(ie_sectors).to_df()
-        notem_df = notem_df.rename(columns={val_col: self._val_col})
-
-        for col, dt in self._target_col_dtypes['notem_north'].items():
-            notem_df[col] = notem_df[col].astype(dt)
-
-        # Retains only internal (North) zones
-        north_wo_infill = notem_df[notem_df['ie_sector_zone_id'] == 1]
-        north_wo_infill = north_wo_infill.drop(columns=['ie_sector_zone_id'])
-
-        # Aggregate away zones
-        group_cols = self._tram_segment_cols
-        index_cols = group_cols + [self._val_col]
-
-        north_wo_infill = north_wo_infill.reindex(columns=index_cols)
-        north_wo_infill = north_wo_infill.groupby(group_cols).sum().reset_index()
-
-        # ## REMOVE TRAM TRIPS TO GET AVERAGE NON-TRAM DEMAND ## #
-        seg_tram_infill = msoa_w_tram_infill.reindex(columns=index_cols)
-        seg_tram_infill = seg_tram_infill.groupby(group_cols).sum().reset_index()
-
-        # Drop Tram mode - we can't remove it where it doesn't exist
-        mask = seg_tram_infill[mode_col] == nd.Mode.TRAM.get_mode_num()
-        seg_tram_infill = seg_tram_infill[~mask].copy()
-        seg_tram_infill = seg_tram_infill.rename(columns={self._val_col: 'tram_val'})
-
-        # Stick together
-        non_tram_north = pd.merge(
-            left=north_wo_infill,
-            right=seg_tram_infill,
-            how='left',
-            on=self._tram_segment_cols,
-        )
-
-        # Remove tram trips
-        non_tram_north['non_tram_val'] = non_tram_north[self._val_col].copy()
-        non_tram_north['non_tram_val'] -= non_tram_north['tram_val']
-
-        # Tidy up and return
-        return_cols = self._tram_segment_cols + ['non_tram_val']
-        non_tram_north = non_tram_north.reindex(columns=return_cols)
-        non_tram_north = non_tram_north.rename(columns={'non_tram_val': self._val_col})
-
-        return non_tram_north, north_wo_infill
-
-    def _non_tram_infill(self,
-                         north_wo_infill: pd.DataFrame,
-                         non_tram_north: pd.DataFrame,
-                         tram_zones: List[str],
-                         dvec_tram_seg: nd.DVector,
-                         tram_competitors: List[nd.Mode],
-                         mode_col: str = 'm',
-                         ):
+    def _infill_non_tram_zones(self,
+                               vector: pd.DataFrame,
+                               tram_zone_infilled: pd.DataFrame,
+                               tram_north_infilled: pd.DataFrame,
+                               tram_zones: List[str],
+                               north_zones: List[str],
+                               non_north_zones: List[str],
+                               tram_competitors: List[nd.Mode],
+                               mode_col: str = 'm',
+                               ):
         """
         Infills tram for MSOAs without tram data in the internal area (north area).
 
         Parameters
         ----------
-        north_wo_infill:
-            NoTEM data aggregated to segments only for the north level,
-            without an tram infill.
+        vector:
+            The vector in infill the tram data into
 
-        non_tram_north:
-            Dataframe of trip ends at internal(north) level, not including
-            tram zones.
+        tram_zone_infilled:
+            Vector, infilled with tram_data, at the zone level
+
+        tram_north_infilled:
+            Vector, infilled with tram_data at the north level
 
         tram_zones:
             A list of the zones that contain tram data
 
-        dvec_tram_seg:
-            NoTEM data at tram segmentation in a DVector
+        north_zones:
+            A list of the zones within the North
+
+        non_north_zones:
+            A list of the zones not within the North
 
         tram_competitors:
             A list of the Modes which would be competing with Tram for trips.
@@ -853,7 +929,7 @@ class TramModel(TramExportPaths):
 
         Returns
         -------
-        notem_df_new:
+        non_tram_infilled:
             Returns the dataframe after non-tram infill for msoa zones for
             all external area, but only non-tram zones for internal area
         """
@@ -861,17 +937,50 @@ class TramModel(TramExportPaths):
         compet_mode_vals = [x.get_mode_num() for x in tram_competitors]
         non_val_cols = [self._zoning_system_col] + self._tram_segment_cols
 
+        # ## SPLIT ORIGINAL VECTOR INTO PARTS ## #
+        # Split the original vector into north and non-north
+        non_north_mask = vector[self._zoning_system_col].isin(non_north_zones)
+        non_north_vector = vector[non_north_mask].copy()
+
+        north_mask = vector[self._zoning_system_col].isin(north_zones)
+        north_vector = vector[north_mask].copy()
+
+        # Filter down to non-tram zones
+        tram_mask = north_vector[self._zoning_system_col].isin(tram_zones)
+        north_no_tram_vector = north_vector[~tram_mask].copy()
+
         # ## STEP 1: CALCULATE NORTH AVERAGE MODE SHARE ADJUSTMENTS ## #
-        # Set up dfs for merge
-        non_tram_north = non_tram_north.copy()
-        non_tram_north = non_tram_north.rename(columns={self._val_col: 'adj_val'})
-        tram_mask = non_tram_north[mode_col] == nd.Mode.TRAM.get_mode_num()
-        non_tram_north = non_tram_north[~tram_mask]
+        # Aggregate vectors to northern level
+        index_cols = self._tram_segment_cols + [self._val_col]
+
+        kwargs = {'index_cols': index_cols, 'value_cols': [self._val_col]}
+        non_tram_north = pd_utils.reindex_and_groupby(north_no_tram_vector, **kwargs)
+        agg_tram_zone_infilled = pd_utils.reindex_and_groupby(tram_zone_infilled, **kwargs)
+
+        # CALCULATE THE ADJUSTED NON-TRAM NORTH AVERAGE
+        agg_tram_zone_infilled.rename(columns={self._val_col: 'tram_val'}, inplace=True)
+        adj_non_tram_north = pd.merge(
+            left=tram_north_infilled,
+            right=agg_tram_zone_infilled,
+            how='outer',
+            on=self._tram_segment_cols,
+        ).fillna(0)
+
+        # Calculate, then keep only what we need
+        adj_non_tram_north[self._val_col] -= adj_non_tram_north['tram_val']
+        cols = self._tram_segment_cols + [self._val_col]
+        adj_non_tram_north = pd_utils.reindex_cols(adj_non_tram_north, cols)
+
+        # CALCULATE THE DIFFERENCE BETWEEN ADJUSTED AND ORIGINAL
+        # Remove tram trips for merge
+        adj_non_tram_north = adj_non_tram_north.rename(columns={self._val_col: 'adj_val'})
+        tram_mask = adj_non_tram_north[mode_col] == self._tram_mode
+        adj_non_tram_north = adj_non_tram_north[~tram_mask]
 
         # Stick into one df
         north_df = pd.merge(
-            left=north_wo_infill,
-            right=non_tram_north,
+            left=non_tram_north,
+            right=adj_non_tram_north,
             how='outer',
             on=self._tram_segment_cols,
         ).fillna(0)
@@ -885,46 +994,27 @@ class TramModel(TramExportPaths):
 
         # Filter down to all we need
         cols = self._tram_segment_cols + ['adj_factor']
-        north_adj_factors = pd_utils.reindex_cols(north_df, cols)
+        non_tram_adj_factors = pd_utils.reindex_cols(north_df, cols)
 
         # ## STEP 2. ADJUST NON-TRAM MSOA BY AVERAGE NORTH ADJUSTMENT ## #
-        # TODO(BT): Make the zoning more flexible
-        # Get the internal, external, and tram zones
-        zoning_system = nd.get_zoning_system('msoa')
-        internal_zones = zoning_system.internal_zones
-        external_zones = zoning_system.external_zones
-
-        # Split the original notem data into internal and external
-        notem_df = dvec_tram_seg.to_df()
-
-        external_mask = notem_df['msoa_zone_id'].isin(external_zones)
-        ext_notem_df = notem_df[external_mask].copy()
-
-        internal_mask = notem_df['msoa_zone_id'].isin(internal_zones)
-        int_notem_df = notem_df[internal_mask].copy()
-
-        # Filter down to non-tram zones
-        tram_mask = int_notem_df['msoa_zone_id'].isin(tram_zones)
-        int_no_tram_notem = int_notem_df[~tram_mask].copy()
-
         # Attach the avg north adj factors
-        int_no_tram_notem = pd.merge(
-            left=int_no_tram_notem,
-            right=north_adj_factors,
+        north_no_tram_vector = pd.merge(
+            left=north_no_tram_vector,
+            right=non_tram_adj_factors,
             how='left',
             on=self._tram_segment_cols,
         ).fillna(1)
 
         # Adjust!
-        int_no_tram_notem['new_val'] = int_no_tram_notem[self._val_col].copy()
-        int_no_tram_notem['new_val'] *= int_no_tram_notem['adj_factor'].copy()
-        int_no_tram_notem = int_no_tram_notem.drop(columns='adj_factor')
+        north_no_tram_vector['new_val'] = north_no_tram_vector[self._val_col].copy()
+        north_no_tram_vector['new_val'] *= north_no_tram_vector['adj_factor'].copy()
+        north_no_tram_vector = north_no_tram_vector.drop(columns='adj_factor')
 
         # ## STEP 3. APPLY NEW MSOA MODE SHARES TO OLD TOTALS ## #
         # split into competitor and non-competitor
-        compet_mask = int_no_tram_notem[mode_col].isin(compet_mode_vals)
-        compet_df = int_no_tram_notem[compet_mask].copy()
-        non_compet_df = int_no_tram_notem[~compet_mask].copy()
+        compet_mask = north_no_tram_vector[mode_col].isin(compet_mode_vals)
+        compet_df = north_no_tram_vector[compet_mask].copy()
+        non_compet_df = north_no_tram_vector[~compet_mask].copy()
 
         # Calculate the new mode shares
         group_cols = du.list_safe_remove(non_val_cols, [mode_col])
@@ -939,17 +1029,17 @@ class TramModel(TramExportPaths):
         # Stick the competitor and non-competitor back together
         compet_df = pd_utils.reindex_cols(compet_df, list(non_compet_df))
         df_list = [compet_df, non_compet_df]
-        int_no_tram_notem = pd.concat(df_list, ignore_index=True)
+        north_no_tram_vector = pd.concat(df_list, ignore_index=True)
 
         # ## STEP 4. TIDY UP DFs. BRING EVERYTHING BACK TOGETHER ## #
         # Add the external back on
-        ext_notem_df['new_val'] = ext_notem_df[self._val_col].copy()
-        df_list = [int_no_tram_notem, ext_notem_df]
-        no_tram_notem_df = pd.concat(df_list, ignore_index=True)
+        non_north_vector['new_val'] = non_north_vector[self._val_col].copy()
+        df_list = [north_no_tram_vector, non_north_vector]
+        adj_non_tram_vector = pd.concat(df_list, ignore_index=True)
 
         # Check we haven't dropped anything!
-        expected_total = no_tram_notem_df[self._val_col].values.sum()
-        final_total = no_tram_notem_df['new_val'].values.sum()
+        expected_total = adj_non_tram_vector[self._val_col].values.sum()
+        final_total = adj_non_tram_vector['new_val'].values.sum()
         if not math_utils.is_almost_equal(expected_total, final_total):
             raise ValueError(
                 "Some demand seems to have gone missing while infilling "
@@ -959,25 +1049,29 @@ class TramModel(TramExportPaths):
                 % (expected_total, final_total)
             )
 
-        new_df = no_tram_notem_df.drop(columns=[self._val_col])
+        new_df = adj_non_tram_vector.drop(columns=[self._val_col])
         new_df = new_df.rename(columns={'new_val': self._val_col})
         new_df = new_df.sort_values(non_val_cols).reset_index(drop=True)
 
-        return new_df, north_adj_factors
+        return new_df, non_tram_adj_factors
 
     def _infill_internal(self,
-                         df: pd.DataFrame,
+                         vector: pd.DataFrame,
+                         tram_vector: pd.DataFrame,
                          tram_competitors: List[nd.Mode],
                          non_val_cols: List[str],
                          mode_col: str = 'm',
-                         ) -> pd.DataFrame:
+                         ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Creates a subset of the given dataframe using a condition.
 
         Parameters
         ----------
-        df:
-            The original dataframe that needs to be subset.
+        vector:
+            The original Vector to add tram_vector into.
+
+        tram_vector:
+            the vector of tram data to infill into vector.
 
         tram_competitors:
             The modes which are considered competitors of tram. These modes
@@ -993,8 +1087,7 @@ class TramModel(TramExportPaths):
 
         """
         # Init
-        df = df.copy()
-        df.reset_index(drop=True, inplace=True)
+        df = pd.concat([vector, tram_vector], ignore_index=True)
 
         # Create needed masks
         train_mask = df[mode_col] == nd.Mode.TRAIN.get_mode_num()
@@ -1077,7 +1170,7 @@ class TramModel(TramExportPaths):
         compet_df['new_val'] = compet_df['old_mode_shares'] * compet_df['new_val_sum']
 
         # ## TIDY UP DF FOR RETURN ## #
-        compet_df = compet_df.reindex(columns=list(non_compet_df))
+        compet_df = pd_utils.reindex_cols(compet_df, list(non_compet_df))
         new_df = pd.concat([compet_df, non_compet_df], ignore_index=True)
 
         # Check we haven't dropped anything

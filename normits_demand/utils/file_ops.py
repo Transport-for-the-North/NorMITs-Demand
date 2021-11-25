@@ -745,6 +745,10 @@ def read_pickle(path: nd.PathLike) -> Any:
     with open(path, 'rb') as f:
         obj = pickle.load(f)
 
+    # If its a DVector, reset the process count
+    if isinstance(obj, nd.core.data_structures.DVector):
+        obj._process_count = nd.constants.PROCESS_COUNT
+
     # If no version, return now
     if not hasattr(obj, '__version__'):
         return obj
