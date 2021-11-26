@@ -56,7 +56,7 @@ you would like to use in-place of NoTEM, they can be slotted in.
 How these models interact can be seen below, grey and red boxes indicate where
 alternate inputs/outputs could be used:
 
-![NorMITs Demand process flow](docs/op_models/Images/NorMITs Demand.png)
+![NorMITs Demand process flow](docs/op_models/Images/normits_demand.png)
 
 
 ## Required Data
