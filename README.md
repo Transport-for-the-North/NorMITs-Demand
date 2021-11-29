@@ -98,7 +98,8 @@ for.
 
 Trip rates are the crucial input for converting Land Use data into productions
 and attractions. Our trip rates are extracted from analysis of
-National Transport Survey data.
+[National Transport Survey](https://beta.ukdataservice.ac.uk/datacatalogue/studies/study?id=7553)
+data.
 
 Splitting factors are the various types of splits that are used by NoTEM to 
 split data into categories such as mode shares and time period splits. Similar
@@ -129,8 +130,9 @@ them into a synthetic trip matrix. Once the trip ends are made, the inputs
 to TMS are comparatively simpler.
 
 #### Inputs
-Firstly, TMS requires a set of trip ends to distribute. These are usually
-fairly aggregate compared to NoTEM outputs so the sample sizes stay significant.
+Firstly, TMS requires a set of trip ends to distribute. Segmentations used
+here are usually fairly aggregate compared to NoTEM outputs so the sample 
+sizes stay significant.
 
 The zoning system that TMS is to run at needs to be defined, along with an 
 "internal" and an "external" definition of zones. The internal area is the
@@ -171,7 +173,7 @@ future year predictions.
 EFS outputs a set of PA future year matrices.
 EFS outputs a set of PA future year matrices.
 The outputs can be further fed into the Elasticity Model to reflect
-exogenous costs.
+exogenous cost changes on demand.
 
 ### [Elasticity](#contents)
 Lastly, the elasticity model aims to take a set of future year PA matrices
@@ -195,8 +197,8 @@ adjustment factors applied.
 
 
 ## [Documentation](#contents)
-Current code documentation can only be found in the codebase. One of the 
-planned improvements include getting this hosted online, so it's easily
+Current code documentation can only be found in the codebase.
+Planned improvements include hosting this online, so it's easily
 accessible!
 
 ## [Planned Improvements](#contents)
