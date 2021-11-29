@@ -28,8 +28,9 @@ see [support](#sharing) for more information.
    - [Travel Market Synthesiser](#travel-market-synthesiser)
    - [External Forecast System](#external-forecast-system)
    - [NorMITs Matrix Tools](#matrix-tools)
+   - [NorMITs Matrix Tools](#contents)
 
-## Summary
+## [Summary](#contents)
 NorMITs Demand is made up of a number of smaller models, each with their own
 individual purpose.
 For further information on how these models work, click the links in their names.
@@ -61,27 +62,27 @@ alternate inputs/outputs could be used:
 ![NorMITs Demand process flow](docs/op_models/Images/normits_demand.png)
 
 
-## Required Data
+## [Required Data](#contents)
 
 
-## Quick Start Guide!
+## [Quick Start Guide!](#contents)
 
 
-## Documentation
+## [Documentation](#contents)
 Current code documentation can only be found in the codebase. One of the 
 planned improvements include getting this hosted online, so it's easily
 accessible!
 
-## Planned Improvements
+## [Planned Improvements](#contents)
 What do we plan to update in future releases?
 
-## Sharing
+## [Sharing](#contents)
 TfN's Technical Assurance, Modelling and Economics (**TAME**) team have done
 a great deal of work to develop TfN’s Analytical Framework.
 As part of this, we would like to start sharing some of our tools, NorMITs 
 Demand included.
 
-### Sharing Models
+### [Sharing Models](#contents)
 We've categorised out ways of sharing into 3 different profiles, each with 
 a distinct risk/reward profile.
 
@@ -100,7 +101,7 @@ Data requests will be submitted using the [requests](#sharing-requests) process.
 TfN will then assess the feasibility, and a discussion will begin to decide how
 best to work together to produce the required output.
 
-### Sharing Requests
+### [Sharing Requests](#contents)
 
 If you are interested in acquiring any of the data, or would like some support
 in utilising NorMITs Demand, please submit your requests to
@@ -123,27 +124,27 @@ However, the team will endeavour to provide you with an estimate of how long
 it would take to share the data.
 
 
-## Gory Details
+## [Gory Details](#contents)
 This section talks about how each of the models in the NorMITs Demand suite work
 in detail. It will provide more insight into the transport methodologies used,
 and the coding detail that makes it so fast. If you are looking for more of an 
 overview, look [here](#summary)!
 
 
-### Northern Trip End Model
+### [Northern Trip End Model](#contents)
 Talk about DVector, zoning systems and segmentations
 
-### Travel Market Synthesiser
+### [Travel Market Synthesiser](#contents)
 Talk about TLD constrained furness, gravity model. Upper and Lower tiers
 
-### External Forecast System
+### [External Forecast System](#contents)
 Growth on Post-ME, WFH adjustment, distribution method
 NTEM forecast??
 
-### Elasticity Model
+### [Elasticity Model](#contents)
 GC based Own Elasticity approach
 
-### Matrix Tools
+### [Matrix Tools](#contents)
 Segment Tier Converter
 PA2OD
 OD2PA
