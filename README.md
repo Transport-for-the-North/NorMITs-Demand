@@ -200,7 +200,17 @@ planned improvements include getting this hosted online, so it's easily
 accessible!
 
 ## [Planned Improvements](#contents)
-What do we plan to update in future releases?
+This section is a work in progress and will be updated with more detail.
+Planned updates include:
+- Online hosting of documentation
+- NoTEM
+  - Zoning system flexible
+  - Northern tram infill
+  - Integration of visitor economy data
+  - Improvement of attraction modelling
+- Multi-Modal TMS running (currently only car and rail)
+  - Improved multi-cost-distribution gravity model calibration
+- Multi-Modal EFS running (currently only car and rail)
 
 ## [Sharing](#contents)
 TfN's Technical Assurance, Modelling and Economics (**TAME**) team have done
@@ -256,23 +266,34 @@ in detail. It will provide more insight into the transport methodologies used,
 and the coding detail that makes it so fast. If you are looking for more of an 
 overview, look [here](#summary)!
 
+This section is currently a work in progress and will be updated.
+An overview of the points we plan to provide more information on can be found
+in each section.
+
 
 ### [Northern Trip End Model](#contents)
-Talk about DVector, zoning systems and segmentations
+- DVector - how NoTEM runs quickly
+- Flexible zoning - how to use
+- Flexible segmentation - how to use
+- Tram infill
 
 ![NoTEM process flow](docs/op_models/Images/notem.png)
 
 ### [Travel Market Synthesiser](#contents)
-Talk about TLD constrained furness, gravity model. Upper and Lower tiers
+- 3 dimensional Furness
+- Gravity Model
+- Upper and Lower tier distributions
 
 ### [External Forecast System](#contents)
-Growth on Post-ME, WFH adjustment, distribution method
-NTEM forecast??
+- Working from home adjustments
+- Bespoke zone handling
 
 ### [Elasticity Model](#contents)
-GC based Own Elasticity approach
+- Types of elasticities
+- VoT/VoC adjustments
+- Generalised Cost approach
 
 ### [Matrix Tools](#contents)
-Segment Tier Converter
-PA2OD
-OD2PA
+- Segment Tier Converter
+- PA to OD conversion
+- OD to PA conversion
