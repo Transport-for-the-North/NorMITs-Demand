@@ -16,8 +16,12 @@ see [support](#sharing) for more information.
 
 #### Contents
  - [Summary](#summary) 
- - [Required Data](#required-data)
  - [Quick Start Guide](#quick-start-guide)
+ - [Required Data](#required-data)
+   - [NoTEM](#notem)
+   - [TMS](#tms)
+   - [EFS](#efs)
+   - [Elasticity](#elasticity)
  - [Documentation](#documentation)
  - [Planned Improvements](#planned-improvements)
  - [Sharing](#sharing)
@@ -27,8 +31,8 @@ see [support](#sharing) for more information.
    - [Northern Trip End Model](#northern-trip-end-model)
    - [Travel Market Synthesiser](#travel-market-synthesiser)
    - [External Forecast System](#external-forecast-system)
+   - [Elasticity](#elasticity-model)
    - [NorMITs Matrix Tools](#matrix-tools)
-   - [NorMITs Matrix Tools](#contents)
 
 ## [Summary](#contents)
 NorMITs Demand is made up of a number of smaller models, each with their own
@@ -37,7 +41,9 @@ For further information on how these models work, click the links in their names
 Currently, the NorMITs Demand models are capable of building the following:
 - [Northern Trip End Model](#northern-trip-end-model) (**NoTEM**) -
   MSOA modelled trip ends (base and future year)
-  based on the provided Land Use and NTS data. (Link to other repos)
+  based on the provided
+  [Land Use](https://github.com/Transport-for-the-North/Land-Use) and 
+  [National Transport Survey data](https://github.com/Transport-for-the-North/NTS-Processing).
 - [Travel Market Synthesiser](#travel-market-synthesiser) (**TMS**) -
   Builds the synthetic base year matrices, by distributing
   the trip end data provided by NoTEM.
@@ -62,10 +68,130 @@ alternate inputs/outputs could be used:
 ![NorMITs Demand process flow](docs/op_models/Images/normits_demand.png)
 
 
-## [Required Data](#contents)
-
-
 ## [Quick Start Guide!](#contents)
+This section will be updated on more detail once we've produced a front-end
+to all our models, making the interaction between each much simpler!
+
+
+## [Required Data](#contents)
+To get NorMITs Demand running numerous data inputs are required.
+Due to the nature of the data required licenses are needed, therefore we
+are unable to share this data alongside our models here. For more information
+on how to get hold of this data, please see the [sharing](#sharing) section.
+
+As mentioned above NorMITs Demand is modularised, therefore each model
+requires a different set of inputs. Some models will feed data into others,
+it will be made clear where this is possible.
+
+### [NoTEM](#contents)
+NoTEM is the most complex model in terms of inputs.
+The inputs are described in more detail [later on](#northern-trip-end-model).
+Briefly, these inputs can be broken down into: Land Use data, trip rates, and
+splitting factors.
+
+#### Inputs
+Land Use data covers residential (where people live) and non-residential
+(shops/work/schools) data, currently this needs to be segmented by MSOA for 
+NoTEM to be able to pick it up. We're working on making this more flexible.
+Land Use data is required for every year that trip ends need to be produced 
+for.
+
+Trip rates are the crucial input for converting Land Use data into productions
+and attractions. Our trip rates are extracted from analysis of
+National Transport Survey data.
+
+Splitting factors are the various types of splits that are used by NoTEM to 
+split data into categories such as mode shares and time period splits. Similar
+to trip rates, our various splitting factors come from analysis of 
+National Transport Survey data.
+
+#### Outputs
+NoTEM outputs 4 sets of trip ends per year: 
+home-based productions, home-based attractions,
+non-home-based productions, and non-home-based attractions.
+These trip end outputs can be fed into TMS and EFS.
+By default there are segmented by:
+
+| Segment          | Description        | Categories |
+|------------------|--------------------|------------|
+| Purpose          | As NTEM            | 14         |
+| Mode             | As NTEM            | 5 (No M4)  |
+| Gender           | As NTEM            | 3          |
+| Soc              | Skill Level Proxy  | 4          |
+| Ns-SeC           | Income Level Proxy | 5          |
+| Car Availability | Simplified NTEM    | 2          |
+| Time Period      | As NTEM            | 6          |
+
+
+### [TMS](#contents)
+TMS is designed to take the base year trip ends and accurately distribute 
+them into a synthetic trip matrix. Once the trip ends are made, the inputs 
+to TMS are comparatively simpler.
+
+#### Inputs
+Firstly, TMS requires a set of trip ends to distribute. These are usually
+fairly aggregate compared to NoTEM outputs so the sample sizes stay significant.
+
+The zoning system that TMS is to run at needs to be defined, along with an 
+"internal" and an "external" definition of zones. The internal area is the
+area of focus, whereas the external area would be the rest of mainland GB,
+and would be more disaggregate.
+
+To aid distribution TMS requires some segmented cost distributions to
+aim towards while distributing the given trip ends. 
+Alongside this, a set of cost matrices that define the cost between each and
+every zone is required.
+
+#### Outputs
+TMS outputs a set of Production-Attraction (*PA*) base year matrices.
+These matrices will be segmented the same as the input data.
+The outputs matrices can be used by EFS as the base year distributed demand 
+on which the future year demand is based off of.
+
+### [EFS](#contents)
+EFS in its simplest form is designed to take the base and future year synthetic
+trip ends alongside a set of post-matrix-estimation (*post-ME*) matrices.
+The synthetic data is then used to grow the post-ME matrices into future years
+and re-distribute.
+More detail on what EFS can take into account in future years can be found
+[here](#external-forecast-system).
+
+#### Inputs
+Firstly, EFS requires a set of base and future year trip ends to distribute,
+these can be supplied by NoTEM.
+As the post-ME matrices should be quite accurately distributed, the EFS trip
+ends can be more segmented than the TMS ones.
+
+EFS also requires a set of Post-ME matrices to base its future year matrices
+off of.
+These matrices should be as accurate as possible to produce more accurate
+future year predictions.
+
+#### Outputs
+EFS outputs a set of PA future year matrices.
+EFS outputs a set of PA future year matrices.
+The outputs can be further fed into the Elasticity Model to reflect
+exogenous costs.
+
+### [Elasticity](#contents)
+Lastly, the elasticity model aims to take a set of future year PA matrices
+alongside a set of future cost changes.
+The cost changes are then applied to the demand represented in the PA
+matrices, moving demand between different modes of transport.
+
+#### Inputs
+First, the elasticity requires the PA matrices to adjust.
+These can be provided by the EFS.
+
+Second, the elasticity requires some cost definitions:
+- The desired cost adjustments. Proportional and by cost component.
+- A definition of how to calculate Generalised Cost from the cost components.
+- A definition of the costs between each and every zone.
+
+#### Outputs
+The elasticity model outputs set of cost adjusted PA future year matrices.
+These outputs will be in the same format as the input matrices, but with
+adjustment factors applied.
 
 
 ## [Documentation](#contents)
@@ -133,6 +259,8 @@ overview, look [here](#summary)!
 
 ### [Northern Trip End Model](#contents)
 Talk about DVector, zoning systems and segmentations
+
+![NoTEM process flow](docs/op_models/Images/notem.png)
 
 ### [Travel Market Synthesiser](#contents)
 Talk about TLD constrained furness, gravity model. Upper and Lower tiers
