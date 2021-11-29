@@ -22,9 +22,9 @@ years = [2018, 2033, 2040, 2050]
 scenario = nd.constants.SC01_JAM
 notem_iter = '9.3'
 tram_import_home = r"I:\NorMITs Demand\import\modal\tram\tram_pa"
-notem_export_home = r"E:\NorMITs Demand\NoTEM"
+notem_export_home = r"F:\NorMITs Demand\NoTEM"
 
-export_home = r"E:\NorMITs Demand\Tram"
+export_home = r"F:\NorMITs Demand\Tram"
 
 
 def main():
@@ -34,6 +34,7 @@ def main():
     nhb_production_data_version = '1.1'
     nhb_attraction_data_version = '1.1'
 
+    attraction_balance_zoning = nd.get_zoning_system('gor')
     tram_competitors = [nd.Mode.CAR, nd.Mode.BUS, nd.Mode.TRAIN]
 
     # Generate the imports
@@ -62,6 +63,7 @@ def main():
         import_builder=import_builder,
         export_home=export_home,
         tram_competitors=tram_competitors,
+        attraction_balance_zoning=attraction_balance_zoning,
     )
 
     n.run_tram(

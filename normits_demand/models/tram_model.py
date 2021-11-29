@@ -102,6 +102,7 @@ class TramModel(TramExportPaths):
                  import_builder: nd.pathing.TramImportPathsBase,
                  export_home: nd.PathLike,
                  tram_competitors: List[nd.Mode],
+                 attraction_balance_zoning: nd.core.zoning.ZoningSystem = None,
                  ):
         """
         Assigns the attributes needed for tram inclusion model.
@@ -132,6 +133,12 @@ class TramModel(TramExportPaths):
             A list of the Modes which would be competing with Tram for trips.
             These are the modes which will be used to remove trips from in
             order to add in tram trips
+
+        attraction_balance_zoning:
+            The zoning system to balance the attractions to the productions at.
+            A translation must exist between this and the running zoning
+            system, which is MSOA by default. If left as None, then no spatial
+            balance is done, only a segmental balance.
         """
         # Validate inputs
         if not isinstance(import_builder, nd.pathing.TramImportPathsBase):
@@ -148,6 +155,7 @@ class TramModel(TramExportPaths):
         self.import_builder = import_builder
         self.base_train = pd.DataFrame()
         self.tram_competitors = tram_competitors
+        self.balance_zoning = attraction_balance_zoning
 
         # Generate the zoning system
         self.zoning_system = nd.get_zoning_system(self._zoning_name)
@@ -496,6 +504,7 @@ class TramModel(TramExportPaths):
                   report_ca_sector_paths: Dict[int, nd.PathLike],
                   report_ie_sector_paths: Dict[int, nd.PathLike],
                   lad_report_paths: Dict[int, nd.PathLike],
+                  balance_paths: Dict[int, nd.PathLike] = None,
                   ) -> None:
         """
         Runs the tram inclusion for the notem trip end output.
@@ -527,11 +536,10 @@ class TramModel(TramExportPaths):
         export_paths:
             Path with filename for tram included notem segmented trip end output.
 
-        report_home:
-            The path where the reports would be saved.
-
-        report_paths:
-            Dictionary of {report_name: report_path}
+        balance_paths:
+            Dictionary of {year: balance_path} pairs. provides the paths to
+            balance the final produced vector to. Usually used when infilling
+            attractions, so they can be balanced back to the productions.
 
         Returns
         -------
@@ -642,6 +650,13 @@ class TramModel(TramExportPaths):
             # Add segments back in from original input
             tram_dvec = tram_dvec.split_segmentation_like(orig_dvec, zonal_average=False)
 
+            # Balance if paths given
+            if balance_paths is not None:
+                tram_dvec = self.balance_dvecs(
+                    dvec=tram_dvec,
+                    balance=nd.read_pickle(balance_paths[year]),
+                )
+
             # ## WRITE OUT THE DVEC AND REPORTS ## #
             self._logger.info("Writing Produced Tram data to disk")
             tram_dvec.to_pickle(export_paths[year])
@@ -664,6 +679,27 @@ class TramModel(TramExportPaths):
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
         self._logger.info("Tram Model took: %s" % time_taken)
+
+    def balance_dvecs(self, dvec: nd.DVector, balance: nd.DVector) -> nd.DVector:
+        """Balances given Dvec to balance using dvec.balance_at_segments()"""
+        balanced_dvec = dvec.balance_at_segments(
+            balance,
+            balance_zoning=self.balance_zoning,
+            split_weekday_weekend=True,
+        )
+
+        # ## ATTRACTIONS TOTAL CHECK ## #
+        if not balanced_dvec.sum_is_close(balance):
+            msg = (
+                "The vector total after balancing is not similar enough. Are "
+                "some zones being dropped in the zonal translation?\n"
+                "Expected %f\n"
+                "Got %f"
+                % (balance.sum(), balanced_dvec.sum())
+            )
+            self._logger.warning(msg)
+
+        return balanced_dvec
 
     @staticmethod
     def _calculate_mode_shares(df, group_cols, val_cols):
