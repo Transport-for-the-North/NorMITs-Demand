@@ -226,7 +226,6 @@ class HBAttractionModel(HBAttractionModelPaths):
             export_fully_segmented: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
-            verbose: bool = False,
             ) -> None:
         """
         Runs the HB Attraction model.
@@ -272,9 +271,6 @@ class HBAttractionModel(HBAttractionModelPaths):
             Whether to output reports while running. All reports will be
             written out to self.report_home.
 
-        verbose:
-            Whether to print progress bars during processing or not.
-
         Returns
         -------
         None
@@ -290,10 +286,10 @@ class HBAttractionModel(HBAttractionModelPaths):
 
             # ## GENERATE PURE ATTRACTIONS ## #
             self._logger.info("Loading the employment data")
-            emp_dvec = self._read_land_use_data(year, verbose=verbose)
+            emp_dvec = self._read_land_use_data(year)
 
             self._logger.info("Applying trip rates")
-            pure_attractions = self._generate_attractions(emp_dvec, verbose=verbose)
+            pure_attractions = self._generate_attractions(emp_dvec)
 
             if export_pure_attractions:
                 self._logger.info("Exporting pure attractions to disk")
@@ -370,10 +366,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         self._logger.info("HB Attraction Model took: %s" % time_taken)
         self._logger.info("HB Attraction Model Finished")        
 
-    def _read_land_use_data(self,
-                            year: int,
-                            verbose: bool,
-                            ) -> nd.DVector:
+    def _read_land_use_data(self, year: int) -> nd.DVector:
         """
         Reads in the land use data for year and converts it into a Dvector.
 
@@ -381,9 +374,6 @@ class HBAttractionModel(HBAttractionModelPaths):
         ----------
         year:
             The year to get attraction data for.
-
-        verbose:
-            Passed into the DVector.
 
         Returns
         -------
@@ -418,10 +408,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             val_col="people",
         )
 
-    def _generate_attractions(self,
-                              emp_dvec: nd.DVector,
-                              verbose: bool = True,
-                              ) -> nd.DVector:
+    def _generate_attractions(self, emp_dvec: nd.DVector) -> nd.DVector:
         """
         Applies trip rates to the given HB employment.
 
@@ -429,9 +416,6 @@ class HBAttractionModel(HBAttractionModelPaths):
         ----------
         emp_dvec:
             Dvector containing the employment.
-
-        verbose:
-            Whether to print a progress bar while applying the splits or not.
 
         Returns
         -------

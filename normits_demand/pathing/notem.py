@@ -160,7 +160,6 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
     _by_lu_dir = "base_land_use"
     _fy_lu_dir = "future_land_use"
 
-    _by_pop_fname = "land_use_output_msoa.csv"
     _fy_pop_fname = "land_use_{year}_pop.csv"
     _fy_emp_fname = "land_use_{year}_emp.csv"
 
