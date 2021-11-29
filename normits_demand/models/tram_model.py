@@ -51,7 +51,7 @@ class TramModel(TramExportPaths):
 
     # Col names
     _tram_segment_cols = ['p', 'm', 'ca']
-    _lad_comparison_col_names = ['p', 'm']
+    _lad_comparison_col_names = ['p', 'm', 'tp']
     _val_col = 'val'
 
     # Running segmentations
@@ -315,18 +315,18 @@ class TramModel(TramExportPaths):
         self._logger.info("Adding Tram into HB Productions")
         paths = self.hb_production
         vector_reports = paths.report_paths.vector_reports
-        # self._add_tram(
-        #     **import_files,
-        #     export_paths=paths.export_paths.notem_segmented,
-        #     tram_growth_factors=paths.report_paths.tram_growth_factors,
-        #     more_tram_msoa=paths.report_paths.more_tram_msoa,
-        #     more_tram_north=paths.report_paths.more_tram_north,
-        #     mode_adj_factors=paths.report_paths.mode_adj_factors,
-        #     report_segment_total_paths=vector_reports.segment_total,
-        #     report_ca_sector_paths=vector_reports.ca_sector,
-        #     report_ie_sector_paths=vector_reports.ie_sector,
-        #     lad_report_paths=vector_reports.lad_report,
-        # )
+        self._add_tram(
+            **import_files,
+            export_paths=paths.export_paths.notem_segmented,
+            tram_growth_factors=paths.report_paths.tram_growth_factors,
+            more_tram_msoa=paths.report_paths.more_tram_msoa,
+            more_tram_north=paths.report_paths.more_tram_north,
+            mode_adj_factors=paths.report_paths.mode_adj_factors,
+            report_segment_total_paths=vector_reports.segment_total,
+            report_ca_sector_paths=vector_reports.ca_sector,
+            report_ie_sector_paths=vector_reports.ie_sector,
+            lad_report_paths=vector_reports.lad_report,
+        )
 
         # Generate a LAD report before and after tram infill
         if before_after_report:
@@ -348,18 +348,18 @@ class TramModel(TramExportPaths):
         self._logger.info("Adding Tram into HB Attractions")
         paths = self.hb_attraction
         vector_reports = paths.report_paths.vector_reports
-        # self._add_tram(
-        #     **import_files,
-        #     export_paths=paths.export_paths.notem_segmented,
-        #     tram_growth_factors=paths.report_paths.tram_growth_factors,
-        #     more_tram_msoa=paths.report_paths.more_tram_msoa,
-        #     more_tram_north=paths.report_paths.more_tram_north,
-        #     mode_adj_factors=paths.report_paths.mode_adj_factors,
-        #     report_segment_total_paths=vector_reports.segment_total,
-        #     report_ca_sector_paths=vector_reports.ca_sector,
-        #     report_ie_sector_paths=vector_reports.ie_sector,
-        #     lad_report_paths=vector_reports.lad_report,
-        # )
+        self._add_tram(
+            **import_files,
+            export_paths=paths.export_paths.notem_segmented,
+            tram_growth_factors=paths.report_paths.tram_growth_factors,
+            more_tram_msoa=paths.report_paths.more_tram_msoa,
+            more_tram_north=paths.report_paths.more_tram_north,
+            mode_adj_factors=paths.report_paths.mode_adj_factors,
+            report_segment_total_paths=vector_reports.segment_total,
+            report_ca_sector_paths=vector_reports.ca_sector,
+            report_ie_sector_paths=vector_reports.ie_sector,
+            lad_report_paths=vector_reports.lad_report,
+        )
 
         # Generate a LAD report before and after tram infill
         if before_after_report:
@@ -381,18 +381,18 @@ class TramModel(TramExportPaths):
         self._logger.info("Adding Tram into NHB Productions")
         paths = self.nhb_production
         vector_reports = paths.report_paths.vector_reports
-        # self._add_tram(
-        #     **import_files,
-        #     export_paths=paths.export_paths.notem_segmented,
-        #     tram_growth_factors=paths.report_paths.tram_growth_factors,
-        #     more_tram_msoa=paths.report_paths.more_tram_msoa,
-        #     more_tram_north=paths.report_paths.more_tram_north,
-        #     mode_adj_factors=paths.report_paths.mode_adj_factors,
-        #     report_segment_total_paths=vector_reports.segment_total,
-        #     report_ca_sector_paths=vector_reports.ca_sector,
-        #     report_ie_sector_paths=vector_reports.ie_sector,
-        #     lad_report_paths=vector_reports.lad_report,
-        # )
+        self._add_tram(
+            **import_files,
+            export_paths=paths.export_paths.notem_segmented,
+            tram_growth_factors=paths.report_paths.tram_growth_factors,
+            more_tram_msoa=paths.report_paths.more_tram_msoa,
+            more_tram_north=paths.report_paths.more_tram_north,
+            mode_adj_factors=paths.report_paths.mode_adj_factors,
+            report_segment_total_paths=vector_reports.segment_total,
+            report_ca_sector_paths=vector_reports.ca_sector,
+            report_ie_sector_paths=vector_reports.ie_sector,
+            lad_report_paths=vector_reports.lad_report,
+        )
 
         # Generate a LAD report before and after tram infill
         if before_after_report:
@@ -414,18 +414,18 @@ class TramModel(TramExportPaths):
         self._logger.info("Adding Tram into NHB Attractions")
         paths = self.nhb_attraction
         vector_reports = paths.report_paths.vector_reports
-        # self._add_tram(
-        #     **import_files,
-        #     export_paths=paths.export_paths.notem_segmented,
-        #     tram_growth_factors=paths.report_paths.tram_growth_factors,
-        #     more_tram_msoa=paths.report_paths.more_tram_msoa,
-        #     more_tram_north=paths.report_paths.more_tram_north,
-        #     mode_adj_factors=paths.report_paths.mode_adj_factors,
-        #     report_segment_total_paths=vector_reports.segment_total,
-        #     report_ca_sector_paths=vector_reports.ca_sector,
-        #     report_ie_sector_paths=vector_reports.ie_sector,
-        #     lad_report_paths=vector_reports.lad_report,
-        # )
+        self._add_tram(
+            **import_files,
+            export_paths=paths.export_paths.notem_segmented,
+            tram_growth_factors=paths.report_paths.tram_growth_factors,
+            more_tram_msoa=paths.report_paths.more_tram_msoa,
+            more_tram_north=paths.report_paths.more_tram_north,
+            mode_adj_factors=paths.report_paths.mode_adj_factors,
+            report_segment_total_paths=vector_reports.segment_total,
+            report_ca_sector_paths=vector_reports.ca_sector,
+            report_ie_sector_paths=vector_reports.ie_sector,
+            lad_report_paths=vector_reports.lad_report,
+        )
 
         # Generate a LAD report before and after tram infill
         if before_after_report:
@@ -640,7 +640,7 @@ class TramModel(TramExportPaths):
             )
 
             # Add segments back in from original input
-            tram_dvec = tram_dvec.split_segmentation_like(orig_dvec)
+            tram_dvec = tram_dvec.split_segmentation_like(orig_dvec, zonal_average=False)
 
             # ## WRITE OUT THE DVEC AND REPORTS ## #
             self._logger.info("Writing Produced Tram data to disk")
