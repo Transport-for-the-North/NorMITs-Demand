@@ -43,15 +43,15 @@ class TramModel(TramExportPaths):
     _train_mode = nd.Mode.TRAIN.get_mode_num()
     _tram_mode = nd.Mode.TRAM.get_mode_num()
     _zoning_name = 'msoa'
+    _lad_report_zoning_name = 'lad_2020'
 
-    _sort_msoa = ['msoa_zone_id', 'p', 'ca', 'm']
-    _sort_north = ['p', 'ca', 'm']
-    _join_cols = ['msoa_zone_id', 'p', 'ca']
+    # Filenames
     _running_report_fname = 'running_parameters.txt'
     _log_fname = "tram_log.log"
-    _notem_cols = ['msoa_zone_id', 'p', 'ca', 'm', 'val']
 
+    # Col names
     _tram_segment_cols = ['p', 'm', 'ca']
+    _lad_comparison_col_names = ['p', 'm', 'tp']
     _val_col = 'val'
 
     # Running segmentations
@@ -225,6 +225,7 @@ class TramModel(TramExportPaths):
                  generate_nhb: bool = False,
                  generate_nhb_production: bool = False,
                  generate_nhb_attraction: bool = False,
+                 before_after_report: bool = False,
                  ) -> None:
         """
         Generates the inputs required for tram inclusion run.
@@ -252,6 +253,11 @@ class TramModel(TramExportPaths):
         generate_nhb_attraction:
             Runs the non home based attraction trip end model only.
 
+        before_after_report:
+            Whether to generate a report comparing the trip end outputs
+            before and after the tram infill. These reports will be generated
+            at the LAD level.
+
         Returns
         -------
         None
@@ -277,31 +283,33 @@ class TramModel(TramExportPaths):
         self._logger.debug("Running nhb productions: %s" % generate_nhb_production)
         self._logger.debug("Running hb attractions: %s" % generate_hb_attraction)
         self._logger.debug("Running nhb attractions: %s" % generate_nhb_attraction)
+        self._logger.debug("Running before/after reports: %s" % before_after_report)
         self._logger.debug("")
 
         # Run the models
         if generate_hb_production:
-            self._generate_hb_production()
+            self._generate_hb_production(before_after_report)
 
         if generate_hb_attraction:
-            self._generate_hb_attraction()
+            self._generate_hb_attraction(before_after_report)
 
         if generate_nhb_production:
-            self._generate_nhb_production()
+            self._generate_nhb_production(before_after_report)
 
         if generate_nhb_attraction:
-            self._generate_nhb_attraction()
+            self._generate_nhb_attraction(before_after_report)
 
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
         self._logger.info("Tram Model run complete! Took %s" % time_taken)
 
-    def _generate_hb_production(self) -> None:
+    def _generate_hb_production(self, before_after_report: bool) -> None:
         """
         Runs tram inclusion for home based Production trip end models
         """
         self._logger.info("Generating HB Production imports")
         import_files = self.import_builder.generate_hb_production_imports()
+        before_lad_report_paths = import_files.pop('before_lad_report_paths')
 
         # Runs the home based Production model
         self._logger.info("Adding Tram into HB Productions")
@@ -320,12 +328,22 @@ class TramModel(TramExportPaths):
             lad_report_paths=vector_reports.lad_report,
         )
 
-    def _generate_hb_attraction(self) -> None:
+        # Generate a LAD report before and after tram infill
+        if before_after_report:
+            self._before_after_report(
+                before_lad_report_paths=before_lad_report_paths,
+                after_lad_report_paths=vector_reports.lad_report,
+                output_paths=paths.report_paths.comparison_report,
+                tram_only_output_paths=paths.report_paths.tram_comparison_report,
+            )
+
+    def _generate_hb_attraction(self, before_after_report: bool) -> None:
         """
         Runs tram inclusion for home based Attraction trip end model
         """
         self._logger.info("Generating HB Attraction imports")
         import_files = self.import_builder.generate_hb_attraction_imports()
+        before_lad_report_paths = import_files.pop('before_lad_report_paths')
 
         self._logger.info("Adding Tram into HB Attractions")
         paths = self.hb_attraction
@@ -343,12 +361,22 @@ class TramModel(TramExportPaths):
             lad_report_paths=vector_reports.lad_report,
         )
 
-    def _generate_nhb_production(self) -> None:
+        # Generate a LAD report before and after tram infill
+        if before_after_report:
+            self._before_after_report(
+                before_lad_report_paths=before_lad_report_paths,
+                after_lad_report_paths=vector_reports.lad_report,
+                output_paths=paths.report_paths.comparison_report,
+                tram_only_output_paths=paths.report_paths.tram_comparison_report,
+            )
+
+    def _generate_nhb_production(self, before_after_report: bool) -> None:
         """
         Runs tram inclusion for non-home based Production trip end model
         """
         self._logger.info("Generating NHB Production imports")
         import_files = self.import_builder.generate_nhb_production_imports()
+        before_lad_report_paths = import_files.pop('before_lad_report_paths')
 
         self._logger.info("Adding Tram into NHB Productions")
         paths = self.nhb_production
@@ -366,12 +394,22 @@ class TramModel(TramExportPaths):
             lad_report_paths=vector_reports.lad_report,
         )
 
-    def _generate_nhb_attraction(self) -> None:
+        # Generate a LAD report before and after tram infill
+        if before_after_report:
+            self._before_after_report(
+                before_lad_report_paths=before_lad_report_paths,
+                after_lad_report_paths=vector_reports.lad_report,
+                output_paths=paths.report_paths.comparison_report,
+                tram_only_output_paths=paths.report_paths.tram_comparison_report,
+            )
+
+    def _generate_nhb_attraction(self, before_after_report: bool) -> None:
         """
         Runs tram inclusion for non home based Attraction trip end models.
         """
         self._logger.info("Generating NHB Attraction imports")
         import_files = self.import_builder.generate_nhb_attraction_imports()
+        before_lad_report_paths = import_files.pop('before_lad_report_paths')
 
         self._logger.info("Adding Tram into NHB Attractions")
         paths = self.nhb_attraction
@@ -388,6 +426,15 @@ class TramModel(TramExportPaths):
             report_ie_sector_paths=vector_reports.ie_sector,
             lad_report_paths=vector_reports.lad_report,
         )
+
+        # Generate a LAD report before and after tram infill
+        if before_after_report:
+            self._before_after_report(
+                before_lad_report_paths=before_lad_report_paths,
+                after_lad_report_paths=vector_reports.lad_report,
+                output_paths=paths.report_paths.comparison_report,
+                tram_only_output_paths=paths.report_paths.tram_comparison_report,
+            )
 
     def _infill_tram(self,
                      vector: nd.DVector,
@@ -593,7 +640,7 @@ class TramModel(TramExportPaths):
             )
 
             # Add segments back in from original input
-            tram_dvec = tram_dvec.split_segmentation_like(orig_dvec)
+            tram_dvec = tram_dvec.split_segmentation_like(orig_dvec, zonal_average=False)
 
             # ## WRITE OUT THE DVEC AND REPORTS ## #
             self._logger.info("Writing Produced Tram data to disk")
@@ -617,6 +664,72 @@ class TramModel(TramExportPaths):
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
         self._logger.info("Tram Model took: %s" % time_taken)
+
+    @staticmethod
+    def _calculate_mode_shares(df, group_cols, val_cols):
+        df = df.copy()
+
+        for col in val_cols:
+            # Create the sum of the group
+            sum_col = '%s_sum' % col
+            share_col = '%s_share' % col
+            df[sum_col] = df.groupby(group_cols)[col].transform('sum')
+
+            # Get the share
+            df[share_col] = df[col] / df[sum_col]
+            df = df.drop(columns=sum_col)
+
+        return df
+
+    def _before_after_report(self,
+                             before_lad_report_paths: Dict[int, nd.PathLike],
+                             after_lad_report_paths: Dict[int, nd.PathLike],
+                             output_paths: Dict[int, nd.PathLike],
+                             tram_only_output_paths: Dict[int, nd.PathLike],
+                             ) -> None:
+        """Generates reports comparing before and after reports"""
+        lad_zoning = nd.get_zoning_system(self._lad_report_zoning_name)
+        merge_cols = [lad_zoning.col_name] + self._lad_comparison_col_names
+
+        for year in self.years:
+            # Read in and tidy reports
+            def get_df(path, col_name):
+                df = nd.read_df(path)
+                df = df.rename(columns={self._val_col: col_name})
+                return pd_utils.reindex_and_groupby(
+                    df=df,
+                    index_cols=merge_cols + [col_name],
+                    value_cols=[col_name]
+                )
+            before_report = get_df(before_lad_report_paths[year], 'before')
+            after_report = get_df(after_lad_report_paths[year], 'after')
+
+            # Merge
+            report = pd.merge(
+                before_report,
+                after_report,
+                how='outer',
+                on=merge_cols
+            ).fillna(0)
+
+            # Set up some col definitions
+            group_cols = merge_cols.copy()
+            group_cols.remove('m')
+            val_cols = ['before', 'after']
+
+            # Get report of all LADs
+            all_report = self._calculate_mode_shares(report, group_cols, val_cols)
+            nd.write_df(all_report, output_paths[year], index=False)
+
+            # Filter down to only the zones with tram data
+            mask = (report['m'] == self._tram_mode) & (report['after'] > 0)
+            tram_zones = report[mask][lad_zoning.col_name].unique().tolist()
+
+            # Generate a tram only report
+            mask = report[lad_zoning.col_name].isin(tram_zones)
+            tram_report = report[mask].copy()
+            tram_report = self._calculate_mode_shares(tram_report, group_cols, val_cols)
+            nd.write_df(tram_report, tram_only_output_paths[year], index=False)
 
     def _read_tram_data(self,
                         tram_data_path: nd.PathLike,

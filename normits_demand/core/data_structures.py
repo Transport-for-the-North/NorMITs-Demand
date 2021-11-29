@@ -1699,6 +1699,7 @@ class DVector:
 
     def split_segmentation_like(self,
                                 other: DVector,
+                                zonal_average: bool = True,
                                 check_totals: bool = True,
                                 ) -> DVector:
         """
@@ -1715,6 +1716,11 @@ class DVector:
         other:
             The DVector to use to determine the segmentation to split in to,
             as well as the weights to use for the splits.
+
+        zonal_average:
+            Whether to use the zonal average of the splits. Most of the time
+            this will want to be True. If set to False, and self is then
+            balanced to other, both DVectors would be exactly the same.
 
         check_totals:
             Check that the total before and after the split is the same.
@@ -1750,8 +1756,12 @@ class DVector:
         dvec_data = dict.fromkeys(other.segmentation.segment_names)
         for in_seg_name, out_seg_names in split_dict.items():
             # Calculate the splitting factors
-            other_segs = [np.mean(other._data[s]) for s in out_seg_names]
-            split_factors = other_segs / np.sum(other_segs)
+            if zonal_average:
+                other_segs = [np.mean(other._data[s]) for s in out_seg_names]
+                split_factors = other_segs / np.sum(other_segs)
+            else:
+                other_segs = [other._data[s] for s in out_seg_names]
+                split_factors = other_segs / np.sum(other_segs, axis=0)
 
             # Get the original value
             self_seg = self._data[in_seg_name]

@@ -19,7 +19,6 @@ from normits_demand.pathing import TramImportPaths
 
 # GLOBAL VARIABLES
 years = [2018, 2033, 2040, 2050]
-years = [2018]
 scenario = nd.constants.SC01_JAM
 notem_iter = '9.3'
 tram_import_home = r"I:\NorMITs Demand\import\modal\tram\tram_pa"
@@ -66,13 +65,14 @@ def main():
     )
 
     n.run_tram(
-        generate_all=True,
+        generate_all=False,
         generate_hb=False,
         generate_nhb=False,
-        generate_hb_production=False,
+        generate_hb_production=True,
         generate_hb_attraction=False,
         generate_nhb_production=False,
         generate_nhb_attraction=False,
+        before_after_report=True,
     )
 
 
