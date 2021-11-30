@@ -73,8 +73,8 @@ def doubly_constrained_furness(seed_vals: np.array,
     completed_iters:
         The number of completed iterations before exiting
 
-    achieved_r2:
-        The R-squared difference achieved before exiting
+    achieved_rmse:
+        The Root Mean Squared Error difference achieved before exiting
     """
     # Error check
     if seed_vals.shape != (len(row_targets), len(col_targets)):
@@ -87,13 +87,14 @@ def doubly_constrained_furness(seed_vals: np.array,
     # Init
     furnessed_mat = seed_vals.copy()
     early_exit = False
-    cur_diff = np.inf
+    cur_rmse = np.inf
     iter_num = 0
+    n_vals = len(row_targets)
 
     # Can return early if all 0 - probably shouldn't happen!
     if row_targets.sum() == 0 or col_targets.sum() == 0:
         warnings.warn("Furness given targets of 0. Returning all 0's")
-        return np.zeros(seed_vals.shape), iter_num, cur_diff
+        return np.zeros(seed_vals.shape), iter_num, cur_rmse
 
     for iter_num in range(max_iters):
         # ## COL CONSTRAIN ## #
@@ -117,23 +118,23 @@ def doubly_constrained_furness(seed_vals: np.array,
         # Calculate the diff - leave early if met
         row_diff = (row_targets - np.sum(furnessed_mat, axis=1)) ** 2
         col_diff = (col_targets - np.sum(furnessed_mat, axis=0)) ** 2
-        cur_diff = np.sum(row_diff + col_diff) ** .5
-        if cur_diff < tol:
+        cur_rmse = (np.sum(row_diff + col_diff) / n_vals) ** 0.5
+        if cur_rmse < tol:
             early_exit = True
             break
 
         # We got a NaN! Make sure to point out we didn't converge
-        if np.isnan(cur_diff):
+        if np.isnan(cur_rmse):
             return np.zeros(furnessed_mat.shape), iter_num, np.inf
 
     # Warn the user if we exhausted our number of loops
     if not early_exit:
         print("WARNING! The doubly constrained furness exhausted its max "
-              "number of loops (%d), while achieving an R^2 difference of "
+              "number of loops (%d), while achieving an RMSE difference of "
               "%f. The values returned may not be accurate."
-              % (max_iters, cur_diff))
+              % (max_iters, cur_rmse))
 
-    return furnessed_mat, iter_num + 1, cur_diff
+    return furnessed_mat, iter_num + 1, cur_rmse
 
 
 def _distribute_pa_internal(productions,
@@ -270,7 +271,7 @@ def _distribute_pa_internal(productions,
         bal_fac = productions[unique_col].sum() / a_weights[unique_col].sum()
         a_weights[unique_col] *= bal_fac
 
-    pa_dist, n_iters, achieved_r2 = furness_pandas_wrapper(
+    pa_dist, n_iters, achieved_rmse = furness_pandas_wrapper(
         row_targets=productions,
         col_targets=a_weights,
         seed_values=seed_dist,
@@ -289,7 +290,7 @@ def _distribute_pa_internal(productions,
     report = {
         'name': out_dist_name,
         'iterations': n_iters,
-        'convergence_gap': achieved_r2,
+        'furness_RMSE': achieved_rmse,
         'tolerance': furness_tol,
     }
 
@@ -742,8 +743,8 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     completed_iters:
         The number of completed iterations before exiting
 
-    achieved_r2:
-        The R-squared difference achieved before exiting
+    achieved_rmse:
+        The Root Mean Squared Error difference achieved before exiting
     """
     # Init
     row_targets = row_targets.copy()
@@ -795,7 +796,7 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     col_targets = col_targets.values.flatten()
     seed_values = seed_values.values
 
-    furnessed_mat, n_iters, achieved_r2 = doubly_constrained_furness(
+    furnessed_mat, n_iters, achieved_rmse = doubly_constrained_furness(
         seed_vals=seed_values,
         row_targets=row_targets,
         col_targets=col_targets,
@@ -812,4 +813,4 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         data=furnessed_mat
     ).round(round_dp)
 
-    return furnessed_mat, n_iters, achieved_r2
+    return furnessed_mat, n_iters, achieved_rmse

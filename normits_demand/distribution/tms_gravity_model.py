@@ -108,7 +108,7 @@ class GravityModel(GravityModelExportPaths):
             convergence_target: float = 0.95,
             fitting_loops: int = 100,
             furness_max_iters: int = 5000,
-            furness_tol: float = 1.0,
+            furness_tol: float = 0.1,
             init_param_cols: str = None,
             ):
         # Validate the trip origin
@@ -257,7 +257,7 @@ class GravityModel(GravityModelExportPaths):
                       convergence_target: float = 0.95,
                       fitting_loops: int = 100,
                       furness_max_iters: int = 5000,
-                      furness_tol: float = 1.0,
+                      furness_tol: float = 0.1,
                       ):
         seg_name = running_segmentation.generate_file_name(segment_params)
         self._logger.info("Running for %s" % seg_name)
@@ -288,10 +288,10 @@ class GravityModel(GravityModelExportPaths):
         path = os.path.join(cost_dir, fname)
 
         # Read in the costs and infill
-        cost = nd.read_df(path, find_similar=True, index_col=0).values
+        cost_matrix = nd.read_df(path, find_similar=True, index_col=0).values
         if intrazonal_cost_infill is not None:
-            cost = cost_utils.iz_infill_costs(
-                cost,
+            cost_matrix = cost_utils.iz_infill_costs(
+                cost_matrix,
                 iz_infill=intrazonal_cost_infill,
             )
 
@@ -318,7 +318,7 @@ class GravityModel(GravityModelExportPaths):
             row_targets=seg_productions,
             col_targets=seg_attractions,
             cost_function=cost_function,
-            costs=cost,
+            costs=cost_matrix,
             target_cost_distribution=target_tld,
             target_convergence=convergence_target,
             furness_max_iters=furness_max_iters,
