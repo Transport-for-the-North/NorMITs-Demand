@@ -1013,12 +1013,14 @@ class SegmentationLevel:
 
         # Check that the output segmentation has been created properly
         if not other.is_correct_naming(list(agg_dict.keys())):
+            target_len = len(other.segment_names)
+            ach_len = len(set(agg_dict.keys()))
             raise SegmentationError(
                 "Some segment names seem to have gone missing during "
-                "aggregation.\n"
+                "while aggregating %s into %s.\n"
                 "Expected %s segments.\n"
                 "Found %s segments."
-                % (len(other.segment_names), len(set(agg_dict.keys())))
+                % (self.name, other.name, target_len, ach_len)
             )
 
         return agg_dict
