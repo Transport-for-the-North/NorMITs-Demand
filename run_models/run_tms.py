@@ -30,17 +30,17 @@ from normits_demand.pathing.travel_market_synthesiser import TMSExportPaths
 # Constants
 base_year = 2018
 scenario = consts.SC01_JAM
-tms_iteration_name = '9.2.3'
+tms_iteration_name = '9.3.1'
 tms_import_home = r"I:\NorMITs Demand\import"
 tms_export_home = r"E:\NorMITs Demand\TMS"
-notem_iteration_name = '9.2'
+notem_iteration_name = '9.3'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
 cache_path = "E:/tms_cache"
 
 
 def main():
-    # mode = nd.Mode.CAR
-    mode = nd.Mode.BUS
+    mode = nd.Mode.CAR
+    # mode = nd.Mode.BUS
     # mode = nd.Mode.TRAIN
 
     use_tram = False
@@ -51,9 +51,9 @@ def main():
         internal_tld_name = 'north/p_m'
         external_tld_name = 'gb/p_m'
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-        nhb_agg_seg = nd.get_segmentation_level('nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_car')
-        nhb_running_seg = nd.get_segmentation_level('nhb_p_m_tp_wday_car')
+        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_car')
         intrazonal_cost_infill = 0.5
         em_convergence_target = 0.9
         gm_convergence_target = 0.95
@@ -69,9 +69,9 @@ def main():
         internal_tld_name = 'north/p_m'
         external_tld_name = 'gb/p_m'
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-        nhb_agg_seg = nd.get_segmentation_level('nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
-        nhb_running_seg = nd.get_segmentation_level('nhb_p_m_tp_wday_bus')
+        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_bus')
         intrazonal_cost_infill = 0.4
         em_convergence_target = 0.8
         gm_convergence_target = 0.85
@@ -88,9 +88,9 @@ def main():
         internal_tld_name = 'north/p_m_ca_train_bands'
         external_tld_name = 'gb/p_m_ca_train_bands'
         hb_agg_seg = nd.get_segmentation_level('hb_p_m_ca')
-        nhb_agg_seg = nd.get_segmentation_level('nhb_p_m_ca_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_ca_rail')
-        nhb_running_seg = nd.get_segmentation_level('nhb_p_m_ca_tp_wday_rail')
+        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday')
+        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday_rail')
         intrazonal_cost_infill = None
         em_convergence_target = 0.9
         gm_convergence_target = 0.95
@@ -220,7 +220,7 @@ def main():
 
     tms.run(
         run_all=False,
-        run_external_model=False,
+        run_external_model=True,
         run_gravity_model=True,
         run_pa_matrix_reports=False,
         run_pa_to_od=False,
