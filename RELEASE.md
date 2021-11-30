@@ -20,3 +20,9 @@ there.
 Below, a brief summary of patches made since the previous version can be found.
 
 ### V0.4.7
+- TMS Updates
+  - Gravity Model Updates
+    - Updated to read in initial cost params based on cost function names
+      by default
+    - Updated the furness to calculate Root Mean Squared Error weighted by the
+      number of zones
