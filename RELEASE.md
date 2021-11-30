@@ -22,6 +22,7 @@ Below, a brief summary of patches made since the previous version can be found.
 ### V0.4.6
 - Minor Updates to NoTEM
   - Logging properly integrated into NoTEM
+  - LAD level reports added to NoTEM outputs
   - New HB Production Trip rates being read in
   - New NHB Production Trip rates being read in
     - NoTEM now outputs NHB Purpose 11

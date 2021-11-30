@@ -194,7 +194,6 @@ class HBProductionModel(HBProductionModelPaths):
             export_fully_segmented: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
-            verbose: bool = False,
             ) -> None:
         """
         Runs the HB Production model.
@@ -241,9 +240,6 @@ class HBProductionModel(HBProductionModelPaths):
             Whether to output reports while running. All reports will be
             written out to self.report_home.
 
-        verbose:
-            Whether to print progress bars during processing or not.
-
         Returns
         -------
         None
@@ -258,10 +254,10 @@ class HBProductionModel(HBProductionModelPaths):
             year_start_time = timing.current_milli_time()
             # ## GENERATE PURE DEMAND ## #
             self._logger.info("Loading the population data")
-            pop_dvec = self._read_land_use_data(year, verbose)
+            pop_dvec = self._read_land_use_data(year)
 
             self._logger.info("Applying trip rates")
-            pure_demand = self._generate_productions(pop_dvec, verbose)
+            pure_demand = self._generate_productions(pop_dvec)
 
             if export_pure_demand:
                 self._logger.info("Exporting pure demand to disk")
@@ -315,6 +311,8 @@ class HBProductionModel(HBProductionModelPaths):
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
+                    lad_report_path=notem_segmented_paths.lad_report[year],
+                    lad_report_seg=nd.get_segmentation_level('hb_p_m_tp_week'),
                 )
 
             # TODO: Bring in constraints (Validation)
@@ -338,7 +336,6 @@ class HBProductionModel(HBProductionModelPaths):
 
     def _read_land_use_data(self,
                             year: int,
-                            verbose: bool,
                             ) -> nd.DVector:
         """
         Reads in the land use data for year and converts it to Dvector
@@ -347,9 +344,6 @@ class HBProductionModel(HBProductionModelPaths):
         ----------
         year:
             The year to get population data for.
-
-        verbose:
-            Passed into the DVector.
 
         Returns
         -------
@@ -386,7 +380,6 @@ class HBProductionModel(HBProductionModelPaths):
 
     def _generate_productions(self,
                               population: nd.DVector,
-                              verbose: bool,
                               ) -> nd.DVector:
         """
         Applies trip rate split on the given HB productions
@@ -394,10 +387,7 @@ class HBProductionModel(HBProductionModelPaths):
         Parameters
         ----------
         population:
-            Dvector containing the population.
-
-        verbose:
-            Whether to print a progress bar while applying the splits or not
+            DVector containing the population.
 
         Returns
         -------
@@ -644,7 +634,6 @@ class NHBProductionModel(NHBProductionModelPaths):
             export_fully_segmented: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
-            verbose: bool = False,
             ) -> None:
         """
         Runs the NHB Production model.
@@ -694,9 +683,6 @@ class NHBProductionModel(NHBProductionModelPaths):
             Whether to output reports while running. All reports will be
             written out to self.report_home.
 
-        verbose:
-            Whether to print progress bars during processing or not.
-
         Returns
         -------
         None
@@ -712,10 +698,10 @@ class NHBProductionModel(NHBProductionModelPaths):
 
             # ## GENERATE PURE DEMAND ## #
             self._logger.info("Loading the HB attraction data")
-            hb_attr_dvec = self._transform_attractions(year, verbose)
+            hb_attr_dvec = self._transform_attractions(year)
 
             self._logger.info("Applying trip rates")
-            pure_nhb_demand = self._generate_nhb_productions(hb_attr_dvec, verbose)
+            pure_nhb_demand = self._generate_nhb_productions(hb_attr_dvec)
 
             if export_nhb_pure_demand:
                 self._logger.info("Exporting NHB pure demand to disk")
@@ -776,6 +762,8 @@ class NHBProductionModel(NHBProductionModelPaths):
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
+                    lad_report_path=notem_segmented_paths.lad_report[year],
+                    lad_report_seg=nd.get_segmentation_level('nhb_p_m_tp_week'),
                 )
 
             # TODO: Bring in constraints (Validation)
@@ -799,7 +787,6 @@ class NHBProductionModel(NHBProductionModelPaths):
 
     def _transform_attractions(self,
                                year: int,
-                               verbose: bool,
                                ) -> nd.DVector:
         """
         Removes time period and adds tfn_at to HB attraction DVector
@@ -813,9 +800,6 @@ class NHBProductionModel(NHBProductionModelPaths):
         ----------
         year:
             The year to get HB attractions data for.
-
-        verbose:
-            Passed into the DVector.
 
         Returns
         -------
@@ -884,7 +868,6 @@ class NHBProductionModel(NHBProductionModelPaths):
 
     def _generate_nhb_productions(self,
                                   hb_attractions: nd.DVector,
-                                  verbose: bool,
                                   ) -> nd.DVector:
         """
         Applies NHB trip rates to hb_attractions
@@ -893,9 +876,6 @@ class NHBProductionModel(NHBProductionModelPaths):
         ----------
         hb_attractions:
             Dvector containing the data to apply the trip rates to.
-
-        verbose:
-            Whether to print a progress bar while applying the splits or not
 
         Returns
         -------

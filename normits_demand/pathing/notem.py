@@ -160,7 +160,6 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
     _by_lu_dir = "base_land_use"
     _fy_lu_dir = "future_land_use"
 
-    _by_pop_fname = "land_use_output_msoa.csv"
     _fy_pop_fname = "land_use_{year}_pop.csv"
     _fy_emp_fname = "land_use_{year}_emp.csv"
 
@@ -542,6 +541,7 @@ class NoTEMModelPaths:
     _segment_totals_report_name = "segment_totals"
     _ca_sector_report_name = "ca_sector_totals"
     _ie_sector_report_name = "ie_sector_totals"
+    _lad_report_name = "lad_totals"
 
     # Output Path Classes
     ExportPaths = collections.namedtuple(
@@ -551,7 +551,7 @@ class NoTEMModelPaths:
 
     ReportPaths = collections.namedtuple(
         typename='ReportPaths',
-        field_names='segment_total, ca_sector, ie_sector',
+        field_names='segment_total, ca_sector, ie_sector, lad_report',
     )
 
     # Define output fnames
@@ -633,6 +633,7 @@ class NoTEMModelPaths:
         segment_total_paths = dict()
         ca_sector_paths = dict()
         ie_sector_paths = dict()
+        lad_paths = dict()
 
         # Create the paths for each year
         for year in self.path_years:
@@ -648,10 +649,15 @@ class NoTEMModelPaths:
             fname = base_fname % (*fname_parts, year, self._ie_sector_report_name)
             ie_sector_paths[year] = os.path.join(self.report_home, fname)
 
+            # LAD Reports
+            fname = base_fname % (*fname_parts, year, self._lad_report_name)
+            lad_paths[year] = os.path.join(self.report_home, fname)
+
         return self.ReportPaths(
             segment_total=segment_total_paths,
             ca_sector=ca_sector_paths,
             ie_sector=ie_sector_paths,
+            lad_report=lad_paths,
         )
 
 

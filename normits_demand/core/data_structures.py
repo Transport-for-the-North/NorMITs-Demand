@@ -1703,6 +1703,7 @@ class DVector:
 
     def split_segmentation_like(self,
                                 other: DVector,
+                                zonal_average: bool = True,
                                 check_totals: bool = True,
                                 ) -> DVector:
         """
@@ -1719,6 +1720,11 @@ class DVector:
         other:
             The DVector to use to determine the segmentation to split in to,
             as well as the weights to use for the splits.
+
+        zonal_average:
+            Whether to use the zonal average of the splits. Most of the time
+            this will want to be True. If set to False, and self is then
+            balanced to other, both DVectors would be exactly the same.
 
         check_totals:
             Check that the total before and after the split is the same.
@@ -1754,8 +1760,12 @@ class DVector:
         dvec_data = dict.fromkeys(other.segmentation.segment_names)
         for in_seg_name, out_seg_names in split_dict.items():
             # Calculate the splitting factors
-            other_segs = [np.mean(other._data[s]) for s in out_seg_names]
-            split_factors = other_segs / np.sum(other_segs)
+            if zonal_average:
+                other_segs = [np.mean(other._data[s]) for s in out_seg_names]
+                split_factors = other_segs / np.sum(other_segs)
+            else:
+                other_segs = [other._data[s] for s in out_seg_names]
+                split_factors = other_segs / np.sum(other_segs, axis=0)
 
             # Get the original value
             self_seg = self._data[in_seg_name]
@@ -2086,6 +2096,8 @@ class DVector:
                              segment_totals_path: nd.PathLike,
                              ca_sector_path: nd.PathLike,
                              ie_sector_path: nd.PathLike,
+                             lad_report_path: nd.PathLike = None,
+                             lad_report_seg: nd.core.zoning.ZoningSystem = None,
                              ) -> None:
         """
         Writes segment, CA sector, and IE sector reports to disk
@@ -2101,10 +2113,23 @@ class DVector:
         ie_sector_path:
             Path to write the IE sector report to
 
+        lad_report_path:
+            Path to write the LAD report to
+
+        lad_report_seg:
+            The segmentation to output the LAD report at
+
         Returns
         -------
         None
         """
+        # Check that not just one argument has been set
+        if du.xor(lad_report_path is None, lad_report_seg is None):
+            raise ValueError(
+                "Only one of lad_report_path and lad_report_seg has been set. "
+                "Either both values need to be set, or neither."
+            )
+
         # Segment totals report
         df = self.sum_zoning().to_df()
         df.to_csv(segment_totals_path, index=False)
@@ -2118,6 +2143,15 @@ class DVector:
         ie_sectors = nd.get_zoning_system('ie_sector')
         dvec = self.translate_zoning(ie_sectors)
         dvec.to_df().to_csv(ie_sector_path, index=False)
+
+        if lad_report_seg is None:
+            return
+
+        # Segment by LAD segment total reports - 1 to 1, No weighting
+        lad = nd.get_zoning_system('lad_2020')
+        dvec = self.aggregate(lad_report_seg)
+        dvec = dvec.translate_zoning(lad)
+        dvec.to_df().to_csv(lad_report_path, index=False)
 
 
 class DVectorError(nd.NormitsDemandError):
