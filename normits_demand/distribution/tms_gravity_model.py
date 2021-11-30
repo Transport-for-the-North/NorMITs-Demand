@@ -25,6 +25,8 @@ import pandas as pd
 import normits_demand as nd
 from normits_demand import constants
 
+from normits_demand import cost
+
 from normits_demand.cost import utils as cost_utils2
 
 from normits_demand.utils import timing
@@ -102,18 +104,21 @@ class GravityModel(GravityModelExportPaths):
             init_params: pd.DataFrame,
             target_tld_dir: pd.DataFrame,
             cost_dir: nd.PathLike,
-            cost_function: str,
+            cost_function: cost.CostFunction,
             intrazonal_cost_infill: Optional[float] = 0.5,
             pa_val_col: Optional[str] = 'val',
             convergence_target: float = 0.95,
             fitting_loops: int = 100,
             furness_max_iters: int = 5000,
             furness_tol: float = 1.0,
-            init_param_1_col: str = 'init_param_a',
-            init_param_2_col: str = 'init_param_b',
+            init_param_cols: str = None,
             ):
         # Validate the trip origin
         trip_origin = checks.validate_trip_origin(trip_origin)
+
+        # If no cols given, get from the cost function
+        if init_param_cols is None:
+            init_param_cols = cost_function.parameter_names
 
         # Replace the overall log if it exists
         if trip_origin == 'hb':
@@ -214,9 +219,11 @@ class GravityModel(GravityModelExportPaths):
             # Make sure the columns we need do exist
             seg_init_params = pd_utils.reindex_cols(
                 df=seg_init_params,
-                columns=[init_param_1_col, init_param_2_col],
+                columns=init_param_cols,
                 dataframe_name='init_params',
             )
+
+            init_cost_params = {x: seg_init_params[x].squeeze() for x in init_param_cols}
 
             # Build the kwargs
             kwargs = unchanging_kwargs.copy()
@@ -224,8 +231,7 @@ class GravityModel(GravityModelExportPaths):
                 'segment_params': segment_params,
                 'seg_productions': seg_productions,
                 'seg_attractions': seg_attractions,
-                'init_param_a': seg_init_params[init_param_1_col].squeeze(),
-                'init_param_b': seg_init_params[init_param_2_col].squeeze(),
+                'init_cost_params': init_cost_params
             })
             kwarg_list.append(kwargs)
 
@@ -244,11 +250,10 @@ class GravityModel(GravityModelExportPaths):
                       running_segmentation: nd.core.segments.SegmentationLevel,
                       seg_productions: pd.DataFrame,
                       seg_attractions: pd.DataFrame,
-                      init_param_a: float,
-                      init_param_b: float,
+                      init_cost_params: Dict[str, float],
                       target_tld_dir: pd.DataFrame,
                       cost_dir: nd.PathLike,
-                      cost_function: str,
+                      cost_function: cost.CostFunction,
                       overall_log_path: nd.PathLike,
                       intrazonal_cost_infill: Optional[float] = 0.5,
                       convergence_target: float = 0.95,
@@ -323,7 +328,6 @@ class GravityModel(GravityModelExportPaths):
             running_log_path=log_path,
         )
 
-        init_cost_params = {'sigma': init_param_a, 'mu': init_param_b}
         optimal_cost_params = calib.calibrate(
             init_params=init_cost_params,
             max_iters=fitting_loops,
