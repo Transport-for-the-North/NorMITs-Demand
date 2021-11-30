@@ -15,12 +15,36 @@ import math
 import warnings
 
 from typing import Any
+from typing import Dict
 from typing import Union
 
 # Third Party
 import numpy as np
 
 # Local Imports
+
+
+def check_numeric(check_dict: Dict[str, Any]) -> None:
+    """Checks if check_dict values are floats or ints.
+
+    Parameters
+    ----------
+    check_dict:
+        A dictionary of argument names and argument values to check.
+        The names are used for the error if the value isn't a numeric.
+
+    Raises
+    ------
+    ValueError
+        If any of the parameters aren't floats or ints,
+        includes the parameter name in the message.
+    """
+    for name, val in check_dict.items():
+        if not isinstance(val, (int, float)):
+            raise ValueError(
+                "%s should be a scalar number (float or int) not %s"
+                % (name, type(val))
+            )
 
 
 def numpy_cast(x: Any, dtype: np.dtype):

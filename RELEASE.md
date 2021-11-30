@@ -35,6 +35,13 @@ Below, a brief summary of patches made since the previous version can be found.
   - Tram Model added which is able to integrate tram production and attraction
     vectors into NoTEM outputs, assuming tram trip were originally nested into
     NoTEM train trips
+  - Added a suite of reports so outputs of the tram model can be compared to
+    NoTEM outputs
+  - Similar to NoTEM, the Tram Model performs a spatial balance if the
+   attractions to the productions.
+- TMS Updates
+  - New gravity model calibration method added.
+  - Front end added to TMS similar to NoTEM.
 - When reading in pickled files, the `__version__` attribute will now be 
   checked (if it exists). It will be compared to the version of the code being
   run. If different, a warning will be raised.

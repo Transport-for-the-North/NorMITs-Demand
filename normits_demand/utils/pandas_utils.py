@@ -70,6 +70,9 @@ def reindex_cols(df: pd.DataFrame,
         If any of the given columns don't exists within df and throw_error is
         True.
     """
+    # Init
+    df = df.copy()
+
     if dataframe_name is None:
         dataframe_name = 'the given dataframe'
 
