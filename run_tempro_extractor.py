@@ -8,7 +8,8 @@ if __name__ == '__main__':
     # Config
     # TODO: some tying up params to funcs here
 
-    output_years = [2011, 2018, 2027, 2033, 2035, 2040, 2050]
+    output_years = [2011, 2018, 2027, 2033, 2035, 2038, 2040, 2045, 2050]
+    output_years = list(range(2011, 2051))
 
     get_planning_data = False
     get_car_ownership = False
@@ -44,6 +45,7 @@ if __name__ == '__main__':
     
     # Get trip ends
     if get_trip_ends:
+        # TODO: Add 'wait if open' code
         te_out = parser.get_trip_ends(trip_type=None,
                                       all_commute_hb=True,
                                       aggregate_car=True,
