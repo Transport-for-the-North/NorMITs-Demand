@@ -22,8 +22,9 @@ from normits_demand.pathing import NoTEMImportPaths
 
 # GLOBAL VARIABLES
 years = [2018, 2033, 2040, 2050]
+years = [2018]
 scenario = constants.SC01_JAM
-notem_iter = '9.2'
+notem_iter = '9.3'
 lu_drive = "I:/"
 by_iteration = "iter3e"
 fy_iteration = "iter3e"

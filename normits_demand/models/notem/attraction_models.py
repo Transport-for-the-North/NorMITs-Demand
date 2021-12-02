@@ -226,7 +226,6 @@ class HBAttractionModel(HBAttractionModelPaths):
             export_fully_segmented: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
-            verbose: bool = False,
             ) -> None:
         """
         Runs the HB Attraction model.
@@ -272,9 +271,6 @@ class HBAttractionModel(HBAttractionModelPaths):
             Whether to output reports while running. All reports will be
             written out to self.report_home.
 
-        verbose:
-            Whether to print progress bars during processing or not.
-
         Returns
         -------
         None
@@ -290,10 +286,10 @@ class HBAttractionModel(HBAttractionModelPaths):
 
             # ## GENERATE PURE ATTRACTIONS ## #
             self._logger.info("Loading the employment data")
-            emp_dvec = self._read_land_use_data(year, verbose=verbose)
+            emp_dvec = self._read_land_use_data(year)
 
             self._logger.info("Applying trip rates")
-            pure_attractions = self._generate_attractions(emp_dvec, verbose=verbose)
+            pure_attractions = self._generate_attractions(emp_dvec)
 
             if export_pure_attractions:
                 self._logger.info("Exporting pure attractions to disk")
@@ -319,7 +315,7 @@ class HBAttractionModel(HBAttractionModelPaths):
                     "Expected %f\n"
                     "Got %f"
                     % (pure_attractions.sum(), fully_segmented.sum())
-                )                
+                )
                 self._logger.warning(msg)
                 warnings.warn(msg)
 
@@ -330,6 +326,7 @@ class HBAttractionModel(HBAttractionModelPaths):
 
             # Control the attractions to the productions - this also adds in
             # some segmentation to bring it in line with the productions
+            self._logger.info("Balancing to productions")
             notem_segmented = self._attractions_balance(
                 a_dvec=fully_segmented,
                 p_dvec_path=self.production_balance_paths[year],
@@ -346,6 +343,8 @@ class HBAttractionModel(HBAttractionModelPaths):
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
+                    lad_report_path=notem_segmented_paths.lad_report[year],
+                    lad_report_seg=nd.get_segmentation_level('hb_p_m_tp_week'),
                 )
 
             # TODO: Bring in constraints (Validation)
@@ -367,10 +366,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         self._logger.info("HB Attraction Model took: %s" % time_taken)
         self._logger.info("HB Attraction Model Finished")        
 
-    def _read_land_use_data(self,
-                            year: int,
-                            verbose: bool,
-                            ) -> nd.DVector:
+    def _read_land_use_data(self, year: int) -> nd.DVector:
         """
         Reads in the land use data for year and converts it into a Dvector.
 
@@ -378,9 +374,6 @@ class HBAttractionModel(HBAttractionModelPaths):
         ----------
         year:
             The year to get attraction data for.
-
-        verbose:
-            Passed into the DVector.
 
         Returns
         -------
@@ -397,6 +390,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             find_similar=True,
         )
 
+        # TODO(BT): Remove this in Land Use 4.0 Update
         # Little hack until Land Use is updated
         if str(year) in list(emp):
             emp = emp.rename(columns={str(year): 'people'})
@@ -412,13 +406,9 @@ class HBAttractionModel(HBAttractionModelPaths):
             import_data=emp.rename(columns=self._seg_rename),
             zone_col="msoa_zone_id",
             val_col="people",
-            verbose=verbose,
         )
 
-    def _generate_attractions(self,
-                              emp_dvec: nd.DVector,
-                              verbose: bool = True,
-                              ) -> nd.DVector:
+    def _generate_attractions(self, emp_dvec: nd.DVector) -> nd.DVector:
         """
         Applies trip rates to the given HB employment.
 
@@ -426,9 +416,6 @@ class HBAttractionModel(HBAttractionModelPaths):
         ----------
         emp_dvec:
             Dvector containing the employment.
-
-        verbose:
-            Whether to print a progress bar while applying the splits or not.
 
         Returns
         -------
@@ -456,7 +443,6 @@ class HBAttractionModel(HBAttractionModelPaths):
             import_data=trip_rates.rename(columns=self._seg_rename),
             zone_col="msoa_zone_id",
             val_col="trip_rate",
-            verbose=verbose,
         )
 
         # ## MULTIPLY TOGETHER ## #
@@ -677,7 +663,6 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             export_nhb_pure_attractions: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
-            verbose: bool = False,
             ) -> None:
         """
         Runs the NHB Attraction model.
@@ -711,9 +696,6 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             Whether to output reports while running. All reports will be
             written out to self.report_home.
 
-        verbose:
-            Whether to print progress bars during processing or not.
-
         Returns
         -------
         None
@@ -728,7 +710,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
 
             # ## GENERATE PURE ATTRACTIONS ## #
             self._logger.info("Loading the HB attraction data")
-            pure_nhb_attr = self._create_nhb_attraction_data(year, verbose=verbose)
+            pure_nhb_attr = self._create_nhb_attraction_data(year)
 
             if export_nhb_pure_attractions:
                 self._logger.info("Exporting NHB pure attractions to disk")
@@ -760,6 +742,8 @@ class NHBAttractionModel(NHBAttractionModelPaths):
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
+                    lad_report_path=notem_segmented_paths.lad_report[year],
+                    lad_report_seg=nd.get_segmentation_level('nhb_p_m_tp_week'),
                 )
 
             # TODO: Bring in constraints (Validation)
@@ -783,7 +767,6 @@ class NHBAttractionModel(NHBAttractionModelPaths):
 
     def _create_nhb_attraction_data(self,
                                     year: int,
-                                    verbose: bool,
                                     ) -> nd.DVector:
         """
         Reads in HB attractions converts it into a NHB attractions Dvector.
@@ -797,9 +780,6 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         ----------
         year:
             The year to get HB attractions data for.
-
-        verbose:
-            Passed into the DVector.
 
         Returns
         -------
@@ -827,7 +807,6 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             import_data=hb_attr_notem_df,
             zone_col=hb_attr_notem.zoning_system.col_name,
             val_col="val",
-            verbose=verbose,
         )
 
     def _attractions_balance(self,

@@ -153,7 +153,6 @@ class NoTEM(NoTEMExportPaths):
             generate_nhb: bool = False,
             generate_nhb_production: bool = False,
             generate_nhb_attraction: bool = False,
-            verbose: bool = True,
             ) -> None:
         """
         Runs the notem trip end models based on the criteria given.
@@ -180,10 +179,6 @@ class NoTEM(NoTEMExportPaths):
 
         generate_nhb_attraction:
             Runs the non home based attraction trip end model only.
-
-        verbose:
-            Whether to print progress updates to the terminal while running
-            or not.
 
         Returns
         -------
@@ -215,22 +210,22 @@ class NoTEM(NoTEMExportPaths):
 
         # Run the models
         if generate_hb_production:
-            self._generate_hb_production(verbose)
+            self._generate_hb_production()
 
         if generate_hb_attraction:
-            self._generate_hb_attraction(verbose)
+            self._generate_hb_attraction()
 
         if generate_nhb_production:
-            self._generate_nhb_production(verbose)
+            self._generate_nhb_production()
 
         if generate_nhb_attraction:
-            self._generate_nhb_attraction(verbose)
+            self._generate_nhb_attraction()
 
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
         self._logger.info("NoTEM run complete! Took %s" % time_taken)
 
-    def _generate_hb_production(self, verbose: bool) -> None:
+    def _generate_hb_production(self) -> None:
         """
         Runs home based Production trip end models
         """
@@ -251,10 +246,9 @@ class NoTEM(NoTEMExportPaths):
             export_fully_segmented=False,
             export_notem_segmentation=True,
             export_reports=True,
-            verbose=verbose,
         )
 
-    def _generate_hb_attraction(self, verbose: bool) -> None:
+    def _generate_hb_attraction(self) -> None:
         """
         Runs the home based Attraction trip end model
         """
@@ -281,10 +275,9 @@ class NoTEM(NoTEMExportPaths):
             export_fully_segmented=False,
             export_notem_segmentation=True,
             export_reports=True,
-            verbose=verbose,
         )
 
-    def _generate_nhb_production(self, verbose: bool) -> None:
+    def _generate_nhb_production(self) -> None:
         """
         Runs the non-home based Production trip end model
         """
@@ -310,10 +303,9 @@ class NoTEM(NoTEMExportPaths):
             export_fully_segmented=False,
             export_notem_segmentation=True,
             export_reports=True,
-            verbose=verbose,
         )
 
-    def _generate_nhb_attraction(self, verbose: bool) -> None:
+    def _generate_nhb_attraction(self) -> None:
         """
         Runs non home based Attraction trip end models.
         """
@@ -343,5 +335,4 @@ class NoTEM(NoTEMExportPaths):
             export_nhb_pure_attractions=False,
             export_notem_segmentation=True,
             export_reports=True,
-            verbose=verbose,
         )

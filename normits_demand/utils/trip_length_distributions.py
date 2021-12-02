@@ -24,6 +24,27 @@ import pandas as pd
 import normits_demand as nd
 
 
+def calculate_average_trip_lengths(min_bounds: np.ndarray,
+                                   max_bounds: np.ndarray,
+                                   trip_lengths: np.ndarray,
+                                   trips: np.ndarray,
+                                   ) -> np.ndarray:
+    ave_trip_lengths = list()
+    for min_val, max_val in zip(min_bounds, max_bounds):
+        band_mask = (trip_lengths >= min_val) & (trip_lengths < max_val)
+        band_distance = (trips * band_mask * trip_lengths).sum()
+        band_trips = (trips * band_mask).sum()
+
+        if band_trips == 0:
+            average_tl = 0
+        else:
+            average_tl = band_distance / band_trips
+
+        ave_trip_lengths.append(average_tl)
+
+    return np.array(ave_trip_lengths)
+
+
 def get_trip_length_distributions(import_dir: nd.PathLike,
                                   segment_params: nd.SegmentParams,
                                   trip_origin: str,
@@ -145,8 +166,8 @@ def get_trip_length_by_band(band_atl,
         band_atl['min'] = band_atl['lower']*1.61
         band_atl['max'] = band_atl['upper']*1.61
 
-    dist_mat = []
-    bs_mat = []
+    dist_mat = list()
+    bs_mat = list()
 
     # Loop over rows in band_atl
     for index, row in band_atl.iterrows():
@@ -201,11 +222,10 @@ def get_trip_length(distance, demand):
     distance = distance matrix as numpy ndarray
     internal_pa = demand as
     """
-
     # TODO: Just copy that bit below
     global_trips = demand.sum()
-    global_distance = demand * distance
+    global_distance = (demand * distance).sum()
 
-    global_atl = global_distance.sum() / global_trips
+    global_atl = global_distance / global_trips
 
     return global_atl

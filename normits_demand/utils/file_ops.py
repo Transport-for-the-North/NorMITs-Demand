@@ -268,7 +268,7 @@ def read_df(path: nd.PathLike,
         if index_col is not None and not is_index_set(df):
             df = df.set_index(list(df)[index_col])
 
-        # Unset the index col if it is set
+        # Unset the index col if it is set - this is how pd.read_csv() works
         if index_col is None and df.index.name is not None:
             df = df.reset_index()
 
@@ -744,6 +744,10 @@ def read_pickle(path: nd.PathLike) -> Any:
     # Read in
     with open(path, 'rb') as f:
         obj = pickle.load(f)
+
+    # If its a DVector, reset the process count
+    if isinstance(obj, nd.core.data_structures.DVector):
+        obj._process_count = nd.constants.PROCESS_COUNT
 
     # If no version, return now
     if not hasattr(obj, '__version__'):

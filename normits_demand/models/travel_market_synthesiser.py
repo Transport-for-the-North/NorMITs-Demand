@@ -48,8 +48,7 @@ class TravelMarketSynthesiser(TMSExportPaths):
                  nhb_running_segmentation: nd.core.segments.SegmentationLevel,
                  iteration_name: str,
                  zoning_system: nd.core.zoning.ZoningSystem,
-                 external_model_arg_builder: tms_arg_builders.ExternalModelArgumentBuilderBase,
-                 gravity_model_arg_builder: tms_arg_builders.GravityModelArgumentBuilderBase,
+                 tms_arg_builder: tms_arg_builders.TMSArgumentBuilderBase,
                  export_home: nd.PathLike,
                  process_count: int = constants.PROCESS_COUNT,
                  ):
@@ -68,8 +67,9 @@ class TravelMarketSynthesiser(TMSExportPaths):
         self.process_count = process_count
 
         # TODO(BT): Validate this is correct type
-        self.external_model_arg_builder = external_model_arg_builder
-        self.gravity_model_arg_builder = gravity_model_arg_builder
+        self.tms_arg_builder = tms_arg_builder
+        self.external_model_arg_builder = tms_arg_builder.external_model_arg_builder
+        self.gravity_model_arg_builder = tms_arg_builder.gravity_model_arg_builder
 
         # Create a logger
         logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
@@ -224,27 +224,19 @@ class TravelMarketSynthesiser(TMSExportPaths):
         args = self.external_model_arg_builder.build_hb_arguments()
 
         self._logger.info("Executing a home-based run of external model")
-        external_model.run(
-            trip_origin='hb',
-            running_segmentation=self.hb_running_segmentation,
-            **args,
-        )
+        external_model.run(trip_origin='hb', **args)
 
         self._logger.info("Building non-home-based arguments for external model")
         args = self.external_model_arg_builder.build_nhb_arguments()
 
         self._logger.info("Executing a non-home-based run of external model")
-        external_model.run(
-            trip_origin='nhb',
-            running_segmentation=self.nhb_running_segmentation,
-            **args,
-        )
+        external_model.run(trip_origin='nhb', **args)
 
         self._logger.info("External Model Done!")
 
     def run_gravity_model(self):
         self._logger.info("Initialising the Gravity Model")
-        gravity_model = distribution.GravityModel(
+        gravity_model = distribution.TMSGravityModel(
             year=self.year,
             running_mode=self.running_mode,
             zoning_system=self.zoning_system,
@@ -255,21 +247,13 @@ class TravelMarketSynthesiser(TMSExportPaths):
         args = self.gravity_model_arg_builder.build_hb_arguments()
 
         self._logger.info("Executing a home-based run of gravity model")
-        gravity_model.run(
-            trip_origin='hb',
-            running_segmentation=self.hb_running_segmentation,
-            **args,
-        )
+        gravity_model.run(trip_origin='hb', **args)
 
         self._logger.info("Building non-home-based arguments for gravity model")
         args = self.gravity_model_arg_builder.build_nhb_arguments()
 
         self._logger.info("Executing a non-home-based run of gravity model")
-        gravity_model.run(
-            trip_origin='nhb',
-            running_segmentation=self.nhb_running_segmentation,
-            **args,
-        )
+        gravity_model.run(trip_origin='nhb', **args)
 
         self._logger.info("Gravity Model Done!")
 
@@ -298,36 +282,15 @@ class TravelMarketSynthesiser(TMSExportPaths):
 
         # ## CONVERT HB PA TO OD ## #
         self._logger.info("Converting HB PA matrices to OD")
-        # Set up the segmentation params
-        # TODO(BT): UPDATE build_od_from_fh_th_factors() to use segmentation levels
-        seg_level = 'tms'
-        seg_params = {
-            'p_needed': self.hb_running_segmentation.segments['p'].unique(),
-            'm_needed': self.hb_running_segmentation.segments['m'].unique(),
-        }
-        if 'ca' in self.hb_running_segmentation.segment_names:
-            seg_params.update({
-                'ca_needed': self.hb_running_segmentation.segments['ca'].unique(),
-            })
-
-        # TODO(BT): Build import paths for TMS!
-        if self.running_mode in [nd.Mode.CAR, nd.Mode.BUS]:
-            fh_th_factors_dir = r'I:\NorMITs Demand\import\noham\post_me_tour_proportions\fh_th_factors'
-        elif self.running_mode in [nd.Mode.RAIL]:
-            fh_th_factors_dir = r'I:\NorMITs Demand\import\norms\post_me_tour_proportions\fh_th_factors'
-        else:
-            raise ValueError("Uh Oh!")
-
+        kwargs = self.tms_arg_builder.build_pa_to_od_arguments()
         pa_to_od.build_od_from_fh_th_factors(
             pa_import=self.export_paths.full_pa_dir,
             od_export=self.export_paths.full_od_dir,
-            fh_th_factors_dir=fh_th_factors_dir,
             pa_matrix_desc='synthetic_pa',
             od_to_matrix_desc='synthetic_od_to',
             od_from_matrix_desc='synthetic_od_from',
             years_needed=[self.year],
-            seg_level=seg_level,
-            seg_params=seg_params,
+            **kwargs
         )
 
         # ## MOVE NHB TO OD DIR ## #
@@ -402,6 +365,65 @@ class TravelMarketSynthesiser(TMSExportPaths):
                 method='to_vehicles',
                 out_format='wide',
                 hourly_average=True,
+            )
+
+        elif self.running_mode == nd.Mode.BUS:
+            # Compile to NoHAM format
+            compile_params_paths = matrix_processing.build_compile_params(
+                import_dir=self.export_paths.full_od_dir,
+                export_dir=self.export_paths.compiled_od_dir,
+                matrix_format='synthetic_od',
+                years_needed=[self.year],
+                m_needed=m_needed,
+                tp_needed=tp_needed,
+            )
+
+            matrix_processing.compile_matrices(
+                mat_import=self.export_paths.full_od_dir,
+                mat_export=self.export_paths.compiled_od_dir,
+                compile_params_path=compile_params_paths[0],
+            )
+
+            # TODO(BT): Build in TMS imports!
+            car_occupancies = pd.read_csv(os.path.join(
+                r'I:\NorMITs Demand\import',
+                'vehicle_occupancies',
+                'bus_vehicle_occupancies.csv',
+            ))
+
+            # Need to convert into hourly average PCU for noham
+            vehicle_occupancy_utils.people_vehicle_conversion(
+                mat_import=self.export_paths.compiled_od_dir,
+                mat_export=self.export_paths.compiled_od_dir_pcu,
+                car_occupancies=car_occupancies,
+                mode=m_needed[0],
+                method='to_vehicles',
+                out_format='wide',
+                hourly_average=True,
+            )
+
+        elif self.running_mode == nd.Mode.TRAIN:
+
+            ## COMBINE INTERNAL AND EXTERNAL MATRICES ## #
+            self._logger.info("Recombining internal and external matrices")
+            matrix_processing.recombine_internal_external(
+                internal_import=self.gravity_model.export_paths.distribution_dir,
+                external_import=self.external_model.export_paths.external_distribution_dir,
+                full_export=self.export_paths.full_pa_dir,
+                force_compress_out=True,
+                years=[self.year],
+            )
+
+            self._logger.info("Compiling NoRMS VDM Format")
+            matrix_processing.compile_norms_to_vdm(
+                mat_import=self.export_paths.full_pa_dir,
+                mat_export=self.export_paths.compiled_pa_dir,
+                params_export=self.export_paths.compiled_pa_dir,
+                year=self.year,
+                m_needed=m_needed,
+                internal_zones=self.zoning_system.internal_zones.tolist(),
+                external_zones=self.zoning_system.internal_zones.tolist(),
+                matrix_format='synthetic_pa',
             )
 
         else:

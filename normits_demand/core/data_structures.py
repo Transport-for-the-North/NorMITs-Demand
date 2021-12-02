@@ -238,7 +238,6 @@ class DVector:
                  df_chunk_size: Optional[int] = None,
                  infill: Optional[Any] = 0,
                  process_count: Optional[int] = consts.PROCESS_COUNT,
-                 verbose: Optional[bool] = False,
                  ) -> None:
         """
         Validates the input arguments and creates a DVector
@@ -298,10 +297,6 @@ class DVector:
             would be os.cpu_count() - 2. If set to zero, multiprocessing
             will not be used.
             Defaults to consts.PROCESS_COUNT.
-
-        verbose:
-            How chatty to be while processing things. Mostly used in debugging
-            and should be set to False usually.
         """
         # Validate arguments
         if zoning_system is not None:
@@ -323,7 +318,6 @@ class DVector:
         self._zoning_system = zoning_system
         self._segmentation = segmentation
         self._time_format = self._validate_time_format(time_format)
-        self.verbose = verbose
         self._df_chunk_size = self._chunk_size if df_chunk_size is None else df_chunk_size
 
         # Define multiprocessing arguments
@@ -359,6 +353,10 @@ class DVector:
             )
 
     # SETTERS AND GETTERS
+    @property
+    def val_col(self):
+        return self._val_col
+
     @property
     def zoning_system(self):
         return self._zoning_system
@@ -464,7 +462,6 @@ class DVector:
             time_format=self._choose_time_format(other),
             import_data=dvec_data,
             process_count=self.process_count,
-            verbose=self.verbose,
         )
 
     def copy(self) -> DVector:
@@ -475,7 +472,6 @@ class DVector:
             time_format=self._time_format,
             import_data=self._data,
             process_count=self.process_count,
-            verbose=self.verbose,
         )
 
     # CUSTOM METHODS
@@ -1032,6 +1028,82 @@ class DVector:
 
         return dvec_data
 
+    def reduce(self,
+               out_segmentation: nd.core.segments.SegmentationLevel,
+               check_same: bool = True,
+               ):
+        """
+        Reduce (by summing) this Dvector into out_segmentation
+
+        A definition of how to reduce from self.segmentation to
+        out_segmentation must exist, otherwise a SegmentationError will be
+        thrown.
+        Reduce operations are where some segments in self.segmentation are
+        combined to make less segments, but with the same total
+
+        Parameters
+        ----------
+        out_segmentation:
+            The segmentation to reduce into.
+
+        check_same:
+            Whether to check if the DVector totals before and after
+            reduce are the same or not. If they are not the same (or
+            very similar) a warning will be given.
+
+        Returns
+        -------
+        reduced_DVector:
+            a new dvector containing the same data, but reduced to
+            out_segmentation.
+
+        Raises
+        ------
+        ValueError:
+            if out_segmentation is not the correct type
+        """
+        # Validate inputs
+        if not isinstance(out_segmentation, nd.core.segments.SegmentationLevel):
+            raise ValueError(
+                "out_segmentation is not the correct type. "
+                "Expected SegmentationLevel, got %s"
+                % type(out_segmentation)
+            )
+
+        # Get the reduction dictionary
+        reduce_dict = self.segmentation.reduce(out_segmentation)
+
+        # Reduce!
+        # TODO(BT): Add optional multiprocessing if reduce_dict is big enough
+        dvec_data = dict.fromkeys(reduce_dict.keys())
+        for out_seg_name, in_seg_names in reduce_dict.items():
+            in_lst = [self._data[x].flatten() for x in in_seg_names]
+            dvec_data[out_seg_name] = np.sum(in_lst, axis=0)
+
+        reduced_dvec = DVector(
+            zoning_system=self.zoning_system,
+            segmentation=out_segmentation,
+            time_format=self.time_format,
+            import_data=dvec_data,
+            process_count=self.process_count,
+        )
+
+        if not check_same:
+            return reduced_dvec
+
+        # Check that we haven't dropped any values during aggregation
+        if not self.sum_is_close(reduced_dvec):
+            warnings.warn(
+                "Total value of DVector is different before and after "
+                "reduction. Have the reduce segmentations and methods "
+                "been defined correctly?\n"
+                "Expected %f\n"
+                "Got %f"
+                % (self.sum(), reduced_dvec.sum())
+            )
+
+        return reduced_dvec
+
     def aggregate(self,
                   out_segmentation: core.SegmentationLevel,
                   split_tfntt_segmentation: bool = False,
@@ -1064,6 +1136,11 @@ class DVector:
         aggregated_DVector:
             a new dvector containing the same data, but aggregated to
             out_segmentation.
+
+        Raises
+        ------
+        ValueError:
+            if out_segmentation is not the correct type
         """
         # Validate inputs
         if not isinstance(out_segmentation, nd.core.segments.SegmentationLevel):
@@ -1092,7 +1169,6 @@ class DVector:
             time_format=self.time_format,
             import_data=dvec_data,
             process_count=self.process_count,
-            verbose=self.verbose,
         )
 
         if not check_same:
@@ -1205,7 +1281,6 @@ class DVector:
             time_format=self._choose_time_format(other),
             import_data=dvec_data,
             process_count=self.process_count,
-            verbose=self.verbose,
         )
 
     def sum_is_close(self,
@@ -1314,6 +1389,10 @@ class DVector:
                 "not have a zoning system to begin with."
             )
 
+        # If we're translating to the same thing, return a copy
+        if self.zoning_system == new_zoning:
+            return self.copy()
+
         # Get translation
         translation = self.zoning_system.translate(new_zoning, weighting)
 
@@ -1363,7 +1442,6 @@ class DVector:
             time_format=self.time_format,
             import_data=dvec_data,
             process_count=self.process_count,
-            verbose=self.verbose,
         )
 
     def expand_segmentation(self,
@@ -1423,7 +1501,6 @@ class DVector:
             segmentation=return_seg,
             import_data=dvec_data,
             process_count=self.process_count,
-            verbose=self.verbose,
         )
 
         # Make sure we're not dropping any demand
@@ -1485,7 +1562,6 @@ class DVector:
             time_format=self.time_format,
             import_data=dvec_data,
             process_count=self.process_count,
-            verbose=self.verbose,
         )
 
     def split_tfntt_segmentation(self,
@@ -1556,11 +1632,79 @@ class DVector:
             time_format=self.time_format,
             import_data=dvec_data,
             process_count=self.process_count,
-            verbose=self.verbose,
+        )
+
+    def duplicate_segment_like(self,
+                               segment_dict: nd.SegmentParams,
+                               like_segment_dict: nd.SegmentParams,
+                               out_segmentation: core.SegmentationLevel,
+                               ) -> DVector:
+        """
+        Duplicates segments to create out_segmentation
+
+        Using the segment, and its children, defined by like_segment_dict the
+        segment (and children) defined by segment_dict will be created. This
+        should create out_segmentation.
+
+        Parameters
+        ----------
+        segment_dict:
+            A dictionary defining the segment to create. This should be
+            defined as {segment_key: segment_value} pairs.
+
+        like_segment_dict:
+            A dictionary defining the segment to copy when creating the
+            segment at segment_dict. The segment defined should be of the
+            same specificity as segment_dict, i.e. contain the same segment
+            keys. This should be defined as {segment_key: segment_value} pairs.
+
+        out_segmentation:
+            The SegmentationLevel that the output DVector should have. This
+            will be the result of duplicating the segment of self with
+            segment_dict. Self.segmentation needs to be a subset of
+            out_segmentation.
+
+        Returns
+        -------
+        new_dvector:
+            A new DVector with the values at like_segment_dict duplicated
+            to create new segments at segment_dict.
+
+        Raises
+        ------
+        ValueError:
+            If the given parameters are not the correct types
+
+        SegmentationError:
+            If the segmentation cannot be split. This DVector must be
+            in a segmentation that is a subset of out_segmentation.
+        """
+
+        # Get the dictionary defining how to duplicate
+        dupe_dict = self.segmentation.duplicate_like(
+            segment_dict=segment_dict,
+            like_segment_dict=like_segment_dict,
+            out_segmentation=out_segmentation,
+        )
+
+        # Duplicate into new df
+        # TODO(BT): Add optional multiprocessing if dupe_dict is big enough
+        dvec_data = dict.fromkeys(out_segmentation.segment_names)
+        for out_seg_name, in_seg_name, in dupe_dict.items():
+            dvec_data[out_seg_name] = self._data[in_seg_name]
+
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=out_segmentation,
+            time_format=self.time_format,
+            import_data=dvec_data,
+            process_count=self.process_count,
         )
 
     def split_segmentation_like(self,
                                 other: DVector,
+                                zonal_average: bool = True,
+                                check_totals: bool = True,
                                 ) -> DVector:
         """
         Splits this DVector segmentation into other.segmentation
@@ -1576,6 +1720,14 @@ class DVector:
         other:
             The DVector to use to determine the segmentation to split in to,
             as well as the weights to use for the splits.
+
+        zonal_average:
+            Whether to use the zonal average of the splits. Most of the time
+            this will want to be True. If set to False, and self is then
+            balanced to other, both DVectors would be exactly the same.
+
+        check_totals:
+            Check that the total before and after the split is the same.
 
         Returns
         -------
@@ -1608,8 +1760,12 @@ class DVector:
         dvec_data = dict.fromkeys(other.segmentation.segment_names)
         for in_seg_name, out_seg_names in split_dict.items():
             # Calculate the splitting factors
-            other_segs = [np.mean(other._data[s]) for s in out_seg_names]
-            split_factors = other_segs / np.sum(other_segs)
+            if zonal_average:
+                other_segs = [np.mean(other._data[s]) for s in out_seg_names]
+                split_factors = other_segs / np.sum(other_segs)
+            else:
+                other_segs = [other._data[s] for s in out_seg_names]
+                split_factors = other_segs / np.sum(other_segs, axis=0)
 
             # Get the original value
             self_seg = self._data[in_seg_name]
@@ -1618,14 +1774,25 @@ class DVector:
             for name, factor in zip(out_seg_names, split_factors):
                 dvec_data[name] = self_seg * factor
 
-        return DVector(
+        split_dvec = DVector(
             zoning_system=self.zoning_system,
             segmentation=other.segmentation,
             time_format=self._choose_time_format(other),
             import_data=dvec_data,
             process_count=self.process_count,
-            verbose=self.verbose,
         )
+
+        # Check that we haven't dropped anything
+        if check_totals and not self.sum_is_close(split_dvec):
+            raise ValueError(
+                "Error when expanding DVector. Before and after totals do "
+                "not match\n"
+                "Before: %f\n"
+                "After:  %f"
+                % (self.sum(), split_dvec.sum())
+            )
+
+        return split_dvec
 
     def _balance_at_segments_internal(self,
                                       other: DVector,
@@ -1808,7 +1975,6 @@ class DVector:
             time_format=self.time_format,
             import_data=dvec_data,
             process_count=self.process_count,
-            verbose=self.verbose,
         )
 
     def sum_zoning(self) -> DVector:
@@ -1860,7 +2026,6 @@ class DVector:
             time_format=self.time_format,
             import_data=dict(zip(keys, values)),
             process_count=self.process_count,
-            verbose=self.verbose,
         )
 
     def convert_time_format(self,
@@ -1925,13 +2090,14 @@ class DVector:
             time_format=new_time_format,
             import_data=dvec_data,
             process_count=self.process_count,
-            verbose=self.verbose,
         )
 
     def write_sector_reports(self,
                              segment_totals_path: nd.PathLike,
                              ca_sector_path: nd.PathLike,
                              ie_sector_path: nd.PathLike,
+                             lad_report_path: nd.PathLike = None,
+                             lad_report_seg: nd.core.zoning.ZoningSystem = None,
                              ) -> None:
         """
         Writes segment, CA sector, and IE sector reports to disk
@@ -1947,23 +2113,45 @@ class DVector:
         ie_sector_path:
             Path to write the IE sector report to
 
+        lad_report_path:
+            Path to write the LAD report to
+
+        lad_report_seg:
+            The segmentation to output the LAD report at
+
         Returns
         -------
         None
         """
+        # Check that not just one argument has been set
+        if du.xor(lad_report_path is None, lad_report_seg is None):
+            raise ValueError(
+                "Only one of lad_report_path and lad_report_seg has been set. "
+                "Either both values need to be set, or neither."
+            )
+
         # Segment totals report
         df = self.sum_zoning().to_df()
         df.to_csv(segment_totals_path, index=False)
 
-        # Segment by CA Sector total reports
+        # Segment by CA Sector total reports - 1 to 1, No weighting
         tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-        df = self.translate_zoning(tfn_ca_sectors)
-        df.to_df().to_csv(ca_sector_path, index=False)
+        dvec = self.translate_zoning(tfn_ca_sectors)
+        dvec.to_df().to_csv(ca_sector_path, index=False)
 
-        # Segment by IE Sector total reports
+        # Segment by IE Sector total reports - 1 to 1, No weighting
         ie_sectors = nd.get_zoning_system('ie_sector')
-        df = self.translate_zoning(ie_sectors).to_df()
-        df.to_csv(ie_sector_path, index=False)
+        dvec = self.translate_zoning(ie_sectors)
+        dvec.to_df().to_csv(ie_sector_path, index=False)
+
+        if lad_report_seg is None:
+            return
+
+        # Segment by LAD segment total reports - 1 to 1, No weighting
+        lad = nd.get_zoning_system('lad_2020')
+        dvec = self.aggregate(lad_report_seg)
+        dvec = dvec.translate_zoning(lad)
+        dvec.to_df().to_csv(lad_report_path, index=False)
 
 
 class DVectorError(nd.NormitsDemandError):
