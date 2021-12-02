@@ -35,6 +35,7 @@ tms_import_home = r"I:\NorMITs Demand\import"
 tms_export_home = r"E:\NorMITs Demand\TMS"
 notem_iteration_name = '9.3'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
+tram_export_home = r"I:\NorMITs Demand\Tram"
 cache_path = "E:/tms_cache"
 
 
@@ -43,10 +44,11 @@ def main():
     # mode = nd.Mode.BUS
     mode = nd.Mode.TRAIN
 
-    use_tram = False
+    use_tram = True
 
     if mode == nd.Mode.CAR:
-        zoning_system = nd.get_zoning_system('noham')
+        zoning_system = nd.get_zoning_system('msoa')
+        # zoning_system = nd.get_zoning_system('noham')
         gm_tld_name = 'north/p_m'
         internal_tld_name = 'north/p_m'
         external_tld_name = 'gb/p_m'
@@ -82,8 +84,8 @@ def main():
         nhb_cost_type = 'tp'
 
     elif mode == nd.Mode.TRAIN:
-        zoning_system = nd.get_zoning_system('msoa')
-        # zoning_system = nd.get_zoning_system('norms')
+        # zoning_system = nd.get_zoning_system('msoa')
+        zoning_system = nd.get_zoning_system('norms')
         gm_tld_name = 'north/p_m_ca_train_bands'
         internal_tld_name = 'north/p_m_ca_train_bands'
         external_tld_name = 'gb/p_m_ca_train_bands'
@@ -118,59 +120,16 @@ def main():
             export_home=tms_export_home,
         )
 
-    # ## BUILD TRIP ENDS ## #
-    if use_tram:
-        raise NotImplementedError()
-
-    else:
-        notem = nd.pathing.NoTEMExportPaths(
-            path_years=[base_year],
-            scenario=scenario,
-            iteration_name=notem_iteration_name,
-            export_home=notem_export_home,
-        )
-        hb_productions_path = notem.hb_production.export_paths.notem_segmented[base_year]
-        hb_attractions_path = notem.hb_attraction.export_paths.notem_segmented[base_year]
-        nhb_productions_path = notem.nhb_production.export_paths.notem_segmented[base_year]
-        nhb_attractions_path = notem.nhb_attraction.export_paths.notem_segmented[base_year]
-
-    # TODO(BT): Should we make this a NoTEM output tool?
-    base_fname = "%s_%s_%s.pkl"
-    hbp_path = os.path.join(cache_path, base_fname % ('hbp', zoning_system.name, mode.value))
-    hba_path = os.path.join(cache_path, base_fname % ('hba', zoning_system.name, mode.value))
-    nhbp_path = os.path.join(cache_path, base_fname % ('nhbp', zoning_system.name, mode.value))
-    nhba_path = os.path.join(cache_path, base_fname % ('nhba', zoning_system.name, mode.value))
-
-    print("Getting the Production/Attraction Vectors...")
-    if not os.path.exists(hbp_path) or not os.path.exists(hba_path):
-        hb_productions, hb_attractions = import_pa(
-            production_import_path=hb_productions_path,
-            attraction_import_path=hb_attractions_path,
-            agg_segmentation=hb_agg_seg,
-            out_segmentation=hb_running_seg,
-            zoning_system=zoning_system,
-            trip_origin='hb',
-        )
-        hb_productions.to_pickle(hbp_path)
-        hb_attractions.to_pickle(hba_path)
-    else:
-        hb_productions = nd.read_pickle(hbp_path)
-        hb_attractions = nd.read_pickle(hba_path)
-
-    if not os.path.exists(nhbp_path) or not os.path.exists(nhba_path):
-        nhb_productions, nhb_attractions = import_pa(
-            production_import_path=nhb_productions_path,
-            attraction_import_path=nhb_attractions_path,
-            agg_segmentation=nhb_agg_seg,
-            out_segmentation=nhb_running_seg,
-            zoning_system=zoning_system,
-            trip_origin='nhb',
-        )
-        nhb_productions.to_pickle(nhbp_path)
-        nhb_attractions.to_pickle(nhba_path)
-    else:
-        nhb_productions = nd.read_pickle(nhbp_path)
-        nhb_attractions = nd.read_pickle(nhba_path)
+    # ## GET TRIP ENDS ## #
+    hb_productions, hb_attractions, nhb_productions, nhb_attractions = build_trip_ends(
+        use_tram=use_tram,
+        zoning_system=zoning_system,
+        mode=mode,
+        hb_agg_seg=hb_agg_seg,
+        hb_running_seg=hb_running_seg,
+        nhb_agg_seg=nhb_agg_seg,
+        nhb_running_seg=nhb_running_seg,
+    )
 
     # ## BUILD MODEL SPECIFIC KWARGS ## #
     external_kwargs = {
@@ -220,7 +179,7 @@ def main():
 
     tms.run(
         run_all=False,
-        run_external_model=False,
+        run_external_model=True,
         run_gravity_model=True,
         run_pa_matrix_reports=False,
         run_pa_to_od=False,
@@ -230,12 +189,99 @@ def main():
     tms.compile_to_assignment_format()
 
 
+def build_trip_ends(use_tram,
+                    zoning_system,
+                    mode,
+                    hb_agg_seg,
+                    hb_running_seg,
+                    nhb_agg_seg,
+                    nhb_running_seg,
+                    ):
+    if use_tram:
+        tram = nd.pathing.TramExportPaths(
+            path_years=[base_year],
+            scenario=scenario,
+            iteration_name=notem_iteration_name,
+            export_home=tram_export_home,
+        )
+        hb_productions_path = tram.hb_production.export_paths.notem_segmented[base_year]
+        hb_attractions_path = tram.hb_attraction.export_paths.notem_segmented[base_year]
+        nhb_productions_path = tram.nhb_production.export_paths.notem_segmented[base_year]
+        nhb_attractions_path = tram.nhb_attraction.export_paths.notem_segmented[base_year]
+
+        base_fname = "%s_%s_%s.pkl"
+        hbp_path = os.path.join(cache_path, base_fname % ('hbp_tram', zoning_system.name, mode.value))
+        hba_path = os.path.join(cache_path, base_fname % ('hba_tram', zoning_system.name, mode.value))
+        nhbp_path = os.path.join(cache_path, base_fname % ('nhbp_tram', zoning_system.name, mode.value))
+        nhba_path = os.path.join(cache_path, base_fname % ('nhba_tram', zoning_system.name, mode.value))
+
+    else:
+        notem = nd.pathing.NoTEMExportPaths(
+            path_years=[base_year],
+            scenario=scenario,
+            iteration_name=notem_iteration_name,
+            export_home=notem_export_home,
+        )
+        hb_productions_path = notem.hb_production.export_paths.notem_segmented[base_year]
+        hb_attractions_path = notem.hb_attraction.export_paths.notem_segmented[base_year]
+        nhb_productions_path = notem.nhb_production.export_paths.notem_segmented[base_year]
+        nhb_attractions_path = notem.nhb_attraction.export_paths.notem_segmented[base_year]
+
+        # TODO(BT): Should we make this a NoTEM output tool?
+        base_fname = "%s_%s_%s.pkl"
+        hbp_path = os.path.join(cache_path, base_fname % ('hbp', zoning_system.name, mode.value))
+        hba_path = os.path.join(cache_path, base_fname % ('hba', zoning_system.name, mode.value))
+        nhbp_path = os.path.join(cache_path, base_fname % ('nhbp', zoning_system.name, mode.value))
+        nhba_path = os.path.join(cache_path, base_fname % ('nhba', zoning_system.name, mode.value))
+
+    print("Getting the Production/Attraction Vectors...")
+    if not os.path.exists(hbp_path) or not os.path.exists(hba_path):
+        hb_productions, hb_attractions = import_pa(
+            production_import_path=hb_productions_path,
+            attraction_import_path=hb_attractions_path,
+            agg_segmentation=hb_agg_seg,
+            out_segmentation=hb_running_seg,
+            zoning_system=zoning_system,
+            trip_origin='hb',
+            use_tram=use_tram,
+        )
+        hb_productions.to_pickle(hbp_path)
+        hb_attractions.to_pickle(hba_path)
+    else:
+        hb_productions = nd.read_pickle(hbp_path)
+        hb_attractions = nd.read_pickle(hba_path)
+
+    if not os.path.exists(nhbp_path) or not os.path.exists(nhba_path):
+        nhb_productions, nhb_attractions = import_pa(
+            production_import_path=nhb_productions_path,
+            attraction_import_path=nhb_attractions_path,
+            agg_segmentation=nhb_agg_seg,
+            out_segmentation=nhb_running_seg,
+            zoning_system=zoning_system,
+            trip_origin='nhb',
+            use_tram=use_tram,
+        )
+        nhb_productions.to_pickle(nhbp_path)
+        nhb_attractions.to_pickle(nhba_path)
+    else:
+        nhb_productions = nd.read_pickle(nhbp_path)
+        nhb_attractions = nd.read_pickle(nhba_path)
+
+    return (
+        hb_productions,
+        hb_attractions,
+        nhb_productions,
+        nhb_attractions,
+    )
+
+
 def import_pa(production_import_path,
               attraction_import_path,
               agg_segmentation,
               out_segmentation,
               zoning_system,
               trip_origin,
+              use_tram,
               ) -> Tuple[nd.DVector, nd.DVector]:
     """
     This function imports productions and attractions from given paths.
@@ -262,13 +308,18 @@ def import_pa(production_import_path,
     [1] attractions:
         Mainland GB attractions.
     """
+    model_name = 'tram' if use_tram else 'notem'
+
     # Determine the required segmentation
     if trip_origin == 'hb':
         reduce_seg = None
-        subset_seg = nd.get_segmentation_level('notem_hb_output_wday')
+        subset_name = '%s_hb_output_wday'
+        subset_seg = nd.get_segmentation_level(subset_name % model_name)
     elif trip_origin == 'nhb':
-        reduce_seg = nd.get_segmentation_level('notem_nhb_output_reduced')
-        subset_seg = nd.get_segmentation_level('notem_nhb_output_reduced_wday')
+        reduce_name = '%s_nhb_output_reduced'
+        reduce_seg = nd.get_segmentation_level(reduce_name % model_name)
+        subset_name = '%s_nhb_output_reduced_wday'
+        subset_seg = nd.get_segmentation_level(subset_name % model_name)
     else:
         raise ValueError("Invalid trip origin")
 
