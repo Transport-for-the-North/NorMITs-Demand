@@ -233,7 +233,7 @@ def gv_processing():
             dctlgv_pcu[7][wd][tp] = {}
             for p in mndPurp:
                 dctlgv_pcu[7][wd][tp][p] = {}
-                dctlgv_pcu[7][wd][tp][p] = dctlgv_tours[7][wd][tp][p] / dctlgv_oc[7][wd][tp][p]
+                dctlgv_pcu[7][wd][tp][p] = dctlgv_tours[7][wd][tp][p] * dctlgv_oc[7][wd][tp][p]
 
     # TODO: save updated lgv dictionary
     with open(r'Y:\Mobile Data\Processing\dctlgv_pcu.pkl', 'wb') as log:
@@ -242,10 +242,10 @@ def gv_processing():
 def produce_combined():
     # TODO: build all mode dictionary
     # Import
-    with open(r'Y:\Mobile Data\Processing\dctNoHAM_uc.pkl', 'rb') as log:
+    with open(r'Y:\Mobile Data\Processing\dctNoHAM_mddpurp.pkl', 'rb') as log:
         dctnoham = pk.load(log)
 
-    with open(r'Y:\Mobile Data\Processing\dctNoTEM_uc.pkl', 'rb') as log:
+    with open(r'Y:\Mobile Data\Processing\dctNoTEM_mddpurp.pkl', 'rb') as log:
         dctnotem = pk.load(log)
 
     with open(GV_Demand_loc + '/dctGV.pkl', 'rb') as log:
@@ -257,7 +257,7 @@ def produce_combined():
     # TODO: define all mode dictionary
     dctmode = {3: 'Car', 5: 'Bus', 7: 'LGV', 8: 'HGV'}
     dctday = {1: 'Weekday'}
-    dctmndPurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'], 3: ['HBO', 'HBO_fr'], 4: ['HBO', 'HBO_to'],
+    dctmddpurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'], 3: ['HBO', 'HBO_fr'], 4: ['HBO', 'HBO_to'],
                5: ['NHB', 'NHB']}
     dcthgvpurp = {5: ['NHB', 'NHB']}
     dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3]}
@@ -269,7 +269,7 @@ def produce_combined():
             dctcombined[md] = {}
             for wd in dctday:
                 dctcombined[md][wd] = {}
-                for pp in dctmndPurp:
+                for pp in dctmddpurp:
                     dctcombined[md][wd][pp] = {}
                     for tp in dcttp:
                         print(str(md) + '-' + str(wd) + '-' + str(pp) + '-' + str(tp))
@@ -296,7 +296,7 @@ def produce_combined():
                         print('HGV')
                         dctcombined[md][wd][pp][tp] = dctgv[md_in][pp_in][tp]
 
-    with open(r'Y:\Mobile Data\Processing\dct_combined.pkl', 'wb') as log:
+    with open(r'Y:\Mobile Data\Processing\dct_CombinedMode.pkl', 'wb') as log:
         pk.dump(dctcombined, log, pk.HIGHEST_PROTOCOL)
 
 
@@ -304,19 +304,19 @@ def calc_mode_share():
 
     dctmode = {3: 'Car', 5: 'Bus', 7: 'LGV', 8: 'HGV'}
     dctday = {1: 'Weekday'}
-    dctmndPurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'], 3: ['HBO', 'HBO_fr'], 4: ['HBO', 'HBO_to'],
+    dctmddpurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'], 3: ['HBO', 'HBO_fr'], 4: ['HBO', 'HBO_to'],
                   5: ['NHB', 'NHB']}
     dcthgvpurp = {5: ['NHB', 'NHB']}
     dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3]}
 
-    with open(r'Y:\Mobile Data\Processing\dct_combined.pkl', 'rb') as log:
+    with open(r'Y:\Mobile Data\Processing\dct_CombinedMode.pkl', 'rb') as log:
         dctcombined = pk.load(log)
 
     # Sum mode trips to calc totals
     dcttotal = {}
     for wd in dctday:
         dcttotal[wd] = {}
-        for pp in dctmndPurp:
+        for pp in dctmddpurp:
             dcttotal[wd][pp] = {}
             for tp in dcttp:
                 print(str(wd) + '-' + str(pp) + '-' + str(tp))
@@ -338,7 +338,7 @@ def calc_mode_share():
             dctglobalshare[md] = {}
             for wd in dctday:
                 dctglobalshare[md][wd] = {}
-                for pp in dctmndPurp:
+                for pp in dctmddpurp:
                     dctglobalshare[md][wd][pp] = {}
                     for tp in dcttp:
                         print(str(md) + '-' + str(wd) + '-' + str(pp) + '-' + str(tp))
@@ -362,7 +362,7 @@ def calc_mode_share():
             dctshare[md] = {}
             for wd in dctday:
                 dctshare[md][wd] = {}
-                for pp in dctmndPurp:
+                for pp in dctmddpurp:
                     dctshare[md][wd][pp] = {}
                     for tp in dcttp:
                         print(str(md) + '-' + str(wd) + '-' + str(pp) + '-' + str(tp))
@@ -379,14 +379,14 @@ def calc_mode_share():
                         dctshare[md][wd][pp][tp] = (dctcombined[md][wd][pp][tp] / dcttotal[wd][pp][tp])
                         dctshare[md][wd][pp][tp] = np.nan_to_num(dctshare[md][wd][pp][tp], nan=dctglobalshare[md][wd][pp][tp])
 
-    with open(r'Y:\Mobile Data\Processing\dct_share.pkl', 'wb') as log:
+    with open(r'Y:\Mobile Data\Processing\dct_ModeShare.pkl', 'wb') as log:
         pk.dump(dctshare, log, pk.HIGHEST_PROTOCOL)
 
     # Sum check mode shares
     dctcheck = {}
     for wd in dctday:
         dctcheck[wd] = {}
-        for pp in dctmndPurp:
+        for pp in dctmddpurp:
             dctcheck[wd][pp] = {}
             for tp in dcttp:
                 print(str(wd) + '-' + str(pp) + '-' + str(tp))
@@ -406,7 +406,7 @@ def calc_mode_share():
     with open(r'Y:\Mobile Data\Processing\dct_check.pkl', 'wb') as log:
         pk.dump(dctcheck, log, pk.HIGHEST_PROTOCOL)
 
-def factor_MND():
+def split_mdd_hw():
 
     with open(r'Y:\Mobile Data\Processing\dctMODD_trip.pkl', 'rb') as log:
         dctMODD = pk.load(log)
@@ -414,7 +414,7 @@ def factor_MND():
     dct_MDDHW = {}
     dct_MDDHW[3] = {}
     dct_MDDHW[3][1] = {}
-    for pp in dctmndPurp:
+    for pp in dctmddpurp:
         dct_MDDHW[3][1][pp] = {}
         for tp in dcttp:
             dct_MDDHW[3][1][pp][tp] = dctMODD[1][2][pp][tp][:2770, :2770]
@@ -422,24 +422,28 @@ def factor_MND():
     with open(r'Y:\Mobile Data\Processing\dct_MDDHW.pkl', 'wb') as log:
         pk.dump(dct_MDDHW, log, pk.HIGHEST_PROTOCOL)
 
-def factor_MND():
+
+def factor_mdd():
+    dctmddpurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'], 3: ['HBO', 'HBO_fr'], 4: ['HBO', 'HBO_to'],
+                  5: ['NHB', 'NHB']}
+    dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3]}
 
     with open(r'Y:\Mobile Data\Processing\dct_MDDHW.pkl', 'rb') as log:
-        dct_MDDHW = pk.load(log)
+        dct_mddhw = pk.load(log)
 
-    with open(r'Y:\Mobile Data\Processing\dct_share.pkl', 'rb') as log:
-        dctshare = pk.load(log)
+    with open(r'Y:\Mobile Data\Processing\dct_ModeShare.pkl', 'rb') as log:
+        dctmodeshare = pk.load(log)
 
-    dct_MDDCar = {}
-    dct_MDDCar[3] = {}
-    dct_MDDCar[3][1] = {}
-    for pp in dctmndPurp:
-        dct_MDDCar[3][1][pp] = {}
+    dct_mdd_car = {}
+    dct_mdd_car[3] = {}
+    dct_mdd_car[3][1] = {}
+    for pp in dctmddpurp:
+        dct_mdd_car[3][1][pp] = {}
         for tp in dcttp:
-            dct_MDDCar[3][1][pp][tp] = (dct_MDDHW[3][1][pp][tp] * dctshare[3][1][pp][tp])
+            dct_mdd_car[3][1][pp][tp] = (dct_mddhw[3][1][pp][tp] * dctmodeshare[3][1][pp][tp])
 
     with open(r'Y:\Mobile Data\Processing\dct_MDDCar.pkl', 'wb') as log:
-        pk.dump(dct_MDDCar, log, pk.HIGHEST_PROTOCOL)
+        pk.dump(dct_mdd_car, log, pk.HIGHEST_PROTOCOL)
     # TODO: convert to PCUs
     # TODO: assign
     # TODO: check tld by mode/purpose
@@ -452,7 +456,8 @@ def main():
     run_gv_processing = False
     run_produce_combined = False
     run_calc_mode_share = False
-    run_factor_MND = True
+    run_split_mdd_hw = False
+    run_factor_mdd = True
 
     if run_gv_package:
         gv_package()
@@ -466,8 +471,11 @@ def main():
     if run_calc_mode_share:
         calc_mode_share()
 
-    if run_factor_MND:
-        factor_MND()
+    if run_split_mdd_hw:
+        split_mdd_hw()
+
+    if run_factor_mdd:
+        factor_mdd()
 
     print("end of main")
 
