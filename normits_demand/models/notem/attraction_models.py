@@ -726,6 +726,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
                 )
 
             # Control the attractions to the productions
+            self._logger.info("Balancing the attractions to the productions")
             notem_segmented = self._attractions_balance(
                 a_dvec=pure_nhb_attr,
                 p_dvec_path=self.nhb_production_paths[year],
@@ -790,23 +791,23 @@ class NHBAttractionModel(NHBAttractionModelPaths):
 
         # Reading the notem segmented HB attractions compressed pickle
         hb_attr_notem = nd.read_pickle(self.hb_attraction_paths[year])
-        hb_attr_notem_df = hb_attr_notem.to_df()
+        df = hb_attr_notem.to_df()
 
         # Removing p1 and p7
-        mask = (hb_attr_notem_df['p'].astype(int) == 7)
-        hb_attr_notem_df = hb_attr_notem_df[~mask].copy().reset_index(drop=True)
+        mask = df['p'] != 7
+        df = df[mask].reset_index(drop=True)
 
         # Adding 10 to the remaining purposes
-        hb_attr_notem_df['p'] = hb_attr_notem_df['p'].astype(int) + 10
+        df['p'] += 10
 
         # Instantiate
         return nd.DVector(
             zoning_system=hb_attr_notem.zoning_system,
             segmentation=segmentation,
-            time_format='avg_week',
-            import_data=hb_attr_notem_df,
+            time_format=hb_attr_notem.time_format,
+            import_data=df,
             zone_col=hb_attr_notem.zoning_system.col_name,
-            val_col="val",
+            val_col=hb_attr_notem.val_col,
         )
 
     def _attractions_balance(self,
@@ -836,7 +837,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         balanced_attractions = a_dvec.balance_at_segments(
             p_dvec,
             balance_zoning=self.balance_zoning,
-            split_weekday_weekend=True,
+            split_weekday_weekend=False,
         )
 
         # ## ATTRACTIONS TOTAL CHECK ## #
