@@ -354,14 +354,14 @@ class GravityModel(GravityModelExportPaths):
         tld_report['ach_ave_length (km)'] = tld_utils.calculate_average_trip_lengths(
             min_bounds=tld_report['min (km)'].values,
             max_bounds=tld_report['max (km)'].values,
-            trip_lengths=cost,
+            trip_lengths=cost_matrix,
             trips=calib.achieved_distribution,
         )
 
         tld_report['cell count'] = cost_utils2.cells_in_bounds(
             min_bounds=tld_report['min (km)'].values,
             max_bounds=tld_report['max (km)'].values,
-            cost=cost,
+            cost=cost_matrix,
         )
         tld_report['cell proportions'] = tld_report['cell count'].copy()
         tld_report['cell proportions'] /= tld_report['cell proportions'].values.sum()
