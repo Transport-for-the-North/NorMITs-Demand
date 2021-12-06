@@ -104,6 +104,7 @@ class ExternalModel(ExternalModelExportPaths):
             intrazonal_cost_infill: Optional[float] = 0.5,
             pa_val_col: Optional[str] = 'val',
             convergence_target: float = 0.9,
+            external_iters: int = 50,
             furness_tol: float = 0.1,
             furness_max_iters: int = 5000,
             time_format: Union[nd.core.TimeFormat, str] = 'avg_week',
@@ -124,6 +125,7 @@ class ExternalModel(ExternalModelExportPaths):
             'intrazonal_cost_infill': intrazonal_cost_infill,
             'seed_matrix': seed_matrix,
             'convergence_target': convergence_target,
+            'external_iters': external_iters,
             'furness_tol': furness_tol,
             'furness_max_iters': furness_max_iters,
         }
@@ -262,6 +264,7 @@ class ExternalModel(ExternalModelExportPaths):
                       seg_productions,
                       seg_attractions,
                       convergence_target,
+                      external_iters,
                       furness_tol,
                       furness_max_iters,
                       ):
@@ -347,6 +350,7 @@ class ExternalModel(ExternalModelExportPaths):
             int_target_tld=internal_tld,
             ext_target_tld=external_tld,
             log_path=log_path,
+            max_iters=external_iters,
             convergence_target=convergence_target,
             furness_tol=furness_tol,
             furness_max_iters=furness_max_iters,
@@ -458,7 +462,7 @@ class ExternalModel(ExternalModelExportPaths):
                         int_target_tld: pd.DataFrame,
                         ext_target_tld: pd.DataFrame,
                         convergence_target: float = 0.9,
-                        max_iters: int = 100,
+                        max_iters: int = 50,
                         furness_tol: float = 0.1,
                         furness_max_iters: int = 5000,
                         ):

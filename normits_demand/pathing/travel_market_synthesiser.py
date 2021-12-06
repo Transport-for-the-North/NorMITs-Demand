@@ -163,6 +163,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
                  nhb_attractions: nd.DVector,
                  intrazonal_cost_infill: float = 0.5,
                  convergence_target: float = 0.9,
+                 external_iters: int = 50,
                  furness_tol: float = 0.1,
                  furness_max_iters: int = 5000,
                  **kwargs,
@@ -184,6 +185,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
         self.nhb_cost_type = nhb_cost_type
         self.intrazonal_cost_infill = intrazonal_cost_infill
         self.convergence_target = convergence_target
+        self.external_iters = external_iters
         self.furness_tol = furness_tol
         self.furness_max_iters = furness_max_iters
         self.kwargs = kwargs
@@ -321,6 +323,7 @@ class ExternalModelArgumentBuilder(ExternalModelArgumentBuilderBase):
             'external_tld_dir': external_tld_path,
             'intrazonal_cost_infill': self.intrazonal_cost_infill,
             'convergence_target': self.convergence_target,
+            'external_iters': self.external_iters,
             'furness_tol': self.furness_tol,
             'furness_max_iters': self.furness_max_iters,
         })
