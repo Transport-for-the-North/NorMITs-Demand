@@ -203,10 +203,6 @@ class DVector:
     process_count:
         The maximum number of parallel processes that this DVector can use
         when processing data.
-
-    verbose:
-        If set to True, the DVector will print out progress updates while
-        running. Currently, setting this to True will not change anything.
     """
     # Constants
     __version__ = nd.__version__
@@ -1178,11 +1174,13 @@ class DVector:
         if not self.sum_is_close(aggregated_dvec):
             warnings.warn(
                 "Total value of DVector is different before and after "
-                "aggregation. Have the aggregation segmentations and methods "
+                "aggregation. Aggregating from %s into %s. "
+                "Have the aggregation segmentations and methods "
                 "been defined correctly?\n"
                 "Expected %f\n"
                 "Got %f"
-                % (self.sum(), aggregated_dvec.sum())
+                % (self.segmentation.name, out_segmentation.name,
+                   self.sum(), aggregated_dvec.sum())
             )
 
         return aggregated_dvec

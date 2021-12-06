@@ -493,7 +493,7 @@ class GravityModelArgumentBuilder(GravityModelArgumentBuilderBase):
                  convergence_target: Optional[float] = 0.95,
                  fitting_loops: Optional[int] = 100,
                  furness_max_iters: Optional[int] = 5000,
-                 furness_tol: Optional[float] = 1.0,
+                 furness_tol: Optional[float] = 0.1,
                  **kwargs
                  ):
         # Check paths exist

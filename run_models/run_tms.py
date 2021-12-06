@@ -42,7 +42,8 @@ cache_path = "E:/tms_cache"
 def main():
     # mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
-    mode = nd.Mode.TRAIN
+    # mode = nd.Mode.TRAIN
+    mode = nd.Mode.TRAM
 
     use_tram = True
 
@@ -52,9 +53,13 @@ def main():
         gm_tld_name = 'north/p_m'
         internal_tld_name = 'north/p_m'
         external_tld_name = 'gb/p_m'
-        hb_agg_seg = nd.get_segmentation_level('hb_p_m')
+        if use_tram:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
+        else:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_car')
-        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
         nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_car')
         intrazonal_cost_infill = 0.5
         em_convergence_target = 0.9
@@ -70,9 +75,13 @@ def main():
         gm_tld_name = 'north/p_m'
         internal_tld_name = 'north/p_m'
         external_tld_name = 'gb/p_m'
-        hb_agg_seg = nd.get_segmentation_level('hb_p_m')
+        if use_tram:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
+        else:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
-        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
         nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_bus')
         intrazonal_cost_infill = 0.4
         em_convergence_target = 0.8
@@ -89,9 +98,13 @@ def main():
         gm_tld_name = 'north/p_m_ca_train_bands'
         internal_tld_name = 'north/p_m_ca_train_bands'
         external_tld_name = 'gb/p_m_ca_train_bands'
-        hb_agg_seg = nd.get_segmentation_level('hb_p_m_ca')
+        if use_tram:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m7_ca')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_ca_tp_wday')
+        else:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m_ca')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_ca_rail')
-        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday')
         nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday_rail')
         intrazonal_cost_infill = None
         em_convergence_target = 0.9
@@ -99,6 +112,30 @@ def main():
         cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
         hb_init_params_fname = 'hb_init_params_p_m_ca.csv'
         nhb_init_params_fname = 'nhb_init_params_p_m_ca_tp.csv'
+        hb_cost_type = '24hr'
+        nhb_cost_type = 'tp'
+
+    elif mode == nd.Mode.TRAM:
+        zoning_system = nd.get_zoning_system('msoa')
+        gm_tld_name = 'north/p_m'
+        internal_tld_name = 'north/p_m'
+        external_tld_name = 'gb/p_m'
+
+        if use_tram:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
+        else:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+
+        hb_running_seg = nd.get_segmentation_level('hb_p_m_tram')
+        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_tram')
+        intrazonal_cost_infill = 0.4
+        em_convergence_target = 0.9
+        gm_convergence_target = 0.95
+        cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
+        hb_init_params_fname = 'hb_init_params_p_m.csv'
+        nhb_init_params_fname = 'nhb_init_params_p_m_tp.csv'
         hb_cost_type = '24hr'
         nhb_cost_type = 'tp'
 
@@ -179,14 +216,14 @@ def main():
 
     tms.run(
         run_all=False,
-        run_external_model=True,
+        run_external_model=False,
         run_gravity_model=True,
         run_pa_matrix_reports=False,
         run_pa_to_od=False,
         run_od_matrix_reports=False,
     )
 
-    tms.compile_to_assignment_format()
+    # tms.compile_to_assignment_format()
 
 
 def build_trip_ends(use_tram,
