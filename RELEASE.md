@@ -20,7 +20,9 @@ there.
 Below, a brief summary of patches made since the previous version can be found.
 
 ### V0.4.7
-- TramModel takes further segmentation from NoTEM Bus Trip Ends
+- TramModel
+  - takes further segmentation from NoTEM Bus Trip Ends
+  - Fixed an issue so the attractions are balanced to the productions 
 - TMS Updates
   - Optional read in of TramModel trip ends into TMS
   - Gravity Model Updates
