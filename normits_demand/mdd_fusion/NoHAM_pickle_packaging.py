@@ -22,8 +22,8 @@ for i in keys:
         dctpurp[i] = ['nhb', ''] + [purp_nhb[i - (len(purp_hb) * 2)]]
     else:
         print('Value outside expected range')
-dctmddpurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'], 3: ['HBO', 'HBO_fr'], 4: ['HBO', 'HBO_to'],
-              5: ['NHB', 'NHB']}
+dctmddpurp = {1: ['HBW', 'HBW_fr', 'commute'], 2: ['HBW', 'HBW_to', 'commute'], 3: ['HBO', 'HBO_fr', 'other'],
+              4: ['HBO', 'HBO_to', 'other'], 5: ['NHB', 'NHB', 'other']}
 dcttp = {1: ['AM'], 2: ['IP'], 3: ['PM'], 4: ['OP']}
 
 
@@ -170,6 +170,32 @@ def export_noham_car():
                                dctnoham_mddpurp[md][wd][pp][tp],
                                fmt='%1.5f', delimiter=',')
 
+def package_noham_car_pcu():
+    # Set local variables
+    version = 1
+    import_folder = 'Y:/Mobile Data/Processing/NoHAM_Demand'
+
+    # Loop dictionaries and save to export location
+    dctnoham_mddpurp_pcu = {}
+    for md in dctmode:
+        dctnoham_mddpurp_pcu[md] = {}
+        for wd in dctday:
+            dctnoham_mddpurp_pcu[md][wd] = {}
+            for pp in dctmddpurp:
+                dctnoham_mddpurp_pcu[md][wd][pp] = {}
+                for tp in dcttp:
+                    file_path = (import_folder + '/v' + str(version) + '/PCUs/' +
+                                 'od_' + str(dctmddpurp[pp][2]) + '_p' + str(pp) +
+                                 '_yr2018_m' + str(md) +
+                                 '_tp' + str(tp) + '.csv')
+                    print(file_path)
+                    noham_car = np.genfromtxt(file_path,
+                                              delimiter=',')
+                    dctnoham_mddpurp_pcu[md][wd][pp][tp] = noham_car
+
+    with open(r'Y:\Mobile Data\Processing\dctNoHAM_mddpurp_pcu.pkl', 'wb') as log:
+        pk.dump(dctnoham_mddpurp_pcu, log, pk.HIGHEST_PROTOCOL)
+    print("noham pcus packaged")
 
 def mdd_to_uc():
     # Import NoHAM purpose dictionary
@@ -279,6 +305,7 @@ def main():
     run_noham_car_package = False
     run_noham_car_merge = False
     run_export_noham_car = True
+    run_package_noham_car_pcu = True
 
     if run_noham_car_package:
         noham_car_package()
@@ -288,6 +315,9 @@ def main():
 
     if run_export_noham_car:
         export_noham_car()
+
+    if run_package_noham_car_pcu:
+        package_noham_car_pcu()
 
     print("end of main")
 
