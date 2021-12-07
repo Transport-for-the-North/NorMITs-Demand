@@ -90,6 +90,10 @@ class CostFunction:
                 % (self.param_names, self.function)
             )
 
+    @property
+    def parameter_names(self):
+        return self.kw_order
+
     def validate_params(self, param_dict: Dict[str, Any]) -> None:
         """
         Validates that the given values are valid and within min/max ranges

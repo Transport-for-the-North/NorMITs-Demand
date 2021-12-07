@@ -177,7 +177,7 @@ class GravityModelCalibrator:
         cost_kwargs = self._cost_params_to_kwargs(cost_args)
 
         # Run gravity model
-        matrix, max_iters, r2 = gravity_model(
+        matrix, max_iters, rmse = gravity_model(
             row_targets=self.row_targets,
             col_targets=self.col_targets,
             cost_function=self.cost_function,
@@ -206,7 +206,7 @@ class GravityModelCalibrator:
         log_dict.update(cost_kwargs)
         log_dict.update({
             'furness_iters': max_iters,
-            'furness_r2': np.round(r2, 6),
+            'furness_rmse': np.round(rmse, 6),
             'bs_con': np.round(convergence, 4),
         })
 
@@ -406,8 +406,8 @@ def gravity_model(row_targets: np.ndarray,
         The number of iterations completed by the doubly constrained furness
         before exiting
 
-    achieved_r2:
-        The R-squared difference achieved by the doubly constarined furness
+    achieved_rmse:
+        The Root Mean Squared Error achieved by the doubly constrained furness
         before exiting
 
     Raises
@@ -435,7 +435,7 @@ def gravity_model(row_targets: np.ndarray,
     init_matrix = np.where(init_matrix == 0, 1e-7, init_matrix)
 
     # Furness trips to trip ends
-    matrix, iters, r2 = furness.doubly_constrained_furness(
+    matrix, iters, rmse = furness.doubly_constrained_furness(
         seed_vals=init_matrix,
         row_targets=row_targets,
         col_targets=col_targets,
@@ -443,5 +443,5 @@ def gravity_model(row_targets: np.ndarray,
         max_iters=furness_max_iters,
     )
 
-    return matrix, iters, r2
+    return matrix, iters, rmse
 

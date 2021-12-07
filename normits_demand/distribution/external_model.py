@@ -104,6 +104,7 @@ class ExternalModel(ExternalModelExportPaths):
             intrazonal_cost_infill: Optional[float] = 0.5,
             pa_val_col: Optional[str] = 'val',
             convergence_target: float = 0.9,
+            external_iters: int = 50,
             furness_tol: float = 0.1,
             furness_max_iters: int = 5000,
             time_format: Union[nd.core.TimeFormat, str] = 'avg_week',
@@ -124,6 +125,7 @@ class ExternalModel(ExternalModelExportPaths):
             'intrazonal_cost_infill': intrazonal_cost_infill,
             'seed_matrix': seed_matrix,
             'convergence_target': convergence_target,
+            'external_iters': external_iters,
             'furness_tol': furness_tol,
             'furness_max_iters': furness_max_iters,
         }
@@ -262,6 +264,7 @@ class ExternalModel(ExternalModelExportPaths):
                       seg_productions,
                       seg_attractions,
                       convergence_target,
+                      external_iters,
                       furness_tol,
                       furness_max_iters,
                       ):
@@ -347,6 +350,7 @@ class ExternalModel(ExternalModelExportPaths):
             int_target_tld=internal_tld,
             ext_target_tld=external_tld,
             log_path=log_path,
+            max_iters=external_iters,
             convergence_target=convergence_target,
             furness_tol=furness_tol,
             furness_max_iters=furness_max_iters,
@@ -458,7 +462,7 @@ class ExternalModel(ExternalModelExportPaths):
                         int_target_tld: pd.DataFrame,
                         ext_target_tld: pd.DataFrame,
                         convergence_target: float = 0.9,
-                        max_iters: int = 100,
+                        max_iters: int = 50,
                         furness_tol: float = 0.1,
                         furness_max_iters: int = 5000,
                         ):
@@ -532,7 +536,7 @@ class ExternalModel(ExternalModelExportPaths):
             )
 
             # Furness across the other 2 dimensions
-            gb_pa, furn_iters, furn_r2 = furness.furness_pandas_wrapper(
+            gb_pa, furn_iters, furn_rmse = furness.furness_pandas_wrapper(
                 seed_values=gb_pa,
                 row_targets=productions,
                 col_targets=attractions,
@@ -584,7 +588,7 @@ class ExternalModel(ExternalModelExportPaths):
                 'Loop Num': str(iter_num),
                 'run_time(ms)': time_taken,
                 'furness_loops': furn_iters,
-                'furness_r2': furn_r2,
+                'furness_rmse': furn_rmse,
                 'pa_diff': np.round(pa_diff, 6),
                 'internal_bs_con': np.round(int_bs_con, 6),
                 'external_bs_con': np.round(ext_bs_con, 6),
