@@ -147,6 +147,30 @@ def noham_car_merge():
         pk.dump(dctnoham_mddpurp, log, pk.HIGHEST_PROTOCOL)
 
 
+def export_noham_car():
+    # Set local variables
+    version = 1
+    export_folder = 'Y:/Mobile Data/Processing/NoHAM_Demand'
+
+    # Load NoHAM_mddpurp pickle
+    with open(r'Y:\Mobile Data\Processing\dctNoHAM_mddpurp.pkl', 'rb') as log:
+        dctnoham_mddpurp = pk.load(log)
+
+    # Loop dictionaries and save to export location
+    for md in dctmode:
+        for wd in dctday:
+            for pp in dctmddpurp:
+                for tp in dcttp:
+                    file_path = (export_folder + '/v' + str(version) + '/PersonTrips/' +
+                                 'od_p' + str(pp) +
+                                 '_yr2018_m' + str(md) +
+                                 '_tp' + str(tp) + '.csv')
+                    print(file_path)
+                    np.savetxt(file_path,
+                               dctnoham_mddpurp[md][wd][pp][tp],
+                               fmt='%1.5f', delimiter=',')
+
+
 def mdd_to_uc():
     # Import NoHAM purpose dictionary
     with open(r'Y:\Mobile Data\Processing\dctNoHAM.pkl', 'rb') as log:
@@ -253,13 +277,17 @@ def mdd_to_uc():
 
 def main():
     run_noham_car_package = False
-    run_noham_car_merge = True
+    run_noham_car_merge = False
+    run_export_noham_car = True
 
     if run_noham_car_package:
         noham_car_package()
 
     if run_noham_car_merge:
         noham_car_merge()
+
+    if run_export_noham_car:
+        export_noham_car()
 
     print("end of main")
 
