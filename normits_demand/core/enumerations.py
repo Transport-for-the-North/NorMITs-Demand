@@ -83,3 +83,10 @@ class Mode(enum.Enum):
 
     def get_name(self):
         return self.value
+
+
+@enum.unique
+class DistributionMethods(enum.Enum):
+    GRAVITY = 'gravity'
+    FURNESS3D = 'furness_3d'
+

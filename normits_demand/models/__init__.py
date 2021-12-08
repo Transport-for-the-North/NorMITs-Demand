@@ -10,3 +10,7 @@ from normits_demand.models.tram_model import TramModel
 
 # TMS
 from normits_demand.models.travel_market_synthesiser import TravelMarketSynthesiser
+
+# Distribution
+from normits_demand.models.distribution_model import DistributionModel
+

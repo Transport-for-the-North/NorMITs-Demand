@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on: 09/09/2021
+Created on: 07/12/2021
 Updated on:
 
 Original author: Ben Taylor
@@ -22,22 +22,26 @@ from typing import Tuple
 sys.path.append("..")
 import normits_demand as nd
 from normits_demand import constants as consts
-from normits_demand.models import TravelMarketSynthesiser
 
-from normits_demand.pathing.travel_market_synthesiser import TMSArgumentBuilder
-from normits_demand.pathing.travel_market_synthesiser import TMSExportPaths
+from normits_demand.models import DistributionModel
 
-# Constants
-base_year = 2018
-scenario = consts.SC01_JAM
-tms_iteration_name = '9.3.1'
-tms_import_home = r"I:\NorMITs Demand\import"
-tms_export_home = r"E:\NorMITs Demand\TMS"
+
+# ## CONSTANTS ## #
+# Trip end import args
 notem_iteration_name = '9.3'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
 tram_export_home = r"I:\NorMITs Demand\Tram"
-cache_path = "E:/tms_cache"
+cache_path = "E:/gb_dist_cache"
 
+# Distribution running args
+base_year = 2018
+scenario = consts.SC01_JAM
+gb_dist_iteration_name = '9.3.2'
+gb_dist_import_home = r"I:\NorMITs Demand\import"
+gb_dist_export_home = r"E:\NorMITs Demand\GB_Distribution"
+
+# General constants
+INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv',
 
 def main():
     mode = nd.Mode.CAR
@@ -45,14 +49,30 @@ def main():
     # mode = nd.Mode.TRAIN
     # mode = nd.Mode.TRAM
 
+    # Running params
     use_tram = True
 
+    run_hb = True
+    run_nhb = False
+
+    run_all = False,
+    run_upper_model = True,
+    run_lower_model = True,
+    run_pa_matrix_reports = False,
+    run_pa_to_od = False,
+    run_od_matrix_reports = False,
+
     if mode == nd.Mode.CAR:
-        zoning_system = nd.get_zoning_system('msoa')
-        # zoning_system = nd.get_zoning_system('noham')
-        gm_tld_name = 'north/p_m'
-        internal_tld_name = 'north/p_m'
-        external_tld_name = 'gb/p_m'
+        # Define zoning systems
+        upper_zoning_name = 'msoa'
+        lower_zoning_name = 'noham'
+
+        # Define cost arguments
+        intrazonal_cost_infill = 0.5
+        hb_cost_type = '24hr'
+        nhb_cost_type = 'tp'
+
+        # Define segmentations for trip ends and running
         if use_tram:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
             nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
@@ -61,106 +81,61 @@ def main():
             nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_car')
         nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_car')
-        intrazonal_cost_infill = 0.5
-        em_convergence_target = 0.9
-        gm_convergence_target = 0.95
-        cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
-        hb_init_params_fname = 'hb_init_params_p_m.csv'
-        nhb_init_params_fname = 'nhb_init_params_p_m_tp.csv'
-        hb_cost_type = '24hr'
-        nhb_cost_type = 'tp'
 
-    elif mode == nd.Mode.BUS:
-        zoning_system = nd.get_zoning_system('noham')
-        gm_tld_name = 'north/p_m'
-        internal_tld_name = 'north/p_m'
-        external_tld_name = 'gb/p_m'
-        if use_tram:
-            hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
-        else:
-            hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
-        hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_bus')
-        intrazonal_cost_infill = 0.4
-        em_convergence_target = 0.8
-        gm_convergence_target = 0.85
-        cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
-        hb_init_params_fname = 'hb_init_params_p_m.csv'
-        nhb_init_params_fname = 'nhb_init_params_p_m_tp.csv'
-        hb_cost_type = '24hr'
-        nhb_cost_type = 'tp'
+        # Define kwargs for the distribution tiers
+        # TODO(BT): Link segs into segmentation objects.
+        #  Need to split out the hb and NHB target TLDs
+        upper_calibration_area = 'gb'
+        upper_seg = 'p_m'
+        upper_method = nd.DistributionMethods.GRAVITY
+        upper_convergence_target = 0.9
 
-    elif mode == nd.Mode.TRAIN:
-        # zoning_system = nd.get_zoning_system('msoa')
-        zoning_system = nd.get_zoning_system('norms')
-        gm_tld_name = 'north/p_m_ca_train_bands'
-        internal_tld_name = 'north/p_m_ca_train_bands'
-        external_tld_name = 'gb/p_m_ca_train_bands'
-        if use_tram:
-            hb_agg_seg = nd.get_segmentation_level('hb_p_m7_ca')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_ca_tp_wday')
-        else:
-            hb_agg_seg = nd.get_segmentation_level('hb_p_m_ca')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday')
-        hb_running_seg = nd.get_segmentation_level('hb_p_m_ca_rail')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday_rail')
-        intrazonal_cost_infill = None
-        em_convergence_target = 0.9
-        gm_convergence_target = 0.95
-        cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
-        hb_init_params_fname = 'hb_init_params_p_m_ca.csv'
-        nhb_init_params_fname = 'nhb_init_params_p_m_ca_tp.csv'
-        hb_cost_type = '24hr'
-        nhb_cost_type = 'tp'
+        lower_calibration_area = 'north'
+        lower_seg = 'p_m_tp'
+        lower_method = nd.DistributionMethods.GRAVITY
+        lower_convergence_target = 0.9
 
-    elif mode == nd.Mode.TRAM:
-        zoning_system = nd.get_zoning_system('msoa')
-        gm_tld_name = 'north/p_m'
-        internal_tld_name = 'north/p_m'
-        external_tld_name = 'gb/p_m'
+        upper_kwargs = {'zoning': upper_zoning_name, 'area': upper_calibration_area}
+        lower_kwargs = {'zoning': lower_zoning_name, 'area': lower_calibration_area}
+        hb_kwargs = {'trip_origin': 'hb', 'seg': upper_seg}
+        nhb_kwargs = {'trip_origin': 'nhb', 'seg': lower_seg}
 
-        if use_tram:
-            hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
-        else:
-            hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        hb_init_params_fname = INIT_PARAMS_BASE.format(**hb_kwargs, **upper_kwargs)
+        nhb_init_params_fname = INIT_PARAMS_BASE.format(**nhb_kwargs, *upper_kwargs)
+        upper_kwargs = {
+            'zoning_system': nd.get_zoning_system(upper_zoning_name),
+            'method': upper_method,
+            'cost_function': nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function(),
+            'convergence_target': upper_convergence_target,
+            'hb_init_params_fname': hb_init_params_fname,
+            'nhb_init_params_fname': nhb_init_params_fname,
+            'hb_target_tld_dir': os.path.join(upper_calibration_area, upper_seg),
+            'nhb_target_tld_dir': os.path.join(upper_calibration_area, upper_seg),
+        }
 
-        hb_running_seg = nd.get_segmentation_level('hb_p_m_tram')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_tram')
-        intrazonal_cost_infill = 0.4
-        em_convergence_target = 0.9
-        gm_convergence_target = 0.95
-        cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
-        hb_init_params_fname = 'hb_init_params_p_m.csv'
-        nhb_init_params_fname = 'nhb_init_params_p_m_tp.csv'
-        hb_cost_type = '24hr'
-        nhb_cost_type = 'tp'
+        hb_init_params_fname = INIT_PARAMS_BASE.format(**hb_kwargs, **lower_kwargs)
+        nhb_init_params_fname = INIT_PARAMS_BASE.format(**nhb_kwargs, *lower_kwargs)
+        lower_kwargs = {
+            'zoning_system': nd.get_zoning_system(lower_zoning_name),
+            'method': lower_method,
+            'target_tld_dir': os.path.join(upper_calibration_area, lower_seg),
+            'cost_function': nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function(),
+            'convergence_target': lower_convergence_target,
+            'hb_init_params_fname': hb_init_params_fname,
+            'nhb_init_params_fname': nhb_init_params_fname,
+            'hb_target_tld_dir': os.path.join(upper_calibration_area, upper_seg),
+            'nhb_target_tld_dir': os.path.join(upper_calibration_area, upper_seg),
+        }
 
     else:
         raise ValueError(
             "Don't know what mode %s is!" % mode.value
         )
 
-    # ## DO WE NEED TO RUN EXTERNAL MODEL? ## #
-    if zoning_system.name == 'msoa':
-        run_external_model = False
-        tms_exports = None
-    else:
-        run_external_model = True
-        tms_exports = TMSExportPaths(
-            year=base_year,
-            iteration_name=tms_iteration_name,
-            running_mode=mode,
-            export_home=tms_export_home,
-        )
-
     # ## GET TRIP ENDS ## #
     hb_productions, hb_attractions, nhb_productions, nhb_attractions = build_trip_ends(
         use_tram=use_tram,
-        zoning_system=zoning_system,
+        zoning_system=nd.get_segmentation_level(upper_zoning_name),
         mode=mode,
         hb_agg_seg=hb_agg_seg,
         hb_running_seg=hb_running_seg,
@@ -169,26 +144,11 @@ def main():
     )
 
     # ## BUILD MODEL SPECIFIC KWARGS ## #
-    external_kwargs = {
-        'internal_tld_name': internal_tld_name,
-        'external_tld_name': external_tld_name,
-        'convergence_target': em_convergence_target,
-    }
-
-    gravity_kwargs = {
-        'target_tld_name': gm_tld_name,
-        'cost_function': cost_function,
-        'convergence_target': gm_convergence_target,
-        'hb_init_params_fname': hb_init_params_fname,
-        'nhb_init_params_fname': nhb_init_params_fname,
-    }
-
-    tms_arg_builder = TMSArgumentBuilder(
-        import_home=tms_import_home,
+    arg_builder = DistModelArgBuilder(
+        import_home=gb_dist_import_home,
         running_mode=mode,
         hb_running_segmentation=hb_running_seg,
         nhb_running_segmentation=nhb_running_seg,
-        zoning_system=zoning_system,
         hb_cost_type=hb_cost_type,
         nhb_cost_type=nhb_cost_type,
         hb_productions=hb_productions,
@@ -196,35 +156,52 @@ def main():
         nhb_productions=nhb_productions,
         nhb_attractions=nhb_attractions,
         intrazonal_cost_infill=intrazonal_cost_infill,
-        run_external_model=run_external_model,
-        tms_exports=tms_exports,
-        external_kwargs=external_kwargs,
-        gravity_kwargs=gravity_kwargs,
+        export_home=gb_dist_export_home,
+        upper_kwargs=upper_kwargs,
+        lower_kwargs=lower_kwargs,
     )
 
-    tms = TravelMarketSynthesiser(
-        year=base_year,
-        running_mode=mode,
-        hb_running_segmentation=hb_running_seg,
-        nhb_running_segmentation=nhb_running_seg,
-        iteration_name=tms_iteration_name,
-        zoning_system=zoning_system,
-        tms_arg_builder=tms_arg_builder,
-        export_home=tms_export_home,
-        process_count=-2,
-    )
+    if run_hb:
+        hb_distributor = DistributionModel(
+            year=base_year,
+            running_mode=mode,
+            running_segmentation=hb_running_seg,
+            iteration_name=gb_dist_iteration_name,
+            arg_builder=arg_builder,
+            export_home=gb_dist_export_home,
+            process_count=-2,
+        )
 
-    tms.run(
-        run_all=False,
-        run_external_model=False,
-        run_gravity_model=True,
-        run_pa_matrix_reports=False,
-        run_pa_to_od=False,
-        run_od_matrix_reports=False,
-    )
+        hb_distributor.run(
+            run_all=run_all,
+            run_upper_model=run_upper_model,
+            run_lower_model=run_lower_model,
+            run_pa_matrix_reports=run_pa_matrix_reports,
+            run_pa_to_od=run_pa_to_od,
+            run_od_matrix_reports=run_od_matrix_reports,
+        )
+
+    if run_nhb:
+        nhb_distributor = DistributionModel(
+            year=base_year,
+            running_mode=mode,
+            running_segmentation=nhb_running_seg,
+            iteration_name=gb_dist_iteration_name,
+            arg_builder=arg_builder,
+            export_home=gb_dist_export_home,
+            process_count=-2,
+        )
+
+        nhb_distributor.run(
+            run_all=run_all,
+            run_upper_model=run_upper_model,
+            run_lower_model=run_lower_model,
+            run_pa_matrix_reports=run_pa_matrix_reports,
+            run_pa_to_od=run_pa_to_od,
+            run_od_matrix_reports=run_od_matrix_reports,
+        )
 
     # tms.compile_to_assignment_format()
-
 
 def build_trip_ends(use_tram,
                     zoning_system,
@@ -320,31 +297,7 @@ def import_pa(production_import_path,
               trip_origin,
               use_tram,
               ) -> Tuple[nd.DVector, nd.DVector]:
-    """
-    This function imports productions and attractions from given paths.
 
-    Parameters
-    ----------
-    production_import_path:
-        Path to import productions from.
-
-    attraction_import_path:
-        Path to import attractions from.
-
-    model_zone:
-        Type of model zoning system. norms or noham
-
-    trip_origin:
-        Trip origin
-
-    Returns
-    ----------
-    [0] productions:
-        Mainland GB productions.
-
-    [1] attractions:
-        Mainland GB attractions.
-    """
     model_name = 'tram' if use_tram else 'notem'
 
     # Determine the required segmentation
