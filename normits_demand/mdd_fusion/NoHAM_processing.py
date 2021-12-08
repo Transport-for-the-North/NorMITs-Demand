@@ -24,14 +24,17 @@ for i in keys:
         print('Value outside expected range')
 dctmddpurp = {1: ['HBW', 'HBW_fr', 'commute'], 2: ['HBW', 'HBW_to', 'commute'], 3: ['HBO', 'HBO_fr', 'other'],
               4: ['HBO', 'HBO_to', 'other'], 5: ['NHB', 'NHB', 'other']}
+dctuc = {1: ['business'],
+         2: ['commute'],
+         3: ['other']}
 dcttp = {1: ['AM'], 2: ['IP'], 3: ['PM'], 4: ['OP']}
+
+unq_zones = list(range(1, 2771))
 
 
 def noham_car_package():
     """ packages NoHAM car matrices into single nested dictionary pickle file """
     # TODO: add import and export locations to function variables
-
-    unq_zones = list(range(1, 2771))
 
     dctnoham = {}
     for md in dctmode:
@@ -72,17 +75,7 @@ def noham_car_package():
 
 
 def noham_compiled_pcu_import():
-    import numpy as np
-    import pickle as pk
-
-    dctmode = {3: ['Car']}
-    dctday = {1: ['Weekday']}
-    dctuc = {1: ['business'],
-             2: ['commute'],
-             3: ['other']}
-    dcttp = {1: ['AM'], 2: ['IP'], 3: ['PM'], 4: ['OP']}
-
-    unq_zones = list(range(1, 2771))
+    # TODO: Add path variables to inputs
 
     dctnoham_uc = {}
     for md in dctmode:
@@ -146,56 +139,6 @@ def noham_car_merge():
     with open(r'Y:\Mobile Data\Processing\dctNoHAM_mddpurp.pkl', 'wb') as log:
         pk.dump(dctnoham_mddpurp, log, pk.HIGHEST_PROTOCOL)
 
-
-def export_noham_car():
-    # Set local variables
-    version = 1
-    export_folder = 'Y:/Mobile Data/Processing/NoHAM_Demand'
-
-    # Load NoHAM_mddpurp pickle
-    with open(r'Y:\Mobile Data\Processing\dctNoHAM_mddpurp.pkl', 'rb') as log:
-        dctnoham_mddpurp = pk.load(log)
-
-    # Loop dictionaries and save to export location
-    for md in dctmode:
-        for wd in dctday:
-            for pp in dctmddpurp:
-                for tp in dcttp:
-                    file_path = (export_folder + '/v' + str(version) + '/PersonTrips/' +
-                                 'od_p' + str(pp) +
-                                 '_yr2018_m' + str(md) +
-                                 '_tp' + str(tp) + '.csv')
-                    print(file_path)
-                    np.savetxt(file_path,
-                               dctnoham_mddpurp[md][wd][pp][tp],
-                               fmt='%1.5f', delimiter=',')
-
-def package_noham_car_pcu():
-    # Set local variables
-    version = 1
-    import_folder = 'Y:/Mobile Data/Processing/NoHAM_Demand'
-
-    # Loop dictionaries and save to export location
-    dctnoham_mddpurp_pcu = {}
-    for md in dctmode:
-        dctnoham_mddpurp_pcu[md] = {}
-        for wd in dctday:
-            dctnoham_mddpurp_pcu[md][wd] = {}
-            for pp in dctmddpurp:
-                dctnoham_mddpurp_pcu[md][wd][pp] = {}
-                for tp in dcttp:
-                    file_path = (import_folder + '/v' + str(version) + '/PCUs/' +
-                                 'od_' + str(dctmddpurp[pp][2]) + '_p' + str(pp) +
-                                 '_yr2018_m' + str(md) +
-                                 '_tp' + str(tp) + '.csv')
-                    print(file_path)
-                    noham_car = np.genfromtxt(file_path,
-                                              delimiter=',')
-                    dctnoham_mddpurp_pcu[md][wd][pp][tp] = noham_car
-
-    with open(r'Y:\Mobile Data\Processing\dctNoHAM_mddpurp_pcu.pkl', 'wb') as log:
-        pk.dump(dctnoham_mddpurp_pcu, log, pk.HIGHEST_PROTOCOL)
-    print("noham pcus packaged")
 
 def mdd_to_uc():
     # Import NoHAM purpose dictionary
@@ -303,21 +246,21 @@ def mdd_to_uc():
 
 def main():
     run_noham_car_package = False
+    run_noham_compiled_pcu_import = True
     run_noham_car_merge = False
-    run_export_noham_car = True
-    run_package_noham_car_pcu = True
+    run_mdd_to_uc = True
 
     if run_noham_car_package:
         noham_car_package()
 
+    if run_noham_compiled_pcu_import:
+        noham_compiled_pcu_import()
+
     if run_noham_car_merge:
         noham_car_merge()
 
-    if run_export_noham_car:
-        export_noham_car()
-
-    if run_package_noham_car_pcu:
-        package_noham_car_pcu()
+    if run_mdd_to_uc:
+        mdd_to_uc()
 
     print("end of main")
 

@@ -42,6 +42,8 @@ def notem_bus_package_test():
 
 
 def notem_bus_package():
+    # TODO: add path variable for import location and export folder
+
     dctnotem = {}
     for md in dctmode:
         dctnotem[md] = {}
