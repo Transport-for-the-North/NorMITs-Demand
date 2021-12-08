@@ -22,15 +22,19 @@ for i in keys:
         dctpurp[i] = ['nhb', ''] + [purp_nhb[i - (len(purp_hb) * 2)]]
     else:
         print('Value outside expected range')
-dctmddPurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'], 3: ['HBO', 'HBO_fr'], 4: ['HBO', 'HBO_to'],
-              5: ['NHB', 'NHB']}
+dctmddpurp = {1: ['HBW', 'HBW_fr', 'commute'], 2: ['HBW', 'HBW_to', 'commute'], 3: ['HBO', 'HBO_fr', 'other'],
+              4: ['HBO', 'HBO_to', 'other'], 5: ['NHB', 'NHB', 'other']}
+dctuc = {1: ['business'],
+         2: ['commute'],
+         3: ['other']}
 dcttp = {1: ['AM'], 2: ['IP'], 3: ['PM'], 4: ['OP']}
+
+unq_zones = list(range(1, 2771))
+
 
 def noham_car_package():
     """ packages NoHAM car matrices into single nested dictionary pickle file """
     # TODO: add import and export locations to function variables
-
-    unq_zones = list(range(1, 2771))
 
     dctnoham = {}
     for md in dctmode:
@@ -60,9 +64,9 @@ def noham_car_package():
                         print('Value outside expected range')
                     print(path)
                     noham_car = np.genfromtxt(path,
-                        delimiter=',',
-                        skip_header=1,
-                        usecols=unq_zones)
+                                              delimiter=',',
+                                              skip_header=1,
+                                              usecols=unq_zones)
                     dctnoham[md][wd][pp][tp] = noham_car
 
     with open(r'Y:\Mobile Data\Processing\dctNoHAM.pkl', 'wb') as log:
@@ -70,8 +74,37 @@ def noham_car_package():
     print("matrices packaged")
 
 
-def noham_car_merge():
+def noham_compiled_pcu_import():
+    # TODO: Add path variables to inputs
 
+    dctnoham_uc = {}
+    for md in dctmode:
+        dctnoham_uc[md] = {}
+        for wd in dctday:
+            dctnoham_uc[md][wd] = {}
+            for uc in dctuc:
+                dctnoham_uc[md][wd][uc] = {}
+                for tp in dcttp:
+                    path = ('I:/NorMITs Demand/noham/EFS/iter3i/NTEM/Matrices/Compiled OD Matrices PCU/'
+                            + 'od_'
+                            + str(dctuc[uc][0]) + '_yr2018'
+                            + '_m' + str(md)
+                            + '_tp' + str(tp) + '.csv')
+                    print(path)
+                    noham_uc = np.genfromtxt(path,
+                                             delimiter=',',
+                                             skip_header=1,
+                                             usecols=unq_zones)
+                    print(str(md) + str(wd) + str(uc) + str(tp))
+                    print(round(np.sum(noham_uc), ndigits=0))
+                    dctnoham_uc[md][wd][uc][tp] = noham_uc
+
+    with open(r'Y:\Mobile Data\Processing\dctNoHAM_compiled_PCU.pkl', 'wb') as log:
+        pk.dump(dctnoham_uc, log, pk.HIGHEST_PROTOCOL)
+    print("matrices packaged")
+
+
+def noham_car_merge():
     temp_array = np.zeros((2770, 2770))
 
     dctnoham_mddpurp = {}
@@ -79,7 +112,7 @@ def noham_car_merge():
         dctnoham_mddpurp[md] = {}
         for wd in dctday:
             dctnoham_mddpurp[md][wd] = {}
-            for pp in dctmddPurp:
+            for pp in dctmddpurp:
                 dctnoham_mddpurp[md][wd][pp] = {}
                 for tp in dcttp:
                     dctnoham_mddpurp[md][wd][pp][tp] = temp_array
@@ -91,11 +124,11 @@ def noham_car_merge():
         for wd in dctday:
             for pp in dctpurp:
                 mddpurp = (1 if dctpurp[pp][2] in [1] and dctpurp[pp][1] in ['from'] else
-                      2 if dctpurp[pp][2] in [1] and dctpurp[pp][1] in ['to'] else
-                      3 if dctpurp[pp][2] in [2, 3, 4, 5, 6, 7, 8] and dctpurp[pp][1] in ['from'] else
-                      4 if dctpurp[pp][2] in [2, 3, 4, 5, 6, 7, 8] and dctpurp[pp][1] in ['to'] else
-                      5 if dctpurp[pp][2] in [12, 13, 14, 15, 16, 18] else
-                      6)
+                           2 if dctpurp[pp][2] in [1] and dctpurp[pp][1] in ['to'] else
+                           3 if dctpurp[pp][2] in [2, 3, 4, 5, 6, 7, 8] and dctpurp[pp][1] in ['from'] else
+                           4 if dctpurp[pp][2] in [2, 3, 4, 5, 6, 7, 8] and dctpurp[pp][1] in ['to'] else
+                           5 if dctpurp[pp][2] in [12, 13, 14, 15, 16, 18] else
+                           6)
                 print('Purpose: ' + str(pp) + ' into mdd ' + str(mddpurp))
                 for tp in dcttp:
                     # print(str(md) + '-' + str(wd) + '-' + str(pp) + '-' + str(tp))
@@ -112,59 +145,82 @@ def mdd_to_uc():
     with open(r'Y:\Mobile Data\Processing\dctNoHAM.pkl', 'rb') as log:
         dctnohampp = pk.load(log)
 
-    with open(r'Y:\Mobile Data\Processing\dctNoHAM_uc.pkl', 'rb') as log:
+    with open(r'Y:\Mobile Data\Processing\dctNoHAM_mddpurp.pkl', 'rb') as log:
         dctnohammdd = pk.load(log)
 
-    dctuc = {'1_hb_from': [1], '1_hb_to': [1],
-             '2_hb_from': [2], '2_hb_to': [2],
-             '3_hb_from': [3], '3_hb_to': [3],
-             '1_nhb': [1], '3_nhb': [3]}
+    dctmdduc = {'1_hb_from': [1], '1_hb_to': [1],
+                '2_hb_from': [2], '2_hb_to': [2],
+                '3_hb_from': [3], '3_hb_to': [3],
+                '1_nhb': [1], '3_nhb': [3]}
     temp_array = np.zeros((2770, 2770))
 
-    dctnohamuc = {}
+    dctnohammdduc = {}
     for md in dctmode:
-        dctnohamuc[md] = {}
+        dctnohammdduc[md] = {}
         for wd in dctday:
-            dctnohamuc[md][wd] = {}
-            for uc in dctuc:
-                dctnohamuc[md][wd][uc] = {}
+            dctnohammdduc[md][wd] = {}
+            for uc in dctmdduc:
+                dctnohammdduc[md][wd][uc] = {}
                 for tp in dcttp:
-                    dctnohamuc[md][wd][uc][tp] = temp_array
+                    dctnohammdduc[md][wd][uc][tp] = temp_array
 
     for md in dctmode:
         for wd in dctday:
             for pp in dctpurp:
                 uc = (  # Commute hb from
-                           '2_hb_from' if dctpurp[pp][2] in [1] and dctpurp[pp][1] in ['from'] else
-                           # Commute hb to
-                           '2_hb_to' if dctpurp[pp][2] in [1] and dctpurp[pp][1] in ['to'] else
-                           # Employers Business hb from
-                           '1_hb_from' if dctpurp[pp][2] in [2] and dctpurp[pp][1] in ['from'] else
-                           # Employers Business hb to
-                           '1_hb_to' if dctpurp[pp][2] in [2] and dctpurp[pp][1] in ['to'] else
-                           # Other hb from
-                           '3_hb_from' if dctpurp[pp][2] in [3, 4, 5, 6, 7, 8] and dctpurp[pp][1] in ['from'] else
-                           # Other hb to
-                           '3_hb_to' if dctpurp[pp][2] in [3, 4, 5, 6, 7, 8] and dctpurp[pp][1] in ['to'] else
-                           # Employers Business nhb
-                           '1_nhb' if dctpurp[pp][2] in [12] else
-                           # Other nhb
-                           '3_nhb' if dctpurp[pp][2] in [13, 14, 15, 16, 18] else
-                           '6')
+                    '2_hb_from' if dctpurp[pp][2] in [1] and dctpurp[pp][1] in ['from'] else
+                    # Commute hb to
+                    '2_hb_to' if dctpurp[pp][2] in [1] and dctpurp[pp][1] in ['to'] else
+                    # Employers Business hb from
+                    '1_hb_from' if dctpurp[pp][2] in [2] and dctpurp[pp][1] in ['from'] else
+                    # Employers Business hb to
+                    '1_hb_to' if dctpurp[pp][2] in [2] and dctpurp[pp][1] in ['to'] else
+                    # Other hb from
+                    '3_hb_from' if dctpurp[pp][2] in [3, 4, 5, 6, 7, 8] and dctpurp[pp][1] in ['from'] else
+                    # Other hb to
+                    '3_hb_to' if dctpurp[pp][2] in [3, 4, 5, 6, 7, 8] and dctpurp[pp][1] in ['to'] else
+                    # Employers Business nhb
+                    '1_nhb' if dctpurp[pp][2] in [12] else
+                    # Other nhb
+                    '3_nhb' if dctpurp[pp][2] in [13, 14, 15, 16, 18] else
+                    '6')
                 for tp in dcttp:
                     print('+++ {} - {} - {} - {} +++ uc: {}'.
                           format(dctmode[md][0], dctday[wd][0], dctpurp[pp][0], dcttp[tp][0], uc))
-                    dctnohamuc[md][wd][uc][tp] += dctnohampp[md][wd][pp][tp][:2770, :2770]
+                    dctnohammdduc[md][wd][uc][tp] = (
+                                dctnohammdduc[md][wd][uc][tp] + dctnohampp[md][wd][pp][tp][:2770, :2770])
 
     with open(r'Y:\Mobile Data\Processing\dctNoHAM_car_uc.pkl', 'wb') as log:
-        pk.dump(dctnohamuc, log, pk.HIGHEST_PROTOCOL)
+        pk.dump(dctnohammdduc, log, pk.HIGHEST_PROTOCOL)
+
+    dctglobalucshare = {}
+    for md in dctmode:
+        dctglobalucshare[md] = {}
+        for wd in dctday:
+            dctglobalucshare[md][wd] = {}
+            for uc in dctmdduc:
+                dctglobalucshare[md][wd][uc] = {}
+                mddpurp = (3 if uc in ['1_hb_from'] else
+                           4 if uc in ['1_hb_to'] else
+                           1 if uc in ['2_hb_from'] else
+                           2 if uc in ['2_hb_to'] else
+                           3 if uc in ['3_hb_from'] else
+                           4 if uc in ['3_hb_to'] else
+                           5 if uc in ['1_nhb'] else
+                           5 if uc in ['3_nhb'] else
+                           6)
+                for tp in dcttp:
+                    print(str(md) + str(wd) + str(uc) + str(mddpurp) + str(tp))
+                    dctglobalucshare[md][wd][uc][tp] = (
+                                np.sum(dctglobalucshare[md][wd][uc][tp]) / np.sum(dctnohammdd[md][wd][mddpurp][tp]))
+                    dctglobalucshare[md][wd][uc][tp] = np.nan_to_num(dctglobalucshare[md][wd][uc][tp])
 
     dctmddsplit = {}
     for md in dctmode:
         dctmddsplit[md] = {}
         for wd in dctday:
             dctmddsplit[md][wd] = {}
-            for uc in dctuc:
+            for uc in dctmdduc:
                 dctmddsplit[md][wd][uc] = {}
                 mddpurp = (3 if uc in ['1_hb_from'] else
                            4 if uc in ['1_hb_to'] else
@@ -176,11 +232,10 @@ def mdd_to_uc():
                            5 if uc in ['3_nhb'] else
                            6)
                 for tp in dcttp:
-                    print('+++ {} - {} - {} - {} +++ mddpurp: {}'.
-                          format(dctmode[md][0], dctday[wd][0], dctuc[uc][0], dcttp[tp][0], mddpurp))
-                    dctmddsplit[md][wd][uc][tp] = (dctnohamuc[md][wd][uc][tp]/dctnohammdd[md][wd][mddpurp][tp])
+                    print(str(md) + str(wd) + str(uc) + str(mddpurp) + str(tp))
+                    dctmddsplit[md][wd][uc][tp] = (dctnohammdduc[md][wd][uc][tp] / dctnohammdd[md][wd][mddpurp][tp])
                     dctmddsplit[md][wd][uc][tp] = np.nan_to_num(dctmddsplit[md][wd][uc][tp],
-                                                                nan=0)
+                                                                nan=dctglobalucshare[md][wd][uc][tp])
 
     with open(r'Y:\Mobile Data\Processing\dctmdd_uc_split.pkl', 'wb') as log:
         pk.dump(dctmddsplit, log, pk.HIGHEST_PROTOCOL)
@@ -188,16 +243,24 @@ def mdd_to_uc():
     # TODO: convert MDD and assign
     # TODO: re-split MDD Car
 
-def main():
 
+def main():
     run_noham_car_package = False
-    run_noham_car_merge = True
+    run_noham_compiled_pcu_import = True
+    run_noham_car_merge = False
+    run_mdd_to_uc = True
 
     if run_noham_car_package:
         noham_car_package()
 
+    if run_noham_compiled_pcu_import:
+        noham_compiled_pcu_import()
+
     if run_noham_car_merge:
         noham_car_merge()
+
+    if run_mdd_to_uc:
+        mdd_to_uc()
 
     print("end of main")
 
