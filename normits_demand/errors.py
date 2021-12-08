@@ -8,7 +8,7 @@ Last update made by:
 Other updates made by:
 
 File purpose:
-Holds all the errors related to the elasticity model
+Holds all the errors related to NorMITs Demand
 """
 
 import normits_demand as nd
