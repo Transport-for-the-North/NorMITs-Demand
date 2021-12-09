@@ -1,20 +1,24 @@
 # -*- coding: utf-8 -*-
 """
-Created on: 06/10/2021
+Created on: 08/12/2021
 Updated on:
 
 Original author: Ben Taylor
-Last update made by: Ben Taylor
-Other updates made by: Chris Storey
+Last update made by:
+Other updates made by:
 
 File purpose:
 
 """
 # Built-Ins
 import os
+import abc
+import enum
 
 from typing import Any
+from typing import List
 from typing import Dict
+from typing import Tuple
 from typing import Optional
 
 # Third Party
@@ -41,7 +45,198 @@ from normits_demand.concurrency import multiprocessing
 from normits_demand.pathing.travel_market_synthesiser import GravityModelExportPaths
 
 
-class GravityModel(GravityModelExportPaths):
+class AbstractDistributor(abc.ABC):
+    # Default class constants that can be overwritten
+    _default_name = 'Distributor'
+
+    # Internal variables for consistent naming
+    _pa_val_col = 'trips'
+
+    def __init__(self,
+                 year: int,
+                 running_mode: nd.Mode,
+                 zoning_system: nd.core.ZoningSystem,
+                 export_home: nd.PathLike,
+                 process_count: Optional[int] = constants.PROCESS_COUNT,
+                 zone_col: str = None,
+                 name: str = None,
+                 ):
+        # Validate inputs
+        if not isinstance(zoning_system, nd.core.zoning.ZoningSystem):
+            raise ValueError(
+                "Expected and instance of a normits_demand ZoningSystem. "
+                "Got a %s instance instead."
+                % type(zoning_system)
+            )
+
+        # Set default values where not set
+        name = self._default_name if name is None else name
+        zone_col = zoning_system.col_name if zone_col is None else zone_col
+
+        # Assign attributes
+        self.name = name
+        self.year = year
+        self.running_mode = running_mode
+        self.zoning_system = zoning_system
+        self.zone_col = zone_col
+        self.export_home = export_home
+        self.process_count = process_count
+
+    def _filter_productions_attractions(self,
+                                        segment_params: Dict[str, Any],
+                                        productions: pd.DataFrame,
+                                        attractions: pd.DataFrame,
+                                        pa_val_col: str,
+                                        ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Extracts and returns the productions and attractions for segment_params"""
+        # Figure out which columns we need
+        segments = list(segment_params.keys())
+        rename_cols = {pa_val_col: self._pa_val_col}
+        needed_cols = segments + [self._pa_val_col]
+
+        # Filter productions
+        seg_productions = pd_utils.filter_df(
+            df=productions,
+            df_filter=segment_params,
+            throw_error=True,
+        )
+        seg_productions = seg_productions.rename(columns=rename_cols)
+        seg_productions = seg_productions.set_index(self.zone_col)
+        seg_productions = seg_productions.reindex(
+            index=self.zoning_system.unique_zones,
+            columns=needed_cols,
+            fill_value=0,
+        ).reset_index()
+
+        # Filter attractions
+        seg_attractions = pd_utils.filter_df(
+            df=attractions,
+            df_filter=segment_params,
+            throw_error=True,
+        )
+        seg_attractions = seg_attractions.rename(columns=rename_cols)
+        seg_attractions = seg_attractions.set_index(self.zone_col)
+        seg_attractions = seg_attractions.reindex(
+            index=self.zoning_system.unique_zones,
+            columns=needed_cols,
+            fill_value=0,
+        ).reset_index()
+
+        # Check we actually got something
+        production_sum = seg_productions[self._pa_val_col].values.sum()
+        attraction_sum = seg_attractions[self._pa_val_col].values.sum()
+        if production_sum <= 0 or attraction_sum <= 0:
+            raise nd.NormitsDemandError(
+                "Missing productions and/or attractions after filtering to "
+                "this segment.\n"
+                "\tSegment: %s\n"
+                "\tProductions sum: %s\n"
+                "\tAttractions sum: %s"
+                % (segment_params, production_sum, attraction_sum)
+            )
+
+        # Balance A to P
+        adj_factor = production_sum / attraction_sum
+        seg_attractions[self._pa_val_col] *= adj_factor
+
+        return seg_productions, seg_attractions
+
+    @abc.abstractmethod
+    def distribute_segment(self,
+                           productions: pd.DataFrame,
+                           attractions: pd.DataFrame,
+                           running_segmentation: nd.SegmentationLevel,
+                           overall_log_path: nd.PathLike,
+                           **kwargs,
+                           ):
+        pass
+
+    def distribute(self,
+                   productions: pd.DataFrame,
+                   attractions: pd.DataFrame,
+                   running_segmentation: nd.SegmentationLevel,
+                   overall_log_path: nd.PathLike,
+                   pa_val_col: Optional[str] = 'val',
+                   by_segment_kwargs: List[Dict[str, Any]] = None,
+                   **kwargs,
+                   ):
+        # Set defaults
+        by_segment_kwargs = dict() if by_segment_kwargs is None else by_segment_kwargs
+
+        # Make a new log file if one already exists
+        if os.path.isfile(overall_log_path):
+            os.remove(overall_log_path)
+
+        # ## MULTIPROCESS ACROSS SEGMENTS ## #
+        unchanging_kwargs = kwargs.copy()
+        unchanging_kwargs.update({
+            'running_segmentation': running_segmentation,
+            'overall_log_path': overall_log_path,
+        })
+
+        pbar_kwargs = {
+            'desc': self.name,
+            'unit': 'segment',
+        }
+
+        # Build a list of kwargs - one for each segment
+        kwarg_list = list()
+        for segment_params in running_segmentation:
+            # Get productions, attractions
+            seg_productions, seg_attractions = self._filter_productions_attractions(
+                segment_params=segment_params,
+                productions=productions,
+                attractions=attractions,
+                pa_val_col=pa_val_col,
+            )
+
+            # Build the kwargs for this segment
+            segment_kwargs = unchanging_kwargs.copy()
+            segment_kwargs.update({
+                'segment_params': segment_params,
+                'productions': seg_productions,
+                'attractions': seg_attractions,
+            })
+
+            # Get any other by_segment kwargs passed in
+            segment_name = running_segmentation.get_segment_name(segment_params)
+            segment_kwargs.update(by_segment_kwargs.get(segment_name, dict()))
+
+            kwarg_list.append(segment_kwargs)
+
+        # Multiprocess
+        multiprocessing.multiprocess(
+            fn=self.distribute_segment,
+            kwargs=kwarg_list,
+            pbar_kwargs=pbar_kwargs,
+            process_count=0,
+            # process_count=self.process_count,
+        )
+
+
+@enum.unique
+class DistributionMethod(enum.Enum):
+    GRAVITY = 'gravity'
+    FURNESS3D = 'furness_3d'
+
+    def get_distributor(self, **kwargs) -> AbstractDistributor:
+
+        if self == DistributionMethod.GRAVITY:
+            function = GravityDistributor
+
+        elif self == DistributionMethod.FURNESS3D:
+            raise NotImplementedError()
+
+        else:
+            raise nd.NormitsDemandError(
+                "No definition exists for %s built in cost function"
+                % self
+            )
+
+        return function(**kwargs)
+
+
+class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
     _log_fname = "Gravity_Model_log.log"
 
     _base_zone_col = "%s_zone_id"
@@ -52,7 +247,7 @@ class GravityModel(GravityModelExportPaths):
     def __init__(self,
                  year: int,
                  running_mode: nd.Mode,
-                 zoning_system: nd.core.ZoningSystem,
+                 zoning_system: nd.ZoningSystem,
                  export_home: nd.PathLike,
                  zone_col: str = None,
                  process_count: Optional[int] = constants.PROCESS_COUNT,
@@ -64,6 +259,17 @@ class GravityModel(GravityModelExportPaths):
                 "Got a %s instance instead."
                 % type(zoning_system)
             )
+
+        # Build the distributor
+        AbstractDistributor.__init__(
+            self,
+            year=year,
+            running_mode=running_mode,
+            zoning_system=zoning_system,
+            export_home=export_home,
+            process_count=process_count,
+
+        )
 
         # Assign attributes
         self.zoning_system = zoning_system
@@ -78,7 +284,8 @@ class GravityModel(GravityModelExportPaths):
         file_ops.create_folder(report_home)
 
         # Build the output paths
-        super().__init__(
+        GravityModelExportPaths.__init__(
+            self,
             year=year,
             running_mode=running_mode,
             export_home=export_home,
@@ -93,153 +300,19 @@ class GravityModel(GravityModelExportPaths):
             instantiate_msg="Initialised new Gravity Model Logger",
         )
 
-    def run(self,
-            trip_origin: str,
-            running_segmentation: nd.core.segments.SegmentationLevel,
-            productions: pd.DataFrame,
-            attractions: pd.DataFrame,
-            init_params: pd.DataFrame,
-            target_tld_dir: pd.DataFrame,
-            cost_dir: nd.PathLike,
-            cost_function: cost.CostFunction,
-            intrazonal_cost_infill: Optional[float] = 0.5,
-            pa_val_col: Optional[str] = 'val',
-            convergence_target: float = 0.95,
-            fitting_loops: int = 100,
-            furness_max_iters: int = 5000,
-            furness_tol: float = 0.1,
-            init_param_cols: str = None,
-            ):
-        # Validate the trip origin
-        trip_origin = checks.validate_trip_origin(trip_origin)
-
-        # If no cols given, get from the cost function
-        if init_param_cols is None:
-            init_param_cols = cost_function.parameter_names
-
-        # Replace the overall log if it exists
-        if trip_origin == 'hb':
-            overall_log_path = self.report_paths.hb_overall_log
-        elif trip_origin == 'nhb':
-            overall_log_path = self.report_paths.nhb_overall_log
-        else:
-            raise ValueError("Don't know what trip_origin %s is" % trip_origin)
-
-        if os.path.isfile(overall_log_path):
-            os.remove(overall_log_path)
-
-        # ## MULTIPROCESS ACROSS SEGMENTS ## #
-        unchanging_kwargs = {
-            'trip_origin': trip_origin,
-            'running_segmentation': running_segmentation,
-            'target_tld_dir': target_tld_dir,
-            'cost_dir': cost_dir,
-            'cost_function': cost_function,
-            'overall_log_path': overall_log_path,
-            'intrazonal_cost_infill': intrazonal_cost_infill,
-            'furness_max_iters': furness_max_iters,
-            'fitting_loops': fitting_loops,
-            'convergence_target': convergence_target,
-            'furness_tol': furness_tol,
-        }
-
-        pbar_kwargs = {
-            'desc': 'Gravity model',
-            'unit': 'segment',
-        }
-
-        # Build a list of kwargs
-        kwarg_list = list()
-        for segment_params in running_segmentation:
-            # ## GET P/A VECTORS FOR THIS SEGMENT ## #
-            # Figure out which columns we need
-            segments = list(segment_params.keys())
-            rename_cols = {pa_val_col: self._pa_val_col}
-            needed_cols = segments + [self._pa_val_col]
-
-            # Filter productions
-            seg_productions = pd_utils.filter_df(
-                df=productions,
-                df_filter=segment_params,
-                throw_error=True,
-            )
-            seg_productions = seg_productions.rename(columns=rename_cols)
-            seg_productions = seg_productions.set_index(self.zone_col)
-            seg_productions = seg_productions.reindex(
-                index=self.zoning_system.unique_zones,
-                columns=needed_cols,
-                fill_value=0,
-            ).reset_index()
-
-            # Filter attractions
-            seg_attractions = pd_utils.filter_df(
-                df=attractions,
-                df_filter=segment_params,
-                throw_error=True,
-            )
-            seg_attractions = seg_attractions.rename(columns=rename_cols)
-            seg_attractions = seg_attractions.set_index(self.zone_col)
-            seg_attractions = seg_attractions.reindex(
-                index=self.zoning_system.unique_zones,
-                columns=needed_cols,
-                fill_value=0,
-            ).reset_index()
-
-            # Check we actually got something
-            production_sum = seg_productions[self._pa_val_col].values.sum()
-            attraction_sum = seg_attractions[self._pa_val_col].values.sum()
-            if production_sum <= 0 or attraction_sum <= 0:
-                raise nd.NormitsDemandError(
-                    "Missing productions and/or attractions after filtering to "
-                    "this segment.\n"
-                    "\tSegment: %s\n"
-                    "\tProductions sum: %s\n"
-                    "\tAttractions sum: %s"
-                    % (segment_params, production_sum, attraction_sum)
-                )
-
-            # Balance A to P
-            adj_factor = production_sum / attraction_sum
-            seg_attractions[self._pa_val_col] *= adj_factor
-
-            # ## GET INIT PARAMS FOP THIS SEGMENT ## #
-            seg_init_params = pd_utils.filter_df(init_params, segment_params)
-
-            if len(seg_init_params) > 1:
-                seg_name = running_segmentation.generate_file_name(segment_params)
-                raise ValueError(
-                    "%s rows found in init_params for segment %s. "
-                    "Expecting only 1 row."
-                    % (len(seg_init_params), seg_name)
-                )
-
-            # Make sure the columns we need do exist
-            seg_init_params = pd_utils.reindex_cols(
-                df=seg_init_params,
-                columns=init_param_cols,
-                dataframe_name='init_params',
-            )
-
-            init_cost_params = {x: seg_init_params[x].squeeze() for x in init_param_cols}
-
-            # Build the kwargs
-            kwargs = unchanging_kwargs.copy()
-            kwargs.update({
-                'segment_params': segment_params,
-                'seg_productions': seg_productions,
-                'seg_attractions': seg_attractions,
-                'init_cost_params': init_cost_params
-            })
-            kwarg_list.append(kwargs)
-
-        # Multiprocess
-        multiprocessing.multiprocess(
-            fn=self._run_internal,
-            kwargs=kwarg_list,
-            pbar_kwargs=pbar_kwargs,
-            # process_count=0,
-            process_count=self.process_count,
-        )
+    def distribute_segment(self,
+                           productions: pd.DataFrame,
+                           attractions: pd.DataFrame,
+                           running_segmentation: nd.SegmentationLevel,
+                           overall_log_path: nd.PathLike,
+                           **kwargs,
+                           ):
+        print(productions)
+        print(attractions)
+        print(running_segmentation)
+        print(overall_log_path)
+        print(kwargs)
+        return
 
     def _run_internal(self,
                       segment_params: Dict[str, Any],

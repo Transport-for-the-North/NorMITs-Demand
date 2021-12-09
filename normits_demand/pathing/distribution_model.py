@@ -15,17 +15,27 @@ import os
 import abc
 import collections
 
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Union
+
 # Third Party
+import pandas as pd
+import tqdm
 
 # Local Imports
 import normits_demand as nd
-
+from normits_demand import constants
+from normits_demand.cost import utils as cost_utils
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
+from normits_demand.utils import pandas_utils as pd_utils
 
 # ## DEFINE COLLECTIONS OF OUTPUT PATHS ## #
-_TMS_ExportPaths_NT = collections.namedtuple(
-    typename='_TMS_ExportPaths_NT',
+# Exports
+_DM_ExportPaths_NT = collections.namedtuple(
+    typename='_DM_ExportPaths_NT',
     field_names=[
         'home',
         'full_pa_dir',
@@ -36,8 +46,9 @@ _TMS_ExportPaths_NT = collections.namedtuple(
     ]
 )
 
-_TMS_ReportPaths_NT = collections.namedtuple(
-    typename='_TMS_ReportPaths_NT',
+# Reports
+_DM_ReportPaths_NT = collections.namedtuple(
+    typename='_DM_ReportPaths_NT',
     field_names=[
         'home',
         'pa_reports_dir',
@@ -45,29 +56,254 @@ _TMS_ReportPaths_NT = collections.namedtuple(
     ]
 )
 
+_Distributor_ReportPaths_NT = collections.namedtuple(
+    typename='_Distributor_ReportPaths_NT',
+    field_names=[
+        'home',
+        'segment_log_dir',
+        'tld_report_dir',
+    ]
+)
+
 
 # ## DEFINE IMPORT PATHS ## #
 class DMArgumentBuilderBase(abc.ABC):
-    """Abstract Class defining how the argument builder for TMS should look.
+    """
+    Abstract Class defining how the argument builder for the
+    distribution model should look.
 
     If custom import paths are needed, then a new class needs to be made
-    which inherits this abstract class. TMS can then use the defined
-    functions/properties to pick up new import files.
+    which inherits this abstract class. DistributionModel can then use the
+    defined functions/properties to pick up new import files.
     """
 
-    # @property
-    # @abc.abstractmethod
-    # def external_model_arg_builder(self) -> ExternalModelArgumentBuilderBase:
-    #     pass
-    #
-    # @property
-    # @abc.abstractmethod
-    # def gravity_model_arg_builder(self) -> GravityModelArgumentBuilderBase:
-    #     pass
-    #
-    # @abc.abstractmethod
-    # def build_pa_to_od_arguments(self) -> Dict[str, Any]:
-    #     pass
+    @abc.abstractmethod
+    def build_upper_model_arguments(self) -> Dict[str, Any]:
+        pass
+
+    @abc.abstractmethod
+    def build_lower_model_arguments(self) -> Dict[str, Any]:
+        pass
+
+
+class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
+    # Costs constants
+    _modal_dir_name = 'modal'
+    _cost_dir_name = 'costs'
+    _cost_base_fname = "{zoning_name}_{cost_type}_costs.csv"
+
+    # Initial Parameters consts
+    _gravity_model_dir = 'gravity model'
+
+    # Trip Length Distribution constants
+    _tld_dir_name = 'trip_length_distributions'
+
+    def __init__(self,
+                 import_home: nd.PathLike,
+                 trip_origin: str,
+                 productions: nd.DVector,
+                 attractions: nd.DVector,
+                 running_mode: nd.Mode,
+                 running_segmentation: nd.SegmentationLevel,
+                 zoning_system: nd.ZoningSystem,
+                 target_tld_name: str,
+                 init_params_fname: str,
+                 init_params_cols: List[str],
+                 upper_model_method: nd.DistributionMethod,
+                 upper_distributor_kwargs: Dict[str, Any],
+                 lower_model_method: nd.DistributionMethod = None,
+                 lower_distributor_kwargs: Dict[str, Any] = None,
+                 intrazonal_cost_infill: float = None,
+                 ):
+        # Check paths exist
+        file_ops.check_path_exists(import_home)
+
+        # TODO(BT): Validate segments and zones are the correct types
+
+        # Assign attributes
+        self.import_home = import_home
+        self.trip_origin = trip_origin
+        self.productions = productions
+        self.attractions = attractions
+
+        self.running_mode = running_mode
+        self.running_segmentation = running_segmentation
+        self.zoning_system = zoning_system
+        self.target_tld_name = target_tld_name
+
+        self.init_params_fname = init_params_fname
+        self.init_params_cols = init_params_cols
+
+        self.upper_model_method = upper_model_method
+        self.lower_model_method = lower_model_method
+        self.upper_distributor_kwargs = upper_distributor_kwargs
+        self.lower_distributor_kwargs = lower_distributor_kwargs
+
+        self.intrazonal_cost_infill = intrazonal_cost_infill
+
+    @staticmethod
+    def _maybe_read_trip_end(trip_end: Union[nd.DVector, nd.PathLike]) -> nd.DVector:
+        """Read in a Dvector if path was give"""
+        # Just return if it's a DVector
+        if isinstance(trip_end, nd.core.data_structures.DVector):
+            return trip_end
+
+        if not os.path.exists(trip_end):
+            raise ValueError(
+                "Expected either a DVector or a path to one. No path exists at "
+                "%s" % trip_end
+            )
+
+        return nd.read_pickle(trip_end)
+
+    def _get_cost(self, segment_params: Dict[str, Any]) -> pd.DataFrame:
+        """Reads in the cost matrix for this segment"""
+        # Generate the path to the segment file
+        cost_dir = os.path.join(
+            self.import_home,
+            self._modal_dir_name,
+            self.running_mode.value,
+            self._cost_dir_name,
+            self.zoning_system.name,
+        )
+        fname = self.running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            file_desc="%s_cost" % self.zoning_system.name,
+            segment_params=segment_params,
+            csv=True,
+        )
+        path = os.path.join(cost_dir, fname)
+
+        # Read in the costs and infill
+        cost_matrix = nd.read_df(path, find_similar=True, index_col=0).values
+        if self.intrazonal_cost_infill is not None:
+            cost_matrix = cost_utils.iz_infill_costs(
+                cost_matrix,
+                iz_infill=self.intrazonal_cost_infill,
+            )
+
+        return cost_matrix
+
+    def _get_target_cost_distribution(self,
+                                      segment_params: Dict[str, Any],
+                                      ) -> pd.DataFrame:
+        """Reads in the target cost distribution for this segment"""
+        # Generate the path to the cost distribution file
+        tcd_dir = os.path.join(
+            self.import_home,
+            self._tld_dir_name,
+            self.target_tld_name,
+        )
+        fname = self.running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            file_desc="tlb",
+            segment_params=segment_params,
+            csv=True,
+        )
+        path = os.path.join(tcd_dir, fname)
+
+        # Convert to expected format
+        target_cost_distribution = file_ops.read_df(path)
+
+        rename = {'lower': 'min', 'upper': 'max'}
+        target_cost_distribution = target_cost_distribution.rename(columns=rename)
+        target_cost_distribution['min'] *= constants.MILES_TO_KM
+        target_cost_distribution['max'] *= constants.MILES_TO_KM
+
+        return target_cost_distribution
+
+    def _get_init_params(self,
+                         segment_params: Dict[str, Any],
+                         init_params_df: pd.DataFrame,
+                         ) -> Dict[str, int]:
+        """Extracts the init params for this segment from init_params_df"""
+        seg_init_params = pd_utils.filter_df(init_params_df, segment_params)
+
+        if len(seg_init_params) > 1:
+            seg_name = self.running_segmentation.generate_file_name(segment_params)
+            raise ValueError(
+                "%s rows found in init_params for segment %s. "
+                "Expecting only 1 row."
+                % (len(seg_init_params), seg_name)
+            )
+
+        # Make sure the columns we need do exist
+        seg_init_params = pd_utils.reindex_cols(
+            df=seg_init_params,
+            columns=self.init_params_cols,
+            dataframe_name='init_params',
+        )
+
+        return {x: seg_init_params[x].squeeze() for x in self.init_params_cols}
+
+    def _build_gravity_by_segment_kwargs(self):
+        """Build the dictionary of kwargs for each segment"""
+        # Read in the init_params_df
+        path = os.path.join(
+            self.import_home,
+            self._gravity_model_dir,
+            self.init_params_fname,
+        )
+        init_params_df = file_ops.read_df(path)
+
+        # Generate by segment kwargs
+        by_segment_kwargs = dict()
+        desc = "Reading in cost and TLDs"
+        for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
+            # Get the needed kwargs
+            segment_name = self.running_segmentation.get_segment_name(segment_params)
+            cost_matrix = self._get_cost(segment_params)
+            target_cost_distribution = self._get_target_cost_distribution(segment_params)
+            init_params = self._get_init_params(segment_params, init_params_df)
+
+            # Add to dictionary
+            by_segment_kwargs[segment_name] = {
+                'costs': cost_matrix,
+                'target_cost_distribution': target_cost_distribution,
+                'init_params': init_params,
+            }
+
+            # TODO: Just do one iter for now while testing
+            break
+
+        return by_segment_kwargs
+
+    def _build_furness3d_by_segment_kwargs(self):
+        raise NotImplementedError
+
+    def _build_by_segment_kwargs(self, method: nd.DistributionMethod):
+        if method == nd.DistributionMethod.GRAVITY:
+            fn = self._build_gravity_by_segment_kwargs
+        elif method == nd.DistributionMethod.FURNESS3D:
+            fn = self._build_furness3d_by_segment_kwargs
+        else:
+            raise NotImplementedError(
+                "No function exists to build the by_segment_kwargs for "
+                "DistributionMethod %s"
+                % method.value
+            )
+        return fn()
+
+    def build_upper_model_arguments(self):
+        # Read and validate trip ends
+        productions = self._maybe_read_trip_end(self.productions)
+        attractions = self._maybe_read_trip_end(self.attractions)
+
+        by_segment_kwargs = self._build_by_segment_kwargs(self.upper_model_method)
+
+        final_kwargs = self.upper_distributor_kwargs.copy()
+        final_kwargs.update({
+            'productions': productions.to_df(),
+            'attractions': attractions.to_df(),
+            'running_segmentation': self.running_segmentation,
+            'by_segment_kwargs': by_segment_kwargs,
+        })
+
+        return final_kwargs
+
+    def build_lower_model_arguments(self):
+        pass
+
 
 # ## DEFINE EXPORT PATHS ##
 class DistributionModelExportPaths:
@@ -88,6 +324,10 @@ class DistributionModelExportPaths:
     _reports_dirname = 'Reports'
     _pa_report_dir = 'PA Reports'
     _od_report_dir = 'OD Reports'
+
+    # Distributor reports names
+    _log_dir_name = 'Logs'
+    _tld_report_dir = 'TLD Reports'
 
     def __init__(self,
                  year: int,
@@ -128,8 +368,8 @@ class DistributionModelExportPaths:
 
         # ## BUILD ALL MODEL PATHS ## #
         # Upper Model
-        upper_export_home = os.path.join(self.export_home, self._upper_model_dir)
-        file_ops.create_folder(upper_export_home)
+        self.upper_export_home = os.path.join(self.export_home, self._upper_model_dir)
+        file_ops.create_folder(self.upper_export_home)
 
         # Lower Model
         lower_export_home = os.path.join(self.export_home, self._lower_model_dir)
@@ -167,7 +407,7 @@ class DistributionModelExportPaths:
             file_ops.create_folder(path)
 
         # Create the export_paths class
-        self.export_paths = _TMS_ExportPaths_NT(
+        self.export_paths = _DM_ExportPaths_NT(
             home=export_home,
             full_pa_dir=full_pa_dir,
             compiled_pa_dir=compiled_pa_dir,
@@ -179,8 +419,8 @@ class DistributionModelExportPaths:
     def _create_report_paths(self, report_home: str) -> None:
         """Creates self.report_paths"""
 
-        # Create the export_paths class
-        self.report_paths = _TMS_ReportPaths_NT(
+        # Create the overall report paths
+        self.report_paths = _DM_ReportPaths_NT(
             home=report_home,
             pa_reports_dir=os.path.join(report_home, self._pa_report_dir),
             od_reports_dir=os.path.join(report_home, self._od_report_dir),
@@ -189,3 +429,11 @@ class DistributionModelExportPaths:
         # Make paths that don't exist
         for path in self.report_paths:
             file_ops.create_folder(path)
+
+        # Create the upper model report paths
+        upper_report_home = os.path.join(report_home, self._upper_model_dir)
+        self.upper_report_paths = _Distributor_ReportPaths_NT(
+            home=upper_report_home,
+            segment_log_dir=os.path.join(upper_report_home, self._log_dir_name),
+            tld_report_dir=os.path.join(upper_report_home, self._tld_report_dir),
+        )

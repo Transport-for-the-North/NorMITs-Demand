@@ -24,6 +24,8 @@ import normits_demand as nd
 from normits_demand import constants as consts
 
 from normits_demand.models import DistributionModel
+from normits_demand.distribution import distributors
+from normits_demand.pathing.distribution_model import DistributionModelArgumentBuilder
 
 
 # ## CONSTANTS ## #
@@ -31,17 +33,18 @@ from normits_demand.models import DistributionModel
 notem_iteration_name = '9.3'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
 tram_export_home = r"I:\NorMITs Demand\Tram"
-cache_path = "E:/gb_dist_cache"
+cache_path = "E:/tms_cache"
 
 # Distribution running args
 base_year = 2018
 scenario = consts.SC01_JAM
-gb_dist_iteration_name = '9.3.2'
-gb_dist_import_home = r"I:\NorMITs Demand\import"
-gb_dist_export_home = r"E:\NorMITs Demand\GB_Distribution"
+dm_iteration_name = '9.3.2'
+dm_import_home = r"I:\NorMITs Demand\import"
+dm_export_home = r"E:\NorMITs Demand\Distribution Model"
 
 # General constants
-INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv',
+INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
+
 
 def main():
     mode = nd.Mode.CAR
@@ -83,16 +86,18 @@ def main():
         nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_car')
 
         # Define kwargs for the distribution tiers
+
         # TODO(BT): Link segs into segmentation objects.
         #  Need to split out the hb and NHB target TLDs
         upper_calibration_area = 'gb'
         upper_seg = 'p_m'
-        upper_method = nd.DistributionMethods.GRAVITY
+        upper_model_method = nd.DistributionMethod.GRAVITY
         upper_convergence_target = 0.9
+        upper_cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
 
         lower_calibration_area = 'north'
         lower_seg = 'p_m_tp'
-        lower_method = nd.DistributionMethods.GRAVITY
+        lower_model_method = nd.DistributionMethod.GRAVITY
         lower_convergence_target = 0.9
 
         upper_kwargs = {'zoning': upper_zoning_name, 'area': upper_calibration_area}
@@ -101,30 +106,30 @@ def main():
         nhb_kwargs = {'trip_origin': 'nhb', 'seg': lower_seg}
 
         hb_init_params_fname = INIT_PARAMS_BASE.format(**hb_kwargs, **upper_kwargs)
-        nhb_init_params_fname = INIT_PARAMS_BASE.format(**nhb_kwargs, *upper_kwargs)
-        upper_kwargs = {
-            'zoning_system': nd.get_zoning_system(upper_zoning_name),
-            'method': upper_method,
-            'cost_function': nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function(),
+        nhb_init_params_fname = INIT_PARAMS_BASE.format(**nhb_kwargs, **upper_kwargs)
+        upper_distributor_kwargs = {
+            'cost_function': upper_cost_function,
             'convergence_target': upper_convergence_target,
-            'hb_init_params_fname': hb_init_params_fname,
-            'nhb_init_params_fname': nhb_init_params_fname,
-            'hb_target_tld_dir': os.path.join(upper_calibration_area, upper_seg),
-            'nhb_target_tld_dir': os.path.join(upper_calibration_area, upper_seg),
+            'fitting_loops': 100,
+            'furness_max_iters': 5000,
+            'furness_tol': 0.1,
         }
 
-        hb_init_params_fname = INIT_PARAMS_BASE.format(**hb_kwargs, **lower_kwargs)
-        nhb_init_params_fname = INIT_PARAMS_BASE.format(**nhb_kwargs, *lower_kwargs)
-        lower_kwargs = {
-            'zoning_system': nd.get_zoning_system(lower_zoning_name),
-            'method': lower_method,
-            'target_tld_dir': os.path.join(upper_calibration_area, lower_seg),
+        # blub = {
+        #     'hb_init_params_fname': hb_init_params_fname,
+        #     'nhb_init_params_fname': nhb_init_params_fname,
+        #     'hb_target_tld_dir': os.path.join(upper_calibration_area, upper_seg),
+        #     'nhb_target_tld_dir': os.path.join(upper_calibration_area, upper_seg),
+        # }
+        #
+        # hb_init_params_fname = INIT_PARAMS_BASE.format(**hb_kwargs, **lower_kwargs)
+        # nhb_init_params_fname = INIT_PARAMS_BASE.format(**nhb_kwargs, **lower_kwargs)
+        lower_distributor_kwargs = {
             'cost_function': nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function(),
             'convergence_target': lower_convergence_target,
-            'hb_init_params_fname': hb_init_params_fname,
-            'nhb_init_params_fname': nhb_init_params_fname,
-            'hb_target_tld_dir': os.path.join(upper_calibration_area, upper_seg),
-            'nhb_target_tld_dir': os.path.join(upper_calibration_area, upper_seg),
+            'fitting_loops': 100,
+            'furness_max_iters': 5000,
+            'furness_tol': 0.1,
         }
 
     else:
@@ -135,7 +140,7 @@ def main():
     # ## GET TRIP ENDS ## #
     hb_productions, hb_attractions, nhb_productions, nhb_attractions = build_trip_ends(
         use_tram=use_tram,
-        zoning_system=nd.get_segmentation_level(upper_zoning_name),
+        zoning_system=nd.get_zoning_system(upper_zoning_name),
         mode=mode,
         hb_agg_seg=hb_agg_seg,
         hb_running_seg=hb_running_seg,
@@ -143,32 +148,40 @@ def main():
         nhb_running_seg=nhb_running_seg,
     )
 
-    # ## BUILD MODEL SPECIFIC KWARGS ## #
-    arg_builder = DistModelArgBuilder(
-        import_home=gb_dist_import_home,
-        running_mode=mode,
-        hb_running_segmentation=hb_running_seg,
-        nhb_running_segmentation=nhb_running_seg,
-        hb_cost_type=hb_cost_type,
-        nhb_cost_type=nhb_cost_type,
-        hb_productions=hb_productions,
-        hb_attractions=hb_attractions,
-        nhb_productions=nhb_productions,
-        nhb_attractions=nhb_attractions,
-        intrazonal_cost_infill=intrazonal_cost_infill,
-        export_home=gb_dist_export_home,
-        upper_kwargs=upper_kwargs,
-        lower_kwargs=lower_kwargs,
-    )
-
+    # ## RUN THE MODEL ## #
     if run_hb:
+        arg_builder = DistributionModelArgumentBuilder(
+            import_home=dm_import_home,
+            trip_origin='hb',
+            productions=hb_productions,
+            attractions=hb_attractions,
+            running_mode=mode,
+            running_segmentation=hb_running_seg,
+            zoning_system=nd.get_zoning_system(upper_zoning_name),
+            target_tld_name=os.path.join(upper_calibration_area, upper_seg),
+            init_params_fname=hb_init_params_fname,
+            init_params_cols=upper_cost_function.parameter_names,
+            upper_model_method=upper_model_method,
+            upper_distributor_kwargs=upper_distributor_kwargs,
+            lower_model_method=lower_model_method,
+            lower_distributor_kwargs=lower_distributor_kwargs,
+            intrazonal_cost_infill=intrazonal_cost_infill,
+        )
+
         hb_distributor = DistributionModel(
+            trip_origin='hb',
             year=base_year,
             running_mode=mode,
             running_segmentation=hb_running_seg,
-            iteration_name=gb_dist_iteration_name,
+            iteration_name=dm_iteration_name,
             arg_builder=arg_builder,
-            export_home=gb_dist_export_home,
+            upper_model_method=upper_model_method,
+            upper_model_zoning=nd.get_zoning_system(upper_zoning_name),
+            upper_model_kwargs=None,
+            lower_model_method=lower_model_method,
+            lower_model_zoning=nd.get_zoning_system(lower_zoning_name),
+            lower_model_kwargs=None,
+            export_home=dm_export_home,
             process_count=-2,
         )
 
@@ -186,9 +199,9 @@ def main():
             year=base_year,
             running_mode=mode,
             running_segmentation=nhb_running_seg,
-            iteration_name=gb_dist_iteration_name,
+            iteration_name=dm_iteration_name,
             arg_builder=arg_builder,
-            export_home=gb_dist_export_home,
+            export_home=dm_export_home,
             process_count=-2,
         )
 

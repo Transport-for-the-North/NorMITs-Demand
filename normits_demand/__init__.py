@@ -23,6 +23,10 @@ from normits_demand.pathing.errors import PathingError
 # Core Functionality
 from normits_demand.core import *
 
+# Costs
+from normits_demand.cost.cost_functions import BuiltInCostFunction
+from normits_demand.distribution import DistributionMethod
+
 # ## EXPOSE CLASS LAYER ## #
 # EFS Class Layer
 from normits_demand.models.external_forecast_system import ExternalForecastSystem

@@ -13,6 +13,9 @@ Home of the NorMITs Distribution Model
 # Built-Ins
 import os
 
+from typing import Any
+from typing import Dict
+
 # Third Party
 
 # Local Imports
@@ -33,14 +36,22 @@ class DistributionModel(DistributionModelExportPaths):
     _running_report_fname = 'running_parameters.txt'
     _log_fname = "Distribution_Model_log.log"
 
+    _dist_overall_log_name = '{trip_origin}_overall_log.csv'
+
     def __init__(self,
                  year: int,
                  running_mode: nd.Mode,
+                 trip_origin: str,
                  running_segmentation: nd.SegmentationLevel,
                  iteration_name: str,
                  arg_builder: DMArgumentBuilderBase,
                  export_home: nd.PathLike,
-                 lower_model_needed: bool = True,
+                 upper_model_method: nd.DistributionMethod,
+                 upper_model_zoning: nd.ZoningSystem,
+                 upper_model_kwargs: Dict[str, Any] = None,
+                 lower_model_method: nd.DistributionMethod = None,
+                 lower_model_zoning: nd.ZoningSystem = None,
+                 lower_model_kwargs: Dict[str, Any] = None,
                  process_count: int = constants.PROCESS_COUNT,
                  ):
         # Generate export paths
@@ -51,15 +62,26 @@ class DistributionModel(DistributionModelExportPaths):
             export_home=export_home,
         )
 
+        # Get default values if set to None
+        upper_model_kwargs = dict() if upper_model_kwargs is None else upper_model_kwargs
+        lower_model_kwargs = dict() if lower_model_kwargs is None else lower_model_kwargs
+
+        # TODO(BT): Check all lower things are set
+
         # Assign attributes
+        self.trip_origin = trip_origin
         self.running_segmentation = running_segmentation
         self.process_count = process_count
-        self.lower_model_needed = lower_model_needed
+
+        self.upper_model_method = upper_model_method
+        self.upper_model_zoning = upper_model_zoning
+        self.upper_model_kwargs = upper_model_kwargs
+        self.lower_model_method = lower_model_method
+        self.lower_model_zoning = lower_model_zoning
+        self.lower_model_kwargs = lower_model_kwargs
 
         # TODO(BT): Validate this is correct type
         self.arg_builder = arg_builder
-        # self.external_model_arg_builder = tms_arg_builder.external_model_arg_builder
-        # self.gravity_model_arg_builder = tms_arg_builder.gravity_model_arg_builder
 
         # Create a logger
         logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
@@ -81,14 +103,14 @@ class DistributionModel(DistributionModelExportPaths):
             'Code Version: %s' % str(nd.__version__),
             'TMS Iteration: %s' % str(self.iteration_name),
             '',
-            '### Upper Model ###',
-            'vector_export: %s' % self.upper_model.export_paths.home,
-            'report_export: %s' % self.external_model.report_paths.home,
-            '',
-            '### Lower Model ###',
-            'vector_export: %s' % self.gravity_model.export_paths.home,
-            'report_export: %s' % self.gravity_model.report_paths.home,
-            '',
+            # '### Upper Model ###',
+            # 'vector_export: %s' % self.upper_model.export_paths.home,
+            # 'report_export: %s' % self.external_model.report_paths.home,
+            # '',
+            # '### Lower Model ###',
+            # 'vector_export: %s' % self.gravity_model.export_paths.home,
+            # 'report_export: %s' % self.gravity_model.report_paths.home,
+            # '',
         ]
 
         # Write out to disk
@@ -207,18 +229,25 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Distribution Model run complete! Took %s" % time_taken)
 
     def run_upper_model(self):
+
         self._logger.info("Initialising the Upper Model")
+        upper_model = self.upper_model_method.get_distributor(
+                year=self.year,
+                running_mode=self.running_mode,
+                zoning_system=self.upper_model_zoning,
+                export_home=self.upper_export_home,
+                process_count=self.process_count,
+                **self.upper_model_kwargs,
+        )
 
-        # Get upper model
-        # Upper model will eb defined in constructor with a run that will take
-        # trip ends per segment and distribute
+        self._logger.info("Building arguments for the Upper Model")
+        args = self.arg_builder.build_upper_model_arguments()
 
-        # Loop through segmentation and hand over individual costs and
-        # trip ends
+        self._logger.info("Running the Upper Model")
+        fname = self._dist_overall_log_name.format(trip_origin=self.trip_origin)
+        overall_log_path = os.path.join(self.upper_report_paths.home, fname)
+        upper_model.distribute(overall_log_path=overall_log_path, **args)
 
-        # Run
-
-        # Returns reports, which are saved
-
-        # Most of above can be abstarcted too!!
+        print(upper_model)
+        exit()
 

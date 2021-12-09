@@ -74,6 +74,7 @@ def get_trip_length_distributions(import_dir: nd.PathLike,
 
     """
     # TODO(BT): Tidy up get_trip_length_distributions
+    # TODO(BT): On last LEGS REMOVE WHEN TMS REMOVED
     # Append name of tlb area
 
     # Index folder
