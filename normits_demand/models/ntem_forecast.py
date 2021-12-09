@@ -15,7 +15,6 @@ import pandas as pd
 from normits_demand.utils import file_ops
 from normits_demand import logging as nd_log
 
-
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
 
@@ -54,6 +53,20 @@ class TEMProData:
             raise ValueError("years should be a list of integers") from err
         self._columns.update({str(y): float for y in self._years})
         self._data = None
+        if not self.DATA_PATH.exists():
+            raise FileNotFoundError(
+                f"TEMPro data file cannot be found: {self.DATA_PATH}"
+            )
+        # Read top 5 rows to check file format
+        try:
+            file_ops.read_df(
+                self.DATA_PATH,
+                usecols=self._columns.keys(),
+                dtype=self._columns,
+                nrows=5,
+            )
+        except ValueError as err:
+            raise ValueError(f"error reading TEMPro data - {err}") from err
 
     @property
     def data(self) -> pd.DataFrame:
