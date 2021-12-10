@@ -15,7 +15,9 @@ from normits_demand import logging as nd_log
 
 ##### CONSTANTS #####
 LOG_FILE = "NTEM_forecast.log"
-LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_models.run_ntem_forecast")
+LOG = nd_log.get_logger(
+    nd_log.get_package_logger_name() + ".run_models.run_ntem_forecast"
+)
 
 ##### CLASSES #####
 
@@ -25,16 +27,15 @@ def main():
     tempro_data = ntem_forecast.TEMProData(
         [efs_consts.BASE_YEAR] + efs_consts.FUTURE_YEARS
     )
-    import io
-    text = io.StringIO()
-    tempro_data.data.info(buf=text)
-    tempro_data.get(purposes=[1, 2, 3], modes=[1],
-                    time_periods=[2]).info(buf=text)
-    LOG.info("Tempro data\n" + text.getvalue())
+    print(tempro_data.data.head())
+    tempro_data.data.info()
+    tempro_data.produce_dvectors()
 
 
 ##### MAIN #####
 if __name__ == '__main__':
     # Add log file output to main package logger
-    nd_log.get_logger(nd_log.get_package_logger_name(), LOG_FILE, "Running NTEM forecast")
+    nd_log.get_logger(
+        nd_log.get_package_logger_name(), LOG_FILE, "Running NTEM forecast"
+    )
     main()
