@@ -272,6 +272,62 @@ class AbstractDistributor(abc.ABC):
             # process_count=self.process_count,
         )
 
+    @staticmethod
+    def generate_cost_distribution_report(target: pd.DataFrame,
+                                          achieved_band_share: np.ndarray,
+                                          achieved_convergence: float,
+                                          achieved_distribution: np.ndarray,
+                                          cost_matrix: np.ndarray,
+                                          ) -> pd.DataFrame:
+        # Create tld report
+        rename = {
+            'min': 'min (km)',
+            'max': 'max (km)',
+            'ave_km': 'target_ave_length (km)',
+            'band_share': 'target_band_share',
+        }
+        report = pd_utils.reindex_cols(target, rename.keys())
+        report = report.rename(columns=rename)
+
+        # Add in achieved values
+        report['ach_band_share'] = achieved_band_share
+        report['convergence'] = achieved_convergence
+        report['ach_band_trips'] = report['ach_band_share'].copy()
+        report['ach_band_trips'] *= achieved_distribution.sum()
+
+        report['ach_ave_length (km)'] = tld_utils.calculate_average_trip_lengths(
+            min_bounds=report['min (km)'].values,
+            max_bounds=report['max (km)'].values,
+            trip_lengths=cost_matrix,
+            trips=achieved_distribution,
+        )
+
+        # Calculate cost distrbutions
+        report['cell count'] = cost_utils.cells_in_bounds(
+            min_bounds=report['min (km)'].values,
+            max_bounds=report['max (km)'].values,
+            cost=cost_matrix,
+        )
+        report['cell proportions'] = report['cell count'].copy()
+        report['cell proportions'] /= report['cell proportions'].values.sum()
+
+        # Order columns for output
+        col_order = [
+            'min (km)',
+            'max (km)',
+            'target_ave_length (km)',
+            'ach_ave_length (km)',
+            'target_band_share',
+            'ach_band_share',
+            'ach_band_trips',
+            'cell count',
+            'cell proportions',
+            'convergence',
+        ]
+        report = pd_utils.reindex_cols(report, col_order)
+
+        return report
+
 
 @enum.unique
 class DistributionMethod(enum.Enum):
@@ -421,8 +477,66 @@ class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
             verbose=kwargs.get('verbose', 2),
         )
 
+        # ## GENERATE REPORTS AND WRITE OUT ## #
+        report = self.generate_cost_distribution_report(
+            target=target_cost_distributions,
+            achieved_band_share=calib.achieved_band_share,
+            achieved_convergence=calib.achieved_convergence,
+            achieved_distribution=calib.achieved_distribution,
+            cost_matrix=cost_matrix,
+        )
 
-        return
+        # Write out report
+        fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            file_desc='tld_report',
+            segment_params=segment_params,
+            csv=True,
+        )
+        path = os.path.join(self.report_paths.tld_report_dir, fname)
+        report.to_csv(path, index=False)
+
+        # ## WRITE DISTRIBUTED DEMAND ## #
+        # Put the demand into a df
+        demand_df = pd.DataFrame(
+            index=self.zoning_system.unique_zones,
+            columns=self.zoning_system.unique_zones,
+            data=calib.achieved_distribution.astype(np.float32),
+        )
+
+        # Generate path and write out
+        fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            file_desc='synthetic_pa',
+            segment_params=segment_params,
+            suffix=self._internal_only_suffix,
+            compressed=True,
+        )
+        path = os.path.join(self.export_paths.distribution_dir, fname)
+        nd.write_df(demand_df, path)
+
+        # ## ADD TO THE OVERALL LOG ## #
+        # Rename keys for log
+        init_cost_params = {"init_%s" % k: v for k, v in kwargs.get('init_params').items()}
+        optimal_cost_params = {"final_%s" % k: v for k, v in optimal_cost_params.items()}
+
+        # Generate the log
+        log_dict = segment_params.copy()
+        log_dict.update(init_cost_params)
+        log_dict.update({'init_bs_con': calib.initial_convergence})
+        log_dict.update(optimal_cost_params)
+        log_dict.update({'final_bs_con': calib.achieved_convergence})
+
+        # Append this iteration to log file
+        file_ops.safe_dataframe_to_csv(
+            pd.DataFrame(log_dict, index=[0]),
+            overall_log_path,
+            mode='a',
+            header=(not os.path.exists(overall_log_path)),
+            index=False,
+        )
 
     def _run_internal(self,
                       segment_params: Dict[str, Any],
