@@ -241,7 +241,7 @@ class GravityModelCalibrator:
                   init_params: Dict[str, Any],
                   diff_step: float = None,
                   ftol: float = 1e-8,
-                  max_iters: int = 100,
+                  grav_max_iters: int = 100,
                   verbose: int = 0,
                   ):
         """Finds the optimal parameters for self.cost_function
@@ -277,7 +277,7 @@ class GravityModelCalibrator:
             used in this code to evaluate results. 1e-8 should almost always
             get a band share convergence of >0.99
 
-        max_iters:
+        grav_max_iters:
             The maximum number of calibration iterations to complete before
             termination if the ftol has not been met.
 
@@ -327,7 +327,7 @@ class GravityModelCalibrator:
             verbose=verbose,
             diff_step=diff_step,
             ftol=ftol,
-            max_nfev=max_iters,
+            max_nfev=grav_max_iters,
         )
 
         # Run an optimal version of the gravity

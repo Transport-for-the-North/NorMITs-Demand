@@ -175,7 +175,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         path = os.path.join(cost_dir, fname)
 
         # Read in the costs and infill
-        cost_matrix = nd.read_df(path, find_similar=True, index_col=0).values
+        cost_matrix = nd.read_df(path, find_similar=True, index_col=0)
         if self.intrazonal_cost_infill is not None:
             cost_matrix = cost_utils.iz_infill_costs(
                 cost_matrix,
@@ -248,23 +248,15 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         # Generate by segment kwargs
         by_segment_kwargs = dict()
-        desc = "Reading in cost and TLDs"
-        for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
+        for segment_params in self.running_segmentation:
             # Get the needed kwargs
             segment_name = self.running_segmentation.get_segment_name(segment_params)
-            cost_matrix = self._get_cost(segment_params)
-            target_cost_distribution = self._get_target_cost_distribution(segment_params)
             init_params = self._get_init_params(segment_params, init_params_df)
 
             # Add to dictionary
             by_segment_kwargs[segment_name] = {
-                'costs': cost_matrix,
-                'target_cost_distribution': target_cost_distribution,
                 'init_params': init_params,
             }
-
-            # TODO: Just do one iter for now while testing
-            break
 
         return by_segment_kwargs
 
@@ -284,11 +276,46 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             )
         return fn()
 
+    def _build_cost_matrices(self):
+        """Build the dictionary of cost matrices for each segment"""
+        # Generate by segment kwargs
+        cost_matrices = dict()
+        desc = "Reading in cost"
+        # TODO: NOT KLUDGE
+        count = 1
+        for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
+            # Get the needed kwargs
+            segment_name = self.running_segmentation.get_segment_name(segment_params)
+            if count == 1:
+                cost_matrix = self._get_cost(segment_params)
+                count += 1
+
+            # Add to dictionary
+            cost_matrices[segment_name] = cost_matrix
+
+        return cost_matrices
+
+    def _build_target_cost_distributions(self):
+        """Build the dictionary of target_cost_distributions for each segment"""
+        # Generate by segment kwargs
+        target_cost_distributions = dict()
+        for segment_params in self.running_segmentation:
+            # Get the needed kwargs
+            segment_name = self.running_segmentation.get_segment_name(segment_params)
+            target_cost_distribution = self._get_target_cost_distribution(segment_params)
+
+            # Add to dictionary
+            target_cost_distributions[segment_name] = target_cost_distribution
+
+        return target_cost_distributions
+
     def build_upper_model_arguments(self):
         # Read and validate trip ends
         productions = self._maybe_read_trip_end(self.productions)
         attractions = self._maybe_read_trip_end(self.attractions)
 
+        cost_matrices = self._build_cost_matrices()
+        target_cost_distributions = self._build_target_cost_distributions()
         by_segment_kwargs = self._build_by_segment_kwargs(self.upper_model_method)
 
         final_kwargs = self.upper_distributor_kwargs.copy()
@@ -296,6 +323,8 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             'productions': productions.to_df(),
             'attractions': attractions.to_df(),
             'running_segmentation': self.running_segmentation,
+            'cost_matrices': cost_matrices,
+            'target_cost_distributions': target_cost_distributions,
             'by_segment_kwargs': by_segment_kwargs,
         })
 

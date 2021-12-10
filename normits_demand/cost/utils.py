@@ -30,7 +30,7 @@ def cells_in_bounds(min_bounds: np.ndarray,
     return cell_counts
 
 
-def iz_infill_costs(cost: np.ndarray,
+def iz_infill_costs(cost: pd.DataFrame,
                     iz_infill: float,
                     min_axis: int = 1,
                     ) -> pd.DataFrame:
@@ -56,7 +56,7 @@ def iz_infill_costs(cost: np.ndarray,
         cost, but with the diagonal infilled.
     """
     # Init
-    infilled_cost = cost.copy()
+    infilled_cost = cost.values.copy()
 
     # Set to inf so we don't pick up 0s or diagonal in min
     infilled_cost = np.where(infilled_cost == 0, np.inf, infilled_cost)
@@ -70,5 +70,9 @@ def iz_infill_costs(cost: np.ndarray,
     # Flip all inf back to 0
     infilled_cost = np.where(infilled_cost == np.inf, 0, infilled_cost)
 
-    return infilled_cost
+    return pd.DataFrame(
+        data=infilled_cost,
+        index=cost.index,
+        columns=cost.columns,
+    )
 

@@ -14,6 +14,7 @@ Home of the NorMITs Distribution Model
 import os
 
 from typing import Any
+from typing import List
 from typing import Dict
 
 # Third Party
@@ -48,9 +49,11 @@ class DistributionModel(DistributionModelExportPaths):
                  export_home: nd.PathLike,
                  upper_model_method: nd.DistributionMethod,
                  upper_model_zoning: nd.ZoningSystem,
+                 upper_running_zones: List[Any],
                  upper_model_kwargs: Dict[str, Any] = None,
                  lower_model_method: nd.DistributionMethod = None,
                  lower_model_zoning: nd.ZoningSystem = None,
+                 lower_running_zones: List[Any] = None,
                  lower_model_kwargs: Dict[str, Any] = None,
                  process_count: int = constants.PROCESS_COUNT,
                  ):
@@ -75,9 +78,11 @@ class DistributionModel(DistributionModelExportPaths):
 
         self.upper_model_method = upper_model_method
         self.upper_model_zoning = upper_model_zoning
+        self.upper_running_zones = upper_running_zones
         self.upper_model_kwargs = upper_model_kwargs
         self.lower_model_method = lower_model_method
         self.lower_model_zoning = lower_model_zoning
+        self.lower_running_zones = lower_running_zones
         self.lower_model_kwargs = lower_model_kwargs
 
         # TODO(BT): Validate this is correct type
@@ -233,8 +238,10 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Initialising the Upper Model")
         upper_model = self.upper_model_method.get_distributor(
                 year=self.year,
+                trip_origin=self.trip_origin,
                 running_mode=self.running_mode,
                 zoning_system=self.upper_model_zoning,
+                running_zones=self.upper_running_zones,
                 export_home=self.upper_export_home,
                 process_count=self.process_count,
                 **self.upper_model_kwargs,

@@ -67,8 +67,8 @@ def main():
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
-        upper_zoning_name = 'msoa'
-        lower_zoning_name = 'noham'
+        upper_zoning_system = nd.get_zoning_system('msoa')
+        lower_zoning_system = nd.get_zoning_system('noham')
 
         # Define cost arguments
         intrazonal_cost_infill = 0.5
@@ -100,8 +100,8 @@ def main():
         lower_model_method = nd.DistributionMethod.GRAVITY
         lower_convergence_target = 0.9
 
-        upper_kwargs = {'zoning': upper_zoning_name, 'area': upper_calibration_area}
-        lower_kwargs = {'zoning': lower_zoning_name, 'area': lower_calibration_area}
+        upper_kwargs = {'zoning': upper_zoning_system.name, 'area': upper_calibration_area}
+        lower_kwargs = {'zoning': lower_zoning_system.name, 'area': lower_calibration_area}
         hb_kwargs = {'trip_origin': 'hb', 'seg': upper_seg}
         nhb_kwargs = {'trip_origin': 'nhb', 'seg': lower_seg}
 
@@ -109,8 +109,8 @@ def main():
         nhb_init_params_fname = INIT_PARAMS_BASE.format(**nhb_kwargs, **upper_kwargs)
         upper_distributor_kwargs = {
             'cost_function': upper_cost_function,
-            'convergence_target': upper_convergence_target,
-            'fitting_loops': 100,
+            'target_convergence': upper_convergence_target,
+            'grav_max_iters': 100,
             'furness_max_iters': 5000,
             'furness_tol': 0.1,
         }
@@ -126,8 +126,8 @@ def main():
         # nhb_init_params_fname = INIT_PARAMS_BASE.format(**nhb_kwargs, **lower_kwargs)
         lower_distributor_kwargs = {
             'cost_function': nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function(),
-            'convergence_target': lower_convergence_target,
-            'fitting_loops': 100,
+            'target_convergence': lower_convergence_target,
+            'grav_max_iters': 100,
             'furness_max_iters': 5000,
             'furness_tol': 0.1,
         }
@@ -140,7 +140,7 @@ def main():
     # ## GET TRIP ENDS ## #
     hb_productions, hb_attractions, nhb_productions, nhb_attractions = build_trip_ends(
         use_tram=use_tram,
-        zoning_system=nd.get_zoning_system(upper_zoning_name),
+        zoning_system=upper_zoning_system,
         mode=mode,
         hb_agg_seg=hb_agg_seg,
         hb_running_seg=hb_running_seg,
@@ -157,7 +157,7 @@ def main():
             attractions=hb_attractions,
             running_mode=mode,
             running_segmentation=hb_running_seg,
-            zoning_system=nd.get_zoning_system(upper_zoning_name),
+            zoning_system=upper_zoning_system,
             target_tld_name=os.path.join(upper_calibration_area, upper_seg),
             init_params_fname=hb_init_params_fname,
             init_params_cols=upper_cost_function.parameter_names,
@@ -176,10 +176,12 @@ def main():
             iteration_name=dm_iteration_name,
             arg_builder=arg_builder,
             upper_model_method=upper_model_method,
-            upper_model_zoning=nd.get_zoning_system(upper_zoning_name),
+            upper_model_zoning=upper_zoning_system,
+            upper_running_zones=upper_zoning_system.unique_zones,
             upper_model_kwargs=None,
             lower_model_method=lower_model_method,
-            lower_model_zoning=nd.get_zoning_system(lower_zoning_name),
+            lower_model_zoning=lower_zoning_system,
+            lower_running_zones=lower_zoning_system.internal_zones,
             lower_model_kwargs=None,
             export_home=dm_export_home,
             process_count=-2,

@@ -55,7 +55,9 @@ class AbstractDistributor(abc.ABC):
     def __init__(self,
                  year: int,
                  running_mode: nd.Mode,
+                 trip_origin: str,
                  zoning_system: nd.core.ZoningSystem,
+                 running_zones: List[Any],
                  export_home: nd.PathLike,
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  zone_col: str = None,
@@ -69,6 +71,8 @@ class AbstractDistributor(abc.ABC):
                 % type(zoning_system)
             )
 
+        trip_origin = checks.validate_trip_origin(trip_origin)
+
         # Set default values where not set
         name = self._default_name if name is None else name
         zone_col = zoning_system.col_name if zone_col is None else zone_col
@@ -77,7 +81,9 @@ class AbstractDistributor(abc.ABC):
         self.name = name
         self.year = year
         self.running_mode = running_mode
+        self.trip_origin = trip_origin
         self.zoning_system = zoning_system
+        self.running_zones = running_zones
         self.zone_col = zone_col
         self.export_home = export_home
         self.process_count = process_count
@@ -141,10 +147,46 @@ class AbstractDistributor(abc.ABC):
 
         return seg_productions, seg_attractions
 
+    @staticmethod
+    def _check_segment_keys(running_segmentation: nd.SegmentationLevel,
+                            check_dict: Dict[str, Any],
+                            name: str = 'check_dict',
+                            ) -> None:
+        """
+        Checks that check_dict contains all segment_names of
+        running segmentation as keys
+
+        Parameters
+        ----------
+        check_dict:
+            The dictionary to check the keys of
+
+        Raises
+        ------
+        ValueError:
+            If any of the segment names don't exist in the keys
+        """
+        # Generate set of segment names
+        segment_names = set()
+        for segment_params in running_segmentation:
+            segment_names.add(running_segmentation.get_segment_name(segment_params))
+
+        # Check all exist
+        dict_keys = set(check_dict.keys())
+        missing = segment_names - dict_keys
+        if len(missing) > 0:
+            raise ValueError(
+                "Not all segment names exist in %s. Missing segment names: %s"
+                % (name, missing)
+            )
+
     @abc.abstractmethod
     def distribute_segment(self,
+                           segment_params: Dict[str, Any],
                            productions: pd.DataFrame,
                            attractions: pd.DataFrame,
+                           cost_matrix: pd.DataFrame,
+                           target_cost_distributions: pd.DataFrame,
                            running_segmentation: nd.SegmentationLevel,
                            overall_log_path: nd.PathLike,
                            **kwargs,
@@ -156,10 +198,24 @@ class AbstractDistributor(abc.ABC):
                    attractions: pd.DataFrame,
                    running_segmentation: nd.SegmentationLevel,
                    overall_log_path: nd.PathLike,
+                   cost_matrices: Dict[str, pd.DataFrame],
+                   target_cost_distributions: Dict[str, pd.DataFrame],
                    pa_val_col: Optional[str] = 'val',
-                   by_segment_kwargs: List[Dict[str, Any]] = None,
+                   by_segment_kwargs: Dict[str, Dict[str, Any]] = None,
                    **kwargs,
                    ):
+        # Validate inputs
+        self._check_segment_keys(
+            running_segmentation,
+            cost_matrices,
+            'cost_matrices',
+        )
+        self._check_segment_keys(
+            running_segmentation,
+            target_cost_distributions,
+            'target_cost_distributions',
+        )
+
         # Set defaults
         by_segment_kwargs = dict() if by_segment_kwargs is None else by_segment_kwargs
 
@@ -182,6 +238,8 @@ class AbstractDistributor(abc.ABC):
         # Build a list of kwargs - one for each segment
         kwarg_list = list()
         for segment_params in running_segmentation:
+            segment_name = running_segmentation.get_segment_name(segment_params)
+
             # Get productions, attractions
             seg_productions, seg_attractions = self._filter_productions_attractions(
                 segment_params=segment_params,
@@ -196,10 +254,11 @@ class AbstractDistributor(abc.ABC):
                 'segment_params': segment_params,
                 'productions': seg_productions,
                 'attractions': seg_attractions,
+                'cost_matrix': cost_matrices[segment_name],
+                'target_cost_distributions': target_cost_distributions[segment_name],
             })
 
             # Get any other by_segment kwargs passed in
-            segment_name = running_segmentation.get_segment_name(segment_params)
             segment_kwargs.update(by_segment_kwargs.get(segment_name, dict()))
 
             kwarg_list.append(segment_kwargs)
@@ -247,7 +306,9 @@ class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
     def __init__(self,
                  year: int,
                  running_mode: nd.Mode,
+                 trip_origin: str,
                  zoning_system: nd.ZoningSystem,
+                 running_zones: List[Any],
                  export_home: nd.PathLike,
                  zone_col: str = None,
                  process_count: Optional[int] = constants.PROCESS_COUNT,
@@ -265,19 +326,14 @@ class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
             self,
             year=year,
             running_mode=running_mode,
+            trip_origin=trip_origin,
             zoning_system=zoning_system,
+            running_zones=running_zones,
+            zone_col=zone_col,
             export_home=export_home,
             process_count=process_count,
 
         )
-
-        # Assign attributes
-        self.zoning_system = zoning_system
-        self.zone_col = zone_col
-        self.process_count = process_count
-
-        if self.zone_col is None:
-            self.zone_col = zoning_system.col_name
 
         # Make sure the reports paths exists
         report_home = os.path.join(export_home, "Logs & Reports")
@@ -301,17 +357,71 @@ class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
         )
 
     def distribute_segment(self,
+                           segment_params: Dict[str, Any],
                            productions: pd.DataFrame,
                            attractions: pd.DataFrame,
+                           cost_matrix: pd.DataFrame,
+                           target_cost_distributions: pd.DataFrame,
                            running_segmentation: nd.SegmentationLevel,
                            overall_log_path: nd.PathLike,
                            **kwargs,
                            ):
-        print(productions)
-        print(attractions)
-        print(running_segmentation)
-        print(overall_log_path)
-        print(kwargs)
+        seg_name = running_segmentation.generate_file_name(segment_params)
+        self._logger.info("Running for %s" % seg_name)
+
+        # ## SET UP LOG AND RUN ## #
+        # Logging set up
+        log_fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            file_desc='gravity_log',
+            segment_params=segment_params,
+            csv=True,
+        )
+        log_path = os.path.join(self.report_paths.model_log_dir, log_fname)
+
+        # Replace the log if it already exists
+        if os.path.isfile(log_path):
+            os.remove(log_path)
+
+        # ## MAKE SURE COST AND P/A ARE IN SAME ORDER ## #
+        # Sort the cost
+        cost_matrix = cost_matrix.reindex(
+            columns=self.running_zones,
+            index=self.running_zones,
+        ).fillna(0)
+
+        # sort the productions and attractions
+        productions = productions.set_index(self.zone_col)
+        productions = productions.reindex(self.running_zones).fillna(0)
+        attractions = attractions.set_index(self.zone_col)
+        attractions = attractions.reindex(self.running_zones).fillna(0)
+
+        # Convert to numpy for gravity model
+        np_cost = cost_matrix.values
+        np_productions = productions[self._pa_val_col].values
+        np_attractions = attractions[self._pa_val_col].values
+
+        # ## CALIBRATE THE GRAVITY MODEL ## #
+        calib = gravity_model.GravityModelCalibrator(
+            row_targets=np_productions,
+            col_targets=np_attractions,
+            costs=np_cost,
+            target_cost_distribution=target_cost_distributions,
+            running_log_path=log_path,
+            cost_function=kwargs.get('cost_function'),
+            target_convergence=kwargs.get('target_convergence'),
+            furness_max_iters=kwargs.get('furness_max_iters'),
+            furness_tol=kwargs.get('furness_tol'),
+        )
+
+        optimal_cost_params = calib.calibrate(
+            init_params=kwargs.get('init_params'),
+            grav_max_iters=kwargs.get('grav_max_iters'),
+            ftol=kwargs.get('ftol', 1e-5),
+            verbose=kwargs.get('verbose', 2),
+        )
+
+
         return
 
     def _run_internal(self,
@@ -331,8 +441,6 @@ class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
                       furness_max_iters: int = 5000,
                       furness_tol: float = 0.1,
                       ):
-        seg_name = running_segmentation.generate_file_name(segment_params)
-        self._logger.info("Running for %s" % seg_name)
 
         # ## READ IN TLD FOR THIS SEGMENT ## #
         target_tld = tld_utils.get_trip_length_distributions(
@@ -400,7 +508,7 @@ class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
 
         optimal_cost_params = calib.calibrate(
             init_params=init_cost_params,
-            max_iters=fitting_loops,
+            grav_max_iters=fitting_loops,
             ftol=1e-5,
             verbose=2,
         )
