@@ -735,6 +735,8 @@ class DVector:
         # Rename the segment columns if needed
         if segment_naming_conversion is not None:
             df = self.segmentation.rename_segment_cols(df, segment_naming_conversion)
+            # Set to None so the columns aren't renamed again in `create_segement_col`
+            segment_naming_conversion = None
 
         # Make sure we don't have any extra columns
         extra_cols = set(list(df)) - set(required_cols)
