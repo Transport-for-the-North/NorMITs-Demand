@@ -58,7 +58,7 @@ def main():
     scenario = consts.SC01_JAM
     iter_num = '3j'
     import_home = "I:/"
-    export_home = "E:/"
+    export_home = "F:/"
     model_name = efs_consts.MODEL_NAME
 
     # ## RUN START ## #
