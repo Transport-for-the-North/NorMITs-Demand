@@ -44,7 +44,6 @@ from normits_demand.utils import compress
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.matrices import pa_to_od as pa2od
-from normits_demand.matrices import utils as mat_utils
 from normits_demand.matrices import compilation as mat_comp
 from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
@@ -3245,7 +3244,7 @@ def _split_int_ext(mat_import,
             continue
 
         # Get the mask and extract the data
-        mask = mat_utils.get_wide_mask(full_mat, zones, join_fn=join_fn)
+        mask = pd_utils.get_wide_mask(full_mat, zones, join_fn=join_fn)
         sub_mat = full_mat.where(mask, 0)
 
         fname = du.calib_params_to_dist_name(
