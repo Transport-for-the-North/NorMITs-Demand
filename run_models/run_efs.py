@@ -55,7 +55,7 @@ def main():
     output_years = efs_consts.FUTURE_YEARS
 
     # Controls I/O
-    scenario = consts.SC04_UZC
+    scenario = consts.SC01_JAM
     iter_num = '3j'
     import_home = "I:/"
     export_home = "E:/"
