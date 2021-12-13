@@ -29,8 +29,6 @@ import pandas as pd
 import normits_demand as nd
 from normits_demand import constants
 
-from normits_demand import cost
-
 from normits_demand.cost import utils as cost_utils
 
 from normits_demand.utils import file_ops
@@ -42,7 +40,8 @@ from normits_demand.distribution import gravity_model
 from normits_demand.validation import checks
 from normits_demand.concurrency import multiprocessing
 
-from normits_demand.pathing.travel_market_synthesiser import GravityModelExportPaths
+from normits_demand.pathing.distribution_model import DistributorExportPaths
+from normits_demand.pathing.distribution_model import GravityDistributorExportPaths
 
 
 class AbstractDistributor(abc.ABC):
@@ -188,7 +187,6 @@ class AbstractDistributor(abc.ABC):
                            cost_matrix: pd.DataFrame,
                            target_cost_distributions: pd.DataFrame,
                            running_segmentation: nd.SegmentationLevel,
-                           overall_log_path: nd.PathLike,
                            **kwargs,
                            ):
         pass
@@ -197,7 +195,6 @@ class AbstractDistributor(abc.ABC):
                    productions: pd.DataFrame,
                    attractions: pd.DataFrame,
                    running_segmentation: nd.SegmentationLevel,
-                   overall_log_path: nd.PathLike,
                    cost_matrices: Dict[str, pd.DataFrame],
                    target_cost_distributions: Dict[str, pd.DataFrame],
                    pa_val_col: Optional[str] = 'val',
@@ -219,16 +216,9 @@ class AbstractDistributor(abc.ABC):
         # Set defaults
         by_segment_kwargs = dict() if by_segment_kwargs is None else by_segment_kwargs
 
-        # Make a new log file if one already exists
-        if os.path.isfile(overall_log_path):
-            os.remove(overall_log_path)
-
         # ## MULTIPROCESS ACROSS SEGMENTS ## #
         unchanging_kwargs = kwargs.copy()
-        unchanging_kwargs.update({
-            'running_segmentation': running_segmentation,
-            'overall_log_path': overall_log_path,
-        })
+        unchanging_kwargs.update({'running_segmentation': running_segmentation})
 
         pbar_kwargs = {
             'desc': self.name,
@@ -268,8 +258,8 @@ class AbstractDistributor(abc.ABC):
             fn=self.distribute_segment,
             kwargs=kwarg_list,
             pbar_kwargs=pbar_kwargs,
-            process_count=0,
-            # process_count=self.process_count,
+            # process_count=0,
+            process_count=self.process_count,
         )
 
     @staticmethod
@@ -302,7 +292,7 @@ class AbstractDistributor(abc.ABC):
             trips=achieved_distribution,
         )
 
-        # Calculate cost distrbutions
+        # Calculate cost distributions
         report['cell count'] = cost_utils.cells_in_bounds(
             min_bounds=report['min (km)'].values,
             max_bounds=report['max (km)'].values,
@@ -344,14 +334,30 @@ class DistributionMethod(enum.Enum):
 
         else:
             raise nd.NormitsDemandError(
-                "No definition exists for %s built in cost function"
+                "No definition exists for %s distribution method"
+                % self
+            )
+
+        return function(**kwargs)
+
+    def get_export_paths(self, **kwargs) -> DistributorExportPaths:
+
+        if self == DistributionMethod.GRAVITY:
+            function = GravityDistributorExportPaths
+
+        elif self == DistributionMethod.FURNESS3D:
+            raise NotImplementedError()
+
+        else:
+            raise nd.NormitsDemandError(
+                "No definition exists for %s distributor export paths"
                 % self
             )
 
         return function(**kwargs)
 
 
-class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
+class GravityDistributor(GravityDistributorExportPaths, AbstractDistributor):
     _log_fname = "Gravity_Model_log.log"
 
     _base_zone_col = "%s_zone_id"
@@ -396,9 +402,10 @@ class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
         file_ops.create_folder(report_home)
 
         # Build the output paths
-        GravityModelExportPaths.__init__(
+        GravityDistributorExportPaths.__init__(
             self,
             year=year,
+            trip_origin=trip_origin,
             running_mode=running_mode,
             export_home=export_home,
         )
@@ -419,7 +426,6 @@ class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
                            cost_matrix: pd.DataFrame,
                            target_cost_distributions: pd.DataFrame,
                            running_segmentation: nd.SegmentationLevel,
-                           overall_log_path: nd.PathLike,
                            **kwargs,
                            ):
         seg_name = running_segmentation.generate_file_name(segment_params)
@@ -445,6 +451,10 @@ class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
             columns=self.running_zones,
             index=self.running_zones,
         ).fillna(0)
+
+        # TODO(BT): Fix this problem at the cost source
+        # Fill any zero costs with 0.2
+        cost_matrix = cost_matrix.mask(cost_matrix == 0, 0.2)
 
         # sort the productions and attractions
         productions = productions.set_index(self.zone_col)
@@ -473,6 +483,7 @@ class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
         optimal_cost_params = calib.calibrate(
             init_params=kwargs.get('init_params'),
             grav_max_iters=kwargs.get('grav_max_iters'),
+            calibrate_params=kwargs.get('calibrate_params', True),
             ftol=kwargs.get('ftol', 1e-5),
             verbose=kwargs.get('verbose', 2),
         )
@@ -483,7 +494,7 @@ class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
             achieved_band_share=calib.achieved_band_share,
             achieved_convergence=calib.achieved_convergence,
             achieved_distribution=calib.achieved_distribution,
-            cost_matrix=cost_matrix,
+            cost_matrix=cost_matrix.values,
         )
 
         # Write out report
@@ -532,197 +543,16 @@ class GravityDistributor(GravityModelExportPaths, AbstractDistributor):
         # Append this iteration to log file
         file_ops.safe_dataframe_to_csv(
             pd.DataFrame(log_dict, index=[0]),
-            overall_log_path,
+            self.report_paths.overall_log,
             mode='a',
-            header=(not os.path.exists(overall_log_path)),
+            header=(not os.path.exists(self.report_paths.overall_log)),
             index=False,
         )
 
-    def _run_internal(self,
-                      segment_params: Dict[str, Any],
-                      trip_origin: str,
-                      running_segmentation: nd.core.segments.SegmentationLevel,
-                      seg_productions: pd.DataFrame,
-                      seg_attractions: pd.DataFrame,
-                      init_cost_params: Dict[str, float],
-                      target_tld_dir: pd.DataFrame,
-                      cost_dir: nd.PathLike,
-                      cost_function: cost.CostFunction,
-                      overall_log_path: nd.PathLike,
-                      intrazonal_cost_infill: Optional[float] = 0.5,
-                      convergence_target: float = 0.95,
-                      fitting_loops: int = 100,
-                      furness_max_iters: int = 5000,
-                      furness_tol: float = 0.1,
-                      ):
+    def distribute(self, *args, **kwargs):
+        # Make new log if one already exists
+        if os.path.isfile(self.report_paths.overall_log):
+            os.remove(self.report_paths.overall_log)
 
-        # ## READ IN TLD FOR THIS SEGMENT ## #
-        target_tld = tld_utils.get_trip_length_distributions(
-            import_dir=target_tld_dir,
-            segment_params=segment_params,
-            trip_origin=trip_origin,
-        )
-
-        # Convert to expected format
-        rename = {'lower': 'min', 'upper': 'max'}
-        target_tld = target_tld.rename(columns=rename)
-        target_tld['min'] *= constants.MILES_TO_KM
-        target_tld['max'] *= constants.MILES_TO_KM
-
-        # ## GET THE COSTS FOR THIS SEGMENT ## #
-        self._logger.debug("Getting costs from: %s" % cost_dir)
-
-        # Generate the fname
-        fname = running_segmentation.generate_file_name(
-            trip_origin=trip_origin,
-            file_desc="%s_cost" % self.zoning_system.name,
-            segment_params=segment_params,
-            csv=True,
-        )
-        path = os.path.join(cost_dir, fname)
-
-        # Read in the costs and infill
-        cost_matrix = nd.read_df(path, find_similar=True, index_col=0).values
-        if intrazonal_cost_infill is not None:
-            cost_matrix = cost_utils.iz_infill_costs(
-                cost_matrix,
-                iz_infill=intrazonal_cost_infill,
-            )
-
-        # ## SET UP LOG AND RUN ## #
-        # Logging set up
-        log_fname = running_segmentation.generate_file_name(
-            trip_origin=trip_origin,
-            file_desc='gravity_log',
-            segment_params=segment_params,
-            csv=True,
-        )
-        log_path = os.path.join(self.report_paths.model_log_dir, log_fname)
-
-        # Need to convert into numpy vectors to work with old code
-        seg_productions = seg_productions[self._pa_val_col].values
-        seg_attractions = seg_attractions[self._pa_val_col].values
-
-        # Replace the log if it already exists
-        if os.path.isfile(log_path):
-            os.remove(log_path)
-
-        # ## CALIBRATE THE GRAVITY MODEL ## #
-        calib = gravity_model.GravityModelCalibrator(
-            row_targets=seg_productions,
-            col_targets=seg_attractions,
-            cost_function=cost_function,
-            costs=cost_matrix,
-            target_cost_distribution=target_tld,
-            target_convergence=convergence_target,
-            furness_max_iters=furness_max_iters,
-            furness_tol=furness_tol,
-            running_log_path=log_path,
-        )
-
-        optimal_cost_params = calib.calibrate(
-            init_params=init_cost_params,
-            grav_max_iters=fitting_loops,
-            ftol=1e-5,
-            verbose=2,
-        )
-
-        # ## WRITE OUT GRAVITY MODEL OUTPUTS ## #
-        # TODO(BT): Make this a standard function for external model too
-        # Create tld report
-        rename = {
-            'min': 'min (km)',
-            'max': 'max (km)',
-            'ave_km': 'target_ave_length (km)',
-            'band_share': 'target_band_share',
-        }
-        tld_report = pd_utils.reindex_cols(target_tld, rename.keys())
-        tld_report = tld_report.rename(columns=rename)
-
-        # Add in achieved values
-        tld_report['ach_band_share'] = calib.achieved_band_share
-        tld_report['convergence'] = calib.achieved_convergence
-        tld_report['ach_band_trips'] = tld_report['ach_band_share'].copy()
-        tld_report['ach_band_trips'] *= calib.achieved_distribution.sum()
-
-        tld_report['ach_ave_length (km)'] = tld_utils.calculate_average_trip_lengths(
-            min_bounds=tld_report['min (km)'].values,
-            max_bounds=tld_report['max (km)'].values,
-            trip_lengths=cost_matrix,
-            trips=calib.achieved_distribution,
-        )
-
-        tld_report['cell count'] = cost_utils.cells_in_bounds(
-            min_bounds=tld_report['min (km)'].values,
-            max_bounds=tld_report['max (km)'].values,
-            cost=cost_matrix,
-        )
-        tld_report['cell proportions'] = tld_report['cell count'].copy()
-        tld_report['cell proportions'] /= tld_report['cell proportions'].values.sum()
-
-        # Order columns for output
-        col_order = [
-            'min (km)',
-            'max (km)',
-            'target_ave_length (km)',
-            'ach_ave_length (km)',
-            'target_band_share',
-            'ach_band_share',
-            'ach_band_trips',
-            'cell count',
-            'cell proportions',
-            'convergence',
-        ]
-        tld_report = pd_utils.reindex_cols(tld_report, col_order)
-
-        # Write out tld report
-        fname = running_segmentation.generate_file_name(
-            trip_origin=trip_origin,
-            year=str(self.year),
-            file_desc='tld_report',
-            segment_params=segment_params,
-            csv=True,
-        )
-        path = os.path.join(self.report_paths.tld_report_dir, fname)
-        tld_report.to_csv(path, index=False)
-
-        # ## WRITE DISTRIBUTED DEMAND ## #
-        # Put the demand into a df
-        demand_df = pd.DataFrame(
-            index=self.zoning_system.unique_zones,
-            columns=self.zoning_system.unique_zones,
-            data=calib.achieved_distribution.astype(np.float32),
-        )
-
-        # Generate path and write out
-        fname = running_segmentation.generate_file_name(
-            trip_origin=trip_origin,
-            year=str(self.year),
-            file_desc='synthetic_pa',
-            segment_params=segment_params,
-            suffix=self._internal_only_suffix,
-            compressed=True,
-        )
-        path = os.path.join(self.export_paths.distribution_dir, fname)
-        nd.write_df(demand_df, path)
-
-        # ## ADD TO THE OVERALL LOG ## #
-        # Rename keys for log
-        init_cost_params = {"init_%s" % k: v for k, v in init_cost_params.items()}
-        optimal_cost_params = {"final_%s" % k: v for k, v in optimal_cost_params.items()}
-
-        # Generate the log
-        log_dict = segment_params.copy()
-        log_dict.update(init_cost_params)
-        log_dict.update({'init_bs_con': calib.initial_convergence})
-        log_dict.update(optimal_cost_params)
-        log_dict.update({'final_bs_con': calib.achieved_convergence})
-
-        # Append this iteration to log file
-        file_ops.safe_dataframe_to_csv(
-            pd.DataFrame(log_dict, index=[0]),
-            overall_log_path,
-            mode='a',
-            header=(not os.path.exists(overall_log_path)),
-            index=False,
-        )
+        # Run default distribution
+        super().distribute(*args, **kwargs)

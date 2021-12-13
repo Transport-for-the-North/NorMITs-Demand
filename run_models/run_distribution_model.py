@@ -108,6 +108,7 @@ def main():
         hb_init_params_fname = INIT_PARAMS_BASE.format(**hb_kwargs, **upper_kwargs)
         nhb_init_params_fname = INIT_PARAMS_BASE.format(**nhb_kwargs, **upper_kwargs)
         upper_distributor_kwargs = {
+            'calibrate_params': False,
             'cost_function': upper_cost_function,
             'target_convergence': upper_convergence_target,
             'grav_max_iters': 100,

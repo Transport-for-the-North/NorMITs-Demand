@@ -10,6 +10,8 @@ Other updates made by:
 File purpose:
 
 """
+from __future__ import annotations
+
 # Built-Ins
 import os
 import abc
@@ -46,6 +48,15 @@ _DM_ExportPaths_NT = collections.namedtuple(
     ]
 )
 
+
+_GravityExportPaths_NT = collections.namedtuple(
+    typename='_GravityExportPaths_NT',
+    field_names=[
+        'home',
+        'distribution_dir',
+    ]
+)
+
 # Reports
 _DM_ReportPaths_NT = collections.namedtuple(
     typename='_DM_ReportPaths_NT',
@@ -61,6 +72,16 @@ _Distributor_ReportPaths_NT = collections.namedtuple(
     field_names=[
         'home',
         'segment_log_dir',
+        'tld_report_dir',
+    ]
+)
+
+_GravityReportPaths_NT = collections.namedtuple(
+    typename='_GravityReportPaths_NT',
+    field_names=[
+        'home',
+        'overall_log',
+        'model_log_dir',
         'tld_report_dir',
     ]
 )
@@ -288,6 +309,8 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             segment_name = self.running_segmentation.get_segment_name(segment_params)
             if count == 1:
                 cost_matrix = self._get_cost(segment_params)
+                import numpy as np
+                print(np.count_nonzero(cost_matrix == 0))
                 count += 1
 
             # Add to dictionary
@@ -335,6 +358,90 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
 
 # ## DEFINE EXPORT PATHS ##
+class DistributorExportPaths(abc.ABC):
+    _reports_dirname = 'Logs & Reports'
+
+    # Report dir names
+    _overall_log_name = '{trip_origin}_overall_log.csv'
+    _log_dir_name = 'Logs'
+    _tld_report_dir = 'TLD Reports'
+
+    def __init__(self,
+                 year: int,
+                 trip_origin: str,
+                 running_mode: nd.Mode,
+                 export_home: nd.PathLike,
+                 ):
+        # Init
+        file_ops.check_path_exists(export_home)
+
+        # Assign attributes
+        self.year = year
+        self.trip_origin = trip_origin
+        self.running_mode = running_mode
+        self.export_home = export_home
+        self.report_home = os.path.join(self.export_home, self._reports_dirname)
+
+        file_ops.create_folder(self.report_home)
+
+        # Generate the paths
+        self._create_export_paths()
+        self._create_report_paths()
+
+    @abc.abstractmethod
+    def _create_export_paths(self) -> None:
+        """Creates self.export_paths"""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _create_report_paths(self) -> None:
+        """Creates self.report_paths"""
+        raise NotImplementedError
+
+
+class GravityDistributorExportPaths(DistributorExportPaths):
+    # Export dir names
+    _dist_out_dir = 'Matrices'
+
+    def _create_export_paths(self) -> None:
+        """Creates self.export_paths"""
+
+        # Build the matrix output path
+        distribution_dir = os.path.join(self.export_home, self._dist_out_dir)
+
+        # Make paths that don't exist
+        dir_paths = [distribution_dir]
+        for path in dir_paths:
+            file_ops.create_folder(path)
+
+        # Create the export_paths class
+        self.export_paths = _GravityExportPaths_NT(
+            home=self.export_home,
+            distribution_dir=distribution_dir,
+        )
+
+    def _create_report_paths(self) -> None:
+        """Creates self.report_paths"""
+        # Build paths
+        fname = self._overall_log_name.format(trip_origin=self.trip_origin)
+        overall_log_path = os.path.join(self.report_home, fname)
+        model_log_dir = os.path.join(self.report_home, self._log_dir_name)
+        tld_report_dir = os.path.join(self.report_home, self._tld_report_dir)
+
+        # Make paths that don't exist
+        dir_paths = [self.report_home, model_log_dir, tld_report_dir]
+        for path in dir_paths:
+            file_ops.create_folder(path)
+
+        # Create the export_paths class
+        self.report_paths = _GravityReportPaths_NT(
+            home=self.report_home,
+            overall_log=overall_log_path,
+            model_log_dir=model_log_dir,
+            tld_report_dir=tld_report_dir,
+        )
+
+
 class DistributionModelExportPaths:
 
     # Define the names of the export dirs
@@ -354,14 +461,13 @@ class DistributionModelExportPaths:
     _pa_report_dir = 'PA Reports'
     _od_report_dir = 'OD Reports'
 
-    # Distributor reports names
-    _log_dir_name = 'Logs'
-    _tld_report_dir = 'TLD Reports'
-
     def __init__(self,
                  year: int,
+                 trip_origin: str,
                  iteration_name: str,
                  running_mode: nd.Mode,
+                 upper_model_method: nd.DistributionMethod,
+                 lower_model_method: nd.DistributionMethod,
                  export_home: nd.PathLike,
                  ):
         """
@@ -390,8 +496,11 @@ class DistributionModelExportPaths:
         file_ops.check_path_exists(export_home)
 
         self.year = year
+        self.trip_origin = trip_origin
         self.iteration_name = du.create_iter_name(iteration_name)
         self.running_mode = running_mode
+        self.upper_model_method = upper_model_method
+        self.lower_model_method = lower_model_method
         self.export_home = os.path.join(export_home, self.iteration_name, self.running_mode.value)
         file_ops.create_folder(self.export_home)
 
@@ -399,10 +508,22 @@ class DistributionModelExportPaths:
         # Upper Model
         self.upper_export_home = os.path.join(self.export_home, self._upper_model_dir)
         file_ops.create_folder(self.upper_export_home)
+        self.upper_exports = upper_model_method.get_export_paths(
+            year=self.year,
+            trip_origin=self.trip_origin,
+            running_mode=self.running_mode,
+            export_home=self.upper_export_home,
+        )
 
         # Lower Model
-        lower_export_home = os.path.join(self.export_home, self._lower_model_dir)
-        file_ops.create_folder(lower_export_home)
+        self.lower_export_home = os.path.join(self.export_home, self._lower_model_dir)
+        file_ops.create_folder(self.lower_export_home)
+        self.lower_exports = upper_model_method.get_export_paths(
+            year=self.year,
+            trip_origin=self.trip_origin,
+            running_mode=self.running_mode,
+            export_home=self.lower_export_home,
+        )
 
         # Final Output Paths
         export_home = os.path.join(self.export_home, self._final_outputs_dir)
@@ -415,25 +536,12 @@ class DistributionModelExportPaths:
         self._create_report_paths(report_home)
 
     def _create_export_paths(self, export_home: str) -> None:
-        """Creates self.export_paths"""
-
         # Build the matrix output path
         full_pa_dir = os.path.join(export_home, self._full_pa_out_dir)
         compiled_pa_dir = os.path.join(export_home, self.compiled_pa_out_dir)
         full_od_dir = os.path.join(export_home, self._full_od_out_dir)
         compiled_od_dir = os.path.join(export_home, self._compiled_od_out_dir)
         compiled_od_dir_pcu = os.path.join(compiled_od_dir, self._compiled_od_out_dir_pcu)
-
-        # Make paths that don't exist
-        dir_paths = [
-            full_pa_dir,
-            compiled_pa_dir,
-            full_od_dir,
-            compiled_od_dir,
-            compiled_od_dir_pcu,
-        ]
-        for path in dir_paths:
-            file_ops.create_folder(path)
 
         # Create the export_paths class
         self.export_paths = _DM_ExportPaths_NT(
@@ -445,9 +553,21 @@ class DistributionModelExportPaths:
             compiled_od_dir_pcu=compiled_od_dir_pcu,
         )
 
-    def _create_report_paths(self, report_home: str) -> None:
-        """Creates self.report_paths"""
+        # Make all paths that don't exist
+        dir_paths = [
+            full_pa_dir,
+            compiled_pa_dir,
+            full_od_dir,
+            compiled_od_dir,
+            compiled_od_dir_pcu,
+        ]
+        for path in dir_paths:
+            file_ops.create_folder(path)
 
+    def _create_report_paths(self,
+                             report_home: str,
+                             ) -> None:
+        """Creates self.report_paths"""
         # Create the overall report paths
         self.report_paths = _DM_ReportPaths_NT(
             home=report_home,
@@ -458,11 +578,3 @@ class DistributionModelExportPaths:
         # Make paths that don't exist
         for path in self.report_paths:
             file_ops.create_folder(path)
-
-        # Create the upper model report paths
-        upper_report_home = os.path.join(report_home, self._upper_model_dir)
-        self.upper_report_paths = _Distributor_ReportPaths_NT(
-            home=upper_report_home,
-            segment_log_dir=os.path.join(upper_report_home, self._log_dir_name),
-            tld_report_dir=os.path.join(upper_report_home, self._tld_report_dir),
-        )

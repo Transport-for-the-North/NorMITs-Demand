@@ -239,6 +239,7 @@ class GravityModelCalibrator:
 
     def calibrate(self,
                   init_params: Dict[str, Any],
+                  calibrate_params: bool = True,
                   diff_step: float = None,
                   ftol: float = 1e-8,
                   grav_max_iters: int = 100,
@@ -260,6 +261,11 @@ class GravityModelCalibrator:
         init_params:
             A dictionary of {parameter_name: parameter_value} to pass
             into the cost function as initial parameters.
+
+        calibrate_params:
+            Whether to calibrate the cost parameters or not. If not
+            calibrating, the given init_params will be assumed to be
+            optimal.
 
         diff_step:
             Copied from scipy.optimize.least_squares documentation, where it
@@ -317,18 +323,21 @@ class GravityModelCalibrator:
         self.initial_cost_params = None
         self.initial_convergence = None
 
-        # Calculate the optimal cost parameters
-        optimal_params, _ = optimize.curve_fit(
-            self._gm_distribution,
-            0,              # Doesn't matter what this is - it's ignored
-            self.target_cost_distribution['band_share'].values,
-            p0=self._order_init_params(init_params),
-            bounds=self._order_bounds(),
-            verbose=verbose,
-            diff_step=diff_step,
-            ftol=ftol,
-            max_nfev=grav_max_iters,
-        )
+        # Calculate the optimal cost parameters if we're calibrating
+        if calibrate_params is True:
+            optimal_params, _ = optimize.curve_fit(
+                self._gm_distribution,
+                0,              # Doesn't matter what this is - it's ignored
+                self.target_cost_distribution['band_share'].values,
+                p0=self._order_init_params(init_params),
+                bounds=self._order_bounds(),
+                verbose=verbose,
+                diff_step=diff_step,
+                ftol=ftol,
+                max_nfev=grav_max_iters,
+            )
+        else:
+            optimal_params = self._order_init_params(init_params)
 
         # Run an optimal version of the gravity
         self.optimal_cost_params = self._cost_params_to_kwargs(optimal_params)

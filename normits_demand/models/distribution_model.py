@@ -60,8 +60,11 @@ class DistributionModel(DistributionModelExportPaths):
         # Generate export paths
         super().__init__(
             year=year,
+            trip_origin=trip_origin,
             iteration_name=iteration_name,
             running_mode=running_mode,
+            upper_model_method=upper_model_method,
+            lower_model_method=lower_model_method,
             export_home=export_home,
         )
 
@@ -72,15 +75,12 @@ class DistributionModel(DistributionModelExportPaths):
         # TODO(BT): Check all lower things are set
 
         # Assign attributes
-        self.trip_origin = trip_origin
         self.running_segmentation = running_segmentation
         self.process_count = process_count
 
-        self.upper_model_method = upper_model_method
         self.upper_model_zoning = upper_model_zoning
         self.upper_running_zones = upper_running_zones
         self.upper_model_kwargs = upper_model_kwargs
-        self.lower_model_method = lower_model_method
         self.lower_model_zoning = lower_model_zoning
         self.lower_running_zones = lower_running_zones
         self.lower_model_kwargs = lower_model_kwargs
@@ -248,12 +248,10 @@ class DistributionModel(DistributionModelExportPaths):
         )
 
         self._logger.info("Building arguments for the Upper Model")
-        args = self.arg_builder.build_upper_model_arguments()
+        kwargs = self.arg_builder.build_upper_model_arguments()
 
         self._logger.info("Running the Upper Model")
-        fname = self._dist_overall_log_name.format(trip_origin=self.trip_origin)
-        overall_log_path = os.path.join(self.upper_report_paths.home, fname)
-        upper_model.distribute(overall_log_path=overall_log_path, **args)
+        upper_model.distribute(**kwargs)
 
         print(upper_model)
         exit()
