@@ -14,32 +14,18 @@ and keeps the code more readable.
 """
 # TODO: Re-organise constants
 import os
+from normits_demand import constants as consts
 
 # ### Constant Values ### #
 
 # General
 SOC_P = [1, 2, 12]
 NS_P = [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18]
-ALL_HB_P = [1, 2, 3, 4, 5, 6, 7, 8]
-ALL_NHB_P = [12, 13, 14, 15, 16, 18]
-ALL_P = ALL_HB_P + ALL_NHB_P
 
 ALL_MODES = [1, 2, 3, 5, 6]
 
 TIME_PERIODS = [1, 2, 3, 4]
 TIME_PERIOD_STRS = ['tp' + str(x) for x in TIME_PERIODS]
-
-
-# Trip origins to purpose
-_trip_origin_purposes = [
-    ('hb', ALL_HB_P),
-    ('nhb', ALL_NHB_P),
-]
-TRIP_ORIGINS = [x[0] for x in _trip_origin_purposes]
-TRIP_ORIGIN_TO_PURPOSE = {to: p for to, p in _trip_origin_purposes}
-
-PROCESS_COUNT = -2
-DEFAULT_ROUNDING = 8
 
 # ## VDM/ME2 constants ## #
 VDM_TRIP_ORIGINS = ['hb', 'nhb']
@@ -110,22 +96,6 @@ SEGMENTATION_ORDER = [
     'tp',
 ]
 
-# Valid Scenario Names
-SC00_NTEM = 'NTEM'
-SC01_JAM = 'SC01_JAM'
-SC02_PP = 'SC02_PP'
-SC03_DD = 'SC03_DD'
-SC04_UZC = 'SC04_UZC'
-
-TFN_SCENARIOS = [
-    SC01_JAM,
-    SC02_PP,
-    SC03_DD,
-    SC04_UZC
-]
-SCENARIOS = [SC00_NTEM] + TFN_SCENARIOS
-
-
 # DIRECTORY NAMES
 AUDITS_DIRNAME = 'Audits'
 PRODUCTIONS_DIRNAME = 'Productions'
@@ -145,6 +115,10 @@ TAG_CERTAINTY_BOUNDS = {
 }
 
 # ## File Names and Paths ## #
+# Zone_system, trip_origin, year
+PRODS_FNAME_YEAR = '%s_%s_%d_productions.csv'
+ATTRS_FNAME_YEAR = '%s_%s_%d_attractions.csv'
+
 # Zone_system, trip_origin
 PRODS_FNAME = '%s_%s_productions.csv'
 ATTRS_FNAME = '%s_%s_attractions.csv'
@@ -263,7 +237,7 @@ BASE_YEAR = 2018
 FUTURE_YEARS = [2033, 2040, 2050]
 
 # HB efs_consts
-HB_PURPOSES_NEEDED = ALL_HB_P
+HB_PURPOSES_NEEDED = consts.ALL_HB_P
 MODES_NEEDED = MODEL_MODES[MODEL_NAME]
 SOC_NEEDED = [0, 1, 2, 3]
 NS_NEEDED = [1, 2, 3, 4, 5]
@@ -271,7 +245,7 @@ CA_NEEDED = [1, 2]
 TP_NEEDED = [1, 2, 3, 4]
 
 # NHB efs_consts
-NHB_PURPOSES_NEEDED = ALL_NHB_P
+NHB_PURPOSES_NEEDED = consts.ALL_NHB_P
 
 ALL_PURPOSES_NEEDED = HB_PURPOSES_NEEDED + NHB_PURPOSES_NEEDED
 

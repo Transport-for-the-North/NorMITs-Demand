@@ -1,6 +1,6 @@
-
 import normits_demand as nd
 from normits_demand import constants as consts
+from normits_demand.logging import initialise_package_logger
 
 
 def _validate_constants() -> None:
@@ -22,3 +22,5 @@ def _validate_constants() -> None:
 
 def _initialise():
     _validate_constants()
+    initialise_package_logger()
+

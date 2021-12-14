@@ -5,21 +5,16 @@
 
 ##### IMPORTS #####
 # Standard imports
-import sys
-import contextlib
 from pathlib import Path
 from typing import Union, Dict, List, Tuple
 
 # Third party imports
 import numpy as np
 import pandas as pd
-from tqdm import contrib
 
 # Local imports
 import normits_demand as nd
 from normits_demand.utils import general as du
-from normits_demand.models import efs_zone_translator as zt
-from normits_demand.elasticity import constants as ec
 
 
 ##### FUNCTIONS #####
@@ -111,7 +106,8 @@ def read_elasticity_file(data: Union[nd.PathLike, pd.DataFrame],
 
 
 def get_constraint_mats(folder: nd.PathLike,
-                        get_files: List[str] = None
+                        get_files: List[str] = None,
+                        keep_ftype: bool = False,
                         ) -> Dict[str, np.array]:
     """Search the given folder for any CSV files.
 
@@ -126,6 +122,9 @@ def get_constraint_mats(folder: nd.PathLike,
         The names of the matrices to read, if None then all CSVs
         found will be returned.
 
+    keep_ftype:
+        Whether the keep the ftype in the name given to the return dictionary.
+
     Returns
     -------
     constraint_mats:
@@ -137,6 +136,9 @@ def get_constraint_mats(folder: nd.PathLike,
     ------
     FileNotFoundError
         If the folder given doesn't exist or isn't a folder.
+
+    FileNotFoundError
+        If one of the files in get_files cannot be found in folder.
     """
     # Init
     if not folder.is_dir():
@@ -148,103 +150,21 @@ def get_constraint_mats(folder: nd.PathLike,
     # Load in the matrices
     matrices = dict()
     for fname in get_files:
+        # Build the path - Add suffix if not there
         path = folder / fname
-        matrices[fname] = np.loadtxt(path, delimiter=",")
+        if path.suffix == '':
+            path = path.parent / (path.name + '.csv')
+
+        if not path.is_file():
+            raise FileNotFoundError(
+                "Path not found for constraint_mat %s.\nWas looking in: %s"
+                % (fname, folder)
+            )
+
+        # Assign to dictionary
+        if keep_ftype:
+            matrices[path.name] = np.loadtxt(path, delimiter=",")
+        else:
+            matrices[path.stem] = np.loadtxt(path, delimiter=",")
 
     return matrices
-
-
-def read_demand_matrix(
-    path: Path, zone_translation_folder: Path, from_zone: str
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Reads demand matrix and converts it to `COMMON_ZONE_SYSTEM`.
-
-    Parameters
-    ----------
-    path : Path
-        Path to the demand matrix.
-    zone_translation_folder : Path
-        Path to the folder contain zone lookups.
-    from_zone : str
-        The current zone system of the matrix, if this
-        isn't `COMMON_ZONE_SYSTEM` then the matrix will
-        be converted.
-
-    Returns
-    -------
-    pd.DataFrame
-        The demand matrix in the `COMMON_ZONE_SYSTEM`.
-    pd.DataFrame
-        Splitting factors for converting back to the old
-        zone system.
-    pd.DataFrame
-        The demand matrix in the `from_zone` zone system.
-    """
-    demand = pd.read_csv(path, index_col=0)
-    # Convert column and index names to int
-    demand.columns = pd.to_numeric(demand.columns, downcast="integer")
-    demand.index = pd.to_numeric(demand.index, downcast="integer")
-
-    reverse = None
-    old_zone = None
-    if from_zone != ec.COMMON_ZONE_SYSTEM:
-        old_zone = demand.copy()
-        lookup_file = zone_translation_folder / ec.ZONE_LOOKUP_NAME.format(
-            from_zone=from_zone, to_zone=ec.COMMON_ZONE_SYSTEM
-        )
-        dtypes = {
-            f"{from_zone}_zone_id": int,
-            f"{ec.COMMON_ZONE_SYSTEM}_zone_id": int,
-            "split": float,
-        }
-        lookup = pd.read_csv(lookup_file, usecols=dtypes.keys(), dtype=dtypes)
-        cols = [f"{from_zone}_zone_id", f"{ec.COMMON_ZONE_SYSTEM}_zone_id"]
-        try:
-            demand, reverse = zt.translate_matrix(
-                demand,
-                lookup,
-                cols,
-                split_column="split",
-            )
-        except zt.MatrixTotalError as e:
-            # Print the error but continue with the translation to still
-            # process current segment
-            print(f"{path.stem} - {e.__class__.__name__}: {e}")
-            demand, reverse = zt.translate_matrix(
-                demand,
-                lookup,
-                cols,
-                split_column="split",
-                check_total=False,
-            )
-
-    return demand.sort_index().sort_index(axis=1), reverse, old_zone
-
-
-@contextlib.contextmanager
-def std_out_err_redirect_tqdm():
-    """Redirect stdout and stderr to `tqdm.write`.
-
-    Code copied from tqdm documentation:
-    https://github.com/tqdm/tqdm#redirecting-writing
-
-    Redirect stdout and stderr to tqdm allows tqdm to control
-    how print statements are shown and stops the progress bar
-    formatting from breaking. Note: warnings.warn() messages
-    still cause formatting issues in terminal.
-
-    Yields
-    -------
-    sys.stdout
-        Original stdout.
-    """
-    orig_out_err = sys.stdout, sys.stderr
-    try:
-        sys.stdout, sys.stderr = map(contrib.DummyTqdmFile, orig_out_err)
-        yield orig_out_err[0]
-    # Relay exceptions
-    except Exception as exc:
-        raise exc
-    # Always restore sys.stdout/err if necessary
-    finally:
-        sys.stdout, sys.stderr = orig_out_err

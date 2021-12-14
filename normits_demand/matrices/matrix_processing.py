@@ -41,6 +41,7 @@ from normits_demand import efs_constants as efs_consts
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 from normits_demand.utils import compress
+from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.matrices import utils as mat_utils
@@ -49,14 +50,13 @@ from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
 from normits_demand.validation import checks
 
-
 from normits_demand.matrices.tms_matrix_processing import *
 
 
 def _aggregate(import_dir: str,
                in_fnames: List[str],
                export_path: str,
-               round_dp: int = efs_consts.DEFAULT_ROUNDING,
+               round_dp: int = consts.DEFAULT_ROUNDING,
                ) -> str:
     """
     Loads the given files, aggregates together and saves in given location
@@ -75,7 +75,7 @@ def _aggregate(import_dir: str,
         )
 
     for fname in in_fnames:
-        mat = pd.read_csv(os.path.join(import_dir, fname), index_col=0)
+        mat = file_ops.read_df(os.path.join(import_dir, fname), index_col=0)
 
         # Build a matching df of 0s if not done yet
         if aggregated_mat is None:
@@ -96,7 +96,7 @@ def _recursive_aggregate(candidates: List[str],
                          import_dir: str,
                          export_path: str,
                          compress_out: bool = False,
-                         round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                         round_dp: int = consts.DEFAULT_ROUNDING,
                          ) -> None:
     """
     The internal function of aggregate_matrices(). Recursively steps through
@@ -258,7 +258,7 @@ def aggregate_matrices(import_dir: str,
                        ca_needed: List[int] = None,
                        tp_needed: List[int] = None,
                        compress_out: bool = False,
-                       round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                       round_dp: int = consts.DEFAULT_ROUNDING,
                        process_count: int = consts.PROCESS_COUNT,
                        ):
     """
@@ -358,13 +358,13 @@ def aggregate_matrices(import_dir: str,
     kwarg_list = list()
     for year, m, p in product(years_needed, m_needed, p_needed):
         # Init
-        if p in efs_consts.SOC_P:
+        if p in consts.SOC_P:
             segment_needed = soc_needed
             segment_str = soc_strs
-        elif p in efs_consts.NS_P:
+        elif p in consts.NS_P:
             segment_needed = ns_needed
             segment_str = ns_strs
-        elif p in efs_consts.ALL_NHB_P:
+        elif p in consts.ALL_NHB_P:
             segment_needed = None
             segment_str = list()
         else:
@@ -385,7 +385,9 @@ def aggregate_matrices(import_dir: str,
     multiprocessing.multiprocess(
         fn=_aggregate_matrices_internal,
         kwargs=kwarg_list,
-        process_count=process_count
+        process_count=process_count,
+        # process_count=0,
+
     )
 
 
@@ -428,7 +430,7 @@ def get_tour_proportion_seed_values(m: int,
         aggregate_to_wday=aggregate_to_wday,
         lookup_folder=phi_lookup_folder
     )
-    phi_factors = pa2od.simplify_time_period_splits(phi_factors)
+    phi_factors = pa2od.simplify_phi_factors(phi_factors)
     phi_factors = phi_factors[phi_factors['purpose_from_home'] == p]
 
     # Get the time period splits
@@ -859,7 +861,7 @@ def _tms_seg_tour_props(od_import: str,
                         pa_export: str,
                         model_name: str,
                         year: int = efs_consts.BASE_YEAR,
-                        p_needed: List[int] = efs_consts.ALL_HB_P,
+                        p_needed: List[int] = consts.ALL_HB_P,
                         m_needed: List[int] = efs_consts.MODES_NEEDED,
                         soc_needed: List[int] = None,
                         ns_needed: List[int] = None,
@@ -1754,8 +1756,10 @@ def build_compile_params(import_dir: str,
 
         # Write outputs for this year
         if output_fname is None:
-            output_fname = du.get_compile_params_name(matrix_format, str(year))
-        out_path = os.path.join(export_dir, output_fname)
+            fname = du.get_compile_params_name(matrix_format, str(year))
+        else:
+            fname = output_fname
+        out_path = os.path.join(export_dir, fname)
         du.write_csv(output_headers, out_lines, out_path)
         out_paths.append(out_path)
 
@@ -1973,9 +1977,9 @@ def build_24hr_mats(import_dir: str,
 
     for p, m, seg, ca in loop_generator:
         # Figure out trip origin
-        if p in efs_consts.ALL_HB_P:
+        if p in consts.ALL_HB_P:
             trip_origin = 'hb'
-        elif p in efs_consts.ALL_NHB_P:
+        elif p in consts.ALL_NHB_P:
             trip_origin = 'nhb'
         else:
             raise ValueError("'%s' is not a valid purpose. Don't know if it "
@@ -2154,17 +2158,17 @@ def nhb_tp_split_via_factors(import_dir: nd.PathLike,
             )
 
     # Read in the splitting factors
-    du.print_w_toggle("Reading in the splitting factors...", echo=verbose)
+    du.print_w_toggle("Reading in the splitting factors...", verbose=verbose)
     fname = consts.POSTME_TP_SPLIT_FACTORS_FNAME
     factor_path = os.path.join(tour_proportions_dir, fname)
-    splitting_factors = file_ops.read_pickle(factor_path, find_similar=True)
+    splitting_factors = file_ops.read_pickle(factor_path)
 
     # Figure out the level of segmentation we are working at
     check_key = list(splitting_factors.keys())[0]
     split_factor_seg_keys = list(du.fname_to_calib_params(check_key).keys())
 
     # Break the splitting factors down into distribution params
-    du.print_w_toggle("Checking the splitting factors...", echo=verbose)
+    du.print_w_toggle("Checking the splitting factors...", verbose=verbose)
     factor_params = dict()
     for key in splitting_factors.keys():
         dist_params = du.fname_to_calib_params(key)
@@ -2261,6 +2265,8 @@ def copy_nhb_matrices(import_dir: str,
                       export_dir: str,
                       replace_pa_with_od: bool = False,
                       replace_od_with_pa: bool = False,
+                      pa_matrix_desc: str = 'pa',
+                      od_matrix_desc: str = 'od',
                       ) -> None:
     """
     Copies NHB matrices from import dir to export dir.
@@ -2277,10 +2283,20 @@ def copy_nhb_matrices(import_dir: str,
         Path to the directory to copy the nhb matrices to.
     
     replace_pa_with_od:
-        Whether to replace the '_pa_' in the matrix names with '_od_'.
+        Whether to replace pa_matrix_desc in the matrix names with od_matrix_desc.
 
     replace_od_with_pa:
-        Whether to replace the '_od_' in the matrix names with '_pa_'.
+        Whether to replace od_matrix_desc in the matrix names with pa_matrix_desc.
+
+    pa_matrix_desc:
+        The name used to describe the pa matrices. Usually just 'pa', but
+        will sometimes be 'synthetic_pa' when dealing with TMS synthetic
+        matrices.
+
+    od_matrix_desc:
+        The name used to describe the od matrices. Usually just 'od', but
+        will sometimes be 'synthetic_od' when dealing with TMS synthetic
+        matrices.
 
     Returns
     -------
@@ -2288,8 +2304,10 @@ def copy_nhb_matrices(import_dir: str,
     """
     # Find the .csv nhb mats
     mats = du.list_files(import_dir)
-    mats = [x for x in mats if '.csv' in x]
     nhb_mats = [x for x in mats if du.starts_with(x, 'nhb')]
+
+    pa_nm = '_%s_' % pa_matrix_desc
+    od_nm = '_%s_' % od_matrix_desc
 
     # Copy them over without a rename
     for mat_fname in nhb_mats:
@@ -2299,18 +2317,20 @@ def copy_nhb_matrices(import_dir: str,
 
         # Try to rename if needed
         elif replace_pa_with_od:
-            if '_pa_' not in mat_fname:
+            if pa_nm not in mat_fname:
                 raise ValueError(
-                    "Cannot find '_pa_' in '%s' to replace." % mat_fname
+                    "Cannot find '%s' in '%s' to replace."
+                    % (pa_nm, mat_fname)
                 )
-            out_mat_fname = mat_fname.replace('_pa_', '_od_')
+            out_mat_fname = mat_fname.replace(pa_nm, od_nm)
 
         elif replace_od_with_pa:
-            if '_od_' not in mat_fname:
+            if od_nm not in mat_fname:
                 raise ValueError(
-                    "Cannot find '_od_' in '%s' to replace." % mat_fname
+                    "Cannot find '%s' in '%s' to replace."
+                    % (od_nm, mat_fname)
                 )
-            out_mat_fname = mat_fname.replace('_od_', '_pa_')
+            out_mat_fname = mat_fname.replace(od_nm, pa_nm)
         else:
             raise ValueError(
                 "This shouldn't happen! Somehow replace_od_with_pa and "
@@ -2322,15 +2342,69 @@ def copy_nhb_matrices(import_dir: str,
             src=os.path.join(import_dir, mat_fname),
             dst=os.path.join(export_dir, out_mat_fname),
         )
-        
+
+
+def _compile_matrices_internal(mat_import,
+                               mat_export,
+                               compile_params,
+                               comp_name,
+                               round_dp,
+                               factor_pickle_path,
+                               avoid_zero_splits,
+                               ) -> None:
+    """
+    The internal function of compile_matrices
+    """
+    # ## COMPILE THE MATRICES ## #
+    # Get the input matrices
+    mask = (compile_params['compilation'] == comp_name)
+    subset = compile_params[mask].copy()
+    input_mat_names = subset['distribution_name'].unique()
+
+    # Read in all the matrices
+    in_mats = list()
+    for mat_name in input_mat_names:
+        in_path = os.path.join(mat_import, mat_name)
+        df = file_ops.read_df(in_path, index_col=0)
+        df.columns = df.columns.astype(int)
+        in_mats.append(df)
+
+    # Combine all matrices together
+    full_mat = functools.reduce(operator.add, in_mats)
+
+    # Output to file
+    output_path = os.path.join(mat_export, comp_name)
+    full_mat = full_mat.round(decimals=round_dp)
+    file_ops.write_df(full_mat, output_path)
+
+    # Go to the next iteration if we don't need the factors
+    if factor_pickle_path is None:
+        return None
+
+    # ## CALCULATE THE DECOMPILE FACTORS ## #
+    # Infill all zeroes with a small number - ensures no 0 splits
+    if avoid_zero_splits:
+        in_mats = [x.where(x != 0, 1e-8) for x in in_mats]
+        full_mat = functools.reduce(operator.add, in_mats)
+
+    decompile_factors = dict()
+    for part_mat, mat_name in zip(in_mats, input_mat_names):
+        # Avoid divide by zero
+        full_mat = np.where(full_mat == 0, 0.0001, full_mat)
+        # decompile_factors[comp_name][mat_name] = part_mat / full_mat
+        decompile_factors[mat_name] = part_mat / full_mat
+
+    return decompile_factors
+
 
 def compile_matrices(mat_import: str,
                      mat_export: str,
                      compile_params_path: str,
                      factor_pickle_path: str = None,
-                     round_dp: int = efs_consts.DEFAULT_ROUNDING,
+                     round_dp: int = consts.DEFAULT_ROUNDING,
                      factors_fname: str = 'od_compilation_factors.pickle',
                      avoid_zero_splits: bool = False,
+                     process_count: int = consts.PROCESS_COUNT,
                      ) -> nd.PathLike:
     """
     Compiles the matrices in mat_import, writes to mat_export
@@ -2401,42 +2475,39 @@ def compile_matrices(mat_import: str,
     # Use function to initialise defaultdict
     decompile_factors = defaultdict(lambda: defaultdict(empty_factors))
 
-    desc = 'Compiling Matrices'
-    for comp_name in tqdm(compiled_names, desc=desc):
-        # ## COMPILE THE MATRICES ## #
-        # Get the input matrices
-        mask = (compile_params['compilation'] == comp_name)
-        subset = compile_params[mask].copy()
-        input_mat_names = subset['distribution_name'].unique()
+    # ## MP Matrix compilation ## #
+    unchanging_kwargs = {
+        'mat_import': mat_import,
+        'mat_export': mat_export,
+        'compile_params': compile_params,
+        'round_dp': round_dp,
+        'factor_pickle_path': factor_pickle_path,
+        'avoid_zero_splits': avoid_zero_splits,
+    }
 
-        # Read in all the matrices
-        in_mats = list()
-        for mat_name in input_mat_names:
-            in_path = os.path.join(mat_import, mat_name)
-            in_mats.append(file_ops.read_df(in_path, index_col=0))
+    pbar_kwargs = {
+        'desc': 'Compiling Matrices',
+        'unit': 'matrices',
+        'colour': 'cyan',
+    }
 
-        # Combine all matrices together
-        full_mat = functools.reduce(operator.add, in_mats)
+    kwarg_list = list()
+    for comp_name in compiled_names:
+        kwargs = unchanging_kwargs.copy()
+        kwargs['comp_name'] = comp_name
+        kwarg_list.append(kwargs)
 
-        # Output to file
-        output_path = os.path.join(mat_export, comp_name)
-        full_mat = full_mat.round(decimals=round_dp)
-        file_ops.write_df(full_mat, output_path)
+    # Compile all the matrices and get the decompile factors back
+    factors = multiprocessing.multiprocess(
+        fn=_compile_matrices_internal,
+        kwargs=kwarg_list,
+        process_count=process_count,
+        in_order=True,
+        pbar_kwargs=pbar_kwargs,
+    )
 
-        # Go to the next iteration if we don't need the factors
-        if factor_pickle_path is None:
-            continue
-
-        # ## CALCULATE THE DECOMPILE FACTORS ## #
-        # Infill all zeroes with a small number - ensures no 0 splits
-        if avoid_zero_splits:
-            in_mats = [x.where(x != 0, 1e-8) for x in in_mats]
-            full_mat = functools.reduce(operator.add, in_mats)
-
-        for part_mat, mat_name in zip(in_mats, input_mat_names):
-            # Avoid divide by zero
-            full_mat = np.where(full_mat == 0, 0.0001, full_mat)
-            decompile_factors[comp_name][mat_name] = part_mat / full_mat
+    # Assign the return values
+    decompile_factors = {c: f for c, f in zip(compiled_names, factors)}
 
     # Write factors to disk if we made them
     if factor_pickle_path is not None:
@@ -2664,10 +2735,10 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
         matrix_format = checks.validate_matrix_format(temp_seg_dict['matrix_format'])
 
         # Figure out which column names we should use
-        if matrix_format in efs_consts.PA_MATRIX_FORMATS:
+        if matrix_format in consts.PA_MATRIX_FORMATS:
             p_or_o_val_name = 'productions'
             a_or_d_val_name = 'attractions'
-        elif matrix_format in efs_consts.OD_MATRIX_FORMATS:
+        elif matrix_format in consts.OD_MATRIX_FORMATS:
             p_or_o_val_name = 'origin'
             a_or_d_val_name = 'destination'
         else:
@@ -2813,7 +2884,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
         vector = du.merge_df_list(yearly_vec, on=segment_col_names)
 
         # Split out the HB and NHB, add to return
-        hb_mask = vector['p'].isin(efs_consts.ALL_HB_P)
+        hb_mask = vector['p'].isin(consts.ALL_HB_P)
         return_values.append(vector[hb_mask].copy())
         return_values.append(vector[~hb_mask].copy())
 
@@ -2903,15 +2974,15 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
 
     # Figure out the file paths we should be using
     if matrix_format == 'pa':
-        hb_p_or_o_fname = efs_consts.PRODS_FNAME % ('cache', 'hb')
-        nhb_p_or_o_fname = efs_consts.PRODS_FNAME % ('cache', 'nhb')
-        hb_a_or_o_fname = efs_consts.ATTRS_FNAME % ('cache', 'hb')
-        nhb_a_or_o_fname = efs_consts.ATTRS_FNAME % ('cache', 'nhb')
+        hb_p_or_o_fname = consts.PRODS_FNAME % ('cache', 'hb')
+        nhb_p_or_o_fname = consts.PRODS_FNAME % ('cache', 'nhb')
+        hb_a_or_o_fname = consts.ATTRS_FNAME % ('cache', 'hb')
+        nhb_a_or_o_fname = consts.ATTRS_FNAME % ('cache', 'nhb')
     elif matrix_format == 'od':
-        hb_p_or_o_fname = efs_consts.ORIGS_FNAME % ('cache', 'hb')
-        nhb_p_or_o_fname = efs_consts.ORIGS_FNAME % ('cache', 'nhb')
-        hb_a_or_o_fname = efs_consts.DESTS_FNAME % ('cache', 'hb')
-        nhb_a_or_o_fname = efs_consts.DESTS_FNAME % ('cache', 'nhb')
+        hb_p_or_o_fname = consts.ORIGS_FNAME % ('cache', 'hb')
+        nhb_p_or_o_fname = consts.ORIGS_FNAME % ('cache', 'nhb')
+        hb_a_or_o_fname = consts.DESTS_FNAME % ('cache', 'hb')
+        nhb_a_or_o_fname = consts.DESTS_FNAME % ('cache', 'nhb')
     else:
         raise ValueError(
             "%s seems to be a valid matrix format, but I don't know what to "
@@ -3159,7 +3230,7 @@ def _split_int_ext(mat_import,
         csv=True,
     )
     path = os.path.join(mat_import, fname)
-    full_mat = pd.read_csv(path, index_col=0)
+    full_mat = file_ops.read_df(path, index_col=0, find_similar=True)
 
     # Build an iterator to go through internal and external
     iterator = zip(
@@ -3176,7 +3247,7 @@ def _split_int_ext(mat_import,
             continue
 
         # Get the mask and extract the data
-        mask = mat_utils.get_wide_mask(full_mat, zones, join_fn=join_fn)
+        mask = pd_utils.get_wide_mask(full_mat, zones, join_fn=join_fn)
         sub_mat = full_mat.where(mask, 0)
 
         fname = du.calib_params_to_dist_name(
@@ -3193,6 +3264,7 @@ def _split_int_ext(mat_import,
 
 def split_internal_external(mat_import: nd.PathLike,
                             year: Union[int, str],
+                            matrix_format: str,
                             internal_zones: List[int] = None,
                             external_zones: List[int] = None,
                             internal_export: nd.PathLike = None,
@@ -3228,8 +3300,9 @@ def split_internal_external(mat_import: nd.PathLike,
         seg_vals = du.fname_to_calib_params(
             path,
             get_trip_origin=True,
-            get_matrix_format=True
+            get_matrix_format=False
         )
+        seg_vals['matrix_format'] = matrix_format
 
         # Skip over any file which is not the wanted year
         if seg_vals['yr'] != year:
@@ -3276,25 +3349,26 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
                          ) -> str:
     # TODO(BT) Write compile_norms_to_vdm() docs
     # Init
-    matrix_format = checks.validate_matrix_format(matrix_format)
+    # matrix_format = checks.validate_matrix_format(matrix_format)
 
     # Build temporary paths
     int_dir = os.path.join(mat_export, 'internal')
     ext_dir = os.path.join(mat_export, 'external')
 
     for path in [int_dir, ext_dir]:
-        file_ops.create_folder(path, verbose=False)
+        file_ops.create_folder(path)
 
     # Temporary output if we need to split from/to
     compiled_dir = mat_export
     if from_to_split_factors is not None:
         compiled_dir = os.path.join(mat_export, 'compiled_non_split')
-        file_ops.create_folder(compiled_dir, verbose=False)
+        file_ops.create_folder(compiled_dir)
 
     # Split internal and external
     print("Splitting into internal and external matrices...")
     split_internal_external(
         mat_import=mat_import,
+        matrix_format=matrix_format,
         internal_export=int_dir,
         external_export=ext_dir,
         year=year,
@@ -3334,6 +3408,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
         return int_split_factors, ext_split_factors
 
     # ## CONVERT TO THE NORMS POST-ME FORMAT ## #
+    print("Converting matrices into NoRMS format...")
     mat_comp.convert_efs_to_norms_matrices(
         mat_import=compiled_dir,
         mat_export=mat_export,
@@ -3344,9 +3419,13 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
     return int_split_factors, ext_split_factors
 
 
-def _recombine_internal_external_internal(in_paths, output_path, force_csv_out):
+def _recombine_internal_external_internal(in_paths,
+                                          output_path,
+                                          force_csv_out,
+                                          force_compress_out,
+                                          ) -> None:
     # Read in the matrices and compile
-    partial_mats = [file_ops.read_df(x, index_col=0) for x in in_paths]
+    partial_mats = [file_ops.read_df(x, index_col=0, find_similar=True) for x in in_paths]
     full_mat = functools.reduce(lambda x, y: x.values + y.values, partial_mats)
 
     # Store back in a df
@@ -3360,6 +3439,10 @@ def _recombine_internal_external_internal(in_paths, output_path, force_csv_out):
         output_path = file_ops.cast_to_pathlib_path(output_path)
         output_path = output_path.parent / (output_path.stem + '.csv')
 
+    if force_compress_out:
+        output_path = file_ops.cast_to_pathlib_path(output_path)
+        output_path = output_path.parent / (output_path.stem + consts.COMPRESSION_SUFFIX)
+
     # Write the complete matrix to disk
     file_ops.write_df(full_mat, output_path)
 
@@ -3367,8 +3450,11 @@ def _recombine_internal_external_internal(in_paths, output_path, force_csv_out):
 def recombine_internal_external(internal_import: nd.PathLike,
                                 external_import: nd.PathLike,
                                 full_export: nd.PathLike,
+                                years: List[int],
                                 force_csv_out: bool = False,
+                                force_compress_out: bool = False,
                                 process_count: int = consts.PROCESS_COUNT,
+                                pbar_kwargs: Dict[str, Any] = None,
                                 ) -> None:
     """
     Combines the internal and external split matrices and write out to full_export
@@ -3395,6 +3481,17 @@ def recombine_internal_external(internal_import: nd.PathLike,
     all_internal_fnames = file_ops.list_files(internal_import)
     all_external_fnames = file_ops.list_files(external_import)
 
+    # Filter to just the wanted years
+    internal_fnames = list()
+    external_fnames = list()
+    for year in years:
+        yr_str = '_yr%s_' % year
+        internal_fnames += [x for x in all_internal_fnames if yr_str in x]
+        external_fnames += [x for x in all_external_fnames if yr_str in x]
+
+    all_internal_fnames = internal_fnames
+    all_external_fnames = external_fnames
+
     # ## BUILD DICTIONARY OF MATRICES TO COMBINE ## #
     comp_dict = dict()
     used_external_fnames = list()
@@ -3404,7 +3501,13 @@ def recombine_internal_external(internal_import: nd.PathLike,
         ext_fname = file_ops.add_external_suffix(full_fname)
 
         # Check the external file actually exists
-        if not os.path.exists(os.path.join(external_import, ext_fname)):
+        try:
+            file_ops.find_filename(
+                path=os.path.join(external_import, ext_fname),
+                alt_types=['.csv', consts.COMPRESSION_SUFFIX]
+            )
+        except FileNotFoundError as e:
+            print(e)
             raise FileNotFoundError(
                 "No external file exists to match the internal file.\n"
                 "Internal file location: %s\n"
@@ -3425,7 +3528,7 @@ def recombine_internal_external(internal_import: nd.PathLike,
 
     # Make sure we've used all the external matrices
     for ext_fname in all_external_fnames:
-        if ext_fname not in used_external_fnames:
+        if not file_ops.filename_in_list(ext_fname, used_external_fnames, ignore_ftype=True):
             int_fname = ext_fname.replace(consts.EXTERNAL_SUFFIX, consts.INTERNAL_SUFFIX)
             raise FileNotFoundError(
                 "No internal file exists to match the external file.\n"
@@ -3442,11 +3545,13 @@ def recombine_internal_external(internal_import: nd.PathLike,
             'output_path': output_path,
             'in_paths': in_paths,
             'force_csv_out': force_csv_out,
+            'force_compress_out': force_compress_out,
         })
         
     multiprocessing.multiprocess(
         fn=_recombine_internal_external_internal,
         kwargs=kwarg_list,
         process_count=process_count,
+        pbar_kwargs=pbar_kwargs,
     )
 

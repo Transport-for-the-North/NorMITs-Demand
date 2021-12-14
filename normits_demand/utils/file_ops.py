@@ -13,8 +13,12 @@ A collections of utility functions for file operations
 
 # builtins
 import os
+import time
+import pickle
 import pathlib
+import warnings
 
+from typing import Any
 from typing import List
 
 # Third Party
@@ -26,10 +30,9 @@ from normits_demand import constants as consts
 from normits_demand.utils import compress
 from normits_demand.utils import general as du
 
-from normits_demand.concurrency import multiprocessing as mp
+from normits_demand.concurrency import multiprocessing as multiprocessing
 
 # Imports that need moving into here
-from normits_demand.utils.utils import create_folder
 from normits_demand.utils.general import list_files
 
 
@@ -79,7 +82,9 @@ def file_exists(file_path: nd.PathLike) -> bool:
     return True
 
 
-def check_file_exists(file_path: nd.PathLike) -> None:
+def check_file_exists(file_path: nd.PathLike,
+                      find_similar: bool = False,
+                      ) -> None:
     """
     Checks if a file exists at the given path. Throws an error if not.
 
@@ -88,10 +93,19 @@ def check_file_exists(file_path: nd.PathLike) -> None:
     file_path:
         path to the file to check.
 
+    find_similar:
+        Whether to look for files with the same name, but a different file
+        type extension. If True, this will call find_filename() using the
+        default alternate file types: ['.pbz2', '.csv']
+
     Returns
     -------
     None
     """
+    if find_similar:
+        find_filename(file_path)
+        return
+
     if not file_exists(file_path):
         raise IOError(
             "Cannot find a path to: %s" % str(file_path)
@@ -113,7 +127,7 @@ def check_path_exists(path: nd.PathLike) -> None:
     """
     if not os.path.exists(path):
         raise IOError(
-            "Cannot find a path: %s" % str(path)
+            "The following path does not exist: %s" % str(path)
         )
 
 
@@ -255,7 +269,7 @@ def read_df(path: nd.PathLike,
         if index_col is not None and not is_index_set(df):
             df = df.set_index(list(df)[index_col])
 
-        # Unset the index col if it is set
+        # Unset the index col if it is set - this is how pd.read_csv() works
         if index_col is None and df.index.name is not None:
             df = df.reset_index()
 
@@ -275,7 +289,7 @@ def read_df(path: nd.PathLike,
 
 def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
     """
-    Reads in the dataframe at path. Decompresses the df if needed.
+    Writes the dataframe at path. Decompresses the df if needed.
 
     Parameters
     ----------
@@ -310,89 +324,46 @@ def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
         )
 
 
-def read_pickle(path: nd.PathLike,
-                find_similar: bool = False,
-                **kwargs,
-                ) -> pd.DataFrame:
-    """
-    Reads in the pickle at path. Decompresses the pickle if needed.
+def filename_in_list(filename: nd.PathLike,
+                     lst: List[nd.PathLike],
+                     ignore_ftype: bool = False,
+                     ) -> bool:
+    """Returns True if filename exists in lst
 
     Parameters
     ----------
-    path:
-        The full path to the dataframe to read in
+    filename:
+        The filename to search for in lst
 
-    find_similar:
-        If True and the given file at path cannot be found, files with the
-        same name but different extensions will be looked for and read in
-        instead. Will check for: '.pkl', '.pbz2', '.pickle', '.p'
+    lst:
+        The list to search for filename in
 
-    Returns
-    -------
-    unpickled_data:
-        The read in pickle at path.
-    """
-    # Init
-    pickle_extensions = ['.pkl', '.p', '.pickle']
-
-    # Try and find similar files if we are allowed
-    if not os.path.exists(path):
-        if not find_similar:
-            raise FileNotFoundError(
-                "No such file or directory: '%s'" % path
-            )
-        alt_types = pickle_extensions + [consts.COMPRESSION_SUFFIX]
-        path = find_filename(path, alt_types=alt_types)
-
-    # Determine how to read in df
-    if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
-        return compress.read_in(path)
-
-    elif pathlib.Path(path).suffix in pickle_extensions:
-        return pd.read_pickle(path, **kwargs)
-
-    else:
-        raise ValueError(
-            "Cannot determine the filetype of the given path. Expected "
-            "either '.pkl' or '%s'" % consts.COMPRESSION_SUFFIX
-        )
-
-
-def write_pickle(obj: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
-    """
-    Reads in the dataframe at path. Decompresses the df if needed.
-
-    Parameters
-    ----------
-    obj:
-        The object to write to disk
-
-    path:
-        The full path to the dataframe to read in
-
-    **kwargs:
-        Any arguments to pass to the underlying write function.
+    ignore_ftype:
+        Whether to ignore the filetypes in both the filename and lst
+        when searching
 
     Returns
     -------
-    df:
-        The read in df at path.
+    boolean:
+        True if filename is in lst, False otherwise
     """
+    # If we're not ignoring ftype, we can do a simple check
+    if not ignore_ftype:
+        return filename in lst
+
     # Init
-    path = cast_to_pathlib_path(path)
+    filename = cast_to_pathlib_path(filename)
+    lst = [cast_to_pathlib_path(x) for x in lst]
 
-    # Determine how to read in df
-    if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
-        compress.write_out(obj, path)
+    # Compare the names
+    for item in lst:
+        item_no_ftype = item.parent / item.stem
+        filename_no_ftype = filename.parent / filename.stem
 
-    elif pathlib.Path(path).suffix == '.pkl':
-        pd.to_pickle(path, **kwargs)
+        if item_no_ftype == filename_no_ftype:
+            return True
 
-    else:
-        raise ValueError(
-            "Cannot determine the filetype of the given path. Expected "
-            "either '.pkl' or '%s'" % consts.COMPRESSION_SUFFIX
-        )
+    return False
 
 
 def find_filename(path: nd.PathLike,
@@ -422,6 +393,12 @@ def find_filename(path: nd.PathLike,
     path:
         The path to a matching, or closely matching (differing only on
         filetype extension) file.
+
+    Raises
+    ------
+    FileNotFoundError:
+        If the file cannot be found under any of the given alt_types file
+        extensions.
     """
     # Init
     path = cast_to_pathlib_path(path)
@@ -456,7 +433,7 @@ def find_filename(path: nd.PathLike,
         if os.path.exists(path):
             return return_fn(path)
 
-    # If here, not paths were found!
+    # If here, no paths were found!
     raise FileNotFoundError(
         "Cannot find any similar files. Tried all of the following paths: %s"
         % str(attempted_paths)
@@ -548,7 +525,7 @@ def copy_all_files(import_dir: nd.PathLike,
         kwargs['in_fname'] = in_fname
         kwarg_list.append(kwargs)
 
-    mp.multiprocess(
+    multiprocessing.multiprocess(
         fn=_copy_all_files_internal,
         kwargs=kwarg_list,
         process_count=process_count,
@@ -647,3 +624,190 @@ def add_external_suffix(path: nd.PathLike) -> pathlib.Path:
         path with the external suffix added
     """
     return add_to_fname(path, consts.EXTERNAL_SUFFIX)
+
+
+def copy_files(src_dir: nd.PathLike,
+               dst_dir: nd.PathLike,
+               filenames: List[str],
+               process_count: int = consts.PROCESS_COUNT,
+               ) -> None:
+    """Copy filenames from src_dir to dst_dir
+
+    # TODO(BT): Write this documentation for copy_files()
+
+    Parameters
+    ----------
+    src_dir
+    dst_dir
+    filenames
+    process_count
+
+    Returns
+    -------
+
+    """
+
+    # Setup kwargs
+    kwarg_list = list()
+    for fname in filenames:
+        kwarg_list.append({
+            'src': os.path.join(src_dir, fname),
+            'dst': os.path.join(dst_dir, fname),
+        })
+
+    multiprocessing.multiprocess(
+        fn=du.copy_and_rename,
+        kwargs=kwarg_list,
+        process_count=process_count,
+        pbar_kwargs={'disable': False},
+    )
+
+
+def create_folder(folder_path: nd.PathLike,
+                  verbose_create: bool = True,
+                  verbose_exists: bool = False,
+                  ) -> None:
+    """
+    Creates the folder at folder_path
+    Parameters
+    ----------
+    folder_path:
+        Path to the folder to create
+
+    verbose_create:
+        Whether to print a message when creating the path
+
+    verbose_exists:
+        Whether to print a message when the path already exists
+
+    """
+    # Check if path exists
+    if os.path.exists(folder_path):
+        du.print_w_toggle('Folder already exists', verbose=verbose_exists)
+        return
+
+    os.makedirs(folder_path)
+    du.print_w_toggle(
+        "New project folder created at %s" % folder_path,
+        verbose=verbose_create,
+    )
+
+
+def write_pickle(obj: object,
+                 path: nd.PathLike,
+                 protocol: int = pickle.HIGHEST_PROTOCOL,
+                 **kwargs,
+                 ) -> None:
+    """Load any pickled object from disk at path.
+
+    Parameters
+    ----------
+    obj:
+        The object to pickle and write to disk
+
+    path:
+        Filepath to write obj to
+
+    protocol:
+        The pickle protocol to use when dumping to disk
+
+    **kwargs:
+        Any additional arguments to pass to pickle.dump()
+
+    Returns
+    -------
+    None
+    """
+    with open(path, 'wb') as f:
+        pickle.dump(obj, f, protocol=protocol, **kwargs)
+
+
+def read_pickle(path: nd.PathLike) -> Any:
+    """Load any pickled object from disk at path.
+
+    Parameters
+    ----------
+    path:
+        Filepath to the object to read in and unpickle
+
+    Returns
+    -------
+    unpickled:
+        Same type as object stored in file.
+    """
+    # Validate path
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            "No file to read in found at %s"
+            % path
+        )
+
+    # Read in
+    with open(path, 'rb') as f:
+        obj = pickle.load(f)
+
+    # If its a DVector, reset the process count
+    if isinstance(obj, nd.core.data_structures.DVector):
+        obj._process_count = nd.constants.PROCESS_COUNT
+
+    # If no version, return now
+    if not hasattr(obj, '__version__'):
+        return obj
+
+    # Check if class definition has a version (should do!)
+    if not hasattr(obj.__class__, '__version__'):
+        warn_msg = (
+            "The object loaded from '%s' has a version, but the class "
+            "definition in the code does not. Aborting version check!\n"
+            "Loaded object is version %s"
+            % (path, obj.__version__)
+        )
+        warnings.warn(warn_msg, UserWarning, stacklevel=2)
+
+    # Throw warning if versions don't match
+    if obj.__version__ != obj.__class__.__version__:
+        warn_msg = (
+            "The object loaded from '%s' is not the same version as the "
+            "class definition in the code. This might cause some unexpected "
+            "problems.\n"
+            "Object Version: %s\n"
+            "Class Version: %s"
+            % (path, obj.__version__, obj.__class__.__version__)
+        )
+        warnings.warn(warn_msg, UserWarning, stacklevel=2)
+
+    return obj
+
+
+def safe_dataframe_to_csv(df, out_path, **to_csv_kwargs):
+    """
+    Wrapper around df.to_csv. Gives the user a chance to close the open file.
+
+    Parameters
+    ----------
+    df:
+        pandas.DataFrame to write to call to_csv on
+
+    out_path:
+        Where to write the file to. TO first argument to df.to_csv()
+
+    to_csv_kwargs:
+        Any other kwargs to be passed straight to df.to_csv()
+
+    Returns
+    -------
+        None
+    """
+    written_to_file = False
+    waiting = False
+    while not written_to_file:
+        try:
+            df.to_csv(out_path, **to_csv_kwargs)
+            written_to_file = True
+        except PermissionError:
+            if not waiting:
+                print("Cannot write to file at %s.\n" % out_path +
+                      "Please ensure it is not open anywhere.\n" +
+                      "Waiting for permission to write...\n")
+                waiting = True
+            time.sleep(1)

@@ -19,7 +19,8 @@ import shutil
 import random
 import inspect
 import operator
-
+import itertools
+import contextlib
 
 import pandas as pd
 import numpy as np
@@ -32,13 +33,14 @@ from typing import Union
 from typing import Callable
 from typing import Iterable
 from typing import Iterator
+from typing import Generator
 
 from pathlib import Path
 
 from math import isclose
 
 import functools
-from tqdm import tqdm
+import tqdm
 from itertools import product
 from collections import defaultdict
 
@@ -49,6 +51,7 @@ from normits_demand import efs_constants as efs_consts
 
 # Can call tms utils.py functions from here
 from normits_demand.utils.utils import *
+
 
 # TODO: Utils is getting big. Refactor into smaller, more specific modules
 
@@ -67,6 +70,7 @@ class ExternalForecastSystemError(NormitsDemandError):
     """
     Base Exception for all custom EFS errors
     """
+
     def __init__(self, message=None):
         self.message = message
         super().__init__(self.message)
@@ -76,9 +80,44 @@ class InitialisationError(NormitsDemandError):
     """
     Exception for all errors that occur during normits_demand initialisation
     """
+
     def __init__(self, message=None):
         self.message = message
         super().__init__(self.message)
+
+
+@contextlib.contextmanager
+def std_out_err_redirect_tqdm():
+    """Redirect stdout and stderr to `tqdm.write`.
+
+    Code copied from tqdm documentation:
+    https://github.com/tqdm/tqdm#redirecting-writing
+
+    Redirect stdout and stderr to tqdm allows tqdm to control
+    how print statements are shown and stops the progress bar
+    formatting from breaking. Note: warnings.warn() messages
+    still cause formatting issues in terminal.
+
+    Yields
+    -------
+    sys.stdout
+        Original stdout.
+    """
+    # Init
+    from tqdm.contrib import DummyTqdmFile
+
+    orig_out_err = sys.stdout, sys.stderr
+    try:
+        sys.stdout, sys.stderr = map(DummyTqdmFile, orig_out_err)
+        yield orig_out_err[0]
+
+    # Relay exceptions
+    except Exception as exc:
+        raise exc
+
+    # Always restore sys.stdout/err if necessary
+    finally:
+        sys.stdout, sys.stderr = orig_out_err
 
 
 def get_seg_level_cols(seg_level: str,
@@ -358,7 +397,8 @@ def build_efs_io_paths(import_location: str,
                        scenario_name: str,
                        demand_dir_name: str = 'NorMITs Demand',
                        base_year: str = efs_consts.BASE_YEAR_STR,
-                       land_use_iteration: str = None,
+                       by_land_use_iteration: str = None,
+                       fy_land_use_iteration: str = None,
                        land_use_drive: str = None,
                        verbose: bool = True,
                        ) -> Tuple[dict, dict, dict]:
@@ -455,6 +495,7 @@ def build_efs_io_paths(import_location: str,
         'lookups': os.path.join(demand_home, 'lookup'),
         'costs': os.path.join(efs_model_home, 'costs'),
         'scenarios': os.path.join(import_home, 'scenarios'),
+        'wfh_adj': os.path.join(import_home, 'scenarios', 'WfH Adjustments', 'wfh_adj.csv'),
         'a_weights': os.path.join(import_home, 'attractions', 'hb_attraction_weights.csv'),
         'soc_weights': soc_weights_path,
         'ntem_control': os.path.join(import_home, 'ntem_constraints'),
@@ -467,22 +508,35 @@ def build_efs_io_paths(import_location: str,
         'params': model_param_home,
         'post_me_factors': os.path.join(model_param_home, 'post_me_tms_decompile_factors.pkl'),
         'post_me_tours': model_tour_prop_home,
+        'post_me_fh_th_factors': os.path.join(model_tour_prop_home, 'fh_th_factors'),
         'decomp_post_me': os.path.join(import_home, model_name, 'decompiled_post_me'),
 
     }
 
     # Add Land use import if we have an iteration
-    if land_use_drive is not None and land_use_iteration is not None:
-        land_use_home = os.path.join(
+    if all([x is not None for x in [land_use_drive, by_land_use_iteration, fy_land_use_iteration]]):
+        by_land_use_home = os.path.join(
             land_use_drive,
             'NorMITs Land Use',
-            land_use_iteration,
+            'base_land_use',
+            by_land_use_iteration,
+            'outputs',
+            'old_EFS_format',
+        )
+
+        fy_land_use_home = os.path.join(
+            land_use_drive,
+            'NorMITs Land Use',
+            'future_land_use',
+            fy_land_use_iteration,
             'outputs',
         )
-        land_use_fy = os.path.join(land_use_home, 'scenarios', scenario_name)
 
-        imports['pop_by'] = os.path.join(land_use_home, consts.BASE_YEAR_POP_FNAME)
-        imports['emp_by'] = os.path.join(land_use_home, consts.BASE_YEAR_EMP_FNAME)
+        land_use_fy = os.path.join(fy_land_use_home, 'scenarios', scenario_name)
+        land_use_fy = os.path.join(land_use_fy, 'old_EFS_format')
+
+        imports['pop_by'] = os.path.join(by_land_use_home, consts.BASE_YEAR_POP_FNAME)
+        imports['emp_by'] = os.path.join(by_land_use_home, consts.BASE_YEAR_EMP_FNAME)
         imports['land_use_fy_dir'] = land_use_fy
 
     # ## EXPORT PATHS ## #
@@ -508,6 +562,7 @@ def build_efs_io_paths(import_location: str,
     compiled = 'Compiled'
     aggregated = 'Aggregated'
     pa_24_bespoke = '24hr PA Matrices - Bespoke Zones'
+    pa_24_elasticity = '24hr PA Matrices - Elasticity'
     pcu = 'PCU'
 
     exports = {
@@ -524,6 +579,7 @@ def build_efs_io_paths(import_location: str,
         'mat_home': matrices_home,
         'pa': os.path.join(matrices_home, pa),
         'pa_24': os.path.join(matrices_home, pa_24),
+        'pa_24_wfh': os.path.join(matrices_home, pa_24 + " WFH"),
         'vdm_pa_24': os.path.join(matrices_home, vdm_pa_24),
         'od': os.path.join(matrices_home, od),
         'od_24': os.path.join(matrices_home, od_24),
@@ -536,11 +592,12 @@ def build_efs_io_paths(import_location: str,
         'aggregated_od': os.path.join(matrices_home, ' '.join([aggregated, od])),
         'aggregated_pa': os.path.join(matrices_home, ' '.join([aggregated, pa])),
 
-        'pa_24_bespoke': os.path.join(matrices_home, pa_24_bespoke)
+        'pa_24_bespoke': os.path.join(matrices_home, pa_24_bespoke),
+        'pa_24_elast': os.path.join(matrices_home, pa_24_elasticity),
     }
 
     for _, path in exports.items():
-        create_folder(path, chDir=False, verbose=verbose)
+        create_folder(path, chDir=False, verbose=True)
 
     # Post-ME
     compiled_od_path = os.path.join(post_me_home, ' '.join([compiled, od]))
@@ -656,7 +713,6 @@ def convert_msoa_naming(df: pd.DataFrame,
     df = df.rename(columns={keep_col: msoa_col_name})
 
     return df.reindex(column_order, axis='columns')
-
 
 
 def copy_and_rename(src: str, dst: str) -> None:
@@ -904,6 +960,35 @@ def calib_params_to_dist_name(trip_origin: str,
                               compressed: bool = False,
                               suffix: str = None,
                               ) -> str:
+    """
+    Wrapper for get_distribution_name() using calib params
+
+    DEPRECATED! Use segment_params_to_dist_name instead
+    """
+    segment_str = 'soc' if calib_params['p'] in efs_consts.SOC_P else 'ns'
+
+    return get_dist_name(
+        trip_origin=trip_origin,
+        matrix_format=matrix_format,
+        year=str(calib_params.get('yr')),
+        purpose=str(calib_params.get('p')),
+        mode=str(calib_params.get('m')),
+        segment=str(calib_params.get(segment_str)),
+        car_availability=str(calib_params.get('ca')),
+        tp=str(calib_params.get('tp')),
+        csv=csv,
+        compressed=compressed,
+        suffix=suffix,
+    )
+
+
+def segment_params_to_dist_name(trip_origin: str,
+                                matrix_format: str,
+                                calib_params: Dict[str, int],
+                                csv: bool = False,
+                                compressed: bool = False,
+                                suffix: str = None,
+                                ) -> str:
     """
     Wrapper for get_distribution_name() using calib params
     """
@@ -1487,7 +1572,7 @@ def ensure_segmentation(df: pd.DataFrame,
                 "No column exists in the given dataframe for %s segmentation."
                 % col
             )
-        
+
     return df
 
 
@@ -1517,7 +1602,7 @@ def vdm_segment_loop_generator(to_list: Iterable[str],
                 )
             else:
                 for time_period in tp_list:
-                    yield(
+                    yield (
                         trip_origin,
                         user_class,
                         mode,
@@ -1933,7 +2018,7 @@ def long_to_wide_out(df: pd.DataFrame,
     # Get the unique column names
     if unq_zones is None:
         unq_zones = df[v_heading].drop_duplicates().reset_index(drop=True).copy()
-        unq_zones = list(range(1, max(unq_zones)+1))
+        unq_zones = list(range(1, max(unq_zones) + 1))
 
     # Make sure all unq_zones exists in v_heading and h_heading
     df = ensure_multi_index(
@@ -2073,7 +2158,6 @@ def get_compiled_matrix_name(matrix_format: str,
                              compress: bool = False,
                              suffix: str = None,
                              ) -> str:
-
     """
     Generates the compiled matrix name
     """
@@ -2247,7 +2331,7 @@ def combine_yearly_dfs(year_dfs: Dict[str, pd.DataFrame],
     # ## SPLIT MATRICES AND JOIN BY PURPOSE ## #
     purpose_ph = list()
     desc = "Merging dataframes by purpose"
-    for p in tqdm(purposes, desc=desc):
+    for p in tqdm.tqdm(purposes, desc=desc):
 
         # Get all the matrices that belong to this purpose
         yr_p_dfs = list()
@@ -2465,7 +2549,7 @@ def defaultdict_to_regular(d):
     return d
 
 
-def file_write_check(path: Union[str, Path], wait: bool=True) -> Path:
+def file_write_check(path: Union[str, Path], wait: bool = True) -> Path:
     """Attempts to write to given path to see if file is in use.
 
     Will either wait for the file to be closed or it will append numbers
@@ -2672,6 +2756,7 @@ def filter_df(df: pd.DataFrame,
     kwargs:
         Any additional kwargs that should be passed to fit_filter() if fit is
         set to True.
+
     Returns
     -------
     filtered_df:
@@ -2714,6 +2799,13 @@ def intersection(l1: List[Any], l2: List[Any]) -> List[Any]:
     # Get the intersection
     temp = set(big)
     return [x for x in small if x in temp]
+
+
+def xor(a: bool, b: bool) -> bool:
+    """
+    Returns the exclusive or of a and b.
+    """
+    return bool(a ^ b)
 
 
 def ensure_index(df: pd.DataFrame,
@@ -2989,7 +3081,9 @@ def is_almost_equal(v1: float,
         The second value to compare
 
     significant:
-        The number of significant bits to compare over
+        The number of significant bits to compare over. If negative,
+        then this represents rounding.
+        i.e. -1 is same up until 10s, -2 100s etc
 
     Returns
     -------
@@ -2997,6 +3091,13 @@ def is_almost_equal(v1: float,
         True if v1 and v2 are equal to significant bits, else False
     """
     return isclose(v1, v2, abs_tol=10 ** -significant)
+
+
+def pairwise(iterable):
+    """s -> (s0,s1), (s1,s2), (s2, s3), ..."""
+    a, b = itertools.tee(iterable)
+    next(b, None)
+    return zip(a, b)
 
 
 def remove_all_commute_cat(df: pd.DataFrame,
@@ -3085,9 +3186,9 @@ def convert_to_weights(df: pd.DataFrame,
         mask = (df[weight_by_col] == val)
         for year in year_cols:
             df.loc[mask, year] = (
-                df.loc[mask, year]
-                /
-                df.loc[mask, year].sum()
+                    df.loc[mask, year]
+                    /
+                    df.loc[mask, year].sum()
             )
     return df
 
@@ -3107,7 +3208,7 @@ def trip_origin_to_purposes(trip_origin: str) -> List[int]:
         A list of integers representing purposes
     """
     # TODO Validate trip origin
-    return efs_consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
+    return consts.TRIP_ORIGIN_TO_PURPOSE[trip_origin]
 
 
 def purpose_to_user_class(purpose: Union[int, str]) -> str:
@@ -3201,6 +3302,7 @@ def split_base_future_years(years: List[int],
         raise TypeError(
             "Expecting a list of integers, but not all items are integers."
         )
+    years = years.copy()
 
     # Find the smallest value
     base_year = years.pop(years.index(min(years)))
@@ -3358,7 +3460,7 @@ def concat_df_dict(dict_list: List[Dict[Any, pd.DataFrame]],
                    non_sum_cols: List[str],
                    concat_keys: List[Any] = None,
                    sort: bool = False
-                ) -> Dict[Any, pd.DataFrame]:
+                   ) -> Dict[Any, pd.DataFrame]:
     """
     Sums the dataframes in dict_list on matching keys
 
@@ -3405,3 +3507,112 @@ def concat_df_dict(dict_list: List[Dict[Any, pd.DataFrame]],
         ret_dict[k] = concat_df
 
     return ret_dict
+
+
+def sum_dict_list(dict_list: List[Dict[Any, Any]]) -> Dict[Any, Any]:
+    """
+    Sums all dictionaries in dict_list together.
+
+    Parameters
+    ----------
+    dict_list:
+        A list of dictionaries to sum together.
+
+    Returns
+    -------
+    summed_dict:
+        A single dictionary of all the dicts in dict_list summed together.
+    """
+    return combine_dict_list(dict_list, operator.add)
+
+
+def combine_dict_list(dict_list: List[Dict[Any, Any]],
+                      operation: Callable,
+                      ) -> Dict[Any, Any]:
+    """
+    Sums all dictionaries in dict_list together.
+
+    Parameters
+    ----------
+    dict_list:
+        A list of dictionaries to sum together.
+
+    operation:
+        the operation to use to combine values at keys.
+        The operator library defines functions to do this.
+        Function should take two values, and return one.
+
+    Returns
+    -------
+    summed_dict:
+        A single dictionary of all the dicts in dict_list summed together.
+    """
+    # Define the accumulator function to call in functools.reduce
+    def reducer(accumulator, item):
+        for key, value in item.items():
+            accumulator[key] = operation(accumulator.get(key, 0), value)
+        return accumulator
+
+    return functools.reduce(reducer, dict_list)
+
+
+def chunk_list(lst: Iterable,
+               chunk_size: int,
+               ) -> Generator[pd.DataFrame, None, None]:
+    """
+    Yields chunk_size chunks of list
+
+    Parameters
+    ----------
+    lst:
+        The list to chunk.
+
+    chunk_size:
+        The size of the chunks to use
+
+    Yields
+    ------
+    lst_chunk:
+        A chunk of the given lst of size chunk_size
+
+    """
+    lst = list(lst)
+
+    for i in range(0, len(lst), chunk_size):
+        chunk_end = i + chunk_size
+        yield lst[i:chunk_end]
+
+
+def compare_sets(x1: set, x2: set) -> Tuple[bool, set, set]:
+    """
+    Checks whether x1 and x2 are the same.
+
+    Checks for items that are in x1, and not x2.
+    Checks for items that are in x2 and not x1.
+    If both above checks are empty, then sets must be equal.
+
+    Parameters
+    ----------
+    x1:
+        The first set the check
+
+    x2:
+        The second set the check
+
+    Returns
+    -------
+    equal:
+        True if x1 and x2 are equal, otherwise False.
+
+    x1_not_in_x2:
+        A set of items that are in x1, but not in x2.
+
+    x2_not_in_x1:
+        A set of items that are in x2, but not in x1.
+    """
+    x1_not_in_x2 = x1 - x2
+    x2_not_in_x1 = x2 - x1
+
+    equal = len(x1_not_in_x2) == 0 and len(x2_not_in_x1) == 0
+
+    return equal, x1_not_in_x2, x2_not_in_x1

@@ -33,7 +33,6 @@ class CostBuilder:
 
     _valid_modes = list(ec.MODE_ID.keys())
     _valid_purposes = list(consts.USER_CLASS_PURPOSES.keys())
-    _valid_e_types = list(ec.GC_ELASTICITY_TYPES.keys())
 
     _e_types_dtypes = {
         'mode': str,
@@ -67,6 +66,7 @@ class CostBuilder:
                  cost_adj_path: nd.PathLike,
 
                  # Parameters
+                 base_year: int,
                  years: List[int],
                  modes: List[str] = None,
                  purposes: List[str] = None,
@@ -99,6 +99,7 @@ class CostBuilder:
             )
 
         # Parameters
+        self.base_year = base_year
         self.years = valid_years
         self.years_str = [str(x) for x in valid_years]
         self.modes = modes
@@ -204,7 +205,8 @@ class CostBuilder:
             raise ValueError(msg + f" from: {self.vot_voc_path.name}")
 
         # Grab all the wanted in_file from the file
-        for yr, m, p in itertools.product(self.years_str, self.modes, self.purposes):
+        years = [str(self.base_year)] + self.years_str
+        for yr, m, p in itertools.product(years, self.modes, self.purposes):
             # Get the rows for these parameters
             mask = (
                 (in_file["yr"] == yr)
@@ -235,7 +237,7 @@ class CostBuilder:
     def get_cost_changes(self,
                          ignore_cols: List[str] = None,
                          ) -> pd.DataFrame:
-        """Read the elasticity cost changes file and check for missing data.
+        """Read the elasticity cost changes file and checks for missing data.
 
         Returns
         -------
@@ -252,7 +254,6 @@ class CostBuilder:
         nd.NormitsDemandError:
             If more than one elasticity type is found for a cost and mode
             combination
-
         """
         # Init
         dtypes = self._cost_adjustment_dtypes
@@ -314,6 +315,7 @@ class CostBuilder:
             cost_adj[str(year)] = cost_adj[str(upper)] + wanted_diff
 
         # ## ADD ELASTICITY TYPES ## #
+        # Function to apply to df to pull out elast type
         def get_e_type(x):
             m = (
                 (self.e_types['mode'] == x['mode'])
@@ -337,24 +339,24 @@ class CostBuilder:
 
             return x
 
+        # Apply the above function to get elast types
         cost_adj['e_type'] = 'none'
         cost_adj = cost_adj.apply(get_e_type, axis='columns')
 
-        # Drop any that we don't have an elasticity for
+        # Check that we found and elasticity type for all adjustments we want
+        # to make
         mask = (cost_adj['e_type'] == 'none')
-        cost_adj = cost_adj[~mask].copy()
+        no_elast_types = cost_adj[mask].copy()
 
-        # Check for unknown elasticity types
-        e_types = cost_adj["e_type"].unique()
-        unknown_types = [x for x in e_types if x not in self._valid_e_types]
-        if unknown_types != list():
-            raise KeyError(
-                f"Unknown elasticity_type: {unknown_types}, "
-                f"available types are: {self._valid_e_types}"
+        if not no_elast_types.empty:
+            raise nd.ElasticityError(
+                "Unable to find an elasticity type for the follow mode "
+                "and cost combinations:\n%s"
+                % no_elast_types
             )
 
         # ## CONVERT TO OUTPUT FORMAT ## #
-        id_vars = ['e_type', 'adj_type']
+        id_vars = ['mode', 'cost_component', 'e_type', 'adj_type']
         cost_adj = cost_adj.reindex(columns=id_vars + self.years_str)
 
         cost_adj = pd.melt(
@@ -378,9 +380,11 @@ def _average_matrices(matrices: Dict[str, np.array],
     ----------
     matrices : Dict[str, np.array]
         Matrices to calculate averages.
+
     expected : List[str]
         List of names of matrices to expect, will raise KeyError if any
         values in this list aren't present as keys in `matrices`.
+
     weights : np.array, optional
         Array for calculating the weighted average of the input matrices,
         by default None. If None then the mean of the input matrices will
@@ -415,15 +419,16 @@ def _average_matrices(matrices: Dict[str, np.array],
     return averages
 
 
-def _check_matrices(
-    matrices: Dict[str, np.array], expected: List[str]
-) -> Dict[str, float]:
+def _check_matrices(matrices: Dict[str, np.array],
+                    expected: List[str]
+                    ) -> Dict[str, float]:
     """Check if all expected matrices are given and are the same shape.
 
     Parameters
     ----------
     matrices : Dict[str, np.array]
         Matrices to check.
+
     expected : List[str]
         List of names of matrices to expect, will raise KeyError if any
         values in this list aren't present as keys in `matrices`.
@@ -437,29 +442,38 @@ def _check_matrices(
     ------
     KeyError
         If any of the expected matrices aren't provided.
+
     ValueError
         If all the matrices aren't the same shape.
     """
-    mats = {}
-    missing = []
-    shapes = []
+    # Init
+    mats = dict()
+    missing = list()
+    shapes = list()
+
+    # Check if any items are missing
     for nm in expected:
         try:
             mats[nm] = matrices[nm].copy()
             shapes.append(matrices[nm].shape)
         except KeyError:
             missing.append(nm)
+
+    # Raise an error for any missing items
     if missing:
         raise KeyError(f"The following matrices are missing: {missing!s}")
+
+    # Raise an error if any of the items are a different shape
     if not all(s == shapes[0] for s in shapes):
         msg = ", ".join(f"{nm} = {shapes[i]}" for i, nm in enumerate(mats))
         raise ValueError(f"Matrices are not all the same shape: {msg}")
+
     return mats
 
 
 def gen_cost_car_mins(matrices: Dict[str, np.array],
-                      vc: float,
-                      vt: float,
+                      voc: float,
+                      vot: float,
                       ) -> np.array:
     """Calculate the generalised cost for cars in minutes.
 
@@ -467,12 +481,12 @@ def gen_cost_car_mins(matrices: Dict[str, np.array],
     ----------
     matrices : Dict[str, np.array]
         The matrices expected are as follows:
-        - time: time matrix in seconds;
-        - dist: distance matrix in metres; and
+        - time: time matrix in minutes;
+        - dist: distance matrix in kilometres; and
         - toll: toll matrix in pence.
-    vc : float
+    voc : float
         The vehicle operating cost, in pence per kilometre.
-    vt : float
+    vot : float
         The value of time * occupancy value, in pence per minute.
 
     Returns
@@ -488,14 +502,14 @@ def gen_cost_car_mins(matrices: Dict[str, np.array],
     matrices = _check_matrices(matrices, ["time", "dist", "toll"])
 
     return (
-        (matrices["time"] / 60)
-        + ((vc / vt) * (matrices["dist"] / 1000))
-        + (matrices["toll"] / vt)
+        (matrices["time"])
+        + ((voc / vot) * (matrices["dist"]))
+        + (matrices["toll"] / vot)
     )
 
 
 def gen_cost_rail_mins(matrices: Dict[str, np.array],
-                       vt: float,
+                       vot: float,
                        factors: Dict[str, float] = None,
                        ) -> np.array:
     """Calculate the generalised cost for rail in minutes.
@@ -509,7 +523,7 @@ def gen_cost_rail_mins(matrices: Dict[str, np.array],
         - ride: the in-vehicle time, in minutes;
         - fare: the fare, in pence; and
         - num_int: the number of interchanges.
-    vt : float
+    vot : float
         Value of time in pence per minute.
     factors : Dict[str, float], optional
         The weighting factors for walk and wait matrices and the interchange
@@ -542,30 +556,33 @@ def gen_cost_rail_mins(matrices: Dict[str, np.array],
         matrices["walk"]
         + matrices["wait"]
         + matrices["ride"]
-        + (matrices["fare"] / vt)
+        + (matrices["fare"] / vot)
         + (matrices["num_int"] * inter_factor)
     )
 
 
-def gen_cost_elasticity_mins(
-    elasticity: float,
-    gen_cost: np.array,
-    cost: np.array,
-    demand: np.array,
-    cost_factor: float = None,
-) -> float:
+def gen_cost_elasticity_mins(elasticity: float,
+                             gen_cost: np.array,
+                             cost: np.array,
+                             demand: np.array,
+                             cost_factor: float = None,
+                             ) -> float:
     """Calculate the weighted average generalised cost elasticity.
 
     Parameters
     ----------
     elasticity : float
         Implied elasticity value.
+
     gen_cost : np.array
         Generalised cost in minutes.
+
     cost : np.array
         Cost in either minutes or monetary units.
+
     demand : np.array
-        Demand for calculating the weighted average.
+        Demand for calculating the demand weighted average.
+
     cost_factor : float, optional
         Factor to convert cost into minutes, if None (default)
         uses a factor of 1.0.
@@ -575,35 +592,43 @@ def gen_cost_elasticity_mins(
     float
         The generalised cost elasticity in minutes.
     """
+    # Calculate the weighted average for gc cost
     averages = _average_matrices(
-        {"gc": gen_cost, "cost": cost}, ["gc", "cost"], weights=demand
+        {"gc": gen_cost, "cost": cost},
+        ["gc", "cost"],
+        weights=demand,
     )
+
     if cost_factor is None:
         cost_factor = 1.0
+
     return elasticity * (averages["gc"] / (averages["cost"] * cost_factor))
 
 
-def get_costs(
-    cost_file: Path,
-    mode: str,
-    zone_system: str,
-    zone_translation_folder: Path,
-    demand: pd.DataFrame = None,
-) -> pd.DataFrame:
+def get_costs(cost_file: Path,
+              mode: str,
+              zone_system: str,
+              zone_translation_folder: Path,
+              translation_weights: pd.DataFrame = None,
+              ) -> pd.DataFrame:
     """Reads the given cost file, expected columns are in `COST_LOOKUP`.
 
     Parameters
     ----------
     cost_file : Path
         Path to the CSV file containing cost data.
+
     mode : str
         The mode of the costs, either rail or car.
+
     zone_system : str
         The zone system of the costs, the cost will be translated
         to the `COMMON_ZONE_SYSTEM` if required.
+
     zone_translation_folder : Path
         Path to the folder containing the zone translation lookups.
-    demand : pd.DataFrame, optional
+
+    translation_weights : pd.DataFrame, optional
         Relevant demand matrix (square format) for calculating
         weight average cost when converting between zone systems,
         only required if `zone_system` != `COMMON_ZONE_SYSTEM`.
@@ -618,51 +643,67 @@ def get_costs(
     ValueError
         If any expected columns are missing.
     """
+    # Init
     mode = mode.lower()
+
+    # Try to load costs - let user know which columns are missing if cant
     try:
         costs = pd.read_csv(cost_file, usecols=ec.COST_LOOKUP[mode].values())
     except ValueError as e:
         loc = str(e).find("columns expected")
         e_str = str(e)[loc:] if loc != -1 else str(e)
         raise ValueError(f"Columns missing from {mode} cost, {e_str}") from e
+
+    # Rename columns to standard format across modes
     costs.rename(
         columns={v: k for k, v in ec.COST_LOOKUP[mode].items()},
         inplace=True,
     )
+
+    # Figure out the number of zeroes in the costs
     cost_cols = costs.columns.tolist()
     cost_cols.remove("origin")
     cost_cols.remove("destination")
-    total_zeros = (costs[cost_cols] <= 0).all(axis=1).sum()
-    print(
-        f"{total_zeros} ({total_zeros / len(costs):.2%}) "
-        "OD pairs have 0 in all cost values"
-    )
+    # total_zeros = (costs[cost_cols] <= 0).all(axis=1).sum()
+    # print(
+    #     f"{total_zeros} ({total_zeros / len(costs):.2%}) "
+    #     f"OD pairs are 0 for {mode} for costs"
+    # )
 
     # Convert zone system if required
     if zone_system != ec.COMMON_ZONE_SYSTEM:
+        # Get the translation
         lookup = du.get_zone_translation(
-            zone_translation_folder,
-            zone_system,
-            ec.COMMON_ZONE_SYSTEM,
+            import_dir=zone_translation_folder,
+            from_zone=zone_system,
+            to_zone=ec.COMMON_ZONE_SYSTEM,
             return_dataframe=True,
         )
-        if not isinstance(demand, pd.DataFrame):
+
+        # Check that weights are the right type
+        if not isinstance(translation_weights, pd.DataFrame):
             raise TypeError(
-                f"'demand' is '{type(demand).__name__}', expected 'DataFrame'"
+                "'demand' is '%s', expected 'DataFrame'"
+                % type(translation_weights).__name__
             )
+
+        # Translate with weights!
+        zone_systems = [zone_system, ec.COMMON_ZONE_SYSTEM]
+        zone_cols = ["%s_zone_id" % x for x in zone_systems]
         costs, _ = zt.translate_matrix(
-            costs,
-            lookup,
-            [f"{zone_system}_zone_id", f"{ec.COMMON_ZONE_SYSTEM}_zone_id"],
+            matrix=costs,
+            lookup=lookup,
+            lookup_cols=zone_cols,
             square_format=False,
             zone_cols=["origin", "destination"],
             aggregation_method="weighted_average",
-            weights=zt.square_to_list(demand),
+            weights=zt.square_to_list(translation_weights),
         )
 
     # Convert origin/destination columns to integers
     for c in ("origin", "destination"):
         costs[c] = pd.to_numeric(costs[c], downcast="integer")
+
     return costs.sort_values(["origin", "destination"])
 
 
@@ -676,18 +717,20 @@ def gen_cost_mode(costs: Union[pd.DataFrame, float],
     ----------
     costs : Union[pd.DataFrame, float]
         Cost dataframe, or value, for given mode.
+
     mode : str
         Name of the mode GC is being calculated for.
+
     kwargs : Keyword Arguments
         Passed to `gen_cost_car_mins` or `gen_cost_rail_mins`
         functions if `mode` is "car" or "rail", respectively,
         not used for any other modes. The following arguments
         are expected:
         For `gen_cost_car_mins`:
-        - vt : float
-        - vc : float
+        - vot : float
+        - voc : float
         For `gen_cost_rail_mins`:
-        - vt : float
+        - vot : float
         - factors : Dict[str, float], optional
 
     Returns
@@ -697,30 +740,26 @@ def gen_cost_mode(costs: Union[pd.DataFrame, float],
         or a float if `costs` is a float.
     """
     mode = mode.lower()
+
     cost_to_array = lambda v: costs.pivot(
         index="origin", columns="destination", values=v
     ).values
+
     if mode == "car":
-        gc = gen_cost_car_mins(
-            {i: cost_to_array(i) for i in ("time", "dist", "toll")}, **kwargs
-        )
+        gc = gen_cost_car_mins({i: cost_to_array(i) for i in ("time", "dist", "toll")}, **kwargs)
     elif mode == "rail":
-        gc = gen_cost_rail_mins(
-            {
-                i: cost_to_array(i)
-                for i in ("walk", "wait", "ride", "fare", "num_int")
-            },
-            **kwargs,
-        )
+        gc = gen_cost_rail_mins({
+            i: cost_to_array(i)
+            for i in ("walk", "wait", "ride", "fare", "num_int")
+        }, **kwargs)
     else:
         gc = costs
     return gc
 
 
-def calculate_gen_costs(
-    costs: Dict[str, Union[pd.DataFrame, float]],
-    gc_params: Dict[str, Dict[str, float]],
-) -> Dict[str, Union[np.array, float]]:
+def calculate_gen_costs(costs: Dict[str, Union[pd.DataFrame, float]],
+                        gc_params: Dict[str, Dict[str, float]],
+                        ) -> Dict[str, Union[np.array, float]]:
     """Calculate the generalised costs for rail, car, bus, active and no-travel.
 
     Generalised cost is a scalar for bus, active and no-travel, will be set
@@ -731,6 +770,7 @@ def calculate_gen_costs(
     costs : Dict[str, Union[pd.DataFrame, float]]
         Cost DataFrames for rail and car, other modes are optional
         but should be scalar values if given.
+
     gc_params : Dict[str, Dict[str, float]]
         Parameters for Value of time * occupancy and vehicle operating
         costs for car and just value of time for rail.

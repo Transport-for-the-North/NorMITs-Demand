@@ -14,7 +14,8 @@ from normits_demand.concurrency import multiprocessing as mp
 
 from normits_demand.utils import utils as nup
 from normits_demand.utils import file_ops
-from normits_demand.reports import reports_audits as ra
+from normits_demand.utils import math_utils
+from normits_demand.utils import trip_length_distributions as tld_utils
 
 _TINY_INFILL = 1*10**-8
 
@@ -64,6 +65,7 @@ def _build_enhanced_pa(tld_mat,
                     value = int(itd[col])
                 calib_params.update({col:value})
 
+        # TODO()
         te, total = nup.filter_pa_vector(te,
                                          ia_name,
                                          calib_params,
@@ -684,7 +686,7 @@ def _dissag_seg(prod_list,
         audit_dict['target_a'] = target_a.sum()
 
         # Get the band share, rename for readability
-        tlb_con = ra.get_trip_length_by_band(target_tld, costs, new_mat)
+        tlb_con = tld_utils.get_trip_length_by_band(target_tld, costs, new_mat)
         dist_mat, band_shares, global_atl = tlb_con
         achieved_bs = band_shares['bs']
         target_bs = band_shares['tbs']
@@ -794,7 +796,7 @@ def _dissag_seg(prod_list,
                 # Get pa diff
                 mat_o = np.sum(new_mat, axis=1)
                 mat_d = np.sum(new_mat, axis=0)
-                pa_diff = nup.get_pa_diff(mat_o,
+                pa_diff = math_utils.get_pa_diff(mat_o,
                                           target_p,
                                           mat_d,
                                           target_a) #.max()
@@ -806,7 +808,7 @@ def _dissag_seg(prod_list,
             prior_bs_con = bs_con
 
             # Get the band share, rename for readability
-            tlb_con = ra.get_trip_length_by_band(target_tld, costs, new_mat)
+            tlb_con = tld_utils.get_trip_length_by_band(target_tld, costs, new_mat)
             dist_mat, band_shares, global_atl = tlb_con
             achieved_bs = band_shares['bs']
             target_bs = band_shares['tbs']
@@ -880,7 +882,7 @@ def _dissag_seg(prod_list,
         print(out_cube[:, :, seg_x[0]].sum())
 
         # Get trip length by band
-        tlb_con = ra.get_trip_length_by_band(tld_list[seg_x[0]]['enh_tld'],
+        tlb_con = tld_utils.get_trip_length_by_band(tld_list[seg_x[0]]['enh_tld'],
                                              costs,
                                              out_cube[:,:,seg_x[0]])
         seg_audit[seg_x[0]].update({'final_tlb_con':tlb_con})
@@ -904,7 +906,7 @@ def _dissag_seg(prod_list,
 
     out_sd = out_cube.sum(axis=2)
 
-    final_pa_diff = nup.get_pa_diff(out_sd.sum(axis=1),
+    final_pa_diff = math_utils.get_pa_diff(out_sd.sum(axis=1),
                                     sd.sum(axis=1),
                                     out_sd.sum(axis=0),
                                     sd.sum(axis=0))

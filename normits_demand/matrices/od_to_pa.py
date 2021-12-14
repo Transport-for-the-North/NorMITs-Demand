@@ -7,7 +7,8 @@ from typing import List
 from functools import reduce
 
 # Self imports
-from normits_demand import efs_constants as consts
+from normits_demand import constants as consts
+from normits_demand import efs_constants as efs_consts
 from normits_demand.utils import general as du
 from normits_demand.utils import vehicle_occupancy as vo
 from normits_demand import AuditError
@@ -223,7 +224,7 @@ def convert_to_efs_matrices(import_path: str,
                             wide_col_name: str = 'zone_id',
                             from_pcu: bool = False,
                             vehicle_occupancy_import: str = None,
-                            m_needed: List[int] = consts.MODES_NEEDED
+                            m_needed: List[int] = efs_consts.MODES_NEEDED
                             ) -> None:
     """
     Converts matrices from TfN models into a format that EFS uses.
@@ -301,11 +302,17 @@ def convert_to_efs_matrices(import_path: str,
     if not from_pcu:
         return
 
+    car_occupancies = pd.read_csv(os.path.join(
+        vehicle_occupancy_import,
+        'vehicle_occupancies',
+        'car_vehicle_occupancies.csv',
+    ))
+
     # Only get here if we need to convert from PCU format
     vo.people_vehicle_conversion(
         mat_import=temp_export_path,
         mat_export=export_path,
-        import_folder=vehicle_occupancy_import,
+        car_occupancies=car_occupancies,
         mode=str(m_needed[0]),
         method='to_people',
         out_format='wide'

@@ -211,26 +211,34 @@ def translate_matrix(matrix: pd.DataFrame,
         Matrix DataFrame in either square format or list format.
         - square: zones should be defined in the index and column headers.
         - list: should contain 2 zone columns and a column with the values.
+
     lookup : pd.DataFrame
         Lookup between the desired zone systems, with optional splitting
         factor column.
+
     lookup_cols : Tuple[str, str]
         Names of the lookup columns containing the current zone system then
         the new zone system.
+
     square_format : bool, optional
         Whether the provided matrix is in square (True) or list format
         (False), by default True
+
     zone_cols : Tuple[str, str], optional
         The names of the zone columns in the matrix only required for list
         format matrices, by default None
+
     split_column : str, optional
         Name of the split column in the lookup, by default None
+
     aggregation_method : str, optional
         Name of the aggregation method to use, default "sum".
+
     weights : pd.DataFrame, optional
         Weights for "weighted_average" aggregation method,
         default None. The format should be [o, d, value]
         or square format if `square_format` is true.
+
     check_total : bool, optional
         Whether or not the matrix total before and after the translation
         should be checked. If True (default) ValueError will be raised
@@ -241,6 +249,7 @@ def translate_matrix(matrix: pd.DataFrame,
     -------
     pd.DataFrame
         Matrix with the new zone system.
+
     pd.DataFrame
         Matrix of splitting factors for converting back to the old zone
         system.
@@ -253,6 +262,7 @@ def translate_matrix(matrix: pd.DataFrame,
             f"'weights' should be 'DataFrame' when 'weighted_average' "
             f"is chosen not '{type(weights).__name__}'"
         )
+
     if aggregation_method not in agg_methods:
         raise ValueError(
             "'aggregation_method' should be one of "
@@ -286,6 +296,11 @@ def translate_matrix(matrix: pd.DataFrame,
         )
         if len(weights) != len(matrix):
             raise ValueError("'weights' and 'matrix' are not the same lengths")
+
+        # TODO(BT): Figure out why these are changing to the wrong types
+        for col in ['o', 'd']:
+            weights[col] = weights[col].astype(int)
+
         # Calculate splitting factor based on weights
         lookup = lookup.merge(
             weights,
@@ -295,14 +310,17 @@ def translate_matrix(matrix: pd.DataFrame,
             validate="m:1",
         )
         lookup.drop(columns=zone_cols, inplace=True)
+
+        # Total of z2 demand z1
         totals = (
-            lookup[lookup_cols[:2] + ["weights"]]
-            .groupby(lookup_cols[:2], as_index=False)
+            lookup[lookup_cols[2:] + ["weights"]]
+            .groupby(lookup_cols[2:], as_index=False)
             .sum()
         )
+
         lookup = lookup.merge(
             totals,
-            on=lookup_cols[:2],
+            on=lookup_cols[2:],
             how="left",
             validate="m:1",
             suffixes=("", "_total"),

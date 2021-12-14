@@ -65,7 +65,7 @@ def _grow_external_pa_internal(growth_factors,
         csv=csv_out,
         compressed=compress_out,
     )
-    du.print_w_toggle("Growing %s ..." % out_dist_name, echo=verbose)
+    du.print_w_toggle("Growing %s ..." % out_dist_name, verbose=verbose)
 
     # ## READ IN THE BASE YEAR EXTERNAL DEMAND ## #
     # Build seg_params for the seed values
@@ -162,8 +162,8 @@ def grow_external_pa(growth_factors: pd.DataFrame,
                      csv_out: bool = True,
                      compress_out: bool = True,
                      report_out: str = None,
-                     round_dp: int = efs_consts.DEFAULT_ROUNDING,
-                     process_count: int = efs_consts.PROCESS_COUNT,
+                     round_dp: int = consts.DEFAULT_ROUNDING,
+                     process_count: int = consts.PROCESS_COUNT,
                      verbose: bool = False,
                      ) -> None:
     # TODO: Write grow_external_pa() docs

@@ -16,6 +16,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Union
+from typing import Tuple
 
 import numpy as np
 
@@ -23,3 +24,9 @@ PathLike = Union[str, pathlib.Path]
 
 SegmentAggregationDict = Dict[str, Dict[str, List[Any]]]
 FactorsDict = Dict[str, Dict[str, np.array]]
+
+SegmentParams = Dict[str, Any]
+
+# Core
+DVectorData = Dict[str, np.ndarray]
+SegmentMultiplyDict = Dict[str, Tuple[str, str]]
