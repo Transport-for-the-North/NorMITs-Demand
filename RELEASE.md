@@ -30,3 +30,5 @@ Below, a brief summary of patches made since the previous version can be found.
       by default
     - Updated the furness to calculate Root Mean Squared Error weighted by the
       number of zones
+- Reports
+  - Added code to automatically generate a report pack at TfN Sectors
