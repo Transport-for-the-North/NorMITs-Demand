@@ -78,6 +78,12 @@ class TEMProData:
         except ValueError as err:
             raise ValueError(f"error reading TEMPro data - {err}") from err
 
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}(years={self._years})"
+
+    def __repr__(self) -> str:
+        return f"{self.__module__}.{self!s}"
+
     @property
     def data(self) -> pd.DataFrame:
         """pd.DataFrame:
@@ -209,10 +215,13 @@ class TEMProData:
         """Produce all of the different DVector properties for TEMPro data."""
         LOG.debug("Producing TEMPro DVectors for %s", self._years)
         start = timing.current_milli_time()
+        # Call each property to produce the DVectors
+        # pylint: disable=pointless-statement
         self.hb_attractions
         self.hb_productions
         self.nhb_attractions
         self.nhb_attractions
+        # pylint: enable=pointless-statement
         LOG.debug(
             "Done in %s",
             timing.time_taken(start, timing.current_milli_time()),
