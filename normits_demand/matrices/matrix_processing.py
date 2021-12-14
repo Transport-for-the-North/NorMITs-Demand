@@ -2629,7 +2629,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
     matrices being the second 4.
     If neither internal or external matrices is set, the first 4 returns are
     the full matrices, and the second 4 will be empty.
-    If only the external zones is set the first 4 returns will be empty, and
+    If only the internal zones is set the first 4 returns will be empty, and
     the second 4 will be the external matrices.
 
     Parameters

@@ -20,9 +20,11 @@ import collections
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Tuple
 from typing import Union
 
 # Third Party
+import numpy as np
 import pandas as pd
 import tqdm
 
@@ -49,11 +51,11 @@ _DM_ExportPaths_NT = collections.namedtuple(
 )
 
 
-_GravityExportPaths_NT = collections.namedtuple(
-    typename='_GravityExportPaths_NT',
+_DistributorExportPaths_NT = collections.namedtuple(
+    typename='_DistributorExportPaths_NT',
     field_names=[
         'home',
-        'distribution_dir',
+        'matrix_dir',
     ]
 )
 
@@ -67,17 +69,9 @@ _DM_ReportPaths_NT = collections.namedtuple(
     ]
 )
 
-_Distributor_ReportPaths_NT = collections.namedtuple(
-    typename='_Distributor_ReportPaths_NT',
-    field_names=[
-        'home',
-        'segment_log_dir',
-        'tld_report_dir',
-    ]
-)
 
-_GravityReportPaths_NT = collections.namedtuple(
-    typename='_GravityReportPaths_NT',
+_DistributorReportPaths_NT = collections.namedtuple(
+    typename='_DistributorReportPaths_NT',
     field_names=[
         'home',
         'overall_log',
@@ -98,13 +92,161 @@ class DMArgumentBuilderBase(abc.ABC):
     defined functions/properties to pick up new import files.
     """
 
+    def __init__(self,
+                 year: int,
+                 trip_origin: str,
+                 running_segmentation: nd.SegmentationLevel,
+                 upper_zoning_system: nd.ZoningSystem,
+                 upper_running_zones: List[Any],
+                 lower_zoning_system: nd.ZoningSystem,
+                 lower_running_zones: List[Any],
+                 ):
+        self.year = year
+        self.trip_origin = trip_origin
+        self.running_segmentation = running_segmentation
+        self.upper_zoning_system = upper_zoning_system
+        self.upper_running_zones = upper_running_zones
+        self.lower_zoning_system = lower_zoning_system
+        self.lower_running_zones = lower_running_zones
+
+    def _get_upper_keep_zones(self):
+        # Get translation into a DataFrame
+        def get_keep_zones(weighting):
+            full_translation = self.upper_zoning_system.translate(
+                other=self.lower_zoning_system,
+                weighting=weighting,
+            )
+            full_translation = pd.DataFrame(
+                data=full_translation,
+                index=self.upper_zoning_system.unique_zones,
+                columns=self.lower_zoning_system.unique_zones,
+            )
+
+            # Filter to zones we want to keep
+            df = full_translation.reindex(columns=self.lower_running_zones)
+            df = df[(df != 0).any(axis=1)].copy()
+
+            # Check we actually have some translation left
+            if df.values.sum() == 0:
+                raise ValueError(
+                    "All zones were dropped while getting the '%s' "
+                    "translation. Are the upper/lower running zones defined "
+                    "in the same type as the upper/lower zoning systems?"
+                    % weighting
+                )
+
+            return df.index.tolist(), full_translation
+
+        # Get the translations
+        pop_keep, pop_trans = get_keep_zones('population')
+        emp_keep, emp_trans = get_keep_zones('employment')
+
+        # Build a single list of upper zones to keep
+        keep_zones = list(set(pop_keep + emp_keep))
+
+        return keep_zones, pop_trans, emp_trans
+
+    def _convert_upper_pa_to_lower(self,
+                                   upper_model_matrix_dir: nd.PathLike,
+                                   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        # Init
+        zone_col = self.upper_zoning_system.col_name
+
+        # Figure out which zones to keep
+        upper_keep_zones, pop_trans, emp_trans = self._get_upper_keep_zones()
+
+        # Convert upper matrices into a efficient dataframes
+        eff_df_list = list()
+        segment_col_names = set()
+        desc = "Convert upper pa to lower"
+        total = len(self.running_segmentation)
+        for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc, total=total):
+            # Read in DF
+            fname = self.running_segmentation.generate_file_name(
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                file_desc='synthetic_pa',
+                segment_params=segment_params,
+                compressed=True,
+            )
+            path = os.path.join(upper_model_matrix_dir, fname)
+            df = file_ops.read_df(path, index_col=0)
+
+            # Filter to needed zones
+            df = df.reindex(
+                index=upper_keep_zones,
+                columns=upper_keep_zones,
+            )
+
+            # Keep track of the column names we're keeping
+            seg_cols = list(segment_params.keys())
+            segment_col_names = set(list(segment_col_names) + seg_cols)
+
+            # Convert to production and attraction vectors
+            index_col = df.index
+            index_col.name = zone_col
+
+            productions = pd.DataFrame(
+                data=df.values.sum(axis=1),
+                index=index_col,
+                columns=['productions'],
+            )
+            attractions = pd.DataFrame(
+                data=df.values.sum(axis=0),
+                index=index_col,
+                columns=['attractions'],
+            )
+
+            # Stick into an efficient DF
+            eff_df = segment_params.copy()
+            eff_df['df'] = productions.join(attractions).reset_index()
+            eff_df_list.append(eff_df)
+
+        # Compile the efficient DFs
+        segment_col_names = [zone_col] + list(segment_col_names)
+        final_cols = segment_col_names + ['productions', 'attractions']
+        vector = du.compile_efficient_df(eff_df_list, col_names=final_cols)
+        vector = vector.sort_values(by=segment_col_names)
+
+        # Translate vectors to lower_zoning system
+
+
+        print(upper_model_matrix_dir)
+        print(self.upper_zoning_system)
+        print(self.lower_zoning_system)
+
+        productions = vector.drop(columns=['attractions'])
+        attractions = vector.drop(columns=['productions'])
+
+        return productions, attractions
+
+    def build_distribution_model_init_args(self):
+        return {
+            'year': self.year,
+            'trip_origin': self.trip_origin,
+            'running_segmentation': self.running_segmentation,
+            'upper_model_zoning': self.upper_zoning_system,
+            'upper_running_zones': self.upper_running_zones,
+            'lower_model_zoning': self.lower_zoning_system,
+            'lower_running_zones': self.lower_running_zones,
+        }
+
     @abc.abstractmethod
     def build_upper_model_arguments(self) -> Dict[str, Any]:
         pass
 
     @abc.abstractmethod
-    def build_lower_model_arguments(self) -> Dict[str, Any]:
-        pass
+    def build_lower_model_arguments(self,
+                                    upper_model_matrix_dir: nd.PathLike,
+                                    ) -> Dict[str, Any]:
+        productions, attractions = self._convert_upper_pa_to_lower(
+            upper_model_matrix_dir=upper_model_matrix_dir,
+        )
+
+        return {
+            'productions': productions,
+            'attractions': attractions,
+        }
 
 
 class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
@@ -121,44 +263,57 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
     def __init__(self,
                  import_home: nd.PathLike,
+                 year: int,
                  trip_origin: str,
                  productions: nd.DVector,
                  attractions: nd.DVector,
                  running_mode: nd.Mode,
                  running_segmentation: nd.SegmentationLevel,
-                 zoning_system: nd.ZoningSystem,
+                 upper_zoning_system: nd.ZoningSystem,
+                 upper_running_zones: List[Any],
+                 lower_zoning_system: nd.ZoningSystem,
+                 lower_running_zones: List[Any],
                  target_tld_name: str,
-                 init_params_fname: str,
                  init_params_cols: List[str],
                  upper_model_method: nd.DistributionMethod,
                  upper_distributor_kwargs: Dict[str, Any],
+                 upper_init_params_fname: str,
                  lower_model_method: nd.DistributionMethod = None,
                  lower_distributor_kwargs: Dict[str, Any] = None,
+                 lower_init_params_fname: str = None,
                  intrazonal_cost_infill: float = None,
                  ):
         # Check paths exist
         file_ops.check_path_exists(import_home)
 
+        super().__init__(
+            year=year,
+            trip_origin=trip_origin,
+            running_segmentation=running_segmentation,
+            upper_zoning_system=upper_zoning_system,
+            upper_running_zones=upper_running_zones,
+            lower_zoning_system=lower_zoning_system,
+            lower_running_zones=lower_running_zones,
+        )
+
         # TODO(BT): Validate segments and zones are the correct types
 
         # Assign attributes
         self.import_home = import_home
-        self.trip_origin = trip_origin
         self.productions = productions
         self.attractions = attractions
 
         self.running_mode = running_mode
-        self.running_segmentation = running_segmentation
-        self.zoning_system = zoning_system
         self.target_tld_name = target_tld_name
 
-        self.init_params_fname = init_params_fname
         self.init_params_cols = init_params_cols
 
         self.upper_model_method = upper_model_method
         self.lower_model_method = lower_model_method
         self.upper_distributor_kwargs = upper_distributor_kwargs
         self.lower_distributor_kwargs = lower_distributor_kwargs
+        self.upper_init_params_fname = upper_init_params_fname
+        self.lower_init_params_fname = lower_init_params_fname
 
         self.intrazonal_cost_infill = intrazonal_cost_infill
 
@@ -177,7 +332,10 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return nd.read_pickle(trip_end)
 
-    def _get_cost(self, segment_params: Dict[str, Any]) -> pd.DataFrame:
+    def _get_cost(self,
+                  segment_params: Dict[str, Any],
+                  zoning_system: nd.ZoningSystem,
+                  ) -> pd.DataFrame:
         """Reads in the cost matrix for this segment"""
         # Generate the path to the segment file
         cost_dir = os.path.join(
@@ -185,11 +343,11 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             self._modal_dir_name,
             self.running_mode.value,
             self._cost_dir_name,
-            self.zoning_system.name,
+            zoning_system.name,
         )
         fname = self.running_segmentation.generate_file_name(
             trip_origin=self.trip_origin,
-            file_desc="%s_cost" % self.zoning_system.name,
+            file_desc="%s_cost" % zoning_system.name,
             segment_params=segment_params,
             csv=True,
         )
@@ -257,13 +415,13 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return {x: seg_init_params[x].squeeze() for x in self.init_params_cols}
 
-    def _build_gravity_by_segment_kwargs(self):
+    def _build_gravity_by_segment_kwargs(self, init_params_fname: str):
         """Build the dictionary of kwargs for each segment"""
         # Read in the init_params_df
         path = os.path.join(
             self.import_home,
             self._gravity_model_dir,
-            self.init_params_fname,
+            init_params_fname
         )
         init_params_df = file_ops.read_df(path)
 
@@ -284,20 +442,23 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
     def _build_furness3d_by_segment_kwargs(self):
         raise NotImplementedError
 
-    def _build_by_segment_kwargs(self, method: nd.DistributionMethod):
+    def _build_by_segment_kwargs(self,
+                                 method: nd.DistributionMethod,
+                                 init_params_fname: str = None,
+                                 ) -> Dict[str, Any]:
         if method == nd.DistributionMethod.GRAVITY:
-            fn = self._build_gravity_by_segment_kwargs
+            by_segment_kwargs = self._build_gravity_by_segment_kwargs(init_params_fname)
         elif method == nd.DistributionMethod.FURNESS3D:
-            fn = self._build_furness3d_by_segment_kwargs
+            by_segment_kwargs = self._build_furness3d_by_segment_kwargs()
         else:
             raise NotImplementedError(
                 "No function exists to build the by_segment_kwargs for "
                 "DistributionMethod %s"
                 % method.value
             )
-        return fn()
+        return by_segment_kwargs
 
-    def _build_cost_matrices(self):
+    def _build_cost_matrices(self, zoning_system: nd.ZoningSystem):
         """Build the dictionary of cost matrices for each segment"""
         # Generate by segment kwargs
         cost_matrices = dict()
@@ -308,7 +469,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             # Get the needed kwargs
             segment_name = self.running_segmentation.get_segment_name(segment_params)
             if count == 1:
-                cost_matrix = self._get_cost(segment_params)
+                cost_matrix = self._get_cost(segment_params, zoning_system)
                 import numpy as np
                 print(np.count_nonzero(cost_matrix == 0))
                 count += 1
@@ -337,9 +498,12 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         productions = self._maybe_read_trip_end(self.productions)
         attractions = self._maybe_read_trip_end(self.attractions)
 
-        cost_matrices = self._build_cost_matrices()
+        cost_matrices = self._build_cost_matrices(self.upper_zoning_system)
         target_cost_distributions = self._build_target_cost_distributions()
-        by_segment_kwargs = self._build_by_segment_kwargs(self.upper_model_method)
+        by_segment_kwargs = self._build_by_segment_kwargs(
+            self.upper_model_method,
+            self.upper_init_params_fname,
+        )
 
         final_kwargs = self.upper_distributor_kwargs.copy()
         final_kwargs.update({
@@ -353,13 +517,37 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return final_kwargs
 
-    def build_lower_model_arguments(self):
-        pass
+    def build_lower_model_arguments(self, upper_model_matrix_dir: nd.PathLike):
+        # Read in trip ends from upper model
+        pa_kwargs = super().build_lower_model_arguments(upper_model_matrix_dir)
+        print('read_pa')
+        exit()
+
+        cost_matrices = self._build_cost_matrices(self.lower_zoning_system)
+        target_cost_distributions = self._build_target_cost_distributions()
+        by_segment_kwargs = self._build_by_segment_kwargs(
+            self.lower_model_method,
+            self.lower_init_params_fname,
+        )
+
+        final_kwargs = self.lower_distributor_kwargs.copy()
+        final_kwargs.update(pa_kwargs)
+        final_kwargs.update({
+            'running_segmentation': self.running_segmentation,
+            'cost_matrices': cost_matrices,
+            'target_cost_distributions': target_cost_distributions,
+            'by_segment_kwargs': by_segment_kwargs,
+        })
+
+        return final_kwargs
 
 
 # ## DEFINE EXPORT PATHS ##
-class DistributorExportPaths(abc.ABC):
+class DistributorExportPaths:
     _reports_dirname = 'Logs & Reports'
+
+    # Output dir names
+    _matrix_out_dir = 'Matrices'
 
     # Report dir names
     _overall_log_name = '{trip_origin}_overall_log.csv'
@@ -388,39 +576,24 @@ class DistributorExportPaths(abc.ABC):
         self._create_export_paths()
         self._create_report_paths()
 
-    @abc.abstractmethod
-    def _create_export_paths(self) -> None:
-        """Creates self.export_paths"""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _create_report_paths(self) -> None:
-        """Creates self.report_paths"""
-        raise NotImplementedError
-
-
-class GravityDistributorExportPaths(DistributorExportPaths):
-    # Export dir names
-    _dist_out_dir = 'Matrices'
-
-    def _create_export_paths(self) -> None:
+    def _create_export_paths(self) -> _DistributorExportPaths_NT:
         """Creates self.export_paths"""
 
         # Build the matrix output path
-        distribution_dir = os.path.join(self.export_home, self._dist_out_dir)
+        matrix_dir = os.path.join(self.export_home, self._matrix_out_dir)
 
         # Make paths that don't exist
-        dir_paths = [distribution_dir]
+        dir_paths = [matrix_dir]
         for path in dir_paths:
             file_ops.create_folder(path)
 
         # Create the export_paths class
-        self.export_paths = _GravityExportPaths_NT(
+        self.export_paths = _DistributorExportPaths_NT(
             home=self.export_home,
-            distribution_dir=distribution_dir,
+            matrix_dir=matrix_dir,
         )
 
-    def _create_report_paths(self) -> None:
+    def _create_report_paths(self) -> _DistributorReportPaths_NT:
         """Creates self.report_paths"""
         # Build paths
         fname = self._overall_log_name.format(trip_origin=self.trip_origin)
@@ -434,7 +607,7 @@ class GravityDistributorExportPaths(DistributorExportPaths):
             file_ops.create_folder(path)
 
         # Create the export_paths class
-        self.report_paths = _GravityReportPaths_NT(
+        self.report_paths = _DistributorReportPaths_NT(
             home=self.report_home,
             overall_log=overall_log_path,
             model_log_dir=model_log_dir,
@@ -508,7 +681,7 @@ class DistributionModelExportPaths:
         # Upper Model
         self.upper_export_home = os.path.join(self.export_home, self._upper_model_dir)
         file_ops.create_folder(self.upper_export_home)
-        self.upper_exports = upper_model_method.get_export_paths(
+        self.upper_exports = DistributorExportPaths(
             year=self.year,
             trip_origin=self.trip_origin,
             running_mode=self.running_mode,
@@ -518,7 +691,7 @@ class DistributionModelExportPaths:
         # Lower Model
         self.lower_export_home = os.path.join(self.export_home, self._lower_model_dir)
         file_ops.create_folder(self.lower_export_home)
-        self.lower_exports = upper_model_method.get_export_paths(
+        self.lower_exports = DistributorExportPaths(
             year=self.year,
             trip_origin=self.trip_origin,
             running_mode=self.running_mode,

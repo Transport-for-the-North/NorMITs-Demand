@@ -41,10 +41,9 @@ from normits_demand.validation import checks
 from normits_demand.concurrency import multiprocessing
 
 from normits_demand.pathing.distribution_model import DistributorExportPaths
-from normits_demand.pathing.distribution_model import GravityDistributorExportPaths
 
 
-class AbstractDistributor(abc.ABC):
+class AbstractDistributor(abc.ABC, DistributorExportPaths):
     # Default class constants that can be overwritten
     _default_name = 'Distributor'
 
@@ -86,6 +85,15 @@ class AbstractDistributor(abc.ABC):
         self.zone_col = zone_col
         self.export_home = export_home
         self.process_count = process_count
+
+        # Build the output paths
+        DistributorExportPaths.__init__(
+            self,
+            year=year,
+            trip_origin=trip_origin,
+            running_mode=running_mode,
+            export_home=export_home,
+        )
 
     def _filter_productions_attractions(self,
                                         segment_params: Dict[str, Any],
@@ -340,24 +348,8 @@ class DistributionMethod(enum.Enum):
 
         return function(**kwargs)
 
-    def get_export_paths(self, **kwargs) -> DistributorExportPaths:
 
-        if self == DistributionMethod.GRAVITY:
-            function = GravityDistributorExportPaths
-
-        elif self == DistributionMethod.FURNESS3D:
-            raise NotImplementedError()
-
-        else:
-            raise nd.NormitsDemandError(
-                "No definition exists for %s distributor export paths"
-                % self
-            )
-
-        return function(**kwargs)
-
-
-class GravityDistributor(GravityDistributorExportPaths, AbstractDistributor):
+class GravityDistributor(AbstractDistributor):
     _log_fname = "Gravity_Model_log.log"
 
     _base_zone_col = "%s_zone_id"
@@ -384,8 +376,7 @@ class GravityDistributor(GravityDistributorExportPaths, AbstractDistributor):
             )
 
         # Build the distributor
-        AbstractDistributor.__init__(
-            self,
+        super().__init__(
             year=year,
             running_mode=running_mode,
             trip_origin=trip_origin,
@@ -395,19 +386,6 @@ class GravityDistributor(GravityDistributorExportPaths, AbstractDistributor):
             export_home=export_home,
             process_count=process_count,
 
-        )
-
-        # Make sure the reports paths exists
-        report_home = os.path.join(export_home, "Logs & Reports")
-        file_ops.create_folder(report_home)
-
-        # Build the output paths
-        GravityDistributorExportPaths.__init__(
-            self,
-            year=year,
-            trip_origin=trip_origin,
-            running_mode=running_mode,
-            export_home=export_home,
         )
 
         # Create a logger
@@ -522,7 +500,6 @@ class GravityDistributor(GravityDistributorExportPaths, AbstractDistributor):
             year=str(self.year),
             file_desc='synthetic_pa',
             segment_params=segment_params,
-            suffix=self._internal_only_suffix,
             compressed=True,
         )
         path = os.path.join(self.export_paths.distribution_dir, fname)

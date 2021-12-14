@@ -253,6 +253,24 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Running the Upper Model")
         upper_model.distribute(**kwargs)
 
-        print(upper_model)
-        exit()
+    def run_lower_model(self):
+        self._logger.info("Initialising the Lower Model")
+        lower_model = self.lower_model_method.get_distributor(
+                year=self.year,
+                trip_origin=self.trip_origin,
+                running_mode=self.running_mode,
+                zoning_system=self.lower_model_zoning,
+                running_zones=self.lower_running_zones,
+                export_home=self.lower_export_home,
+                process_count=self.process_count,
+                **self.lower_model_kwargs,
+        )
+
+        self._logger.info("Building arguments for the Lower Model")
+        matrix_dir = self.upper_exports.export_paths.matrix_dir
+        kwargs = self.arg_builder.build_lower_model_arguments(matrix_dir)
+
+        self._logger.info("Running the Lower Model")
+        lower_model.distribute(**kwargs)
+
 
