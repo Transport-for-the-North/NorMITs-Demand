@@ -5,6 +5,7 @@
 
 ##### IMPORTS #####
 # Standard imports
+from pathlib import Path
 
 # Third party imports
 
@@ -18,6 +19,8 @@ LOG_FILE = "NTEM_forecast.log"
 LOG = nd_log.get_logger(
     nd_log.get_package_logger_name() + ".run_models.run_ntem_forecast"
 )
+IMPORT_PATH = Path(r"I:\NorMITs Demand\import")
+MODEL_NAME = "noham"
 
 ##### CLASSES #####
 
@@ -30,6 +33,14 @@ def main():
     print(tempro_data.data.head())
     tempro_data.data.info()
     tempro_data.produce_dvectors()
+
+    ntem_inputs = ntem_forecast.NTEMImportMatrices(
+        IMPORT_PATH,
+        efs_consts.BASE_YEAR,
+        MODEL_NAME,
+    )
+    ntem_inputs.hb_paths
+    ntem_inputs.nhb_paths
 
 
 ##### MAIN #####

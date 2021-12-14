@@ -16,6 +16,8 @@ from normits_demand.utils import file_ops
 from normits_demand import logging as nd_log
 from normits_demand import core as nd_core
 from normits_demand.utils import timing
+from normits_demand import efs_constants as efs_consts
+from normits_demand import constants as consts
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
@@ -269,6 +271,120 @@ class TEMProData:
                     ) from err
                 filtered = filtered.loc[filtered[c].isin(ls)]
         return filtered
+
+
+class NTEMImportMatrices:
+    """Generates paths to base PostME matrices.
+
+    These matrices are used as the base for the NTEM forecasting.
+
+    Parameters
+    ----------
+    import_folder : Path
+        Path to the import folder, should contain
+        the matrices in a sub-path (`MATRIX_FOLDER`).
+    year : int
+        Model base year.
+    model_name : str
+        Name of the model to get inputs from, currently
+        only works with 'noham'.
+
+    Raises
+    ------
+    NotImplementedError
+        This class only handles the noham model and
+        one mode per model.
+    """
+
+    MATRIX_FOLDER = "{name}/post_me/tms_seg_pa"
+    _MATRIX_FILENAME = "{hb}_pa_yr{yr}_p{p}_m{m}.csv"
+
+    def __init__(self, import_folder: Path, year: int, model_name: str) -> None:
+        file_ops.check_path_exists(import_folder)
+        self.year = int(year)
+        self.model_name = model_name.lower().strip()
+        if self.model_name != "noham":
+            raise NotImplementedError(
+                "this class currently only works for 'noham' model"
+            )
+        self.matrix_folder = import_folder / self.MATRIX_FOLDER.format(
+            name=self.model_name
+        )
+        file_ops.check_path_exists(self.matrix_folder)
+        self.mode = efs_consts.MODEL_MODES[self.model_name]
+        if len(self.mode) == 1:
+            self.mode = self.mode[0]
+        else:
+            raise NotImplementedError(
+                "cannot handle models with more than one mode, "
+                f"this model ({self.model_name}) has {len(self.mode)} modes"
+            )
+        self._hb_paths = None
+        self._nhb_paths = None
+
+    def __str__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(matrix_folder={self.matrix_folder}, "
+            f"year={self.year}, model_name={self.model_name})"
+        )
+
+    def __repr__(self) -> str:
+        return f"{self.__module__}.{self!s}"
+
+    def _check_path(self, hb: str, purpose: int) -> Path:
+        """Checks file exists for specific purpose.
+
+        Parameters
+        ----------
+        hb : str {'hb', 'nhb'}
+            Whether using home-based (hb) or non-home-based (nhb).
+        purpose : int
+            Number of the specific purpose to get path for.
+
+        Returns
+        -------
+        Path
+            Path to the matrix file.
+        """
+        path = self.matrix_folder / self._MATRIX_FILENAME.format(
+            hb=hb, yr=self.year, p=purpose, m=self.mode
+        )
+        file_ops.check_file_exists(path, find_similar=True)
+        return path
+
+    @property
+    def hb_paths(self) -> dict[int, Path]:
+        """dict[int, Path]
+            Paths to home-based matrices for each
+            purpose (keys) for the given year.
+
+        See Also
+        --------
+        normits_demand.constants.ALL_HB_P:
+            for a list of all home-based purposes
+        """
+        if self._hb_paths is None:
+            self._hb_paths = {}
+            for p in consts.ALL_HB_P:
+                self._hb_paths[p] = self._check_path("hb", p)
+        return self._hb_paths.copy()
+
+    @property
+    def nhb_paths(self) -> dict[int, Path]:
+        """dict[int, Path]
+            Paths to non-home-based matrices for each
+            purpose (keys) for the given year.
+
+        See Also
+        --------
+        normits_demand.constants.ALL_NHB_P:
+            for a list of all non-home-based purposes
+        """
+        if self._nhb_paths is None:
+            self._nhb_paths = {}
+            for p in consts.ALL_NHB_P:
+                self._nhb_paths[p] = self._check_path("nhb", p)
+        return self._nhb_paths.copy()
 
 
 ##### FUNCTIONS #####
