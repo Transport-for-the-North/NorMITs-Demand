@@ -29,7 +29,7 @@ noham_internal_loc = 'Y:/Mobile Data/Processing/MDD_Check/lookups/noham_internal
 sector_loc = 'Y:/Mobile Data/Processing/MDD_Check/lookups/sector_to_noham_correspondence.csv'
 distance_loc = 'Y:/NoHAM/17.TUBA_Runs/-TPT/Skims/RefDist_Skims/NoHAM_Base_2018_TS2_v106_Dist_Other.csv'
 
-#Read in MDD
+#Read in MDD HW
 with open(r'Y:/Mobile Data/Processing/dct_MDDHW.pkl', 'rb') as log:
         dct_mdd_car = pk.load(log)
 #[md][wd][pp][hr]
@@ -42,8 +42,8 @@ print(dct_mdd_car[3][1][1].keys())
 print(dct_mdd_car[3][1][1][1])
 
 
-#Read in NoHAM
-with open(r'Y:/Mobile Data/Processing/dctNoHAM_mddpurp.pkl', 'rb') as log:
+#Read in MDD Car
+with open(r'Y:/Mobile Data/Processing/dct_MDDCar.pkl', 'rb') as log:
         dct_noham_car = pk.load(log)
 #[md][wd][pp][hr]
 #[3][1][1-5][1-4]
@@ -133,19 +133,19 @@ for md in dctmode:
                     ######
                     #Zone tripends
                     o_trips = mat.groupby(['o_zone']).agg({'mddtrip':sum, 'nmtrip':sum}).reset_index()
-                    o_trips = o_trips.rename(columns = {'mddtrip':'o_mdd', 'nmtrip':'o_nm'})
+                    o_trips = o_trips.rename(columns = {'mddtrip':'o_hw', 'nmtrip':'o_car'})
                     d_trips = mat.groupby(['d_zone']).agg({'mddtrip':sum, 'nmtrip':sum}).reset_index()
-                    d_trips = d_trips.rename(columns = {'mddtrip':'d_mdd', 'nmtrip':'d_nm'})
+                    d_trips = d_trips.rename(columns = {'mddtrip':'d_hw', 'nmtrip':'d_car'})
                     #Join
                     zone_te = pd.merge(o_trips,
                                        d_trips,
                                        left_on = ['o_zone'],
                                        right_on = ['d_zone'])
                     zone_te = zone_te[['o_zone',
-                                       'o_mdd',
-                                       'd_mdd',
-                                       'o_nm',
-                                       'd_nm']]
+                                       'o_hw',
+                                       'd_hw',
+                                       'o_car',
+                                       'd_car']]
                     zone_te = zone_te.rename(columns = {'o_zone':'zone'})
                     #Join internal/external marker
                     zone_te = pd.merge(zone_te,
@@ -196,8 +196,8 @@ for md in dctmode:
                     ax = mat1.plot.scatter(y='mddtrip', x='nmtrip', 
                                           title='Regression: y = ' + str(d[0].round(2)) + 'x + ' + str(d[0].round(1)))
                     mat1.plot(x='nmtrip', y='linearfit', color='Red', ax=ax,
-                                  xlabel='NoHAM trips',
-                                  ylabel='MDD trips')
+                                  xlabel='MDD Car trips',
+                                  ylabel='MDD HW trips')
                     ax.figure.savefig(f'Y:/Mobile Data/Processing/MDD_Check_HW/zone_od_xEE_p{pp}_m{md}_tp{tp}.png')
                     
                     
@@ -223,9 +223,9 @@ for md in dctmode:
                     
                     #LAD tripends
                     o_trips = mat_lad.groupby(['o_lad', 'o_int']).agg({'mdd_lad':sum, 'nm_lad':sum}).reset_index()
-                    o_trips = o_trips.rename(columns = {'mdd_lad':'o_mdd', 'nm_lad':'o_nm'})
+                    o_trips = o_trips.rename(columns = {'mdd_lad':'o_hw', 'nm_lad':'o_car'})
                     d_trips = mat_lad.groupby(['d_lad', 'd_int']).agg({'mdd_lad':sum, 'nm_lad':sum}).reset_index()
-                    d_trips = d_trips.rename(columns = {'mdd_lad':'d_mdd', 'nm_lad':'d_nm'})
+                    d_trips = d_trips.rename(columns = {'mdd_lad':'d_hw', 'nm_lad':'d_car'})
                     #Join
                     lad_te = pd.merge(o_trips,
                                        d_trips,
@@ -233,10 +233,10 @@ for md in dctmode:
                                        right_on = ['d_lad'])
                     lad_te = lad_te[['o_lad',
                                      'o_int',
-                                     'o_mdd',
-                                     'd_mdd',
-                                     'o_nm',
-                                     'd_nm']]
+                                     'o_hw',
+                                     'd_hw',
+                                     'o_car',
+                                     'd_car']]
                     lad_te = lad_te.rename(columns = {'o_lad':'lad', 'o_int':'internal'})
                     #Export as csv
                     lad_te.to_csv(f'Y:/Mobile Data/Processing/MDD_Check_HW/lad_te_od_p{pp}_m{md}_tp{tp}.csv', 
@@ -256,8 +256,8 @@ for md in dctmode:
                     ax = mat_lad.plot.scatter(y='mdd_lad', x='nm_lad', 
                                  title='Regression: y = ' + str(d[0].round(2)) + 'x + ' + str(d[0].round(1)))
                     mat_lad.plot(x='nm_lad', y='linearfit', color='Red', ax=ax,
-                                  xlabel='NoHAM LAD trips',
-                                  ylabel='MDD LAD trips')
+                                  xlabel='MDD Car LAD trips',
+                                  ylabel='MDD HW trips')
                     ax.figure.savefig(f'Y:/Mobile Data/Processing/MDD_Check_HW/lad_od_p{pp}_m{md}_tp{tp}.png')
                     #Close all plots
                     plt.close('all')
@@ -273,8 +273,8 @@ for md in dctmode:
                     ax = mat_lad2.plot.scatter(y='mdd_lad', x='nm_lad', 
                                   title='Regression: y = ' + str(d[0].round(2)) + 'x + ' + str(d[0].round(1)))
                     mat_lad2.plot(x='nm_lad', y='linearfit', color='Red', ax=ax,
-                                  xlabel='NoHAM LAD trips',
-                                  ylabel='MDD LAD trips')
+                                  xlabel='MDD Car LAD trips',
+                                  ylabel='MDD HW trips')
                     ax.figure.savefig(f'Y:/Mobile Data/Processing/MDD_Check_HW/lad_od_xEE_p{pp}_m{md}_tp{tp}.png')
                     plt.close('all')
                     
@@ -307,9 +307,9 @@ for md in dctmode:
                     
                     #Sector tripends
                     o_trips = mat_sec.groupby(['o_sec', 'o_int']).agg({'mdd_sec':sum, 'nm_sec':sum}).reset_index()
-                    o_trips = o_trips.rename(columns = {'mdd_sec':'o_mdd', 'nm_sec':'o_nm'})
+                    o_trips = o_trips.rename(columns = {'mdd_sec':'o_hw', 'nm_sec':'o_car'})
                     d_trips = mat_sec.groupby(['d_sec', 'd_int']).agg({'mdd_sec':sum, 'nm_sec':sum}).reset_index()
-                    d_trips = d_trips.rename(columns = {'mdd_sec':'d_mdd', 'nm_sec':'d_nm'})
+                    d_trips = d_trips.rename(columns = {'mdd_sec':'d_hw', 'nm_sec':'d_car'})
                     #Join
                     sec_te = pd.merge(o_trips,
                                        d_trips,
@@ -317,10 +317,10 @@ for md in dctmode:
                                        right_on = ['d_sec'])
                     sec_te = sec_te[['o_sec',
                                      'o_int',
-                                     'o_mdd',
-                                     'd_mdd',
-                                     'o_nm',
-                                     'd_nm']]
+                                     'o_hw',
+                                     'd_hw',
+                                     'o_car',
+                                     'd_car']]
                     sec_te = sec_te.rename(columns = {'o_sec':'sector', 'o_int':'internal'})
                     #Export as csv
                     sec_te.to_csv(f'Y:/Mobile Data/Processing/MDD_Check_HW/sector_te_od_p{pp}_m{md}_tp{tp}.csv', 
@@ -340,8 +340,8 @@ for md in dctmode:
                     ax = mat_sec.plot.scatter(y='mdd_sec', x='nm_sec', 
                                  title='Regression: y = ' + str(d[0].round(2)) + 'x + ' + str(d[0].round(1)))
                     mat_sec.plot(x='nm_sec', y='linearfit', color='Red', ax=ax,
-                                  xlabel='NoHAM Sector trips',
-                                  ylabel='MDD Sector trips')
+                                  xlabel='MDD Car Sector trips',
+                                  ylabel='MDD HW Sector trips')
                     ax.figure.savefig(f'Y:/Mobile Data/Processing/MDD_Check_HW/sector_od_p{pp}_m{md}_tp{tp}.png')
                     #Close all plots
                     plt.close('all')
@@ -357,8 +357,8 @@ for md in dctmode:
                     ax = mat_sec2.plot.scatter(y='mdd_sec', x='nm_sec', 
                                   title='Regression: y = ' + str(d[0].round(2)) + 'x + ' + str(d[0].round(1)))
                     mat_sec2.plot(x='nm_sec', y='linearfit', color='Red', ax=ax,
-                                  xlabel='NoHAM Sector trips',
-                                  ylabel='MDD Sector trips')
+                                  xlabel='MDD Car Sector trips',
+                                  ylabel='MDD HW Sector trips')
                     ax.figure.savefig(f'Y:/Mobile Data/Processing/MDD_Check_HW/sector_od_xEE_p{pp}_m{md}_tp{tp}.png')
                     plt.close('all')
                     
@@ -390,6 +390,7 @@ for md in dctmode:
                     #cut for distance bands and group
                     mat['dband'] = pd.cut(mat['dist_km'], bins=tldDist, right=False, labels=tldLabels)
                     distbands = mat.groupby(['dband', 'o_int', 'd_int']).agg({'mddtrip':sum, 'nmtrip':sum}).reset_index()
+                    distbands = distbands.rename(columns = {'mddtrip':'hw_trips', 'nmtrip':'car_trips'})
                     
                     #Master list
                     distbands['mode'] = md
