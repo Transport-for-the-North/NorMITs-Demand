@@ -266,37 +266,25 @@ class SegmentationLevel:
         """Overrides the default implementation"""
         return not self.__eq__(other)
 
-    def __mul__(self, other) -> Tuple[nd.SegmentMultiplyDict, SegmentationLevel]:
+    def _mul_div_segmentation(self,
+                              other: SegmentationLevel,
+                              return_seg_name: str,
+                              join_cols: List[str],
+                              ) -> Tuple[nd.SegmentMultiplyDict, SegmentationLevel]:
+        """Build segmentation dictionary for `__mul__` and `__div__`.
+
+        Parameters
+        ----------
+        other : SegmentationLevel
+            SegmentationLevel that self is being multiplied
+            with (or divided by).
+        return_seg_name : str
+            The segmentation name that will be returned by
+            the operation.
+        join_cols : List[str]
+            The columns that are used for joining the two
+            segments.
         """
-        Multiply two SegmentationLevel objects
-
-        Returns a dictionary defining how to multiply the two
-        SegmentationLevel objects, along with a SegmentationLevel defining
-        the return segmentation of the multiplication.
-
-        Returns
-        -------
-        SegmentMultiplyDict:
-            A dictionary where they keys are the resultant segment names,
-            and the value is a tuple where the first value
-            corresponds to the segment_name in this SegmentationLevel to use,
-            and the second value is the other SegmentationLevel to use.
-
-        SegmentationLevel:
-            A SegmentationLevel object defining what the return segmentation
-            would be if two Dvectors with the corresponding SegmentationLevels
-            were multiplied.
-        """
-        # Check we can do it
-        if not isinstance(other, SegmentationLevel):
-            raise SegmentationError(
-                "The __mul__ operator can only be used with."
-                "SegmentationLevel objects on both sides."
-            )
-
-        # Get the multiplication definition
-        return_seg_name, join_cols = self._get_multiply_definition(other)
-
         # Build the return segmentation
         if return_seg_name == self.name:
             return_seg = self
@@ -336,6 +324,70 @@ class SegmentationLevel:
 
         return multiply_dict, return_seg
 
+    def __mul__(self, other) -> Tuple[nd.SegmentMultiplyDict, SegmentationLevel]:
+        """
+        Multiply two SegmentationLevel objects
+
+        Returns a dictionary defining how to multiply the two
+        SegmentationLevel objects, along with a SegmentationLevel defining
+        the return segmentation of the multiplication.
+
+        Returns
+        -------
+        SegmentMultiplyDict:
+            A dictionary where they keys are the resultant segment names,
+            and the value is a tuple where the first value
+            corresponds to the segment_name in this SegmentationLevel to use,
+            and the second value is the other SegmentationLevel to use.
+
+        SegmentationLevel:
+            A SegmentationLevel object defining what the return segmentation
+            would be if two Dvectors with the corresponding SegmentationLevels
+            were multiplied.
+        """
+        # Check we can do it
+        if not isinstance(other, SegmentationLevel):
+            raise SegmentationError(
+                "The __mul__ operator can only be used with."
+                "SegmentationLevel objects on both sides."
+            )
+
+        # Get the multiplication definition
+        return_seg_name, join_cols = self._get_multiply_definition(other)
+        return self._mul_div_segmentation(other, return_seg_name, join_cols)
+
+    def __truediv__(self, other) -> Tuple[nd.SegmentMultiplyDict, SegmentationLevel]:
+        """
+        Divide two SegmentationLevel objects
+
+        Returns a dictionary defining how to divide the two
+        SegmentationLevel objects, along with a SegmentationLevel defining
+        the return segmentation of the division.
+
+        Returns
+        -------
+        SegmentMultiplyDict:
+            A dictionary where they keys are the resultant segment names,
+            and the value is a tuple where the first value
+            corresponds to the segment_name in this SegmentationLevel to use,
+            and the second value is the other SegmentationLevel to use.
+
+        SegmentationLevel:
+            A SegmentationLevel object defining what the return segmentation
+            would be if two Dvectors with the corresponding SegmentationLevels
+            were divided.
+        """
+        # Check we can do it
+        if not isinstance(other, SegmentationLevel):
+            raise SegmentationError(
+                "The __div__ operator can only be used with."
+                "SegmentationLevel objects on both sides."
+            )
+
+        # Get the division definition
+        return_seg_name, join_cols = self._get_divide_definition(other)
+        return self._mul_div_segmentation(other, return_seg_name, join_cols)
+
     def __iter__(self):
         """Overrides the default implementation"""
         return self._segments.to_dict(orient='records').__iter__()
@@ -360,6 +412,7 @@ class SegmentationLevel:
 
     def _get_multiply_definition(self,
                                  other: SegmentationLevel,
+                                 check_flipped: bool = True,
                                  ) -> Tuple[str, List[str]]:
         """
         Returns the return_seg_name and join cols for multiplying
@@ -377,11 +430,12 @@ class SegmentationLevel:
 
         # If none found, try flipping a and b
         if definition.empty:
-            df_filter = {
-                'b': self.name,
-                'a': other.name,
-            }
-            definition = pd_utils.filter_df(mult_def, df_filter)
+            if check_flipped:
+                df_filter = {
+                    'b': self.name,
+                    'a': other.name,
+                }
+                definition = pd_utils.filter_df(mult_def, df_filter)
 
             # If empty again, we don't know what to do
             if definition.empty:
@@ -396,6 +450,23 @@ class SegmentationLevel:
             definition['out'].squeeze(),
             self._parse_join_cols(definition['join'].squeeze())
         )
+
+    def _get_divide_definition(self,
+                               other: SegmentationLevel,
+                               ) -> Tuple[str, List[str]]:
+        """
+        Returns the return_seg_name and join cols for dividing
+        self and other
+        """
+        try:
+            return self._get_multiply_definition(other, check_flipped=False)
+        except SegmentationError as err:
+            raise SegmentationError(
+                "Got no definition for dividing '%s' by '%s'.\n"
+                "If there should be a definition, please add one in "
+                "at: %s"
+                % (self.name, other.name, self._multiply_definitions_path)
+            ) from err
 
     def _get_expansion_definition(self,
                                   other: SegmentationLevel,
