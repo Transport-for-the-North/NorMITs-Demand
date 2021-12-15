@@ -401,6 +401,28 @@ class DVector:
         """
         return [x.value for x in TimeFormat]
 
+    def _check_other(self, other: DVector, method: str) -> core.ZoningSystem:
+        """Check `other` is a `DVector` with the same zoning system."""
+        # We can only multiply, or divide, with other DVectors
+        if not isinstance(other, DVector):
+            raise nd.NormitsDemandError(
+                "The %s operator can only be used with."
+                "a DVector objects on each side. Got %s and %s."
+                % (method, type(self), type(other))
+            )
+        if self.zoning_system == other.zoning_system:
+            return self.zoning_system
+        if self.zoning_system is None:
+            return other.zoning_system
+        if other.zoning_system is None:
+            return self.zoning_system
+        raise nd.ZoningError(
+            "Cannot %s two Dvectors using different zoning systems.\n"
+            "zoning system of a: %s\n"
+            "zoning system of b: %s\n"
+            % (method, self.zoning_system.name, other.zoning_system.name)
+        )
+
     # BUILT IN METHODS
     def __mul__(self: DVector, other: DVector) -> DVector:
         """
@@ -424,28 +446,8 @@ class DVector:
         c:
             A new DVector which is the product of multiplying a and b.
         """
-        # We can only multiply against other DVectors
-        if not isinstance(other, DVector):
-            raise nd.NormitsDemandError(
-                "The __mul__ operator can only be used with."
-                "a DVector objects on each side. Got %s and %s."
-                % (type(self), type(other))
-            )
-
         # ## CHECK WE CAN MULTIPLY a AND b ## #
-        if self.zoning_system == other.zoning_system:
-            return_zoning_system = self.zoning_system
-        elif self.zoning_system is None:
-            return_zoning_system = other.zoning_system
-        elif other.zoning_system is None:
-            return_zoning_system = self.zoning_system
-        else:
-            raise nd.ZoningError(
-                "Cannot multiply two Dvectors using different zoning systems.\n"
-                "zoning system of a: %s\n"
-                "zoning system of b: %s\n"
-                % (self.zoning_system.name, other.zoning_system.name)
-            )
+        return_zoning_system = self._check_other(other, "multiply")
 
         # ## DO MULTIPLICATION ## #
         # Use the segmentations to figure out what to multiply
@@ -455,6 +457,48 @@ class DVector:
         dvec_data = dict.fromkeys(multiply_dict.keys())
         for final_seg, (self_key, other_key) in multiply_dict.items():
             dvec_data[final_seg] = self._data[self_key] * other._data[other_key]
+
+        return DVector(
+            zoning_system=return_zoning_system,
+            segmentation=return_segmentation,
+            time_format=self._choose_time_format(other),
+            import_data=dvec_data,
+            process_count=self.process_count,
+        )
+
+    def __truediv__(self: DVector, other: DVector) -> DVector:
+        """
+        Builds a new Dvec by dividing a by b.
+
+        How to join the two Dvectors is defined by the segmentation of each
+        Dvector.
+
+        Retains process_count, df_chunk_size, and verbose params from a.
+
+        Parameters
+        ----------
+        self:
+            The first DVector to divide
+
+        other:
+            The second DVector to divide
+
+        Returns
+        -------
+        c:
+            A new DVector which is the result of dividing a by b.
+        """
+        # ## CHECK WE CAN DIVIDE a AND b ## #
+        return_zoning_system = self._check_other(other, "divide")
+
+        # ## DO DIVISION ## #
+        # Use the segmentations to figure out what to multiply
+        division_dict, return_segmentation = self.segmentation / other.segmentation
+
+        # Build the dvec data here with division
+        dvec_data = dict.fromkeys(division_dict.keys())
+        for final_seg, (self_key, other_key) in division_dict.items():
+            dvec_data[final_seg] = self._data[self_key] / other._data[other_key]
 
         return DVector(
             zoning_system=return_zoning_system,
