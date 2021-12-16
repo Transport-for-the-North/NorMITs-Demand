@@ -2199,6 +2199,51 @@ class DVector:
         dvec = dvec.translate_zoning(lad)
         dvec.to_df().to_csv(lad_report_path, index=False)
 
+    def segment_apply(self,
+                      func: Callable[[np.ndarray], np.ndarray],
+                      *args,
+                      **kwargs
+                      ) -> DVector:
+        """Applies a function to each segment array, separately.
+
+        The function is applied to a copy of the data
+        so will not edit the current DVector.
+
+        Parameters
+        ----------
+        func : Callable[[np.ndarray], np.ndarray]
+            Function which will be applied to each segment
+            in turn, should return a np.ndarray with the
+            same shape as the input array.
+
+        Returns
+        -------
+        DVector
+            A new DVector with the same metadata as self
+            but with new segment data.
+
+        Raises
+        ------
+        ValueError
+            If `func` is not callable.
+        """
+        if not callable(func):
+            raise ValueError(
+                "func is not callable. func must be a function that "
+                "takes a np.ndarray of values and returns a np.ndarray."
+            )
+        dvec_data = {}
+        # TODO(MB): Add optional multiprocessing if self._data
+        # is big enough
+        for seg, data in self._data.items():
+            dvec_data[seg] = func(data.copy(), *args, **kwargs)
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=self.segmentation,
+            time_format=self.time_format,
+            import_data=dvec_data,
+            process_count=self.process_count,
+        )
 
 class DVectorError(nd.NormitsDemandError):
     """
