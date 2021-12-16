@@ -6,7 +6,7 @@
 ##### IMPORTS #####
 # Standard imports
 from pathlib import Path
-from typing import List
+from typing import List, Dict
 
 # Third party imports
 import pandas as pd
@@ -166,8 +166,8 @@ class TEMProData:
         )
 
     @property
-    def hb_attractions(self) -> dict[int, nd_core.DVector]:
-        """dict[int, nd_core.DVector]
+    def hb_attractions(self) -> Dict[int, nd_core.DVector]:
+        """Dict[int, nd_core.DVector]
             Home-based attraction trip ends for all years (keys).
         """
         if self._hb_attractions is None:
@@ -178,8 +178,8 @@ class TEMProData:
         return self._hb_attractions
 
     @property
-    def hb_productions(self) -> dict[int, nd_core.DVector]:
-        """dict[int, nd_core.DVector]
+    def hb_productions(self) -> Dict[int, nd_core.DVector]:
+        """Dict[int, nd_core.DVector]
             Home-based production trip ends for all years (keys).
         """
         if self._hb_productions is None:
@@ -190,8 +190,8 @@ class TEMProData:
         return self._hb_productions
 
     @property
-    def nhb_attractions(self) -> dict[int, nd_core.DVector]:
-        """dict[int, nd_core.DVector]
+    def nhb_attractions(self) -> Dict[int, nd_core.DVector]:
+        """Dict[int, nd_core.DVector]
             Non-home-based attraction trip ends for all years (keys).
         """
         if self._nhb_attractions is None:
@@ -202,8 +202,8 @@ class TEMProData:
         return self._nhb_attractions
 
     @property
-    def nhb_productions(self) -> dict[int, nd_core.DVector]:
-        """dict[int, nd_core.DVector]
+    def nhb_productions(self) -> Dict[int, nd_core.DVector]:
+        """Dict[int, nd_core.DVector]
             Non-home-based production trip ends for all years (keys).
         """
         if self._nhb_productions is None:
@@ -353,8 +353,8 @@ class NTEMImportMatrices:
         return path
 
     @property
-    def hb_paths(self) -> dict[int, Path]:
-        """dict[int, Path]
+    def hb_paths(self) -> Dict[int, Path]:
+        """Dict[int, Path]
             Paths to home-based matrices for each
             purpose (keys) for the given year.
 
@@ -370,8 +370,8 @@ class NTEMImportMatrices:
         return self._hb_paths.copy()
 
     @property
-    def nhb_paths(self) -> dict[int, Path]:
-        """dict[int, Path]
+    def nhb_paths(self) -> Dict[int, Path]:
+        """Dict[int, Path]
             Paths to non-home-based matrices for each
             purpose (keys) for the given year.
 
