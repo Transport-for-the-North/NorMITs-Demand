@@ -5,6 +5,7 @@
 
 ##### IMPORTS #####
 # Standard imports
+import dataclasses
 from pathlib import Path
 from typing import List, Dict
 
@@ -275,6 +276,49 @@ class TEMProData:
         return filtered
 
 
+@dataclasses.dataclass
+class TEMProForecasts:
+    """TEMPro trip end data for all future years.
+
+    Attributes
+    ----------
+    hb_attractions: Dict[int, nd_core.DVector]
+        Home-based attractions trip end vectors,
+        dictionary keys are the year.
+    hb_productions: Dict[int, nd_core.DVector]
+        Home-based productions trip end vectors,
+        dictionary keys are the year.
+    nhb_attractions: Dict[int, nd_core.DVector]
+        Non-home-based attractions trip end vectors,
+        dictionary keys are the year.
+    nhb_productions: Dict[int, nd_core.DVector]
+        Non-home-based productions trip end vectors,
+        dictionary keys are the year.
+    """
+    hb_attractions: Dict[int, nd_core.DVector]
+    hb_productions: Dict[int, nd_core.DVector]
+    nhb_attractions: Dict[int, nd_core.DVector]
+    nhb_productions: Dict[int, nd_core.DVector]
+
+    def save(self, folder: Path):
+        """Saves all DVectors to `folder`.
+
+        Saved using `DVector.compress_out` method with name
+        in the format "{nhb|hb}_{attractions|productions}-{year}".
+
+        Parameters
+        ----------
+        folder : Path
+            Path to folder to save outputs, will
+            be created if it doesn't already exist.
+        """
+        folder.mkdir(exist_ok=True, parents=True)
+        LOG.info("Writing TEMProForecasts to %s", folder)
+        for name, years in dataclasses.asdict(self).items():
+            for yr, dvec in years.items():
+                dvec.compress_out(folder / f"{name}-{yr}")
+
+
 class NTEMImportMatrices:
     """Generates paths to base PostME matrices.
 
@@ -438,6 +482,9 @@ def trip_end_growth(
                 np.nan_to_num, nan=0.0, posinf=0.0, neginf=0.0
             )
             # Translate back to original zone system
+            # TODO(MB) Fix translation to msoa to not use splitting factors
+            # (or use splitting factor of 1) to keep growth factors the same
+            # for all MSOAs within a LAD
             growth[yr] = data.translate_zoning(old_zone)
     return growth
 
@@ -481,3 +528,41 @@ def grow_trip_ends(
     for yr, growth in te_growth.items():
         future[yr] = base_data * growth
     return future
+
+
+def grow_tempro_data(tempro_data: TEMProData) -> TEMProForecasts:
+    """Calculate LAD growth factors and use them to grow `tempro_data`.
+
+    Growth factors are calculated at LAD level but are applied
+    to the `tempro_data` at MSOA level.
+
+    Parameters
+    ----------
+    tempro_data : TEMProData
+        TEMPro trip end data for all study years.
+
+    Returns
+    -------
+    TEMProForecasts
+        Forecasted TEMPro trip ends for all future
+        years.
+
+    Raises
+    ------
+    ValueError
+        If `tempro_data` isn't an instance of `TEMProData`.
+
+    See Also
+    --------
+    grow_trip_ends: which will grow trip ends for all years for
+        a single dictionary e.g. `hb_attractions`.
+    """
+    if not isinstance(tempro_data, TEMProData):
+        raise ValueError(
+            f"tempro_data should be TEMProData type not {type(tempro_data)}"
+        )
+    grown = {}
+    for segment in dataclasses.fields(TEMProForecasts):
+        LOG.info("Calculating TEMPro trip end growth for %s", segment.name)
+        grown[segment.name] = grow_trip_ends(getattr(tempro_data, segment.name))
+    return TEMProForecasts(**grown)

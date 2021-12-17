@@ -32,7 +32,9 @@ def main():
     )
     print(tempro_data.data.head())
     tempro_data.data.info()
-    tempro_data.produce_dvectors()
+    
+    future_tempro = ntem_forecast.grow_tempro_data(tempro_data)
+    future_tempro.save(Path(r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Test Outputs\TEMProForecasts"))
 
     ntem_inputs = ntem_forecast.NTEMImportMatrices(
         IMPORT_PATH,
