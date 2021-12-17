@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List, Dict
 
 # Third party imports
+import numpy as np
 import pandas as pd
 
 # Local imports
@@ -21,6 +22,7 @@ from normits_demand import constants as consts
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
+LAD_ZONE_SYSTEM = "lad_2020"
 
 
 ##### CLASSES #####
@@ -388,3 +390,94 @@ class NTEMImportMatrices:
 
 
 ##### FUNCTIONS #####
+def trip_end_growth(
+    tempro_vectors: Dict[int, nd_core.DVector]
+) -> Dict[int, nd_core.DVector]:
+    """Calculate growth at LAD level and return it a `tempro_vectors` zone system.
+
+    The trip ends are translated to `LAD_ZONE_SYSTEM` to
+    calculate growth factors then translated back to the
+    original zone system before returning.
+
+    Parameters
+    ----------
+    tempro_vectors : Dict[int, nd_core.DVector]
+        Trip end vectors from TEMPro for all study years,
+        keys should be years and must include
+        `normits_demand.efs_constants.BASE_YEAR`.
+
+    Returns
+    -------
+    Dict[int, nd_core.DVector]
+        Trip end growth factors in same zone system as
+        `tempro_vectors` base year, contains all years
+        from `tempro_vectors` except the base year.
+
+    Raises
+    ------
+    ValueError
+        If `normits_demand.efs_constants.BASE_YEAR` is not
+        in `tempro_vectors`.
+    """
+    if efs_consts.BASE_YEAR not in tempro_vectors:
+        raise ValueError(f"base year ({efs_consts.BASE_YEAR}) data not given")
+    old_zone = tempro_vectors[efs_consts.BASE_YEAR].zoning_system
+    growth_zone = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
+    base_data = tempro_vectors[efs_consts.BASE_YEAR
+                              ].translate_zoning(growth_zone)
+    # Convert to LADs and calculate growth from base year
+    growth = {}
+    # Ignore divide by zero warnings and fill with zeros
+    with np.errstate(divide="ignore", invalid="ignore"):
+        for yr, data in tempro_vectors.items():
+            if yr == efs_consts.BASE_YEAR:
+                continue
+            data = data.translate_zoning(growth_zone) / base_data
+            # Set any nan or inf values created by dividing by 0 to 0 growth
+            data = data.segment_apply(
+                np.nan_to_num, nan=0.0, posinf=0.0, neginf=0.0
+            )
+            # Translate back to original zone system
+            growth[yr] = data.translate_zoning(old_zone)
+    return growth
+
+
+def grow_trip_ends(
+    tempro_vectors: Dict[int, nd_core.DVector]
+) -> Dict[int, nd_core.DVector]:
+    """Grow TEMPro trip ends based on LAD growth.
+
+    Growth factors are calculated at `LAD_ZONE_SYSTEM`
+    level but applied at the original zone system.
+
+    Parameters
+    ----------
+    tempro_vectors : Dict[int, nd_core.DVector]
+        Trip end vectors from TEMPro for all study years,
+        keys should be years and must include
+        `normits_demand.efs_constants.BASE_YEAR`.
+
+    Returns
+    -------
+    Dict[int, nd_core.DVector]
+        Future trip ends in same zone system as `tempro_vectors`
+        base year, contains all years from `tempro_vectors`
+        except the base year.
+
+    Raises
+    ------
+    ValueError
+        If `normits_demand.efs_constants.BASE_YEAR` is not
+        in `tempro_vectors`.
+
+    See Also
+    --------
+    trip_end_growth : for growth factor calculation
+    """
+    # Calculate growth at LAD level
+    te_growth = trip_end_growth(tempro_vectors)
+    base_data = tempro_vectors[efs_consts.BASE_YEAR]
+    future = {}
+    for yr, growth in te_growth.items():
+        future[yr] = base_data * growth
+    return future
