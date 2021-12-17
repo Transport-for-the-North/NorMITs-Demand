@@ -481,11 +481,9 @@ def trip_end_growth(
             data = data.segment_apply(
                 np.nan_to_num, nan=0.0, posinf=0.0, neginf=0.0
             )
-            # Translate back to original zone system
-            # TODO(MB) Fix translation to msoa to not use splitting factors
-            # (or use splitting factor of 1) to keep growth factors the same
-            # for all MSOAs within a LAD
-            growth[yr] = data.translate_zoning(old_zone)
+            # Translate back to original zone system, without using
+            # weighting factors i.e. weighting factors of 1
+            growth[yr] = data.translate_zoning(old_zone, weighting="no_weight")
     return growth
 
 

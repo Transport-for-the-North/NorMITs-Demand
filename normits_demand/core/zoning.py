@@ -83,6 +83,7 @@ class ZoningSystem:
     _weighting_suffix = {
         'population': 'population_weight',
         'employment': 'employment_weight',
+        'no_weight': 'no_weighting',
     }
 
     possible_weightings = list(_weighting_suffix.keys()) + [None]
