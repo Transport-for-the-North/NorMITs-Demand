@@ -110,7 +110,10 @@ def gv_processing():
             #Add 24hr
             dctgv_vehtp[md][wd][5] = (dctgv_vehtp[md][wd][1] + dctgv_vehtp[md][wd][2] + 
                                       dctgv_vehtp[md][wd][3] + dctgv_vehtp[md][wd][4])
-        
+
+    with open(r'Y:\Mobile Data\Processing\dctGV_24hr.pkl', 'wb') as log:
+        pk.dump(dctgv_vehtp, log, pk.HIGHEST_PROTOCOL)
+
     """TODO:
         Apply Van occupancy to get person trips from vehicles & Split LGV into purposes using NTS tour proportions
             Import LGV distance skim & tour proportions

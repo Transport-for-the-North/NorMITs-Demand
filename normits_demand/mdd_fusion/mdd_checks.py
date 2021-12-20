@@ -11,35 +11,88 @@ dctmddpurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'], 3: ['HBO', 'HBO_fr'], 
 dcthgvpurp = {5: ['NHB', 'NHB']}
 dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3]}
 
-def mdd_combined_totals():
+def noham_combined_totals():
     # Import combined dict
     with open(r'Y:\Mobile Data\Processing\dct_CombinedMode.pkl', 'rb') as log:
         dct_combined = pk.load(log)
 
     dct_total = {}
-    for wd in dctday:
-        dct_total[wd] = {}
-        for pp in dctmddpurp:
-            dct_total[wd][pp] = {}
-            for tp in dcttp:
-                print(str(wd) + '-' + str(pp) + '-' + str(tp))
-                if pp == 5:
-                    print('NHB')
-                    dct_total[wd][pp][tp] = (dct_combined[3][wd][pp][tp] + dct_combined[5][wd][pp][tp] +
-                                            dct_combined[7][wd][pp][tp] + dct_combined[8][wd][pp][tp])
-                elif pp in [1, 2, 3, 4]:
-                    print('Car, Bus & LGV')
-                    dct_total[wd][pp][tp] = (dct_combined[3][wd][pp][tp] + dct_combined[5][wd][pp][tp] +
-                                            dct_combined[7][wd][pp][tp])
-                else:
-                    print('purpose variable outside anticipated range')
+    for md in dctmode:
+        if md in [3, 5, 7]:
+            dct_total[md] = {}
+            for wd in dctday:
+                dct_total[md][wd] = {}
+                for pp in dctmddpurp:
+                    dct_total[md][wd][pp] = {}
+                    for tp in dcttp:
+                        print(str(md) + '-' + str(wd) + '-' + str(pp) + '-' + str(tp))
+                        dct_total[md][wd][pp][tp] = np.sum(dct_combined[md][wd][pp][tp])
+        elif md in [8]:
+            dct_total[md] = {}
+            for wd in dctday:
+                dct_total[md][wd] = {}
+                for pp in dcthgvpurp:
+                    dct_total[md][wd][pp] = {}
+                    for tp in dcttp:
+                        print(str(md) + '-' + str(wd) + '-' + str(pp) + '-' + str(tp))
+                        dct_total[md][wd][pp][tp] = np.sum(dct_combined[md][wd][pp][tp])
 
-    df_totals = pd.DataFrame.from_dict({(i, j): dct_total[i][j]
+    df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
                                         for i in dct_total.keys()
-                                        for j in dct_total[i].keys()},
+                                        for j in dct_total[i].keys()
+                                        for k in dct_total[i][j].keys()},
                                        orient='index')
 
-    df_totals.to_csv(r'Y:\Mobile Data\Processing\Combined_Totals')
+    df_totals.to_csv(r'Y:\Mobile Data\Processing\NoHAM_Combined_Totals.csv')
+
+
+def mdd_totals():
+    # Import combined dict
+    with open(r'Y:\Mobile Data\Processing\dct_CombinedMode.pkl', 'rb') as log:
+        dct_combined = pk.load(log)
+
+
+def mdd_hw_totals():
+    dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3], 4: ['OP', 12]}
+    # Import combined dict
+    with open(r'Y:\Mobile Data\Processing\dct_MDDHW_incOP.pkl', 'rb') as log:
+        dct_mddhw = pk.load(log)
+
+    dct_total = {3: {1: {}}}
+    for pp in dctmddpurp:
+        dct_total[3][1][pp] = {}
+        for tp in dcttp:
+            print(str(3) + '-' + str(1) + '-' + str(pp) + '-' + str(tp))
+            dct_total[3][1][pp][tp] = np.sum(dct_mddhw[3][1][pp][tp])
+
+    df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                        for i in dct_total.keys()
+                                        for j in dct_total[i].keys()
+                                        for k in dct_total[i][j].keys()},
+                                       orient='index')
+
+    df_totals.to_csv(r'Y:\Mobile Data\Processing\MDD_HW_Totals_incOP.csv')
+
+def mdd_car_totals():
+    # Import combined dict
+    with open(r'Y:\Mobile Data\Processing\dct_MDDCar.pkl', 'rb') as log:
+        dct_mddcar = pk.load(log)
+
+    dct_total = {3: {1: {}}}
+    for pp in dctmddpurp:
+        dct_total[3][1][pp] = {}
+        for tp in dcttp:
+            print(str(3) + '-' + str(1) + '-' + str(pp) + '-' + str(tp))
+            dct_total[3][1][pp][tp] = np.sum(dct_mddcar[3][1][pp][tp])
+
+    df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                        for i in dct_total.keys()
+                                        for j in dct_total[i].keys()
+                                        for k in dct_total[i][j].keys()},
+                                       orient='index')
+
+    df_totals.to_csv(r'Y:\Mobile Data\Processing\MDD_Car_Totals.csv')
+
 
 def main():
     run_mdd_combined_totals = False

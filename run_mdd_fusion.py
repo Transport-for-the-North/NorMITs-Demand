@@ -10,18 +10,23 @@ Other updates made by:
 File purpose:
 Scoping test runs of MDD fusion
 """
+
+# TODO: tidy imports into functions
 import pandas as pd
 import numpy as np
-
+import pickle as pk
+import os, sys
+import multiprocessing as mp
 import normits_demand as nd
+from normits_demand.mdd_fusion import mdd_fusion_engine
 from normits_demand import fusion_constants as consts
 
-# TODO: scope mdd_pre_processing structure
-# TODO: locate un-expanded MDD demand - is this still valid?
-
+distance_folder = r'Y:\NoHAM\17.TUBA_Runs\-TPT\Skims\RefDist_Skims'
+# TODO: Add looping dictionaries
 
 def mode_correction():
-
+    # TODO: is this still valid?
+    # TODO: Tidy and retain as required
     """ Process considerations:
     - What is the current assumption regarding modes contained within MDD data?
     - Are we intending to match high level mode splits from NTS/NoHAM models?
@@ -57,7 +62,7 @@ def mode_correction():
 
 
 def nts_control():
-
+    # TODO: How much of this is still valid?
     """ Process considerations
     - Do we control by day of week or average day?
     - What level of time period disaggregation do we control at?
@@ -93,25 +98,36 @@ def nts_control():
     print("made it to the end of nts_control")
 
 
+def fusion_factors():
+    # TODO: import NoHAM Car
+    # TODO: import MDD Car
+    # TODO: loop build_fusion_factor for
+    mov = ['I-I', 'S-E']
+        #mdd_fusion_engine.build_fusion_factor
+
 def main():
 
-    # TODO: scope out main function
-    # TODO: add required variables
-
+    # TODO: Link to pre_processing files
     # Pre-process options
-    run_mode_correction = True
+    run_mode_correction = False
     run_nts_control = False
-
-    # Placeholder variables
-    # example - model_name = consts.MODEL_NAMES
-
     if run_mode_correction:
         # Pre process MDD data for expansion and fusion
         mode_correction()
-    
     if run_nts_control:
         # Space for comments
         nts_control()
+
+    run_package_fusion_dist = True
+    if run_package_fusion_dist:
+        # Updates distance skims used within fusion
+        print(mdd_fusion_engine.package_fusion_distances(inputs_path=distance_folder,
+                                                         output_path=r'Y:\Mobile Data\Processing\Fusion_Inputs',
+                                                         version_name='NoHAM_Base_2018_TS2_v106'))
+    run_fusion_factors = True
+    if run_fusion_factors:
+        fusion_factors()
+        mdd_fusion_engine.build_fusion_factor
 
     print("end of main")
 

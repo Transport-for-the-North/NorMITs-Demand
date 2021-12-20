@@ -2,9 +2,37 @@
 
 import numpy as np
 import pickle as pk
+import pandas as pd
 import normits_demand as nd
 from normits_demand import efs_constants as efs_consts
 from normits_demand.utils import vehicle_occupancy as vo
+
+dctmode = {3: ['Car']}
+dctday = {1: ['Weekday']}
+purp_hb = [1, 2, 3, 4, 5, 6, 7, 8]
+purp_nhb = [12, 13, 14, 15, 16, 18]
+keys = range((len(purp_hb) * 2) + len(purp_nhb))
+dctpurp = {}
+for i in keys:
+    if i < len(purp_hb):
+        # print([purp_hb[i]])
+        dctpurp[i] = ['hb', 'from'] + [purp_hb[i]]
+    elif len(purp_hb) <= i < (len(purp_hb) * 2):
+        # print([purp_hb[i-len(purp_hb)]])
+        dctpurp[i] = ['hb', 'to'] + [purp_hb[i - len(purp_hb)]]
+    elif i >= (len(purp_hb) * 2):
+        # print([purp_nhb[i-(len(purp_hb)*2)]])
+        dctpurp[i] = ['nhb', ''] + [purp_nhb[i - (len(purp_hb) * 2)]]
+    else:
+        print('Value outside expected range')
+dctmddpurp = {1: ['HBW', 'HBW_fr', 'commute'], 2: ['HBW', 'HBW_to', 'commute'], 3: ['HBO', 'HBO_fr', 'other'],
+              4: ['HBO', 'HBO_to', 'other'], 5: ['NHB', 'NHB', 'other']}
+dctuc = {1: ['business'],
+         2: ['commute'],
+         3: ['other']}
+dcttp = {1: ['AM'], 2: ['IP'], 3: ['PM'], 4: ['OP']}
+
+unq_zones = list(range(1, 2771))
 
 def mdd_export():
     # some notes
@@ -31,15 +59,37 @@ def mdd_export():
 
 
 def mdd_person_export():
+    # Set local variables
+    version = 1
+    export_folder = 'Y:/Mobile Data/Processing/NoHAM_Demand'
+
     # TODO: Load MMD Car pickle
+    with open(r'Y:\Mobile Data\Processing\dct_MDDCar.pkl', 'rb') as log:
+        dct_mdd_car = pk.load(log)
+
     # TODO: Loop export into PersonTrips folder with pandas out method
+    for md in dctmode:
+        for wd in dctday:
+            for pp in dctmddpurp:
+                for tp in dcttp:
+                    file_path = (export_folder + '/v' + str(version) + '/PersonTrips/' +
+                                 'od_' + str(dctmddpurp[pp][2]) + '_p' + str(pp) +
+                                 '_yr2018_m' + str(md) +
+                                 '_tp' + str(tp) + '.csv')
+                    print(file_path)
+                    export_array = dct_mdd_car[md][wd][pp][tp]
+                    export_df = pd.DataFrame(data=export_array, index=unq_zones, columns=unq_zones)
+                    export_df.to_csv(file_path)
     print('mdd person trip matrices exported')
 
 
 def mdd_per_to_veh():
-    import_path = r'Y:\Mobile Data\Processing\MDD_Demand\v0\PersonTrips'
-    export_path = r'Y:\Mobile Data\Processing\MDD_Demand\v0\PCUs'
-    import_folder = r'I:\NorMITs Demand\import'
+    # Set local variables
+    version = 1
+    working_folder = 'Y:/Mobile Data/Processing/MDD_Demand/'
+    import_path = working_folder + '/v' + str(version) + '/PersonTrips'
+    export_path = working_folder + '/v' + str(version) + '/PCUs'
+    import_folder = 'I:/NorMITs Demand/import'
 
     vo.people_vehicle_conversion(
         mat_import=import_path,
