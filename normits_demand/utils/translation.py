@@ -48,7 +48,7 @@ def numpy_matrix_zone_translation(matrix: np.array,
 
     translation_dtype:
         The numpy datatype to use to do the translation. If None, then the
-        dtype of the translation is used. As this is a 3d translation, it can
+        dtype of the matrix is used. As this is a 3d translation, it can
         use a lot of memory if float64 is used. Where such high precision
         isn't needed, a more memory efficient dtype can be passed in instead
         and the translation will be carried out in it.
@@ -173,8 +173,127 @@ def numpy_matrix_zone_translation(matrix: np.array,
 
 def numpy_vector_zone_translation(vector: np.array,
                                   translation: np.array,
+                                  translation_dtype: np.dtype = None,
+                                  check_shapes: bool = True,
+                                  check_totals: bool = False,
                                   ) -> np.array:
-    pass
+    """Translates vector with translation
+
+    Pure numpy operations. Should be super fast!!
+
+    Parameters
+    ----------
+    vector:
+        The Vector to translate. Needs to be one dimensional!
+        e.g. (n_in, )
+
+    translation:
+        The matrix defining the factors to use to translate matrix. Should
+        be of shape (n_in, n_out), where the output vector shape will be
+        (n_out, ).
+
+    translation_dtype:
+        The numpy datatype to use to do the translation. If None, then the
+        dtype of the vector is used. As this is a 2d translation, it can
+        use a lot of memory if float64 is used. Where such high precision
+        isn't needed, a more memory efficient dtype can be passed in instead
+        and the translation will be carried out in it.
+
+    check_shapes:
+        Whether to check that the input and translation shapes look correct.
+        Will raise an error if vector is not a 1d array, or if translation
+        does not have the same number of rows as vector.
+        Optionally set to False if checks have been done externally to speed
+        up runtime.
+
+    check_totals:
+        Whether to check that the input and output vector sum to the same
+        total.
+
+    Returns
+    -------
+    translated_vector:
+        vector, translated into (n_out, ) shape via translation.
+
+    Raises
+    ------
+    ValueError:
+        Will raise an error if vector is not a square array, or if translation
+        does not have the same number of rows as vector.
+    """
+    # ## OPTIONALLY CHECK INPUT SHAPES ## #
+    if check_shapes:
+        # Check that vector is 1D
+        if len(vector.shape) > 1:
+            raise ValueError(
+                "The given vector is not a vector. Expected a np.ndarray with "
+                "only one dimension, but got %s dimensions instead."
+                % len(vector.shape)
+            )
+
+        # Check translation has the right number of rows
+        n_zones_in, _ = translation.shape
+        if n_zones_in != len(vector):
+            raise ValueError(
+                "The given translation does not have the correct number of "
+                "rows. Translation rows needs to match vector rows for the "
+                "numpy zone translations to work.\n"
+                "Given vector shape: %s\n"
+                "Given translation shape: %s"
+                % (vector.shape, translation.shape)
+            )
+
+    # ## CONVERT DTYPES ## #
+    # If not given, assumed based on the input precision
+    if translation_dtype is None:
+        translation_dtype = vector.dtype
+
+    # Make sure we're not gonna introduce infs...
+    mat_max = np.max(vector)
+    mat_min = np.min(vector)
+    dtype_max = np.finfo(translation_dtype).max
+    dtype_min = np.finfo(translation_dtype).min
+
+    if mat_max > dtype_max:
+        raise ValueError(
+            "Maximum value in vector is greater than the given "
+            "translation_dtype can handle.\n"
+            "Maximum dtype value: %s\n"
+            "Maximum vector value: %s"
+            % (dtype_max, mat_max)
+        )
+
+    if mat_min < dtype_min:
+        raise ValueError(
+            "Minimum value in vector is less than the given "
+            "translation_dtype can handle.\n"
+            "Minimum dtype value: %s\n"
+            "Minimum vector value: %s"
+            % (dtype_min, mat_min)
+        )
+
+    # Now we know it's safe. Translate
+    vector = vector.astype(translation_dtype)
+    translation = translation.astype(translation_dtype)
+
+    # ## TRANSLATE ## #
+    out_vector = np.broadcast_to(np.expand_dims(vector, axis=1), translation.shape)
+    out_vector = out_vector * translation
+
+    if not check_totals:
+        return out_vector
+
+    if not math_utils.is_almost_equal(vector.sum(), out_vector.sum()):
+        raise ValueError(
+            "Some values seem to have been dropped during the translation. "
+            "Check the given translation matrix isn't unintentionally dropping "
+            "values. If the difference is small, it's likely a rounding error.\n"
+            "Before: %s\n"
+            "After: %s"
+            % (vector.sum(), out_vector.sum())
+        )
+
+    return out_vector
 
 
 def pandas_matrix_zone_translation(matrix: pd.DataFrame,
