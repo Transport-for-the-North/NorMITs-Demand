@@ -33,7 +33,7 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 notem_iteration_name = '9.3'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
 tram_export_home = r"I:\NorMITs Demand\Tram"
-cache_path = "E:/tms_cache"
+cache_path = "E:/dm_cache"
 
 # Distribution running args
 base_year = 2018
@@ -54,6 +54,7 @@ def main():
 
     # Running params
     use_tram = True
+    overwrite_cache = False
 
     run_hb = True
     run_nhb = False
@@ -139,6 +140,8 @@ def main():
         'lower_model_method': lower_model_method,
         'lower_distributor_kwargs': lower_distributor_kwargs,
         'intrazonal_cost_infill': intrazonal_cost_infill,
+        'cache_path': cache_path,
+        'overwrite_cache': overwrite_cache,
     }
 
     # Distribution model

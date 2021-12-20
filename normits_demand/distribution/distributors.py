@@ -489,9 +489,15 @@ class GravityDistributor(AbstractDistributor):
         # ## WRITE DISTRIBUTED DEMAND ## #
         # Put the demand into a df
         demand_df = pd.DataFrame(
+            index=self.running_zones,
+            columns=self.running_zones,
+            data=calib.achieved_distribution.astype(np.float32),
+        )
+
+        demand_df = demand_df.reindex(
             index=self.zoning_system.unique_zones,
             columns=self.zoning_system.unique_zones,
-            data=calib.achieved_distribution.astype(np.float32),
+            fill_value=0,
         )
 
         # Generate path and write out
@@ -502,7 +508,7 @@ class GravityDistributor(AbstractDistributor):
             segment_params=segment_params,
             compressed=True,
         )
-        path = os.path.join(self.export_paths.distribution_dir, fname)
+        path = os.path.join(self.export_paths.matrix_dir, fname)
         nd.write_df(demand_df, path)
 
         # ## ADD TO THE OVERALL LOG ## #

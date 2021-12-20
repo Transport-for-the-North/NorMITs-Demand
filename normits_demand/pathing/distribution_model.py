@@ -33,6 +33,7 @@ import normits_demand as nd
 from normits_demand import constants
 from normits_demand.cost import utils as cost_utils
 from normits_demand.utils import file_ops
+from normits_demand.utils import translation
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
@@ -92,6 +93,8 @@ class DMArgumentBuilderBase(abc.ABC):
     defined functions/properties to pick up new import files.
     """
 
+    _translation_weight_col = 'weight'
+
     def __init__(self,
                  year: int,
                  trip_origin: str,
@@ -135,7 +138,18 @@ class DMArgumentBuilderBase(abc.ABC):
                     % weighting
                 )
 
-            return df.index.tolist(), full_translation
+            # Determine which upper zones to keep
+            upper_zones = df.index.tolist()
+
+            # Melt and name columns
+            df = pd_utils.wide_to_long_infill(
+                df=df,
+                index_col_1_name=self.upper_zoning_system.col_name,
+                index_col_2_name=self.lower_zoning_system.col_name,
+                value_col_name=self._translation_weight_col,
+            )
+
+            return upper_zones, df
 
         # Get the translations
         pop_keep, pop_trans = get_keep_zones('population')
@@ -149,8 +163,26 @@ class DMArgumentBuilderBase(abc.ABC):
     def _convert_upper_pa_to_lower(self,
                                    upper_model_matrix_dir: nd.PathLike,
                                    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Converts Upper matrices into vectors for lower model
+
+        Parameters
+        ----------
+        upper_model_matrix_dir:
+            The directory containing the upper model's output matrices
+
+        Returns
+        -------
+        productions:
+            pandas DataFrame of productions. Will have columns named after:
+            self.lower_zoning_system.name, segment_names, and 'productions'
+
+        attractions:
+            pandas DataFrame of attractions. Will have columns named after:
+            self.lower_zoning_system.name, segment_names, and 'attractions'
+        """
         # Init
-        zone_col = self.upper_zoning_system.col_name
+        in_zone_col = self.upper_zoning_system.col_name
+        out_zone_col = self.lower_zoning_system.col_name
 
         # Figure out which zones to keep
         upper_keep_zones, pop_trans, emp_trans = self._get_upper_keep_zones()
@@ -184,7 +216,7 @@ class DMArgumentBuilderBase(abc.ABC):
 
             # Convert to production and attraction vectors
             index_col = df.index
-            index_col.name = zone_col
+            index_col.name = in_zone_col
 
             productions = pd.DataFrame(
                 data=df.values.sum(axis=1),
@@ -197,26 +229,96 @@ class DMArgumentBuilderBase(abc.ABC):
                 columns=['attractions'],
             )
 
+            # Translate the productions and attractions
+            kwargs = {
+                'from_zone_col': self.upper_zoning_system.col_name,
+                'to_zone_col': self.lower_zoning_system.col_name,
+                'factors_col': self._translation_weight_col,
+                'from_unique_zones': upper_keep_zones,
+                'to_unique_zones': self.lower_running_zones,
+            }
+
+            productions = translation.pandas_vector_zone_translation(
+                vector=productions,
+                translation=pop_trans,
+                **kwargs,
+            )
+            productions.index.name = self.lower_zoning_system.col_name
+            attractions = translation.pandas_vector_zone_translation(
+                vector=attractions,
+                translation=emp_trans,
+                **kwargs,
+            )
+            attractions.index.name = self.lower_zoning_system.col_name
+
             # Stick into an efficient DF
             eff_df = segment_params.copy()
             eff_df['df'] = productions.join(attractions).reset_index()
             eff_df_list.append(eff_df)
 
         # Compile the efficient DFs
-        segment_col_names = [zone_col] + list(segment_col_names)
+        segment_col_names = [out_zone_col] + list(segment_col_names)
         final_cols = segment_col_names + ['productions', 'attractions']
         vector = du.compile_efficient_df(eff_df_list, col_names=final_cols)
-        vector = vector.sort_values(by=segment_col_names)
-
-        # Translate vectors to lower_zoning system
-
-
-        print(upper_model_matrix_dir)
-        print(self.upper_zoning_system)
-        print(self.lower_zoning_system)
+        vector = vector.sort_values(by=segment_col_names).reset_index(drop=True)
 
         productions = vector.drop(columns=['attractions'])
+        productions = productions.rename(columns={'productions': 'val'})
+
         attractions = vector.drop(columns=['productions'])
+        attractions = attractions.rename(columns={'attractions': 'val'})
+
+        return productions, attractions
+
+    def _maybe_convert_upper_pa_to_lower(self,
+                                         upper_model_matrix_dir: nd.PathLike,
+                                         productions_cache: nd.PathLike,
+                                         attractions_cache: nd.PathLike,
+                                         overwrite_cache: bool,
+                                         ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Cache wrapper for self._convert_upper_pa_to_lower()
+
+        Checks if files exist in productions_cache and attractions_cache.
+        If files do exist, they will be loaded in returned.
+        If not, self._convert_upper_pa_to_lower() will be run.
+
+        Parameters
+        ----------
+        upper_model_matrix_dir:
+            The directory containing the upper model's output matrices.
+
+        productions_cache:
+            Path to where the productions should be cached.
+
+        attractions_cache:
+            Path to where the attractions should be cached.
+
+        overwrite_cache:
+            Whether to overwrite any cache that exists, no matter what.
+
+        Returns
+        -------
+        productions:
+            pandas DataFrame of productions. Will have columns named after:
+            self.lower_zoning_system.name, segment_names, and 'productions'
+
+        attractions:
+            pandas DataFrame of attractions. Will have columns named after:
+            self.lower_zoning_system.name, segment_names, and 'attractions'
+        """
+        # Init
+        p_exists = os.path.isfile(productions_cache)
+        a_exists = os.path.isfile(attractions_cache)
+
+        if not overwrite_cache and p_exists and a_exists:
+            return file_ops.read_df(productions_cache), file_ops.read_df(attractions_cache)
+
+        # Generate the vectors
+        productions, attractions = self._convert_upper_pa_to_lower(upper_model_matrix_dir)
+
+        # Save into cache
+        file_ops.write_df(productions, productions_cache)
+        file_ops.write_df(attractions, attractions_cache)
 
         return productions, attractions
 
@@ -255,6 +357,10 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
     _cost_dir_name = 'costs'
     _cost_base_fname = "{zoning_name}_{cost_type}_costs.csv"
 
+    # Cache
+    _production_base_cache = '{trip_origin}p_{zoning}_{mode}_{tier}_cache.pbz2'
+    _attraction_base_cache = '{trip_origin}a_{zoning}_{mode}_{tier}_cache.pbz2'
+
     # Initial Parameters consts
     _gravity_model_dir = 'gravity model'
 
@@ -282,6 +388,8 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                  lower_distributor_kwargs: Dict[str, Any] = None,
                  lower_init_params_fname: str = None,
                  intrazonal_cost_infill: float = None,
+                 cache_path: nd.PathLike = None,
+                 overwrite_cache: nd.PathLike = False,
                  ):
         # Check paths exist
         file_ops.check_path_exists(import_home)
@@ -316,6 +424,9 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         self.lower_init_params_fname = lower_init_params_fname
 
         self.intrazonal_cost_infill = intrazonal_cost_infill
+
+        self.cache_path = cache_path
+        self.overwrite_cache = overwrite_cache
 
     @staticmethod
     def _maybe_read_trip_end(trip_end: Union[nd.DVector, nd.PathLike]) -> nd.DVector:
@@ -517,11 +628,43 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return final_kwargs
 
+    def _read_lower_pa(self,
+                       upper_model_matrix_dir: nd.PathLike,
+                       ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        # If no cache path, just get the vectors
+        if self.cache_path is None:
+            return self._convert_upper_pa_to_lower(
+                upper_model_matrix_dir=upper_model_matrix_dir,
+            )
+
+        # Generate cache_paths
+        fname = self._production_base_cache.format(
+            trip_origin=self.trip_origin,
+            zoning=self.lower_zoning_system.name,
+            mode=self.running_mode.value,
+            tier='lower',
+        )
+        productions_cache = os.path.join(self.cache_path, fname)
+
+        fname = self._attraction_base_cache.format(
+            trip_origin=self.trip_origin,
+            zoning=self.lower_zoning_system.name,
+            mode=self.running_mode.value,
+            tier='lower',
+        )
+        attractions_cache = os.path.join(self.cache_path, fname)
+
+        # Try load from the cache
+        return self._maybe_convert_upper_pa_to_lower(
+            upper_model_matrix_dir=upper_model_matrix_dir,
+            productions_cache=productions_cache,
+            attractions_cache=attractions_cache,
+            overwrite_cache=self.overwrite_cache,
+        )
+
     def build_lower_model_arguments(self, upper_model_matrix_dir: nd.PathLike):
         # Read in trip ends from upper model
-        pa_kwargs = super().build_lower_model_arguments(upper_model_matrix_dir)
-        print('read_pa')
-        exit()
+        productions, attractions = self._read_lower_pa(upper_model_matrix_dir)
 
         cost_matrices = self._build_cost_matrices(self.lower_zoning_system)
         target_cost_distributions = self._build_target_cost_distributions()
@@ -531,8 +674,9 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         )
 
         final_kwargs = self.lower_distributor_kwargs.copy()
-        final_kwargs.update(pa_kwargs)
         final_kwargs.update({
+            'productions': productions,
+            'attractions': attractions,
             'running_segmentation': self.running_segmentation,
             'cost_matrices': cost_matrices,
             'target_cost_distributions': target_cost_distributions,

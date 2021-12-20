@@ -225,11 +225,14 @@ def numpy_vector_zone_translation(vector: np.array,
     if check_shapes:
         # Check that vector is 1D
         if len(vector.shape) > 1:
-            raise ValueError(
-                "The given vector is not a vector. Expected a np.ndarray with "
-                "only one dimension, but got %s dimensions instead."
-                % len(vector.shape)
-            )
+            if vector.shape[1] == 1:
+                vector = vector.flatten()
+            else:
+                raise ValueError(
+                    "The given vector is not a vector. Expected a np.ndarray with "
+                    "only one dimension, but got %s dimensions instead."
+                    % len(vector.shape)
+                )
 
         # Check translation has the right number of rows
         n_zones_in, _ = translation.shape
@@ -279,6 +282,7 @@ def numpy_vector_zone_translation(vector: np.array,
     # ## TRANSLATE ## #
     out_vector = np.broadcast_to(np.expand_dims(vector, axis=1), translation.shape)
     out_vector = out_vector * translation
+    out_vector = out_vector.sum(axis=0)
 
     if not check_totals:
         return out_vector
@@ -365,7 +369,6 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
     translated_matrix:
         matrix, translated into to_zone system.
     """
-    # TODO (BT): Add a check to make sure no demand is being dropped
     # ## CHECK ZONE NAME DTYPES ## #
     # Check the matrix index and column dtypes match
     if matrix.columns.dtype != matrix.index.dtype:
@@ -428,7 +431,8 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
     missing_zones = (set(from_unique_zones) - trans_from_zones)
     if len(missing_zones) != 0:
         warnings.warn(
-            "Some zones in the matrix are missing in the translation!\n"
+            "Some zones in the matrix are missing in the translation! "
+            "Infilling missing zones with translation infill.\n"
             "Missing zones count: %s"
             % len(missing_zones)
         )
@@ -465,5 +469,155 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
         data=translated,
         index=to_unique_zones,
         columns=to_unique_zones,
+    )
+
+
+def pandas_vector_zone_translation(vector: pd.DataFrame,
+                                   translation: pd.DataFrame,
+                                   from_zone_col: str,
+                                   to_zone_col: str,
+                                   factors_col: str,
+                                   from_unique_zones: List[Any],
+                                   to_unique_zones: List[Any],
+                                   translation_dtype: np.dtype = None,
+                                   vector_infill: float = 0.0,
+                                   translate_infill: float = 0.0,
+                                   check_totals: bool = False,
+                                   ) -> pd.DataFrame:
+    """Translates a Pandas DataFrame from one zoning system to another
+
+    Parameters
+    ----------
+    vector:
+        The vector to translate. The index needs to be the
+        from_zone_system ID
+
+    translation:
+        A pandas dataframe with at least 3 columns, defining how the
+        factor to translate from from_zone to to_zone.
+        Needs to contain columns [from_zone_col, to_zone_col, factors_col].
+
+    from_zone_col:
+        The name of the column in translation containing the from_zone system
+        ID. Values should be in the same format as vector index.
+
+    to_zone_col:
+        The name of the column in translation containing the to_zone system
+        ID. Values should be in the same format as expected in the output.
+
+    factors_col:
+        The name of the column in translation containing the translation
+        factors between from_zone and to_zone. Where zone pairs do not exist,
+        they will be infilled with translate_infill.
+
+    from_unique_zones:
+        A list of all the unique zones in the from_zone system. Used to know
+        where an infill is needed for missing zones in translation.
+
+    to_unique_zones:
+        A list of all the unique zones in the to_zone system. Used to know
+        where an infill is needed for missing zones in translation.
+
+    translation_dtype:
+        The numpy datatype to use to do the translation. If None, then the
+        dtype of the vector is used. As this is a 2d translation, it can
+        use a lot of memory if float64 is used. Where such high precision
+        isn't needed, a more memory efficient dtype can be passed in instead
+        and the translation will be carried out in it.
+
+    vector_infill:
+        The value to use to infill any missing matrix values.
+
+    translate_infill:
+        The value to use to infill any missing translation factors.
+
+    check_totals:
+        Whether to check that the input and output matrices sum to the same
+        total.
+
+    Returns
+    -------
+    translated_vector:
+        vector, translated into to_zone system.
+    """
+    # ## CHECK ZONE NAME DTYPES ## #
+    # Check the matrix and translation dtypes match
+    if vector.index.dtype != translation[from_zone_col].dtype:
+        raise ValueError(
+            "The datatype of the vector index must be the same "
+            "as the translation datatype in from_zone_col for the zone "
+            "translation to work.\n"
+            "vector index Dtype: %s\n"
+            "translation[from_zone_col] Dtype: %s"
+            % (vector.index.dtype, translation[from_zone_col].dtype)
+        )
+
+    # ## CHECK THE PASSED IN ARGUMENTS ARE VALID ## #
+    # Make sure there are no duplicates in from_unique_zones or to_unique_zones
+    if len(from_unique_zones) < len(set(from_unique_zones)):
+        raise ValueError(
+            "Some zones went missing when converting from_unique_zones into "
+            "a set. This must mean there are some duplicate zones."
+        )
+
+    if len(to_unique_zones) < len(set(to_unique_zones)):
+        raise ValueError(
+            "Some zones went missing when converting to_unique_zones into "
+            "a set. This must mean there are some duplicate zones."
+        )
+
+    # Make sure the vector only has the zones defined in from_unique_zones
+    missing_rows = set(vector.index.to_list()) - set(from_unique_zones)
+    if len(missing_rows) > 0:
+        warnings.warn(
+            "There are some zones in vector.index that have not been defined in "
+            "from_unique_zones. These zones will be dropped before the "
+            "translation!\n"
+            "Additional rows count: %s"
+            % len(missing_rows)
+        )
+
+    # Check all needed values are in from_zone_col zone col
+    trans_from_zones = set(translation[from_zone_col].unique())
+    missing_zones = (set(from_unique_zones) - trans_from_zones)
+    if len(missing_zones) != 0:
+        warnings.warn(
+            "Some zones in the vector are missing in the translation! "
+            "Infilling missing zones with translation infill.\n"
+            "Missing zones count: %s"
+            % len(missing_zones)
+        )
+
+    # ## PREP AND TRANSLATE ## #
+    # Square the translation
+    translation = pd_utils.long_to_wide_infill(
+        df=translation,
+        index_col=from_zone_col,
+        columns_col=to_zone_col,
+        values_col=factors_col,
+        index_vals=from_unique_zones,
+        column_vals=to_unique_zones,
+        infill=translate_infill
+    )
+
+    # Make sure all zones are in the vector and infill 0s
+    vector = vector.reindex(
+        index=from_unique_zones,
+        fill_value=vector_infill,
+    )
+
+    # Translate
+    translated = numpy_vector_zone_translation(
+        vector=vector.values,
+        translation=translation.values,
+        translation_dtype=translation_dtype,
+        check_totals=check_totals,
+    )
+
+    # Stick into pandas
+    return pd.DataFrame(
+        data=translated,
+        index=to_unique_zones,
+        columns=vector.columns,
     )
 
