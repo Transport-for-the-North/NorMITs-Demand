@@ -7,4 +7,4 @@ Original author: Ben Taylor
 Last update made by:
 Other updates made by:
 """
-
+from normits_demand.supply.PostGresConnector import PostGresConector
