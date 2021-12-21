@@ -26,7 +26,9 @@ from normits_demand.utils import pandas_utils as pd_utils
 
 
 def numpy_matrix_zone_translation(matrix: np.array,
-                                  translation: np.array,
+                                  translation: np.array = None,
+                                  row_translation: np.array = None,
+                                  col_translation: np.array = None,
                                   translation_dtype: np.dtype = None,
                                   check_shapes: bool = True,
                                   check_totals: bool = False,
@@ -42,9 +44,24 @@ def numpy_matrix_zone_translation(matrix: np.array,
         e.g. (n_in, n_in)
 
     translation:
-        The matrix defining the factors to use to translate matrix. Should
-        be of shape (n_in, n_out), where the output matrix shape will be
-        (n_out, n_out).
+        The matrix defining the factors to use to translate the rows and the
+        columns of matrix. Setting this argument would be the same as setting
+        row_translation and col_translation to the same matrix. If defined,
+        row_translation and col_translation will be ignored.
+        Should be of shape (n_in, n_out), where the output
+        matrix shape will be (n_out, n_out).
+
+    row_translation:
+        The matrix defining the factors to use to translate the rows of
+        matrix. If defined, then col_translation needs to be defined too.
+        Should be of shape (n_in, n_out), where the output
+        matrix shape will be (n_out, n_out).
+
+    col_translation:
+        The matrix defining the factors to use to translate the rows of
+        matrix. If defined, then row_translation needs to be defined too.
+        Should be of shape (n_in, n_out), where the output
+        matrix shape will be (n_out, n_out).
 
     translation_dtype:
         The numpy datatype to use to do the translation. If None, then the
@@ -77,6 +94,16 @@ def numpy_matrix_zone_translation(matrix: np.array,
     """
     # TODO(BT): Translate in chunks if full 3D matrix will be too
     #  memory intensive
+    if translation is not None:
+        row_translation = translation.copy()
+        col_translation = translation.copy()
+
+    if row_translation is None or col_translation is None:
+        raise ValueError(
+            "No translations have been given. Don't know how to translate. "
+            "Either translation needs to be set, or row_translation AND "
+            "col_translations needs to be set."
+        )
 
     # ## OPTIONALLY CHECK INPUT SHAPES ## #
     if check_shapes:
@@ -90,8 +117,19 @@ def numpy_matrix_zone_translation(matrix: np.array,
                 % str(matrix.shape)
             )
 
+        # Check translations are the same shape
+        if row_translation.shape != col_translation.shape:
+            raise ValueError(
+                "Row and column translations are not the same shape. "
+                "Both need to be (n_in, n_out) shape for "
+                "numpy zone translations to work.\n"
+                "Row shape: %s\n"
+                "Column shape: %s"
+                % (row_translation.shape, col_translation.shape)
+            )
+
         # Check translation has the right number of rows
-        n_zones_in, _ = translation.shape
+        n_zones_in, _ = row_translation.shape
         if n_zones_in != mat_rows:
             raise ValueError(
                 "The given translation does not have the correct number of "
@@ -99,7 +137,7 @@ def numpy_matrix_zone_translation(matrix: np.array,
                 "numpy zone translations to work.\n"
                 "Given matrix shape: %s\n"
                 "Given translation shape: %s"
-                % (matrix.shape, translation.shape)
+                % (matrix.shape, row_translation.shape)
             )
 
     # ## CONVERT DTYPES ## #
@@ -133,16 +171,17 @@ def numpy_matrix_zone_translation(matrix: np.array,
 
     # Now we know it's safe. Translate
     matrix = matrix.astype(translation_dtype)
-    translation = translation.astype(translation_dtype)
+    row_translation = row_translation.astype(translation_dtype)
+    col_translation = col_translation.astype(translation_dtype)
 
     # ## DO THE TRANSLATION ## #
     # Get the input and output shapes
-    n_in, n_out = translation.shape
+    n_in, n_out = row_translation.shape
 
     # Translate rows
     mult_shape = (n_in, n_in, n_out)
     a = np.broadcast_to(np.expand_dims(matrix, axis=2), mult_shape)
-    trans_a = np.broadcast_to(np.expand_dims(translation, axis=1), mult_shape)
+    trans_a = np.broadcast_to(np.expand_dims(row_translation, axis=1), mult_shape)
     temp = a * trans_a
 
     # mat is transposed, but we need it this way
@@ -151,7 +190,7 @@ def numpy_matrix_zone_translation(matrix: np.array,
     # Translate cols
     mult_shape = (n_in, n_out, n_out)
     b = np.broadcast_to(np.expand_dims(out_mat, axis=2), mult_shape)
-    trans_b = np.broadcast_to(np.expand_dims(translation, axis=1), mult_shape)
+    trans_b = np.broadcast_to(np.expand_dims(col_translation, axis=1), mult_shape)
     temp = b * trans_b
     out_mat_2 = temp.sum(axis=0)
 
@@ -301,12 +340,14 @@ def numpy_vector_zone_translation(vector: np.array,
 
 
 def pandas_matrix_zone_translation(matrix: pd.DataFrame,
-                                   translation: pd.DataFrame,
                                    from_zone_col: str,
                                    to_zone_col: str,
                                    factors_col: str,
                                    from_unique_zones: List[Any],
                                    to_unique_zones: List[Any],
+                                   translation: pd.DataFrame = None,
+                                   row_translation: pd.DataFrame = None,
+                                   col_translation: pd.DataFrame = None,
                                    translation_dtype: np.dtype = None,
                                    matrix_infill: float = 0.0,
                                    translate_infill: float = 0.0,
@@ -323,7 +364,22 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
 
     translation:
         A pandas dataframe with at least 3 columns, defining how the
-        factor to translate from from_zone to to_zone.
+        factor to translate from from_zone to to_zone. Setting this argument
+        would be the same as setting row_translation and col_translation to
+        the same value. If defined, row_translation and col_translation will
+        be ignored.
+        Needs to contain columns [from_zone_col, to_zone_col, factors_col].
+
+    row_translation:
+        A pandas dataframe with at least 3 columns, defining how the
+        factor to translate from from_zone to to_zone for the rows of matrix.
+        If defined, then col_translation needs to be defined too.
+        Needs to contain columns [from_zone_col, to_zone_col, factors_col].
+
+    col_translation:
+        A pandas dataframe with at least 3 columns, defining how the
+        factor to translate from from_zone to to_zone for the rows of matrix.
+        If defined, then row_translation needs to be defined too.
         Needs to contain columns [from_zone_col, to_zone_col, factors_col].
 
     from_zone_col:
@@ -369,6 +425,18 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
     translated_matrix:
         matrix, translated into to_zone system.
     """
+    # Init
+    if translation is not None:
+        row_translation = translation.copy()
+        col_translation = translation.copy()
+
+    if row_translation is None or col_translation is None:
+        raise ValueError(
+            "No translations have been given. Don't know how to translate. "
+            "Either translation needs to be set, or row_translation AND "
+            "col_translations needs to be set."
+        )
+
     # ## CHECK ZONE NAME DTYPES ## #
     # Check the matrix index and column dtypes match
     if matrix.columns.dtype != matrix.index.dtype:
@@ -381,14 +449,24 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
         )
 
     # Check the matrix and translation dtypes match
-    if matrix.index.dtype != translation[from_zone_col].dtype:
+    if matrix.index.dtype != row_translation[from_zone_col].dtype:
         raise ValueError(
             "The datatype of the matrix index and columns must be the same "
             "as the translation datatype in from_zone_col for the zone "
             "translation to work.\n"
             "matrix index Dtype: %s\n"
-            "translation[from_zone_col] Dtype: %s"
-            % (matrix.index.dtype, translation[from_zone_col].dtype)
+            "row_translation[from_zone_col] Dtype: %s"
+            % (matrix.index.dtype, row_translation[from_zone_col].dtype)
+        )
+
+    if matrix.index.dtype != col_translation[from_zone_col].dtype:
+        raise ValueError(
+            "The datatype of the matrix index and columns must be the same "
+            "as the translation datatype in from_zone_col for the zone "
+            "translation to work.\n"
+            "matrix index Dtype: %s\n"
+            "col_translation[from_zone_col] Dtype: %s"
+            % (matrix.index.dtype, col_translation[from_zone_col].dtype)
         )
 
     # ## CHECK THE PASSED IN ARGUMENTS ARE VALID ## #
@@ -427,11 +505,21 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
         )
 
     # Check all needed values are in from_zone_col zone col
-    trans_from_zones = set(translation[from_zone_col].unique())
+    trans_from_zones = set(row_translation[from_zone_col].unique())
     missing_zones = (set(from_unique_zones) - trans_from_zones)
     if len(missing_zones) != 0:
         warnings.warn(
-            "Some zones in the matrix are missing in the translation! "
+            "Some zones in the matrix are missing in the row translation! "
+            "Infilling missing zones with translation infill.\n"
+            "Missing zones count: %s"
+            % len(missing_zones)
+        )
+
+    trans_from_zones = set(col_translation[from_zone_col].unique())
+    missing_zones = (set(from_unique_zones) - trans_from_zones)
+    if len(missing_zones) != 0:
+        warnings.warn(
+            "Some zones in the matrix are missing in the col translation! "
             "Infilling missing zones with translation infill.\n"
             "Missing zones count: %s"
             % len(missing_zones)
@@ -439,8 +527,8 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
 
     # ## PREP AND TRANSLATE ## #
     # Square the translation
-    translation = pd_utils.long_to_wide_infill(
-        df=translation,
+    row_translation = pd_utils.long_to_wide_infill(
+        df=row_translation,
         index_col=from_zone_col,
         columns_col=to_zone_col,
         values_col=factors_col,
@@ -448,6 +536,20 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
         column_vals=to_unique_zones,
         infill=translate_infill
     )
+
+    # Can speed up with translation is not None - row and col translations are same
+    if translation is not None:
+        col_translation = row_translation.copy()
+    else:
+        col_translation = pd_utils.long_to_wide_infill(
+            df=col_translation,
+            index_col=from_zone_col,
+            columns_col=to_zone_col,
+            values_col=factors_col,
+            index_vals=from_unique_zones,
+            column_vals=to_unique_zones,
+            infill=translate_infill
+        )
 
     # Make sure all zones are in the matrix and infill 0s
     matrix = matrix.reindex(
@@ -459,7 +561,8 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
     # Translate
     translated = numpy_matrix_zone_translation(
         matrix=matrix.values,
-        translation=translation.values,
+        row_translation=row_translation.values,
+        col_translation=col_translation.values,
         translation_dtype=translation_dtype,
         check_totals=check_totals,
     )
