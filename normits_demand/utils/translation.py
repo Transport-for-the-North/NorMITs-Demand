@@ -178,36 +178,66 @@ def numpy_matrix_zone_translation(matrix: np.array,
     # Get the input and output shapes
     n_in, n_out = row_translation.shape
 
-    # Translate rows
-    mult_shape = (n_in, n_in, n_out)
-    a = np.broadcast_to(np.expand_dims(matrix, axis=2), mult_shape)
-    trans_a = np.broadcast_to(np.expand_dims(row_translation, axis=1), mult_shape)
-    temp = a * trans_a
+    # We might run out of memory doing it this way...
+    not_enough_memory = False
 
-    # mat is transposed, but we need it this way
-    out_mat = temp.sum(axis=0)
+    try:
+        # Translate rows
+        mult_shape = (n_in, n_in, n_out)
+        a = np.broadcast_to(np.expand_dims(matrix, axis=2), mult_shape)
+        trans_a = np.broadcast_to(np.expand_dims(row_translation, axis=1), mult_shape)
+        temp = a * trans_a
 
-    # Translate cols
-    mult_shape = (n_in, n_out, n_out)
-    b = np.broadcast_to(np.expand_dims(out_mat, axis=2), mult_shape)
-    trans_b = np.broadcast_to(np.expand_dims(col_translation, axis=1), mult_shape)
-    temp = b * trans_b
-    out_mat_2 = temp.sum(axis=0)
+        # mat is transposed, but we need it this way
+        rows_done = temp.sum(axis=0)
+
+        # Translate cols
+        mult_shape = (n_in, n_out, n_out)
+        b = np.broadcast_to(np.expand_dims(rows_done, axis=2), mult_shape)
+        trans_b = np.broadcast_to(np.expand_dims(col_translation, axis=1), mult_shape)
+        temp = b * trans_b
+        translated_matrix = temp.sum(axis=0)
+    except MemoryError:
+        not_enough_memory = True
+
+    # Try translation again, a slower way.
+    if not_enough_memory:
+        # Translate the rows
+        row_translated = list()
+        for vector in np.hsplit(matrix, matrix.shape[1]):
+            vector = vector.flatten()
+            vector = np.broadcast_to(np.expand_dims(vector, axis=1), row_translation.shape)
+            vector = vector * row_translation
+            vector = vector.sum(axis=0)
+            row_translated.append(vector)
+
+        row_translated = np.vstack(row_translated).T
+
+        # Translate the columns
+        full_translated = list()
+        for vector in np.vsplit(row_translated, row_translated.shape[0]):
+            vector = vector.flatten()
+            vector = np.broadcast_to(np.expand_dims(vector, axis=1), col_translation.shape)
+            vector = vector * col_translation
+            vector = vector.sum(axis=0)
+            full_translated.append(vector)
+
+        translated_matrix = np.vstack(full_translated)
 
     if not check_totals:
-        return out_mat_2
+        return translated_matrix
 
-    if not math_utils.is_almost_equal(matrix.sum(), out_mat_2.sum()):
+    if not math_utils.is_almost_equal(matrix.sum(), translated_matrix.sum()):
         raise ValueError(
             "Some values seem to have been dropped during the translation. "
             "Check the given translation matrix isn't unintentionally dropping "
             "values. If the difference is small, it's likely a rounding error.\n"
             "Before: %s\n"
             "After: %s"
-            % (matrix.sum(), out_mat_2.sum())
+            % (matrix.sum(), translated_matrix.sum())
         )
 
-    return out_mat_2
+    return translated_matrix
 
 
 def numpy_vector_zone_translation(vector: np.array,
