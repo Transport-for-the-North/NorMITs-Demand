@@ -11,6 +11,8 @@ File purpose:
 A collections of utility functions for file operations
 """
 # builtins
+from __future__ import annotations
+
 import os
 import time
 import pickle
@@ -623,6 +625,38 @@ def add_external_suffix(path: nd.PathLike) -> pathlib.Path:
         path with the external suffix added
     """
     return add_to_fname(path, consts.EXTERNAL_SUFFIX)
+
+
+def copy_segment_files(src_dir: nd.PathLike,
+                       dst_dir: nd.PathLike,
+                       segmentation: nd.SegmentationLevel,
+                       process_count: int = consts.PROCESS_COUNT,
+                       **filename_kwargs
+                       ) -> None:
+    """Copy segment files from src_dir to dst_dir
+
+    Parameters
+    ----------
+    src_dir
+    dst_dir
+    segmentation
+    process_count
+    filename_kwargs
+    """
+    # Generate all the filenames
+    filenames = list()
+    for segment_params in segmentation:
+        filenames.append(segmentation.generate_file_name(
+            segment_params=segment_params,
+            **filename_kwargs,
+        ))
+        
+    copy_files(
+        src_dir=src_dir,
+        dst_dir=dst_dir,
+        filenames=filenames,
+        process_count=process_count,
+    )
 
 
 def copy_files(src_dir: nd.PathLike,
