@@ -21,8 +21,84 @@ import numpy as np
 import pandas as pd
 
 # Local Imports
+import normits_demand as nd
 from normits_demand.utils import math_utils
 from normits_demand.utils import pandas_utils as pd_utils
+from normits_demand.concurrency import multiprocessing
+
+
+def _lower_memory_row_translation(vector_chunk: np.array,
+                                  row_translation: np.array,
+                                  ) -> np.array:
+    """Internal MP functionality of _lower_memory_matrix_zone_translation()"""
+    # Translate the rows
+    row_translated = list()
+    for vector in np.hsplit(vector_chunk, vector_chunk.shape[1]):
+        vector = vector.flatten()
+        vector = np.broadcast_to(np.expand_dims(vector, axis=1), row_translation.shape)
+        vector = vector * row_translation
+        vector = vector.sum(axis=0)
+        row_translated.append(vector)
+
+    return row_translated
+
+
+def _lower_memory_col_translation(vector_chunk: np.array,
+                                  col_translation: np.array,
+                                  ) -> np.array:
+    """Internal MP functionality of _lower_memory_matrix_zone_translation()"""
+    # Translate the columns
+    col_translated = list()
+    for vector in np.vsplit(vector_chunk, vector_chunk.shape[0]):
+        vector = vector.flatten()
+        vector = np.broadcast_to(np.expand_dims(vector, axis=1), col_translation.shape)
+        vector = vector * col_translation
+        vector = vector.sum(axis=0)
+        col_translated.append(vector)
+
+    return col_translated
+
+
+def _lower_memory_matrix_zone_translation(matrix: np.array,
+                                          row_translation: np.array,
+                                          col_translation: np.array,
+                                          chunk_size: int,
+                                          ) -> np.array:
+    # Translate the rows
+    kwargs = list()
+    n_splits = matrix.shape[1] / chunk_size
+    for vector_chunk in np.array_split(matrix, n_splits, axis=1):
+        kwargs.append({
+            'vector_chunk': vector_chunk,
+            'row_translation': row_translation,
+        })
+
+    row_translated = multiprocessing.multiprocess(
+        fn=_lower_memory_row_translation,
+        kwargs=kwargs,
+        process_count=nd.constants.PROCESS_COUNT,
+        pbar_kwargs={'desc': 'doing rows'},
+    )
+
+    row_translated = np.vstack(row_translated).T
+
+    # Translate the rows
+    kwargs = list()
+    n_splits = row_translated.shape[0] / chunk_size
+    for vector_chunk in np.array_split(row_translated, n_splits, axis=0):
+        kwargs.append({
+            'vector_chunk': vector_chunk,
+            'col_translation': col_translation,
+        })
+
+    full_translated = multiprocessing.multiprocess(
+        fn=_lower_memory_col_translation,
+        kwargs=kwargs,
+        process_count=nd.constants.PROCESS_COUNT,
+        pbar_kwargs={'desc': 'doing cols'},
+    )
+
+    return np.vstack(full_translated)
 
 
 def numpy_matrix_zone_translation(matrix: np.array,
@@ -32,6 +108,7 @@ def numpy_matrix_zone_translation(matrix: np.array,
                                   translation_dtype: np.dtype = None,
                                   check_shapes: bool = True,
                                   check_totals: bool = False,
+                                  chunk_size: int = 100,
                                   ) -> np.array:
     """Translates matrix with translation
 
@@ -81,6 +158,11 @@ def numpy_matrix_zone_translation(matrix: np.array,
         Whether to check that the input and output matrices sum to the same
         total.
 
+    chunk_size:
+        The size of the chunks to use if there isn't enough memory to do a
+        3D translation. Most of the time this can be ignored unless
+        translating between two massive zoning systems.
+
     Returns
     -------
     translated_matrix:
@@ -92,8 +174,6 @@ def numpy_matrix_zone_translation(matrix: np.array,
         Will raise an error if matrix is not a square array, or if translation
         does not have the same number of rows as matrix.
     """
-    # TODO(BT): Translate in chunks if full 3D matrix will be too
-    #  memory intensive
     if translation is not None:
         row_translation = translation.copy()
         col_translation = translation.copy()
@@ -202,27 +282,12 @@ def numpy_matrix_zone_translation(matrix: np.array,
 
     # Try translation again, a slower way.
     if not_enough_memory:
-        # Translate the rows
-        row_translated = list()
-        for vector in np.hsplit(matrix, matrix.shape[1]):
-            vector = vector.flatten()
-            vector = np.broadcast_to(np.expand_dims(vector, axis=1), row_translation.shape)
-            vector = vector * row_translation
-            vector = vector.sum(axis=0)
-            row_translated.append(vector)
-
-        row_translated = np.vstack(row_translated).T
-
-        # Translate the columns
-        full_translated = list()
-        for vector in np.vsplit(row_translated, row_translated.shape[0]):
-            vector = vector.flatten()
-            vector = np.broadcast_to(np.expand_dims(vector, axis=1), col_translation.shape)
-            vector = vector * col_translation
-            vector = vector.sum(axis=0)
-            full_translated.append(vector)
-
-        translated_matrix = np.vstack(full_translated)
+        translated_matrix = _lower_memory_matrix_zone_translation(
+            matrix=matrix,
+            row_translation=row_translation,
+            col_translation=col_translation,
+            chunk_size=chunk_size,
+        )
 
     if not check_totals:
         return translated_matrix
@@ -382,9 +447,9 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
                                    matrix_infill: float = 0.0,
                                    translate_infill: float = 0.0,
                                    check_totals: bool = False,
+                                   chunk_size: int = 100,
                                    ) -> pd.DataFrame:
     """Translates a Pandas DataFrame from one zoning system to another
-
 
     Parameters
     ----------
@@ -449,6 +514,11 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
     check_totals:
         Whether to check that the input and output matrices sum to the same
         total.
+
+    chunk_size:
+        The size of the chunks to use if there isn't enough memory to do a
+        3D translation. Most of the time this can be ignored unless
+        translating between two massive zoning systems.
 
     Returns
     -------
@@ -595,6 +665,7 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
         col_translation=col_translation.values,
         translation_dtype=translation_dtype,
         check_totals=check_totals,
+        chunk_size=chunk_size,
     )
 
     # Stick into pandas
@@ -753,4 +824,3 @@ def pandas_vector_zone_translation(vector: pd.DataFrame,
         index=to_unique_zones,
         columns=vector.columns,
     )
-
