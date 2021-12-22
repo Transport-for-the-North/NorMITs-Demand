@@ -24,7 +24,6 @@ import normits_demand as nd
 from normits_demand import constants as consts
 
 from normits_demand.models import DistributionModel
-from normits_demand.distribution import distributors
 from normits_demand.pathing.distribution_model import DistributionModelArgumentBuilder
 
 
@@ -146,7 +145,6 @@ def main():
 
     # Distribution model
     dm_kwargs = {
-        'running_mode': mode,
         'iteration_name': dm_iteration_name,
         'upper_model_method': upper_model_method,
         'upper_model_kwargs': None,

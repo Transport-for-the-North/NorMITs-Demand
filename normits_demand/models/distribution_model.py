@@ -25,6 +25,7 @@ import normits_demand as nd
 from normits_demand import constants
 
 from normits_demand.utils import timing
+from normits_demand.matrices import matrix_processing
 
 from normits_demand.pathing.distribution_model import DistributionModelExportPaths
 from normits_demand.pathing.distribution_model import DMArgumentBuilderBase
@@ -57,6 +58,16 @@ class DistributionModel(DistributionModelExportPaths):
                  lower_model_kwargs: Dict[str, Any] = None,
                  process_count: int = constants.PROCESS_COUNT,
                  ):
+        # Make sure all are set if one is
+        lower_args = [lower_model_method, lower_model_zoning, lower_running_zones]
+        if not all([x is not None for x in lower_args]):
+            raise ValueError(
+                "Only some of the lower tier model arguments have been set. "
+                "Either all of these arguments need to be set, or none of them "
+                "do. This applies to the following arguments: "
+                "[lower_model_method', 'lower_model_zoning', 'lower_running_zones]"
+            )
+
         # Generate export paths
         super().__init__(
             year=year,
@@ -252,6 +263,7 @@ class DistributionModel(DistributionModelExportPaths):
 
         self._logger.info("Running the Upper Model")
         upper_model.distribute(**kwargs)
+        self._logger.info("Upper Model Done!")
 
     def run_lower_model(self):
         self._logger.info("Initialising the Lower Model")
@@ -266,11 +278,83 @@ class DistributionModel(DistributionModelExportPaths):
                 **self.lower_model_kwargs,
         )
 
+        self._logger.info("Converting Upper Model Outputs for Lower Model")
+        productions, attractions = self.arg_builder.read_lower_pa(
+            upper_model_matrix_dir=self.upper.export_paths.matrix_dir,
+            external_matrix_output_dir=self.export_paths.upper_external_pa,
+        )
+
         self._logger.info("Building arguments for the Lower Model")
-        matrix_dir = self.upper_exports.export_paths.matrix_dir
-        kwargs = self.arg_builder.build_lower_model_arguments(matrix_dir)
+        kwargs = self.arg_builder.build_lower_model_arguments()
+        kwargs.update({
+            'productions': productions,
+            'attractions': attractions,
+        })
 
         self._logger.info("Running the Lower Model")
         lower_model.distribute(**kwargs)
+        self._logger.info("Lower Model Done!")
+
+    def run_pa_matrix_reports(self):
+        # PA RUN REPORTS
+        # Matrix Trip ENd totals
+        # Sector Reports Dvec style
+        # TLD curve
+        #   single mile bands - p/m (ca ) segments full matrix
+        #   NorMITs Vis
+
+        pass
+
+    def run_pa_to_od(self):
+        # TODO(BT): Make sure the internal and external matrices exist!
+
+        # ## COMBINE INTERNAL AND EXTERNAL MATRICES ## #
+        if self.lower_model_method is not None:
+            # External should be made by  lower tier
+            self._logger.info("Recombining internal and external matrices")
+            matrix_processing.recombine_internal_external(
+                internal_import=self.lower.export_paths.matrix_dir,
+                external_import=self.upper.export_paths.matrix_dir,
+                full_export=self.export_paths.full_pa_dir,
+                force_compress_out=True,
+                years=[self.year],
+            )
+        else:
+            # Copy over
+            pass
+
+        # ## CONVERT HB PA TO OD ## #
+        self._logger.info("Converting HB PA matrices to OD")
+        kwargs = self.tms_arg_builder.build_pa_to_od_arguments()
+        pa_to_od.build_od_from_fh_th_factors(
+            pa_import=self.export_paths.full_pa_dir,
+            od_export=self.export_paths.full_od_dir,
+            pa_matrix_desc='synthetic_pa',
+            od_to_matrix_desc='synthetic_od_to',
+            od_from_matrix_desc='synthetic_od_from',
+            years_needed=[self.year],
+            **kwargs
+        )
+
+        # ## MOVE NHB TO OD DIR ## #
+        # they're already OD anyway, just need a little name change
+        matrix_processing.copy_nhb_matrices(
+            import_dir=self.export_paths.full_pa_dir,
+            export_dir=self.export_paths.full_od_dir,
+            replace_pa_with_od=True,
+            pa_matrix_desc='synthetic_pa',
+            od_matrix_desc='synthetic_od',
+        )
+
+    def run_od_matrix_reports(self):
+        # PA RUN REPORTS
+        # Matrix Trip ENd totals
+        # Sector Reports Dvec style
+        # TLD curve
+        #   single mile bands - p/m (ca ) segments full matrix
+        #   NorMITs Vis
+
+        pass
+
 
 

@@ -77,7 +77,6 @@ def _lower_memory_matrix_zone_translation(matrix: np.array,
         fn=_lower_memory_row_translation,
         kwargs=kwargs,
         process_count=nd.constants.PROCESS_COUNT,
-        pbar_kwargs={'desc': 'doing rows'},
     )
 
     row_translated = np.vstack(row_translated).T
@@ -95,7 +94,6 @@ def _lower_memory_matrix_zone_translation(matrix: np.array,
         fn=_lower_memory_col_translation,
         kwargs=kwargs,
         process_count=nd.constants.PROCESS_COUNT,
-        pbar_kwargs={'desc': 'doing cols'},
     )
 
     return np.vstack(full_translated)
