@@ -99,9 +99,9 @@ def get_trip_length_distributions(import_dir: nd.PathLike,
 
     if len(import_files) <= 0:
         raise IOError(
-            "Cannot find any %s trip length bands.\n"
+            "Cannot find any %s, %s trip length bands.\n"
             "import folder: %s"
-            % (trip_origin, import_dir)
+            % (trip_origin,  segment_params, import_dir)
         )
 
     for key, value in segment_params.items():

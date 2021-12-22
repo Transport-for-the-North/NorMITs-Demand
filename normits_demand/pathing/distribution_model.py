@@ -296,7 +296,7 @@ class DMArgumentBuilderBase(abc.ABC):
 
             # Convert to production and attraction vectors
             index_col = lower_model_demand.index
-            index_col.name = in_zone_col
+            index_col.name = out_zone_col
 
             productions = pd.DataFrame(
                 data=lower_model_demand.values.sum(axis=1),
