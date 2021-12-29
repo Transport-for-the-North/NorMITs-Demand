@@ -18,6 +18,7 @@ from typing import List
 from typing import Dict
 
 # Third Party
+import pandas as pd
 
 # Local Imports
 import normits_demand as nd
@@ -26,6 +27,7 @@ from normits_demand import constants
 
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
+from normits_demand.utils import vehicle_occupancy
 from normits_demand.matrices import matrix_processing
 from normits_demand.matrices import pa_to_od
 
@@ -68,12 +70,14 @@ class DistributionModel(DistributionModelExportPaths):
         # Make sure all are set if one is
         lower_args = [lower_model_method, lower_model_zoning, lower_running_zones]
         if not all([x is not None for x in lower_args]):
-            raise ValueError(
-                "Only some of the lower tier model arguments have been set. "
-                "Either all of these arguments need to be set, or none of them "
-                "do. This applies to the following arguments: "
-                "[lower_model_method', 'lower_model_zoning', 'lower_running_zones]"
-            )
+            # Check they're not all None still
+            if not all([x is None for x in lower_args]):
+                raise ValueError(
+                    "Only some of the lower tier model arguments have been set. "
+                    "Either all of these arguments need to be set, or none of them "
+                    "do. This applies to the following arguments: "
+                    "[lower_model_method', 'lower_model_zoning', 'lower_running_zones]"
+                )
 
         # Generate export paths
         super().__init__(
@@ -102,6 +106,11 @@ class DistributionModel(DistributionModelExportPaths):
         self.lower_model_zoning = lower_model_zoning
         self.lower_running_zones = lower_running_zones
         self.lower_model_kwargs = lower_model_kwargs
+
+        if self.lower_model_zoning is not None:
+            self.output_zoning = self.lower_model_zoning
+        else:
+            self.output_zoning = self.upper_model_zoning
 
         # TODO(BT): Validate this is correct type
         self.arg_builder = arg_builder
@@ -312,9 +321,7 @@ class DistributionModel(DistributionModelExportPaths):
 
         pass
 
-    def run_pa_to_od(self):
-        # TODO(BT): Make sure the upper and lower matrices exist!
-
+    def _recombine_pa_matrices(self):
         # ## GET THE FULL PA MATRICES ## #
         if self.lower_model_method is not None:
             # External should be made by  lower tier
@@ -344,29 +351,44 @@ class DistributionModel(DistributionModelExportPaths):
                 compressed=True,
             )
 
+    def run_pa_to_od(self):
+        # TODO(BT): Make sure the upper and lower matrices exist!
+
+        # ## GET THE FULL PA MATRICES ## #
+        self._recombine_pa_matrices()
+
         # ## CONVERT HB PA TO OD ## #
-        self._logger.info("Converting HB PA matrices to OD")
-        kwargs = self.arg_builder.build_pa_to_od_arguments()
-        pa_to_od.build_od_from_fh_th_factors(
-            pa_import=self.export_paths.full_pa_dir,
-            od_export=self.export_paths.full_od_dir,
-            pa_matrix_desc=self._pa_matrix_desc,
-            od_to_matrix_desc=self._od_to_matrix_desc,
-            od_from_matrix_desc=self._od_from_matrix_desc,
-            base_year=self.year,
-            years_needed=[self.year],
-            **kwargs
-        )
+        if self.trip_origin == 'hb':
+            self._logger.info("Converting HB PA matrices to OD")
+            kwargs = self.arg_builder.build_pa_to_od_arguments()
+            pa_to_od.build_od_from_fh_th_factors(
+                pa_import=self.export_paths.full_pa_dir,
+                od_export=self.export_paths.full_od_dir,
+                pa_matrix_desc=self._pa_matrix_desc,
+                od_to_matrix_desc=self._od_to_matrix_desc,
+                od_from_matrix_desc=self._od_from_matrix_desc,
+                base_year=self.year,
+                years_needed=[self.year],
+                **kwargs
+            )
 
         # ## MOVE NHB TO OD DIR ## #
-        # they're already OD anyway, just need a little name change
-        matrix_processing.copy_nhb_matrices(
-            import_dir=self.export_paths.full_pa_dir,
-            export_dir=self.export_paths.full_od_dir,
-            replace_pa_with_od=True,
-            pa_matrix_desc=self._pa_matrix_desc,
-            od_matrix_desc=self._od_matrix_desc,
-        )
+        elif self.trip_origin == 'nhb':
+            # they're already OD anyway, just need a little name change
+            self._logger.info("Copying NHB PA matrices to OD")
+            matrix_processing.copy_nhb_matrices(
+                import_dir=self.export_paths.full_pa_dir,
+                export_dir=self.export_paths.full_od_dir,
+                replace_pa_with_od=True,
+                pa_matrix_desc=self._pa_matrix_desc,
+                od_matrix_desc=self._od_matrix_desc,
+            )
+
+        else:
+            raise ValueError(
+                "Don't know how to compile PA matrices to OD for trip origin"
+                "'%s'." % self.trip_origin
+            )
 
     def run_od_matrix_reports(self):
         # PA RUN REPORTS
@@ -377,6 +399,94 @@ class DistributionModel(DistributionModelExportPaths):
         #   NorMITs Vis
 
         pass
+
+    def compile_to_assignment_format(self):
+        """TfN Specific helper function to compile outputs into assignment format
+
+        This should really be the job of NorMITs Matrix tools! Move there
+        once we create an object of it.
+
+        Returns
+        -------
+
+        """
+        # TODO(BT): NEED TO OUTPUT SPLITTING FACTORS
+
+        # TODO(BT): UPDATE build_compile_params() to use segmentation levels
+        m_needed = self.running_segmentation.segments['m'].unique()
+
+        # NoHAM should be tp split
+        tp_needed = [1, 2, 3, 4]
+
+        if self.running_mode in [nd.Mode.CAR, nd.Mode.BUS]:
+            # Compile to NoHAM format
+            compile_params_paths = matrix_processing.build_compile_params(
+                import_dir=self.export_paths.full_od_dir,
+                export_dir=self.export_paths.compiled_od_dir,
+                matrix_format=self._od_matrix_desc,
+                years_needed=[self.year],
+                m_needed=m_needed,
+                tp_needed=tp_needed,
+            )
+
+            matrix_processing.compile_matrices(
+                mat_import=self.export_paths.full_od_dir,
+                mat_export=self.export_paths.compiled_od_dir,
+                compile_params_path=compile_params_paths[0],
+            )
+
+            # TODO(BT): Build in DM imports!
+            if self.running_mode == nd.Mode.CAR:
+                occupancy_fname = 'car_vehicle_occupancies.csv'
+
+            elif self.running_mode == nd.Mode.BUS:
+                occupancy_fname = 'bus_vehicle_occupancies.csv'
+
+            else:
+                raise ValueError(
+                    "This Error shouldn't be possible. The code must have "
+                    "been updated without checking here!"
+                )
+
+            occupancies = pd.read_csv(os.path.join(
+                r'I:\NorMITs Demand\import',
+                'vehicle_occupancies',
+                occupancy_fname,
+            ))
+
+            # Need to convert into hourly average PCU for noham
+            vehicle_occupancy.people_vehicle_conversion(
+                mat_import=self.export_paths.compiled_od_dir,
+                mat_export=self.export_paths.compiled_od_dir_pcu,
+                car_occupancies=occupancies,
+                mode=m_needed[0],
+                method='to_vehicles',
+                out_format='wide',
+                hourly_average=True,
+            )
+
+        elif self.running_mode == nd.Mode.TRAIN:
+            self._recombine_pa_matrices()
+
+            self._logger.info("Compiling NoRMS VDM Format")
+
+            matrix_processing.compile_norms_to_vdm(
+                mat_import=self.export_paths.full_pa_dir,
+                mat_export=self.export_paths.compiled_pa_dir,
+                params_export=self.export_paths.compiled_pa_dir,
+                year=self.year,
+                m_needed=m_needed,
+                internal_zones=self.output_zoning.internal_zones.tolist(),
+                external_zones=self.output_zoning.external_zones.tolist(),
+                matrix_format=self._pa_matrix_desc,
+            )
+
+        else:
+            raise ValueError(
+                "I don't know how to compile mode %s into an assignment model "
+                "format :("
+                % self.running_mode.value
+            )
 
 
 
