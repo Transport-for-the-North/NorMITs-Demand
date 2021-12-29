@@ -60,10 +60,11 @@ def main():
 
     run_all = False
     run_upper_model = False
-    run_lower_model = True
+    run_lower_model = False
     run_pa_matrix_reports = False
-    run_pa_to_od = False
+    run_pa_to_od = True
     run_od_matrix_reports = False
+    compile_to_assignment = True
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
@@ -207,14 +208,14 @@ def main():
             **dmab_kwargs,
         )
 
-        hb_distributor = DistributionModel(
+        nhb_distributor = DistributionModel(
             trip_origin=trip_origin,
             arg_builder=arg_builder,
             **dm_kwargs,
             **arg_builder.build_distribution_model_init_args(),
         )
 
-        hb_distributor.run(
+        nhb_distributor.run(
             run_all=run_all,
             run_upper_model=run_upper_model,
             run_lower_model=run_lower_model,
@@ -223,8 +224,10 @@ def main():
             run_od_matrix_reports=run_od_matrix_reports,
         )
 
+        # TODO(BT): Move this into Matrix tools!
+        if compile_to_assignment:
+            nhb_distributor.compile_to_assignment_format()
 
-    # tms.compile_to_assignment_format()
 
 def build_trip_ends(use_tram,
                     zoning_system,
