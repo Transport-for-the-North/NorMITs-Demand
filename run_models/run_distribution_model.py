@@ -59,12 +59,12 @@ def main():
     run_nhb = False
 
     run_all = False
-    run_upper_model = False
+    run_upper_model = True
     run_lower_model = False
     run_pa_matrix_reports = False
-    run_pa_to_od = True
+    run_pa_to_od = False
     run_od_matrix_reports = False
-    compile_to_assignment = True
+    compile_to_assignment = False
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
@@ -83,14 +83,14 @@ def main():
             nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_car')
         nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_car')
+        hb_seg_name = 'p_m'
+        nhb_seg_name = 'p_m_tp'
 
         # Define kwargs for the distribution tiers
         upper_calibration_area = 'gb'
-        upper_seg = 'p_m'
-        upper_model_method = nd.DistributionMethod.GRAVITY
+        upper_model_method = nd.DistributionMethod.FURNESS3D
 
         lower_calibration_area = 'north'
-        lower_seg = 'p_m_tp'
         lower_model_method = nd.DistributionMethod.GRAVITY
         gm_cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
 
@@ -100,12 +100,24 @@ def main():
             'grav_max_iters': 100,
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
+            'calibrate_params': False
         }
 
-        upper_distributor_kwargs = gravity_kwargs.copy()
-        upper_distributor_kwargs.update({'calibrate_params': False})
-        lower_distributor_kwargs = gravity_kwargs.copy()
-        lower_distributor_kwargs.update({'calibrate_params': False})
+        furness3d_kwargs = {
+            'target_convergence': 0.9,
+            'outer_max_iters': 50,
+            'furness_max_iters': 3000,
+            'furness_tol': 0.1,
+            'calibrate': True,
+        }
+
+        # Choose the correct kwargs
+        gravity = (nd.DistributionMethod.GRAVITY, gravity_kwargs)
+        furness3d = (nd.DistributionMethod.FURNESS3D, furness3d_kwargs)
+        choice = [gravity, furness3d]
+
+        upper_distributor_kwargs = [x[1].copy() for x in choice if x[0] == upper_model_method][0]
+        lower_distributor_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
 
     else:
         raise ValueError(
@@ -131,14 +143,13 @@ def main():
         'running_mode': mode,
         'upper_zoning_system': upper_zoning_system,
         'upper_running_zones': upper_zoning_system.unique_zones,
-        'lower_running_zones': lower_zoning_system.internal_zones,
-        'lower_zoning_system': lower_zoning_system,
-        'target_tld_name': os.path.join(upper_calibration_area, upper_seg),
         'upper_model_method': upper_model_method,
         'upper_distributor_kwargs': upper_distributor_kwargs,
-        'init_params_cols': gm_cost_function.parameter_names,
+        'lower_zoning_system': lower_zoning_system,
+        'lower_running_zones': lower_zoning_system.internal_zones,
         'lower_model_method': lower_model_method,
         'lower_distributor_kwargs': lower_distributor_kwargs,
+        'init_params_cols': gm_cost_function.parameter_names,
         'intrazonal_cost_infill': intrazonal_cost_infill,
         'cache_path': cache_path,
         'overwrite_cache': overwrite_cache,
@@ -158,8 +169,8 @@ def main():
     # Init params fnames
     upper_kwargs = {'zoning': upper_zoning_system.name, 'area': upper_calibration_area}
     lower_kwargs = {'zoning': lower_zoning_system.name, 'area': lower_calibration_area}
-    hb_kwargs = {'trip_origin': 'hb', 'seg': upper_seg}
-    nhb_kwargs = {'trip_origin': 'nhb', 'seg': lower_seg}
+    hb_kwargs = {'trip_origin': 'hb', 'seg': hb_seg_name}
+    nhb_kwargs = {'trip_origin': 'nhb', 'seg': nhb_seg_name}
 
     hb_upper_init_params_fname = INIT_PARAMS_BASE.format(**hb_kwargs, **upper_kwargs)
     nhb_upper_init_params_fname = INIT_PARAMS_BASE.format(**nhb_kwargs, **upper_kwargs)
@@ -177,6 +188,7 @@ def main():
             running_segmentation=hb_running_seg,
             upper_init_params_fname=hb_upper_init_params_fname,
             lower_init_params_fname=hb_lower_init_params_fname,
+            target_tld_dir=os.path.join(upper_calibration_area, hb_seg_name),
             **dmab_kwargs,
         )
 
@@ -205,6 +217,7 @@ def main():
             running_segmentation=nhb_running_seg,
             upper_init_params_fname=nhb_upper_init_params_fname,
             lower_init_params_fname=nhb_lower_init_params_fname,
+            target_tld_dir=os.path.join(upper_calibration_area, nhb_seg_name),
             **dmab_kwargs,
         )
 

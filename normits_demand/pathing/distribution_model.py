@@ -477,7 +477,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                  upper_running_zones: List[Any],
                  lower_zoning_system: nd.ZoningSystem,
                  lower_running_zones: List[Any],
-                 target_tld_name: str,
+                 target_tld_dir: str,
                  init_params_cols: List[str],
                  upper_model_method: nd.DistributionMethod,
                  upper_distributor_kwargs: Dict[str, Any],
@@ -513,7 +513,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         self.attractions = attractions
 
         self.running_mode = running_mode
-        self.target_tld_name = target_tld_name
+        self.target_tld_dir = target_tld_dir
 
         self.init_params_cols = init_params_cols
 
@@ -580,7 +580,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         tcd_dir = os.path.join(
             self.import_home,
             self._tld_dir_name,
-            self.target_tld_name,
+            self.target_tld_dir,
         )
         fname = self.running_segmentation.generate_file_name(
             trip_origin=self.trip_origin,
@@ -649,7 +649,8 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         return by_segment_kwargs
 
     def _build_furness3d_by_segment_kwargs(self):
-        raise NotImplementedError
+        """furness3d has no by-segment kwargs!"""
+        return dict()
 
     def _build_by_segment_kwargs(self,
                                  method: nd.DistributionMethod,
