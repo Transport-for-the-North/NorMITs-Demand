@@ -30,6 +30,7 @@ sys.path.append('..')
 import normits_demand as nd
 
 from normits_demand.utils import general as du
+from normits_demand.utils import math_utils
 from normits_demand.utils import file_ops
 
 # ## GLOBALS ## #
@@ -240,7 +241,7 @@ def main():
                 total += v.sum()
 
             expected = len(idx) ** 2
-            if not du.is_almost_equal(total, expected, significant=5):
+            if not math_utils.is_almost_equal(total, expected):
                 raise ValueError(
                     "Factor dictionary is not similar enough to the expected "
                     "value!\n"

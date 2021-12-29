@@ -3065,34 +3065,6 @@ def list_safe_remove(lst: List[Any],
     return lst
 
 
-def is_almost_equal(v1: float,
-                    v2: float,
-                    significant: int = 7
-                    ) -> bool:
-    """
-    Checks v1 and v2 are equal to significant places
-
-    Parameters
-    ----------
-    v1:
-        The first value to compare
-
-    v2:
-        The second value to compare
-
-    significant:
-        The number of significant bits to compare over. If negative,
-        then this represents rounding.
-        i.e. -1 is same up until 10s, -2 100s etc
-
-    Returns
-    -------
-    almost_equal:
-        True if v1 and v2 are equal to significant bits, else False
-    """
-    return isclose(v1, v2, abs_tol=10 ** -significant)
-
-
 def pairwise(iterable):
     """s -> (s0,s1), (s1,s2), (s2, s3), ..."""
     a, b = itertools.tee(iterable)

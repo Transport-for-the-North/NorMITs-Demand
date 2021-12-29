@@ -25,7 +25,9 @@ import normits_demand as nd
 from normits_demand import constants
 
 from normits_demand.utils import timing
+from normits_demand.utils import file_ops
 from normits_demand.matrices import matrix_processing
+from normits_demand.matrices import pa_to_od
 
 from normits_demand.pathing.distribution_model import DistributionModelExportPaths
 from normits_demand.pathing.distribution_model import DMArgumentBuilderBase
@@ -34,6 +36,11 @@ from normits_demand.pathing.distribution_model import DMArgumentBuilderBase
 class DistributionModel(DistributionModelExportPaths):
     # ## Class Constants ## #
     __version__ = nd.__version__
+
+    _pa_matrix_desc = 'synthetic_pa'
+    _od_matrix_desc = 'synthetic_od'
+    _od_to_matrix_desc = 'synthetic_od_to'
+    _od_from_matrix_desc = 'synthetic_od_from'
 
     _running_report_fname = 'running_parameters.txt'
     _log_fname = "Distribution_Model_log.log"
@@ -117,16 +124,16 @@ class DistributionModel(DistributionModelExportPaths):
         # Define the lines to output
         out_lines = [
             'Code Version: %s' % str(nd.__version__),
-            'TMS Iteration: %s' % str(self.iteration_name),
+            'Distribution Model Iteration: %s' % str(self.iteration_name),
             '',
-            # '### Upper Model ###',
-            # 'vector_export: %s' % self.upper_model.export_paths.home,
-            # 'report_export: %s' % self.external_model.report_paths.home,
-            # '',
-            # '### Lower Model ###',
-            # 'vector_export: %s' % self.gravity_model.export_paths.home,
-            # 'report_export: %s' % self.gravity_model.report_paths.home,
-            # '',
+            '### Upper Model ###',
+            'vector_export: %s' % self.upper.export_paths.home,
+            'report_export: %s' % self.upper.report_paths.home,
+            '',
+            '### Lower Model ###',
+            'vector_export: %s' % self.lower.export_paths.home,
+            'report_export: %s' % self.lower.report_paths.home,
+            '',
         ]
 
         # Write out to disk
@@ -306,32 +313,47 @@ class DistributionModel(DistributionModelExportPaths):
         pass
 
     def run_pa_to_od(self):
-        # TODO(BT): Make sure the internal and external matrices exist!
+        # TODO(BT): Make sure the upper and lower matrices exist!
 
-        # ## COMBINE INTERNAL AND EXTERNAL MATRICES ## #
+        # ## GET THE FULL PA MATRICES ## #
         if self.lower_model_method is not None:
             # External should be made by  lower tier
-            self._logger.info("Recombining internal and external matrices")
-            matrix_processing.recombine_internal_external(
-                internal_import=self.lower.export_paths.matrix_dir,
-                external_import=self.upper.export_paths.matrix_dir,
-                full_export=self.export_paths.full_pa_dir,
-                force_compress_out=True,
-                years=[self.year],
+            self._logger.info("Combining Upper and Lower Tier Matrices")
+            import_dirs = [
+                self.lower.export_paths.matrix_dir,
+                self.export_paths.upper_external_pa,
+            ]
+            matrix_processing.combine_partial_matrices(
+                import_dirs=import_dirs,
+                export_dir=self.export_paths.full_pa_dir,
+                segmentation=self.running_segmentation,
+                import_suffixes=[None, self.arg_builder._external_suffix],
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                file_desc=self._pa_matrix_desc,
             )
         else:
-            # Copy over
-            pass
+            self._logger.info("Copying over Upper Tier Matrices")
+            file_ops.copy_segment_files(
+                src_dir=self.upper.export_paths.matrix_dir,
+                dst_dir=self.export_paths.full_pa_dir,
+                segmentation=self.running_segmentation,
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                file_desc=self._pa_matrix_desc,
+                compressed=True,
+            )
 
         # ## CONVERT HB PA TO OD ## #
         self._logger.info("Converting HB PA matrices to OD")
-        kwargs = self.tms_arg_builder.build_pa_to_od_arguments()
+        kwargs = self.arg_builder.build_pa_to_od_arguments()
         pa_to_od.build_od_from_fh_th_factors(
             pa_import=self.export_paths.full_pa_dir,
             od_export=self.export_paths.full_od_dir,
-            pa_matrix_desc='synthetic_pa',
-            od_to_matrix_desc='synthetic_od_to',
-            od_from_matrix_desc='synthetic_od_from',
+            pa_matrix_desc=self._pa_matrix_desc,
+            od_to_matrix_desc=self._od_to_matrix_desc,
+            od_from_matrix_desc=self._od_from_matrix_desc,
+            base_year=self.year,
             years_needed=[self.year],
             **kwargs
         )
@@ -342,8 +364,8 @@ class DistributionModel(DistributionModelExportPaths):
             import_dir=self.export_paths.full_pa_dir,
             export_dir=self.export_paths.full_od_dir,
             replace_pa_with_od=True,
-            pa_matrix_desc='synthetic_pa',
-            od_matrix_desc='synthetic_od',
+            pa_matrix_desc=self._pa_matrix_desc,
+            od_matrix_desc=self._od_matrix_desc,
         )
 
     def run_od_matrix_reports(self):

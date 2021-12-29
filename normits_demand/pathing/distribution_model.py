@@ -252,7 +252,7 @@ class DMArgumentBuilderBase(abc.ABC):
         # Convert upper matrices into a efficient dataframes
         eff_df_list = list()
         segment_col_names = set()
-        desc = "Convert upper pa to lower"
+        desc = "Converting Upper Demand for Lower Model"
         total = len(self.running_segmentation)
         for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc, total=total):
             # Read in DF
@@ -446,12 +446,18 @@ class DMArgumentBuilderBase(abc.ABC):
     def build_lower_model_arguments(self) -> Dict[str, Any]:
         pass
 
+    @abc.abstractmethod
+    def build_pa_to_od_arguments(self) -> Dict[str, Any]:
+        pass
+
 
 class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
     # Costs constants
     _modal_dir_name = 'modal'
     _cost_dir_name = 'costs'
     _cost_base_fname = "{zoning_name}_{cost_type}_costs.csv"
+    _tour_props_dir_name = 'pre_me_tour_proportions'
+    _fh_th_factors_dir_name = 'fh_th_factors'
 
     # Initial Parameters consts
     _gravity_model_dir = 'gravity model'
@@ -694,7 +700,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return target_cost_distributions
 
-    def build_upper_model_arguments(self):
+    def build_upper_model_arguments(self) -> Dict[str, Any]:
         # Read and validate trip ends
         productions = self._maybe_read_trip_end(self.productions)
         attractions = self._maybe_read_trip_end(self.attractions)
@@ -718,7 +724,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return final_kwargs
 
-    def build_lower_model_arguments(self):
+    def build_lower_model_arguments(self) -> Dict[str, Any]:
         # Read the costs etc
         cost_matrices = self._build_cost_matrices(self.lower_zoning_system)
         target_cost_distributions = self._build_target_cost_distributions()
@@ -736,6 +742,33 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         })
 
         return final_kwargs
+
+    def build_pa_to_od_arguments(self) -> Dict[str, Any]:
+        # TODO(BT): UPDATE build_od_from_fh_th_factors() to use segmentation levels
+        seg_level = 'tms'
+        seg_params = {
+            'p_needed': self.running_segmentation.segments['p'].unique(),
+            'm_needed': self.running_segmentation.segments['m'].unique(),
+        }
+        if 'ca' in self.running_segmentation.segment_names:
+            seg_params.update({
+                'ca_needed': self.running_segmentation.segments['ca'].unique(),
+            })
+
+        # Build the factors dir
+        fh_th_factors_dir = os.path.join(
+            self.import_home,
+            self._modal_dir_name,
+            self.running_mode.value,
+            self._tour_props_dir_name,
+            self._fh_th_factors_dir_name,
+        )
+
+        return {
+            'seg_level': seg_level,
+            'seg_params': seg_params,
+            'fh_th_factors_dir': fh_th_factors_dir,
+        }
 
 
 # ## DEFINE EXPORT PATHS ##
