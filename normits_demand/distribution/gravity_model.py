@@ -47,7 +47,7 @@ class GravityModelCalibrator:
                  row_targets: np.ndarray,
                  col_targets: np.ndarray,
                  cost_function: cost.CostFunction,
-                 costs: np.ndarray,
+                 cost_matrix: np.ndarray,
                  target_cost_distribution: pd.DataFrame,
                  target_convergence: float,
                  furness_max_iters: int,
@@ -81,7 +81,7 @@ class GravityModelCalibrator:
         self.row_targets = row_targets
         self.col_targets = col_targets
         self.cost_function = cost_function
-        self.costs = costs
+        self.cost_matrix = cost_matrix
         self.target_cost_distribution = target_cost_distribution
         self.furness_max_iters = furness_max_iters
         self.furness_tol = furness_tol
@@ -161,7 +161,7 @@ class GravityModelCalibrator:
         # Calculate band shares
         distribution = list()
         for min_val, max_val in zip(min_costs, max_costs):
-            cost_mask = (self.costs >= min_val) & (self.costs < max_val)
+            cost_mask = (self.cost_matrix >= min_val) & (self.cost_matrix < max_val)
             band_trips = (matrix * cost_mask).sum()
             band_share = band_trips / total_trips
             distribution.append(band_share)
@@ -181,13 +181,14 @@ class GravityModelCalibrator:
             row_targets=self.row_targets,
             col_targets=self.col_targets,
             cost_function=self.cost_function,
-            costs=self.costs,
+            costs=self.cost_matrix,
             furness_max_iters=self.furness_max_iters,
             furness_tol=self.furness_tol,
             **cost_kwargs,
         )
 
         # Convert matrix into an achieved distribution curve
+        # TODO(BT): Move to AbstractDistributor
         achieved_band_shares = self._calculate_cost_distribution(matrix)
         convergence = math_utils.curve_convergence(
             self.target_cost_distribution['band_share'].values,

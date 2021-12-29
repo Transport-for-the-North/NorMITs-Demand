@@ -456,8 +456,15 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
     _modal_dir_name = 'modal'
     _cost_dir_name = 'costs'
     _cost_base_fname = "{zoning_name}_{cost_type}_costs.csv"
+
+    # PA to OD consts
     _tour_props_dir_name = 'pre_me_tour_proportions'
     _fh_th_factors_dir_name = 'fh_th_factors'
+
+    # CJTW constants
+    _cjtw_infill = 1e-7
+    _cjtw_dir_name = 'cjtw'
+    _cjtw_base_fname = 'cjtw_{zoning_name}.csv'
 
     # Initial Parameters consts
     _gravity_model_dir = 'gravity model'
@@ -701,6 +708,63 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return target_cost_distributions
 
+    def _build_furness3d_further_kwargs(self,
+                                        zoning_system: nd.ZoningSystem,
+                                        running_zones: List[Any],
+                                        ) -> Dict[str, Any]:
+        # Build a path to the input
+        fname = self._cjtw_base_fname.format(zoning_name=zoning_system.name)
+        path = os.path.join(self.import_home, self._cjtw_dir_name, fname)
+
+        # Read and convert to zoning system format
+        cjtw = read_cjtw(
+            file_path=path,
+            zoning_name=zoning_system.name,
+            subset=None,
+            reduce_to_pa_factors=False,
+        )
+
+        # Aggregate mode
+        p_col = list(cjtw)[0]
+        a_col = list(cjtw)[1]
+        cjtw = cjtw[cjtw['mode'] == self.running_mode.get_mode_num()].copy()
+        cjtw = cjtw.reindex([p_col, a_col, 'trips'], axis=1)
+        cjtw = cjtw.groupby([p_col, a_col]).sum().reset_index()
+
+        # Convert to a wide matrix
+        base_matrix = pd_utils.long_to_wide_infill(
+            df=cjtw,
+            index_col=p_col,
+            columns_col=a_col,
+            values_col='trips',
+            index_vals=running_zones,
+            column_vals=running_zones,
+            infill=self._cjtw_infill,
+        )
+
+        return {'base_matrix': base_matrix.values}
+
+    def _build_further_distributor_kwargs(self,
+                                          method: nd.Mode,
+                                          zoning_system: nd.ZoningSystem,
+                                          running_zones: List[Any],
+                                          ) -> Dict[str, Any]:
+        if method == nd.DistributionMethod.GRAVITY:
+            further_kwargs = dict()
+        elif method == nd.DistributionMethod.FURNESS3D:
+            further_kwargs = self._build_furness3d_further_kwargs(
+                zoning_system=zoning_system,
+                running_zones=running_zones,
+            )
+        else:
+            raise NotImplementedError(
+                "No function exists to build the further_kwargs for "
+                "DistributionMethod %s"
+                % method.value
+            )
+
+        return further_kwargs
+
     def build_upper_model_arguments(self) -> Dict[str, Any]:
         # Read and validate trip ends
         productions = self._maybe_read_trip_end(self.productions)
@@ -713,7 +777,14 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             self.upper_init_params_fname,
         )
 
+        further_dist_args = self._build_further_distributor_kwargs(
+            method=self.upper_model_method,
+            zoning_system=self.upper_zoning_system,
+            running_zones=self.upper_running_zones,
+        )
+
         final_kwargs = self.upper_distributor_kwargs.copy()
+        final_kwargs.update(further_dist_args)
         final_kwargs.update({
             'productions': productions.to_df(),
             'attractions': attractions.to_df(),
@@ -734,7 +805,14 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             self.lower_init_params_fname,
         )
 
+        further_dist_args = self._build_further_distributor_kwargs(
+            method=self.lower_model_method,
+            zoning_system=self.lower_zoning_system,
+            running_zones=self.lower_running_zones,
+        )
+
         final_kwargs = self.lower_distributor_kwargs.copy()
+        final_kwargs.update(further_dist_args)
         final_kwargs.update({
             'running_segmentation': self.running_segmentation,
             'cost_matrices': cost_matrices,
@@ -985,3 +1063,115 @@ class DistributionModelExportPaths:
         # Make paths that don't exist
         for path in self.report_paths:
             file_ops.create_folder(path)
+
+
+# ## FUNCTIONS ## #
+def read_cjtw(file_path: nd.PathLike,
+              zoning_name: str,
+              subset=None,
+              reduce_to_pa_factors: bool = True,
+              ) -> pd.DataFrame:
+    """
+    This function imports census journey to work and converts types
+    to ntem journey types
+
+    Parameters
+    ----------
+    file_path:
+        Takes a model folder to look for a cjtw zonal conversion
+
+    zoning_name:
+        The name of the zoning system the cjtw file is in
+
+    subset:
+        Takes a vector of model zones to filter by. Mostly for test model runs.
+
+    reduce_to_pa_factors:
+        ???
+
+    Returns
+    ----------
+    census_journey_to_work:
+        A census journey to work distribution in the required zonal format.
+    """
+    # TODO(BT, CS): Re-write this to be more generic
+    # Init
+    zoning_name = zoning_name.lower()
+
+    # Read in the file
+    if not os.path.isfile(file_path):
+        raise ValueError("No file exists at %s" % file_path)
+    cjtw = pd.read_csv(file_path)
+
+    # CTrip End Categories
+    # 1 Walk
+    # 2 Cycle
+    # 3 Car driver
+    # 4 Car passenger
+    # 5 Bus
+    # 6 Rail / underground
+
+    if subset is not None:
+        sub_col = list(subset)
+        sub_zones = subset[sub_col].squeeze()
+        cjtw = cjtw[cjtw['1_' + zoning_name + 'Areaofresidence'].isin(sub_zones)]
+        cjtw = cjtw[cjtw['2_' + zoning_name + 'Areaofworkplace'].isin(sub_zones)]
+
+    method_to_mode = {'4_Workmainlyatorfromhome': '1_walk',
+                      '5_Undergroundmetrolightrailtram': '6_rail_ug',
+                      '6_Train': '6_rail_ug',
+                      '7_Busminibusorcoach': '5_bus',
+                      '8_Taxi': '3_car',
+                      '9_Motorcyclescooterormoped': '2_cycle',
+                      '10_Drivingacarorvan': '3_car',
+                      '11_Passengerinacarorvan': '3_car',
+                      '12_Bicycle': '2_cycle',
+                      '13_Onfoot': '1_walk',
+                      '14_Othermethodoftraveltowork': '1_walk'}
+    mode_cols = list(method_to_mode.keys())
+
+    for col in mode_cols:
+        cjtw = cjtw.rename(columns={col: method_to_mode.get(col)})
+
+    cjtw = cjtw.drop('3_Allcategories_Methodoftraveltowork', axis=1)
+    cjtw = cjtw.groupby(cjtw.columns, axis=1).sum()
+    cjtw = cjtw.reindex(['1_' + zoning_name + 'Areaofresidence',
+                         '2_' + zoning_name + 'Areaofworkplace',
+                         '1_walk', '2_cycle', '3_car',
+                         '5_bus', '6_rail_ug'], axis=1)
+
+    # Pivot
+    cjtw = pd.melt(
+        cjtw,
+        id_vars=['1_' + zoning_name + 'Areaofresidence', '2_' + zoning_name + 'Areaofworkplace'],
+        var_name='mode',
+        value_name='trips',
+    )
+    cjtw['mode'] = cjtw['mode'].str[0]
+    cjtw['mode'] = cjtw['mode'].astype(int)
+
+    # Build distribution factors
+    hb_totals = cjtw.drop('2_' + zoning_name + 'Areaofworkplace', axis=1)
+    hb_totals = hb_totals.groupby(['1_' + zoning_name + 'Areaofresidence', 'mode'])
+    hb_totals = hb_totals.sum().reset_index()
+
+    hb_totals = hb_totals.rename(columns={'trips': 'zonal_mode_total_trips'})
+    hb_totals = hb_totals.reindex(
+        ['1_' + zoning_name + 'Areaofresidence', 'mode', 'zonal_mode_total_trips'],
+        axis=1
+    )
+
+    cjtw = cjtw.merge(
+        hb_totals,
+        how='left',
+        on=['1_' + zoning_name + 'Areaofresidence', 'mode'],
+    )
+
+    # Divide by total trips to get distribution factors
+    if reduce_to_pa_factors:
+        cjtw['distribution'] = cjtw['trips'] / cjtw['zonal_mode_total_trips']
+        cjtw = cjtw.drop(['trips', 'zonal_mode_total_trips'], axis=1)
+    else:
+        cjtw = cjtw.drop(['zonal_mode_total_trips'], axis=1)
+
+    return cjtw

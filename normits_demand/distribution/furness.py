@@ -24,14 +24,218 @@ from typing import Tuple
 from typing import Callable
 
 # self imports
+import normits_demand as nd
 from normits_demand import constants as consts
 
+from normits_demand.utils import timing
 from normits_demand.utils import file_ops
+from normits_demand.utils import math_utils
+from normits_demand.utils import trip_length_distributions as tld_utils
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.concurrency import multiprocessing
 from normits_demand.audits import audits
+
+
+class Furness3D:
+    # TODO(BT): Write Furness3D docs
+
+    _target_cost_distribution_cols = ['min', 'max', 'band_share']
+
+    def __init__(self,
+                 row_targets: np.ndarray,
+                 col_targets: np.ndarray,
+                 cost_matrix: np.ndarray,
+                 base_matrix: np.ndarray,
+                 target_cost_distribution: pd.DataFrame,
+                 target_convergence: float,
+                 furness_max_iters: int,
+                 furness_tol: float,
+                 running_log_path: nd.PathLike = None,
+                 ):
+
+        # TODO(BT): Write Furness3D __init__ docs
+        # Validate attributes
+        target_cost_distribution = pd_utils.reindex_cols(
+            target_cost_distribution,
+            self._target_cost_distribution_cols,
+        )
+
+        if running_log_path is not None:
+            dir_name, _ = os.path.split(running_log_path)
+            if not os.path.exists(dir_name):
+                raise FileNotFoundError(
+                    "Cannot find the defined directory to write out a"
+                    "log. Given the following path: %s"
+                    % dir_name
+                )
+
+            if os.path.isfile(running_log_path):
+                warnings.warn(
+                    "Given a log path to a file that already exists. Logs "
+                    "will be appended to the end of the file at: %s"
+                    % running_log_path
+                )
+
+        # Set attributes
+        self.row_targets = row_targets
+        self.col_targets = col_targets
+        self.cost_matrix = cost_matrix
+        self.base_matrix = base_matrix
+        self.target_cost_distribution = target_cost_distribution
+        self.furness_max_iters = furness_max_iters
+        self.furness_tol = furness_tol
+        self.running_log_path = running_log_path
+
+        self.target_convergence = target_convergence
+
+        # Additional attributes
+        self.initial_convergence = None
+        self.achieved_band_share = None
+        self.achieved_convergence = None
+        self.achieved_distribution = None
+
+    def _correct_band_share(self,
+                            matrix: np.ndarray,
+                            ) -> np.ndarray:
+        """Correct matrix to move band shares towards the target"""
+        # Init
+        out_matrix = np.zeros_like(matrix)
+        matrix_total = matrix.sum()
+
+        # Adjust bands one at a time
+        for index, row in self.target_cost_distribution.iterrows():
+            # Get proportion of all trips that should be in this band
+            target_band_share = row['band_share']
+            min_val = float(row['min'])
+            max_val = float(row['max'])
+
+            # Get proportion of all trips that are in this band
+            distance_mask = (self.cost_matrix >= min_val) & (self.cost_matrix < max_val)
+            band_trips = matrix * distance_mask
+
+            # Figure out the target and achieved
+            target_band_total = matrix_total * target_band_share
+            ach_band_total = band_trips.sum()
+
+            # We can't adjust if there are no trips in this band
+            if ach_band_total <= 0:
+                adj_mat = band_trips
+
+            # Adjust the matrix towards target
+            else:
+                adjustment = target_band_total / ach_band_total
+                adj_mat = band_trips * adjustment
+
+            # Add into the return matrix
+            out_matrix += adj_mat
+
+        return out_matrix
+
+    def _calculate_cost_distribution(self, matrix: np.ndarray) -> np.ndarray:
+        """
+        Calculates the band share distribution of matrix.
+
+        Uses the bounds supplied in self.target_cost_distribution, and the costs in
+        self.costs to calculate the equivalent band shares in matrix.
+
+        Parameters
+        ----------
+        matrix:
+            The matrix to calculate the cost distribution for. This matrix
+            should be the same shape as self.costs
+
+        Returns
+        -------
+        cost_distribution:
+            a numpy array of distributed costs, where the bands are equivalent
+            to min/max values in self.target_cost_distribution
+        """
+        # Init
+        min_costs = self.target_cost_distribution['min']
+        max_costs = self.target_cost_distribution['max']
+
+        total_trips = matrix.sum()
+
+        # Calculate band shares
+        distribution = list()
+        for min_val, max_val in zip(min_costs, max_costs):
+            cost_mask = (self.cost_matrix >= min_val) & (self.cost_matrix < max_val)
+            band_trips = (matrix * cost_mask).sum()
+            band_share = band_trips / total_trips
+            distribution.append(band_share)
+
+        return np.array(distribution)
+
+    def fit(self,
+            outer_max_iters: int = 100,
+            calibrate: bool = True,
+            ):
+        # Make sure we always do at least 1 loop!
+        if outer_max_iters < 1 or not calibrate:
+            outer_max_iters = 1
+
+        # Seed base
+        matrix = self.base_matrix.copy()
+
+        # Perform a 3D furness
+        for iter_num in range(outer_max_iters):
+            iter_start_time = timing.current_milli_time()
+
+            # Push band shares towards targets
+            matrix = self._correct_band_share(matrix=matrix)
+
+            # Furness across the other 2 dimensions
+            matrix, furn_iters, furn_rmse = doubly_constrained_furness(
+                seed_vals=matrix,
+                row_targets=self.row_targets,
+                col_targets=self.col_targets,
+                tol=self.furness_tol,
+                max_iters=self.furness_max_iters,
+            )
+
+            # Convert matrix into an achieved distribution curve
+            # TODO(BT): Move to AbstractDistributor - Elsewhere!
+            achieved_band_shares = self._calculate_cost_distribution(matrix)
+            iter_convergence = math_utils.curve_convergence(
+                self.target_cost_distribution['band_share'].values,
+                achieved_band_shares,
+            )
+
+            # ## LOG THIS ITERATION ## #
+            iter_end_time = timing.current_milli_time()
+            time_taken = iter_end_time - iter_start_time
+
+            log_dict = {
+                'Loop Num': str(iter_num),
+                'run_time(s)': time_taken / 1000,
+                'furness_loops': furn_iters,
+                'furness_rmse': furn_rmse,
+                'bs_con': np.round(iter_convergence, 6),
+            }
+
+            # Append this iteration to log file
+            file_ops.safe_dataframe_to_csv(
+                pd.DataFrame(log_dict, index=[0]),
+                self.running_log_path,
+                mode='a',
+                header=(not os.path.exists(self.running_log_path)),
+                index=False,
+            )
+
+            # log initial convergence if first iter
+            if iter_num == 0:
+                self.initial_convergence = iter_convergence
+
+            # Log current best performance
+            self.achieved_band_share = achieved_band_shares
+            self.achieved_convergence = iter_convergence
+            self.achieved_distribution = matrix
+
+            # ## EXIT EARLY IF CONDITIONS MET ## #
+            if iter_convergence > self.target_convergence:
+                break
 
 
 def doubly_constrained_furness(seed_vals: np.array,

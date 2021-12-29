@@ -68,7 +68,7 @@ def main():
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
-        upper_zoning_system = nd.get_zoning_system('msoa')
+        upper_zoning_system = nd.get_zoning_system('noham')
         lower_zoning_system = nd.get_zoning_system('noham')
 
         # Define cost arguments

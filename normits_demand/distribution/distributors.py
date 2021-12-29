@@ -6,8 +6,10 @@ Updated on:
 Original author: Ben Taylor
 Last update made by:
 Other updates made by:
+Originally based on code written by Chris Storey.
 
 File purpose:
+
 
 """
 # Built-Ins
@@ -36,6 +38,7 @@ from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.utils import trip_length_distributions as tld_utils
 
 from normits_demand.distribution import gravity_model
+from normits_demand.distribution import furness
 
 from normits_demand.validation import checks
 from normits_demand.concurrency import multiprocessing
@@ -336,10 +339,8 @@ class DistributionMethod(enum.Enum):
 
         if self == DistributionMethod.GRAVITY:
             function = GravityDistributor
-
         elif self == DistributionMethod.FURNESS3D:
-            raise NotImplementedError()
-
+            function = Furness3dDistributor
         else:
             raise nd.NormitsDemandError(
                 "No definition exists for %s distribution method"
@@ -409,7 +410,7 @@ class GravityDistributor(AbstractDistributor):
         seg_name = running_segmentation.generate_file_name(segment_params)
         self._logger.info("Running for %s" % seg_name)
 
-        # ## SET UP LOG AND RUN ## #
+        # ## SET UP SEGMENT LOG ## #
         # Logging set up
         log_fname = running_segmentation.generate_file_name(
             trip_origin=self.trip_origin,
@@ -449,7 +450,7 @@ class GravityDistributor(AbstractDistributor):
         calib = gravity_model.GravityModelCalibrator(
             row_targets=np_productions,
             col_targets=np_attractions,
-            costs=np_cost,
+            cost_matrix=np_cost,
             target_cost_distribution=target_cost_distributions,
             running_log_path=log_path,
             cost_function=kwargs.get('cost_function'),
@@ -539,3 +540,188 @@ class GravityDistributor(AbstractDistributor):
 
         # Run default distribution
         super().distribute(*args, **kwargs)
+
+
+class Furness3dDistributor(AbstractDistributor):
+    _log_fname = "3D_Furness_log.log"
+
+    _base_zone_col = "%s_zone_id"
+    _pa_val_col = 'trips'
+
+    _internal_only_suffix = 'int'
+
+    def __init__(self,
+                 year: int,
+                 running_mode: nd.Mode,
+                 trip_origin: str,
+                 zoning_system: nd.ZoningSystem,
+                 running_zones: List[Any],
+                 export_home: nd.PathLike,
+                 zone_col: str = None,
+                 process_count: Optional[int] = constants.PROCESS_COUNT,
+                 ):
+        # Validate inputs
+        if not isinstance(zoning_system, nd.core.zoning.ZoningSystem):
+            raise ValueError(
+                "Expected and instance of a normits_demand ZoningSystem. "
+                "Got a %s instance instead."
+                % type(zoning_system)
+            )
+
+        # Build the distributor
+        super().__init__(
+            year=year,
+            running_mode=running_mode,
+            trip_origin=trip_origin,
+            zoning_system=zoning_system,
+            running_zones=running_zones,
+            zone_col=zone_col,
+            export_home=export_home,
+            process_count=process_count,
+
+        )
+
+        # Create a logger
+        logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
+        log_file_path = os.path.join(self.export_home, self._log_fname)
+        self._logger = nd.get_logger(
+            logger_name=logger_name,
+            log_file_path=log_file_path,
+            instantiate_msg="Initialised new 3D Furness Logger",
+        )
+
+    def distribute_segment(self,
+                           segment_params: Dict[str, Any],
+                           productions: pd.DataFrame,
+                           attractions: pd.DataFrame,
+                           cost_matrix: pd.DataFrame,
+                           target_cost_distributions: pd.DataFrame,
+                           running_segmentation: nd.SegmentationLevel,
+                           **kwargs,
+                           ):
+        seg_name = running_segmentation.generate_file_name(segment_params)
+        self._logger.info("Running for %s" % seg_name)
+
+        # ## SET UP SEGMENT LOG ## #
+        # Logging set up
+        log_fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            file_desc='furness3d_log',
+            segment_params=segment_params,
+            csv=True,
+        )
+        log_path = os.path.join(self.report_paths.model_log_dir, log_fname)
+
+        # Replace the log if it already exists
+        if os.path.isfile(log_path):
+            os.remove(log_path)
+
+        # ## MAKE SURE COST AND P/A ARE IN SAME ORDER ## #
+        # Sort the cost
+        cost_matrix = cost_matrix.reindex(
+            columns=self.running_zones,
+            index=self.running_zones,
+        ).fillna(0)
+
+        # TODO(BT): Fix this problem at the cost source
+        # Fill any zero costs with 0.2
+        cost_matrix = cost_matrix.mask(cost_matrix == 0, 0.2)
+
+        # sort the productions and attractions
+        productions = productions.set_index(self.zone_col)
+        productions = productions.reindex(self.running_zones).fillna(0)
+        attractions = attractions.set_index(self.zone_col)
+        attractions = attractions.reindex(self.running_zones).fillna(0)
+
+        # Convert things to numpy
+        np_cost = cost_matrix.values
+        np_productions = productions[self._pa_val_col].values
+        np_attractions = attractions[self._pa_val_col].values
+
+        # ## RUN THE 3D FURNESS ## #
+        calib = furness.Furness3D(
+            row_targets=np_productions,
+            col_targets=np_attractions,
+            cost_matrix=np_cost,
+            base_matrix=kwargs.get('base_matrix'),
+            target_cost_distribution=target_cost_distributions,
+            running_log_path=log_path,
+            target_convergence=kwargs.get('target_convergence'),
+            furness_max_iters=kwargs.get('furness_max_iters'),
+            furness_tol=kwargs.get('furness_tol'),
+        )
+
+        # Run
+        calib.fit(
+            outer_max_iters=kwargs.get('outer_max_iters'),
+            calibrate=kwargs.get('calibrate'),
+        )
+
+        # ## GENERATE REPORTS AND WRITE OUT ## #
+        report = self.generate_cost_distribution_report(
+            target=target_cost_distributions,
+            achieved_band_share=calib.achieved_band_share,
+            achieved_convergence=calib.achieved_convergence,
+            achieved_distribution=calib.achieved_distribution,
+            cost_matrix=np_cost,
+        )
+
+        # Write out report
+        fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            file_desc='tld_report',
+            segment_params=segment_params,
+            csv=True,
+        )
+        path = os.path.join(self.report_paths.tld_report_dir, fname)
+        report.to_csv(path, index=False)
+
+        # ## WRITE DISTRIBUTED DEMAND ## #
+        # Put the demand into a df
+        demand_df = pd.DataFrame(
+            index=self.running_zones,
+            columns=self.running_zones,
+            data=calib.achieved_distribution.astype(np.float32),
+        )
+
+        demand_df = demand_df.reindex(
+            index=self.zoning_system.unique_zones,
+            columns=self.zoning_system.unique_zones,
+            fill_value=0,
+        )
+
+        # Generate path and write out
+        fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            file_desc='synthetic_pa',
+            segment_params=segment_params,
+            compressed=True,
+        )
+        path = os.path.join(self.export_paths.matrix_dir, fname)
+        nd.write_df(demand_df, path)
+
+        # ## ADD TO THE OVERALL LOG ## #
+        # Generate the log
+        log_dict = segment_params.copy()
+        log_dict.update({'init_bs_con': calib.initial_convergence})
+        log_dict.update({'final_bs_con': calib.achieved_convergence})
+
+        # Append this iteration to log file
+        file_ops.safe_dataframe_to_csv(
+            pd.DataFrame(log_dict, index=[0]),
+            self.report_paths.overall_log,
+            mode='a',
+            header=(not os.path.exists(self.report_paths.overall_log)),
+            index=False,
+        )
+
+    def distribute(self, *args, **kwargs):
+        # Make new log if one already exists
+        if os.path.isfile(self.report_paths.overall_log):
+            os.remove(self.report_paths.overall_log)
+
+        # Run default distribution
+        super().distribute(*args, **kwargs)
+
