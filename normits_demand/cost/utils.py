@@ -11,6 +11,7 @@ File purpose:
 
 """
 # Built-Ins
+from typing import List
 
 # Third Party
 import numpy as np
@@ -75,4 +76,53 @@ def iz_infill_costs(cost: pd.DataFrame,
         index=cost.index,
         columns=cost.columns,
     )
+
+
+def calculate_cost_distribution(matrix: np.ndarray,
+                                cost_matrix: np.ndarray,
+                                min_bounds: List[float],
+                                max_bounds: List[float],
+                                ) -> np.ndarray:
+    """
+    Calculates the band share distribution of matrix.
+
+    Uses the bounds supplied in target_cost_distribution, and the costs in
+    self.costs to calculate the equivalent band shares in matrix.
+
+    Parameters
+    ----------
+    matrix:
+        The matrix to calculate the cost distribution for. This matrix
+        should be the same shape as cost_matrix
+
+    cost_matrix:
+        A matrix of cost relating to matrix. This matrix
+        should be the same shape as matrix
+
+    min_bounds:
+        A list of minimum bounds for each edge of a distribution band.
+        Corresponds to max_bounds.
+
+    max_bounds:
+        A list of maximum bounds for each edge of a distribution band.
+        Corresponds to min_bounds.
+
+    Returns
+    -------
+    cost_distribution:
+        a numpy array of distributed costs, where the bands are equivalent
+        to min/max values in self.target_cost_distribution
+    """
+    # Init
+    total_trips = matrix.sum()
+
+    # Calculate band shares
+    distribution = list()
+    for min_val, max_val in zip(min_bounds, max_bounds):
+        cost_mask = (cost_matrix >= min_val) & (cost_matrix < max_val)
+        band_trips = (matrix * cost_mask).sum()
+        band_share = band_trips / total_trips
+        distribution.append(band_share)
+
+    return np.array(distribution)
 

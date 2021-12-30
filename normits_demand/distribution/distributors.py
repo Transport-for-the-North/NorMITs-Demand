@@ -52,6 +52,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
 
     # Internal variables for consistent naming
     _pa_val_col = 'trips'
+    _calibration_ignore_val = -1
 
     def __init__(self,
                  year: int,
@@ -196,7 +197,9 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
                            productions: pd.DataFrame,
                            attractions: pd.DataFrame,
                            cost_matrix: pd.DataFrame,
-                           target_cost_distributions: pd.DataFrame,
+                           calibration_matrix: pd.DataFrame,
+                           target_cost_distributions: Dict[Any, pd.DataFrame],
+                           calibration_naming: Dict[Any, Any],
                            running_segmentation: nd.SegmentationLevel,
                            **kwargs,
                            ):
@@ -207,7 +210,9 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
                    attractions: pd.DataFrame,
                    running_segmentation: nd.SegmentationLevel,
                    cost_matrices: Dict[str, pd.DataFrame],
-                   target_cost_distributions: Dict[str, pd.DataFrame],
+                   calibration_matrix: pd.DataFrame,
+                   target_cost_distributions: Dict[Any, Dict[str, pd.DataFrame]],
+                   calibration_naming: Dict[Any, Any],
                    pa_val_col: Optional[str] = 'val',
                    by_segment_kwargs: Dict[str, Dict[str, Any]] = None,
                    **kwargs,
@@ -218,18 +223,41 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             cost_matrices,
             'cost_matrices',
         )
-        self._check_segment_keys(
-            running_segmentation,
-            target_cost_distributions,
-            'target_cost_distributions',
-        )
+        for item in target_cost_distributions.values():
+            self._check_segment_keys(
+                running_segmentation,
+                item,
+                'target_cost_distributions',
+            )
+
+        # Validate calibration keys
+        calib_keys = np.unique(calibration_matrix)
+
+        missing = set(calib_keys) - set(target_cost_distributions.keys())
+        missing -= {self._calibration_ignore_val}
+        if len(missing) > 0:
+            raise ValueError(
+                "Target cost distributions can not be found for all key "
+                "values found in the calibration matrix. No targets given for "
+                "the following %s keys: %s"
+                % (len(missing), missing)
+            )
+
+        # Add in any naming keys that don't exist
+        for key in calib_keys:
+            if key not in calibration_naming:
+                calibration_naming[key] = key
 
         # Set defaults
         by_segment_kwargs = dict() if by_segment_kwargs is None else by_segment_kwargs
 
         # ## MULTIPROCESS ACROSS SEGMENTS ## #
         unchanging_kwargs = kwargs.copy()
-        unchanging_kwargs.update({'running_segmentation': running_segmentation})
+        unchanging_kwargs.update({
+            'running_segmentation': running_segmentation,
+            'calibration_matrix': calibration_matrix,
+            'calibration_naming': calibration_naming,
+        })
 
         pbar_kwargs = {
             'desc': self.name,
@@ -249,6 +277,11 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
                 pa_val_col=pa_val_col,
             )
 
+            # Get the cost distributions for this segment
+            segment_target_costs = dict().fromkeys(calib_keys)
+            for key in calib_keys:
+                segment_target_costs[key] = target_cost_distributions[key][segment_name]
+
             # Build the kwargs for this segment
             segment_kwargs = unchanging_kwargs.copy()
             segment_kwargs.update({
@@ -256,7 +289,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
                 'productions': seg_productions,
                 'attractions': seg_attractions,
                 'cost_matrix': cost_matrices[segment_name],
-                'target_cost_distributions': target_cost_distributions[segment_name],
+                'target_cost_distributions': segment_target_costs,
             })
 
             # Get any other by_segment kwargs passed in
@@ -595,12 +628,16 @@ class Furness3dDistributor(AbstractDistributor):
                            productions: pd.DataFrame,
                            attractions: pd.DataFrame,
                            cost_matrix: pd.DataFrame,
-                           target_cost_distributions: pd.DataFrame,
+                           calibration_matrix: pd.DataFrame,
+                           target_cost_distributions: Dict[Any, pd.DataFrame],
+                           calibration_naming: Dict[Any, Any],
                            running_segmentation: nd.SegmentationLevel,
                            **kwargs,
                            ):
+        # Init
         seg_name = running_segmentation.generate_file_name(segment_params)
         self._logger.info("Running for %s" % seg_name)
+        calibration_keys = np.unique(calibration_matrix).tolist()
 
         # ## SET UP SEGMENT LOG ## #
         # Logging set up
@@ -616,9 +653,14 @@ class Furness3dDistributor(AbstractDistributor):
         if os.path.isfile(log_path):
             os.remove(log_path)
 
-        # ## MAKE SURE COST AND P/A ARE IN SAME ORDER ## #
+        # ## MAKE SURE INPUTS ARE IN SAME ORDER ## #
         # Sort the cost
         cost_matrix = cost_matrix.reindex(
+            columns=self.running_zones,
+            index=self.running_zones,
+        ).fillna(0)
+
+        calibration_matrix = calibration_matrix.reindex(
             columns=self.running_zones,
             index=self.running_zones,
         ).fillna(0)
@@ -635,6 +677,7 @@ class Furness3dDistributor(AbstractDistributor):
 
         # Convert things to numpy
         np_cost = cost_matrix.values
+        np_calibration_matrix = calibration_matrix.values
         np_productions = productions[self._pa_val_col].values
         np_attractions = attractions[self._pa_val_col].values
 
@@ -644,7 +687,10 @@ class Furness3dDistributor(AbstractDistributor):
             col_targets=np_attractions,
             cost_matrix=np_cost,
             base_matrix=kwargs.get('base_matrix'),
-            target_cost_distribution=target_cost_distributions,
+            calibration_matrix=np_calibration_matrix,
+            target_cost_distributions=target_cost_distributions,
+            calibration_naming=calibration_naming,
+            calibration_ignore_val=self._calibration_ignore_val,
             running_log_path=log_path,
             target_convergence=kwargs.get('target_convergence'),
             furness_max_iters=kwargs.get('furness_max_iters'),
@@ -658,24 +704,32 @@ class Furness3dDistributor(AbstractDistributor):
         )
 
         # ## GENERATE REPORTS AND WRITE OUT ## #
-        report = self.generate_cost_distribution_report(
-            target=target_cost_distributions,
-            achieved_band_share=calib.achieved_band_share,
-            achieved_convergence=calib.achieved_convergence,
-            achieved_distribution=calib.achieved_distribution,
-            cost_matrix=np_cost,
-        )
+        for calib_key in calibration_keys:
+            # Filter down to this area
+            area_mask = (np_calibration_matrix == calib_key)
+            area_distribution = calib.achieved_distribution * area_mask
+            area_cost = np_cost * area_mask
 
-        # Write out report
-        fname = running_segmentation.generate_file_name(
-            trip_origin=self.trip_origin,
-            year=str(self.year),
-            file_desc='tld_report',
-            segment_params=segment_params,
-            csv=True,
-        )
-        path = os.path.join(self.report_paths.tld_report_dir, fname)
-        report.to_csv(path, index=False)
+            # Generate report
+            report = self.generate_cost_distribution_report(
+                target=target_cost_distributions[calib_key],
+                achieved_band_share=calib.achieved_band_shares[calib_key],
+                achieved_convergence=calib.achieved_convergences[calib_key],
+                achieved_distribution=area_distribution,
+                cost_matrix=area_cost,
+            )
+
+            # Write out report
+            fname = running_segmentation.generate_file_name(
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                file_desc='tld_report',
+                segment_params=segment_params,
+                suffix=calibration_naming[calib_key],
+                csv=True,
+            )
+            path = os.path.join(self.report_paths.tld_report_dir, fname)
+            report.to_csv(path, index=False)
 
         # ## WRITE DISTRIBUTED DEMAND ## #
         # Put the demand into a df
@@ -705,8 +759,15 @@ class Furness3dDistributor(AbstractDistributor):
         # ## ADD TO THE OVERALL LOG ## #
         # Generate the log
         log_dict = segment_params.copy()
-        log_dict.update({'init_bs_con': calib.initial_convergence})
-        log_dict.update({'final_bs_con': calib.achieved_convergence})
+
+        # Add initial and final bs_con for each area
+        for calib_key in calibration_keys:
+            init_name = '%s_init_bs_con' % calibration_naming[calib_key]
+            final_name = '%s_final_bs_con' % calibration_naming[calib_key]
+            log_dict.update({
+                init_name: calib.initial_convergences[calib_key],
+                final_name: calib.achieved_convergences[calib_key],
+            })
 
         # Append this iteration to log file
         file_ops.safe_dataframe_to_csv(

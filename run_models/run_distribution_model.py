@@ -89,9 +89,16 @@ def main():
         # Define kwargs for the distribution tiers
         upper_calibration_area = 'gb'
         upper_model_method = nd.DistributionMethod.FURNESS3D
+        upper_calibration_zones_fname = 'noham_north_other_rows.pbz2'
+        upper_calibration_areas = {1: 'north', 2: 'gb'}
+        upper_calibration_naming = {1: 'north', 2: 'other'}
 
         lower_calibration_area = 'north'
         lower_model_method = nd.DistributionMethod.GRAVITY
+        lower_calibration_zones_fname = None
+        lower_calibration_areas = lower_calibration_area
+        lower_calibration_naming = None
+
         gm_cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
 
         gravity_kwargs = {
@@ -103,12 +110,13 @@ def main():
             'calibrate_params': False
         }
 
+        # Args only work for upper atm!
         furness3d_kwargs = {
             'target_convergence': 0.9,
             'outer_max_iters': 50,
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
-            'calibrate': True,
+            'calibrate': False,
         }
 
         # Choose the correct kwargs
@@ -145,10 +153,16 @@ def main():
         'upper_running_zones': upper_zoning_system.unique_zones,
         'upper_model_method': upper_model_method,
         'upper_distributor_kwargs': upper_distributor_kwargs,
+        'upper_calibration_zones_fname': upper_calibration_zones_fname,
+        'upper_calibration_areas': upper_calibration_areas,
+        'upper_calibration_naming': upper_calibration_naming,
         'lower_zoning_system': lower_zoning_system,
         'lower_running_zones': lower_zoning_system.internal_zones,
         'lower_model_method': lower_model_method,
         'lower_distributor_kwargs': lower_distributor_kwargs,
+        'lower_calibration_zones_fname': lower_calibration_zones_fname,
+        'lower_calibration_areas': lower_calibration_areas,
+        'lower_calibration_naming': lower_calibration_naming,
         'init_params_cols': gm_cost_function.parameter_names,
         'intrazonal_cost_infill': intrazonal_cost_infill,
         'cache_path': cache_path,
@@ -188,7 +202,7 @@ def main():
             running_segmentation=hb_running_seg,
             upper_init_params_fname=hb_upper_init_params_fname,
             lower_init_params_fname=hb_lower_init_params_fname,
-            target_tld_dir=os.path.join(upper_calibration_area, hb_seg_name),
+            target_tld_dir=hb_seg_name,
             **dmab_kwargs,
         )
 
@@ -217,7 +231,7 @@ def main():
             running_segmentation=nhb_running_seg,
             upper_init_params_fname=nhb_upper_init_params_fname,
             lower_init_params_fname=nhb_lower_init_params_fname,
-            target_tld_dir=os.path.join(upper_calibration_area, nhb_seg_name),
+            target_tld_dir=nhb_seg_name,
             **dmab_kwargs,
         )
 

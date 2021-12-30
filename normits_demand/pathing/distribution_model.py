@@ -22,6 +22,7 @@ from typing import Dict
 from typing import List
 from typing import Tuple
 from typing import Union
+from typing import Optional
 
 # Third Party
 import numpy as np
@@ -466,8 +467,10 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
     _cjtw_dir_name = 'cjtw'
     _cjtw_base_fname = 'cjtw_{zoning_name}.csv'
 
-    # Initial Parameters consts
+    # Distributors consts
+    _distributors_dir = 'distributors'
     _gravity_model_dir = 'gravity model'
+    _calibration_mats_dir = 'calibration zones'
 
     # Trip Length Distribution constants
     _tld_dir_name = 'trip_length_distributions'
@@ -489,15 +492,28 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                  upper_model_method: nd.DistributionMethod,
                  upper_distributor_kwargs: Dict[str, Any],
                  upper_init_params_fname: str,
-                 lower_model_method: nd.DistributionMethod = None,
-                 lower_distributor_kwargs: Dict[str, Any] = None,
-                 lower_init_params_fname: str = None,
-                 intrazonal_cost_infill: float = None,
-                 cache_path: nd.PathLike = None,
-                 overwrite_cache: nd.PathLike = False,
+                 upper_calibration_areas: Union[Dict[Any, str], str],
+                 upper_calibration_zones_fname: Optional[str] = None,
+                 upper_calibration_naming: Optional[Dict[Any, str]] = None,
+                 lower_model_method: Optional[nd.DistributionMethod] = None,
+                 lower_distributor_kwargs: Optional[Dict[str, Any]] = None,
+                 lower_init_params_fname: Optional[str] = None,
+                 lower_calibration_areas: Optional[Union[Dict[Any, str], str]] = None,
+                 lower_calibration_zones_fname: Optional[str] = None,
+                 lower_calibration_naming: Optional[Dict[Any, str]] = None,
+                 intrazonal_cost_infill: Optional[float] = None,
+                 cache_path: Optional[nd.PathLike] = None,
+                 overwrite_cache: Optional[nd.PathLike] = False,
                  ):
         # Check paths exist
         file_ops.check_path_exists(import_home)
+
+        # Set default values
+        if not isinstance(upper_calibration_areas, dict):
+            upper_calibration_areas = {1: upper_calibration_areas}
+
+        if not isinstance(lower_calibration_areas, dict):
+            lower_calibration_areas = {1: lower_calibration_areas}
 
         super().__init__(
             year=year,
@@ -525,11 +541,18 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         self.init_params_cols = init_params_cols
 
         self.upper_model_method = upper_model_method
-        self.lower_model_method = lower_model_method
         self.upper_distributor_kwargs = upper_distributor_kwargs
-        self.lower_distributor_kwargs = lower_distributor_kwargs
         self.upper_init_params_fname = upper_init_params_fname
+        self.upper_calibration_areas = upper_calibration_areas
+        self.upper_calibration_zones_fname = upper_calibration_zones_fname
+        self.upper_calibration_naming = upper_calibration_naming
+
+        self.lower_model_method = lower_model_method
+        self.lower_distributor_kwargs = lower_distributor_kwargs
         self.lower_init_params_fname = lower_init_params_fname
+        self.lower_calibration_areas = lower_calibration_areas
+        self.lower_calibration_zones_fname = lower_calibration_zones_fname
+        self.lower_calibration_naming = lower_calibration_naming
 
         self.intrazonal_cost_infill = intrazonal_cost_infill
 
@@ -547,6 +570,19 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             )
 
         return nd.read_pickle(trip_end)
+
+    def _read_calibration_zones_matrix(self, fname: str) -> np.ndarray:
+        """Reads in the matrix of calibration zones"""
+        file_path = os.path.join(
+            self.import_home,
+            self._distributors_dir,
+            self._calibration_mats_dir,
+            fname,
+        )
+
+        df = file_ops.read_df(file_path, index_col=0, find_similar=True)
+
+        return df
 
     def _get_cost(self,
                   segment_params: Dict[str, Any],
@@ -580,6 +616,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         return cost_matrix
 
     def _get_target_cost_distribution(self,
+                                      area: str,
                                       segment_params: Dict[str, Any],
                                       ) -> pd.DataFrame:
         """Reads in the target cost distribution for this segment"""
@@ -587,6 +624,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         tcd_dir = os.path.join(
             self.import_home,
             self._tld_dir_name,
+            area,
             self.target_tld_dir,
         )
         fname = self.running_segmentation.generate_file_name(
@@ -694,14 +732,17 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return cost_matrices
 
-    def _build_target_cost_distributions(self):
+    def _build_target_cost_distributions(self, area: str):
         """Build the dictionary of target_cost_distributions for each segment"""
         # Generate by segment kwargs
         target_cost_distributions = dict()
         for segment_params in self.running_segmentation:
             # Get the needed kwargs
             segment_name = self.running_segmentation.get_segment_name(segment_params)
-            target_cost_distribution = self._get_target_cost_distribution(segment_params)
+            target_cost_distribution = self._get_target_cost_distribution(
+                area=area,
+                segment_params=segment_params,
+            )
 
             # Add to dictionary
             target_cost_distributions[segment_name] = target_cost_distribution
@@ -770,13 +811,37 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         productions = self._maybe_read_trip_end(self.productions)
         attractions = self._maybe_read_trip_end(self.attractions)
 
+        # Read in calibration zones data
+        if self.upper_calibration_zones_fname is not None:
+            calibration_matrix = self._read_calibration_zones_matrix(
+                self.upper_calibration_zones_fname,
+            )
+        else:
+            calibration_matrix = pd.DataFrame(
+                index=self.upper_zoning_system.unique_zones,
+                columns=self.upper_zoning_system.unique_zones,
+                data=1,
+            )
+
+        calib_area_keys = self.upper_calibration_areas.keys()
+        target_cost_distributions = dict.fromkeys(calib_area_keys)
+        for area_key, area_name in self.upper_calibration_areas.items():
+            area_targets = self._build_target_cost_distributions(area=area_name)
+            target_cost_distributions[area_key] = area_targets
+
+        if self.upper_calibration_naming is None:
+            upper_calibration_naming = {x: x for x in calib_area_keys}
+        else:
+            upper_calibration_naming = self.upper_calibration_naming
+
+        # Build dictionaries of arguments for each segment
         cost_matrices = self._build_cost_matrices(self.upper_zoning_system)
-        target_cost_distributions = self._build_target_cost_distributions()
         by_segment_kwargs = self._build_by_segment_kwargs(
             self.upper_model_method,
             self.upper_init_params_fname,
         )
 
+        # Read in any further needed kwargs
         further_dist_args = self._build_further_distributor_kwargs(
             method=self.upper_model_method,
             zoning_system=self.upper_zoning_system,
@@ -790,7 +855,9 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             'attractions': attractions.to_df(),
             'running_segmentation': self.running_segmentation,
             'cost_matrices': cost_matrices,
+            'calibration_matrix': calibration_matrix,
             'target_cost_distributions': target_cost_distributions,
+            'calibration_naming': upper_calibration_naming,
             'by_segment_kwargs': by_segment_kwargs,
         })
 

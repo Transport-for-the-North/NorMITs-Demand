@@ -30,37 +30,39 @@ from normits_demand import constants as consts
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.utils import math_utils
-from normits_demand.utils import trip_length_distributions as tld_utils
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.concurrency import multiprocessing
 from normits_demand.audits import audits
+from normits_demand.cost import utils as cost_utils
 
 
 class Furness3D:
     # TODO(BT): Write Furness3D docs
 
-    _target_cost_distribution_cols = ['min', 'max', 'band_share']
+    _target_cost_distribution_cols = ['min', 'max', 'ave_km', 'band_share']
 
     def __init__(self,
                  row_targets: np.ndarray,
                  col_targets: np.ndarray,
                  cost_matrix: np.ndarray,
                  base_matrix: np.ndarray,
-                 target_cost_distribution: pd.DataFrame,
+                 calibration_matrix: np.ndarray,
+                 target_cost_distributions: Dict[Any, pd.DataFrame],
+                 calibration_naming: Dict[Any, Any],
                  target_convergence: float,
                  furness_max_iters: int,
                  furness_tol: float,
+                 calibration_ignore_val: Any = -1,
                  running_log_path: nd.PathLike = None,
                  ):
 
         # TODO(BT): Write Furness3D __init__ docs
         # Validate attributes
-        target_cost_distribution = pd_utils.reindex_cols(
-            target_cost_distribution,
-            self._target_cost_distribution_cols,
-        )
+        for key, tcd in target_cost_distributions.items():
+            tcd = pd_utils.reindex_cols(tcd, self._target_cost_distribution_cols)
+            target_cost_distributions[key] = tcd
 
         if running_log_path is not None:
             dir_name, _ = os.path.split(running_log_path)
@@ -78,12 +80,20 @@ class Furness3D:
                     % running_log_path
                 )
 
+        # Get a list of keys for calibration zones
+        calib_keys = np.unique(calibration_matrix).tolist()
+        calib_keys = du.list_safe_remove(calib_keys, [calibration_ignore_val])
+
         # Set attributes
         self.row_targets = row_targets
         self.col_targets = col_targets
         self.cost_matrix = cost_matrix
         self.base_matrix = base_matrix
-        self.target_cost_distribution = target_cost_distribution
+        self.calibration_keys = calib_keys
+        self.calibration_matrix = calibration_matrix
+        self.target_cost_distributions = target_cost_distributions
+        self.calibration_naming = calibration_naming
+        self.calibration_ignore_val = calibration_ignore_val
         self.furness_max_iters = furness_max_iters
         self.furness_tol = furness_tol
         self.running_log_path = running_log_path
@@ -91,9 +101,9 @@ class Furness3D:
         self.target_convergence = target_convergence
 
         # Additional attributes
-        self.initial_convergence = None
-        self.achieved_band_share = None
-        self.achieved_convergence = None
+        self.initial_convergences = None
+        self.achieved_band_shares = None
+        self.achieved_convergences = None
         self.achieved_distribution = None
 
     def _correct_band_share(self,
@@ -102,71 +112,54 @@ class Furness3D:
         """Correct matrix to move band shares towards the target"""
         # Init
         out_matrix = np.zeros_like(matrix)
-        matrix_total = matrix.sum()
 
-        # Adjust bands one at a time
-        for index, row in self.target_cost_distribution.iterrows():
-            # Get proportion of all trips that should be in this band
-            target_band_share = row['band_share']
-            min_val = float(row['min'])
-            max_val = float(row['max'])
+        # Just copy over where there are ignore values
+        ignore_mask = (self.calibration_matrix == self.calibration_ignore_val)
+        ignore_values = matrix * ignore_mask
+        out_matrix += ignore_values
 
-            # Get proportion of all trips that are in this band
-            distance_mask = (self.cost_matrix >= min_val) & (self.cost_matrix < max_val)
-            band_trips = matrix * distance_mask
+        # Adjust band shares by calibration areas
+        for calib_key in self.calibration_keys:
+            # Filter down to this area
+            area_mask = (self.calibration_matrix == calib_key)
+            area_tcd = self.target_cost_distributions[calib_key]
 
-            # Figure out the target and achieved
-            target_band_total = matrix_total * target_band_share
-            ach_band_total = band_trips.sum()
+            area_matrix_values = matrix * area_mask
+            area_total = area_matrix_values.sum()
+            area_cost = self.cost_matrix * area_mask
 
-            # We can't adjust if there are no trips in this band
-            if ach_band_total <= 0:
-                adj_mat = band_trips
+            # Adjust bands one at a time
+            for _, row in area_tcd.iterrows():
+                # Get proportion of all trips that should be in this band
+                target_band_share = row['band_share']
+                min_val = float(row['min'])
+                max_val = float(row['max'])
 
-            # Adjust the matrix towards target
-            else:
-                adjustment = target_band_total / ach_band_total
-                adj_mat = band_trips * adjustment
+                # Get proportion of all trips that are in this band
+                distance_mask = (area_cost >= min_val) & (area_cost < max_val)
+                band_trips = area_matrix_values * distance_mask
 
-            # Add into the return matrix
-            out_matrix += adj_mat
+                # Figure out the target and achieved
+                target_band_total = area_total * target_band_share
+                ach_band_total = band_trips.sum()
+
+                # We can't adjust if there are no trips in this band
+                if ach_band_total <= 0:
+                    adj_mat = band_trips
+
+                elif target_band_total <= 0:
+                    # Set to a really small value so furness can use still
+                    adj_mat = np.where(band_trips != 0, 1e-7, 0)
+
+                else:
+                    # Adjust the matrix towards target
+                    adjustment = target_band_total / ach_band_total
+                    adj_mat = band_trips * adjustment
+
+                # Add into the return matrix
+                out_matrix += adj_mat
 
         return out_matrix
-
-    def _calculate_cost_distribution(self, matrix: np.ndarray) -> np.ndarray:
-        """
-        Calculates the band share distribution of matrix.
-
-        Uses the bounds supplied in self.target_cost_distribution, and the costs in
-        self.costs to calculate the equivalent band shares in matrix.
-
-        Parameters
-        ----------
-        matrix:
-            The matrix to calculate the cost distribution for. This matrix
-            should be the same shape as self.costs
-
-        Returns
-        -------
-        cost_distribution:
-            a numpy array of distributed costs, where the bands are equivalent
-            to min/max values in self.target_cost_distribution
-        """
-        # Init
-        min_costs = self.target_cost_distribution['min']
-        max_costs = self.target_cost_distribution['max']
-
-        total_trips = matrix.sum()
-
-        # Calculate band shares
-        distribution = list()
-        for min_val, max_val in zip(min_costs, max_costs):
-            cost_mask = (self.cost_matrix >= min_val) & (self.cost_matrix < max_val)
-            band_trips = (matrix * cost_mask).sum()
-            band_share = band_trips / total_trips
-            distribution.append(band_share)
-
-        return np.array(distribution)
 
     def fit(self,
             outer_max_iters: int = 100,
@@ -195,15 +188,8 @@ class Furness3D:
                 max_iters=self.furness_max_iters,
             )
 
-            # Convert matrix into an achieved distribution curve
-            # TODO(BT): Move to AbstractDistributor - Elsewhere!
-            achieved_band_shares = self._calculate_cost_distribution(matrix)
-            iter_convergence = math_utils.curve_convergence(
-                self.target_cost_distribution['band_share'].values,
-                achieved_band_shares,
-            )
-
-            # ## LOG THIS ITERATION ## #
+            # ## EVALUATE AND LOG THIS ITERATION ## #
+            # Initialise the log
             iter_end_time = timing.current_milli_time()
             time_taken = iter_end_time - iter_start_time
 
@@ -212,8 +198,38 @@ class Furness3D:
                 'run_time(s)': time_taken / 1000,
                 'furness_loops': furn_iters,
                 'furness_rmse': furn_rmse,
-                'bs_con': np.round(iter_convergence, 6),
             }
+
+            # Evaluate per calibration area
+            area_convergence_dict = dict()
+            area_band_share_dict = dict()
+            for calib_key in self.calibration_keys:
+                # Filter down to this area
+                area_mask = (self.calibration_matrix == calib_key)
+                area_tcd = self.target_cost_distributions[calib_key]
+
+                area_matrix_values = matrix * area_mask
+                area_cost = self.cost_matrix * area_mask
+
+                # Calculate the convergence of this area
+                achieved_band_shares = cost_utils.calculate_cost_distribution(
+                    matrix=area_matrix_values,
+                    cost_matrix=area_cost,
+                    min_bounds=area_tcd['min'].tolist(),
+                    max_bounds=area_tcd['max'].tolist(),
+                )
+                area_convergence = math_utils.curve_convergence(
+                    area_tcd['band_share'].values,
+                    achieved_band_shares,
+                )
+
+                # Store for recording runs
+                area_convergence_dict[calib_key] = area_convergence
+                area_band_share_dict[calib_key] = achieved_band_shares
+
+                # Add to log
+                area_name = '%s_bs_con' % self.calibration_naming[calib_key]
+                log_dict.update({area_name: np.round(area_convergence, 6)})
 
             # Append this iteration to log file
             file_ops.safe_dataframe_to_csv(
@@ -226,15 +242,15 @@ class Furness3D:
 
             # log initial convergence if first iter
             if iter_num == 0:
-                self.initial_convergence = iter_convergence
+                self.initial_convergences = area_convergence_dict
 
             # Log current best performance
-            self.achieved_band_share = achieved_band_shares
-            self.achieved_convergence = iter_convergence
+            self.achieved_band_shares = area_band_share_dict
+            self.achieved_convergences = area_convergence_dict
             self.achieved_distribution = matrix
 
             # ## EXIT EARLY IF CONDITIONS MET ## #
-            if iter_convergence > self.target_convergence:
+            if all([x > self.target_convergence for x in area_convergence_dict.values()]):
                 break
 
 
