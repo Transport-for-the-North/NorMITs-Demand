@@ -237,9 +237,33 @@ def main():
             run_od_matrix_reports=run_od_matrix_reports,
         )
 
-        # TODO(BT): Move this into Matrix tools!
-        if compile_to_assignment:
+    # TODO(BT): Move this into Matrix tools!
+    #  Fudged to get this to work for now. Handle this better!
+    if compile_to_assignment:
+        if 'hb_distributor' in locals():
+            hb_distributor.compile_to_assignment_format()
+        elif 'nhb_distributor' in locals():
             nhb_distributor.compile_to_assignment_format()
+        else:
+            trip_origin = 'hb'
+            arg_builder = DistributionModelArgumentBuilder(
+                trip_origin=trip_origin,
+                productions=hb_productions,
+                attractions=hb_attractions,
+                running_segmentation=hb_running_seg,
+                upper_init_params_fname=hb_upper_init_params_fname,
+                lower_init_params_fname=hb_lower_init_params_fname,
+                target_tld_dir=os.path.join(upper_calibration_area, hb_seg_name),
+                **dmab_kwargs,
+            )
+
+            hb_distributor = DistributionModel(
+                arg_builder=arg_builder,
+                **dm_kwargs,
+                **arg_builder.build_distribution_model_init_args(),
+            )
+
+            hb_distributor.compile_to_assignment_format()
 
 
 def build_trip_ends(use_tram,
