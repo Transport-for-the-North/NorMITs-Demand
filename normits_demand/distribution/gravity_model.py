@@ -36,6 +36,7 @@ from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.distribution import furness
+from normits_demand.cost import utils as cost_utils
 
 
 class GravityModelCalibrator:
@@ -133,41 +134,6 @@ class GravityModelCalibrator:
             self._order_cost_params(self.cost_function.param_max),
         )
 
-    def _calculate_cost_distribution(self, matrix: np.ndarray) -> np.ndarray:
-        """
-        Calculates the band share distribution of matrix.
-
-        Uses the bounds supplied in self.target_cost_distribution, and the costs in
-        self.costs to calculate the equivalent band shares in matrix.
-
-        Parameters
-        ----------
-        matrix:
-            The matrix to calculate the cost distribution for. This matrix
-            should be the same shape as self.costs
-
-        Returns
-        -------
-        cost_distribution:
-            a numpy array of distributed costs, where the bands are equivalent
-            to min/max values in self.target_cost_distribution
-        """
-        # Init
-        min_costs = self.target_cost_distribution['min']
-        max_costs = self.target_cost_distribution['max']
-
-        total_trips = matrix.sum()
-
-        # Calculate band shares
-        distribution = list()
-        for min_val, max_val in zip(min_costs, max_costs):
-            cost_mask = (self.cost_matrix >= min_val) & (self.cost_matrix < max_val)
-            band_trips = (matrix * cost_mask).sum()
-            band_share = band_trips / total_trips
-            distribution.append(band_share)
-
-        return np.array(distribution)
-
     def _gm_distribution(self, _, *cost_args: float) -> np.ndarray:
         """Runs gravity model with given parameters and returns distribution.
 
@@ -188,8 +154,12 @@ class GravityModelCalibrator:
         )
 
         # Convert matrix into an achieved distribution curve
-        # TODO(BT): Move to AbstractDistributor
-        achieved_band_shares = self._calculate_cost_distribution(matrix)
+        achieved_band_shares = cost_utils.calculate_cost_distribution(
+            matrix=matrix,
+            cost_matrix=self.cost_matrix,
+            min_bounds=self.target_cost_distribution['min'].tolist(),
+            max_bounds=self.target_cost_distribution['max'].tolist(),
+        )
         convergence = math_utils.curve_convergence(
             self.target_cost_distribution['band_share'].values,
             achieved_band_shares,

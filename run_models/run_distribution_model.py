@@ -68,7 +68,7 @@ def main():
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
-        upper_zoning_system = nd.get_zoning_system('noham')
+        upper_zoning_system = nd.get_zoning_system('msoa')
         lower_zoning_system = nd.get_zoning_system('noham')
 
         # Define cost arguments
@@ -88,10 +88,14 @@ def main():
 
         # Define kwargs for the distribution tiers
         upper_calibration_area = 'gb'
-        upper_model_method = nd.DistributionMethod.FURNESS3D
-        upper_calibration_zones_fname = 'noham_north_other_rows.pbz2'
-        upper_calibration_areas = {1: 'north', 2: 'gb'}
-        upper_calibration_naming = {1: 'north', 2: 'other'}
+        upper_model_method = nd.DistributionMethod.GRAVITY
+        upper_calibration_zones_fname = None
+        upper_calibration_areas = upper_calibration_area
+        upper_calibration_naming = None
+        # upper_model_method = nd.DistributionMethod.FURNESS3D
+        # upper_calibration_zones_fname = 'noham_north_other_rows.pbz2'
+        # upper_calibration_areas = {1: 'north', 2: 'gb'}
+        # upper_calibration_naming = {1: 'north', 2: 'other'}
 
         lower_calibration_area = 'north'
         lower_model_method = nd.DistributionMethod.GRAVITY
@@ -126,6 +130,81 @@ def main():
 
         upper_distributor_kwargs = [x[1].copy() for x in choice if x[0] == upper_model_method][0]
         lower_distributor_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
+
+    elif mode == nd.Mode.BUS:
+        zoning_system = nd.get_zoning_system('noham')
+        gm_tld_name = 'north/p_m'
+        internal_tld_name = 'north/p_m'
+        external_tld_name = 'gb/p_m'
+        if use_tram:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
+        else:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
+        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_bus')
+        intrazonal_cost_infill = 0.4
+        em_convergence_target = 0.8
+        gm_convergence_target = 0.85
+        cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
+        hb_init_params_fname = 'hb_init_params_p_m.csv'
+        nhb_init_params_fname = 'nhb_init_params_p_m_tp.csv'
+        hb_cost_type = '24hr'
+        nhb_cost_type = 'tp'
+
+        raise NotImplementedError()
+
+    elif mode == nd.Mode.TRAIN:
+        # zoning_system = nd.get_zoning_system('msoa')
+        zoning_system = nd.get_zoning_system('norms')
+        gm_tld_name = 'north/p_m_ca_train_bands'
+        internal_tld_name = 'north/p_m_ca_train_bands'
+        external_tld_name = 'gb/p_m_ca_train_bands'
+        if use_tram:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m7_ca')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_ca_tp_wday')
+        else:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m_ca')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday')
+        hb_running_seg = nd.get_segmentation_level('hb_p_m_ca_rail')
+        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday_rail')
+        intrazonal_cost_infill = None
+        em_convergence_target = 0.9
+        gm_convergence_target = 0.95
+        cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
+        hb_init_params_fname = 'hb_init_params_p_m_ca.csv'
+        nhb_init_params_fname = 'nhb_init_params_p_m_ca_tp.csv'
+        hb_cost_type = '24hr'
+        nhb_cost_type = 'tp'
+
+        raise NotImplementedError()
+
+    elif mode == nd.Mode.TRAM:
+        zoning_system = nd.get_zoning_system('msoa')
+        gm_tld_name = 'north/p_m'
+        internal_tld_name = 'north/p_m'
+        external_tld_name = 'gb/p_m'
+
+        if use_tram:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
+        else:
+            hb_agg_seg = nd.get_segmentation_level('hb_p_m')
+            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+
+        hb_running_seg = nd.get_segmentation_level('hb_p_m_tram')
+        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_tram')
+        intrazonal_cost_infill = 0.4
+        em_convergence_target = 0.9
+        gm_convergence_target = 0.95
+        cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
+        hb_init_params_fname = 'hb_init_params_p_m.csv'
+        nhb_init_params_fname = 'nhb_init_params_p_m_tp.csv'
+        hb_cost_type = '24hr'
+        nhb_cost_type = 'tp'
+
+        raise NotImplementedError()
 
     else:
         raise ValueError(

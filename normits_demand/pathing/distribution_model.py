@@ -864,14 +864,37 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         return final_kwargs
 
     def build_lower_model_arguments(self) -> Dict[str, Any]:
-        # Read the costs etc
+        # Read in calibration zones data
+        if self.lower_calibration_zones_fname is not None:
+            calibration_matrix = self._read_calibration_zones_matrix(
+                self.lower_calibration_zones_fname,
+            )
+        else:
+            calibration_matrix = pd.DataFrame(
+                index=self.lower_zoning_system.unique_zones,
+                columns=self.lower_zoning_system.unique_zones,
+                data=1,
+            )
+
+        calib_area_keys = self.lower_calibration_areas.keys()
+        target_cost_distributions = dict.fromkeys(calib_area_keys)
+        for area_key, area_name in self.lower_calibration_areas.items():
+            area_targets = self._build_target_cost_distributions(area=area_name)
+            target_cost_distributions[area_key] = area_targets
+
+        if self.lower_calibration_naming is None:
+            lower_calibration_naming = {x: x for x in calib_area_keys}
+        else:
+            lower_calibration_naming = self.lower_calibration_naming
+
+        # Build dictionaries of arguments for each segment
         cost_matrices = self._build_cost_matrices(self.lower_zoning_system)
-        target_cost_distributions = self._build_target_cost_distributions()
         by_segment_kwargs = self._build_by_segment_kwargs(
             self.lower_model_method,
             self.lower_init_params_fname,
         )
 
+        # Read in any further needed kwargs
         further_dist_args = self._build_further_distributor_kwargs(
             method=self.lower_model_method,
             zoning_system=self.lower_zoning_system,
@@ -883,7 +906,9 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         final_kwargs.update({
             'running_segmentation': self.running_segmentation,
             'cost_matrices': cost_matrices,
+            'calibration_matrix': calibration_matrix,
             'target_cost_distributions': target_cost_distributions,
+            'calibration_naming': lower_calibration_naming,
             'by_segment_kwargs': by_segment_kwargs,
         })
 

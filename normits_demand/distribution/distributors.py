@@ -436,12 +436,21 @@ class GravityDistributor(AbstractDistributor):
                            productions: pd.DataFrame,
                            attractions: pd.DataFrame,
                            cost_matrix: pd.DataFrame,
-                           target_cost_distributions: pd.DataFrame,
+                           calibration_matrix: pd.DataFrame,
+                           target_cost_distributions: Dict[Any, pd.DataFrame],
+                           calibration_naming: Dict[Any, Any],
                            running_segmentation: nd.SegmentationLevel,
                            **kwargs,
                            ):
         seg_name = running_segmentation.generate_file_name(segment_params)
         self._logger.info("Running for %s" % seg_name)
+
+        # TODO(BT): Multi-TLDs not supported yet.
+        # Do this to ignore for now
+        target_cost_distribution = target_cost_distributions[1]
+        # calibration_matrix
+        # target_cost_distributions
+        # calibration_naming
 
         # ## SET UP SEGMENT LOG ## #
         # Logging set up
@@ -484,7 +493,7 @@ class GravityDistributor(AbstractDistributor):
             row_targets=np_productions,
             col_targets=np_attractions,
             cost_matrix=np_cost,
-            target_cost_distribution=target_cost_distributions,
+            target_cost_distribution=target_cost_distribution,
             running_log_path=log_path,
             cost_function=kwargs.get('cost_function'),
             target_convergence=kwargs.get('target_convergence'),
@@ -502,7 +511,7 @@ class GravityDistributor(AbstractDistributor):
 
         # ## GENERATE REPORTS AND WRITE OUT ## #
         report = self.generate_cost_distribution_report(
-            target=target_cost_distributions,
+            target=target_cost_distribution,
             achieved_band_share=calib.achieved_band_share,
             achieved_convergence=calib.achieved_convergence,
             achieved_distribution=calib.achieved_distribution,
