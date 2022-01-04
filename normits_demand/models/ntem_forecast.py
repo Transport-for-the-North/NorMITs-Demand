@@ -7,7 +7,7 @@
 # Standard imports
 import dataclasses
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Any
 
 # Third party imports
 import numpy as np
@@ -19,7 +19,6 @@ from normits_demand import logging as nd_log
 from normits_demand import core as nd_core
 from normits_demand.utils import timing
 from normits_demand import efs_constants as efs_consts
-from normits_demand import constants as consts
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
@@ -343,7 +342,7 @@ class NTEMImportMatrices:
     """
 
     MATRIX_FOLDER = "{name}/post_me/tms_seg_pa"
-    _MATRIX_FILENAME = "{hb}_pa_yr{yr}_p{p}_m{m}.csv"
+    SEGMENTATION = {"hb": "hb_p_m", "nhb": "nhb_p_m"}
 
     def __init__(self, import_folder: Path, year: int, model_name: str) -> None:
         file_ops.check_path_exists(import_folder)
@@ -365,6 +364,10 @@ class NTEMImportMatrices:
                 "cannot handle models with more than one mode, "
                 f"this model ({self.model_name}) has {len(self.mode)} modes"
             )
+        self.segmentation = {
+            k: nd_core.get_segmentation_level(s)
+            for k, s in self.SEGMENTATION.items()
+        }
         self._hb_paths = None
         self._nhb_paths = None
 
@@ -377,26 +380,52 @@ class NTEMImportMatrices:
     def __repr__(self) -> str:
         return f"{self.__module__}.{self!s}"
 
-    def _check_path(self, hb: str, purpose: int) -> Path:
-        """Checks file exists for specific purpose.
+    def _check_path(self, hb: str, segment_params: Dict[str, Any]) -> Path:
+        """Generate the segment filename and check it exists.
 
         Parameters
         ----------
         hb : str {'hb', 'nhb'}
             Whether using home-based (hb) or non-home-based (nhb).
-        purpose : int
-            Number of the specific purpose to get path for.
+        segment_params : Dict[str, Any]
+            A dictionary of {segment_name: segment_value}, passed
+            to `SegmentationLevel.generate_file_name`.
 
         Returns
         -------
         Path
-            Path to the matrix file.
+            Path to segment matrix file.
         """
-        path = self.matrix_folder / self._MATRIX_FILENAME.format(
-            hb=hb, yr=self.year, p=purpose, m=self.mode
+        name = self.segmentation[hb].generate_file_name(
+            segment_params,
+            file_desc="pa",
+            trip_origin=hb,
+            year=self.year,
         )
+        path = self.matrix_folder / name
         file_ops.check_file_exists(path, find_similar=True)
         return path
+
+    def _get_paths(self, hb: str) -> Dict[int, Path]:
+        """Get paths to all hb, or nhb, matrices.
+
+        Parameters
+        ----------
+        hb : str {'hb', 'nhb'}
+            Whether using home-based (hb) or non-home-based (nhb).
+
+        Returns
+        -------
+        Dict[int, Path]
+            Dictionary containing paths to matrices (values)
+            for each purpose (keys).
+        """
+        paths = {}
+        for seg in self.segmentation[hb]:
+            if seg["m"] != self.mode:
+                continue
+            paths[seg["p"]] = self._check_path(hb, seg)
+        return paths
 
     @property
     def hb_paths(self) -> Dict[int, Path]:
@@ -410,9 +439,7 @@ class NTEMImportMatrices:
             for a list of all home-based purposes
         """
         if self._hb_paths is None:
-            self._hb_paths = {}
-            for p in consts.ALL_HB_P:
-                self._hb_paths[p] = self._check_path("hb", p)
+            self._hb_paths = self._get_paths("hb")
         return self._hb_paths.copy()
 
     @property
@@ -427,9 +454,7 @@ class NTEMImportMatrices:
             for a list of all non-home-based purposes
         """
         if self._nhb_paths is None:
-            self._nhb_paths = {}
-            for p in consts.ALL_NHB_P:
-                self._nhb_paths[p] = self._check_path("nhb", p)
+            self._nhb_paths = self._get_paths("nhb")
         return self._nhb_paths.copy()
 
 
