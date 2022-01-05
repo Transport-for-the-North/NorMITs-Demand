@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 # Local imports
+import normits_demand
 from normits_demand.utils import file_ops
 from normits_demand import logging as nd_log
 from normits_demand import core as nd_core
@@ -26,6 +27,10 @@ LAD_ZONE_SYSTEM = "lad_2020"
 
 
 ##### CLASSES #####
+class NTEMForecastError(normits_demand.NormitsDemandError):
+    """Exception for errors caused during NTEM forecasting."""
+
+
 class TEMProData:
     """Class for reading and filtering TEMPro trip end data.
 
@@ -36,7 +41,7 @@ class TEMProData:
 
     Raises
     ------
-    ValueError
+    NTEMForecastError
         If `years` isn't (or cannot be converted to)
         a list of integers.
     """
@@ -60,7 +65,9 @@ class TEMProData:
         try:
             self._years = [int(i) for i in years]
         except (ValueError, TypeError) as err:
-            raise ValueError("years should be a list of integers") from err
+            raise NTEMForecastError(
+                "years should be a list of integers"
+            ) from err
         self._columns.update({str(y): float for y in self._years})
         self._data = None
         self._hb_attractions = None
@@ -80,7 +87,9 @@ class TEMProData:
                 nrows=5,
             )
         except ValueError as err:
-            raise ValueError(f"error reading TEMPro data - {err}") from err
+            raise NTEMForecastError(
+                f"error reading TEMPro data - {err}"
+            ) from err
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}(years={self._years})"
@@ -135,7 +144,7 @@ class TEMProData:
 
         Raises
         ------
-        ValueError
+        NTEMForecastError
             If an incorrect value is given for `segmentation`
             or `pa` parameters.
         """
@@ -146,14 +155,16 @@ class TEMProData:
         elif seg == "nhb":
             purp_mask = self.data["purpose"] > 8
         else:
-            raise ValueError(
+            raise NTEMForecastError(
                 "segmentation should be one of "
                 f"{self.SEGMENTATION.values()} not {seg!r}"
             )
         # Create boolean mask for productions/attractions
         pa_options = ["attractions", "productions"]
         if pa not in pa_options:
-            raise ValueError(f"pa should be one of {pa_options} not {pa!r}")
+            raise NTEMForecastError(
+                f"pa should be one of {pa_options} not {pa!r}"
+            )
         pa_mask = self.data["trip_end_type"] == pa
 
         cols = ["msoa_zone_id", *self.SEGMENTATION_COLUMNS.values(), str(year)]
@@ -256,7 +267,7 @@ class TEMProData:
 
         Raises
         ------
-        ValueError
+        NTEMForecastError
             If any of the parameters provided aren't (or
             cannot be converted to) a list of integers.
         """
@@ -268,7 +279,7 @@ class TEMProData:
                 try:
                     ls = [int(i) for i in ls]
                 except (ValueError, TypeError) as err:
-                    raise ValueError(
+                    raise NTEMForecastError(
                         f"{c} should be a list of integers"
                     ) from err
                 filtered = filtered.loc[filtered[c].isin(ls)]
@@ -293,6 +304,12 @@ class TEMProForecasts:
     nhb_productions: Dict[int, nd_core.DVector]
         Non-home-based productions trip end vectors,
         dictionary keys are the year.
+    
+    Raises
+    ------
+    NTEMForecastError
+        If the dictionary keys in all of the attributes
+        aren't the same.
     """
     hb_attractions: Dict[int, nd_core.DVector]
     hb_productions: Dict[int, nd_core.DVector]
@@ -303,7 +320,9 @@ class TEMProForecasts:
         """Check all attributes have the same keys."""
         for name, field in dataclasses.asdict(self).items():
             if field.keys() != self.hb_attractions.keys():
-                raise ValueError(f"years (keys) differ for attribute {name!r}")
+                raise NTEMForecastError(
+                    f"years (keys) differ for attribute {name!r}"
+                )
 
     def save(self, folder: Path):
         """Saves all DVectors to `folder`.
@@ -350,6 +369,7 @@ class TEMProForecasts:
                 for yr, dvec in attribute.items()
             }
         return TEMProForecasts(**new_data)
+
 
 class NTEMImportMatrices:
     """Generates paths to base PostME matrices.
@@ -517,12 +537,14 @@ def trip_end_growth(
 
     Raises
     ------
-    ValueError
+    NTEMForecastError
         If `normits_demand.efs_constants.BASE_YEAR` is not
         in `tempro_vectors`.
     """
     if efs_consts.BASE_YEAR not in tempro_vectors:
-        raise ValueError(f"base year ({efs_consts.BASE_YEAR}) data not given")
+        raise NTEMForecastError(
+            f"base year ({efs_consts.BASE_YEAR}) data not given"
+        )
     old_zone = tempro_vectors[efs_consts.BASE_YEAR].zoning_system
     growth_zone = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
     base_data = tempro_vectors[efs_consts.BASE_YEAR
@@ -605,7 +627,7 @@ def grow_tempro_data(tempro_data: TEMProData) -> TEMProForecasts:
 
     Raises
     ------
-    ValueError
+    NTEMForecastError
         If `tempro_data` isn't an instance of `TEMProData`.
 
     See Also
@@ -614,7 +636,7 @@ def grow_tempro_data(tempro_data: TEMProData) -> TEMProForecasts:
         a single dictionary e.g. `hb_attractions`.
     """
     if not isinstance(tempro_data, TEMProData):
-        raise ValueError(
+        raise NTEMForecastError(
             f"tempro_data should be TEMProData type not {type(tempro_data)}"
         )
     grown = {}
