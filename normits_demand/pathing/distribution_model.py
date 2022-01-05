@@ -248,7 +248,13 @@ class DMArgumentBuilderBase(abc.ABC):
         # Init
         in_zone_col = self.upper_zoning_system.col_name
         out_zone_col = self.lower_zoning_system.col_name
-        pop_trans, emp_trans = self._get_translations()
+
+        # Don't need any translations if same
+        if self.upper_zoning_system != self.lower_zoning_system:
+            pop_trans, emp_trans = self._get_translations()
+        else:
+            pop_trans = None
+            emp_trans = None
 
         # Convert upper matrices into a efficient dataframes
         eff_df_list = list()
@@ -268,16 +274,17 @@ class DMArgumentBuilderBase(abc.ABC):
             df = file_ops.read_df(path, index_col=0)
 
             # Translate to lower zoning
-            df = translation.pandas_matrix_zone_translation(
-                matrix=df,
-                row_translation=pop_trans,
-                col_translation=emp_trans,
-                from_zone_col=self.upper_zoning_system.col_name,
-                to_zone_col=self.lower_zoning_system.col_name,
-                factors_col=self._translation_weight_col,
-                from_unique_zones=self.upper_zoning_system.unique_zones,
-                to_unique_zones=self.lower_zoning_system.unique_zones,
-            )
+            if not(pop_trans is None or emp_trans is None):
+                df = translation.pandas_matrix_zone_translation(
+                    matrix=df,
+                    row_translation=pop_trans,
+                    col_translation=emp_trans,
+                    from_zone_col=self.upper_zoning_system.col_name,
+                    to_zone_col=self.lower_zoning_system.col_name,
+                    factors_col=self._translation_weight_col,
+                    from_unique_zones=self.upper_zoning_system.unique_zones,
+                    to_unique_zones=self.lower_zoning_system.unique_zones,
+                )
 
             # Split into the internal and external demand for lower model
             internal_mask = pd_utils.get_wide_mask(df=df, zones=self.lower_running_zones)
