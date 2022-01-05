@@ -42,7 +42,13 @@ from normits_demand.cost import utils as cost_utils
 class GravityModelCalibrator:
     # TODO(BT): Write GravityModelCalibrator docs
 
-    _target_cost_distribution_cols = ['min', 'max', 'band_share']
+    _avg_cost_col = 'ave_km'        # Should be more generic
+    _target_cost_distribution_cols = ['min', 'max', 'trips'] + [_avg_cost_col]
+    _least_squares_method = 'trf'
+
+    # Cost amplification constants
+    _cost_amplify_min_dist = np.inf     # Turn off for now
+    _cost_amplify_power = 1
 
     def __init__(self,
                  row_targets: np.ndarray,
@@ -83,7 +89,7 @@ class GravityModelCalibrator:
         self.col_targets = col_targets
         self.cost_function = cost_function
         self.cost_matrix = cost_matrix
-        self.target_cost_distribution = target_cost_distribution
+        self.target_cost_distribution = self._update_tcd(target_cost_distribution)
         self.furness_max_iters = furness_max_iters
         self.furness_tol = furness_tol
         self.running_log_path = running_log_path
@@ -102,6 +108,22 @@ class GravityModelCalibrator:
         self.achieved_band_share = None
         self.achieved_convergence = None
         self.achieved_distribution = None
+
+    @staticmethod
+    def _update_tcd(tcd: pd.DataFrame) -> pd.DataFrame:
+        """Extrapolates data where needed"""
+        # Add in ave_km where needed
+        tcd['ave_km'] = np.where(
+            (tcd['ave_km'] == 0) | np.isnan(tcd['ave_km']),
+            tcd['min'],
+            tcd['ave_km'],
+        )
+
+        # Generate the band shares using the given data
+        tcd['band_share'] = tcd['trips'].copy()
+        tcd['band_share'] /= tcd['band_share'].values.sum()
+
+        return tcd
 
     def _order_cost_params(self, params: Dict[str, Any]) -> List[Any]:
         """Order params into a list that self.cost_function expects"""
@@ -134,7 +156,44 @@ class GravityModelCalibrator:
             self._order_cost_params(self.cost_function.param_max),
         )
 
-    def _gm_distribution(self, _, *cost_args: float) -> np.ndarray:
+    def _cost_amplify(self, cost_matrix: np.ndarray) -> np.ndarray:
+        if 0 < self._cost_amplify_min_dist < np.max(cost_matrix):
+            factor = (cost_matrix / self._cost_amplify_min_dist) ** self._cost_amplify_min_dist
+            new_val = cost_matrix * factor
+        else:
+            new_val = cost_matrix
+
+        return np.where(
+            cost_matrix <= self._cost_amplify_min_dist,
+            1,
+            new_val,
+        )
+
+    def _guess_init_params(self, cost_args: List[float]):
+        """Guesses what the initial params should be.
+
+        Uses the average cost in each band to estimate what changes in
+        the cost_params would do to the final cost distributions. This is a
+        very coarse grained estimation, but can be used to guess around about
+        where the best init params are.
+
+        Used by the `optimize.least_squares` function.
+        """
+        # Convert the cost function args back into kwargs
+        cost_kwargs = self._cost_params_to_kwargs(cost_args)
+
+        # Used to optionally increase the cost of long distance trips
+        avg_cost_vals = self.target_cost_distribution[self._avg_cost_col].values
+        avg_cost_vals = self._cost_amplify(avg_cost_vals)
+
+        # Estimate what the cost function will do to the costs - on average
+        estimated_cost_vals = self.cost_function.calculate(avg_cost_vals, **cost_kwargs)
+        estimated_band_shares = estimated_cost_vals / estimated_cost_vals.sum()
+
+        # return the residuals to the target
+        return self.target_cost_distribution['band_share'].values - estimated_band_shares
+
+    def _gm_distribution(self, _, *cost_args: List[float]) -> np.ndarray:
         """Runs gravity model with given parameters and returns distribution.
 
         Used by the `optimize.curve_fit` function.
@@ -210,6 +269,7 @@ class GravityModelCalibrator:
 
     def calibrate(self,
                   init_params: Dict[str, Any],
+                  estimate_init_params: bool = False,
                   calibrate_params: bool = True,
                   diff_step: float = None,
                   ftol: float = 1e-8,
@@ -232,6 +292,11 @@ class GravityModelCalibrator:
         init_params:
             A dictionary of {parameter_name: parameter_value} to pass
             into the cost function as initial parameters.
+
+        estimate_init_params:
+            Whether to ignore the given init_params and estimate new ones
+            using least squares, or just use the given init_params to start
+            with.
 
         calibrate_params:
             Whether to calibrate the cost parameters or not. If not
@@ -293,6 +358,20 @@ class GravityModelCalibrator:
         self._loop_start_time = timing.current_milli_time()
         self.initial_cost_params = None
         self.initial_convergence = None
+
+        # Estimate what the inital params should be
+        estimate_init_params = True
+        if estimate_init_params:
+            result = optimize.least_squares(
+                self._guess_init_params,
+                x0=self._order_init_params(init_params),
+                method=self._least_squares_method,
+                bounds=self._order_bounds(),
+            )
+            init_params = self._cost_params_to_kwargs(result.x)
+
+        print("calibrating")
+        exit()
 
         # Calculate the optimal cost parameters if we're calibrating
         if calibrate_params is True:

@@ -302,8 +302,8 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             fn=self.distribute_segment,
             kwargs=kwarg_list,
             pbar_kwargs=pbar_kwargs,
-            # process_count=0,
-            process_count=self.process_count,
+            process_count=0,
+            # process_count=self.process_count,
         )
 
     @staticmethod
