@@ -25,6 +25,7 @@ import pandas as pd
 # Local imports
 import normits_demand as nd
 import normits_demand.constants as consts
+import normits_demand.efs_constants as efs_consts
 
 from normits_demand.validation import checks
 
@@ -111,17 +112,17 @@ def decompile_noham(year: int,
                 vehicle_occupancy_import=vehicle_occupancy_import
             )
 
-        od2pa.decompile_od(
-            od_import=post_me_renamed_export,
-            od_export=od_export,
-            decompile_factors_path=decompile_factors_path,
-            year=year
-        )
+        # od2pa.decompile_od(
+        #     od_import=post_me_renamed_export,
+        #     od_export=od_export,
+        #     decompile_factors_path=decompile_factors_path,
+        #     year=year
+        # )
 
         # Re-aggregate back up to VDM seg, but hb/nhb separated
         if seg_level == 'vdm':
             # Get compile params path
-            output_fname = du.get_compile_params_name('vdm_od', consts.BASE_YEAR)
+            output_fname = du.get_compile_params_name('vdm_od', efs_consts.BASE_YEAR)
             compile_params_path = os.path.join(tour_proportions_export, output_fname)
 
             # Compile the matrices
@@ -129,10 +130,10 @@ def decompile_noham(year: int,
                 import_dir=od_export,
                 export_dir=tour_proportions_export,
                 matrix_format='od',
-                years_needed=[consts.BASE_YEAR],
+                years_needed=[efs_consts.BASE_YEAR],
                 m_needed=seg_params['m_needed'],
                 ca_needed=seg_params['ca_needed'],
-                tp_needed=consts.TIME_PERIODS,
+                tp_needed=efs_consts.TIME_PERIODS,
                 split_hb_nhb=True,
                 split_od_from_to=True,
                 output_fname=output_fname
@@ -225,11 +226,11 @@ def convert_norms_to_efs_matrices(import_dir: nd.PathLike,
     # Init
     conversion_dict = consts.NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING
 
-    if len(consts.MODEL_MODES['norms']) != 1:
+    if len(efs_consts.MODEL_MODES['norms']) != 1:
         raise nd.NormitsDemandError(
             "Somehow gotten more than 1 more for NoRMS! What's gone wrong?"
         )
-    mode = consts.MODEL_MODES['norms'][0]
+    mode = efs_consts.MODEL_MODES['norms'][0]
 
     # ## CHECK POST-ME MATRICES EXIST ## #
     # Build a list of matrix names

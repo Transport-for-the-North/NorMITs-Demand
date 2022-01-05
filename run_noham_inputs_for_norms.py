@@ -18,7 +18,8 @@ import pandas as pd
 
 # Local imports
 import normits_demand as nd
-from normits_demand import constants as consts
+from normits_demand import constants
+from normits_demand import efs_constants
 
 from normits_demand.utils import output_converter as oc
 from normits_demand.utils import general as du
@@ -30,17 +31,17 @@ from normits_demand.matrices import matrix_processing as mat_p
 def main():
 
     # Running params
-    run_vdm_od2pa = False
+    run_vdm_od2pa = True
     run_nhb_splitting_factors = False
     convert_tour_props = False
-    convert_matrices = True
+    convert_matrices = False
 
     # Build and EFS instance for the paths
-    scenario = consts.SC00_NTEM
-    iter_num = '3f'
+    scenario = constants.SC00_NTEM
+    iter_num = '3i'
     import_home = "I:/"
     export_home = "E:/"
-    model_name = consts.MODEL_NAME
+    model_name = efs_constants.MODEL_NAME
 
     efs = nd.ExternalForecastSystem(
         iter_num=iter_num,
@@ -54,10 +55,10 @@ def main():
     seg_level = 'vdm'
     hb_seg_params = {
         'to_needed': ['hb'],
-        'uc_needed': consts.USER_CLASSES,
-        'm_needed': consts.MODEL_MODES[model_name],
+        'uc_needed': efs_constants.USER_CLASSES,
+        'm_needed': efs_constants.MODEL_MODES[model_name],
         'ca_needed': efs.ca_needed,
-        'tp_needed': consts.TIME_PERIODS
+        'tp_needed': efs_constants.TIME_PERIODS
     }
     nhb_seg_params = hb_seg_params.copy()
     nhb_seg_params['to_needed'] = ['nhb']
@@ -77,7 +78,7 @@ def main():
             tour_proportions_export=efs.params['tours'],
             decompile_factors_path=efs.imports['post_me_factors'],
             vehicle_occupancy_import=efs.imports['home'],
-            overwrite_decompiled_od=False,
+            overwrite_decompiled_od=True,
             overwrite_tour_proportions=True,
         )
 
@@ -85,7 +86,7 @@ def main():
             import_dir=efs.exports['post_me']['pa'],
             export_dir=efs.exports['post_me']['vdm_pa_24'],
             matrix_format='pa',
-            years_needed=[consts.BASE_YEAR],
+            years_needed=[efs_constants.BASE_YEAR],
             **hb_seg_params
         )
 
@@ -95,7 +96,7 @@ def main():
             export_dir=efs.exports['post_me']['od_24'],
             matrix_format='od',
             split_factors_path=efs.params['tours'],
-            years_needed=[consts.BASE_YEAR],
+            years_needed=[efs_constants.BASE_YEAR],
             **nhb_seg_params
         )
 
@@ -109,7 +110,7 @@ def main():
         oc.noham_vdm_tour_proportions_out(
             input_path=efs.params['tours'],
             output_path=noham_tp_path,
-            year=consts.BASE_YEAR,
+            year=efs_constants.BASE_YEAR,
             seg_level=seg_level,
             seg_params=hb_seg_params,
         )
@@ -138,7 +139,7 @@ def future_year():
     convert_matrices = True
 
     # Build and EFS instance for the paths
-    scenario = consts.SC01_JAM
+    scenario = constants.SC01_JAM
     iter_num = '3i'
     import_home = "I:/"
     export_home = "I:/"
@@ -171,7 +172,7 @@ def future_year():
             matrix_format='pa',
             split_hb_nhb=True,
             years_needed=future_years,
-            m_needed=consts.MODEL_MODES[model_name],
+            m_needed=efs_constants.MODEL_MODES[model_name],
             ca_needed=efs.ca_needed,
             tp_needed=None,
         )
@@ -181,7 +182,7 @@ def future_year():
                 mat_import=efs.exports['pa_24_elast'],
                 mat_export=efs.exports['vdm_pa_24'],
                 compile_params_path=path,
-                round_dp=consts.DEFAULT_ROUNDING,
+                round_dp=constants.DEFAULT_ROUNDING,
             )
 
     # Convert matrices to long format
@@ -198,5 +199,5 @@ def future_year():
 
 
 if __name__ == '__main__':
-    # main()
-    future_year()
+    main()
+    # future_year()

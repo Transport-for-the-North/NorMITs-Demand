@@ -186,7 +186,7 @@ class ExternalForecastSystem:
         None
         """
         # Path building is slightly different for default NTEM
-        if self.scenario_name == efs_consts.SC00_NTEM:
+        if self.scenario_name == consts.SC00_NTEM:
             # Setup directory paths
             home = self.imports['default_inputs']
             pop_home = os.path.join(home, 'population')
@@ -198,7 +198,7 @@ class ExternalForecastSystem:
             emp_growth_path = os.path.join(emp_home, 'future_workers_growth.csv')
             emp_constraint_path = os.path.join(emp_home, 'future_workers_growth_values.csv')
 
-        elif self.scenario_name in efs_consts.TFN_SCENARIOS:
+        elif self.scenario_name in consts.TFN_SCENARIOS:
             # Setup directory paths
             scenario_home = os.path.join(self.imports['scenarios'],
                                          self.scenario_name)
