@@ -22,6 +22,7 @@ from normits_demand.mdd_fusion import mdd_fusion_engine
 from normits_demand import fusion_constants as consts
 
 distance_folder = r'Y:\NoHAM\17.TUBA_Runs\-TPT\Skims\RefDist_Skims'
+inputs_folder = r'Y:\Mobile Data\Processing\Fusion_Inputs'
 # TODO: Add looping dictionaries
 
 def mode_correction():
@@ -99,11 +100,47 @@ def nts_control():
 
 
 def fusion_factors():
-    # TODO: import NoHAM Car
-    # TODO: import MDD Car
-    # TODO: loop build_fusion_factor for
-    mov = ['I-I', 'S-E']
-        #mdd_fusion_engine.build_fusion_factor
+    # Import distances dictionary
+    distance_file = inputs_folder + '\\' + 'NoHAM_Distances.pkl'
+    with open(distance_file, 'rb') as log:
+        dct_distance = pk.load(log)
+    # Import matrix type arrays
+    # Origin types
+    origin_file = inputs_folder + '\\' + 'Origin_Type.csv'
+    origin_type_matrix = pd.read_csv(origin_file, delimiter=',', header=0)
+    origin_type_matrix = origin_type_matrix.to_numpy()
+    # Destination types
+    dest_file = inputs_folder + '\\' + 'Dest_Type.csv'
+    dest_type_matrix = pd.read_csv(dest_file, delimiter=',', header=0)
+    dest_type_matrix = dest_type_matrix.to_numpy()
+    # Import mdd demand
+    # TODO: check if PCUs
+    mdd_car_file = inputs_folder + '\\' + 'MDD_Car.pkl'
+    with open(mdd_car_file, 'rb') as log:
+        dct_mdd_demand = pk.load(log)
+    # Import noham PCUs
+    # TODO: Check for PCU file
+    noham_car_file = inputs_folder + '\\' + 'MDD_Car.pkl'
+    with open(noham_car_file, 'rb') as log:
+        dct_noham_demand = pk.load(log)
+
+    # TODO: loop demand dct and create factor dct
+    temp_array = np.zeros((2770, 2770))
+    input_matrix = temp_array
+    distance_matrix = dct_distance['Commute']
+    # TODO: package fusion factors into dct
+    fusion_matrix = mdd_fusion_engine.build_fusion_factor(input_matrix,
+                                                          distance_matrix,
+                                                          origin_type_matrix,
+                                                          dest_type_matrix,
+                                                          chop_head=False,
+                                                          chop_tail=False,
+                                                          origin_type=False,
+                                                          dest_type=False,
+                                                          min_dist=0,
+                                                          max_dist=9999,
+                                                          default_value=1)
+    # TODO: combine demand
 
 def main():
 
@@ -118,7 +155,7 @@ def main():
         # Space for comments
         nts_control()
 
-    run_package_fusion_dist = True
+    run_package_fusion_dist = False
     if run_package_fusion_dist:
         # Updates distance skims used within fusion
         print(mdd_fusion_engine.package_fusion_distances(inputs_path=distance_folder,
@@ -126,8 +163,9 @@ def main():
                                                          version_name='NoHAM_Base_2018_TS2_v106'))
     run_fusion_factors = True
     if run_fusion_factors:
+
         fusion_factors()
-        mdd_fusion_engine.build_fusion_factor
+
 
     print("end of main")
 

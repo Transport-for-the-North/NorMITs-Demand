@@ -38,11 +38,16 @@ def package_fusion_distances(inputs_path,
 
 def build_fusion_factor(input_matrix,
                         distance_matrix,
+                        origin_type_matrix,
+                        dest_type_matrix,
                         chop_head=False,
                         chop_tail=False,
+                        origin_type=False,
+                        dest_type=False,
                         min_dist=0,
                         max_dist=9999,
                         default_value=1):
+    print(str(chop_head) + ', ' + str(chop_tail) + ', ' + str(origin_type) + ', ' + str(dest_type))
     fusion_factor = (input_matrix * 0) + default_value
     if chop_head:
         head_factor = np.where(distance_matrix <= min_dist, 0, 1)
@@ -52,11 +57,15 @@ def build_fusion_factor(input_matrix,
         tail_factor = np.where(distance_matrix > max_dist, 0, 1)
     else:
         tail_factor = (input_matrix * 0) + 1
-    fusion_factor = (fusion_factor * head_factor * tail_factor)
-    # TODO: insert type adjustment
-    return fusion_factor
-
-
+    if origin_type and dest_type:
+        type_factor = np.minimum(origin_type_matrix, dest_type_matrix)
+    elif origin_type:
+        type_factor = origin_type_matrix
+    elif dest_type:
+        type_factor = dest_type_matrix
+    else:
+        type_factor = (input_matrix * 0) + 1
+    fusion_factor = (fusion_factor * head_factor * tail_factor * type_factor)
     return fusion_factor
 
 
