@@ -299,6 +299,12 @@ class TEMProForecasts:
     nhb_attractions: Dict[int, nd_core.DVector]
     nhb_productions: Dict[int, nd_core.DVector]
 
+    def __post_init__(self):
+        """Check all attributes have the same keys."""
+        for name, field in dataclasses.asdict(self).items():
+            if field.keys() != self.hb_attractions.keys():
+                raise ValueError(f"years (keys) differ for attribute {name!r}")
+
     def save(self, folder: Path):
         """Saves all DVectors to `folder`.
 
@@ -317,6 +323,33 @@ class TEMProForecasts:
             for yr, dvec in years.items():
                 dvec.compress_out(folder / f"{name}-{yr}")
 
+    def translate_zoning(self, zone_system: str, **kwargs) -> TEMProForecasts:
+        """Translates all DVectors into new `zone_system`.
+
+        Translations are done using `DVector.translate_zoning`
+        and a new instance of `TEMProForecasts` is returned.
+        This does not update the current instance.
+
+        Parameters
+        ----------
+        zone_system : str
+            Name of the zone system to translate to.
+
+        Returns
+        -------
+        TEMProForecasts
+            New instance of this class with the DVectors
+            all translated into the new `zone_system`.
+        """
+        LOG.info("Translating TEMProForecasts zone system to %s", zone_system)
+        zoning = nd_core.get_zoning_system(zone_system)
+        new_data = {}
+        for name, attribute in dataclasses.asdict(self).items():
+            new_data[name] = {
+                yr: dvec.translate_zoning(zoning, **kwargs)
+                for yr, dvec in attribute.items()
+            }
+        return TEMProForecasts(**new_data)
 
 class NTEMImportMatrices:
     """Generates paths to base PostME matrices.
