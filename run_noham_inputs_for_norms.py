@@ -31,8 +31,8 @@ from normits_demand.matrices import matrix_processing as mat_p
 def main():
 
     # Running params
-    run_vdm_od2pa = True
-    run_nhb_splitting_factors = False
+    run_vdm_od2pa = False
+    run_nhb_splitting_factors = True
     convert_tour_props = False
     convert_matrices = False
 

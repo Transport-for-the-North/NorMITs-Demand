@@ -112,12 +112,12 @@ def decompile_noham(year: int,
                 vehicle_occupancy_import=vehicle_occupancy_import
             )
 
-        # od2pa.decompile_od(
-        #     od_import=post_me_renamed_export,
-        #     od_export=od_export,
-        #     decompile_factors_path=decompile_factors_path,
-        #     year=year
-        # )
+        od2pa.decompile_od(
+            od_import=post_me_renamed_export,
+            od_export=od_export,
+            decompile_factors_path=decompile_factors_path,
+            year=year
+        )
 
         # Re-aggregate back up to VDM seg, but hb/nhb separated
         if seg_level == 'vdm':
