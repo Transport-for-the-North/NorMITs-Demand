@@ -304,7 +304,7 @@ class TEMProForecasts:
     nhb_productions: Dict[int, nd_core.DVector]
         Non-home-based productions trip end vectors,
         dictionary keys are the year.
-    
+
     Raises
     ------
     NTEMForecastError
@@ -342,7 +342,7 @@ class TEMProForecasts:
             for yr, dvec in years.items():
                 dvec.compress_out(folder / f"{name}-{yr}")
 
-    def translate_zoning(self, zone_system: str, **kwargs) -> TEMProForecasts:
+    def translate_zoning(self, zone_system: str, **kwargs):
         """Translates all DVectors into new `zone_system`.
 
         Translations are done using `DVector.translate_zoning`
@@ -509,6 +509,41 @@ class NTEMImportMatrices:
         if self._nhb_paths is None:
             self._nhb_paths = self._get_paths("nhb")
         return self._nhb_paths.copy()
+
+    def output_filename(self, hb: str, purpose: int, year: int) -> str:
+        """Generate filename for output matrix.
+
+        Parameters
+        ----------
+        hb : str {'hb', 'nhb'}
+            Whether using home-based (hb) or non-home-based (nhb).
+        purpose : int
+            Purpose number.
+        year : int
+            The year for the output matrix
+
+        Returns
+        -------
+        str
+            Name of the output CSV file.
+        """
+        try:
+            seg = self.segmentation[hb]
+        except KeyError as err:
+            raise NTEMForecastError(
+                "hb should be one of %s not %r" %
+                (tuple(self.segmentation.keys()), hb)
+            ) from err
+        return seg.generate_file_name(
+            {
+                "p": purpose,
+                "m": self.mode
+            },
+            file_desc="pa",
+            trip_origin=hb,
+            year=year,
+            csv=True,
+        )
 
 
 ##### FUNCTIONS #####
