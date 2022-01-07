@@ -80,14 +80,12 @@ def iz_infill_costs(cost: pd.DataFrame,
 
 def calculate_cost_distribution(matrix: np.ndarray,
                                 cost_matrix: np.ndarray,
-                                min_bounds: List[float],
-                                max_bounds: List[float],
+                                min_bounds: List[float] = None,
+                                max_bounds: List[float] = None,
+                                bin_edges: List[float] = None,
                                 ) -> np.ndarray:
     """
     Calculates the band share distribution of matrix.
-
-    Uses the bounds supplied in target_cost_distribution, and the costs in
-    self.costs to calculate the equivalent band shares in matrix.
 
     Parameters
     ----------
@@ -107,22 +105,41 @@ def calculate_cost_distribution(matrix: np.ndarray,
         A list of maximum bounds for each edge of a distribution band.
         Corresponds to min_bounds.
 
+    bin_edges:
+        Defines a monotonically increasing array of bin edges, including the
+        rightmost edge, allowing for non-uniform bin widths. This argument
+        is passed straight into `numpy.histogram`
+
     Returns
     -------
     cost_distribution:
         a numpy array of distributed costs, where the bands are equivalent
         to min/max values in self.target_cost_distribution
+
+    See Also
+    --------
+    `numpy.histogram`
     """
-    # Init
-    total_trips = matrix.sum()
+    # Use bounds to calculate bin edges
+    if bin_edges is None:
+        if min_bounds is None or max_bounds is None:
+            raise ValueError(
+                "Either bin_edges needs to be set, or both min_bounds and "
+                "max_bounds needs to be set."
+            )
 
-    # Calculate band shares
-    distribution = list()
-    for min_val, max_val in zip(min_bounds, max_bounds):
-        cost_mask = (cost_matrix >= min_val) & (cost_matrix < max_val)
-        band_trips = (matrix * cost_mask).sum()
-        band_share = band_trips / total_trips
-        distribution.append(band_share)
+        bin_edges = [min_bounds[0]] + max_bounds
 
-    return np.array(distribution)
+    # Sort into bins
+    distribution, _ = np.histogram(
+        a=cost_matrix,
+        bins=bin_edges,
+        weights=matrix,
+    )
+
+    # Normalise
+    if distribution.sum() == 0:
+        return np.zeros_like(distribution)
+    else:
+        return distribution / distribution.sum()
 

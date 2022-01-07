@@ -258,7 +258,8 @@ def doubly_constrained_furness(seed_vals: np.array,
                                row_targets: np.array,
                                col_targets: np.array,
                                tol: float = 1e-9,
-                               max_iters: int = 5000
+                               max_iters: int = 5000,
+                               warning: bool = True,
                                ) -> Tuple[np.array, int, float]:
     """
     Performs a doubly constrained furness for max_iters or until tol is met
@@ -348,7 +349,7 @@ def doubly_constrained_furness(seed_vals: np.array,
             return np.zeros(furnessed_mat.shape), iter_num, np.inf
 
     # Warn the user if we exhausted our number of loops
-    if not early_exit:
+    if not early_exit and warning:
         print("WARNING! The doubly constrained furness exhausted its max "
               "number of loops (%d), while achieving an RMSE difference of "
               "%f. The values returned may not be accurate."
