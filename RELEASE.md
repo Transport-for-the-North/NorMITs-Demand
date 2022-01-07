@@ -24,9 +24,17 @@ Below, a brief summary of patches made since the previous version can be found.
   - takes further segmentation from NoTEM Bus Trip Ends
   - Fixed an issue so the attractions are balanced to the productions 
 - TMS Updates
+  - Renamed the Distribution Model, with a complete rewrite of code 
   - Optional read in of TramModel trip ends into TMS
   - Gravity Model Updates
     - Updated to read in initial cost params based on cost function names
       by default
     - Updated the furness to calculate Root Mean Squared Error weighted by the
       number of zones
+    - Added ability to take a guess at some good initial parameters.
+    - Added a custom Jacobian function to make the search for the best 
+      cost parameters significantly faster, while only losing an 
+      insignificant amount of accuracy.
+  - Added an option 3D Furness option
+    - Replaces the TMS "external model", same functionalty, but much more
+      flexible

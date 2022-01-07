@@ -336,6 +336,77 @@ class DMArgumentBuilderBase(abc.ABC):
 
         return productions, attractions
 
+    def _get_latest_matrix_time(self, matrix_dir: nd.PathLike) -> float:
+        """Gets the latest modified time from all the relevant matrices
+
+        Parameters
+        ----------
+        matrix_dir:
+            The directory to check the matrices in
+
+        Returns
+        -------
+        timestamp:
+            A floating point number giving the number of seconds since the
+            epoch (see the time module) for the most recent matrix file in
+            matrix_dir.
+
+        Raises
+        ------
+        OSError:
+            if the file does not exist or is inaccessible.
+        """
+        latest_time = 0
+        for segment_params in self.running_segmentation:
+            # Read in DF
+            fname = self.running_segmentation.generate_file_name(
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                file_desc='synthetic_pa',
+                segment_params=segment_params,
+                compressed=True,
+            )
+            path = os.path.join(matrix_dir, fname)
+
+            # Keep the latest time
+            mat_modified_time = os.path.getmtime(path)
+            if mat_modified_time > latest_time:
+                latest_time = mat_modified_time
+
+        return latest_time
+
+    @staticmethod
+    def _get_latest_cache_time(productions_cache: nd.PathLike,
+                               attractions_cache: nd.PathLike,
+                               ) -> float:
+        """Gets the latest modified time from the caches
+
+        Parameters
+        ----------
+        productions_cache:
+            The path to the productions cache to check
+
+        attractions_cache:
+            The path to the attractions cache to check
+
+        Returns
+        -------
+        timestamp:
+            A floating point number giving the number of seconds since the
+            epoch (see the time module) for the most recent of
+            productions_cache and attractions_cache.
+
+        Raises
+        ------
+        OSError:
+            if the file does not exist or is inaccessible.
+        """
+        productions_time = os.path.getmtime(productions_cache)
+        attractions_time = os.path.getmtime(attractions_cache)
+        if productions_time > attractions_time:
+            return productions_time
+        return attractions_time
+
     def _maybe_convert_upper_pa_to_lower(self,
                                          upper_model_matrix_dir: nd.PathLike,
                                          external_matrix_output_dir: nd.PathLike,
@@ -381,6 +452,17 @@ class DMArgumentBuilderBase(abc.ABC):
         # Init
         p_exists = os.path.isfile(productions_cache)
         a_exists = os.path.isfile(attractions_cache)
+
+        # Check if we need to overwrite regardless
+        if not overwrite_cache:
+            # Get the last modified time of matrices and caches
+            matrix_modified_time = self._get_latest_matrix_time(upper_model_matrix_dir)
+            cache_modified_time = self._get_latest_cache_time(
+                productions_cache=productions_cache,
+                attractions_cache=attractions_cache,
+            )
+
+            overwrite_cache = matrix_modified_time > cache_modified_time
 
         if not overwrite_cache and p_exists and a_exists:
             return file_ops.read_df(productions_cache), file_ops.read_df(attractions_cache)
