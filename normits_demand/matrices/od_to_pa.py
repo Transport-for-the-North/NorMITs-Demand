@@ -175,6 +175,9 @@ def _convert_to_efs_matrices_user_class(import_path: str,
     for fname in import_files:
         print("Converting '%s' to EFS matrix format..." % str(fname))
 
+        if '.csv' not in fname or '.pbz2' not in fname:
+            continue
+
         # Try get the calib params from the filename
         calib_params = du.post_me_fname_to_calib_params(fname,
                                                         force_year=force_year)

@@ -68,7 +68,7 @@ def main():
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
-        upper_zoning_system = nd.get_zoning_system('msoa')
+        upper_zoning_system = nd.get_zoning_system('noham')
         lower_zoning_system = nd.get_zoning_system('noham')
 
         # Define cost arguments
@@ -92,6 +92,7 @@ def main():
         upper_calibration_zones_fname = None
         upper_calibration_areas = upper_calibration_area
         upper_calibration_naming = None
+
         # upper_model_method = nd.DistributionMethod.FURNESS3D
         # upper_calibration_zones_fname = 'noham_north_other_rows.pbz2'
         # upper_calibration_areas = {1: 'north', 2: 'gb'}
@@ -111,7 +112,8 @@ def main():
             'grav_max_iters': 100,
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
-            'calibrate_params': False
+            'calibrate_params': True
+            'estimate_init_params': False
         }
 
         # Args only work for upper atm!
@@ -120,7 +122,7 @@ def main():
             'outer_max_iters': 50,
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
-            'calibrate': False,
+            'calibrate': True,
         }
 
         # Choose the correct kwargs

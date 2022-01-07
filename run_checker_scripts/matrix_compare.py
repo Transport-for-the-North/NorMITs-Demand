@@ -15,6 +15,7 @@ a report on their similarity
 import os
 import re
 import sys
+import operator
 
 import numpy as np
 import pandas as pd
@@ -77,11 +78,10 @@ TRIP_ORIGIN = None
 # OUTPUT_DIR = r'E:/'
 # REPORT_FNAME = 'compiled_report.csv'
 
-# Compare NoRMS Post-ME to EFS Post-ME
-ORIGINAL_DIR = r'I:\NorMITs Demand\import\norms\post_me'
-COMPARE_DIR = r'I:\NorMITs Demand\norms\EFS\iter3i\NTEM\Matrices\Compiled PA Matrices\2018'
-OUTPUT_DIR = r'E:/'
-REPORT_FNAME = 'compiled_report.csv'
+ORIGINAL_DIR = r'I:\NorMITs Demand\TMS\iter9.3.1\car_and_passenger\Final Outputs\Compiled OD Matrices\PCU'
+COMPARE_DIR = r'I:\NorMITs Demand\Distribution Model\iter9.3.2\car_and_passenger\Final Outputs\Compiled OD Matrices\PCU'
+OUTPUT_DIR = r'E:\tms_dm_reports'
+REPORT_FNAME = 'ext_compiled_report.csv'
 
 
 def list_files(path):
@@ -116,6 +116,26 @@ def compare_mats_fn(mat_fname):
             "and compare directories. Please check manually."
             % mat_fname
         )
+
+    # # Get specific area
+    # split = 2516        # noham
+    # total = 2770        # noham
+    # internal = list(range(1, split+1))
+    # external = list(range(split+1, total+1))
+    #
+    # area = external
+    # join_fn = operator.or_
+    #
+    # # Create square masks for the rows and cols
+    # orig.columns = orig.columns.astype(int)
+    # col_mask = np.broadcast_to(orig.columns.isin(area), orig.shape)
+    # index_mask = np.broadcast_to(orig.index.isin(area), orig.shape).T
+    #
+    # # Combine together to get the full mask
+    # mask = join_fn(col_mask, index_mask)
+    #
+    # orig *= mask
+    # comp *= mask
 
     # extract just the values
     orig = orig.values
