@@ -350,8 +350,7 @@ class GravityModelCalibrator:
             achieved_band_shares = self._cost_distribution(adj_final)
 
             # Calculate the Jacobian for this cost param
-            # jacobian_residuals = self.achieved_band_share - achieved_band_shares
-            jacobian_residuals = self.achieved_residuals - achieved_band_shares
+            jacobian_residuals = self.achieved_band_share - achieved_band_shares
             cost_step = cost_kwargs[cost_param] * diff_step
             cost_jacobian = jacobian_residuals / cost_step
 
