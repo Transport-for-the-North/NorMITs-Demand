@@ -12,12 +12,18 @@ File purpose:
 """
 # Built-Ins
 from typing import List
+from typing import Dict
 
 # Third Party
 import numpy as np
 import pandas as pd
 
+from matplotlib import pyplot as plt
+from matplotlib.ticker import PercentFormatter
+from matplotlib.ticker import AutoMinorLocator
+
 # Local Imports
+import normits_demand as nd
 
 
 def cells_in_bounds(min_bounds: np.ndarray,
@@ -143,3 +149,99 @@ def calculate_cost_distribution(matrix: np.ndarray,
     else:
         return distribution / distribution.sum()
 
+
+def plot_cost_distribution(target_x: List[float],
+                           target_y: List[float],
+                           achieved_x: List[float],
+                           achieved_y: List[float],
+                           convergence: float,
+                           cost_params: Dict[str, float],
+                           plot_title: str,
+                           path: nd.PathLike = None,
+                           close_plot: bool = True,
+                           **save_kwargs,
+                           ):
+
+    # Init
+    figure, axis = plt.subplots()
+
+    # Plot the target data
+    label = 'Target | [R2=%.4f]' % convergence
+    axis.plot(target_x, target_y, 'r--', label=label)
+
+    # Plot the achieved data
+    label = 'Achieved |'
+    for name, value in cost_params.items():
+        label += ' %s=%.2f' % (name, value)
+
+    axis.plot(achieved_x, achieved_y, 'b-', label=label)
+
+    # Label the plot
+    axis.set_xlabel('Distance (km)')
+    axis.set_ylabel('Band Share (%)')
+    axis.set_title(plot_title)
+    axis.legend()
+
+    # Format the plot
+    axis.yaxis.set_major_formatter(PercentFormatter(1.0))
+    axis.set_ylim(0, None)
+    axis.set_xlim(0, None)
+    axis.yaxis.set_minor_locator(AutoMinorLocator())
+    axis.xaxis.set_minor_locator(AutoMinorLocator())
+    axis.grid(which="major")
+    axis.grid(which="minor", ls=":")
+
+    # Save if a path is given
+    if path is not None:
+        # plt.savefig(path, **save_kwargs)
+        plt.show()
+
+    # Return plot if not closing
+    if not close_plot:
+        return figure, axis
+    else:
+        plt.close(figure)
+        return None, None
+
+
+def calculate_average_cost_in_bounds(min_bounds: np.ndarray,
+                                     max_bounds: np.ndarray,
+                                     cost_matrix: np.ndarray,
+                                     trips: np.ndarray,
+                                     ) -> np.ndarray:
+    """Calculates the average cost between each bounds pair
+
+    Parameters
+    ----------
+    min_bounds:
+        The minimum bounds for each cost band. Corresponds to max_bounds.
+
+    max_bounds:
+        The maximum bounds for each cost band. Corresponds to min_bounds.
+
+    cost_matrix:
+        A matrix of costs from each point to point. Corresponds to trips.
+
+    trips:
+        A matrix of trip counts from each point to point. Corresponds to
+        cost_matrix.
+
+    Returns
+    -------
+    average_costs:
+         An array of the average cost between each bounds pair
+    """
+    average_costs = list()
+    for min_val, max_val in zip(min_bounds, max_bounds):
+        band_mask = (cost_matrix >= min_val) & (cost_matrix < max_val)
+        band_distance = (trips * band_mask * cost_matrix).sum()
+        band_trips = (trips * band_mask).sum()
+
+        if band_trips == 0:
+            band_average = min_val
+        else:
+            band_average = band_distance / band_trips
+
+        average_costs.append(band_average)
+
+    return np.array(average_costs)

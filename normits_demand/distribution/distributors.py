@@ -313,6 +313,49 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
                                           achieved_distribution: np.ndarray,
                                           cost_matrix: np.ndarray,
                                           ) -> pd.DataFrame:
+        """Generates a report of the target and achieved cost distribution
+
+        Parameters
+        ----------
+        target:
+            A pandas dataframe defining the target cost distribution.
+            This should be in the same format as that handed over to
+            distribute_segment as target_cost_distribution.
+            i.e. Have at least 4 columns named:
+            ['min', 'max', 'ave_km', 'band_share'].
+
+        achieved_band_share:
+            A numpy array of the achieved band share values. Must
+            correspond to target['band_share']
+
+        achieved_convergence:
+            The value describing the convergence that was achieved between
+            achieved_band_share and target['band_share']
+
+        achieved_distribution:
+            The matrix of distributed values that produces achieved_band_share
+
+        cost_matrix:
+            The matrix of costs from zone to zone.
+
+        Returns
+        -------
+        report:
+            A report with the following columns:
+            col_order = [
+                'min (km)',
+                'max (km)',
+                'target_ave_length (km)',
+                'ach_ave_length (km)',
+                'target_band_share',
+                'ach_band_share',
+                'ach_band_trips',
+                'cell count',
+                'cell proportions',
+                'convergence',
+            ]
+
+        """
         # Create tld report
         rename = {
             'min': 'min (km)',
@@ -329,10 +372,10 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         report['ach_band_trips'] = report['ach_band_share'].copy()
         report['ach_band_trips'] *= achieved_distribution.sum()
 
-        report['ach_ave_length (km)'] = tld_utils.calculate_average_trip_lengths(
+        report['ach_ave_length (km)'] = cost_utils.calculate_average_cost_in_bounds(
             min_bounds=report['min (km)'].values,
             max_bounds=report['max (km)'].values,
-            trip_lengths=cost_matrix,
+            cost_matrix=cost_matrix,
             trips=achieved_distribution,
         )
 
@@ -361,6 +404,87 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         report = pd_utils.reindex_cols(report, col_order)
 
         return report
+
+    @staticmethod
+    def generate_cost_distribution_graph(target: pd.DataFrame,
+                                         achieved_band_share: np.ndarray,
+                                         achieved_convergence: float,
+                                         achieved_distribution: np.ndarray,
+                                         achieved_cost_params: Dict[str, float],
+                                         cost_matrix: np.ndarray,
+                                         plot_title: str,
+                                         graph_path: nd.PathLike,
+                                         **graph_kwargs,
+                                         ) -> None:
+        """Generates and writes out a graph of cost distributions
+
+        Compares target and achieved cost distribution, generates a graph,
+        and then writes the generated graph to disk
+
+        Parameters
+        ----------
+        target:
+            A pandas dataframe defining the target cost distribution.
+            This should be in the same format as that handed over to
+            distribute_segment as target_cost_distribution.
+            i.e. Have at least 4 columns named:
+            ['min', 'max', 'ave_km', 'band_share'].
+
+        achieved_band_share:
+            A numpy array of the achieved band share values. Must
+            correspond to target['band_share']
+
+        achieved_convergence:
+            The value describing the convergence that was achieved between
+            achieved_band_share and target['band_share']
+
+        achieved_distribution:
+            The matrix of distributed values that produces achieved_band_share
+
+        achieved_cost_params:
+            The cost parameters that were used to generate achieved_distribution.
+
+        cost_matrix:
+            The matrix of costs from zone to zone.
+
+        plot_title:
+            The title to give to the generated plot
+
+        graph_path:
+            The path to write the generated plot out to. This will be passed
+            to matplotlib.pyplot.savefig
+
+        graph_kwargs:
+            An further keyword arguments to pass to matplotlib.pyplot.savefig
+
+        See Also
+        --------
+        `matplotlib.pyplot.savefig`
+        """
+        # Init
+        if 'dpi' not in graph_kwargs:
+            graph_kwargs['dpi'] = 300
+
+        # Get the average cost values of the achieved
+        average_costs = cost_utils.calculate_average_cost_in_bounds(
+            min_bounds=target['min'].values,
+            max_bounds=target['max'].values,
+            cost_matrix=cost_matrix,
+            trips=achieved_distribution,
+        )
+
+        # Plot the graph and write out
+        cost_utils.plot_cost_distribution(
+            target_x=target['ave_km'].values,
+            target_y=target['band_share'].values,
+            achieved_x=average_costs,
+            achieved_y=achieved_band_share,
+            convergence=achieved_convergence,
+            cost_params=achieved_cost_params,
+            plot_title=plot_title,
+            path=graph_path,
+            **graph_kwargs,
+        )
 
 
 @enum.unique
@@ -510,6 +634,14 @@ class GravityDistributor(AbstractDistributor):
         )
 
         # ## GENERATE REPORTS AND WRITE OUT ## #
+        # Generate the base filename
+        fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            file_desc='tld_report',
+            segment_params=segment_params,
+        )
+
         report = self.generate_cost_distribution_report(
             target=target_cost_distribution,
             achieved_band_share=calib.achieved_band_share,
@@ -519,15 +651,23 @@ class GravityDistributor(AbstractDistributor):
         )
 
         # Write out report
-        fname = running_segmentation.generate_file_name(
-            trip_origin=self.trip_origin,
-            year=str(self.year),
-            file_desc='tld_report',
-            segment_params=segment_params,
-            csv=True,
-        )
-        path = os.path.join(self.report_paths.tld_report_dir, fname)
+        csv_fname = fname + '.csv'
+        path = os.path.join(self.report_paths.tld_report_dir, csv_fname)
         report.to_csv(path, index=False)
+
+        # Convert to a graph and write out
+        graph_fname = fname + '.png'
+        graph_path = os.path.join(self.report_paths.tld_report_dir, graph_fname)
+        self.generate_cost_distribution_graph(
+            target=target_cost_distribution,
+            achieved_band_share=calib.achieved_band_share,
+            achieved_convergence=calib.achieved_convergence,
+            achieved_distribution=calib.achieved_distribution,
+            achieved_cost_params=optimal_cost_params,
+            cost_matrix=cost_matrix.values,
+            plot_title=fname,
+            graph_path=graph_path,
+        )
 
         # ## WRITE DISTRIBUTED DEMAND ## #
         # Put the demand into a df
