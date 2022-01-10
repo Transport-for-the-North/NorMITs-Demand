@@ -11,6 +11,7 @@ File purpose:
 
 """
 # Built-Ins
+import bisect
 from typing import List
 from typing import Dict
 
@@ -18,12 +19,15 @@ from typing import Dict
 import numpy as np
 import pandas as pd
 
+import seaborn as sns
 from matplotlib import pyplot as plt
 from matplotlib.ticker import PercentFormatter
 from matplotlib.ticker import AutoMinorLocator
 
 # Local Imports
 import normits_demand as nd
+
+sns.set_theme(style="darkgrid")
 
 
 def cells_in_bounds(min_bounds: np.ndarray,
@@ -150,6 +154,20 @@ def calculate_cost_distribution(matrix: np.ndarray,
         return distribution / distribution.sum()
 
 
+def _get_cutoff_idx(lst: List[float], cutoff: float) -> int:
+    """Get the index of the cutoff point in lst"""
+    # Init
+    i = 0
+
+    # Loop until we pass the cutoff
+    for i, item in enumerate(reversed(lst)):
+        if item > cutoff:
+            break
+
+    # Flip the index to the forwards list
+    return -1-i
+
+
 def plot_cost_distribution(target_x: List[float],
                            target_y: List[float],
                            achieved_x: List[float],
@@ -157,51 +175,65 @@ def plot_cost_distribution(target_x: List[float],
                            convergence: float,
                            cost_params: Dict[str, float],
                            plot_title: str,
+                           band_share_cutoff: float = 0.005,
                            path: nd.PathLike = None,
                            close_plot: bool = True,
                            **save_kwargs,
                            ):
-
     # Init
-    figure, axis = plt.subplots()
+    plt.clf()
 
     # Plot the target data
     label = 'Target | [R2=%.4f]' % convergence
-    axis.plot(target_x, target_y, 'r--', label=label)
+    sns.lineplot(x=target_x, y=target_y, label=label)
 
     # Plot the achieved data
     label = 'Achieved |'
     for name, value in cost_params.items():
         label += ' %s=%.2f' % (name, value)
 
-    axis.plot(achieved_x, achieved_y, 'b-', label=label)
+    axis = sns.lineplot(x=achieved_x, y=achieved_y, label=label)
+
+    # Figure out where we need to plot up until
+    if band_share_cutoff <= 0:
+        upper_x_lim = None
+    else:
+        # Get the cutoff point indexes
+        target_idx = _get_cutoff_idx(target_y, band_share_cutoff)
+        achieved_idx = _get_cutoff_idx(achieved_y, band_share_cutoff)
+
+        # Keep the larger of the two
+        target_max_x = target_x[target_idx + 1]
+        achieved_max_x = achieved_x[achieved_idx + 1]
+        upper_x_lim = max([target_max_x, achieved_max_x])
 
     # Label the plot
     axis.set_xlabel('Distance (km)')
     axis.set_ylabel('Band Share (%)')
     axis.set_title(plot_title)
-    axis.legend()
 
     # Format the plot
     axis.yaxis.set_major_formatter(PercentFormatter(1.0))
     axis.set_ylim(0, None)
-    axis.set_xlim(0, None)
+    axis.set_xlim(0, upper_x_lim)
     axis.yaxis.set_minor_locator(AutoMinorLocator())
     axis.xaxis.set_minor_locator(AutoMinorLocator())
-    axis.grid(which="major")
-    axis.grid(which="minor", ls=":")
+    axis.tick_params(which="both", bottom=True)
+    axis.grid(which="minor", ls=':')
+
+    # Set the aspect ratio
+    ratio = 9/16
+    x_left, x_right = axis.get_xlim()
+    y_low, y_high = axis.get_ylim()
+    axis.set_aspect(abs((x_right - x_left) / (y_low - y_high)) * ratio)
 
     # Save if a path is given
     if path is not None:
-        # plt.savefig(path, **save_kwargs)
-        plt.show()
+        plt.savefig(path, **save_kwargs)
 
-    # Return plot if not closing
-    if not close_plot:
-        return figure, axis
-    else:
-        plt.close(figure)
-        return None, None
+    # Clear plot, unless told otherwise
+    if close_plot:
+        plt.clf()
 
 
 def calculate_average_cost_in_bounds(min_bounds: np.ndarray,
