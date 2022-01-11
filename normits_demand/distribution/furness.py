@@ -286,6 +286,11 @@ def doubly_constrained_furness(seed_vals: np.array,
     max_iters:
         The maximum number of iterations to complete before exiting.
 
+    warning:
+        Whether to print a warning or not when the tol cannot be met before
+        max_iters.
+
+
     Returns
     -------
     furnessed_matrix:
@@ -321,20 +326,38 @@ def doubly_constrained_furness(seed_vals: np.array,
         # ## COL CONSTRAIN ## #
         # Calculate difference factor
         col_ach = np.sum(furnessed_mat, axis=0)
-        col_ach = np.where(col_ach == 0, 1, col_ach)
-        diff_factor = col_targets / col_ach
+        diff_factor = np.divide(
+            col_targets,
+            col_ach,
+            where=col_ach != 0,
+            out=np.ones_like(col_targets, dtype=float),
+        )
 
         # adjust cols
-        furnessed_mat = furnessed_mat * diff_factor
+        furnessed_mat = np.multiply(
+            furnessed_mat,
+            diff_factor,
+            where=~np.isinf(diff_factor),
+            out=furnessed_mat.astype(float),
+        )
 
         # ## ROW CONSTRAIN ## #
         # Calculate difference factor
         row_ach = np.sum(furnessed_mat, axis=1)
-        row_ach = np.where(row_ach == 0, 1, row_ach)
-        diff_factor = row_targets / row_ach
+        diff_factor = np.divide(
+            row_targets,
+            row_ach,
+            where=row_ach != 0,
+            out=np.ones_like(row_targets, dtype=float),
+        )
 
         # adjust rows
-        furnessed_mat = (furnessed_mat.T * diff_factor).T
+        furnessed_mat = np.multiply(
+            furnessed_mat,
+            np.atleast_2d(diff_factor).T,
+            where=~np.isinf(diff_factor),
+            out=furnessed_mat.astype(float),
+        )
 
         # Calculate the diff - leave early if met
         row_diff = (row_targets - np.sum(furnessed_mat, axis=1)) ** 2
