@@ -453,8 +453,8 @@ class DMArgumentBuilderBase(abc.ABC):
         p_exists = os.path.isfile(productions_cache)
         a_exists = os.path.isfile(attractions_cache)
 
-        # Check if we need to overwrite regardless
-        if not overwrite_cache:
+        # Return the cache only if it is safe to do so
+        if not overwrite_cache and p_exists and a_exists:
             # Get the last modified time of matrices and caches
             matrix_modified_time = self._get_latest_matrix_time(upper_model_matrix_dir)
             cache_modified_time = self._get_latest_cache_time(
@@ -462,10 +462,9 @@ class DMArgumentBuilderBase(abc.ABC):
                 attractions_cache=attractions_cache,
             )
 
-            overwrite_cache = matrix_modified_time > cache_modified_time
-
-        if not overwrite_cache and p_exists and a_exists:
-            return file_ops.read_df(productions_cache), file_ops.read_df(attractions_cache)
+            # Only return cache if made after the matrices
+            if matrix_modified_time < cache_modified_time:
+                return file_ops.read_df(productions_cache), file_ops.read_df(attractions_cache)
 
         # Generate the vectors
         productions, attractions = self._convert_upper_pa_to_lower(

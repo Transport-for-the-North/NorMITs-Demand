@@ -364,8 +364,8 @@ class GravityModelCalibrator:
                   estimate_init_params: bool = False,
                   calibrate_params: bool = True,
                   diff_step: float = 1e-8,
-                  ftol: float = 1e-6,
-                  xtol: float = 1e-6,
+                  ftol: float = 1e-4,
+                  xtol: float = 1e-4,
                   grav_max_iters: int = 100,
                   verbose: int = 0,
                   ):

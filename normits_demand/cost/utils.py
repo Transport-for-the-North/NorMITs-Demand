@@ -207,6 +207,9 @@ def plot_cost_distribution(target_x: List[float],
         achieved_max_x = achieved_x[achieved_idx + 1]
         upper_x_lim = max([target_max_x, achieved_max_x])
 
+        if np.isnan(upper_x_lim) or np.isinf(upper_x_lim):
+            upper_x_lim = None
+
     # Label the plot
     axis.set_xlabel('Distance (km)')
     axis.set_ylabel('Band Share (%)')
