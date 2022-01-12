@@ -3581,3 +3581,38 @@ def chunk_list(lst: Iterable,
     for i in range(0, len(lst), chunk_size):
         chunk_end = i + chunk_size
         yield lst[i:chunk_end]
+
+
+def compare_sets(x1: set, x2: set) -> Tuple[bool, set, set]:
+    """
+    Checks whether x1 and x2 are the same.
+
+    Checks for items that are in x1, and not x2.
+    Checks for items that are in x2 and not x1.
+    If both above checks are empty, then sets must be equal.
+
+    Parameters
+    ----------
+    x1:
+        The first set the check
+
+    x2:
+        The second set the check
+
+    Returns
+    -------
+    equal:
+        True if x1 and x2 are equal, otherwise False.
+
+    x1_not_in_x2:
+        A set of items that are in x1, but not in x2.
+
+    x2_not_in_x1:
+        A set of items that are in x2, but not in x1.
+    """
+    x1_not_in_x2 = x1 - x2
+    x2_not_in_x1 = x2 - x1
+
+    equal = len(x1_not_in_x2) == 0 and len(x2_not_in_x1) == 0
+
+    return equal, x1_not_in_x2, x2_not_in_x1

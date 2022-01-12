@@ -311,7 +311,7 @@ class ExternalForecastSystem:
             combine_internal_external: bool = False,
             outputting_files: bool = True,
             output_location: str = None,
-            echo_distribution: bool = True
+            echo_distribution: bool = True,
             ) -> None:
         """
         The main function for the External Forecast System.

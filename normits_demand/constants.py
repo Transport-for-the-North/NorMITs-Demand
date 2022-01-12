@@ -30,6 +30,8 @@ TFN_SCENARIOS = [
 ]
 SCENARIOS = [SC00_NTEM] + TFN_SCENARIOS
 
+MILES_TO_KM = 1.61
+
 
 # STANDARD FILE NAMES
 # i/e areas - add model_zone

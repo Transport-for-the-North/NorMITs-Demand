@@ -13,6 +13,7 @@ File purpose:
 # Built-Ins
 import os
 
+from typing import Union
 from typing import Optional
 
 # Third Party
@@ -103,8 +104,10 @@ class ExternalModel(ExternalModelExportPaths):
             intrazonal_cost_infill: Optional[float] = 0.5,
             pa_val_col: Optional[str] = 'val',
             convergence_target: float = 0.9,
+            external_iters: int = 50,
             furness_tol: float = 0.1,
             furness_max_iters: int = 5000,
+            time_format: Union[nd.core.TimeFormat, str] = 'avg_week',
             ) -> None:
         # TODO(BT): Make sure the P/A vectors are the right zoning system
         # TODO(BT): Make sure pa_val_col is in P/A vectors
@@ -122,6 +125,7 @@ class ExternalModel(ExternalModelExportPaths):
             'intrazonal_cost_infill': intrazonal_cost_infill,
             'seed_matrix': seed_matrix,
             'convergence_target': convergence_target,
+            'external_iters': external_iters,
             'furness_tol': furness_tol,
             'furness_max_iters': furness_max_iters,
         }
@@ -146,6 +150,7 @@ class ExternalModel(ExternalModelExportPaths):
                 df_filter=segment_params,
                 throw_error=True,
             )
+
             seg_productions = seg_productions.rename(columns=rename_cols)
             seg_productions = seg_productions.set_index(self.zone_col)
             seg_productions = seg_productions.reindex(
@@ -198,8 +203,8 @@ class ExternalModel(ExternalModelExportPaths):
         return_vals = multiprocessing.multiprocess(
             fn=self._run_internal,
             kwargs=kwarg_list,
-            process_count=self.process_count,
             pbar_kwargs=pbar_kwargs,
+            process_count=self.process_count,
         )
 
         # Unpack the return values
@@ -217,20 +222,34 @@ class ExternalModel(ExternalModelExportPaths):
             raise ValueError(
                 "'%s' is not a valid trip origin! How did this error happen? "
                 "Trip origin should have already been validated in this "
-                "function.s"
+                "function."
             )
 
         # Build col names
         segment_names = running_segmentation.naming_order
         col_names = [self.zone_col] + segment_names + [pa_val_col]
 
-        # Write out productions
+        # Write out productions as DVector
         internal_productions = du.compile_efficient_df(internal_p_vector_eff_df, col_names)
-        internal_productions.to_csv(productions_path, index=False)
+        internal_productions = nd.DVector(
+            segmentation=running_segmentation,
+            zoning_system=self.zoning_system,
+            import_data=internal_productions,
+            zone_col=self.zoning_system.col_name,
+            time_format=time_format,
+        )
+        nd.write_pickle(internal_productions, productions_path)
 
         # Write out attractions
         internal_attractions = du.compile_efficient_df(internal_a_vector_eff_df, col_names)
-        internal_attractions.to_csv(attractions_path, index=False)
+        internal_attractions = nd.DVector(
+            segmentation=running_segmentation,
+            zoning_system=self.zoning_system,
+            import_data=internal_attractions,
+            zone_col=self.zoning_system.col_name,
+            time_format=time_format,
+        )
+        nd.write_pickle(internal_attractions, attractions_path)
 
     def _run_internal(self,
                       trip_origin,
@@ -245,6 +264,7 @@ class ExternalModel(ExternalModelExportPaths):
                       seg_productions,
                       seg_attractions,
                       convergence_target,
+                      external_iters,
                       furness_tol,
                       furness_max_iters,
                       ):
@@ -330,6 +350,7 @@ class ExternalModel(ExternalModelExportPaths):
             int_target_tld=internal_tld,
             ext_target_tld=external_tld,
             log_path=log_path,
+            max_iters=external_iters,
             convergence_target=convergence_target,
             furness_tol=furness_tol,
             furness_max_iters=furness_max_iters,
@@ -441,7 +462,7 @@ class ExternalModel(ExternalModelExportPaths):
                         int_target_tld: pd.DataFrame,
                         ext_target_tld: pd.DataFrame,
                         convergence_target: float = 0.9,
-                        max_iters: int = 100,
+                        max_iters: int = 50,
                         furness_tol: float = 0.1,
                         furness_max_iters: int = 5000,
                         ):
@@ -515,7 +536,7 @@ class ExternalModel(ExternalModelExportPaths):
             )
 
             # Furness across the other 2 dimensions
-            gb_pa, furn_iters, furn_r2 = furness.furness_pandas_wrapper(
+            gb_pa, furn_iters, furn_rmse = furness.furness_pandas_wrapper(
                 seed_values=gb_pa,
                 row_targets=productions,
                 col_targets=attractions,
@@ -567,7 +588,7 @@ class ExternalModel(ExternalModelExportPaths):
                 'Loop Num': str(iter_num),
                 'run_time(ms)': time_taken,
                 'furness_loops': furn_iters,
-                'furness_r2': furn_r2,
+                'furness_rmse': furn_rmse,
                 'pa_diff': np.round(pa_diff, 6),
                 'internal_bs_con': np.round(int_bs_con, 6),
                 'external_bs_con': np.round(ext_bs_con, 6),
