@@ -155,7 +155,14 @@ def calculate_cost_distribution(matrix: np.ndarray,
 
 
 def _get_cutoff_idx(lst: List[float], cutoff: float) -> int:
-    """Get the index of the cutoff point in lst"""
+    """Get the index of the cutoff point in lst
+
+    Returns the index of the first value in lst that is
+    less than or equal to cutoff.
+
+    If no values are less then the cutoff then the index of the final
+    value in lst is returned
+    """
     # Init
     i = 0
 
@@ -164,8 +171,15 @@ def _get_cutoff_idx(lst: List[float], cutoff: float) -> int:
         if item > cutoff:
             break
 
+    # Be careful when flipping edges
+    if i == 0:
+        return -1
+
+    if i == len(lst) - 1:
+        return 0
+
     # Flip the index to the forwards list
-    return -1-i
+    return -i
 
 
 def plot_cost_distribution(target_x: List[float],
