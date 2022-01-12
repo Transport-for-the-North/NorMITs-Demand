@@ -3,6 +3,7 @@ TODO: add some more comments here
 """
 import numpy as np
 import pickle as pk
+import pandas as pd
 
 dctmode = {3: ['Car']}
 dctday = {1: ['Weekday']}
@@ -74,7 +75,7 @@ def noham_car_package():
     print("matrices packaged")
 
 
-def noham_compiled_pcu_import():
+def noham_compiled_pcu_import(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\9_Totals_Check'):
     # TODO: Add path variables to inputs
 
     dctnoham_uc = {}
@@ -98,15 +99,32 @@ def noham_compiled_pcu_import():
                     print(str(md) + str(wd) + str(uc) + str(tp))
                     print(round(np.sum(noham_uc), ndigits=0))
                     dctnoham_uc[md][wd][uc][tp] = noham_uc
-
+    # Export totals if required
+    if totals_check:
+        # Build totals dictionary
+        dct_total = {3: {1: {}}}
+        for uc in dctuc:
+            dct_total[3][1][uc] = {}
+            for tp in dcttp:
+                print(str(3) + '-' + str(1) + '-' + str(uc) + '-' + str(tp))
+                dct_total[3][1][uc][tp] = np.sum(dctnoham_uc[3][1][uc][tp][:2770, :2770])
+        # Convert dictionary to dataframe
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        # Export to csv
+        df_totals.to_csv(check_location + '\\NoHAM_compiled-OD_Totals.csv')
+    # Export compiled dictionary
     with open(r'Y:\Mobile Data\Processing\dctNoHAM_compiled_PCU.pkl', 'wb') as log:
         pk.dump(dctnoham_uc, log, pk.HIGHEST_PROTOCOL)
     print("matrices packaged")
 
 
-def noham_car_merge():
+def noham_car_merge(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\9_Totals_Check'):
     temp_array = np.zeros((2770, 2770))
-
+    # Setup empty dictionary
     dctnoham_mddpurp = {}
     for md in dctmode:
         dctnoham_mddpurp[md] = {}
@@ -116,10 +134,27 @@ def noham_car_merge():
                 dctnoham_mddpurp[md][wd][pp] = {}
                 for tp in dcttp:
                     dctnoham_mddpurp[md][wd][pp][tp] = temp_array
-
+    # Import compiled NoHAM demand
     with open(r'Y:\Mobile Data\Processing\dctNoHAM.pkl', 'rb') as log:
         dctnoham = pk.load(log)  # [md][wd][pp][hr]
-
+    # If require export check totals
+    if totals_check:
+        # Build totals dictionary
+        dct_total = {3: {1: {}}}
+        for pp in dctpurp:
+            dct_total[3][1][pp] = {}
+            for tp in dcttp:
+                print(str(3) + '-' + str(1) + '-' + str(pp) + '-' + str(tp))
+                dct_total[3][1][pp][tp] = np.sum(dctnoham[3][1][pp][tp][:2770, :2770])
+        # Convert dictionary to dataframe
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        # Export to csv
+        df_totals.to_csv(check_location + '\\NoHAM_splitpurp_Totals.csv')
+    # Sum split noham purposes into combined mdd purposes
     for md in dctmode:
         for wd in dctday:
             for pp in dctpurp:
@@ -135,7 +170,24 @@ def noham_car_merge():
                     # print(str(md) + '-' + str(wd) + '-' + str(mddpurp) + '-' + str(tp))
                     dctnoham_mddpurp[md][wd][mddpurp][tp] = (dctnoham_mddpurp[md][wd][mddpurp][tp] +
                                                              dctnoham[md][wd][pp][tp])
-
+    # If require export check totals
+    if totals_check:
+        # Build totals dictionary
+        dct_total = {3: {1: {}}}
+        for pp in dctmddpurp:
+            dct_total[3][1][pp] = {}
+            for tp in dcttp:
+                print(str(3) + '-' + str(1) + '-' + str(pp) + '-' + str(tp))
+                dct_total[3][1][pp][tp] = np.sum(dctnoham_mddpurp[3][1][pp][tp][:2770, :2770])
+        # Convert dictionary to dataframe
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        # Export to csv
+        df_totals.to_csv(check_location + '\\NoHAM_aggregatedpurp_Totals.csv')
+    # Export aggregated Noham demand
     with open(r'Y:\Mobile Data\Processing\dctNoHAM_mddpurp.pkl', 'wb') as log:
         pk.dump(dctnoham_mddpurp, log, pk.HIGHEST_PROTOCOL)
 
@@ -212,7 +264,7 @@ def mdd_to_uc():
                 for tp in dcttp:
                     print(str(md) + str(wd) + str(uc) + str(mddpurp) + str(tp))
                     dctglobalucshare[md][wd][uc][tp] = (
-                                np.sum(dctglobalucshare[md][wd][uc][tp]) / np.sum(dctnohammdd[md][wd][mddpurp][tp]))
+                                np.sum(dctnohammdduc[md][wd][uc][tp]) / np.sum(dctnohammdd[md][wd][mddpurp][tp]))
                     dctglobalucshare[md][wd][uc][tp] = np.nan_to_num(dctglobalucshare[md][wd][uc][tp])
 
     dctmddsplit = {}

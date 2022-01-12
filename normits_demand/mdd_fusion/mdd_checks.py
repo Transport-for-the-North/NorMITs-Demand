@@ -73,10 +73,10 @@ def mdd_hw_totals():
 
     df_totals.to_csv(r'Y:\Mobile Data\Processing\MDD_HW_Totals_incOP.csv')
 
-def mdd_car_totals():
+def mdd_car_totals(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\9_Totals_Check'):
     # Import combined dict
     with open(r'Y:\Mobile Data\Processing\dct_MDDCar.pkl', 'rb') as log:
-        dct_mddcar = pk.load(log)
+        dct_mdd_car = pk.load(log)
 
     dct_total = {3: {1: {}}}
     for pp in dctmddpurp:
@@ -91,7 +91,7 @@ def mdd_car_totals():
                                         for k in dct_total[i][j].keys()},
                                        orient='index')
 
-    df_totals.to_csv(r'Y:\Mobile Data\Processing\MDD_Car_Totals.csv')
+    df_totals.to_csv(check_location + '\\MDD_Car_Totals.csv')
 
 
 def main():

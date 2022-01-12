@@ -44,6 +44,7 @@ def build_fusion_factor(input_matrix,
                         chop_tail=False,
                         origin_type=False,
                         dest_type=False,
+                        invert=False,
                         min_dist=0,
                         max_dist=9999,
                         default_value=1):
@@ -66,6 +67,11 @@ def build_fusion_factor(input_matrix,
     else:
         type_factor = (input_matrix * 0) + 1
     fusion_factor = (fusion_factor * head_factor * tail_factor * type_factor)
+    if invert:
+        fusion_factor = np.array(fusion_factor, dtype=bool)
+        fusion_factor = ~fusion_factor
+        fusion_factor = np.array(fusion_factor, dtype=int)
+    print(np.sum(fusion_factor))
     return fusion_factor
 
 

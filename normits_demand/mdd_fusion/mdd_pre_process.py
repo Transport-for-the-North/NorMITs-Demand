@@ -38,6 +38,12 @@ ntsGORs = {1:['NE',1],2:['NW',2],3:['YH',3],
            4:['EM',4],5:['WM',4],6:['East',4],7:['Lon',4],8:['SE',4],9:['SW',4],
            10:['Wales',4],11:['Scot',5]}
 
+# looping dictionaries
+dctmddpurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'],
+              3: ['HBO', 'HBO_fr'], 4: ['HBO', 'HBO_to'],
+              5: ['NHB', 'NHB']}
+dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3], 4: ['OP', 4]}
+
 #TLD distance band
 tldDist = [0,1,2,3,4,5,6,7,8,9,10,12.5,15,17.5,20,25,30,35,40,50,75,100,150,200,250,300,400,600,999]
 tldBand = {'band':[],'lower':[],'upper':[]}
@@ -78,7 +84,7 @@ def gv_package():
     print("matrices packaged")
 
 
-def gv_processing():
+def gv_processing(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\9_Totals_Check'):
     #Read GV pickle file
     dctgv = pk.load(open(GV_Demand_loc + '/dctGV.pkl', 'rb'))
     
@@ -148,7 +154,7 @@ def gv_processing():
     # Join tour props to zone list
     znList_tour = pd.merge(znList, lgv_tour, how='right', left_on=['TFN_GOR2'], right_on=['agg_gor_from'])
     # Remove extra data columns
-    znList_tourtidy = znList_tour[['Zone', 'p', 'trip_direction', 'start_time', 'prop']]
+    znList_tourtidy = znList_tour[['Zone', 'p', 'trip_direction', 'start_time', 'prop_p']]
     # Import purp list
     toMndPurpList = pd.read_csv(MPD_Processing +
                          '/toMndPurp.csv',
@@ -176,23 +182,45 @@ def gv_processing():
                 dctgv_vehtp[md][wd][tp] = temp_array
     """
     # duplicate 24hr into tps
-    dctlgv_tours= {}
-    dctlgv_tours[7] = {}
+    dctlgv_tours= {7: {}}
     for wd in dctday:
         dctlgv_tours[7][wd] = {}
-        for tp in dcttp:
-            dctlgv_tours[7][wd][tp] = {}
-            for p in mndPurp:
-                dctlgv_tours[7][wd][tp][p] = {}
-                dctlgv_tours[7][wd][tp][p] = dctgv_vehtp[4][wd][5]
+        for pp in mndPurp:
+            dctlgv_tours[7][wd][pp] = {}
+            for tp in dcttp:
+                dctlgv_tours[7][wd][pp][tp] = {}
+                dctlgv_tours[7][wd][pp][tp] = dctgv_vehtp[4][wd][5]
 
     for wd in dctday:
-        for tp in dcttp:
-            for p in mndPurp:
-                tourProp1 = znList_tourTidyPurp.loc[([tp], [p]), ['Zone', 'prop']].sort_values(by=['Zone'])
+        for pp in mndPurp:
+            for tp in dcttp:
+                tourProp1 = znList_tourTidyPurp.loc[([tp], [pp]), ['Zone', 'prop_p']].sort_values(by=['Zone'])
                 tourProp2 = tourProp1.head(2770)
-                tourProp3 = tourProp2['prop'].to_numpy()
-                dctlgv_tours[7][wd][tp][p] = dctlgv_tours[7][wd][tp][p] * tourProp3[:, np.newaxis]
+                tourProp3 = tourProp2['prop_p'].to_numpy()
+                dctlgv_tours[7][wd][pp][tp] = (dctlgv_tours[7][wd][pp][tp] * tourProp3[:, np.newaxis])
+
+    # Export totals if required
+    if totals_check:
+        # Save off dctlgv_tours
+        with open(r'Y:\Mobile Data\Processing\dct_LGV_tours.pkl', 'wb') as log:
+            pk.dump(dctlgv_tours, log, pk.HIGHEST_PROTOCOL)
+        # Build totals dictionary
+        dct_total = {7: {1: {}}}
+        for pp in mndPurp:
+            dct_total[7][1][pp] = {}
+            for tp in dcttp:
+                print(str(7) + '-' + str(1) + '-' + str(pp) + '-' + str(tp))
+                dct_total[7][1][pp][tp] = np.sum(dctlgv_tours[7][1][pp][tp][:2770, :2770])
+        # Convert dictionary to dataframe
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        # Export to csv
+        df_totals.to_csv(check_location + '\\LGV_tours_Totals.csv')
+    # Export compiled dictionary
+
 
     # Import dbands
     '''
@@ -207,42 +235,59 @@ def gv_processing():
 
     # Loop indexed lgv oc list and convert dband integers with occupancy factor
     # Duplicate dband integer matrices into nested purpose dict
-    dctlgv_oc = {}
-    dctlgv_oc[7] = {}
+    dctlgv_oc = {7: {}}
     for wd in dctday:
         dctlgv_oc[7][wd] = {}
-        for tp in dcttp:
-            dctlgv_oc[7][wd][tp] = {}
-            for p in mndPurp:
-                dctlgv_oc[7][wd][tp][p] = {}
-                dctlgv_oc[7][wd][tp][p] = lgvDistBand
+        for pp in mndPurp:
+            dctlgv_oc[7][wd][pp] = {}
+            for tp in dcttp:
+                dctlgv_oc[7][wd][pp][tp] = {}
+                dctlgv_oc[7][wd][pp][tp] = lgvDistBand
 
     # Loops purpose and replaces dband integer with occupancy
     for wd in dctday:
-        for tp in dcttp:
-            for p in mndPurp:
-                purpose = ''.join(mndPurp[p][:1])
-                print(purpose)
+        for pp in mndPurp:
+            purpose = ''.join(mndPurp[pp][:1])
+            print(purpose)
+            for tp in dcttp:
                 for band, purp, oc in lgv_oc[lgv_oc['purpose'] == purpose].itertuples(index=False):
                     print(band, purp, oc)
-                    dctlgv_oc[7][wd][tp][p] = np.where(dctlgv_oc[7][wd][tp][p] == band, oc, dctlgv_oc[7][wd][tp][p])
+                    dctlgv_oc[7][wd][pp][tp] = np.where(dctlgv_oc[7][wd][pp][tp] == band, oc, dctlgv_oc[7][wd][pp][tp])
 
     # Apply occupancy adjustment to TP LGVs
-    dctlgv_pcu = {}
-    dctlgv_pcu[7] = {}
+    dctlgv_persons = {7: {}}
     for wd in dctday:
-        dctlgv_pcu[7][wd] = {}
-        for tp in dcttp:
-            dctlgv_pcu[7][wd][tp] = {}
-            for p in mndPurp:
-                dctlgv_pcu[7][wd][tp][p] = {}
-                dctlgv_pcu[7][wd][tp][p] = dctlgv_tours[7][wd][tp][p] * dctlgv_oc[7][wd][tp][p]
+        dctlgv_persons[7][wd] = {}
+        for pp in mndPurp:
+            dctlgv_persons[7][wd][pp] = {}
+            for tp in dcttp:
+                dctlgv_persons[7][wd][pp][tp] = {}
+                dctlgv_persons[7][wd][pp][tp] = (dctlgv_tours[7][wd][pp][tp] * dctlgv_oc[7][wd][pp][tp])
+
+    if totals_check:
+        # Save off dctlgv_tours
+        # Build totals dictionary
+        dct_total = {7: {1: {}}}
+        for pp in mndPurp:
+            dct_total[7][1][pp] = {}
+            for tp in dcttp:
+                print(str(7) + '-' + str(1) + '-' + str(pp) + '-' + str(tp))
+                dct_total[7][1][pp][tp] = np.sum(dctlgv_persons[7][1][pp][tp][:2770, :2770])
+        # Convert dictionary to dataframe
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        # Export to csv
+        df_totals.to_csv(check_location + '\\LGV_person_Totals.csv')
 
     # TODO: save updated lgv dictionary
-    with open(r'Y:\Mobile Data\Processing\dctlgv_pcu.pkl', 'wb') as log:
-        pk.dump(dctlgv_pcu, log, pk.HIGHEST_PROTOCOL)
+    with open(r'Y:\Mobile Data\Processing\dctlgv_persons.pkl', 'wb') as log:
+        pk.dump(dctlgv_persons, log, pk.HIGHEST_PROTOCOL)
 
-def produce_combined():
+
+def produce_combined(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\9_Totals_Check'):
     # TODO: build all mode dictionary
     # Import
     with open(r'Y:\Mobile Data\Processing\dctNoHAM_mddpurp.pkl', 'rb') as log:
@@ -251,10 +296,10 @@ def produce_combined():
     with open(r'Y:\Mobile Data\Processing\dctNoTEM_mddpurp.pkl', 'rb') as log:
         dctnotem = pk.load(log)
 
-    with open(GV_Demand_loc + '/dctGV.pkl', 'rb') as log:
+    with open(r'Y:\Mobile Data\Processing\dctGV_24hr.pkl', 'rb') as log:
         dctgv = pk.load(log)
 
-    with open(r'Y:\Mobile Data\Processing\dctlgv_pcu.pkl', 'rb') as log:
+    with open(r'Y:\Mobile Data\Processing\dctlgv_persons.pkl', 'rb') as log:
         dctlgv = pk.load(log)
 
     # TODO: define all mode dictionary
@@ -263,7 +308,7 @@ def produce_combined():
     dctmddpurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'], 3: ['HBO', 'HBO_fr'], 4: ['HBO', 'HBO_to'],
                5: ['NHB', 'NHB']}
     dcthgvpurp = {5: ['NHB', 'NHB']}
-    dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3]}
+    dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3], 4: ['OP', 4]}
 
     # TODO: amend below
     dctcombined = {}
@@ -278,13 +323,16 @@ def produce_combined():
                         print(str(md) + '-' + str(wd) + '-' + str(pp) + '-' + str(tp))
                         if md == 3:
                             print('Car')
+                            print(np.sum(dctnoham[md][wd][pp][tp]))
                             dctcombined[md][wd][pp][tp] = dctnoham[md][wd][pp][tp]
                         elif md == 5:
                             print('Bus')
+                            print(np.sum(dctnotem[md][wd][pp][tp]))
                             dctcombined[md][wd][pp][tp] = dctnotem[md][wd][pp][tp]
                         elif md == 7:
                             print('LGV')
-                            dctcombined[md][wd][pp][tp] = dctlgv[md][wd][tp][pp]
+                            print(np.sum(dctlgv[md][wd][pp][tp]))
+                            dctcombined[md][wd][pp][tp] = dctlgv[md][wd][pp][tp]
         elif md in [8]:
             md_in = 5
             dctcombined[md] = {}
@@ -297,8 +345,30 @@ def produce_combined():
                         print(str(md_in) + '-' + str(wd) + '-' + str(pp_in) + '-' + str(tp))
                         print(str(md) + '-' + str(wd) + '-' + str(pp) + '-' + str(tp))
                         print('HGV')
+                        print(np.sum(dctgv[md_in][pp_in][tp]))
                         dctcombined[md][wd][pp][tp] = dctgv[md_in][pp_in][tp]
-
+    # Export totals if required
+    if totals_check:
+        # Build totals dictionary
+        dct_total = {}
+        for md in [3, 5, 7]:
+            dct_total[md] = {}
+            for wd in dctday:
+                dct_total[md][wd] = {}
+                for pp in dctmddpurp:
+                    dct_total[md][wd][pp] = {}
+                    for tp in dcttp:
+                        print(str(md) + '-' + str(wd) + '-' + str(pp) + '-' + str(tp))
+                        dct_total[md][wd][pp][tp] = np.sum(dctcombined[md][wd][pp][tp][:2770, :2770])
+        # Convert dictionary to dataframe
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        # Export to csv
+        df_totals.to_csv(check_location + '\\CombinedMode_Person_Totals.csv')
+    # Export combined mode
     with open(r'Y:\Mobile Data\Processing\dct_CombinedMode.pkl', 'wb') as log:
         pk.dump(dctcombined, log, pk.HIGHEST_PROTOCOL)
 
@@ -310,7 +380,7 @@ def calc_mode_share():
     dctmddpurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'], 3: ['HBO', 'HBO_fr'], 4: ['HBO', 'HBO_to'],
                   5: ['NHB', 'NHB']}
     dcthgvpurp = {5: ['NHB', 'NHB']}
-    dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3]}
+    dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3], 4: ['OP', 4]}
 
     with open(r'Y:\Mobile Data\Processing\dct_CombinedMode.pkl', 'rb') as log:
         dctcombined = pk.load(log)
@@ -409,19 +479,51 @@ def calc_mode_share():
     with open(r'Y:\Mobile Data\Processing\dct_check.pkl', 'wb') as log:
         pk.dump(dctcheck, log, pk.HIGHEST_PROTOCOL)
 
-def split_mdd_hw():
 
+def split_mdd_hw(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\9_Totals_Check'):
+    # Import previous mdd data pickle file
     with open(r'Y:\Mobile Data\Processing\dctMODD_trip.pkl', 'rb') as log:
-        dctMODD = pk.load(log)
-
-    dct_MDDHW = {}
-    dct_MDDHW[3] = {}
+        dct_MODD = pk.load(log)
+    # Export totals if required
+    if totals_check:
+        # Build totals dictionary
+        dct_total = {3: {1: {}}}
+        for pp in dctmddpurp:
+            dct_total[3][1][pp] = {}
+            for tp in dcttp:
+                print(str(3) + '-' + str(1) + '-' + str(pp) + '-' + str(tp))
+                dct_total[3][1][pp][tp] = np.sum(dct_MODD[1][2][pp][tp][:2770, :2770])
+        # Convert dictionary to dataframe
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        # Export to csv
+        df_totals.to_csv(check_location + '\\MODD_HW_Totals.csv')
+    # Build dictionary with future matching mode and weekday keys
+    dct_MDDHW = {3: {}}
     dct_MDDHW[3][1] = {}
     for pp in dctmddpurp:
         dct_MDDHW[3][1][pp] = {}
         for tp in dcttp:
-            dct_MDDHW[3][1][pp][tp] = dctMODD[1][2][pp][tp][:2770, :2770]
-
+            dct_MDDHW[3][1][pp][tp] = (dct_MODD[1][2][pp][tp][:2770, :2770]/240)
+    # Export revised totals if required
+    if totals_check:
+        # Build totals dictionary
+        dct_total = {3: {1: {}}}
+        for pp in dctmddpurp:
+            dct_total[3][1][pp] = {}
+            for tp in dcttp:
+                print(str(3) + '-' + str(1) + '-' + str(pp) + '-' + str(tp))
+                dct_total[3][1][pp][tp] = np.sum(dct_MDDHW[3][1][pp][tp])
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        df_totals.to_csv(check_location + '\\MDD_HW_Totals-Average_WeekDay.csv')
+    # Export to MDDHW pickle file
     with open(r'Y:\Mobile Data\Processing\dct_MDDHW.pkl', 'wb') as log:
         pk.dump(dct_MDDHW, log, pk.HIGHEST_PROTOCOL)
 
@@ -429,7 +531,7 @@ def split_mdd_hw():
 def factor_mdd():
     dctmddpurp = {1: ['HBW', 'HBW_fr'], 2: ['HBW', 'HBW_to'], 3: ['HBO', 'HBO_fr'], 4: ['HBO', 'HBO_to'],
                   5: ['NHB', 'NHB']}
-    dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3]}
+    dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3], 4: ['OP', 4]}
 
     with open(r'Y:\Mobile Data\Processing\dct_MDDHW.pkl', 'rb') as log:
         dct_mddhw = pk.load(log)
@@ -437,8 +539,7 @@ def factor_mdd():
     with open(r'Y:\Mobile Data\Processing\dct_ModeShare.pkl', 'rb') as log:
         dctmodeshare = pk.load(log)
 
-    dct_mdd_car = {}
-    dct_mdd_car[3] = {}
+    dct_mdd_car = {3: {}}
     dct_mdd_car[3][1] = {}
     for pp in dctmddpurp:
         dct_mdd_car[3][1][pp] = {}
@@ -451,6 +552,90 @@ def factor_mdd():
     # TODO: assign
     # TODO: check tld by mode/purpose
     # TODO: check mode share by origin/purpose
+
+
+def convert_mdd_purp_to_noham_uc(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\9_Totals_Check'):
+    dctmddpurp = {1: ['HBW', 'HBW_fr', 'Commute'], 2: ['HBW', 'HBW_to', 'Commute'], 3: ['HBO', 'HBO_fr', 'Other'],
+                  4: ['HBO', 'HBO_to', 'Other'], 5: ['NHB', 'NHB', 'Other']}
+    dctmddpurpuc = {1: ['HBW', 'HBW_fr', 'Commute'], 2: ['HBW', 'HBW_to', 'Commute'],
+                    31: ['HBO', 'HBO_fr', 'Other'], 33: ['HBO', 'HBO_fr', 'Other'],
+                    41: ['HBO', 'HBO_to', 'Other'], 43: ['HBO', 'HBO_to', 'Other'],
+                    51: ['NHB', 'NHB', 'Other'], 53: ['NHB', 'NHB', 'Other']}
+    dctuc = {1: ['Business'],
+             2: ['Commute'],
+             3: ['Other']}
+    dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3], 4: ['OP', 4]}
+
+    # import input dictionaries
+    mdd_car_file = 'Y:\\Mobile Data\\Processing\\dct_MDDCar.pkl'
+    with open(mdd_car_file, 'rb') as log:
+        dct_mdd_car = pk.load(log)
+
+    mdd_uc_split_file = 'Y:\\Mobile Data\\Processing\\dctmdd_uc_split.pkl'
+    with open(mdd_uc_split_file, 'rb') as log:
+        dct_mdd_uc_split = pk.load(log)
+
+    dct_mdd_demand_uc = {3: {}}
+    dct_mdd_demand_uc[3][1] = {}
+    for pp in dctmddpurpuc:
+        dct_mdd_demand_uc[3][1][pp] = {}
+        purpose = (3 if pp in [31] else
+                   3 if pp in [33] else
+                   4 if pp in [41] else
+                   4 if pp in [43] else
+                   5 if pp in [51] else
+                   5 if pp in [53] else
+                   1 if pp in [1] else
+                   2 if pp in [2] else
+                   6)
+        uc_split = ('1_hb_from' if pp in [31] else
+                    '3_hb_from' if pp in [33] else
+                    '1_hb_to' if pp in [41] else
+                    '3_hb_to' if pp in [43] else
+                    '1_nhb' if pp in [51] else
+                    '3_nhb' if pp in [53] else
+                    'commute' if pp in [1, 2] else
+                    'missing')
+        for tp in dcttp:
+            if pp in [1, 2]:
+                # multiply by 1
+                dct_mdd_demand_uc[3][1][pp][tp] = dct_mdd_car[3][1][purpose][tp] * 1
+            else:
+                dct_mdd_demand_uc[3][1][pp][tp] = dct_mdd_car[3][1][purpose][tp] * dct_mdd_uc_split[3][1][uc_split][tp]
+
+    temp_array = np.zeros((2770, 2770))
+    dct_mdd_demand_uc_comb = {3: {}}
+    dct_mdd_demand_uc_comb[3][1] = {}
+    for uc in dctuc:
+        dct_mdd_demand_uc_comb[3][1][uc] = {}
+        for tp in dcttp:
+            dct_mdd_demand_uc_comb[3][1][uc][tp] = temp_array
+
+    for pp in dctmddpurpuc:
+        userclass = (1 if pp in [31, 41, 51] else
+                     2 if pp in [1, 2] else
+                     3 if pp in [33, 43, 53] else
+                     4)
+        for tp in dcttp:
+            dct_mdd_demand_uc_comb[3][1][userclass][tp] = (dct_mdd_demand_uc_comb[3][1][userclass][tp] + dct_mdd_demand_uc[3][1][pp][tp])
+    # If required export totals
+    if totals_check:
+        # Build totals dictionary
+        dct_total = {3: {1: {}}}
+        for uc in dctuc:
+            dct_total[3][1][uc] = {}
+            for tp in dcttp:
+                print(str(3) + '-' + str(1) + '-' + str(uc) + '-' + str(tp))
+                dct_total[3][1][uc][tp] = np.sum(dct_mdd_demand_uc_comb[3][1][uc][tp])
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        df_totals.to_csv(check_location + '\\MDD_Car_UC_Totals.csv')
+    # Export to MDDHW pickle file
+    with open(r'Y:\Mobile Data\Processing\dct_MDDCar_UC.pkl', 'wb') as log:
+        pk.dump(dct_mdd_demand_uc_comb, log, pk.HIGHEST_PROTOCOL)
 
 
 def main():

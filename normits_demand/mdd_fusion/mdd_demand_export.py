@@ -3,6 +3,7 @@
 import numpy as np
 import pickle as pk
 import pandas as pd
+import pathlib as Path
 import normits_demand as nd
 from normits_demand import efs_constants as efs_consts
 from normits_demand.utils import vehicle_occupancy as vo
@@ -60,7 +61,7 @@ def mdd_export():
 
 def mdd_person_export():
     # Set local variables
-    version = 1
+    version = 2
     export_folder = 'Y:/Mobile Data/Processing/NoHAM_Demand'
 
     # TODO: Load MMD Car pickle
@@ -83,9 +84,35 @@ def mdd_person_export():
     print('mdd person trip matrices exported')
 
 
+def mdd_person_uc_export():
+    # Set local variables
+    version = 2
+    export_folder = 'Y:/Mobile Data/Processing/NoHAM_Demand'
+
+    # TODO: Load MMD Car pickle
+    with open(r'Y:\Mobile Data\Processing\dct_MDDCar_UC.pkl', 'rb') as log:
+        dct_mdd_car_uc = pk.load(log)
+
+    # TODO: Loop export into PersonTrips folder with pandas out method
+    for md in dctmode:
+        for wd in dctday:
+            for uc in dctuc:
+                for tp in dcttp:
+                    folder_path = (export_folder + '/v' + str(version) + '/PersonTrips')
+                    Path(folder_path).mkdir(parents=True, exist_ok=True)
+                    file_path = (folder_path + '/' +
+                                 'od_' + str(dctmddpurp[uc][0]) + '_p' + str(uc) +
+                                 '_yr2018_m' + str(md) +
+                                 '_tp' + str(tp) + '.csv')
+                    print(file_path)
+                    export_array = dct_mdd_car_uc[md][wd][uc][tp]
+                    export_df = pd.DataFrame(data=export_array, index=unq_zones, columns=unq_zones)
+                    export_df.to_csv(file_path)
+    print('mdd person userclass trip matrices exported')
+
 def mdd_per_to_veh():
     # Set local variables
-    version = 1
+    version = 2
     working_folder = 'Y:/Mobile Data/Processing/MDD_Demand/'
     import_path = working_folder + '/v' + str(version) + '/PersonTrips'
     export_path = working_folder + '/v' + str(version) + '/PCUs'
