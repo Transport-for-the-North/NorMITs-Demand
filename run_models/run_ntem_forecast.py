@@ -79,12 +79,12 @@ class NTEMForecastParameters:
 
 
 ##### FUNCTIONS #####
-def get_tempro_data() -> ntem_forecast.TEMProData:
+def get_tempro_data() -> ntem_forecast.TEMProTripEnds:
     """Read TEMPro data and convert it to DVectors.
 
     Returns
     -------
-    ntem_forecast.TEMProData
+    ntem_forecast.TEMProTripEnds
         TEMPro trip end data as DVectors stored in class
         attributes for base and all future years.
     """
@@ -92,9 +92,7 @@ def get_tempro_data() -> ntem_forecast.TEMProData:
         [efs_consts.BASE_YEAR] + efs_consts.FUTURE_YEARS
     )
     # Read data and convert to DVectors
-    tempro_data.produce_dvectors()
-    return tempro_data
-
+    return tempro_data.produce_dvectors()
 
 def main(params: NTEMForecastParameters):
     """Main function for running the NTEM forecasting.

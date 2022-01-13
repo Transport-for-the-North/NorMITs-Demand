@@ -70,10 +70,7 @@ class TEMProData:
             ) from err
         self._columns.update({str(y): float for y in self._years})
         self._data = None
-        self._hb_attractions = None
-        self._hb_productions = None
-        self._nhb_attractions = None
-        self._nhb_productions = None
+        self._dvectors = None
         if not self.DATA_PATH.exists():
             raise FileNotFoundError(
                 f"TEMPro data file cannot be found: {self.DATA_PATH}"
@@ -140,7 +137,7 @@ class TEMProData:
         -------
         nd_core.DVector
             DVector containing trip ends for given
-            `segmentation` and `year`.
+            `seg` and `year`.
 
         Raises
         ------
@@ -178,69 +175,38 @@ class TEMProData:
             df_naming_conversion=self.SEGMENTATION_COLUMNS,
         )
 
-    @property
-    def hb_attractions(self) -> Dict[int, nd_core.DVector]:
-        """Dict[int, nd_core.DVector]
-            Home-based attraction trip ends for all years (keys).
-        """
-        if self._hb_attractions is None:
-            d = {}
-            for yr in self._years:
-                d[yr] = self._segment_dvector("hb", "attractions", yr)
-            self._hb_attractions = d
-        return self._hb_attractions
+    def produce_dvectors(self):
+        """Produce all of the different DVector properties for TEMPro data.
 
-    @property
-    def hb_productions(self) -> Dict[int, nd_core.DVector]:
-        """Dict[int, nd_core.DVector]
-            Home-based production trip ends for all years (keys).
+        Returns
+        -------
+        TEMProTripEnds
+            Trip end DVectors for all years.
         """
-        if self._hb_productions is None:
-            d = {}
+        if self._dvectors is None:
+            LOG.debug("Producing TEMPro DVectors for %s", self._years)
+            start = timing.current_milli_time()
+            # Produce DVectors for all segments
+            hb_attr = {}
+            hb_prod = {}
+            nhb_attr = {}
+            nhb_prod = {}
             for yr in self._years:
-                d[yr] = self._segment_dvector("hb", "productions", yr)
-            self._hb_productions = d
-        return self._hb_productions
-
-    @property
-    def nhb_attractions(self) -> Dict[int, nd_core.DVector]:
-        """Dict[int, nd_core.DVector]
-            Non-home-based attraction trip ends for all years (keys).
-        """
-        if self._nhb_attractions is None:
-            d = {}
-            for yr in self._years:
-                d[yr] = self._segment_dvector("nhb", "attractions", yr)
-            self._nhb_attractions = d
-        return self._nhb_attractions
-
-    @property
-    def nhb_productions(self) -> Dict[int, nd_core.DVector]:
-        """Dict[int, nd_core.DVector]
-            Non-home-based production trip ends for all years (keys).
-        """
-        if self._nhb_productions is None:
-            d = {}
-            for yr in self._years:
-                d[yr] = self._segment_dvector("nhb", "productions", yr)
-            self._nhb_productions = d
-        return self._nhb_productions
-
-    def produce_dvectors(self) -> None:
-        """Produce all of the different DVector properties for TEMPro data."""
-        LOG.debug("Producing TEMPro DVectors for %s", self._years)
-        start = timing.current_milli_time()
-        # Call each property to produce the DVectors
-        # pylint: disable=pointless-statement
-        self.hb_attractions
-        self.hb_productions
-        self.nhb_attractions
-        self.nhb_attractions
-        # pylint: enable=pointless-statement
-        LOG.debug(
-            "Done in %s",
-            timing.time_taken(start, timing.current_milli_time()),
-        )
+                hb_attr[yr] = self._segment_dvector("hb", "attractions", yr)
+                hb_prod[yr] = self._segment_dvector("hb", "productions", yr)
+                nhb_attr[yr] = self._segment_dvector("nhb", "attractions", yr)
+                nhb_prod[yr] = self._segment_dvector("nhb", "productions", yr)
+            LOG.debug(
+                "Done in %s",
+                timing.time_taken(start, timing.current_milli_time()),
+            )
+            self._dvectors = {
+                "hb_attractions": hb_attr,
+                "hb_productions": hb_prod,
+                "nhb_attractions": nhb_attr,
+                "nhb_productions": nhb_prod,
+            }
+        return TEMProTripEnds(**self._dvectors)
 
     def get(
         self,
@@ -287,8 +253,8 @@ class TEMProData:
 
 
 @dataclasses.dataclass
-class TEMProForecasts:
-    """TEMPro trip end data for all future years.
+class TEMProTripEnds:
+    """TEMPro trip end data for all years.
 
     Attributes
     ----------
@@ -367,13 +333,13 @@ class TEMProForecasts:
 
         Returns
         -------
-        TEMProForecasts
+        TEMProTripEnds
             New instance of this class with the DVectors
             all translated into the new `zone_system`.
         """
         if weighting is None:
             weighting = {}
-        LOG.info("Translating TEMProForecasts zone system to %s", zone_system)
+        LOG.info("Translating TEMProTripEnds zone system to %s", zone_system)
         zoning = nd_core.get_zoning_system(zone_system)
         new_data = {}
         for name, attribute in dataclasses.asdict(self).items():
@@ -382,7 +348,7 @@ class TEMProForecasts:
                 yr: dvec.translate_zoning(zoning, weight, **kwargs)
                 for yr, dvec in attribute.items()
             }
-        return TEMProForecasts(**new_data)
+        return TEMProTripEnds(**new_data)
 
 
 class NTEMImportMatrices:
@@ -657,7 +623,7 @@ def grow_trip_ends(
     return future
 
 
-def grow_tempro_data(tempro_data: TEMProData) -> TEMProForecasts:
+def grow_tempro_data(tempro_data: TEMProTripEnds) -> TEMProTripEnds:
     """Calculate LAD growth factors and use them to grow `tempro_data`.
 
     Growth factors are calculated at LAD level but are applied
@@ -665,31 +631,32 @@ def grow_tempro_data(tempro_data: TEMProData) -> TEMProForecasts:
 
     Parameters
     ----------
-    tempro_data : TEMProData
+    tempro_data : TEMProTripEnds
         TEMPro trip end data for all study years.
 
     Returns
     -------
-    TEMProForecasts
+    TEMProTripEnds
         Forecasted TEMPro trip ends for all future
         years.
 
     Raises
     ------
     NTEMForecastError
-        If `tempro_data` isn't an instance of `TEMProData`.
+        If `tempro_data` isn't an instance of `TEMProTripEnds`.
 
     See Also
     --------
     grow_trip_ends: which will grow trip ends for all years for
         a single dictionary e.g. `hb_attractions`.
     """
-    if not isinstance(tempro_data, TEMProData):
+    if not isinstance(tempro_data, TEMProTripEnds):
         raise NTEMForecastError(
-            f"tempro_data should be TEMProData type not {type(tempro_data)}"
+            f"tempro_data should be TEMProTripEnds type not {type(tempro_data)}"
         )
     grown = {}
-    for segment in dataclasses.fields(TEMProForecasts):
+    for segment in dataclasses.fields(TEMProTripEnds):
         LOG.info("Calculating TEMPro trip end growth for %s", segment.name)
         grown[segment.name] = grow_trip_ends(getattr(tempro_data, segment.name))
-    return TEMProForecasts(**grown)
+    return TEMProTripEnds(**grown)
+
