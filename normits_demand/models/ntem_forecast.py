@@ -342,7 +342,12 @@ class TEMProForecasts:
             for yr, dvec in years.items():
                 dvec.compress_out(folder / f"{name}-{yr}")
 
-    def translate_zoning(self, zone_system: str, **kwargs):
+    def translate_zoning(
+        self,
+        zone_system: str,
+        weighting: Dict[str, str] = None,
+        **kwargs,
+    ):
         """Translates all DVectors into new `zone_system`.
 
         Translations are done using `DVector.translate_zoning`
@@ -353,6 +358,12 @@ class TEMProForecasts:
         ----------
         zone_system : str
             Name of the zone system to translate to.
+        weighting : Dict[str, str]
+            Name of the weighting (value) to be passed to
+            `DVector.translate_zoning`, weighting is defined for each
+            attribute separately (keys should be attribute names).
+        kwargs : Dict[str, Any]
+            Keyword arguments passed to `DVector.translate_zoning`.
 
         Returns
         -------
@@ -360,12 +371,15 @@ class TEMProForecasts:
             New instance of this class with the DVectors
             all translated into the new `zone_system`.
         """
+        if weighting is None:
+            weighting = {}
         LOG.info("Translating TEMProForecasts zone system to %s", zone_system)
         zoning = nd_core.get_zoning_system(zone_system)
         new_data = {}
         for name, attribute in dataclasses.asdict(self).items():
+            weight = weighting.get(name, None)
             new_data[name] = {
-                yr: dvec.translate_zoning(zoning, **kwargs)
+                yr: dvec.translate_zoning(zoning, weight, **kwargs)
                 for yr, dvec in attribute.items()
             }
         return TEMProForecasts(**new_data)
