@@ -92,7 +92,59 @@ def get_tempro_data() -> ntem_forecast.TEMProTripEnds:
         [efs_consts.BASE_YEAR] + efs_consts.FUTURE_YEARS
     )
     # Read data and convert to DVectors
-    return tempro_data.produce_dvectors()
+    trip_ends = tempro_data.produce_dvectors()
+    # Aggregate DVector to required segmentation
+    segmentation = ntem_forecast.NTEMImportMatrices.SEGMENTATION
+    return trip_ends.aggregate(
+        {
+            "hb_attractions": segmentation["hb"],
+            "hb_productions": segmentation["hb"],
+            "nhb_attractions": segmentation["nhb"],
+            "nhb_productions": segmentation["nhb"],
+        }
+    )
+
+
+def model_mode_subset(
+    trip_ends: ntem_forecast.TEMProTripEnds,
+    model_name: str,
+) -> ntem_forecast.TEMProTripEnds:
+    """Get subset of `trip_ends` segmentation for specific `model_name`.
+
+    Parameters
+    ----------
+    trip_ends : ntem_forecast.TEMProTripEnds
+        Trip end data, which has segmentation split by
+        mode.
+    model_name : str
+        Name of the model being ran, currently only
+        works for 'noham'.
+
+    Returns
+    -------
+    ntem_forecast.TEMProTripEnds
+        Trip end data at new segmentation.
+
+    Raises
+    ------
+    NotImplementedError
+        If any `model_name` other than 'noham' is
+        given.
+    """
+    model_name = model_name.lower().strip()
+    if model_name == "noham":
+        segmentation = {
+            "hb_attractions": "hb_p_m_car",
+            "hb_productions": "hb_p_m_car",
+            "nhb_attractions": "nhb_p_m_car",
+            "nhb_productions": "nhb_p_m_car",
+        }
+    else:
+        raise NotImplementedError(
+            f"NTEM forecasting only not implemented for model {model_name!r}"
+        )
+    return trip_ends.subset(segmentation)
+
 
 def main(params: NTEMForecastParameters):
     """Main function for running the NTEM forecasting.
@@ -113,6 +165,7 @@ def main(params: NTEMForecastParameters):
         LOG.info("created export folder: %s", params.export_path)
 
     tempro_data = get_tempro_data()
+    tempro_data = model_mode_subset(tempro_data, params.model_name)
     future_tempro = ntem_forecast.grow_tempro_data(tempro_data)
     future_tempro.save(params.export_path / "TEMProForecasts")
 

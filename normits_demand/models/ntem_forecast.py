@@ -350,6 +350,96 @@ class TEMProTripEnds:
             }
         return TEMProTripEnds(**new_data)
 
+    def _get_segmentation(
+        self, segmentation: Dict[str, str]
+    ) -> Dict[str, nd_core.SegmentationLevel]:
+        """Get `SegmentationLevel` for each segment name given.
+
+        SegmentationLevel instances are created using
+        `nd_core.get_segmentation_level`.
+
+        Parameters
+        ----------
+        segmentation : Dict[str, str]
+            Dictionary containing the attribute name (keys) and
+            the name of the segmentation to get (values). Should
+            contain keys for every attribute in this class.
+
+        Returns
+        -------
+        Dict[str, nd_core.SegmentationLevel]
+            SegmentationLevel instances for each attribute of
+            the class.
+
+        Raises
+        ------
+        NTEMForecastError
+            If there are any attributes in the class which
+            aren't in `segmentation`.
+        """
+        segments = {}
+        missing = []
+        for field in dataclasses.fields(self):
+            try:
+                segments[field.name] = nd_core.get_segmentation_level(
+                    segmentation[field.name]
+                )
+            except KeyError:
+                missing.append(field.name)
+        if missing:
+            raise NTEMForecastError(
+                f"trip end attributes expected, but not found: {missing}"
+            )
+        return segments
+
+    def aggregate(self, segmentation: Dict[str, str], **kwargs):
+        """Aggregates all DVectors to new segmentation.
+
+        Parameters
+        ----------
+        segmentation : Dict[str, str]
+            Dictionary containing the attribute name (keys) and
+            the name of the segmentation to get (values). Should
+            contain keys for every attribute in this class.
+
+        Returns
+        -------
+        TEMProTripEnds
+            A new instance of this class with the new
+            segmentation
+        """
+        new_data = {}
+        for attr_name, segment in self._get_segmentation(segmentation).items():
+            new_data[attr_name] = {
+                yr: dvec.aggregate(segment, **kwargs)
+                for yr, dvec in getattr(self, attr_name).items()
+            }
+        return TEMProTripEnds(**new_data)
+
+    def subset(self, segmentation: Dict[str, str], **kwargs):
+        """Gets a subset of the DVectors at the new segmentation.
+
+        Parameters
+        ----------
+        segmentation : Dict[str, str]
+            Dictionary containing the attribute name (keys) and
+            the name of the segmentation to get (values). Should
+            contain keys for every attribute in this class.
+
+        Returns
+        -------
+        TEMProTripEnds
+            A new instance of this class with the new
+            segmentation
+        """
+        new_data = {}
+        for attr_name, segment in self._get_segmentation(segmentation).items():
+            new_data[attr_name] = {
+                yr: dvec.subset(segment, **kwargs)
+                for yr, dvec in getattr(self, attr_name).items()
+            }
+        return TEMProTripEnds(**new_data)
+
 
 class NTEMImportMatrices:
     """Generates paths to base PostME matrices.
