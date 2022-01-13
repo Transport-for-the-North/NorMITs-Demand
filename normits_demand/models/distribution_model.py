@@ -18,6 +18,7 @@ from typing import List
 from typing import Dict
 
 # Third Party
+import tqdm
 import pandas as pd
 
 # Local Imports
@@ -27,6 +28,7 @@ from normits_demand import constants
 
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
+from normits_demand.utils import translation
 from normits_demand.utils import vehicle_occupancy
 from normits_demand.matrices import matrix_processing
 from normits_demand.matrices import pa_to_od
@@ -43,6 +45,8 @@ class DistributionModel(DistributionModelExportPaths):
     _od_matrix_desc = 'synthetic_od'
     _od_to_matrix_desc = 'synthetic_od_to'
     _od_from_matrix_desc = 'synthetic_od_from'
+
+    _translated_dir_name = 'translated'
 
     _running_report_fname = 'running_parameters.txt'
     _log_fname = "Distribution_Model_log.log"
@@ -65,6 +69,7 @@ class DistributionModel(DistributionModelExportPaths):
                  lower_model_zoning: nd.ZoningSystem = None,
                  lower_running_zones: List[Any] = None,
                  lower_model_kwargs: Dict[str, Any] = None,
+                 compile_zoning_system: nd.ZoningSystem = None,
                  process_count: int = constants.PROCESS_COUNT,
                  ):
         # Make sure all are set if one is
@@ -107,10 +112,17 @@ class DistributionModel(DistributionModelExportPaths):
         self.lower_running_zones = lower_running_zones
         self.lower_model_kwargs = lower_model_kwargs
 
-        if self.lower_model_zoning is not None:
-            self.output_zoning = self.lower_model_zoning
+        # Control output zoning systems depending on what we've been given
+        if compile_zoning_system is not None:
+            self.compile_zoning_system = compile_zoning_system
         else:
-            self.output_zoning = self.upper_model_zoning
+            if lower_model_zoning is not None:
+                self.compile_zoning_system = lower_model_zoning
+            else:
+                self.compile_zoning_system = upper_model_zoning
+
+        # TODO(BT): Integrate code to allow the output_zoning to be different
+        self.output_zoning = self.compile_zoning_system
 
         # TODO(BT): Validate this is correct type
         self.arg_builder = arg_builder
@@ -356,6 +368,84 @@ class DistributionModel(DistributionModelExportPaths):
                 compressed=True,
             )
 
+    def _maybe_translate_matrices_for_compile(self,
+                                              matrices_path: nd.PathLike,
+                                              matrices_desc: str,
+                                              ) -> nd.PathLike:
+        """Translates the matrices for compilation if they need it
+
+        Returns the path to the translated matrices if translated, otherwise
+        returns the given matrices_path
+
+        Parameters
+        ----------
+        matrices_path:
+            Path the the matrices that might need converting. If matrices
+            need converting, a sub folder is made named
+            DistributionModel._translated_dir_name -> "translated"
+
+        Returns
+        -------
+        path:
+            The path to the 'output' matrices from this process.
+            If nothing needs converting, this path is the same as
+            matrices_path.
+        """
+        # Init
+        translation_weight_col = 'weight'
+
+        # Figure out what the current zoning is
+        if self.lower_model_zoning is not None:
+            current_zoning = self.lower_model_zoning
+        else:
+            current_zoning = self.upper_model_zoning
+
+        if current_zoning == self.compile_zoning_system:
+            return matrices_path
+
+        # If here, a translation needs doing
+        out_dir = os.path.join(matrices_path, self._translated_dir_name)
+        file_ops.create_folder(out_dir)
+
+        # Get the translations
+        pop_trans, emp_trans = translation.get_long_pop_emp_translations(
+            in_zoning_system=current_zoning,
+            out_zoning_system=self.compile_zoning_system,
+            weight_col_name=translation_weight_col
+        )
+
+        desc = "Translating matrices for compilation"
+        total = len(self.running_segmentation)
+        for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc, total=total):
+            # Read in DF
+            fname = self.running_segmentation.generate_file_name(
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                file_desc=matrices_desc,
+                segment_params=segment_params,
+                compressed=True,
+            )
+            path = os.path.join(matrices_path, fname)
+            df = file_ops.read_df(path, index_col=0)
+
+            # Make sure index and columns are the same type
+            df.columns = df.columns.astype(df.index.dtype)
+
+            # Translate
+            df = translation.pandas_matrix_zone_translation(
+                matrix=df,
+                row_translation=pop_trans,
+                col_translation=emp_trans,
+                from_zone_col=current_zoning.col_name,
+                to_zone_col=self.compile_zoning_system.col_name,
+                factors_col=translation_weight_col,
+                from_unique_zones=current_zoning.unique_zones,
+                to_unique_zones=self.compile_zoning_system.unique_zones,
+            )
+
+            # Write new matrix out
+            file_ops.write_df(df, os.path.join(out_dir, fname))
+
     def run_pa_to_od(self):
         # TODO(BT): Make sure the upper and lower matrices exist!
 
@@ -473,10 +563,15 @@ class DistributionModel(DistributionModelExportPaths):
         elif self.running_mode == nd.Mode.TRAIN:
             self._recombine_pa_matrices()
 
-            self._logger.info("Compiling NoRMS VDM Format")
+            # Translate matrices if needed
+            compile_in_path = self._maybe_translate_matrices_for_compile(
+                matrices_path=self.export_paths.full_pa_dir,
+                matrices_desc=self._pa_matrix_desc,
+            )
 
+            self._logger.info("Compiling NoRMS VDM Format")
             matrix_processing.compile_norms_to_vdm(
-                mat_import=self.export_paths.full_pa_dir,
+                mat_import=compile_in_path,
                 mat_export=self.export_paths.compiled_pa_dir,
                 params_export=self.export_paths.compiled_pa_dir,
                 year=self.year,

@@ -15,6 +15,7 @@ import warnings
 
 from typing import Any
 from typing import List
+from typing import Tuple
 
 # Third Party
 import numpy as np
@@ -822,3 +823,73 @@ def pandas_vector_zone_translation(vector: pd.DataFrame,
         index=to_unique_zones,
         columns=vector.columns,
     )
+
+
+def get_long_pop_emp_translations(in_zoning_system: nd.ZoningSystem,
+                                  out_zoning_system: nd.ZoningSystem,
+                                  in_zoning_col_name: str = None,
+                                  out_zoning_col_name: str = None,
+                                  weight_col_name: str = 'weight',
+                                  ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Get the translations needed for pandas_matrix_zone_translation
+
+    Parameters
+    ----------
+    in_zoning_system:
+        The zoning system to translate from.
+
+    out_zoning_system:
+        The zoning system to translate to.
+
+    in_zoning_col_name:
+        The name to give to the column of in_zoning_system zone names.
+        If None, in_zoning_system.col_name will be used.
+
+    out_zoning_col_name:
+        The name to give to the column of out_zoning_system zone names.
+        If None, out_zoning_system.col_name will be used.
+
+    weight_col_name:
+        The name to give to the column of weights in each return DataFrame
+
+    Returns
+    -------
+    population_translation:
+        The population weighted translation from in_zoning_system to
+        out_zoning_system in a long pandas dataframe with 3 columns. One for
+        each zoning system, and another named weight_col_name.
+
+    employment_translation:
+        The employment weighted translation from in_zoning_system to
+        out_zoning_system in a long pandas dataframe with 3 columns. One for
+        each zoning system, and another named weight_col_name.
+    """
+    # Init
+    if in_zoning_col_name is None:
+        in_zoning_col_name = in_zoning_system.col_name
+
+    if out_zoning_col_name is None:
+        out_zoning_col_name = out_zoning_system.col_name
+
+    # Get translation into long df
+    def get_translation(weighting):
+        full_translation = in_zoning_system.translate(
+            other=out_zoning_system,
+            weighting=weighting,
+        )
+        full_translation = pd.DataFrame(
+            data=full_translation,
+            index=in_zoning_system.unique_zones,
+            columns=out_zoning_system.unique_zones,
+        )
+
+        # Melt and name columns
+        full_translation = pd_utils.wide_to_long_infill(
+            df=full_translation,
+            index_col_1_name=in_zoning_col_name,
+            index_col_2_name=out_zoning_col_name,
+            value_col_name=weight_col_name,
+        )
+        return full_translation
+
+    return get_translation('population'), get_translation('employment')

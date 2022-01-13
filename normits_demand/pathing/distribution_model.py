@@ -126,30 +126,13 @@ class DMArgumentBuilderBase(abc.ABC):
         self.cache_path = cache_path
         self.overwrite_cache = overwrite_cache
 
-    def _get_translations(self):
+    def _get_translations(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Get the translations between upper and lower zoning"""
-        # Get translation into long df
-        def get_translation(weighting):
-            full_translation = self.upper_zoning_system.translate(
-                other=self.lower_zoning_system,
-                weighting=weighting,
-            )
-            full_translation = pd.DataFrame(
-                data=full_translation,
-                index=self.upper_zoning_system.unique_zones,
-                columns=self.lower_zoning_system.unique_zones,
-            )
-
-            # Melt and name columns
-            full_translation = pd_utils.wide_to_long_infill(
-                df=full_translation,
-                index_col_1_name=self.upper_zoning_system.col_name,
-                index_col_2_name=self.lower_zoning_system.col_name,
-                value_col_name=self._translation_weight_col,
-            )
-            return full_translation
-
-        return get_translation('population'), get_translation('employment')
+        return translation.get_long_pop_emp_translations(
+            in_zoning_system=self.upper_zoning_system,
+            out_zoning_system=self.lower_zoning_system,
+            weight_col_name=self._translation_weight_col
+        )
 
     def _get_upper_keep_zones(self):
         # Get translation into a DataFrame
@@ -272,6 +255,9 @@ class DMArgumentBuilderBase(abc.ABC):
             )
             path = os.path.join(upper_model_matrix_dir, fname)
             df = file_ops.read_df(path, index_col=0)
+
+            # Make sure index and columns are the same type
+            df.columns = df.columns.astype(df.index.dtype)
 
             # Translate to lower zoning
             if not(pop_trans is None or emp_trans is None):

@@ -2366,7 +2366,7 @@ def _compile_matrices_internal(mat_import,
     for mat_name in input_mat_names:
         in_path = os.path.join(mat_import, mat_name)
         df = file_ops.read_df(in_path, index_col=0)
-        df.columns = df.columns.astype(int)
+        df.columns = df.columns.astype(df.index.dtype)
         in_mats.append(df)
 
     # Combine all matrices together
