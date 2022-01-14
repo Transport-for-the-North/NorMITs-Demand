@@ -15,7 +15,7 @@ Scoping test runs of MDD fusion
 import pandas as pd
 import numpy as np
 import pickle as pk
-import pathlib as Path
+from pathlib import Path
 import os, sys
 import multiprocessing as mp
 import normits_demand as nd
@@ -125,58 +125,9 @@ def fusion_factors():
     dest_type_matrix = pd.read_csv(dest_file, delimiter=',', header=0)
     dest_type_matrix = dest_type_matrix.to_numpy()
     # Import mdd demand
-    # TODO: check if PCUs
-    mdd_car_file = inputs_folder + '\\' + 'dct_MDDCar.pkl'
+    mdd_car_file = inputs_folder + '\\' + 'dct_MDDCar_UC_pcu.pkl'
     with open(mdd_car_file, 'rb') as log:
         dct_mdd_demand = pk.load(log)
-
-    mdd_uc_split_file = 'Y:\\Mobile Data\\Processing\\dctmdd_uc_split.pkl'
-    with open(mdd_uc_split_file, 'rb') as log:
-        dct_mdd_uc_split = pk.load(log)
-
-    dct_mdd_demand_uc = {3: {}}
-    dct_mdd_demand_uc[3][1] = {}
-    for pp in dctmddpurpuc:
-        dct_mdd_demand_uc[3][1][pp] = {}
-        purpose = (3 if pp in [31] else
-                   3 if pp in [33] else
-                   4 if pp in [41] else
-                   4 if pp in [43] else
-                   5 if pp in [51] else
-                   5 if pp in [53] else
-                   1 if pp in [1] else
-                   2 if pp in [2] else
-                   6)
-        uc_split = ('1_hb_from' if pp in [31] else
-                    '3_hb_from' if pp in [33] else
-                    '1_hb_to' if pp in [41] else
-                    '3_hb_to' if pp in [43] else
-                    '1_nhb' if pp in [51] else
-                    '3_nhb' if pp in [53] else
-                    'commute' if pp in [1, 2] else
-                    'missing')
-        for tp in dcttp:
-            if pp in [1, 2]:
-                # multiply by 1
-                dct_mdd_demand_uc[3][1][pp][tp] = dct_mdd_demand[3][1][purpose][tp] * 1
-            else:
-                dct_mdd_demand_uc[3][1][pp][tp] = dct_mdd_demand[3][1][purpose][tp] * dct_mdd_uc_split[3][1][uc_split][tp]
-
-    temp_array = np.zeros((2770, 2770))
-    dct_mdd_demand_uc_comb = {3: {}}
-    dct_mdd_demand_uc_comb[3][1] = {}
-    for uc in dctuc:
-        dct_mdd_demand_uc_comb[3][1][uc] = {}
-        for tp in dcttp:
-            dct_mdd_demand_uc_comb[3][1][uc][tp] = temp_array
-
-    for pp in dctmddpurpuc:
-        userclass = (1 if pp in [31, 41, 51] else
-                     2 if pp in [1, 2] else
-                     3 if pp in [33, 43, 53] else
-                     4)
-        for tp in dcttp:
-            dct_mdd_demand_uc_comb[3][1][userclass][tp] = (dct_mdd_demand_uc_comb[3][1][userclass][tp] + dct_mdd_demand_uc[3][1][pp][tp])
 
     # Import noham PCUs
     noham_car_file = inputs_folder + '\\' + 'dctNoHAM_mddpurp_pcu.pkl'
@@ -232,18 +183,41 @@ def fusion_factors():
                                                               default_value=1)
         for tp in dcttp:
             dct_noham_fusion_factors[3][1][pp][tp] = fusion_matrix
-    # TODO: combine demand
+    # combine demand
+    dct_expansion_factor = {3: {1: {1: {1: {}, 2: {}, 3: {}},
+                                    2: {1: {}, 2: {}, 3: {}},
+                                    3: {1: {}, 2: {}, 3: {}}}}}
+    # TP1
+    dct_expansion_factor[3][1][1][1] = 1.00
+    dct_expansion_factor[3][1][1][2] = 1.29
+    dct_expansion_factor[3][1][1][3] = 1.17
+    # TP2
+    dct_expansion_factor[3][1][2][1] = 1.00
+    dct_expansion_factor[3][1][2][2] = 1.29
+    dct_expansion_factor[3][1][2][3] = 1.17
+    # TP3
+    dct_expansion_factor[3][1][3][1] = 1.00
+    dct_expansion_factor[3][1][3][2] = 1.29
+    dct_expansion_factor[3][1][3][3] = 1.17
+
+    expansion_applied = True
     dct_fusion_demand = {3: {}}
     dct_fusion_demand[3][1] = {}
     for uc in dctuc:
         dct_fusion_demand[3][1][uc] = {}
         for tp in dcttp:
-            dct_fusion_demand[3][1][uc][tp] = ((dct_mdd_demand_uc_comb[3][1][uc][tp] * dct_mdd_fusion_factors[3][1][uc][tp])
-                                               +
-                                               (dct_noham_demand[3][1][uc][tp] * dct_noham_fusion_factors[3][1][uc][tp]))
+            if expansion_applied:
+                dct_fusion_demand[3][1][uc][tp] = ((dct_mdd_demand[3][1][uc][tp] * dct_mdd_fusion_factors[3][1][uc][tp] * dct_expansion_factor[3][1][uc][tp])
+                                                   +
+                                                   (dct_noham_demand[3][1][uc][tp] * dct_noham_fusion_factors[3][1][uc][tp]))
+            else:
+                dct_fusion_demand[3][1][uc][tp] = ((dct_mdd_demand[3][1][uc][tp] * dct_mdd_fusion_factors[3][1][uc][tp])
+                                                   +
+                                                   (dct_noham_demand[3][1][uc][tp] * dct_noham_fusion_factors[3][1][uc][
+                                                       tp]))
 
     unq_zones = list(range(1, 2771))
-    version = 0
+    version = 2
     export_folder = 'Y:/Mobile Data/Processing/3-1_Fusion_Demand'
     md = 3
     wd = 1
@@ -252,13 +226,13 @@ def fusion_factors():
             folder_path = (export_folder + '/v' + str(version) + '/PCUTrips')
             Path(folder_path).mkdir(parents=True, exist_ok=True)
             file_path = (folder_path + '/' +
-                         'od_' + str(dctmddpurp[uc][0]) + '_p' + str(uc) +
+                         'od_' + str(dctuc[uc][0]) + '_p' + str(uc) +
                          '_yr2018_m' + str(md) +
                          '_tp' + str(tp) + '.csv')
             print(file_path)
             export_array = dct_fusion_demand[md][wd][uc][tp]
             export_df = pd.DataFrame(data=export_array, index=unq_zones, columns=unq_zones)
-            export_df.to_csv(file_path, float_format='%.5f', header=False)
+            export_df.to_csv(file_path, float_format='%.5f', index=False, header=False)
 
 def main():
 

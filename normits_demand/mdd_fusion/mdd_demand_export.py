@@ -3,10 +3,10 @@
 import numpy as np
 import pickle as pk
 import pandas as pd
-import pathlib as Path
 import normits_demand as nd
 from normits_demand import efs_constants as efs_consts
 from normits_demand.utils import vehicle_occupancy as vo
+from pathlib import Path
 
 dctmode = {3: ['Car']}
 dctday = {1: ['Weekday']}
@@ -116,6 +116,7 @@ def mdd_per_to_veh():
     working_folder = 'Y:/Mobile Data/Processing/MDD_Demand/'
     import_path = working_folder + '/v' + str(version) + '/PersonTrips'
     export_path = working_folder + '/v' + str(version) + '/PCUs'
+    Path(export_path).mkdir(parents=True, exist_ok=True)
     import_folder = 'I:/NorMITs Demand/import'
 
     vo.people_vehicle_conversion(
@@ -128,6 +129,52 @@ def mdd_per_to_veh():
         hourly_average=True,
         header=True
     )
+
+
+def package_mdd_pcus(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\9_Totals_Check'):
+
+    version = 2
+    working_folder = 'Y:/Mobile Data/Processing/MDD_Demand'
+    import_path = working_folder + '/v' + str(version) + '/PCUs'
+
+    md = 3
+
+    dct_mdd_pcu = {md: {}}
+    dct_mdd_pcu[md][1] = {}
+    for uc in dctuc:
+        dct_mdd_pcu[md][1][uc] = {}
+        for tp in dcttp:
+            print(str(md) + '-' + str(1) + '-' + str(uc) + '-' + str(tp))
+            path = (import_path + '\\'
+                    + 'od_' + str(dctuc[uc][0])
+                    + '_p' + str(uc)
+                    + '_yr2018_m' + str(md)
+                    + '_tp' + str(tp) + '.csv')
+            print(path)
+            mdd_car = np.genfromtxt(path,
+                                      delimiter=',',
+                                      skip_header=1,
+                                      usecols=unq_zones)
+            dct_mdd_pcu[md][1][uc][tp] = mdd_car
+    # export totals if needed
+    if totals_check:
+        # Build totals dictionary
+        dct_total = {3: {1: {}}}
+        for uc in dctuc:
+            dct_total[3][1][uc] = {}
+            for tp in dcttp:
+                print(str(3) + '-' + str(1) + '-' + str(uc) + '-' + str(tp))
+                dct_total[3][1][uc][tp] = np.sum(dct_mdd_pcu[3][1][uc][tp])
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        df_totals.to_csv(check_location + '\\MDD_Car_UC_pcu_Totals.csv')
+    # Export to MDDHW pickle file
+    with open(r'Y:\Mobile Data\Processing\dct_MDDCar_UC_pcu.pkl', 'wb') as log:
+        pk.dump(dct_mdd_pcu, log, pk.HIGHEST_PROTOCOL)
+
 
 """
 TEMPLATE CODE

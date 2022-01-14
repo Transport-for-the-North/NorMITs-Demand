@@ -4,6 +4,9 @@ TODO: add some more comments here
 import numpy as np
 import pickle as pk
 import pandas as pd
+import bz2
+from normits_demand.utils import vehicle_occupancy as vo
+from pathlib import Path
 
 dctmode = {3: ['Car']}
 dctday = {1: ['Weekday']}
@@ -31,6 +34,160 @@ dctuc = {1: ['business'],
 dcttp = {1: ['AM'], 2: ['IP'], 3: ['PM'], 4: ['OP']}
 
 unq_zones = list(range(1, 2771))
+
+
+def decompress_pickle(file):
+    data = bz2.BZ2File(file, 'rb')
+    data = pk.load(data)
+    return data
+
+
+def noham_synthetic_package():
+    import_folder = 'I:\\Transfer\\External Model OD\\NoTEM iter4\\car_and_passenger\\'
+
+    dct_noham_synthetic = {}
+    for md in dctmode:
+        dct_noham_synthetic[md] = {}
+        for wd in dctday:
+            dct_noham_synthetic[md][wd] = {}
+            for pp in dctpurp:
+                dct_noham_synthetic[md][wd][pp] = {}
+                for tp in dcttp:
+                    print('+++ {} - {} - {} - {} +++'.
+                          format(dctmode[md][0], dctday[wd][0], dctpurp[pp], dcttp[tp][0]))
+                    if dctpurp[pp][0] == 'hb':
+                        path = (import_folder
+                                + str(dctpurp[pp][0]) + '_synthetic_od_'
+                                + str(dctpurp[pp][1]) + '_yr2018_p'
+                                + str(dctpurp[pp][2]) + '_m'
+                                + str(md) + '_tp'
+                                + str(tp) + '.pbz2')
+                    elif dctpurp[pp][0] == 'nhb':
+                        path = (import_folder
+                                + str(dctpurp[pp][0]) + '_synthetic_od_'
+                                + str(dctpurp[pp][1]) + 'yr2018_p'
+                                + str(dctpurp[pp][2]) + '_m'
+                                + str(md) + '_tp'
+                                + str(tp) + '.pbz2')
+                    else:
+                        print('Value outside expected range')
+                    print(path)
+                    noham_synthetic = decompress_pickle(path)
+                    dct_noham_synthetic[md][wd][pp][tp] = noham_synthetic
+
+    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic.pkl', 'wb') as log:
+        pk.dump(dct_noham_synthetic, log, pk.HIGHEST_PROTOCOL)
+
+
+def noham_synthetic_merge(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\9_Totals_Check'):
+    temp_array = np.zeros((2770, 2770))
+    # Build template table
+    dct_noham_synthetic_uc = {}
+    for md in dctmode:
+        dct_noham_synthetic_uc[md] = {}
+        for wd in dctday:
+            dct_noham_synthetic_uc[md][wd] = {}
+            for uc in dctuc:
+                dct_noham_synthetic_uc[md][wd][uc] = {}
+                for tp in dcttp:
+                    dct_noham_synthetic_uc[md][wd][uc][tp] = temp_array
+
+    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic.pkl', 'rb') as log:
+        dct_noham_synthetic = pk.load(log)
+    # If required export totals
+    if totals_check:
+        # Build totals dictionary
+        dct_total = {3: {1: {}}}
+        for pp in dctpurp:
+            dct_total[3][1][pp] = {}
+            for tp in dcttp:
+                print(str(3) + '-' + str(1) + '-' + str(pp) + '-' + str(tp))
+                dct_total[3][1][pp][tp] = np.sum(dct_noham_synthetic[3][1][pp][tp].to_numpy())
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        df_totals.to_csv(check_location + '\\NoHAM_Synthetic_Totals.csv')
+    # Build template table
+    for md in dctmode:
+        for wd in dctday:
+            for pp in dctpurp:
+                uc = (1 if dctpurp[pp][2] in [2, 12] else
+                      2 if dctpurp[pp][2] in [1] else
+                      3 if dctpurp[pp][2] in [2, 3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18] else
+                      6)
+                print('Purpose: ' + str(pp) + ' into uc ' + str(uc))
+                for tp in dcttp:
+                    # print(str(md) + '-' + str(wd) + '-' + str(pp) + '-' + str(tp))
+                    # print(str(md) + '-' + str(wd) + '-' + str(mddpurp) + '-' + str(tp))
+                    dct_noham_synthetic_uc[md][wd][uc][tp] = (dct_noham_synthetic_uc[md][wd][uc][tp] +
+                                                              dct_noham_synthetic[md][wd][pp][tp].to_numpy())
+    # If required export totals
+    if totals_check:
+        # Build totals dictionary
+        dct_total = {3: {1: {}}}
+        for uc in dctuc:
+            dct_total[3][1][uc] = {}
+            for tp in dcttp:
+                print(str(3) + '-' + str(1) + '-' + str(uc) + '-' + str(tp))
+                dct_total[3][1][uc][tp] = np.sum(dct_noham_synthetic_uc[3][1][uc][tp])
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        df_totals.to_csv(check_location + '\\NoHAM_Synthetic_UC_Totals.csv')
+    # Export
+    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic_UC.pkl', 'wb') as log:
+        pk.dump(dct_noham_synthetic_uc, log, pk.HIGHEST_PROTOCOL)
+
+
+def noham_synthetic_export():
+    # Set local variables
+    version = 3
+    export_folder = 'Y:/Mobile Data/Processing/1-1_NoHAM_Demand'
+
+    # TODO: Load MMD Car pickle
+    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic_UC.pkl', 'rb') as log:
+        dct_noham_synthetic_uc = pk.load(log)
+
+    # TODO: Loop export into PersonTrips folder with pandas out method
+    folder_path = (export_folder + '/v' + str(version) + '/PersonTrips')
+    Path(folder_path).mkdir(parents=True, exist_ok=True)
+    for md in dctmode:
+        for wd in dctday:
+            for uc in dctuc:
+                for tp in dcttp:
+                    file_path = (folder_path + '/' +
+                                 'od_' + str(dctuc[uc][0]) + '_p' + str(uc) +
+                                 '_yr2018_m' + str(md) +
+                                 '_tp' + str(tp) + '.csv')
+                    print(file_path)
+                    export_array = dct_noham_synthetic_uc[md][wd][uc][tp]
+                    export_df = pd.DataFrame(data=export_array, index=unq_zones, columns=unq_zones)
+                    export_df.to_csv(file_path)
+    print('noham person userclass trip matrices exported')
+
+
+def noham_synthetic_per_to_veh():
+    # Set local variables
+    version = 3
+    working_folder = 'Y:/Mobile Data/Processing/1-1_NoHAM_Demand/'
+    import_path = working_folder + '/v' + str(version) + '/PersonTrips'
+    export_path = working_folder + '/v' + str(version) + '/PCUs'
+    import_folder = 'I:/NorMITs Demand/import'
+
+    vo.people_vehicle_conversion(
+        mat_import=import_path,
+        mat_export=export_path,
+        import_folder=import_folder,
+        mode=3,
+        method='to_vehicles',
+        out_format='wide',
+        hourly_average=True,
+        header=True
+    )
 
 
 def noham_car_package():
@@ -300,7 +457,8 @@ def main():
     run_noham_car_package = False
     run_noham_compiled_pcu_import = True
     run_noham_car_merge = False
-    run_mdd_to_uc = True
+    run_mdd_to_uc = False
+    run_noham_synthetic_per_to_veh = True
 
     if run_noham_car_package:
         noham_car_package()
@@ -313,6 +471,9 @@ def main():
 
     if run_mdd_to_uc:
         mdd_to_uc()
+
+    if run_noham_synthetic_per_to_veh:
+        noham_synthetic_per_to_veh()
 
     print("end of main")
 
