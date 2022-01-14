@@ -174,8 +174,11 @@ def main(params: NTEMForecastParameters):
         efs_consts.BASE_YEAR,
         params.model_name,
     )
-    ntem_forecast.grow_matrices(
-        ntem_inputs, future_tempro, params.export_path / "Matrices"
+    ntem_forecast.grow_all_matrices(
+        ntem_inputs,
+        future_tempro,
+        params.model_name,
+        params.export_path / "Matrices",
     )
 
 

@@ -20,6 +20,7 @@ from normits_demand import logging as nd_log
 from normits_demand import core as nd_core
 from normits_demand.utils import timing
 from normits_demand import efs_constants as efs_consts
+from normits_demand.distribution import furness
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
@@ -750,3 +751,195 @@ def grow_tempro_data(tempro_data: TEMProTripEnds) -> TEMProTripEnds:
         grown[segment.name] = grow_trip_ends(getattr(tempro_data, segment.name))
     return TEMProTripEnds(**grown)
 
+
+def _trip_end_totals(
+    row_targets: pd.Series,
+    col_targets: pd.Series,
+    tolerance: float = 1e-7,
+) -> Dict[str, pd.Series]:
+    """Compare `row_targets` and `col_targets` sum totals and factor if needed.
+
+    If the totals for either of the targets differ by more than
+    `tolerance` then both targets are factored to equal a mean
+    total.
+
+    Parameters
+    ----------
+    row_targets : pd.Series
+        Target trip ends for the rows.
+    col_targets : pd.Series
+        Target trip ends for the columns.
+    tolerance: float, default 1e-7
+        Tolerance allowed when comparing the trip end totals.
+
+    Returns
+    -------
+    Dict[str, pd.Series]
+        Dictionary containing both targets with
+        keys: 'row_targets' and 'col_targets'.
+    """
+    targets = {"row_targets": row_targets, "col_targets": col_targets}
+    totals = {nm: s.sum() for nm, s in targets.items()}
+    diff = abs(totals["row_targets"] - totals["col_targets"])
+    if diff > tolerance:
+        avg_tot = np.mean(list(totals.values()))
+        LOG.debug(
+            "Row and column trip end totals differ by %.5e, "
+            "factoring trip end totals to mean: %.5e",
+            diff,
+            avg_tot,
+        )
+        for nm, data in targets.items():
+            targets[nm] = data * (avg_tot / totals[nm])
+    return targets
+
+
+def grow_matrix(
+    matrix: pd.DataFrame,
+    output_path: Path,
+    segment_name: str,
+    attractions: nd_core.DVector,
+    productions: nd_core.DVector,
+) -> pd.DataFrame:
+    """Grow `matrix` to trip end totals and save to `output_path`.
+
+    Internal growth is done using a 2D furness and
+    external growth is done by factoring the rows,
+    then the columns, to the targets.
+
+    Parameters
+    ----------
+    matrix : pd.DataFrame
+        Trip matrix for base year, columns and index
+        should be zone numbers.
+    output_path : Path
+        Path to save the output file to.
+    segment_name : str
+        Name of the segment being grown, format
+        `{purpose}_{mode}` e.g. `2_3`.
+    attractions : nd_core.DVector
+        DVector for the attractions trip ends,
+        should be the same zone system as matrix.
+    productions : nd_core.DVector
+        DVector for the productions trip ends,
+        should be the same zone system as matrix.
+
+    Returns
+    -------
+    pd.DataFrame
+        Trip `matrix` grown to match target `attractions`
+        and `productions`.
+    """
+    # Get single segment as a Series from DVectors
+    targets = {}
+    dvectors = {"row_targets": productions, "col_targets": attractions}
+    for nm, dvec in dvectors.items():
+        targets[nm] = pd.Series(
+            dvec.get_segment_data(segment_name),
+            index=dvec.zoning_system.unique_zones,
+            name="trips",
+        )
+        targets[nm].index.name = "model_zone_id"
+
+    # Get internal targets only and factor to the same totals
+    internals = attractions.zoning_system.internal_zones
+    int_targets = {nm: data.loc[internals] for nm, data in targets.items()}
+    int_targets = _trip_end_totals(**int_targets)
+    # Distribute internal demand with 2D furnessing, targets
+    # converted to DataFrames for this function
+    int_future, iters, r_sq = furness.furness_pandas_wrapper(
+        matrix.loc[internals, internals],
+        **{nm: data.reset_index() for nm, data in int_targets.items()},
+    )
+    LOG.debug(
+        "Furnessed internal trips with %s iterations and R^2 = %.2f",
+        iters,
+        r_sq,
+    )
+    # Factor external demand to row and column targets, make sure
+    # row and column targets have the same totals
+    targets = _trip_end_totals(**targets)
+    row_factors = targets["row_targets"] / matrix.sum(axis=0)
+    ext_future = matrix.mul(row_factors.fillna(0), axis="index")
+    col_factors = targets["col_targets"] / ext_future.sum(axis=1)
+    ext_future = ext_future.mul(col_factors.fillna(0), axis="columns")
+    # Set internal zones in factored matrix to 0 and add internal furnessed
+    ext_future.loc[internals, internals] = 0
+    combined_future = ext_future + int_future
+    # Write future to file
+    file_ops.write_df(combined_future, output_path)
+    LOG.info("Written: %s", output_path)
+    return combined_future
+
+
+def grow_all_matrices(
+    matrices: NTEMImportMatrices,
+    trip_ends: TEMProTripEnds,
+    model: str,
+    output_folder: Path,
+) -> None:
+    """Grow all base year `matrices` to all forecast years in `trip_ends`.
+
+    Parameters
+    ----------
+    matrices : NTEMImportMatrices
+        Paths to the base year PostME matrices.
+    trip_ends : TEMProTripEnds
+        TEMPro trip end data for all forecast years.
+    model : str
+        Name of the model e.g. 'noham'.
+    output_folder : Path
+        Path to folder for saving the output matrices.
+
+    Raises
+    ------
+    NTEMForecastError
+        If the productions and attractions in `trip_ends`
+        don't have the same forecast years.
+
+    See Also
+    --------
+    grow_matrix: for growing a single matrix.
+    """
+    zone_translation_weights = {
+        **dict.fromkeys(("hb_attractions", "nhb_attractions"), "employment"),
+        **dict.fromkeys(("hb_productions", "nhb_productions"), "population"),
+    }
+    trip_ends = trip_ends.translate_zoning(
+        model, weighting=zone_translation_weights
+    )
+    iterator = {
+        "hb":
+            (
+                matrices.hb_paths,
+                trip_ends.hb_attractions,
+                trip_ends.hb_productions,
+            ),
+        "nhb":
+            (
+                matrices.nhb_paths,
+                trip_ends.nhb_attractions,
+                trip_ends.nhb_productions,
+            ),
+    }
+    output_folder.mkdir(exist_ok=True, parents=True)
+    for hb, (paths, attractions, productions) in iterator.items():
+        for purp, path in paths.items():
+            LOG.info("Reading base year matrix: %s", path)
+            base = file_ops.read_df(path, find_similar=True, index_col=0)
+            base.columns = pd.to_numeric(base.columns, downcast="integer")
+            for yr, attr in attractions.items():
+                LOG.info("Growing %s to %s", path.stem, yr)
+                try:
+                    prod = productions[yr]
+                except KeyError as err:
+                    raise NTEMForecastError(
+                        f"production trip ends doesn't contain year {yr}"
+                    ) from err
+                grow_matrix(
+                    base,
+                    output_folder / matrices.output_filename(hb, purp, yr),
+                    f"{purp}_{matrices.mode}",
+                    attr,
+                    prod,
+                )
