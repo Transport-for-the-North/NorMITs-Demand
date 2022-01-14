@@ -44,3 +44,5 @@ Below, a brief summary of patches made since the previous version can be found.
   - Added an option 3D Furness option
     - Replaces the TMS "external model", same functionalty, but much more
       flexible
+- Reports
+  - Added code to automatically generate a report pack at TfN Sectors
