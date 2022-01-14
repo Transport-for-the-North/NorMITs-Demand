@@ -78,6 +78,24 @@ class NTEMForecastParameters:
             f"export_path={self.export_path!r})"
         )
 
+    @property
+    def pa_to_od_factors(self) -> Dict[str, Path]:
+        """Dict[str, Path]
+            Paths to the PA to OD tour proportions, has
+            keys `post_me_tours` and `post_me_fh_th_factors`.
+        """
+        tour_prop_home = (
+            self.import_path / self.model_name / "post_me_tour_proportions"
+        )
+        paths = {
+            "post_me_tours": tour_prop_home,
+            "post_me_fh_th_factors": tour_prop_home / "fh_th_factors"
+        }
+        for nm, p in paths.items():
+            if not p.is_dir():
+                raise NotADirectoryError(f"cannot find {nm} folder: {p}")
+        return paths
+
 
 ##### FUNCTIONS #####
 def get_tempro_data() -> tempro_trip_ends.TEMProTripEnds:
@@ -176,11 +194,21 @@ def main(params: NTEMForecastParameters):
         efs_consts.BASE_YEAR,
         params.model_name,
     )
+    pa_folder = params.export_path / "Matrices" / "PA"
     ntem_forecast.grow_all_matrices(
         ntem_inputs,
         future_tempro,
         params.model_name,
-        params.export_path / "Matrices",
+        pa_folder,
+    )
+    ntem_forecast.convert_to_od(
+        pa_folder,
+        pa_folder.with_name("OD"),
+        list(tempro_data.hb_attractions.keys()),
+        [ntem_inputs.mode],
+        {"hb": efs_consts.HB_PURPOSES_NEEDED, "nhb": efs_consts.NHB_PURPOSES_NEEDED},
+        params.model_name,
+        params.pa_to_od_factors,
     )
     LOG.info(
         "NTEM forecasting completed in %s",

@@ -7,7 +7,7 @@
 # Standard imports
 import dataclasses
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 # Third party imports
 import numpy as np
@@ -20,6 +20,7 @@ from normits_demand import core as nd_core
 from normits_demand import efs_constants as efs_consts
 from normits_demand.distribution import furness
 from normits_demand.models.tempro_trip_ends import NTEMForecastError, TEMProTripEnds
+from normits_demand.matrices import pa_to_od, matrix_processing
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
@@ -541,3 +542,65 @@ def grow_all_matrices(
                     attr,
                     prod,
                 )
+
+
+def convert_to_od(
+    pa_folder: Path,
+    od_folder: Path,
+    years: List[int],
+    modes: List[int],
+    purposes: Dict[str, List[int]],
+    model_name: str,
+    pa_to_od_factors: Dict[str, Path],
+) -> None:
+    """Converts PA matrices from folder to OD.
+
+    Parameters
+    ----------
+    pa_folder : Path
+        Path to folder containing PA matrices.
+    od_folder : Path
+        Path to folder to save OD matrices in.
+    years : List[int]
+        List of years of matrices to convert.
+    modes : List[int]
+        List of modes for matrices to convert.
+    purposes : Dict[str, List[int]]
+        Purposes to convert for home-based and non-home-based
+        matrices, should have keys "hb" and "nhb".
+    model_name : str
+        Name of the model being ran.
+    pa_to_od_factors : Dict[str, Path]
+        Paths to the folders containing the PA to OD tour
+        proportions, should have keys "post_me_fh_th_factors"
+        and "post_me_tours".
+
+    See Also
+    --------
+    pa_to_od.build_od_from_fh_th_factors : for home-based conversion
+    matrix_processing.nhb_tp_split_via_factors : for non-home-based conversion
+    """
+    LOG.info("Converting PA to OD")
+    od_folder.mkdir(exist_ok=True, parents=True)
+    pa_to_od.build_od_from_fh_th_factors(
+        pa_import=pa_folder,
+        od_export=od_folder,
+        fh_th_factors_dir=pa_to_od_factors["post_me_fh_th_factors"],
+        years_needed=years,
+        seg_level="tms",
+        seg_params={
+            "p_needed": purposes["hb"],
+            "m_needed": modes
+        },
+    )
+    matrix_processing.nhb_tp_split_via_factors(
+        import_dir=pa_folder,
+        export_dir=od_folder,
+        import_matrix_format="pa",
+        export_matrix_format="od",
+        tour_proportions_dir=pa_to_od_factors["post_me_tours"],
+        model_name=model_name,
+        years_needed=years,
+        p_needed=purposes["nhb"],
+        m_needed=modes,
+    )
