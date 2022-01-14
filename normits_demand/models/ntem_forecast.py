@@ -581,17 +581,29 @@ class NTEMImportMatrices:
             self._nhb_paths = self._get_paths("nhb")
         return self._nhb_paths.copy()
 
-    def output_filename(self, hb: str, purpose: int, year: int) -> str:
+    def output_filename(
+        self,
+        trip_origin: str,
+        purpose: int,
+        year: int,
+        compressed: bool = True,
+        **kwargs,
+    ) -> str:
         """Generate filename for output matrix.
 
         Parameters
         ----------
-        hb : str {'hb', 'nhb'}
+        trip_origin : str {'hb', 'nhb'}
             Whether using home-based (hb) or non-home-based (nhb).
         purpose : int
             Purpose number.
         year : int
             The year for the output matrix
+        compressed: bool, default True
+            Whether the return should be a compressed filetype or not.
+        kwargs: keyword arguments, optional
+            All other keyword arguments passed to
+            `SegmentationLevel.generate_file_name`.
 
         Returns
         -------
@@ -599,11 +611,11 @@ class NTEMImportMatrices:
             Name of the output CSV file.
         """
         try:
-            seg = self.segmentation[hb]
+            seg = self.segmentation[trip_origin]
         except KeyError as err:
             raise NTEMForecastError(
                 "hb should be one of %s not %r" %
-                (tuple(self.segmentation.keys()), hb)
+                (tuple(self.segmentation.keys()), trip_origin)
             ) from err
         return seg.generate_file_name(
             {
@@ -611,9 +623,10 @@ class NTEMImportMatrices:
                 "m": self.mode
             },
             file_desc="pa",
-            trip_origin=hb,
+            trip_origin=trip_origin,
             year=year,
-            csv=True,
+            compressed=compressed,
+            **kwargs,
         )
 
 
