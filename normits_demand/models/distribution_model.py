@@ -299,6 +299,13 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Upper Model Done!")
 
     def run_lower_model(self):
+        if self.lower_model_method is None:
+            self._logger.info(
+                "Cannot run Lower Model as no method has been given to run "
+                "this model."
+            )
+            return
+
         self._logger.info("Initialising the Lower Model")
         lower_model = self.lower_model_method.get_distributor(
                 year=self.year,
@@ -445,6 +452,8 @@ class DistributionModel(DistributionModelExportPaths):
 
             # Write new matrix out
             file_ops.write_df(df, os.path.join(out_dir, fname))
+
+        return out_dir
 
     def run_pa_to_od(self):
         # TODO(BT): Make sure the upper and lower matrices exist!
