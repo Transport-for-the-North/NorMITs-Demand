@@ -15,6 +15,7 @@ from typing import Dict, Any
 from normits_demand.models import ntem_forecast, tempro_trip_ends
 from normits_demand import efs_constants as efs_consts
 from normits_demand import logging as nd_log
+from normits_demand.utils import timing
 
 ##### CONSTANTS #####
 LOG_FILE = "NTEM_forecast.log"
@@ -158,6 +159,7 @@ def main(params: NTEMForecastParameters):
     --------
     normits_demand.models.ntem_forecast
     """
+    start = timing.current_milli_time()
     if params.export_path.exists():
         LOG.info("export folder already exists: %s", params.export_path)
     else:
@@ -179,6 +181,10 @@ def main(params: NTEMForecastParameters):
         future_tempro,
         params.model_name,
         params.export_path / "Matrices",
+    )
+    LOG.info(
+        "NTEM forecasting completed in %s",
+        timing.time_taken(start, timing.current_milli_time()),
     )
 
 
