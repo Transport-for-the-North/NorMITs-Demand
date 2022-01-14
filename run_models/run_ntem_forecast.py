@@ -12,7 +12,7 @@ from typing import Dict, Any
 # Third party imports
 
 # Local imports
-from normits_demand.models import ntem_forecast
+from normits_demand.models import ntem_forecast, tempro_trip_ends
 from normits_demand import efs_constants as efs_consts
 from normits_demand import logging as nd_log
 
@@ -79,16 +79,16 @@ class NTEMForecastParameters:
 
 
 ##### FUNCTIONS #####
-def get_tempro_data() -> ntem_forecast.TEMProTripEnds:
+def get_tempro_data() -> tempro_trip_ends.TEMProTripEnds:
     """Read TEMPro data and convert it to DVectors.
 
     Returns
     -------
-    ntem_forecast.TEMProTripEnds
+    tempro_trip_ends.TEMProTripEnds
         TEMPro trip end data as DVectors stored in class
         attributes for base and all future years.
     """
-    tempro_data = ntem_forecast.TEMProData(
+    tempro_data = tempro_trip_ends.TEMProData(
         [efs_consts.BASE_YEAR] + efs_consts.FUTURE_YEARS
     )
     # Read data and convert to DVectors
@@ -106,14 +106,14 @@ def get_tempro_data() -> ntem_forecast.TEMProTripEnds:
 
 
 def model_mode_subset(
-    trip_ends: ntem_forecast.TEMProTripEnds,
+    trip_ends: tempro_trip_ends.TEMProTripEnds,
     model_name: str,
-) -> ntem_forecast.TEMProTripEnds:
+) -> tempro_trip_ends.TEMProTripEnds:
     """Get subset of `trip_ends` segmentation for specific `model_name`.
 
     Parameters
     ----------
-    trip_ends : ntem_forecast.TEMProTripEnds
+    trip_ends : tempro_trip_ends.TEMProTripEnds
         Trip end data, which has segmentation split by
         mode.
     model_name : str
@@ -122,7 +122,7 @@ def model_mode_subset(
 
     Returns
     -------
-    ntem_forecast.TEMProTripEnds
+    tempro_trip_ends.TEMProTripEnds
         Trip end data at new segmentation.
 
     Raises
