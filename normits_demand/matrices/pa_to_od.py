@@ -29,11 +29,12 @@ import normits_demand as nd
 
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
-from normits_demand.utils import general as du
-from normits_demand.utils import file_ops
 from normits_demand.concurrency import multiprocessing
 
 from normits_demand.matrices import utils as mat_utils
+from normits_demand.utils import general as du
+from normits_demand.utils import file_ops
+from normits_demand.utils import math_utils
 
 # Can call tms pa_to_od.py functions from here
 from normits_demand.matrices.tms_pa_to_od import *
@@ -849,7 +850,7 @@ def to_od_via_tour_props(n_od_vals,
     od_total = fh_total + th_total
 
     # From home and to home should be the same total
-    if not du.is_almost_equal(fh_total, th_total, significant=0):
+    if not math_utils.is_almost_equal(fh_total, th_total):
         raise nd.NormitsDemandError(
             "From-home and to-home OD matrix totals are not the same."
             "Are the given splitting factors correct?\n"
@@ -859,7 +860,7 @@ def to_od_via_tour_props(n_od_vals,
         )
 
     # OD total should be double the input PA
-    if not du.is_almost_equal(od_total, pa_24.values.sum() * 2, significant=-1):
+    if not math_utils.is_almost_equal(od_total, pa_24.values.sum() * 2):
         raise nd.NormitsDemandError(
             "OD Matrices total is not 2 * the input PA input."
             "Are the given splitting factors correct?"

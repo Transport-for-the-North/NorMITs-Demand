@@ -24,27 +24,6 @@ import pandas as pd
 import normits_demand as nd
 
 
-def calculate_average_trip_lengths(min_bounds: np.ndarray,
-                                   max_bounds: np.ndarray,
-                                   trip_lengths: np.ndarray,
-                                   trips: np.ndarray,
-                                   ) -> np.ndarray:
-    ave_trip_lengths = list()
-    for min_val, max_val in zip(min_bounds, max_bounds):
-        band_mask = (trip_lengths >= min_val) & (trip_lengths < max_val)
-        band_distance = (trips * band_mask * trip_lengths).sum()
-        band_trips = (trips * band_mask).sum()
-
-        if band_trips == 0:
-            average_tl = 0
-        else:
-            average_tl = band_distance / band_trips
-
-        ave_trip_lengths.append(average_tl)
-
-    return np.array(ave_trip_lengths)
-
-
 def get_trip_length_distributions(import_dir: nd.PathLike,
                                   segment_params: nd.SegmentParams,
                                   trip_origin: str,
@@ -74,6 +53,7 @@ def get_trip_length_distributions(import_dir: nd.PathLike,
 
     """
     # TODO(BT): Tidy up get_trip_length_distributions
+    # TODO(BT): On last LEGS REMOVE WHEN TMS REMOVED
     # Append name of tlb area
 
     # Index folder
@@ -98,9 +78,9 @@ def get_trip_length_distributions(import_dir: nd.PathLike,
 
     if len(import_files) <= 0:
         raise IOError(
-            "Cannot find any %s trip length bands.\n"
+            "Cannot find any %s, %s trip length bands.\n"
             "import folder: %s"
-            % (trip_origin, import_dir)
+            % (trip_origin,  segment_params, import_dir)
         )
 
     for key, value in segment_params.items():

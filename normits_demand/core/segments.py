@@ -340,6 +340,10 @@ class SegmentationLevel:
         """Overrides the default implementation"""
         return self._segments.to_dict(orient='records').__iter__()
 
+    def __len__(self):
+        """Overrides the default implementation"""
+        return len(self.segment_names)
+
     def _read_multiply_definitions(self) -> pd.DataFrame:
         """
         Returns the multiplication definitions for segments as a pd.DataFrame
@@ -858,6 +862,24 @@ class SegmentationLevel:
                 )
 
         return segment_col
+
+    def get_segment_name(self, segment_params: Dict[str, Any]):
+        """
+        Converts the given {seg_name: seg_val} dict into a segment_name
+        """
+        # Check all needed keys exist
+        missing_segments = set(self.naming_order) - set(segment_params.keys())
+        if len(missing_segments) > 0:
+            raise ValueError(
+                "Some segments were missing when trying to generate the"
+                "segment name for segmentation %s."
+                "Missing the following segments: %s"
+                % (self.name, missing_segments)
+            )
+
+        # Generate the name
+        name_parts = [str(segment_params[s]) for s in self.naming_order]
+        return self._segment_name_separator.join(name_parts)
 
     def get_seg_dict(self, segment_name: str) -> Dict[str, Any]:
         """
