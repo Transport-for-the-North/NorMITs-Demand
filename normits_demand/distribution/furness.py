@@ -334,12 +334,7 @@ def doubly_constrained_furness(seed_vals: np.array,
         )
 
         # adjust cols
-        furnessed_mat = np.multiply(
-            furnessed_mat,
-            diff_factor,
-            where=~np.isinf(diff_factor),
-            out=furnessed_mat.astype(float),
-        )
+        furnessed_mat *= diff_factor
 
         # ## ROW CONSTRAIN ## #
         # Calculate difference factor
@@ -352,12 +347,7 @@ def doubly_constrained_furness(seed_vals: np.array,
         )
 
         # adjust rows
-        furnessed_mat = np.multiply(
-            furnessed_mat,
-            np.atleast_2d(diff_factor).T,
-            where=~np.isinf(diff_factor),
-            out=furnessed_mat.astype(float),
-        )
+        furnessed_mat *= np.atleast_2d(diff_factor).T
 
         # Calculate the diff - leave early if met
         row_diff = (row_targets - np.sum(furnessed_mat, axis=1)) ** 2
