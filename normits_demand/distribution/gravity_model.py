@@ -46,10 +46,6 @@ class GravityModelCalibrator:
     _target_cost_distribution_cols = ['min', 'max', 'trips'] + [_avg_cost_col]
     _least_squares_method = 'trf'
 
-    # Cost amplification constants
-    _cost_amplify_min_dist = np.inf     # Turn off for now
-    _cost_amplify_power = 1
-
     def __init__(self,
                  row_targets: np.ndarray,
                  col_targets: np.ndarray,
@@ -59,6 +55,7 @@ class GravityModelCalibrator:
                  target_convergence: float,
                  furness_max_iters: int,
                  furness_tol: float,
+                 use_perceived_factors: bool = True,
                  running_log_path: nd.PathLike = None,
                  ):
         # TODO(BT): Write GravityModelCalibrator __init__ docs
@@ -93,6 +90,7 @@ class GravityModelCalibrator:
         self.tcd_bin_edges = self._get_tcd_bin_edges()
         self.furness_max_iters = furness_max_iters
         self.furness_tol = furness_tol
+        self.use_perceived_factors = use_perceived_factors
         self.running_log_path = running_log_path
 
         self.target_convergence = target_convergence
@@ -102,6 +100,7 @@ class GravityModelCalibrator:
         self._loop_start_time = None
         self._loop_end_time = None
         self._jacobian_mats = None
+        self._perceived_factors = None
 
         # Additional attributes
         self.initial_cost_params = None
@@ -164,17 +163,8 @@ class GravityModelCalibrator:
             self._order_cost_params(self.cost_function.param_max),
         )
 
-    def _cost_amplify(self, cost_matrix: np.ndarray) -> np.ndarray:
-        if not (0 < self._cost_amplify_min_dist < np.max(cost_matrix)):
-            return cost_matrix
-
-        factor = (cost_matrix / self._cost_amplify_min_dist) ** self._cost_amplify_power
-        new_cost = cost_matrix * factor
-        return np.where(
-            cost_matrix <= self._cost_amplify_min_dist,
-            cost_matrix,
-            new_cost,
-        )
+    def _apply_perceived_factors(self, cost_matrix: np.ndarray) -> np.ndarray:
+        return cost_matrix * self._perceived_factors
 
     def _cost_distribution(self, matrix: np.ndarray) -> np.ndarray:
         """Returns the distribution of matrix across self.tcd_bin_edges"""
@@ -199,7 +189,6 @@ class GravityModelCalibrator:
 
         # Used to optionally increase the cost of long distance trips
         avg_cost_vals = self.target_cost_distribution[self._avg_cost_col].values
-        avg_cost_vals = self._cost_amplify(avg_cost_vals)
 
         # Estimate what the cost function will do to the costs - on average
         estimated_cost_vals = self.cost_function.calculate(avg_cost_vals, **cost_kwargs)
@@ -220,8 +209,8 @@ class GravityModelCalibrator:
         # Convert the cost function args back into kwargs
         cost_kwargs = self._cost_params_to_kwargs(cost_args)
 
-        # Used to optionally increase the cost of long distance trips
-        cost_matrix = self._cost_amplify(self.cost_matrix)
+        # Used to optionally adjust the cost of long distance trips
+        cost_matrix = self._apply_perceived_factors(self.cost_matrix)
 
         # Calculate initial matrix through cost function
         init_matrix = self.cost_function.calculate(cost_matrix, **cost_kwargs)
@@ -359,6 +348,106 @@ class GravityModelCalibrator:
 
         return jacobian
 
+    def _calculate_perceived_factors(self) -> None:
+        """Updates the perceived cost class variables
+
+        Compares the latest run of the gravity model (as defined by the
+        variables: self.achieved_band_share)
+        and generates a perceived cost factor matrix, which will be applied
+        on calls to self._cost_amplify() in the gravity model.
+
+        This function updates the _perceived_factors class variable.
+        """
+        # Init
+        target_band_share = self.target_cost_distribution['band_share'].values
+
+        # Calculate the adjustment per band in target band share.
+        # Adjustment is clipped between 0.5 and 2 to limit affect
+        perc_factors = np.divide(
+            self.achieved_band_share,
+            target_band_share,
+            where=target_band_share > 0,
+            out=np.ones_like(self.achieved_band_share),
+        ) ** 0.5
+        perc_factors = np.clip(perc_factors, 0.5, 2)
+
+        # Initialise loop
+        perc_factors_mat = np.ones_like(self.cost_matrix)
+        min_vals = self.target_cost_distribution['min']
+        max_vals = self.target_cost_distribution['max']
+
+        # Convert into factors for the cost matrix
+        for min_val, max_val, factor in zip(min_vals, max_vals, perc_factors):
+            # Get proportion of all trips that are in this band
+            distance_mask = (
+                (self.cost_matrix >= min_val)
+                & (self.cost_matrix < max_val)
+            )
+
+            perc_factors_mat = np.multiply(
+                perc_factors_mat,
+                factor,
+                where=distance_mask,
+                out=perc_factors_mat,
+            )
+
+        # Assign to class attribute
+        self._perceived_factors = perc_factors_mat
+
+    def _initialise_calibrate_params(self) -> None:
+        """Sets running params to their default values for a run"""
+        self._loop_num = 1
+        self._loop_start_time = timing.current_milli_time()
+        self.initial_cost_params = None
+        self.initial_convergence = None
+        self._perceived_factors = np.ones_like(self.cost_matrix)
+
+    def _calibrate(self,
+                   init_params: Dict[str, Any],
+                   calibrate_params: bool = True,
+                   diff_step: float = 1e-8,
+                   ftol: float = 1e-4,
+                   xtol: float = 1e-4,
+                   grav_max_iters: int = 100,
+                   verbose: int = 0,
+                   ) -> None:
+        """Internal function of calibrate.
+
+        Runs the gravity model, and calibrates the optimal cost parameters
+        if calibrate params is set to True.
+        This function will populate and update:
+        self.achieved_band_share
+        self.achieved_convergence
+        self.achieved_residuals
+        self.achieved_distribution
+        self.optimal_cost_params
+        """
+        # Calculate the optimal cost parameters if we're calibrating
+        if calibrate_params is True:
+            result = optimize.least_squares(
+                fun=self._gravity_function,
+                x0=self._order_init_params(init_params),
+                method=self._least_squares_method,
+                bounds=self._order_bounds(),
+                jac=self._gravity_jacobian,
+                verbose=verbose,
+                ftol=ftol,
+                xtol=xtol,
+                max_nfev=grav_max_iters,
+                kwargs={'diff_step': diff_step},
+            )
+            optimal_params = result.x
+        else:
+            optimal_params = self._order_init_params(init_params)
+
+        # Run an optimal version of the gravity
+        self.optimal_cost_params = self._cost_params_to_kwargs(optimal_params)
+        self._gravity_function(optimal_params, diff_step=diff_step)
+
+        print(init_params)
+        print(self._perceived_factors)
+        print(self.optimal_cost_params)
+
     def calibrate(self,
                   init_params: Dict[str, Any],
                   estimate_init_params: bool = False,
@@ -466,38 +555,61 @@ class GravityModelCalibrator:
                 init_params['mu'] *= 0.5
 
         # Initialise running params
-        self._loop_num = 1
-        self._loop_start_time = timing.current_milli_time()
-        self.initial_cost_params = None
-        self.initial_convergence = None
+        self._initialise_calibrate_params()
 
-        # Calculate the optimal cost parameters if we're calibrating
-        if calibrate_params is True:
-            result = optimize.least_squares(
-                fun=self._gravity_function,
-                x0=self._order_init_params(init_params),
-                method=self._least_squares_method,
-                bounds=self._order_bounds(),
-                jac=self._gravity_jacobian,
-                verbose=verbose,
-                ftol=ftol,
-                xtol=xtol,
-                max_nfev=grav_max_iters,
-                kwargs={'diff_step': diff_step},
+        # Figure out the optimal cost params
+        self._calibrate(
+            init_params=init_params,
+            calibrate_params=calibrate_params,
+            diff_step=diff_step,
+            ftol=ftol,
+            xtol=xtol,
+            grav_max_iters=grav_max_iters,
+            verbose=verbose,
+        )
+
+        # Just return if not using perceived factors
+        if not self.use_perceived_factors:
+            return self.optimal_cost_params
+
+        # ## APPLY PERCEIVED FACTORS IF WE CAN ## #
+        upper_limit = self.target_convergence + 0.03
+        lower_limit = self.target_convergence - 0.15
+
+        # Just return if upper limit has been beaten
+        if self.achieved_convergence > upper_limit:
+            return self.optimal_cost_params
+
+        # Warn if the lower limit hasn't been reached
+        if self.achieved_convergence < lower_limit:
+            warnings.warn(
+                "Calibration was not able to reach the lower threshold "
+                "required to use perceived factors.\n"
+                "Target convergence: %s\n"
+                "Upper Limit: %s\n"
+                "Achieved convergence: %s"
+                % (self.target_convergence, upper_limit, self.achieved_convergence)
             )
-            optimal_params = result.x
-        else:
-            optimal_params = self._order_init_params(init_params)
+            return self.optimal_cost_params
 
-        # Run an optimal version of the gravity
-        self.optimal_cost_params = self._cost_params_to_kwargs(optimal_params)
-        self._gravity_function(optimal_params, diff_step=diff_step)
+        # If here, it's safe to use perceived factors
+        self._calculate_perceived_factors()
 
-        # Check the performance of the best run
+        # Calibrate again, using the perceived factors
+        self._calibrate(
+            init_params=self.optimal_cost_params.copy(),
+            calibrate_params=calibrate_params,
+            diff_step=diff_step,
+            ftol=ftol,
+            xtol=xtol,
+            grav_max_iters=grav_max_iters,
+            verbose=verbose,
+        )
+
         if self.achieved_convergence < self.target_convergence:
             warnings.warn(
-                "Calibration was not able to reach the target_convergence. "
-                "Perhaps K-Factors are needed to improve the convergence?\n"
+                "Calibration with perceived factors was not able to reach the "
+                "target_convergence.\n"
                 "Target convergence: %s\n"
                 "Achieved convergence: %s"
                 % (self.target_convergence, self.achieved_convergence)
