@@ -610,7 +610,7 @@ def import_pa(production_import_path,
 
     # Convert from ave_week to ave_day
     prod_dvec = prod_dvec.subset(out_segmentation=subset_seg)
-    prod_dvec = prod_dvec.convert_time_format('avg_week')
+    prod_dvec = prod_dvec.convert_time_format('avg_day')
 
     # Convert zoning and segmentation to desired
     prod_dvec = prod_dvec.aggregate(agg_segmentation)
@@ -626,7 +626,7 @@ def import_pa(production_import_path,
 
     # Convert from ave_week to ave_day
     attr_dvec = attr_dvec.subset(out_segmentation=subset_seg)
-    attr_dvec = attr_dvec.convert_time_format('avg_week')
+    attr_dvec = attr_dvec.convert_time_format('avg_day')
 
     # Convert zoning and segmentation to desired
     attr_dvec = attr_dvec.aggregate(agg_segmentation)
