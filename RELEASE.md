@@ -46,3 +46,7 @@ Below, a brief summary of patches made since the previous version can be found.
       flexible
 - Reports
   - Added code to automatically generate a report pack at TfN Sectors
+- Patches
+  - Multi-processed matrix translations now return in order
+  - Distribution Model now runs at the average weekday (as it should),
+    not total week day
