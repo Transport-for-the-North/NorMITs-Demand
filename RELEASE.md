@@ -23,3 +23,6 @@ Below, a brief summary of patches made since the previous version can be found.
 - Distribution Model
   - Cache was incorrectly not converting trip ends to average weekday.
     This has been corrected in this version of the model.
+- General
+  - Low memory matrix translations now return all multiprocessed results in
+    order, instead of potentially out of order.
