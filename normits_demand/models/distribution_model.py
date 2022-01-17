@@ -278,7 +278,7 @@ class DistributionModel(DistributionModelExportPaths):
         # Can only handle 9 processes if doing an MSOA gravity model
         saved_process_count = None
         if self.upper_model_zoning.name == 'msoa':
-            if self.process_count > 9 or self.process_count < 0:
+            if os.cpu_count() > 10 and (self.process_count > 9 or self.process_count < 0):
                 saved_process_count = self.process_count
                 self.process_count = 9
 

@@ -444,10 +444,6 @@ class GravityModelCalibrator:
         self.optimal_cost_params = self._cost_params_to_kwargs(optimal_params)
         self._gravity_function(optimal_params, diff_step=diff_step)
 
-        print(init_params)
-        print(self._perceived_factors)
-        print(self.optimal_cost_params)
-
     def calibrate(self,
                   init_params: Dict[str, Any],
                   estimate_init_params: bool = False,
