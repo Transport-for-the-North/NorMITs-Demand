@@ -68,6 +68,7 @@ def _lower_memory_matrix_zone_translation(matrix: np.array,
     # Translate the rows
     kwargs = list()
     n_splits = matrix.shape[1] / chunk_size
+    n_splits = 1 if n_splits <= 0 else n_splits
     for vector_chunk in np.array_split(matrix, n_splits, axis=1):
         kwargs.append({
             'vector_chunk': vector_chunk,
@@ -78,6 +79,7 @@ def _lower_memory_matrix_zone_translation(matrix: np.array,
         fn=_lower_memory_row_translation,
         kwargs=kwargs,
         process_count=nd.constants.PROCESS_COUNT,
+        in_order=True,
     )
 
     row_translated = np.vstack(row_translated).T
@@ -85,6 +87,7 @@ def _lower_memory_matrix_zone_translation(matrix: np.array,
     # Translate the rows
     kwargs = list()
     n_splits = row_translated.shape[0] / chunk_size
+    n_splits = 1 if n_splits <= 0 else n_splits
     for vector_chunk in np.array_split(row_translated, n_splits, axis=0):
         kwargs.append({
             'vector_chunk': vector_chunk,
@@ -95,6 +98,7 @@ def _lower_memory_matrix_zone_translation(matrix: np.array,
         fn=_lower_memory_col_translation,
         kwargs=kwargs,
         process_count=nd.constants.PROCESS_COUNT,
+        in_order=True,
     )
 
     return np.vstack(full_translated)
