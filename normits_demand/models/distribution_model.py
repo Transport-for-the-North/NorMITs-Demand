@@ -276,8 +276,10 @@ class DistributionModel(DistributionModelExportPaths):
 
         self._logger.info("Initialising the Upper Model")
         # Can only handle 9 processes if doing an MSOA gravity model
+        saved_process_count = None
         if self.upper_model_zoning.name == 'msoa':
             if self.process_count > 9 or self.process_count < 0:
+                saved_process_count = self.process_count
                 self.process_count = 9
 
         upper_model = self.upper_model_method.get_distributor(
@@ -297,6 +299,10 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Running the Upper Model")
         upper_model.distribute(**kwargs)
         self._logger.info("Upper Model Done!")
+
+        # Reset the process count
+        if saved_process_count is not None:
+            self.process_count = saved_process_count
 
     def run_lower_model(self):
         if self.lower_model_method is None:
