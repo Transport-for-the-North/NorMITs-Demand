@@ -44,6 +44,7 @@ def build_fusion_factor(input_matrix,
                         chop_tail=False,
                         origin_type=False,
                         dest_type=False,
+                        inclusive=False,
                         invert=False,
                         min_dist=0,
                         max_dist=9999,
@@ -59,7 +60,10 @@ def build_fusion_factor(input_matrix,
     else:
         tail_factor = (input_matrix * 0) + 1
     if origin_type and dest_type:
-        type_factor = np.minimum(origin_type_matrix, dest_type_matrix)
+        if inclusive:
+            type_factor = np.maximum(origin_type_matrix, dest_type_matrix)
+        else:
+            type_factor = np.minimum(origin_type_matrix, dest_type_matrix)
     elif origin_type:
         type_factor = origin_type_matrix
     elif dest_type:

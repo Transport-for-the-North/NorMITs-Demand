@@ -35,6 +35,7 @@ dcttp = {1: ['AM'], 2: ['IP'], 3: ['PM'], 4: ['OP']}
 
 unq_zones = list(range(1, 2771))
 
+
 def mdd_export():
     # some notes
     with open(r'Y:\Mobile Data\Processing\dct_MDDCar.pkl', 'wb') as log:
@@ -109,6 +110,7 @@ def mdd_person_uc_export():
                     export_df = pd.DataFrame(data=export_array, index=unq_zones, columns=unq_zones)
                     export_df.to_csv(file_path)
     print('mdd person userclass trip matrices exported')
+
 
 def mdd_per_to_veh():
     # Set local variables
@@ -235,6 +237,7 @@ def package_noham_car_pcu():
         pk.dump(dctnoham_mddpurp_pcu, log, pk.HIGHEST_PROTOCOL)
     print("noham pcus packaged")
 """
+
 
 def main():
     run_mdd_export = False

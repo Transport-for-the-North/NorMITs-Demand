@@ -176,6 +176,7 @@ def noham_synthetic_per_to_veh():
     working_folder = 'Y:/Mobile Data/Processing/1-1_NoHAM_Demand/'
     import_path = working_folder + '/v' + str(version) + '/PersonTrips'
     export_path = working_folder + '/v' + str(version) + '/PCUs'
+    Path(export_path).mkdir(parents=True, exist_ok=True)
     import_folder = 'I:/NorMITs Demand/import'
 
     vo.people_vehicle_conversion(
@@ -186,7 +187,7 @@ def noham_synthetic_per_to_veh():
         method='to_vehicles',
         out_format='wide',
         hourly_average=True,
-        header=True
+        header=False
     )
 
 
@@ -274,7 +275,7 @@ def noham_compiled_pcu_import(totals_check=False, check_location='Y:\\Mobile Dat
         # Export to csv
         df_totals.to_csv(check_location + '\\NoHAM_compiled-OD_Totals.csv')
     # Export compiled dictionary
-    with open(r'Y:\Mobile Data\Processing\dctNoHAM_compiled_PCU.pkl', 'wb') as log:
+    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic_PCU.pkl', 'wb') as log:
         pk.dump(dctnoham_uc, log, pk.HIGHEST_PROTOCOL)
     print("matrices packaged")
 
@@ -455,7 +456,7 @@ def mdd_to_uc():
 
 def main():
     run_noham_car_package = False
-    run_noham_compiled_pcu_import = True
+    run_noham_compiled_pcu_import = False
     run_noham_car_merge = False
     run_mdd_to_uc = False
     run_noham_synthetic_per_to_veh = True

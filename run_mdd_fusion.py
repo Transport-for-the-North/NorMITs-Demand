@@ -16,11 +16,8 @@ import pandas as pd
 import numpy as np
 import pickle as pk
 from pathlib import Path
-import os, sys
-import multiprocessing as mp
-import normits_demand as nd
 from normits_demand.mdd_fusion import mdd_fusion_engine
-from normits_demand import fusion_constants as consts
+
 
 distance_folder = r'Y:\NoHAM\17.TUBA_Runs\-TPT\Skims\RefDist_Skims'
 inputs_folder = r'Y:\Mobile Data\Processing\Fusion_Inputs'
@@ -107,9 +104,9 @@ def fusion_factors():
                     31: ['HBO', 'HBO_fr', 'Other'], 33: ['HBO', 'HBO_fr', 'Other'],
                     41: ['HBO', 'HBO_to', 'Other'], 43: ['HBO', 'HBO_to', 'Other'],
                     51: ['NHB', 'NHB', 'Other'], 53: ['NHB', 'NHB', 'Other']}
-    dctuc = {1: ['Business'],
-             2: ['Commute'],
-             3: ['Other']}
+    dctuc = {1: ['business', 'Business'],
+             2: ['commute', 'Commute'],
+             3: ['other', 'Other']}
     dcttp = {1: ['AM'], 2: ['IP'], 3: ['PM']}
     # Import distances dictionary
     distance_file = inputs_folder + '\\' + 'NoHAM_Distances.pkl'
@@ -128,7 +125,10 @@ def fusion_factors():
     mdd_car_file = inputs_folder + '\\' + 'dct_MDDCar_UC_pcu.pkl'
     with open(mdd_car_file, 'rb') as log:
         dct_mdd_demand = pk.load(log)
-
+    noham_car_file = inputs_folder + '\\' + 'dct_NoHAM_Synthetic_PCU.pkl'
+    with open(noham_car_file, 'rb') as log:
+        dct_noham_demand = pk.load(log)
+    """
     # Import noham PCUs
     noham_car_file = inputs_folder + '\\' + 'dctNoHAM_mddpurp_pcu.pkl'
     with open(noham_car_file, 'rb') as log:
@@ -137,7 +137,7 @@ def fusion_factors():
     noham_car_file = inputs_folder + '\\' + 'dctNoHAM_compiled_PCU.pkl'
     with open(noham_car_file, 'rb') as log:
         dct_noham_demand = pk.load(log)
-
+    """
 
     # TODO: loop demand dct and create factor dct
     temp_array = np.zeros((2770, 2770))
@@ -148,7 +148,7 @@ def fusion_factors():
     dct_mdd_fusion_factors[3][1] = {}
     for pp in dctuc:
         dct_mdd_fusion_factors[3][1][pp] = {}
-        distance_matrix = dct_distance[dctuc[pp][0]]
+        distance_matrix = dct_distance[dctuc[pp][1]]
         fusion_matrix = mdd_fusion_engine.build_fusion_factor(input_matrix,
                                                               distance_matrix,
                                                               origin_type_matrix,
@@ -157,6 +157,7 @@ def fusion_factors():
                                                               chop_tail=False,
                                                               origin_type=True,
                                                               dest_type=True,
+                                                              inclusive=False,
                                                               invert=False,
                                                               min_dist=0,
                                                               max_dist=9999,
@@ -168,7 +169,7 @@ def fusion_factors():
     dct_noham_fusion_factors[3][1] = {}
     for pp in dctuc:
         dct_noham_fusion_factors[3][1][pp] = {}
-        distance_matrix = dct_distance[dctuc[pp][0]]
+        distance_matrix = dct_distance[dctuc[pp][1]]
         fusion_matrix = mdd_fusion_engine.build_fusion_factor(input_matrix,
                                                               distance_matrix,
                                                               origin_type_matrix,
@@ -177,28 +178,54 @@ def fusion_factors():
                                                               chop_tail=False,
                                                               origin_type=True,
                                                               dest_type=True,
+                                                              inclusive=False,
                                                               invert=True,
                                                               min_dist=0,
                                                               max_dist=9999,
                                                               default_value=1)
         for tp in dcttp:
             dct_noham_fusion_factors[3][1][pp][tp] = fusion_matrix
+    # Calc noham target
+    dct_noham_target = {3: {}}
+    dct_noham_target[3][1] = {}
+    for uc in dctuc:
+        dct_noham_target[3][1][uc] = {}
+        for tp in dcttp:
+            print(np.sum(dct_noham_demand[3][1][uc][tp] * dct_mdd_fusion_factors[3][1][uc][tp]))
+            dct_noham_target[3][1][uc][tp] = (dct_noham_demand[3][1][uc][tp] * dct_mdd_fusion_factors[3][1][uc][tp])
+    # Calc MDD Fusion total
+    dct_mdd_fusion_total = {3: {}}
+    dct_mdd_fusion_total[3][1] = {}
+    for uc in dctuc:
+        dct_mdd_fusion_total[3][1][uc] = {}
+        for tp in dcttp:
+            print(np.sum(dct_mdd_demand[3][1][uc][tp] * dct_mdd_fusion_factors[3][1][uc][tp]))
+            dct_mdd_fusion_total[3][1][uc][tp] = (dct_mdd_demand[3][1][uc][tp] * dct_mdd_fusion_factors[3][1][uc][tp])
+    # Calc expansion factor
+    dct_mdd_expand = {3: {}}
+    dct_mdd_expand[3][1] = {}
+    for uc in dctuc:
+        dct_mdd_expand[3][1][uc] = {}
+        for tp in dcttp:
+            print('3-1-' + str(uc) + '-' + str(tp))
+            print((np.sum(dct_noham_target[3][1][uc][tp]) / np.sum(dct_mdd_fusion_total[3][1][uc][tp])))
+            dct_mdd_expand[3][1][uc][tp] = (np.sum(dct_noham_target[3][1][uc][tp]) / np.sum(dct_mdd_fusion_total[3][1][uc][tp]))
     # combine demand
     dct_expansion_factor = {3: {1: {1: {1: {}, 2: {}, 3: {}},
                                     2: {1: {}, 2: {}, 3: {}},
                                     3: {1: {}, 2: {}, 3: {}}}}}
     # TP1
-    dct_expansion_factor[3][1][1][1] = 1.00
-    dct_expansion_factor[3][1][1][2] = 1.29
-    dct_expansion_factor[3][1][1][3] = 1.17
+    dct_expansion_factor[3][1][1][1] = 1.03
+    dct_expansion_factor[3][1][1][2] = 1.38
+    dct_expansion_factor[3][1][1][3] = 1.58
     # TP2
-    dct_expansion_factor[3][1][2][1] = 1.00
-    dct_expansion_factor[3][1][2][2] = 1.29
-    dct_expansion_factor[3][1][2][3] = 1.17
+    dct_expansion_factor[3][1][2][1] = 4.98
+    dct_expansion_factor[3][1][2][2] = 1.65
+    dct_expansion_factor[3][1][2][3] = 5.12
     # TP3
-    dct_expansion_factor[3][1][3][1] = 1.00
-    dct_expansion_factor[3][1][3][2] = 1.29
-    dct_expansion_factor[3][1][3][3] = 1.17
+    dct_expansion_factor[3][1][3][1] = 2.84
+    dct_expansion_factor[3][1][3][2] = 2.84
+    dct_expansion_factor[3][1][3][3] = 2.54
 
     expansion_applied = True
     dct_fusion_demand = {3: {}}
@@ -217,7 +244,7 @@ def fusion_factors():
                                                        tp]))
 
     unq_zones = list(range(1, 2771))
-    version = 2
+    version = '3-2'
     export_folder = 'Y:/Mobile Data/Processing/3-1_Fusion_Demand'
     md = 3
     wd = 1
