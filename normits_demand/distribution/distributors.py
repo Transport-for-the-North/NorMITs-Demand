@@ -35,7 +35,6 @@ from normits_demand.cost import utils as cost_utils
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import pandas_utils as pd_utils
-from normits_demand.utils import trip_length_distributions as tld_utils
 
 from normits_demand.distribution import gravity_model
 from normits_demand.distribution import furness
@@ -623,6 +622,7 @@ class GravityDistributor(AbstractDistributor):
             target_convergence=kwargs.get('target_convergence'),
             furness_max_iters=kwargs.get('furness_max_iters'),
             furness_tol=kwargs.get('furness_tol'),
+            use_perceived_factors=kwargs.get('use_perceived_factors'),
         )
 
         optimal_cost_params = calib.calibrate(
