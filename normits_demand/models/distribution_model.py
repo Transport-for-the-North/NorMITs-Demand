@@ -64,11 +64,11 @@ class DistributionModel(DistributionModelExportPaths):
                  upper_model_method: nd.DistributionMethod,
                  upper_model_zoning: nd.ZoningSystem,
                  upper_running_zones: List[Any],
-                 upper_model_kwargs: Dict[str, Any] = None,
+                 upper_distributor_kwargs: Dict[str, Any] = None,
                  lower_model_method: nd.DistributionMethod = None,
                  lower_model_zoning: nd.ZoningSystem = None,
                  lower_running_zones: List[Any] = None,
-                 lower_model_kwargs: Dict[str, Any] = None,
+                 lower_distributor_kwargs: Dict[str, Any] = None,
                  compile_zoning_system: nd.ZoningSystem = None,
                  process_count: int = constants.PROCESS_COUNT,
                  ):
@@ -96,10 +96,10 @@ class DistributionModel(DistributionModelExportPaths):
         )
 
         # Get default values if set to None
-        upper_model_kwargs = dict() if upper_model_kwargs is None else upper_model_kwargs
-        lower_model_kwargs = dict() if lower_model_kwargs is None else lower_model_kwargs
-
-        # TODO(BT): Check all lower things are set
+        if upper_distributor_kwargs is None:
+            upper_distributor_kwargs = dict()
+        if lower_distributor_kwargs is None:
+            lower_distributor_kwargs = dict()
 
         # Assign attributes
         self.running_segmentation = running_segmentation
@@ -107,10 +107,10 @@ class DistributionModel(DistributionModelExportPaths):
 
         self.upper_model_zoning = upper_model_zoning
         self.upper_running_zones = upper_running_zones
-        self.upper_model_kwargs = upper_model_kwargs
+        self.upper_distributor_kwargs = upper_distributor_kwargs
         self.lower_model_zoning = lower_model_zoning
         self.lower_running_zones = lower_running_zones
-        self.lower_model_kwargs = lower_model_kwargs
+        self.lower_distributor_kwargs = lower_distributor_kwargs
 
         # Control output zoning systems depending on what we've been given
         if compile_zoning_system is not None:
@@ -290,7 +290,7 @@ class DistributionModel(DistributionModelExportPaths):
                 running_zones=self.upper_running_zones,
                 export_home=self.upper_export_home,
                 process_count=self.process_count,
-                **self.upper_model_kwargs,
+                **self.upper_distributor_kwargs,
         )
 
         self._logger.info("Building arguments for the Upper Model")
@@ -321,7 +321,7 @@ class DistributionModel(DistributionModelExportPaths):
                 running_zones=self.lower_running_zones,
                 export_home=self.lower_export_home,
                 process_count=self.process_count,
-                **self.lower_model_kwargs,
+                **self.lower_distributor_kwargs,
         )
 
         self._logger.info("Converting Upper Model Outputs for Lower Model")

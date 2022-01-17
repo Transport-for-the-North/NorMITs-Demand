@@ -32,31 +32,31 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 notem_iteration_name = '9.3'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
 tram_export_home = r"I:\NorMITs Demand\Tram"
-cache_path = "F:/dm_cache"
+cache_path = "E:/dm_cache"
 
 # Distribution running args
 base_year = 2018
 scenario = consts.SC01_JAM
-dm_iteration_name = '9.3.3'
+dm_iteration_name = '9.3.4'
 dm_import_home = r"I:\NorMITs Demand\import"
-dm_export_home = r"F:\NorMITs Demand\Distribution Model"
+dm_export_home = r"E:\NorMITs Demand\Distribution Model"
 
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
 
 
 def main():
-    # mode = nd.Mode.CAR
+    mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
     # mode = nd.Mode.TRAIN
-    mode = nd.Mode.TRAM
+    # mode = nd.Mode.TRAM
 
     # Running params
     use_tram = True
     overwrite_cache = False
 
-    run_hb = False
-    run_nhb = True
+    run_hb = True
+    run_nhb = False
 
     run_all = False
     run_upper_model = True
@@ -113,8 +113,9 @@ def main():
             'grav_max_iters': 100,
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
-            'calibrate_params': True,
-            'estimate_init_params': False
+            'calibrate_params': False,
+            'estimate_init_params': False,
+            'use_perceived_factors': True,
         }
 
         # Args only work for upper atm!
@@ -131,8 +132,8 @@ def main():
         furness3d = (nd.DistributionMethod.FURNESS3D, furness3d_kwargs)
         choice = [gravity, furness3d]
 
-        upper_distributor_kwargs = [x[1].copy() for x in choice if x[0] == upper_model_method][0]
-        lower_distributor_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
+        upper_model_kwargs = [x[1].copy() for x in choice if x[0] == upper_model_method][0]
+        lower_model_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
 
     elif mode == nd.Mode.BUS:
         # Define zoning systems
@@ -177,7 +178,8 @@ def main():
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
             'calibrate_params': True,
-            'estimate_init_params': False
+            'estimate_init_params': False,
+            'use_perceived_factors': True,
         }
 
         # Args only work for upper atm!
@@ -194,8 +196,8 @@ def main():
         furness3d = (nd.DistributionMethod.FURNESS3D, furness3d_kwargs)
         choice = [gravity, furness3d]
 
-        upper_distributor_kwargs = [x[1].copy() for x in choice if x[0] == upper_model_method][0]
-        lower_distributor_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
+        upper_model_kwargs = [x[1].copy() for x in choice if x[0] == upper_model_method][0]
+        lower_model_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
 
     elif mode == nd.Mode.TRAIN:
         # Define zoning systems
@@ -240,7 +242,8 @@ def main():
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
             'calibrate_params': True,
-            'estimate_init_params': False
+            'estimate_init_params': False,
+            'use_perceived_factors': True,
         }
 
         # Args only work for upper atm!
@@ -257,8 +260,8 @@ def main():
         furness3d = (nd.DistributionMethod.FURNESS3D, furness3d_kwargs)
         choice = [gravity, furness3d]
 
-        upper_distributor_kwargs = [x[1].copy() for x in choice if x[0] == upper_model_method][0]
-        lower_distributor_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
+        upper_model_kwargs = [x[1].copy() for x in choice if x[0] == upper_model_method][0]
+        lower_model_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
 
     elif mode == nd.Mode.TRAM:
         # Define zoning systems
@@ -304,6 +307,7 @@ def main():
             'furness_tol': 0.1,
             'calibrate_params': True,
             'estimate_init_params': False,
+            'use_perceived_factors': True,
         }
 
         # Args only work for upper atm!
@@ -320,11 +324,11 @@ def main():
         furness3d = (nd.DistributionMethod.FURNESS3D, furness3d_kwargs)
         choice = [gravity, furness3d]
 
-        upper_distributor_kwargs = [x[1].copy() for x in choice if x[0] == upper_model_method][0]
+        upper_model_kwargs = [x[1].copy() for x in choice if x[0] == upper_model_method][0]
         if lower_model_method is not None:
-            lower_distributor_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
+            lower_model_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
         else:
-            lower_distributor_kwargs = None
+            lower_model_kwargs = None
     else:
         raise ValueError(
             "Don't know what mode %s is!" % mode.value
@@ -355,14 +359,14 @@ def main():
         'upper_zoning_system': upper_zoning_system,
         'upper_running_zones': upper_zoning_system.unique_zones,
         'upper_model_method': upper_model_method,
-        'upper_distributor_kwargs': upper_distributor_kwargs,
+        'upper_model_kwargs': upper_model_kwargs,
         'upper_calibration_zones_fname': upper_calibration_zones_fname,
         'upper_calibration_areas': upper_calibration_areas,
         'upper_calibration_naming': upper_calibration_naming,
         'lower_zoning_system': lower_zoning_system,
         'lower_running_zones': lower_running_zones,
         'lower_model_method': lower_model_method,
-        'lower_distributor_kwargs': lower_distributor_kwargs,
+        'lower_model_kwargs': lower_model_kwargs,
         'lower_calibration_zones_fname': lower_calibration_zones_fname,
         'lower_calibration_areas': lower_calibration_areas,
         'lower_calibration_naming': lower_calibration_naming,
@@ -376,9 +380,9 @@ def main():
     dm_kwargs = {
         'iteration_name': dm_iteration_name,
         'upper_model_method': upper_model_method,
-        'upper_model_kwargs': None,
+        'upper_distributor_kwargs': None,
         'lower_model_method': lower_model_method,
-        'lower_model_kwargs': None,
+        'lower_distributor_kwargs': None,
         'export_home': dm_export_home,
         'process_count': -2,
     }

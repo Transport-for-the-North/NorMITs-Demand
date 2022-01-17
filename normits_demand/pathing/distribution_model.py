@@ -564,13 +564,13 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                  target_tld_dir: str,
                  init_params_cols: List[str],
                  upper_model_method: nd.DistributionMethod,
-                 upper_distributor_kwargs: Dict[str, Any],
+                 upper_model_kwargs: Dict[str, Any],
                  upper_init_params_fname: str,
                  upper_calibration_areas: Union[Dict[Any, str], str],
                  upper_calibration_zones_fname: Optional[str] = None,
                  upper_calibration_naming: Optional[Dict[Any, str]] = None,
                  lower_model_method: Optional[nd.DistributionMethod] = None,
-                 lower_distributor_kwargs: Optional[Dict[str, Any]] = None,
+                 lower_model_kwargs: Optional[Dict[str, Any]] = None,
                  lower_init_params_fname: Optional[str] = None,
                  lower_calibration_areas: Optional[Union[Dict[Any, str], str]] = None,
                  lower_calibration_zones_fname: Optional[str] = None,
@@ -615,14 +615,14 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         self.init_params_cols = init_params_cols
 
         self.upper_model_method = upper_model_method
-        self.upper_distributor_kwargs = upper_distributor_kwargs
+        self.upper_model_kwargs = upper_model_kwargs
         self.upper_init_params_fname = upper_init_params_fname
         self.upper_calibration_areas = upper_calibration_areas
         self.upper_calibration_zones_fname = upper_calibration_zones_fname
         self.upper_calibration_naming = upper_calibration_naming
 
         self.lower_model_method = lower_model_method
-        self.lower_distributor_kwargs = lower_distributor_kwargs
+        self.lower_model_kwargs = lower_model_kwargs
         self.lower_init_params_fname = lower_init_params_fname
         self.lower_calibration_areas = lower_calibration_areas
         self.lower_calibration_zones_fname = lower_calibration_zones_fname
@@ -922,7 +922,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             running_zones=self.upper_running_zones,
         )
 
-        final_kwargs = self.upper_distributor_kwargs.copy()
+        final_kwargs = self.upper_model_kwargs.copy()
         final_kwargs.update(further_dist_args)
         final_kwargs.update({
             'productions': productions.to_df(),
@@ -975,7 +975,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             running_zones=self.lower_running_zones,
         )
 
-        final_kwargs = self.lower_distributor_kwargs.copy()
+        final_kwargs = self.lower_model_kwargs.copy()
         final_kwargs.update(further_dist_args)
         final_kwargs.update({
             'running_segmentation': self.running_segmentation,
