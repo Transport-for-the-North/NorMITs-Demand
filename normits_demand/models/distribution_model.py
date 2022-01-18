@@ -328,6 +328,7 @@ class DistributionModel(DistributionModelExportPaths):
         productions, attractions = self.arg_builder.read_lower_pa(
             upper_model_matrix_dir=self.upper.export_paths.matrix_dir,
             external_matrix_output_dir=self.export_paths.upper_external_pa,
+            lower_model_vector_report_dir=self.report_paths.lower_vector_reports_dir,
         )
 
         self._logger.info("Building arguments for the Lower Model")
@@ -344,7 +345,10 @@ class DistributionModel(DistributionModelExportPaths):
     def run_pa_matrix_reports(self):
         # PA RUN REPORTS
         # Matrix Trip ENd totals
+        #   Inter / Intra Report by segment?
+        #   Aggregate segments and report again too? (CBO)
         # Sector Reports Dvec style
+        #   Output 24x24 square at 12 hours
         # TLD curve
         #   single mile bands - p/m (ca ) segments full matrix
         #   NorMITs Vis
@@ -503,7 +507,10 @@ class DistributionModel(DistributionModelExportPaths):
     def run_od_matrix_reports(self):
         # PA RUN REPORTS
         # Matrix Trip ENd totals
+        #   Inter / Intra Report by segment?
+        #   Aggregate segments and report again too? (CBO)
         # Sector Reports Dvec style
+        #   Output 24x24 square at 12 hours
         # TLD curve
         #   single mile bands - p/m (ca ) segments full matrix
         #   NorMITs Vis

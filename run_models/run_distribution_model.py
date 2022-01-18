@@ -59,8 +59,8 @@ def main():
     run_nhb = False
 
     run_all = False
-    run_upper_model = True
-    run_lower_model = False
+    run_upper_model = False
+    run_lower_model = True
     run_pa_matrix_reports = False
     run_pa_to_od = False
     run_od_matrix_reports = False
@@ -113,7 +113,7 @@ def main():
             'grav_max_iters': 100,
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
-            'calibrate_params': False,
+            'calibrate_params': True,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
