@@ -204,7 +204,7 @@ def main(params: NTEMForecastParameters):
     ntem_forecast.convert_to_od(
         pa_folder,
         pa_folder.with_name("OD"),
-        list(tempro_data.hb_attractions.keys()),
+        efs_consts.FUTURE_YEARS,
         [ntem_inputs.mode],
         {"hb": efs_consts.HB_PURPOSES_NEEDED, "nhb": efs_consts.NHB_PURPOSES_NEEDED},
         params.model_name,

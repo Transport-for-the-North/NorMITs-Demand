@@ -450,7 +450,7 @@ def grow_matrix(
         matrix.loc[internals, internals],
         **{nm: data.reset_index() for nm, data in int_targets.items()},
     )
-    LOG.debug(
+    LOG.info(
         "Furnessed internal trips with %s iterations and R^2 = %.2f",
         iters,
         r_sq,
@@ -464,7 +464,11 @@ def grow_matrix(
     ext_future = ext_future.mul(col_factors.fillna(0), axis="columns")
     # Set internal zones in factored matrix to 0 and add internal furnessed
     ext_future.loc[internals, internals] = 0
-    combined_future = ext_future + int_future
+    combined_future = pd.concat([int_future, ext_future], axis=0)
+    combined_future = combined_future.groupby(level=0).sum()
+    nans = np.sum(combined_future.isna().values)
+    if nans > 0:
+        raise NTEMForecastError(f"future matrix contains {nans:,} NaN values")
     # Write future to file
     file_ops.write_df(combined_future, output_path)
     LOG.info("Written: %s", output_path)
