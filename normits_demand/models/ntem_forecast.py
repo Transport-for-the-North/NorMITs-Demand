@@ -5,6 +5,7 @@
 
 ##### IMPORTS #####
 # Standard imports
+import os
 import dataclasses
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
@@ -702,3 +703,72 @@ def convert_to_od(
         m_needed=modes,
         compress_out=True,
     )
+
+
+def compile_noham_for_norms(output_path):
+    mat_path = os.path.join(output_path, 'Matrices')
+
+    in_path = os.path.join(mat_path, 'PA')
+    out_path = os.path.join(mat_path, '24hr VDM PA Matrices')
+
+    years = [2033, 2040, 2050]
+
+    paths = matrix_processing.build_compile_params(
+        import_dir=in_path,
+        export_dir=out_path,
+        matrix_format='pa',
+        years_needed=years,
+        m_needed=[3],
+        split_hb_nhb=True,
+    )
+    for path in paths:
+        matrix_processing.compile_matrices(
+            mat_import=in_path,
+            mat_export=out_path,
+            compile_params_path=path,
+        )
+
+
+def compile_noham(output_path):
+    from normits_demand.utils import vehicle_occupancy
+
+    mat_path = os.path.join(output_path, 'Matrices')
+    import_od_path = os.path.join(mat_path, 'OD')
+    compiled_od_path = os.path.join(mat_path, 'Compiled OD')
+    compiled_od_pcu_path = os.path.join(mat_path, 'Compiled OD\PCU')
+
+    years = [2033, 2040, 2050]
+
+    compile_params_paths = matrix_processing.build_compile_params(
+        import_dir=import_od_path,
+        export_dir=compiled_od_path,
+        matrix_format='od',
+        years_needed=years,
+        m_needed=[3],
+        tp_needed=[1, 2, 3, 4],
+    )
+
+    for path in compile_params_paths:
+        matrix_processing.compile_matrices(
+            mat_import=import_od_path,
+            mat_export=compiled_od_path,
+            compile_params_path=path,
+        )
+
+    car_occupancies = pd.read_csv(os.path.join(
+        r'I:\NorMITs Demand\import',
+        'vehicle_occupancies',
+        'car_vehicle_occupancies.csv',
+    ))
+
+    # Need to convert into hourly average PCU for noham
+    vehicle_occupancy.people_vehicle_conversion(
+        mat_import=compiled_od_path,
+        mat_export=compiled_od_pcu_path,
+        car_occupancies=car_occupancies,
+        mode=3,
+        method='to_vehicles',
+        out_format='wide',
+        hourly_average=True,
+    )
+
