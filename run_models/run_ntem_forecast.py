@@ -6,11 +6,14 @@
 ##### IMPORTS #####
 # Standard imports
 import dataclasses
+import sys
 from pathlib import Path
 from typing import Dict, Any
 
 # Third party imports
 
+# Add parent folder to path
+sys.path.append("..")
 # Local imports
 from normits_demand.models import ntem_forecast, tempro_trip_ends
 from normits_demand import efs_constants as efs_consts
