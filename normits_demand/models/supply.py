@@ -15,6 +15,8 @@ import os
 import warnings
 
 # Third Party
+from typing import Dict
+
 import pandas as pd
 import numpy as np
 
@@ -24,6 +26,8 @@ from normits_demand.supply import PostGresConector
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.utils import pandas_utils as pd_utils
+from normits_demand.matrices import utils as mat_utils
+from normits_demand.core import zoning
 
 
 class NorMITsSupply(PostGresConector):
@@ -34,6 +38,10 @@ class NorMITsSupply(PostGresConector):
     _skims_index = "origin_zone"
     _skims_col = "destination_zone"
     _skims_val = "skim_value"
+    _zone_id = {1: "Norms",
+                2: "Noham"}
+    _time_period_od = ['TS1', 'TS2', 'TS3', 'TS4']
+    _time_period_pa = [1, 2, 3, 4]
 
     def __init__(self,
                  user: str,
@@ -54,12 +62,39 @@ class NorMITsSupply(PostGresConector):
 
         Parameters
         ----------
+        user:
+            Username of database user.
+
+        password:
+            Password of database user.
+
+        server:
+            Server address.
+
+        database:
+            Postgres database name.
+
+        port:
+            Port number for the database.
+
         query_fname:
+            File name of the table in which the query has to be run.
+
         skim_type_id:
+            Type of skim required. Distance, time, toll etc. Ranges from 1 to 6.
+
         scenario_id:
+            Type of scenario needed. NoRMS, NoHAM or TRACC. Ranges from 1 to 3.
+
         users_id:
+            Type of user class required. Car Business, Car commute,
+            LGV, HGV etc. Ranges from 1 to 19.
+
         value_id:
+            Cost value required. Ranges from 1 to 67.
+
         time_period:
+            Time period needed. TS1, TS2, TS3, TS4, allday and AM.
         """
         # Assign
         self.query_fname = query_fname
@@ -69,6 +104,8 @@ class NorMITsSupply(PostGresConector):
         self.value_id = value_id
         self.time_period = time_period
         self.export_home = export_home
+        self.zone_list = zoning._get_zones(self._zone_id[self.scenario_id])[0]
+        self.col_index = self.zone_list.tolist()
 
         # Connect to the sql server
         super().__init__(
@@ -115,25 +152,57 @@ class NorMITsSupply(PostGresConector):
 
         # Run query on database
         self._logger.info("Running query on the connected database")
-        skims = self._cost_request(self.query_fname, self.skim_type_id, self.scenario_id,
-                                   self.users_id, self.value_id, self.time_period)
+        skims = self._cost_request()
         print(skims)
+        print(skims.sum())
+        skims1 = pd.DataFrame(skims)
+        skims1.to_csv(r"I:\NorMITs Demand\import\noham\post_me_tour_proportions\fh_th_factors\trial1.csv", index=False)
 
     def _cost_request(self,
-                      query_fname: str,
-                      skim_type_id: int,
-                      scenario_id: int,
-                      users_id: int,
-                      value_id: int,
-                      time_period: str,
                       ):
-        print(time_period)
-        query_name = "SELECT * FROM " + query_fname + " WHERE scenario_id = " + str(
-            scenario_id) + " AND users_id = " + str(
-            users_id) + " AND value_id = " + str(value_id) + " AND skim_type_id = " + str(
-            skim_type_id)
+        """
+        Runs the cost query and return the output as numpy.
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        skims:
+        Returns skims based on the query as numpy
+
+        """
+
+        query_name = "SELECT * FROM " + self.query_fname + " WHERE scenario_id = " + str(
+            self.scenario_id) + " AND users_id = " + str(
+            self.users_id) + " AND value_id = " + str(self.value_id) + " AND skim_type_id = " + str(
+            self.skim_type_id)
 
         skims = self.query(query_name)
+        od_matrix = {}
+        j = 1
+        for i in self._time_period_od:
+            new_df = skims[skims['time_period'] == i]
+            od_matrix[j] = pd_utils.long_df_to_wide_ndarray(new_df, self._skims_index, self._skims_col, self._skims_val,
+                                                     self.col_index, self.col_index)
+            j += 1
+        return od_matrix
 
-        skims = pd_utils.long_df_to_wide_ndarray(skims, self._skims_index, self._skims_col, self._skims_val)
-        return skims
+    def od_pa_via_tour_props(self,
+                             od_matrix: Dict,
+                             fh_factor_dict: Dict,
+                             n_od_vals: int,
+                             tp_needed: list,
+
+                             ):
+        mat_utils.check_fh_th_factors(
+            factor_dict=fh_factor_dict,
+            tp_needed=tp_needed,
+            n_row_col=n_od_vals,
+        )
+        pa = {}
+        pa_total = np.zeros(n_od_vals, n_od_vals)
+        for tp in tp_needed:
+            pa[tp] = od_matrix[tp] * fh_factor_dict[tp]
+            pa_total += pa[tp]
