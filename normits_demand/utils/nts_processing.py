@@ -8,7 +8,7 @@ import os
 
 import pandas as pd
 
-import normits_demand.constants as con
+from normits_demand import constants
 
 
 class NTSTripLengthBuilder:
@@ -86,7 +86,8 @@ class NTSTripLengthBuilder:
         """
         # TODO: Need smart aggregation based on sample size threshold
 
-        north_la = con.NORTH_LA
+        north_la = constants.NORTH_LA
+        north_and_mids_la = constants.NORTH_AND_MID_LA
 
         # Set target cols
         target_cols = ['SurveyYear', 'TravelWeekDay_B01ID', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc_cat',
@@ -153,9 +154,6 @@ class NTSTripLengthBuilder:
             output_dat = output_dat[
                 output_dat['HHoldOSLAUA_B01ID'].isin(
                     north_la)].reset_index(drop=True)
-        records.append(len(output_dat))
-
-        # TODO: Process O/D to handle incl. i/e
 
         out_mat = []
         for index, row in self.target_segmentation.iterrows():
