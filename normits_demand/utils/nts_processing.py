@@ -62,10 +62,10 @@ class NTSTripLengthBuilder:
 
         self.target_segmentation = segments
 
-        for (i, option) in enumerate(con.GEO_AREAS, 0):
+        for (i, option) in enumerate(constants.GEO_AREAS, 0):
             print(i, option)
         selection_g = input('Choose geo-area (index): ')
-        self.geo_area = con.GEO_AREAS[int(selection_g)]
+        self.geo_area = constants.GEO_AREAS[int(selection_g)]
 
         self.export = os.path.join(
             self.tlb_folder,
@@ -166,9 +166,9 @@ class NTSTripLengthBuilder:
                 cost_type = row['cost_type']
             else:
                 if 'p' in row:
-                    if int(row['p']) in con.ALL_HB_P:
+                    if int(row['p']) in constants.ALL_HB_P:
                         cost_type = 'pa'
-                    elif int(row['p']) in con.ALL_NHB_P:
+                    elif int(row['p']) in constants.ALL_NHB_P:
                         cost_type = 'od'
                     else:
                         raise ValueError('%d non-recognised purpose' % row['p'])
