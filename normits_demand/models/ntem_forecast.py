@@ -446,14 +446,16 @@ def grow_matrix(
     int_targets = _trip_end_totals(**int_targets)
     # Distribute internal demand with 2D furnessing, targets
     # converted to DataFrames for this function
-    int_future, iters, r_sq = furness.furness_pandas_wrapper(
+    int_future, iters, rms = furness.furness_pandas_wrapper(
         matrix.loc[internals, internals],
         **{nm: data.reset_index() for nm, data in int_targets.items()},
+        tol=1e-4,
+        max_iters=3000,
     )
     LOG.info(
-        "Furnessed internal trips with %s iterations and R^2 = %.2f",
+        "Furnessed internal trips with %s iterations and RMS = %.1e",
         iters,
-        r_sq,
+        rms,
     )
     # Factor external demand to row and column targets, make sure
     # row and column targets have the same totals
