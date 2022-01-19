@@ -393,6 +393,47 @@ def _trip_end_totals(
     return targets
 
 
+def _check_matrix(
+    matrix: pd.DataFrame,
+    name: str,
+    raise_nan_errors: bool = True,
+):
+    """Check if `matrix` contains any non-finite values and log some matrix statistics.
+
+    Parameters
+    ----------
+    matrix : pd.DataFrame
+        Matrix to check.
+    name : str
+        Name of the matrix being checked (used in error message).
+    raise_nan_errors : bool
+        If check should raise errors (True) or just log them.
+
+    Raises
+    ------
+    NTEMForecastError
+        If any non-finite values are found and `raise_nan_errors`
+        is True.
+    """
+    LOG.debug(
+        "%s matrix: shape %s, total %.1e, mean %.1e",
+        name,
+        matrix.shape,
+        np.sum(matrix.values),
+        np.mean(matrix.values),
+    )
+    nans = np.sum(matrix.isna().values)
+    infs = np.sum(np.isinf(matrix.values))
+    if nans > 0 or infs > 0:
+        err = (
+            f"{name} matrix contains {nans:,} "
+            f"NaN and {infs:,} infinite values"
+        )
+        if raise_nan_errors:
+            raise NTEMForecastError(err)
+        LOG.error(err)
+
+
 def grow_matrix(
     matrix: pd.DataFrame,
     output_path: Path,
@@ -452,7 +493,7 @@ def grow_matrix(
         tol=1e-4,
         max_iters=3000,
     )
-    LOG.info(
+    LOG.debug(
         "Furnessed internal trips with %s iterations and RMS = %.1e",
         iters,
         rms,
@@ -468,9 +509,7 @@ def grow_matrix(
     ext_future.loc[internals, internals] = 0
     combined_future = pd.concat([int_future, ext_future], axis=0)
     combined_future = combined_future.groupby(level=0).sum()
-    nans = np.sum(combined_future.isna().values)
-    if nans > 0:
-        raise NTEMForecastError(f"future matrix contains {nans:,} NaN values")
+    _check_matrix(combined_future, output_path.stem)
     # Write future to file
     file_ops.write_df(combined_future, output_path)
     LOG.info("Written: %s", output_path)
@@ -609,4 +648,5 @@ def convert_to_od(
         years_needed=years,
         p_needed=purposes["nhb"],
         m_needed=modes,
+        compress_out=True,
     )
