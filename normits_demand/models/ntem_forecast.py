@@ -7,7 +7,7 @@
 # Standard imports
 import dataclasses
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 # Third party imports
 import numpy as np
@@ -434,6 +434,60 @@ def _check_matrix(
         LOG.error(err)
 
 
+def _target_proportions(
+    matrix: pd.DataFrame,
+    internals: np.ndarray,
+    targets: Dict[str, pd.Series],
+) -> Tuple[Dict[str, pd.Series], Dict[str, pd.Series]]:
+    """Calculate proportion of trip end `targets` for the internal and external zones.
+
+    Use the `matrix` internal trip end totals as a proportion
+    of the full `matrix` trip end totals to calculate internal
+    targets. Internal and external targets should sum to the
+    total `targets`.
+
+    Parameters
+    ----------
+    matrix : pd.DataFrame
+        Matrix to use for calculating the internal proportion.
+    internals : np.ndarray
+        The zones in the `matrix` which are internal.
+    targets : Dict[str, pd.Series]
+        The row and column trip end targets, should have keys
+        "row_targets" and "col_targets".
+
+    Returns
+    -------
+    Dict[str, pd.Series]
+        Internal targets dictionary, same format as `targets`.
+    Dict[str, pd.Series]
+        External targets dictionary, same format as `targets`.
+    """
+    internal_targets = {}
+    external_targets = {}
+    for i, nm in enumerate(("row", "col")):
+        int_totals = matrix.loc[internals, internals].sum(axis=i)
+        totals = matrix.sum(axis=i)
+        int_proportion = int_totals / totals
+        name = f"{nm}_targets"
+        internal_targets[
+            name] = targets[name].loc[internals] * int_proportion.loc[internals]
+        external_targets[name] = targets[name] * (1 - int_proportion)
+    return (
+        _trip_end_totals(**internal_targets),
+        _trip_end_totals(**external_targets),
+    )
+
+
+def _finite_series(series: pd.Series):
+    """Replace non-finite values in series with 0."""
+    return pd.Series(
+        np.nan_to_num(series, nan=0.0, posinf=0.0, neginf=0.0),
+        index=series.index,
+        name=series.name,
+    )
+
+
 def grow_matrix(
     matrix: pd.DataFrame,
     output_path: Path,
@@ -483,8 +537,7 @@ def grow_matrix(
 
     # Get internal targets only and factor to the same totals
     internals = attractions.zoning_system.internal_zones
-    int_targets = {nm: data.loc[internals] for nm, data in targets.items()}
-    int_targets = _trip_end_totals(**int_targets)
+    int_targets, ext_targets = _target_proportions(matrix, internals, targets)
     # Distribute internal demand with 2D furnessing, targets
     # converted to DataFrames for this function
     int_future, iters, rms = furness.furness_pandas_wrapper(
@@ -500,11 +553,10 @@ def grow_matrix(
     )
     # Factor external demand to row and column targets, make sure
     # row and column targets have the same totals
-    targets = _trip_end_totals(**targets)
-    row_factors = targets["row_targets"] / matrix.sum(axis=0)
-    ext_future = matrix.mul(row_factors.fillna(0), axis="index")
-    col_factors = targets["col_targets"] / ext_future.sum(axis=1)
-    ext_future = ext_future.mul(col_factors.fillna(0), axis="columns")
+    col_factors = ext_targets["col_targets"] / matrix.sum(axis=1)
+    ext_future = matrix.mul(_finite_series(col_factors), axis="columns")
+    row_factors = ext_targets["row_targets"] / ext_future.sum(axis=0)
+    ext_future = ext_future.mul(_finite_series(row_factors), axis="index")
     # Set internal zones in factored matrix to 0 and add internal furnessed
     ext_future.loc[internals, internals] = 0
     combined_future = pd.concat([int_future, ext_future], axis=0)
