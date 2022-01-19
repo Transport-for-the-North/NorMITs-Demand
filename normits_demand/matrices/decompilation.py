@@ -224,12 +224,12 @@ def convert_norms_to_efs_matrices(import_dir: nd.PathLike,
     # TODO(BT): Write convert_norms_to_efs_matrices() docs
     # Init
     conversion_dict = consts.NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING
-
-    if len(consts.MODEL_MODES['norms']) != 1:
-        raise nd.NormitsDemandError(
-            "Somehow gotten more than 1 more for NoRMS! What's gone wrong?"
-        )
-    mode = consts.MODEL_MODES['norms'][0]
+    #
+    # if len(6) != 1:
+    #     raise nd.NormitsDemandError(
+    #         "Somehow gotten more than 1 more for NoRMS! What's gone wrong?"
+    #     )
+    mode = 6
 
     # ## CHECK POST-ME MATRICES EXIST ## #
     # Build a list of matrix names
@@ -428,7 +428,7 @@ def decompile_norms(year: int,
     ext_dir = os.path.join(post_me_decompiled_export, 'external')
 
     for path in [int_dir, ext_dir]:
-        file_ops.create_folder(path, verbose=False)
+        file_ops.create_folder(path)
 
     # ## CONVERT MATRICES TO EFS VDM FORMAT ## #
     need_convert = need_to_convert_to_efs_matrices(
@@ -470,4 +470,5 @@ def decompile_norms(year: int,
         external_import=ext_dir,
         full_export=post_me_decompiled_export,
         force_csv_out=final_export_csv,
+        years=[year],
     )

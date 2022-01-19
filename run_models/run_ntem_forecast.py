@@ -213,6 +213,11 @@ def main(params: NTEMForecastParameters):
         params.model_name,
         params.pa_to_od_factors,
     )
+
+    # Compile to output formats
+    ntem_forecast.compile_noham_for_norms(params.export_path)
+    ntem_forecast.compile_noham(params.export_path)
+
     LOG.info(
         "NTEM forecasting completed in %s",
         timing.time_taken(start, timing.current_milli_time()),
