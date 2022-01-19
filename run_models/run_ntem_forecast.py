@@ -54,7 +54,7 @@ class NTEMForecastParameters:
     """
     import_path: Path = Path("I:/NorMITs Demand/import")
     model_name: str = "noham"
-    iteration: str = "1"
+    iteration: str = "1a"
     export_path_fmt: str = "I:/NorMITs Demand/{model_name}/NTEM/iter{iteration}"
     export_path_params: Dict[str, Any] = None
     _export_path: Path = dataclasses.field(default=None, init=False, repr=False)
