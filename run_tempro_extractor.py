@@ -56,6 +56,6 @@ if __name__ == '__main__':
             te_out[te_out['trip_end_type'].isin(pa)].to_csv(
                 os.path.join(out_path,
                              'tempro_pa_data.csv'), index=False)
-            te_out[te_out['trip_end_type'.isin(od)]].to_csv(
+            te_out[te_out['trip_end_type'].isin(od)].to_csv(
                 os.path.join(out_path,
                              'tempro_od_data.csv'), index=False)
