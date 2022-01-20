@@ -87,11 +87,11 @@ def mdd_person_export():
 
 def mdd_person_uc_export():
     # Set local variables
-    version = 2
-    export_folder = 'Y:/Mobile Data/Processing/NoHAM_Demand'
+    version = 3
+    export_folder = 'Y:/Mobile Data/Processing/MDD_Demand'
 
     # TODO: Load MMD Car pickle
-    with open(r'Y:\Mobile Data\Processing\dct_MDDCar_UC.pkl', 'rb') as log:
+    with open(r'Y:\Mobile Data\Processing\dct_MDDCar_expanded_UC.pkl', 'rb') as log:
         dct_mdd_car_uc = pk.load(log)
 
     # TODO: Loop export into PersonTrips folder with pandas out method
@@ -114,7 +114,7 @@ def mdd_person_uc_export():
 
 def mdd_per_to_veh():
     # Set local variables
-    version = 2
+    version = 3
     working_folder = 'Y:/Mobile Data/Processing/MDD_Demand/'
     import_path = working_folder + '/v' + str(version) + '/PersonTrips'
     export_path = working_folder + '/v' + str(version) + '/PCUs'
@@ -135,7 +135,7 @@ def mdd_per_to_veh():
 
 def package_mdd_pcus(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\9_Totals_Check'):
 
-    version = 2
+    version = 3
     working_folder = 'Y:/Mobile Data/Processing/MDD_Demand'
     import_path = working_folder + '/v' + str(version) + '/PCUs'
 
@@ -172,9 +172,9 @@ def package_mdd_pcus(totals_check=False, check_location='Y:\\Mobile Data\\Proces
                                             for j in dct_total[i].keys()
                                             for k in dct_total[i][j].keys()},
                                            orient='index')
-        df_totals.to_csv(check_location + '\\MDD_Car_UC_pcu_Totals.csv')
+        df_totals.to_csv(check_location + '\\MDD_Car_expanded_UC_pcu_Totals.csv')
     # Export to MDDHW pickle file
-    with open(r'Y:\Mobile Data\Processing\dct_MDDCar_UC_pcu.pkl', 'wb') as log:
+    with open(r'Y:\Mobile Data\Processing\dct_MDDCar_expanded_UC_pcu.pkl', 'wb') as log:
         pk.dump(dct_mdd_pcu, log, pk.HIGHEST_PROTOCOL)
 
 
@@ -242,16 +242,20 @@ def package_noham_car_pcu():
 def main():
     run_mdd_export = False
     run_mdd_person_export = False
+    run_mdd_person_uc_export = True
     run_mdd_per_to_veh = True
+    run_package_mdd_pcus = True
 
     if run_mdd_export:
         mdd_export()
-
     if run_mdd_person_export:
         mdd_person_export()
-
+    if run_mdd_person_uc_export:
+        mdd_person_uc_export()
     if run_mdd_per_to_veh:
         mdd_per_to_veh()
+    if run_package_mdd_pcus:
+        package_mdd_pcus(totals_check=True)
 
     print("end of main")
 

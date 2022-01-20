@@ -125,9 +125,15 @@ def fusion_factors():
     mdd_car_file = inputs_folder + '\\' + 'dct_MDDCar_UC_pcu.pkl'
     with open(mdd_car_file, 'rb') as log:
         dct_mdd_demand = pk.load(log)
+    # Import NoHAM demand
     noham_car_file = inputs_folder + '\\' + 'dct_NoHAM_Synthetic_PCU.pkl'
     with open(noham_car_file, 'rb') as log:
         dct_noham_demand = pk.load(log)
+    # Import Min Distance cut offs
+    head_cut_dist_file = inputs_folder + '\\' + 'dictcutoff_v0.pkl'
+    with open(head_cut_dist_file, 'rb') as log:
+        dct_head_cut_dist = pk.load(log)
+
     """
     # Import noham PCUs
     noham_car_file = inputs_folder + '\\' + 'dctNoHAM_mddpurp_pcu.pkl'
@@ -146,45 +152,57 @@ def fusion_factors():
     # package mdd fusion factors
     dct_mdd_fusion_factors = {3: {}}
     dct_mdd_fusion_factors[3][1] = {}
-    for pp in dctuc:
-        dct_mdd_fusion_factors[3][1][pp] = {}
-        distance_matrix = dct_distance[dctuc[pp][1]]
-        fusion_matrix = mdd_fusion_engine.build_fusion_factor(input_matrix,
-                                                              distance_matrix,
-                                                              origin_type_matrix,
-                                                              dest_type_matrix,
-                                                              chop_head=True,
-                                                              chop_tail=False,
-                                                              origin_type=True,
-                                                              dest_type=True,
-                                                              inclusive=False,
-                                                              invert=False,
-                                                              min_dist=0,
-                                                              max_dist=9999,
-                                                              default_value=1)
+    for uc in dctuc:
+        pp = (3 if uc in [1] else
+              1 if uc in [2] else
+              3 if uc in [3] else
+              6)
+        dct_mdd_fusion_factors[3][1][uc] = {}
+        distance_matrix = dct_distance[dctuc[uc][1]]
         for tp in dcttp:
-            dct_mdd_fusion_factors[3][1][pp][tp] = fusion_matrix
+            min_dist_cut = dct_head_cut_dist[3][1][pp][tp]
+            print(min_dist_cut)
+            fusion_matrix = mdd_fusion_engine.build_fusion_factor(input_matrix,
+                                                                  distance_matrix,
+                                                                  origin_type_matrix,
+                                                                  dest_type_matrix,
+                                                                  chop_head=True,
+                                                                  chop_tail=False,
+                                                                  origin_type=True,
+                                                                  dest_type=True,
+                                                                  inclusive=True,
+                                                                  invert=False,
+                                                                  min_dist=min_dist_cut,
+                                                                  max_dist=9999,
+                                                                  default_value=1)
+            dct_mdd_fusion_factors[3][1][uc][tp] = fusion_matrix
     # package noham fusion factors
     dct_noham_fusion_factors = {3: {}}
     dct_noham_fusion_factors[3][1] = {}
-    for pp in dctuc:
-        dct_noham_fusion_factors[3][1][pp] = {}
-        distance_matrix = dct_distance[dctuc[pp][1]]
-        fusion_matrix = mdd_fusion_engine.build_fusion_factor(input_matrix,
-                                                              distance_matrix,
-                                                              origin_type_matrix,
-                                                              dest_type_matrix,
-                                                              chop_head=True,
-                                                              chop_tail=False,
-                                                              origin_type=True,
-                                                              dest_type=True,
-                                                              inclusive=False,
-                                                              invert=True,
-                                                              min_dist=0,
-                                                              max_dist=9999,
-                                                              default_value=1)
+    for uc in dctuc:
+        pp = (3 if uc in [1] else
+              1 if uc in [2] else
+              3 if uc in [3] else
+              6)
+        dct_noham_fusion_factors[3][1][uc] = {}
+        distance_matrix = dct_distance[dctuc[uc][1]]
         for tp in dcttp:
-            dct_noham_fusion_factors[3][1][pp][tp] = fusion_matrix
+            min_dist_cut = dct_head_cut_dist[3][1][pp][tp]
+            print(min_dist_cut)
+            fusion_matrix = mdd_fusion_engine.build_fusion_factor(input_matrix,
+                                                                  distance_matrix,
+                                                                  origin_type_matrix,
+                                                                  dest_type_matrix,
+                                                                  chop_head=True,
+                                                                  chop_tail=False,
+                                                                  origin_type=True,
+                                                                  dest_type=True,
+                                                                  inclusive=True,
+                                                                  invert=True,
+                                                                  min_dist=min_dist_cut,
+                                                                  max_dist=9999,
+                                                                  default_value=1)
+            dct_noham_fusion_factors[3][1][uc][tp] = fusion_matrix
     # Calc noham target
     dct_noham_target = {3: {}}
     dct_noham_target[3][1] = {}
@@ -215,17 +233,17 @@ def fusion_factors():
                                     2: {1: {}, 2: {}, 3: {}},
                                     3: {1: {}, 2: {}, 3: {}}}}}
     # TP1
-    dct_expansion_factor[3][1][1][1] = 1.03
-    dct_expansion_factor[3][1][1][2] = 1.38
-    dct_expansion_factor[3][1][1][3] = 1.58
+    dct_expansion_factor[3][1][1][1] = 1.04
+    dct_expansion_factor[3][1][1][2] = 1.37
+    dct_expansion_factor[3][1][1][3] = 1.47
     # TP2
-    dct_expansion_factor[3][1][2][1] = 4.98
-    dct_expansion_factor[3][1][2][2] = 1.65
-    dct_expansion_factor[3][1][2][3] = 5.12
+    dct_expansion_factor[3][1][2][1] = 6.32
+    dct_expansion_factor[3][1][2][2] = 2.65
+    dct_expansion_factor[3][1][2][3] = 6.91
     # TP3
-    dct_expansion_factor[3][1][3][1] = 2.84
-    dct_expansion_factor[3][1][3][2] = 2.84
-    dct_expansion_factor[3][1][3][3] = 2.54
+    dct_expansion_factor[3][1][3][1] = 2.94
+    dct_expansion_factor[3][1][3][2] = 2.98
+    dct_expansion_factor[3][1][3][3] = 2.71
 
     expansion_applied = True
     dct_fusion_demand = {3: {}}
@@ -244,7 +262,7 @@ def fusion_factors():
                                                        tp]))
 
     unq_zones = list(range(1, 2771))
-    version = '3-2'
+    version = '3-6'
     export_folder = 'Y:/Mobile Data/Processing/3-1_Fusion_Demand'
     md = 3
     wd = 1
@@ -260,6 +278,27 @@ def fusion_factors():
             export_array = dct_fusion_demand[md][wd][uc][tp]
             export_df = pd.DataFrame(data=export_array, index=unq_zones, columns=unq_zones)
             export_df.to_csv(file_path, float_format='%.5f', index=False, header=False)
+    # Export demand totals
+    totals_check = True
+    check_location = 'Y:\\Mobile Data\\Processing\\3-1_Fusion_Demand'
+    if totals_check:
+        # Build totals dictionary
+        dct_total = {3: {1: {}}}
+        for uc in dctuc:
+            dct_total[3][1][uc] = {}
+            for tp in dcttp:
+                print(str(3) + '-' + str(1) + '-' + str(uc) + '-' + str(tp))
+                dct_total[3][1][uc][tp] = np.sum(dct_fusion_demand[3][1][uc][tp])
+        df_totals = pd.DataFrame.from_dict({(i, j, k): dct_total[i][j][k]
+                                            for i in dct_total.keys()
+                                            for j in dct_total[i].keys()
+                                            for k in dct_total[i][j].keys()},
+                                           orient='index')
+        df_totals.to_csv(check_location + '\\FusionDemand_' + version + '_Totals.csv')
+    # Export to pickle file
+    folder_path = (export_folder + '/v' + str(version) + '/PCUTrips')
+    with open(folder_path + '\\' + 'dct_FusionDemand_' + version + '.pkl', 'wb') as log:
+        pk.dump(dct_fusion_demand, log, pk.HIGHEST_PROTOCOL)
 
 def main():
 
