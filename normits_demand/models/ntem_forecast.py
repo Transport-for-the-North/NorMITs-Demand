@@ -352,6 +352,7 @@ def grow_tempro_data(tempro_data: TEMProTripEnds) -> TEMProTripEnds:
 
 
 def _trip_end_totals(
+    name: str,
     row_targets: pd.Series,
     col_targets: pd.Series,
     tolerance: float = 1e-7,
@@ -364,6 +365,9 @@ def _trip_end_totals(
 
     Parameters
     ----------
+    name : str
+        Name of the trip end totals being factored,
+        used in log messages.
     row_targets : pd.Series
         Target trip ends for the rows.
     col_targets : pd.Series
@@ -383,8 +387,9 @@ def _trip_end_totals(
     if diff > tolerance:
         avg_tot = np.mean(list(totals.values()))
         LOG.debug(
-            "Row and column trip end totals differ by %.5e, "
+            "%s row and column trip end totals differ by %.5e, "
             "factoring trip end totals to mean: %.5e",
+            name,
             diff,
             avg_tot,
         )
@@ -474,8 +479,8 @@ def _target_proportions(
             name] = targets[name].loc[internals] * int_proportion.loc[internals]
         external_targets[name] = targets[name] * (1 - int_proportion)
     return (
-        _trip_end_totals(**internal_targets),
-        _trip_end_totals(**external_targets),
+        _trip_end_totals("Internal", **internal_targets),
+        _trip_end_totals("External", **external_targets),
     )
 
 
