@@ -473,11 +473,14 @@ def _target_proportions(
     for i, nm in enumerate(("row", "col")):
         int_totals = matrix.loc[internals, internals].sum(axis=i)
         totals = matrix.sum(axis=i)
-        int_proportion = int_totals / totals
+        int_proportion = (int_totals / totals).fillna(0)
         name = f"{nm}_targets"
-        internal_targets[
-            name] = targets[name].loc[internals] * int_proportion.loc[internals]
+        internal_targets[name] = (
+            targets[name].loc[internals] * int_proportion.loc[internals]
+        )
+        internal_targets[name].name = targets[name].name
         external_targets[name] = targets[name] * (1 - int_proportion)
+        external_targets[name].name = targets[name].name
     return (
         _trip_end_totals("Internal", **internal_targets),
         _trip_end_totals("External", **external_targets),
