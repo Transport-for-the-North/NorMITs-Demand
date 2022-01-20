@@ -99,6 +99,18 @@ class NTEMForecastParameters:
                 raise NotADirectoryError(f"cannot find {nm} folder: {p}")
         return paths
 
+    @property
+    def car_occupancies_path(self) -> Path:
+        """Path
+            Path to the vehicle occupancies CSV file.
+        """
+        path = self.import_path / "vehicle_occupancies/car_vehicle_occupancies.csv"
+        if not path.exists():
+            raise FileNotFoundError(
+                f"cannot find vehicle occupancies CSV: {path}"
+            )
+        return path
+
 
 ##### FUNCTIONS #####
 def get_tempro_data() -> tempro_trip_ends.TEMProTripEnds:
@@ -204,19 +216,27 @@ def main(params: NTEMForecastParameters):
         params.model_name,
         pa_folder,
     )
+    od_folder = pa_folder.with_name("OD")
     ntem_forecast.convert_to_od(
         pa_folder,
-        pa_folder.with_name("OD"),
+        od_folder,
         efs_consts.FUTURE_YEARS,
         [ntem_inputs.mode],
-        {"hb": efs_consts.HB_PURPOSES_NEEDED, "nhb": efs_consts.NHB_PURPOSES_NEEDED},
+        {
+            "hb": efs_consts.HB_PURPOSES_NEEDED,
+            "nhb": efs_consts.NHB_PURPOSES_NEEDED,
+        },
         params.model_name,
         params.pa_to_od_factors,
     )
 
     # Compile to output formats
-    ntem_forecast.compile_noham_for_norms(params.export_path)
-    ntem_forecast.compile_noham(params.export_path)
+    ntem_forecast.compile_noham_for_norms(pa_folder, efs_consts.FUTURE_YEARS)
+    ntem_forecast.compile_noham(
+        od_folder,
+        efs_consts.FUTURE_YEARS,
+        params.car_occupancies_path,
+    )
 
     LOG.info(
         "NTEM forecasting completed in %s",

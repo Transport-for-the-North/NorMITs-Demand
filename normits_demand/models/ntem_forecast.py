@@ -5,7 +5,6 @@
 
 ##### IMPORTS #####
 # Standard imports
-import os
 import dataclasses
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
@@ -15,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 # Local imports
-from normits_demand.utils import file_ops
+from normits_demand.utils import file_ops, vehicle_occupancy
 from normits_demand import logging as nd_log
 from normits_demand import core as nd_core
 from normits_demand import efs_constants as efs_consts
@@ -705,61 +704,86 @@ def convert_to_od(
     )
 
 
-def compile_noham_for_norms(output_path):
-    mat_path = os.path.join(output_path, 'Matrices')
+def compile_noham_for_norms(pa_folder: Path, years: List[int]) -> Path:
+    """Compile the PA matrices into the 24hr VDM PA matrices format.
 
-    in_path = os.path.join(mat_path, 'PA')
-    out_path = os.path.join(mat_path, '24hr VDM PA Matrices')
+    The outputs are saved in a new folder called
+    "24hr PA Matrices" with the same parent as `pa_folder`.
 
-    years = [2033, 2040, 2050]
+    Parameters
+    ----------
+    pa_folder : Path
+        Folder containing PA matrices.
+    years : List[int]
+        List of the years to convert.
+
+    Returns
+    -------
+    vdm_folder : Path
+        Folder where the output 24hr VDM PA Matrices are saved.
+    """
+    vdm_folder = pa_folder.with_name("24hr VDM PA Matrices")
+    vdm_folder.mkdir(exist_ok=True)
 
     paths = matrix_processing.build_compile_params(
-        import_dir=in_path,
-        export_dir=out_path,
-        matrix_format='pa',
+        import_dir=pa_folder,
+        export_dir=vdm_folder,
+        matrix_format="pa",
         years_needed=years,
         m_needed=[3],
         split_hb_nhb=True,
     )
     for path in paths:
         matrix_processing.compile_matrices(
-            mat_import=in_path,
-            mat_export=out_path,
+            mat_import=pa_folder,
+            mat_export=vdm_folder,
             compile_params_path=path,
         )
+    LOG.info("Written 24hr VDM PA Matrices: %s", vdm_folder)
+    return vdm_folder
 
 
-def compile_noham(output_path):
-    from normits_demand.utils import vehicle_occupancy
+def compile_noham(
+    import_od_path: Path, years: List[int], car_occupancies_path: Path
+) -> Path:
+    """Compile OD matrices into the formats required for NoHAM.
 
-    mat_path = os.path.join(output_path, 'Matrices')
-    import_od_path = os.path.join(mat_path, 'OD')
-    compiled_od_path = os.path.join(mat_path, 'Compiled OD')
-    compiled_od_pcu_path = os.path.join(mat_path, 'Compiled OD\PCU')
+    Parameters
+    ----------
+    import_od_path : Path
+        Folder containing the existing OD matrices.
+    years : List[int]
+        List of years to compile.
+    car_occupancies_path : Path
+        Path to CSV containing car occupancies.
 
-    years = [2033, 2040, 2050]
+    Returns
+    -------
+    Path
+        Path to the Compiled OD matrices folder, will
+        be named "Compiled OD" and in the same folder
+        as `import_od_path`.
+    """
+    compiled_od_path = import_od_path.with_name("Compiled OD")
+    compiled_od_pcu_path = compiled_od_path / "PCU"
+    compiled_od_pcu_path.mkdir(parents=True, exist_ok=True)
 
     compile_params_paths = matrix_processing.build_compile_params(
         import_dir=import_od_path,
         export_dir=compiled_od_path,
-        matrix_format='od',
+        matrix_format="od",
         years_needed=years,
         m_needed=[3],
         tp_needed=[1, 2, 3, 4],
     )
-
     for path in compile_params_paths:
         matrix_processing.compile_matrices(
             mat_import=import_od_path,
             mat_export=compiled_od_path,
             compile_params_path=path,
         )
-
-    car_occupancies = pd.read_csv(os.path.join(
-        r'I:\NorMITs Demand\import',
-        'vehicle_occupancies',
-        'car_vehicle_occupancies.csv',
-    ))
+    LOG.info("Written Compiled OD matrices: %s", compiled_od_path)
+    car_occupancies = pd.read_csv(car_occupancies_path)
 
     # Need to convert into hourly average PCU for noham
     vehicle_occupancy.people_vehicle_conversion(
@@ -767,8 +791,9 @@ def compile_noham(output_path):
         mat_export=compiled_od_pcu_path,
         car_occupancies=car_occupancies,
         mode=3,
-        method='to_vehicles',
-        out_format='wide',
+        method="to_vehicles",
+        out_format="wide",
         hourly_average=True,
     )
-
+    LOG.info("Written Compiled OD PCU matrices: %s", compiled_od_pcu_path)
+    return compiled_od_path
