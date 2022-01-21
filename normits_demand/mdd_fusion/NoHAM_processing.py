@@ -43,7 +43,8 @@ def decompress_pickle(file):
 
 
 def noham_synthetic_package():
-    import_folder = 'I:\\Transfer\\External Model OD\\NoTEM iter4\\car_and_passenger\\'
+    # import_folder = 'I:\\Transfer\\External Model OD\\NoTEM iter4\\car_and_passenger\\'
+    import_folder = 'I:\\NorMITs Demand\\Distribution Model\\iter9.3.4\\car_and_passenger\\Final Outputs\\Full OD Matrices\\'
 
     dct_noham_synthetic = {}
     for md in dctmode:
@@ -75,7 +76,7 @@ def noham_synthetic_package():
                     noham_synthetic = decompress_pickle(path)
                     dct_noham_synthetic[md][wd][pp][tp] = noham_synthetic
 
-    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic.pkl', 'wb') as log:
+    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic_v4.pkl', 'wb') as log:
         pk.dump(dct_noham_synthetic, log, pk.HIGHEST_PROTOCOL)
 
 
@@ -92,7 +93,7 @@ def noham_synthetic_merge(totals_check=False, check_location='Y:\\Mobile Data\\P
                 for tp in dcttp:
                     dct_noham_synthetic_uc[md][wd][uc][tp] = temp_array
 
-    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic.pkl', 'rb') as log:
+    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic_v4.pkl', 'rb') as log:
         dct_noham_synthetic = pk.load(log)
     # If required export totals
     if totals_check:
@@ -108,7 +109,7 @@ def noham_synthetic_merge(totals_check=False, check_location='Y:\\Mobile Data\\P
                                             for j in dct_total[i].keys()
                                             for k in dct_total[i][j].keys()},
                                            orient='index')
-        df_totals.to_csv(check_location + '\\NoHAM_Synthetic_Totals.csv')
+        df_totals.to_csv(check_location + '\\NoHAM_Synthetic_v4_Totals.csv')
     # Build template table
     for md in dctmode:
         for wd in dctday:
@@ -137,19 +138,19 @@ def noham_synthetic_merge(totals_check=False, check_location='Y:\\Mobile Data\\P
                                             for j in dct_total[i].keys()
                                             for k in dct_total[i][j].keys()},
                                            orient='index')
-        df_totals.to_csv(check_location + '\\NoHAM_Synthetic_UC_Totals.csv')
+        df_totals.to_csv(check_location + '\\NoHAM_Synthetic_v4_UC_Totals.csv')
     # Export
-    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic_UC.pkl', 'wb') as log:
+    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic_v4_UC.pkl', 'wb') as log:
         pk.dump(dct_noham_synthetic_uc, log, pk.HIGHEST_PROTOCOL)
 
 
 def noham_synthetic_export():
     # Set local variables
-    version = 3
+    version = 4
     export_folder = 'Y:/Mobile Data/Processing/1-1_NoHAM_Demand'
 
     # TODO: Load MMD Car pickle
-    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic_UC.pkl', 'rb') as log:
+    with open(r'Y:\Mobile Data\Processing\dct_NoHAM_Synthetic_v4_UC.pkl', 'rb') as log:
         dct_noham_synthetic_uc = pk.load(log)
 
     # TODO: Loop export into PersonTrips folder with pandas out method
@@ -172,7 +173,7 @@ def noham_synthetic_export():
 
 def noham_synthetic_per_to_veh():
     # Set local variables
-    version = 3
+    version = 4
     working_folder = 'Y:/Mobile Data/Processing/1-1_NoHAM_Demand/'
     import_path = working_folder + '/v' + str(version) + '/PersonTrips'
     export_path = working_folder + '/v' + str(version) + '/PCUs'
@@ -455,26 +456,35 @@ def mdd_to_uc():
 
 
 def main():
+    run_noham_synthetic_package = True
+    run_noham_synthetic_merge = True
+    run_noham_synthetic_export = True
+    run_noham_synthetic_per_to_veh = True
+
     run_noham_car_package = False
     run_noham_compiled_pcu_import = False
     run_noham_car_merge = False
     run_mdd_to_uc = False
-    run_noham_synthetic_per_to_veh = True
+
+
+    if run_noham_synthetic_package:
+        noham_synthetic_package()
+    if run_noham_synthetic_merge:
+        noham_synthetic_merge(totals_check=True)
+    if run_noham_synthetic_export:
+        noham_synthetic_export()
+    if run_noham_synthetic_per_to_veh:
+        noham_synthetic_per_to_veh()
 
     if run_noham_car_package:
         noham_car_package()
-
     if run_noham_compiled_pcu_import:
         noham_compiled_pcu_import()
-
     if run_noham_car_merge:
         noham_car_merge()
-
     if run_mdd_to_uc:
         mdd_to_uc()
 
-    if run_noham_synthetic_per_to_veh:
-        noham_synthetic_per_to_veh()
 
     print("end of main")
 
