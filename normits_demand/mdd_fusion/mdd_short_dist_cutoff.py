@@ -45,7 +45,7 @@ with open(r'Y:/Mobile Data/Processing/dctNoHAM_mddpurp.pkl', 'rb') as log:
 
 
 zone_int = pd.read_csv(noham_internal_loc,
-                       names=['zone', 'internal'],
+                       names=['zone', 'internal', 'internal_scot'],
                        skiprows=1)
 
 distance = pd.read_csv(distance_loc,
@@ -78,13 +78,17 @@ dctpurp = {1: ['hbw_fr'], 2: ['hbw_to'], 3: ['hbo_fr'], 4: ['hbo_to'], 5: ['nhb'
 dcttp = {1: ['AM'], 2: ['IP'], 3: ['PM']}
 
 cutoff_dict = {}
+mnfactor_dict = {}
 
 for md in dctmode:
     cutoff_dict[md] = {}
+    mnfactor_dict[md] = {}
     for wd in dctday:
         cutoff_dict[md][wd] = {}
+        mnfactor_dict[md][wd] = {}
         for pp in dctpurp:
             cutoff_dict[md][wd][pp] = {}
+            mnfactor_dict[md][wd][pp] = {}
             for tp in dcttp:
                 # Convert to pandas
                 wide_mdd = pd.DataFrame(dct_mdd_car[md][wd][pp][tp],
@@ -120,15 +124,15 @@ for md in dctmode:
                                on=['o_zone', 'd_zone'])
                 # join internal marker
                 mat = pd.merge(mat,
-                               zone_int,
+                               zone_int[['zone', 'internal_scot']],
                                left_on=['o_zone'],
                                right_on=['zone'])
-                mat = mat.rename(columns={'internal': 'o_int'})
+                mat = mat.rename(columns={'internal_scot': 'o_int'})
                 mat = pd.merge(mat,
-                               zone_int,
+                               zone_int[['zone', 'internal_scot']],
                                left_on=['d_zone'],
                                right_on=['zone'])
-                mat = mat.rename(columns={'internal': 'd_int'})
+                mat = mat.rename(columns={'internal_scot': 'd_int'})
                 mat.drop(['zone_x', 'zone_y'], axis=1, inplace=True)
                 # cut for distance bands and group
                 mat['dband'] = pd.cut(mat['dist_km'], bins=tldDist, right=False, labels=tldLabels)
@@ -184,10 +188,37 @@ for md in dctmode:
                 # Add cutoff value to dictionary
                 cutoff_dict[md][wd][pp][tp] = cutoff
 
-# Save cutoff dictionary
+                # Create MND-NoHAM global factor
+                mat1 = mat[(mat['dband'] >= cutoff) & ((mat['o_int'] == 1) | (mat['d_int'] == 1))]
+                # add linear regression for zone-zone
+                d = np.polyfit(mat1['nmtrip'], mat1['mddtrip'], 1)
+                mnfactor = (1 / d[0]).round(3)
+
+                # Create factor array for application
+                conditions = [
+                    (mat['o_int'] == 0) & (mat['d_int'] == 0),
+                    (mat['o_int'] == 2) & (mat['d_int'] == 2),
+                    (mat['dband'] < cutoff)
+                ]
+                f_choice = [1, 1, 1]
+                mat['mnfactor'] = np.select(conditions, f_choice, default=mnfactor)
+                # Add as array to dictionary
+                export_array = mat.pivot(index='o_zone',
+                                         columns='d_zone',
+                                         values='mnfactor')
+                export_array = export_array.to_numpy()
+                np.nan_to_num(export_array, copy=False, nan=1)
+                mnfactor_dict[md][wd][pp][tp] = export_array
+
+# Save dictionaries
 with open('Y:/Mobile Data/Processing/dictcutoff_v1.pkl', 'wb') as log:
     pk.dump(cutoff_dict, log, pk.HIGHEST_PROTOCOL)
 print("cutoffs packaged")
+
+with open('Y:/Mobile Data/Processing/dict_mnfactor_arrays_v1.pkl', 'wb') as log:
+    pk.dump(mnfactor_dict, log, pk.HIGHEST_PROTOCOL)
+print("mnfactor arrays packaged")
+
 
 for k, v in cutoff_dict.items():
     print(k, v)
