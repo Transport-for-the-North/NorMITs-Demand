@@ -384,8 +384,8 @@ def aggregate_matrices(import_dir: str,
     multiprocessing.multiprocess(
         fn=_aggregate_matrices_internal,
         kwargs=kwarg_list,
-        process_count=process_count,
-        # process_count=0,
+        # process_count=process_count,
+        process_count=0,
 
     )
 

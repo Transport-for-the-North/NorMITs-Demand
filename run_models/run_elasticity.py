@@ -287,14 +287,14 @@ def merge_internal_external(scenario,
 
 def main():
     # Controls I/O
-    scenario = efs_consts.SC04_UZC
-    iter_num = '3k'
+    scenario = consts.SC04_UZC
+    iter_num = '3i'
     import_home = "I:/"
     export_home = "I:/"
 
     base_year = 2018
     # future_years = [2033, 2040, 2050]
-    future_years = [2050]
+    future_years = [2038, 2045, 2055]
     use_bespoke_zones = False
     use_wfh_adj = True
 

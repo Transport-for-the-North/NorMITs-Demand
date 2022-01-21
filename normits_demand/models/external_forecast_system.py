@@ -698,29 +698,29 @@ class ExternalForecastSystem:
             du.create_folder(path, verbose=False)
 
         # Distribute the internal trips, write to disk
-        self._distribute_internal_demand(
-            p_vector=model_p_vector,
-            nhb_p_vector=model_nhb_p_vector,
-            a_vector=model_a_vector,
-            nhb_a_vector=model_nhb_a_vector,
-            years_needed=year_list,
-            hb_p_needed=hb_purposes_needed,
-            nhb_p_needed=nhb_purposes_needed,
-            m_needed=modes_needed,
-            soc_needed=soc_needed,
-            ns_needed=ns_needed,
-            ca_needed=car_availabilities_needed,
-            zone_col=model_zone_col,
-            internal_zones_path=self.imports['internal_zones'],
-            seed_dist_dir=self.imports['decomp_post_me'],
-            seed_infill=0,
-            normalise_seeds=False,
-            dist_out=int_dir,
-            report_out=self.exports['dist_reports'],
-            csv_out=False,
-            compress_out=True,
-            verbose=echo_distribution
-        )
+        # self._distribute_internal_demand(
+        #     p_vector=model_p_vector,
+        #     nhb_p_vector=model_nhb_p_vector,
+        #     a_vector=model_a_vector,
+        #     nhb_a_vector=model_nhb_a_vector,
+        #     years_needed=year_list,
+        #     hb_p_needed=hb_purposes_needed,
+        #     nhb_p_needed=nhb_purposes_needed,
+        #     m_needed=modes_needed,
+        #     soc_needed=soc_needed,
+        #     ns_needed=ns_needed,
+        #     ca_needed=car_availabilities_needed,
+        #     zone_col=model_zone_col,
+        #     internal_zones_path=self.imports['internal_zones'],
+        #     seed_dist_dir=self.imports['decomp_post_me'],
+        #     seed_infill=0,
+        #     normalise_seeds=False,
+        #     dist_out=int_dir,
+        #     report_out=self.exports['dist_reports'],
+        #     csv_out=False,
+        #     compress_out=True,
+        #     verbose=echo_distribution
+        # )
 
         # Distribute the external trips, write to disk
         # DO NOT INCLUDE EG in external
@@ -1047,6 +1047,7 @@ class ExternalForecastSystem:
         print("Getting base year external distributions...")
         mat_p.split_internal_external(
             mat_import=post_me_dir,
+            matrix_format='pa',
             year=base_year,
             external_zones=external_zones,
             external_export=dist_out,
@@ -1312,7 +1313,7 @@ class ExternalForecastSystem:
         # Init
         _input_checks(m_needed=m_needed)
         base_zone_col = "%s_zone_id"
-        pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24'
+        pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24_wfh'
         pa_import = 'pa_24_elast' if use_elasticity_pa else pa_import
         hb_p_needed, nhb_p_needed = du.split_hb_nhb_purposes(p_needed)
 

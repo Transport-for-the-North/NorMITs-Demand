@@ -17,7 +17,7 @@ import warnings
 # Third Party
 import numpy as np
 import pandas as pd
-from scipy import optimize
+# from scipy import optimize
 
 from typing import Any
 from typing import List

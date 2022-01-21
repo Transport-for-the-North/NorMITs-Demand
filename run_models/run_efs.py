@@ -43,7 +43,7 @@ def main():
     # Running options
     run_bespoke_zones = False
     ignore_bespoke_zones = True
-    use_elasticity_to_od = True
+    use_elasticity_to_od = False
 
     # Compiling matrices
     run_pa_to_od = False
@@ -55,10 +55,11 @@ def main():
     output_years = efs_consts.FUTURE_YEARS
 
     # Controls I/O
-    scenario = consts.SC01_JAM
-    iter_num = '3j'
+    scenario = consts.SC02_PP
+    iter_num = '3i'
     import_home = "I:/"
-    export_home = "F:/"
+    export_home = "D:/NorMITs/"
+    # export_home = "I:/"
     model_name = efs_consts.MODEL_NAME
 
     # ## RUN START ## #
