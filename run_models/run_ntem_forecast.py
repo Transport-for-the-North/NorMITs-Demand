@@ -216,6 +216,7 @@ def main(params: NTEMForecastParameters):
         params.model_name,
         pa_folder,
     )
+    ntem_forecast.pa_matrix_comparison(pa_folder, tempro_data, params.model_name)
     od_folder = pa_folder.with_name("OD")
     ntem_forecast.convert_to_od(
         pa_folder,
