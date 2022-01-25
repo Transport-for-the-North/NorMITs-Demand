@@ -221,6 +221,7 @@ class DMArgumentBuilderBase(abc.ABC):
             import_data=df,
             zone_col=self.lower_zoning_system.col_name,
             val_col='val',
+            time_format='avg_day',
         )
 
         # Generate filenames
