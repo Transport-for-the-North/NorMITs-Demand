@@ -53,6 +53,7 @@ def get_trip_length_distributions(import_dir: nd.PathLike,
 
     """
     # TODO(BT): Tidy up get_trip_length_distributions
+    # TODO(BT): On last LEGS REMOVE WHEN TMS REMOVED
     # Append name of tlb area
 
     # Index folder
@@ -77,9 +78,9 @@ def get_trip_length_distributions(import_dir: nd.PathLike,
 
     if len(import_files) <= 0:
         raise IOError(
-            "Cannot find any %s trip length bands.\n"
+            "Cannot find any %s, %s trip length bands.\n"
             "import folder: %s"
-            % (trip_origin, import_dir)
+            % (trip_origin,  segment_params, import_dir)
         )
 
     for key, value in segment_params.items():
@@ -145,8 +146,8 @@ def get_trip_length_by_band(band_atl,
         band_atl['min'] = band_atl['lower']*1.61
         band_atl['max'] = band_atl['upper']*1.61
 
-    dist_mat = []
-    bs_mat = []
+    dist_mat = list()
+    bs_mat = list()
 
     # Loop over rows in band_atl
     for index, row in band_atl.iterrows():
@@ -201,11 +202,10 @@ def get_trip_length(distance, demand):
     distance = distance matrix as numpy ndarray
     internal_pa = demand as
     """
-
     # TODO: Just copy that bit below
     global_trips = demand.sum()
-    global_distance = demand * distance
+    global_distance = (demand * distance).sum()
 
-    global_atl = global_distance.sum() / global_trips
+    global_atl = global_distance / global_trips
 
     return global_atl

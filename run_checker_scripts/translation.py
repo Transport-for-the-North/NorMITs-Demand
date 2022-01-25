@@ -71,6 +71,52 @@ def pure_np_main(mat):
     print(out_mat_2)
 
 
+def pop_emp_main(mat):
+    pop_trans = np.array([
+        [1, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [0, 0, 1],
+    ])
+
+    emp_trans = np.array([
+        [0, 0, 1],
+        [0, 0, 1],
+        [0, 1, 0],
+        [1, 0, 0],
+        [1, 0, 0],
+    ])
+
+    print("Starting mat")
+    print(mat)
+
+    print("Translation mat")
+    print(pop_trans)
+    print(emp_trans)
+
+    n_mat, n_sec = pop_trans.shape
+
+    # Translate rows
+    mult_shape = (n_mat, n_mat, n_sec)
+    a = np.broadcast_to(np.expand_dims(mat, axis=2), mult_shape)
+    trans_a = np.broadcast_to(np.expand_dims(pop_trans, axis=1), mult_shape)
+    temp = a * trans_a
+
+    # mat is transposed, but we need it this way
+    out_mat = temp.sum(axis=0)
+
+    # Translate cols
+    mult_shape = (n_mat, n_sec, n_sec)
+    b = np.broadcast_to(np.expand_dims(out_mat, axis=2), mult_shape)
+    trans_b = np.broadcast_to(np.expand_dims(emp_trans, axis=1), mult_shape)
+    temp = b * trans_b
+    out_mat_2 = temp.sum(axis=0)
+
+    print("Translation result")
+    print(out_mat_2)
+
+
 def disagg():
     mat = np.ones((3, 3)) * 1000
 
@@ -135,6 +181,7 @@ def vector():
     print(out.sum())
 
 
+
 if __name__ == '__main__':
     mat = np.random.randint(1, 10, 25).reshape((5, 5))
 
@@ -152,4 +199,8 @@ if __name__ == '__main__':
 
     print("Vector")
     vector()
+    print('\n\n')
+
+    print("pop emp numpy")
+    pop_emp_main(mat)
     print('\n\n')

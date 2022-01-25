@@ -146,11 +146,11 @@ class HBProductionModel(HBProductionModelPaths):
             Defaults to consts.PROCESS_COUNT.
         """
         # Check that the paths we need exist!
-        [file_ops.check_file_exists(x) for x in population_paths.values()]
-        file_ops.check_file_exists(trip_rates_path)
-        file_ops.check_file_exists(mode_time_splits_path)
+        [file_ops.check_file_exists(x, find_similar=True) for x in population_paths.values()]
+        file_ops.check_file_exists(trip_rates_path, find_similar=True)
+        file_ops.check_file_exists(mode_time_splits_path, find_similar=True)
         if constraint_paths is not None:
-            [file_ops.check_file_exists(x) for x in constraint_paths.values()]
+            [file_ops.check_file_exists(x, find_similar=True) for x in constraint_paths.values()]
 
         # Validate that we have data for all the years we're running for
         for year in population_paths.keys():
@@ -190,11 +190,10 @@ class HBProductionModel(HBProductionModelPaths):
         )
 
     def run(self,
-            export_pure_demand: bool = True,
+            export_pure_demand: bool = False,
             export_fully_segmented: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
-            verbose: bool = False,
             ) -> None:
         """
         Runs the HB Production model.
@@ -241,9 +240,6 @@ class HBProductionModel(HBProductionModelPaths):
             Whether to output reports while running. All reports will be
             written out to self.report_home.
 
-        verbose:
-            Whether to print progress bars during processing or not.
-
         Returns
         -------
         None
@@ -258,10 +254,10 @@ class HBProductionModel(HBProductionModelPaths):
             year_start_time = timing.current_milli_time()
             # ## GENERATE PURE DEMAND ## #
             self._logger.info("Loading the population data")
-            pop_dvec = self._read_land_use_data(year, verbose)
+            pop_dvec = self._read_land_use_data(year)
 
             self._logger.info("Applying trip rates")
-            pure_demand = self._generate_productions(pop_dvec, verbose)
+            pure_demand = self._generate_productions(pop_dvec)
 
             if export_pure_demand:
                 self._logger.info("Exporting pure demand to disk")
@@ -315,6 +311,8 @@ class HBProductionModel(HBProductionModelPaths):
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
+                    lad_report_path=notem_segmented_paths.lad_report[year],
+                    lad_report_seg=nd.get_segmentation_level('hb_p_m_tp_week'),
                 )
 
             # TODO: Bring in constraints (Validation)
@@ -338,7 +336,6 @@ class HBProductionModel(HBProductionModelPaths):
 
     def _read_land_use_data(self,
                             year: int,
-                            verbose: bool,
                             ) -> nd.DVector:
         """
         Reads in the land use data for year and converts it to Dvector
@@ -347,9 +344,6 @@ class HBProductionModel(HBProductionModelPaths):
         ----------
         year:
             The year to get population data for.
-
-        verbose:
-            Passed into the DVector.
 
         Returns
         -------
@@ -365,6 +359,12 @@ class HBProductionModel(HBProductionModelPaths):
             path=self.population_paths[year],
             find_similar=True,
         )
+
+        # TODO(BT): Remove this in Land Use 4.0 Update
+        # Little hack until Land Use is updated
+        if str(year) in list(pop):
+            pop = pop.rename(columns={str(year): 'people'})
+
         pop = pd_utils.reindex_cols(pop, self._target_col_dtypes['pop'].keys())
         for col, dt in self._target_col_dtypes['pop'].items():
             pop[col] = pop[col].astype(dt)
@@ -376,12 +376,10 @@ class HBProductionModel(HBProductionModelPaths):
             import_data=pop.rename(columns=self._seg_rename),
             zone_col="msoa_zone_id",
             val_col="people",
-            verbose=verbose,
         )
 
     def _generate_productions(self,
                               population: nd.DVector,
-                              verbose: bool,
                               ) -> nd.DVector:
         """
         Applies trip rate split on the given HB productions
@@ -389,10 +387,7 @@ class HBProductionModel(HBProductionModelPaths):
         Parameters
         ----------
         population:
-            Dvector containing the population.
-
-        verbose:
-            Whether to print a progress bar while applying the splits or not
+            DVector containing the population.
 
         Returns
         -------
@@ -419,7 +414,6 @@ class HBProductionModel(HBProductionModelPaths):
             segmentation=pure_hb_prod,
             import_data=trip_rates.rename(columns=self._seg_rename),
             val_col="trip_rate",
-            verbose=verbose,
         )
         # ## MULTIPLY TOGETHER ## #
         return population * trip_rates_dvec
@@ -583,12 +577,12 @@ class NHBProductionModel(NHBProductionModelPaths):
         """
         # Check that the paths we need exist!
         [file_ops.check_file_exists(x) for x in hb_attraction_paths.values()]
-        [file_ops.check_file_exists(x) for x in population_paths.values()]
-        file_ops.check_file_exists(trip_rates_path)
-        file_ops.check_file_exists(time_splits_path)
+        [file_ops.check_file_exists(x, find_similar=True) for x in population_paths.values()]
+        file_ops.check_file_exists(trip_rates_path, find_similar=True)
+        file_ops.check_file_exists(time_splits_path, find_similar=True)
 
         if constraint_paths is not None:
-            [file_ops.check_file_exists(x) for x in constraint_paths.values()]
+            [file_ops.check_file_exists(x, find_similar=True) for x in constraint_paths.values()]
 
         # Validate that we have data for all the years we're running for
         for year in hb_attraction_paths.keys():
@@ -636,11 +630,10 @@ class NHBProductionModel(NHBProductionModelPaths):
         )
 
     def run(self,
-            export_nhb_pure_demand: bool = True,
+            export_nhb_pure_demand: bool = False,
             export_fully_segmented: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
-            verbose: bool = False,
             ) -> None:
         """
         Runs the NHB Production model.
@@ -690,9 +683,6 @@ class NHBProductionModel(NHBProductionModelPaths):
             Whether to output reports while running. All reports will be
             written out to self.report_home.
 
-        verbose:
-            Whether to print progress bars during processing or not.
-
         Returns
         -------
         None
@@ -708,10 +698,10 @@ class NHBProductionModel(NHBProductionModelPaths):
 
             # ## GENERATE PURE DEMAND ## #
             self._logger.info("Loading the HB attraction data")
-            hb_attr_dvec = self._transform_attractions(year, verbose)
+            hb_attr_dvec = self._transform_attractions(year)
 
             self._logger.info("Applying trip rates")
-            pure_nhb_demand = self._generate_nhb_productions(hb_attr_dvec, verbose)
+            pure_nhb_demand = self._generate_nhb_productions(hb_attr_dvec)
 
             if export_nhb_pure_demand:
                 self._logger.info("Exporting NHB pure demand to disk")
@@ -772,6 +762,8 @@ class NHBProductionModel(NHBProductionModelPaths):
                     segment_totals_path=notem_segmented_paths.segment_total[year],
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
+                    lad_report_path=notem_segmented_paths.lad_report[year],
+                    lad_report_seg=nd.get_segmentation_level('nhb_p_m_tp_week'),
                 )
 
             # TODO: Bring in constraints (Validation)
@@ -795,7 +787,6 @@ class NHBProductionModel(NHBProductionModelPaths):
 
     def _transform_attractions(self,
                                year: int,
-                               verbose: bool,
                                ) -> nd.DVector:
         """
         Removes time period and adds tfn_at to HB attraction DVector
@@ -809,9 +800,6 @@ class NHBProductionModel(NHBProductionModelPaths):
         ----------
         year:
             The year to get HB attractions data for.
-
-        verbose:
-            Passed into the DVector.
 
         Returns
         -------
@@ -868,7 +856,6 @@ class NHBProductionModel(NHBProductionModelPaths):
             import_data=pop,
             zone_col="zone",
             val_col="value",
-            verbose=verbose,
         )
 
         # ## CONVERT THE ATTRACTIONS INTO DESIRED FORMAT ## #
@@ -881,7 +868,6 @@ class NHBProductionModel(NHBProductionModelPaths):
 
     def _generate_nhb_productions(self,
                                   hb_attractions: nd.DVector,
-                                  verbose: bool,
                                   ) -> nd.DVector:
         """
         Applies NHB trip rates to hb_attractions
@@ -890,9 +876,6 @@ class NHBProductionModel(NHBProductionModelPaths):
         ----------
         hb_attractions:
             Dvector containing the data to apply the trip rates to.
-
-        verbose:
-            Whether to print a progress bar while applying the splits or not
 
         Returns
         -------
@@ -918,7 +901,6 @@ class NHBProductionModel(NHBProductionModelPaths):
             segmentation=nhb_trip_rate_seg,
             import_data=trip_rates.rename(columns=self._seg_rename),
             val_col="nhb_trip_rate",
-            verbose=verbose,
         )
 
         # Multiply

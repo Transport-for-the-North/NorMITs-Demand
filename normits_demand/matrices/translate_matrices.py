@@ -8,8 +8,10 @@ Created on Fri Nov 13 12:11:52 2020
 import os
 
 import pandas as pd
+import numpy as np
 
 import normits_demand.utils.utils as nup
+import normits_demand.utils.n_matrix_split as ms
 
 import_folder = (r'I:\NorMITs Demand\noham\v0.3-EFS_Output\NTEM\iter3f\Matrices\OD Matrices')
 export_folder = (r'I:\NorMITs Synthesiser\Nelum\iter2\Outputs\From Home Matrices')
@@ -22,15 +24,81 @@ end_zone_model_folder = (r'I:\NorMITs Synthesiser\Nelum\Model Zone Lookups')
 start_zoning_system = 'Noham'
 end_zoning_system = 'Nelum'
 
-def _get_lookups(translation_lookup_folder,
-                 start_zoning_system,
-                 end_zoning_system,
-                 translation_type = 'pop'):
+
+def convert_correspondence_to_wide(long_correspondence: pd.DataFrame,
+                                   primary_key: str = None,
+                                   secondary_key: str = None,
+                                   weight_value: str = None,
+                                   placeholder_value: int = 9999):
+
+    """
+    Convert long format zone correspondences into wide format for use
+    with wide format matrix reporter.
+
+    long_correspondence:
+        Standard format translation, weighted or otherwise.
+    primary_key:
+        Unique identifier ie. side of correspondence with most zones
+    secondary_key:
+        Secondary identifier ie. side with fewest zones
+    placeholder_value:
+        Integer for infilling non corresponded unique zones
+    """
+    # TODO: Repeat and tile with numpy???
+
+
+    # Init
+    lc = long_correspondence.copy()
+    # If no weight - add simple weight, assuming many:1
+    if weight_value is None:
+        lc['weight'] = 1
+        weight_value = 'weight'
+
+    # Simplify correspondence
+    lc = lc.reindex([primary_key, secondary_key, weight_value], axis=1)
+    lc = lc.reset_index(drop=True)
+
+    # Fill in any consecutive primary key zones dropped in translation
+    min_pk, max_pk = min(lc[primary_key]), max(lc[primary_key])
+    trans_ready = pd.DataFrame({primary_key: range(min_pk, max_pk+1)})
+    trans_ready = trans_ready.merge(lc, how='left', on=primary_key)
+
+    # Check if that's gone many: many
+
+    # Infill nans on right hand side with a default placeholder
+    trans_ready[secondary_key] = trans_ready[secondary_key].fillna(
+        placeholder_value)
+    trans_ready[weight_value] = trans_ready[weight_value].fillna(
+        1)
+
+    # Build audit zone totals
+    pk_len = len(trans_ready[primary_key])
+
+    # Pivot to wide - infill 0s
+    wide_c = trans_ready.pivot(index=primary_key,
+                               columns=secondary_key,
+                               values=weight_value)
+    wide_c = wide_c.fillna(0)
+
+    # Audit axis sum
+    pk_tot = sum(wide_c.values.sum(axis=0))
+    sk_tot = sum(wide_c.values.sum(axis=1))
+    if pk_len != pk_tot or pk_len != sk_tot:
+        raise ValueError('unique zones %d and translation sum %d differ' % (
+            pk_len, pk_tot))
+
+    return wide_c
+
+
+def _get_correspondence(translation_folder,
+                        start_zoning_system,
+                        end_zoning_system,
+                        translation_type='pop'):
     """
     translation_type = 'pop', 'emp', 'pop_emp', 'spatial'
     """
     # Index folder
-    lookup_folder = os.listdir(translation_lookup_folder)
+    lookup_folder = os.listdir(translation_folder)
     # Sub on type
     if translation_type in ['pop', 'emp']:
         lookup_folder = [x for x in lookup_folder if translation_type in x]
@@ -59,6 +127,7 @@ def _get_lookups(translation_lookup_folder,
 
     return lookups
 
+
 def _define_mat_headings(mat_format):
     """
     
@@ -72,6 +141,8 @@ def _define_mat_headings(mat_format):
         right_col = 'd_zone'
     
     return left_col, right_col
+
+
 
 def translate_demand(mat,
                      translation,
@@ -112,6 +183,7 @@ def translate_matrices(start_zoning_system,
                        after_tld=False,
                        export=True):
     """
+    OLD VERSION WITH LONG JOIN METHOD
     translation_type = 'pop', 'emp', 'pop_emp', 'spatial'
     
     """
@@ -123,10 +195,10 @@ def translate_matrices(start_zoning_system,
     left_col, right_col = _define_mat_headings(mat_format)
         
     # Import lookup
-    lookups = _get_lookups(translation_lookup_folder,
-                           start_zoning_system,
-                           end_zoning_system,
-                           translation_type)
+    lookups = _get_correspondence(translation_lookup_folder,
+                                  start_zoning_system,
+                                  end_zoning_system,
+                                  translation_type)
 
     # Get contents of input folder
     input_mats = nup.parse_mat_output(os.listdir(import_folder),
@@ -259,12 +331,12 @@ def translate_matrices(start_zoning_system,
         # TODO: Back to square format if you want
 
         # Build translation report
-        translation_report.append({'matrix':row['file'],
-                                   'before':before,
-                                   'after':after})
+        translation_report.append({'matrix': row['file'],
+                                   'before': before,
+                                   'after': after})
 
         if export:
-            mat.to_csv(os.path.join(export_folder,row['file']), index=False)
+            mat.to_csv(os.path.join(export_folder, row['file']), index=False)
 
     translation_report = pd.DataFrame(translation_report)
 
@@ -277,3 +349,38 @@ def translate_matrices(start_zoning_system,
         )
 
     return translation_report, before_tld_report, after_tld_report
+
+
+def matrix_zone_translation(mat: np.ndarray,
+                            sector_trans_mat: np.ndarray) -> np.ndarray:
+
+    """
+    Much needed function to translate demand from a given matrix shape
+    to another - using a weighted translation.
+
+    mat: ndarray of wide matrix of travel demand, function assumes consecutive
+    zero based indices - ie. if you want indexers you'll have to retain them yourself.
+
+    sector_trans_mat: ndarray of wide matrix in standard many:1 many:many format
+    could be built from convert_correspondence_to_wide.
+    """
+
+    n_mat, n_sec = sector_trans_mat.shape
+
+    # Translate rows
+    t_shape = (n_mat, n_mat, n_sec)
+    a = np.broadcast_to(np.expand_dims(mat, axis=2), t_shape)
+    trans_a = np.broadcast_to(np.expand_dims(sector_trans_mat, axis=1), t_shape)
+    temp = a * trans_a
+
+    # mat is transposed, but we need it this way
+    col_mat = temp.sum(axis=0)
+
+    # Translate cols
+    t_shape = (n_mat, n_sec, n_sec)
+    b = np.broadcast_to(np.expand_dims(col_mat, axis=2), t_shape)
+    trans_b = np.broadcast_to(np.expand_dims(sector_trans_mat, axis=1), t_shape)
+    temp = b * trans_b
+    out_mat = temp.sum(axis=0)
+
+    return out_mat

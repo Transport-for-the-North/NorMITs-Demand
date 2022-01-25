@@ -241,7 +241,7 @@ def validate_scenario_name(scenario_name: str) -> str:
     # Init
     scenario_name = scenario_name.strip().upper()
 
-    if scenario_name not in efs_consts.SCENARIOS:
+    if scenario_name not in consts.SCENARIOS:
         raise ValueError("%s is not a valid name for a scenario."
                          % scenario_name)
     return scenario_name
@@ -3065,34 +3065,6 @@ def list_safe_remove(lst: List[Any],
     return lst
 
 
-def is_almost_equal(v1: float,
-                    v2: float,
-                    significant: int = 7
-                    ) -> bool:
-    """
-    Checks v1 and v2 are equal to significant places
-
-    Parameters
-    ----------
-    v1:
-        The first value to compare
-
-    v2:
-        The second value to compare
-
-    significant:
-        The number of significant bits to compare over. If negative,
-        then this represents rounding.
-        i.e. -1 is same up until 10s, -2 100s etc
-
-    Returns
-    -------
-    almost_equal:
-        True if v1 and v2 are equal to significant bits, else False
-    """
-    return isclose(v1, v2, abs_tol=10 ** -significant)
-
-
 def pairwise(iterable):
     """s -> (s0,s1), (s1,s2), (s2, s3), ..."""
     a, b = itertools.tee(iterable)
@@ -3581,3 +3553,38 @@ def chunk_list(lst: Iterable,
     for i in range(0, len(lst), chunk_size):
         chunk_end = i + chunk_size
         yield lst[i:chunk_end]
+
+
+def compare_sets(x1: set, x2: set) -> Tuple[bool, set, set]:
+    """
+    Checks whether x1 and x2 are the same.
+
+    Checks for items that are in x1, and not x2.
+    Checks for items that are in x2 and not x1.
+    If both above checks are empty, then sets must be equal.
+
+    Parameters
+    ----------
+    x1:
+        The first set the check
+
+    x2:
+        The second set the check
+
+    Returns
+    -------
+    equal:
+        True if x1 and x2 are equal, otherwise False.
+
+    x1_not_in_x2:
+        A set of items that are in x1, but not in x2.
+
+    x2_not_in_x1:
+        A set of items that are in x2, but not in x1.
+    """
+    x1_not_in_x2 = x1 - x2
+    x2_not_in_x1 = x2 - x1
+
+    equal = len(x1_not_in_x2) == 0 and len(x2_not_in_x1) == 0
+
+    return equal, x1_not_in_x2, x2_not_in_x1

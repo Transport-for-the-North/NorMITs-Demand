@@ -11,12 +11,103 @@ File purpose:
 Collections of math based utils for normits demand
 """
 # Built-Ins
+import math
 import warnings
+
+from typing import Any
+from typing import Dict
+from typing import Union
 
 # Third Party
 import numpy as np
 
 # Local Imports
+
+
+def check_numeric(check_dict: Dict[str, Any]) -> None:
+    """Checks if check_dict values are floats or ints.
+
+    Parameters
+    ----------
+    check_dict:
+        A dictionary of argument names and argument values to check.
+        The names are used for the error if the value isn't a numeric.
+
+    Raises
+    ------
+    ValueError
+        If any of the parameters aren't floats or ints,
+        includes the parameter name in the message.
+    """
+    for name, val in check_dict.items():
+        if not isinstance(val, (int, float)):
+            raise ValueError(
+                "%s should be a scalar number (float or int) not %s"
+                % (name, type(val))
+            )
+
+
+def numpy_cast(x: Any, dtype: np.dtype):
+    """
+    Casts scalar x to dtype using numpy
+
+    Parameters
+    ----------
+    x:
+        The scalar value to cast
+
+    dtype:
+        The numpy data type to cast x to
+
+    Returns
+    -------
+    x_cast:
+        x, but cast to dtype
+    """
+    return np.array(x).astype(dtype).item()
+
+
+def is_almost_equal(x1: Union[int, float],
+                    x2: Union[int, float],
+                    rel_tol: float = 0.0001,
+                    abs_tol: float = 0.0,
+                    ) -> bool:
+    """Checks if x1 is similar to x2
+
+    Whether or not two values are considered close is determined
+    according to given absolute and relative tolerances.
+
+    Parameters
+    -----------
+    x1:
+        The first value to check if close to x2
+
+    x2:
+        The second value to check if close to x1
+
+    rel_tol:
+        the relative tolerance – it is the maximum allowed difference
+        between the sum of x1 and x2,
+        relative to the larger absolute value of x1 or
+        x2. By default, this is set to 0.0001,
+        meaning the values must be within 0.01% of each other.
+
+    abs_tol:
+        is the minimum absolute tolerance – useful for comparisons near
+        zero. abs_tol must be at least zero.
+
+    Returns
+    -------
+    is_close:
+         Return True if self.sum() and other.sum() are close to each
+         other, False otherwise.
+    """
+    return math.isclose(
+        x1,
+        x2,
+        rel_tol=rel_tol,
+        abs_tol=abs_tol,
+    )
 
 
 def vector_mean_squared_error(vector1: np.array,

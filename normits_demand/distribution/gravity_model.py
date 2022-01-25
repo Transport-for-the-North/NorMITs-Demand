@@ -1,1125 +1,605 @@
 # -*- coding: utf-8 -*-
 """
-Created on: 06/10/2021
+Created on: 05/11/2021
 Updated on:
 
 Original author: Ben Taylor
 Last update made by: Ben Taylor
-Other updates made by: Chris Storey
+Other updates made by:
 
 File purpose:
 
 """
 # Built-Ins
 import os
-
-from typing import Any
-from typing import Dict
-from typing import Optional
+import warnings
 
 # Third Party
 import numpy as np
 import pandas as pd
+from scipy import optimize
+
+from typing import Any
+from typing import List
+from typing import Dict
+from typing import Tuple
 
 # Local Imports
 import normits_demand as nd
-from normits_demand import constants
+
+from normits_demand import cost
 
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.utils import math_utils
-from normits_demand.utils import costs as cost_utils
+from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
-from normits_demand.utils import trip_length_distributions as tld_utils
 
-from normits_demand.validation import checks
-from normits_demand.concurrency import multiprocessing
-
-from normits_demand.pathing.travel_market_synthesiser import GravityModelExportPaths
-
-# BACKLOG: Re-write Gravity Model to use scipy.optimize.curve_fit
-#  and numpy based furness
-#  labels: TMS, optimisation
+from normits_demand.distribution import furness
+from normits_demand.cost import utils as cost_utils
 
 
-class GravityModel(GravityModelExportPaths):
-    _log_fname = "Gravity_Model_log.log"
+class GravityModelCalibrator:
+    # TODO(BT): Write GravityModelCalibrator docs
 
-    _base_zone_col = "%s_zone_id"
-    _pa_val_col = 'trips'
+    _avg_cost_col = 'ave_km'        # Should be more generic
+    _target_cost_distribution_cols = ['min', 'max', 'trips'] + [_avg_cost_col]
+    _least_squares_method = 'trf'
 
-    _internal_only_suffix = 'int'
+    # Cost amplification constants
+    _cost_amplify_min_dist = np.inf     # Turn off for now
+    _cost_amplify_power = 1
 
     def __init__(self,
-                 year: int,
-                 running_mode: nd.Mode,
-                 zoning_system: nd.core.ZoningSystem,
-                 export_home: nd.PathLike,
-                 zone_col: str = None,
-                 process_count: Optional[int] = constants.PROCESS_COUNT,
+                 row_targets: np.ndarray,
+                 col_targets: np.ndarray,
+                 cost_function: cost.CostFunction,
+                 cost_matrix: np.ndarray,
+                 target_cost_distribution: pd.DataFrame,
+                 target_convergence: float,
+                 furness_max_iters: int,
+                 furness_tol: float,
+                 running_log_path: nd.PathLike = None,
                  ):
-        # Validate inputs
-        if not isinstance(zoning_system, nd.core.zoning.ZoningSystem):
+        # TODO(BT): Write GravityModelCalibrator __init__ docs
+        # Validate attributes
+        target_cost_distribution = pd_utils.reindex_cols(
+            target_cost_distribution,
+            self._target_cost_distribution_cols,
+        )
+
+        if running_log_path is not None:
+            dir_name, _ = os.path.split(running_log_path)
+            if not os.path.exists(dir_name):
+                raise FileNotFoundError(
+                    "Cannot find the defined directory to write out a"
+                    "log. Given the following path: %s"
+                    % dir_name
+                )
+
+            if os.path.isfile(running_log_path):
+                warnings.warn(
+                    "Given a log path to a file that already exists. Logs "
+                    "will be appended to the end of the file at: %s"
+                    % running_log_path
+                )
+
+        # Set attributes
+        self.row_targets = row_targets
+        self.col_targets = col_targets
+        self.cost_function = cost_function
+        self.cost_matrix = cost_matrix
+        self.target_cost_distribution = self._update_tcd(target_cost_distribution)
+        self.tcd_bin_edges = self._get_tcd_bin_edges()
+        self.furness_max_iters = furness_max_iters
+        self.furness_tol = furness_tol
+        self.running_log_path = running_log_path
+
+        self.target_convergence = target_convergence
+
+        # Running attributes
+        self._loop_num = -1
+        self._loop_start_time = None
+        self._loop_end_time = None
+        self._jacobian_mats = None
+
+        # Additional attributes
+        self.initial_cost_params = None
+        self.initial_convergence = None
+        self.optimal_cost_params = None
+        self.achieved_band_share = None
+        self.achieved_convergence = None
+        self.achieved_residuals = None
+        self.achieved_distribution = None
+
+    @staticmethod
+    def _update_tcd(tcd: pd.DataFrame) -> pd.DataFrame:
+        """Extrapolates data where needed"""
+        # Add in ave_km where needed
+        tcd['ave_km'] = np.where(
+            (tcd['ave_km'] == 0) | np.isnan(tcd['ave_km']),
+            tcd['min'],
+            tcd['ave_km'],
+        )
+
+        # Generate the band shares using the given data
+        tcd['band_share'] = tcd['trips'].copy()
+        tcd['band_share'] /= tcd['band_share'].values.sum()
+
+        return tcd
+
+    def _get_tcd_bin_edges(self) -> List[float]:
+        min_bounds = self.target_cost_distribution['min'].tolist()
+        max_bounds = self.target_cost_distribution['max'].tolist()
+        return [min_bounds[0]] + max_bounds
+
+    def _order_cost_params(self, params: Dict[str, Any]) -> List[Any]:
+        """Order params into a list that self.cost_function expects"""
+        ordered_params = [0] * len(self.cost_function.kw_order)
+        for name, value in params.items():
+            index = self.cost_function.kw_order.index(name)
+            ordered_params[index] = value
+
+        return ordered_params
+
+    def _cost_params_to_kwargs(self, args: List[Any]) -> Dict[str, Any]:
+        """Converts a list or args into kwargs that self.cost_function expects"""
+        if len(args) != len(self.cost_function.kw_order):
             raise ValueError(
-                "Expected and instance of a normits_demand ZoningSystem. "
-                "Got a %s instance instead."
-                % type(zoning_system)
+                "Received the wrong number of args to convert to cost function "
+                "kwargs. Expected %s args, but got %s."
+                % (len(self.cost_function.kw_order), len(args))
             )
 
-        # Assign attributes
-        self.zoning_system = zoning_system
-        self.zone_col = zone_col
-        self.process_count = process_count
+        return {k: v for k, v in zip(self.cost_function.kw_order, args)}
 
-        if self.zone_col is None:
-            self.zone_col = zoning_system.col_name
+    def _order_init_params(self, init_params: Dict[str, Any]) -> List[Any]:
+        """Order init_params into a list that self.cost_function expects"""
+        return self._order_cost_params(init_params)
 
-        # Make sure the reports paths exists
-        report_home = os.path.join(export_home, "Logs & Reports")
-        file_ops.create_folder(report_home)
-
-        # Build the output paths
-        super().__init__(
-            year=year,
-            running_mode=running_mode,
-            export_home=export_home,
+    def _order_bounds(self) -> Tuple[List[Any], List[Any]]:
+        """Order min and max into a tuple of lists that self.cost_function expects"""
+        return(
+            self._order_cost_params(self.cost_function.param_min),
+            self._order_cost_params(self.cost_function.param_max),
         )
 
-        # Create a logger
-        logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
-        log_file_path = os.path.join(self.export_home, self._log_fname)
-        self._logger = nd.get_logger(
-            logger_name=logger_name,
-            log_file_path=log_file_path,
-            instantiate_msg="Initialised new Gravity Model Logger",
+    def _cost_amplify(self, cost_matrix: np.ndarray) -> np.ndarray:
+        if not (0 < self._cost_amplify_min_dist < np.max(cost_matrix)):
+            return cost_matrix
+
+        factor = (cost_matrix / self._cost_amplify_min_dist) ** self._cost_amplify_power
+        new_cost = cost_matrix * factor
+        return np.where(
+            cost_matrix <= self._cost_amplify_min_dist,
+            cost_matrix,
+            new_cost,
         )
 
-    def run(self,
-            trip_origin: str,
-            running_segmentation: nd.core.segments.SegmentationLevel,
-            productions: pd.DataFrame,
-            attractions: pd.DataFrame,
-            init_params: pd.DataFrame,
-            target_tld_dir: pd.DataFrame,
-            costs_path: nd.PathLike,
-            cost_function: str,
-            intrazonal_cost_infill: Optional[float] = 0.5,
-            pa_val_col: Optional[str] = 'val',
-            apply_k_factoring: bool = True,
-            convergence_target: float = 0.95,
-            fitting_loops: int = 100,
-            furness_max_iters: int = 2000,
-            furness_tol: float = 1.0,
-            init_param_1_col: str = 'init_param_a',
-            init_param_2_col: str = 'init_param_b',
-            ):
-        # Validate the trip origin
-        trip_origin = checks.validate_trip_origin(trip_origin)
+    def _cost_distribution(self, matrix: np.ndarray) -> np.ndarray:
+        """Returns the distribution of matrix across self.tcd_bin_edges"""
+        return cost_utils.calculate_cost_distribution(
+            matrix=matrix,
+            cost_matrix=self.cost_matrix,
+            bin_edges=self.tcd_bin_edges,
+        )
 
-        # ## MULTIPROCESS ACROSS SEGMENTS ## #
-        unchanging_kwargs = {
-            'trip_origin': trip_origin,
-            'running_segmentation': running_segmentation,
-            'target_tld_dir': target_tld_dir,
-            'costs_path': costs_path,
-            'cost_function': cost_function,
-            'intrazonal_cost_infill': intrazonal_cost_infill,
-            'apply_k_factoring': apply_k_factoring,
-            'furness_max_iters': furness_max_iters,
-            'fitting_loops': fitting_loops,
-            'convergence_target': convergence_target,
-            'furness_tol': furness_tol,
+    def _guess_init_params(self, cost_args: List[float]):
+        """Guesses what the initial params should be.
+
+        Uses the average cost in each band to estimate what changes in
+        the cost_params would do to the final cost distributions. This is a
+        very coarse grained estimation, but can be used to guess around about
+        where the best init params are.
+
+        Used by the `optimize.least_squares` function.
+        """
+        # Convert the cost function args back into kwargs
+        cost_kwargs = self._cost_params_to_kwargs(cost_args)
+
+        # Used to optionally increase the cost of long distance trips
+        avg_cost_vals = self.target_cost_distribution[self._avg_cost_col].values
+        avg_cost_vals = self._cost_amplify(avg_cost_vals)
+
+        # Estimate what the cost function will do to the costs - on average
+        estimated_cost_vals = self.cost_function.calculate(avg_cost_vals, **cost_kwargs)
+        estimated_band_shares = estimated_cost_vals / estimated_cost_vals.sum()
+
+        # return the residuals to the target
+        return self.target_cost_distribution['band_share'].values - estimated_band_shares
+
+    def _gravity_function(self, cost_args: List[float], diff_step: float):
+        """Returns residuals to target cost distribution
+
+        Runs gravity model with given parameters and converts into achieved
+        cost distribution. The residuals are then calculated between the
+        achieved and the target.
+
+        Used by the `optimize.least_squares` function.
+        """
+        # Convert the cost function args back into kwargs
+        cost_kwargs = self._cost_params_to_kwargs(cost_args)
+
+        # Used to optionally increase the cost of long distance trips
+        cost_matrix = self._cost_amplify(self.cost_matrix)
+
+        # Calculate initial matrix through cost function
+        init_matrix = self.cost_function.calculate(cost_matrix, **cost_kwargs)
+
+        # Do some prep for jacobian calculations
+        self._jacobian_mats = {'base': init_matrix.copy()}
+        for cost_param in self.cost_function.kw_order:
+            # Adjust cost slightly
+            adj_cost_kwargs = cost_kwargs.copy()
+            adj_cost_kwargs[cost_param] += adj_cost_kwargs[cost_param] * diff_step
+
+            # Calculate adjusted cost
+            adj_cost = self.cost_function.calculate(cost_matrix, **adj_cost_kwargs)
+
+            self._jacobian_mats[cost_param] = adj_cost
+
+        # Furness trips to trip ends
+        matrix, iters, rmse = furness.doubly_constrained_furness(
+            seed_vals=init_matrix,
+            row_targets=self.row_targets,
+            col_targets=self.col_targets,
+            tol=self.furness_tol,
+            max_iters=self.furness_max_iters,
+        )
+
+        # Store for the jacobian calculations
+        self._jacobian_mats['final'] = matrix.copy()
+
+        # Convert matrix into an achieved distribution curve
+        achieved_band_shares = self._cost_distribution(matrix)
+
+        # Evaluate this run
+        target_band_shares = self.target_cost_distribution['band_share'].values
+        convergence = math_utils.curve_convergence(target_band_shares, achieved_band_shares)
+        achieved_residuals = target_band_shares - achieved_band_shares
+
+        # Calculate the time this loop took
+        self._loop_end_time = timing.current_milli_time()
+        time_taken = self._loop_end_time - self._loop_start_time
+
+        # ## LOG THIS ITERATION ## #
+        log_dict = {
+            'loop_number': str(self._loop_num),
+            'runtime (s)': time_taken / 1000,
         }
+        log_dict.update(cost_kwargs)
+        log_dict.update({
+            'furness_iters': iters,
+            'furness_rmse': np.round(rmse, 6),
+            'bs_con': np.round(convergence, 4),
+        })
 
-        pbar_kwargs = {
-            'desc': 'Gravity model',
-            'unit': 'segment',
-        }
-
-        # Build a list of kwargs
-        kwarg_list = list()
-        for segment_params in running_segmentation:
-            # ## GET P/A VECTORS FOR THIS SEGMENT ## #
-            # Figure out which columns we need
-            segments = list(segment_params.keys())
-            rename_cols = {pa_val_col: self._pa_val_col}
-            needed_cols = segments + [self._pa_val_col]
-
-            # Filter productions
-            seg_productions = pd_utils.filter_df(
-                df=productions,
-                df_filter=segment_params,
-                throw_error=True,
-            )
-            seg_productions = seg_productions.rename(columns=rename_cols)
-            seg_productions = seg_productions.set_index(self.zone_col)
-            seg_productions = seg_productions.reindex(
-                index=self.zoning_system.unique_zones,
-                columns=needed_cols,
-                fill_value=0,
-            ).reset_index()
-
-            # Filter attractions
-            seg_attractions = pd_utils.filter_df(
-                df=attractions,
-                df_filter=segment_params,
-                throw_error=True,
-            )
-            seg_attractions = seg_attractions.rename(columns=rename_cols)
-            seg_attractions = seg_attractions.set_index(self.zone_col)
-            seg_attractions = seg_attractions.reindex(
-                index=self.zoning_system.unique_zones,
-                columns=needed_cols,
-                fill_value=0,
-            ).reset_index()
-
-            # Check we actually got something
-            production_sum = seg_productions[self._pa_val_col].values.sum()
-            attraction_sum = seg_attractions[self._pa_val_col].values.sum()
-            if production_sum <= 0 or attraction_sum <= 0:
-                raise nd.NormitsDemandError(
-                    "Missing productions and/or attractions after filtering to "
-                    "this segment.\n"
-                    "\tSegment: %s\n"
-                    "\tProductions sum: %s\n"
-                    "\tAttractions sum: %s"
-                    % (segment_params, production_sum, attraction_sum)
-                )
-
-            # Balance A to P
-            adj_factor = production_sum / attraction_sum
-            seg_attractions[self._pa_val_col] *= adj_factor
-
-            # ## GET INIT PARAMS FOP THIS SEGMENT ## #
-            seg_init_params = pd_utils.filter_df(init_params, segment_params)
-
-            if len(seg_init_params) > 1:
-                seg_name = running_segmentation.generate_file_name(segment_params)
-                raise ValueError(
-                    "%s rows found in init_params for segment %s. "
-                    "Expecting only 1 row."
-                    % (len(seg_init_params), seg_name)
-                )
-
-            # Make sure the columns we need do exist
-            seg_init_params = pd_utils.reindex_cols(
-                df=seg_init_params,
-                columns=[init_param_1_col, init_param_2_col],
-                dataframe_name='init_params',
-            )
-
-            # Build the kwargs
-            kwargs = unchanging_kwargs.copy()
-            kwargs.update({
-                'segment_params': segment_params,
-                'seg_productions': seg_productions,
-                'seg_attractions': seg_attractions,
-                'init_param_a': seg_init_params[init_param_1_col].squeeze(),
-                'init_param_b': seg_init_params[init_param_2_col].squeeze(),
-            })
-            kwarg_list.append(kwargs)
-
-        # Multiprocess
-        multiprocessing.multiprocess(
-            fn=self._run_internal,
-            kwargs=kwarg_list,
-            pbar_kwargs=pbar_kwargs,
-            process_count=self.process_count,
+        # Append this iteration to log file
+        file_ops.safe_dataframe_to_csv(
+                pd.DataFrame(log_dict, index=[0]),
+                self.running_log_path,
+                mode='a',
+                header=(not os.path.exists(self.running_log_path)),
+                index=False,
         )
 
-    def _run_internal(self,
-                      segment_params: Dict[str, Any],
-                      trip_origin: str,
-                      running_segmentation: nd.core.segments.SegmentationLevel,
-                      seg_productions: pd.DataFrame,
-                      seg_attractions: pd.DataFrame,
-                      init_param_a: float,
-                      init_param_b: float,
-                      target_tld_dir: pd.DataFrame,
-                      costs_path: nd.PathLike,
-                      cost_function: str,
-                      intrazonal_cost_infill: Optional[float] = 0.5,
-                      apply_k_factoring: bool = True,
-                      convergence_target: float = 0.95,
-                      fitting_loops: int = 100,
-                      furness_max_iters: int = 2000,
-                      furness_tol: float = 1.0,
-                      ):
-        seg_name = running_segmentation.generate_file_name(segment_params)
-        self._logger.info("Running for %s" % seg_name)
+        # Update loop params and return the achieved band shares
+        self._loop_num += 1
+        self._loop_start_time = timing.current_milli_time()
+        self._loop_end_time = None
 
-        # ## READ IN TLD FOR THIS SEGMENT ## #
-        target_tld = tld_utils.get_trip_length_distributions(
-            import_dir=target_tld_dir,
-            segment_params=segment_params,
-            trip_origin=trip_origin,
+        # Update performance params
+        self.achieved_band_share = achieved_band_shares
+        self.achieved_convergence = convergence
+        self.achieved_residuals = achieved_residuals
+        self.achieved_distribution = matrix
+
+        # Store the initial values to log later
+        if self.initial_cost_params is None:
+            self.initial_cost_params = cost_kwargs
+        if self.initial_convergence is None:
+            self.initial_convergence = convergence
+
+        return achieved_residuals
+
+    def _gravity_jacobian(self, cost_args: List[float], diff_step: float):
+        """Returns the Jacobian for _gravity_function
+
+        Uses the matrices stored in self._jacobian_mats (which were stored in
+        the previous call to self._gravity function) to estimate what a change
+        in the cost parameters would do to final furnessed matrix. This is
+        then formatted into a Jacobian for optimize.least_squares to use.
+
+        Used by the `optimize.least_squares` function.
+        """
+        # Initialise the output
+        n_bands = len(self.target_cost_distribution['band_share'].values)
+        n_cost_params = len(cost_args)
+        jacobian = np.zeros((n_bands, n_cost_params))
+
+        # Convert the cost function args back into kwargs
+        cost_kwargs = self._cost_params_to_kwargs(cost_args)
+
+        # Estimate what the furness does to the matrix
+        furness_factor = np.divide(
+            self._jacobian_mats['final'],
+            self._jacobian_mats['base'],
+            where=self._jacobian_mats['base'] != 0,
+            out=np.zeros_like(self._jacobian_mats['base']),
         )
 
-        # ## GET THE COSTS FOR THIS SEGMENT ## #
-        self._logger.debug("Getting costs from: %s" % costs_path)
+        # Calculate the Jacobian section for each cost param
+        for i, cost_param in enumerate(self.cost_function.kw_order):
+            # Estimate how the final matrix would be different with a
+            # different input cost parameter
+            furness_mat = self._jacobian_mats[cost_param] * furness_factor
+            adj_weights = furness_mat / furness_mat.sum() if furness_mat.sum() != 0 else 0
+            adj_final = self._jacobian_mats['final'].sum() * adj_weights
 
-        int_costs, cost_name = cost_utils.get_costs(
-            costs_path,
-            segment_params,
-            iz_infill=intrazonal_cost_infill,
-            replace_nhb_with_hb=(trip_origin == 'nhb'),
-        )
-
-        # Translate costs to wide - filter to only internal
-        costs = pd_utils.long_to_wide_infill(
-            df=int_costs,
-            index_col='p_zone',
-            columns_col='a_zone',
-            values_col='cost',
-            index_vals=self.zoning_system.unique_zones,
-            column_vals=self.zoning_system.unique_zones,
-            infill=0,
-        )
-
-        # ## SET UP LOG AND RUN ## #
-        # Logging set up
-        log_fname = running_segmentation.generate_file_name(
-            trip_origin=trip_origin,
-            file_desc='gravity_log',
-            segment_params=segment_params,
-            csv=True,
-        )
-        log_path = os.path.join(self.report_paths.model_log_dir, log_fname)
-
-        # Need to convert into numpy vectors to work with old code
-        seg_productions = seg_productions[self._pa_val_col].values
-        seg_attractions = seg_attractions[self._pa_val_col].values
-        costs = costs.values
-
-        # Replace the log if it already exists
-        if os.path.isfile(log_path):
-            os.remove(log_path)
-
-        internal_pa_mat, tld_report = calibrate_gravity_model(
-            init_param_a=init_param_a,
-            init_param_b=init_param_b,
-            productions=seg_productions,
-            attractions=seg_attractions,
-            costs=costs,
-            zones=self.zoning_system.unique_zones,
-            target_tld=target_tld,
-            log_path=log_path,
-            cost_function=cost_function,
-            apply_k_factoring=apply_k_factoring,
-            furness_loops=furness_max_iters,
-            fitting_loops=fitting_loops,
-            bs_con_target=convergence_target,
-            target_r_gap=furness_tol,
-        )
-
-        # ## WRITE OUT GRAVITY MODEL OUTPUTS ## #
-        # Write out tld report
-        fname = running_segmentation.generate_file_name(
-            trip_origin=trip_origin,
-            year=str(self.year),
-            file_desc='tld_report',
-            segment_params=segment_params,
-            csv=True,
-        )
-        path = os.path.join(self.report_paths.tld_report_dir, fname)
-        tld_report.to_csv(path, index=False)
-
-        # ## WRITE DISTRIBUTED DEMAND ## #
-        # Generate path and write out
-        fname = running_segmentation.generate_file_name(
-            trip_origin=trip_origin,
-            year=str(self.year),
-            file_desc='synthetic_pa',
-            segment_params=segment_params,
-            suffix=self._internal_only_suffix,
-            compressed=True,
-        )
-        path = os.path.join(self.export_paths.distribution_dir, fname)
-        nd.write_df(internal_pa_mat, path)
-
-
-def calibrate_gravity_model(init_param_a: float,
-                            init_param_b: float,
-                            productions,
-                            attractions,
-                            costs,
-                            zones,
-                            target_tld,
-                            log_path,
-                            cost_function,
-                            apply_k_factoring=True,
-                            furness_loops=1999,
-                            fitting_loops=100,
-                            bs_con_target=.95,
-                            target_r_gap=1
-                            ):
-    # ## VALIDATE INPUTS ## #
-    # Make sure the costs and P/A are the same shape
-    n_prod = len(productions)
-    n_attr = len(attractions)
-    n_zones = len(zones)
-    if n_prod != n_zones:
-        raise ValueError(
-            "Productions are not the expected length based on given zones."
-            "Got %s productions, expected %s."
-            % (n_prod, len(zones))
-        )
-
-    if n_attr != n_zones:
-        raise ValueError(
-            "Attractions are not the expected length based on given zones."
-            "Got %s attractions, expected %s."
-            % (n_attr, len(zones))
-        )
-
-    if (n_zones, n_zones) != costs.shape:
-        raise ValueError(
-            "Costs are not the expected shape based on given zones. "
-            "Got %s costs, expected %s."
-            % (costs.shape, (n_zones, n_zones))
-        )
-
-    # ## Start of parameter search ## #
-    min_dist, max_dist, obs_trip, obs_dist = unpack_tlb(target_tld)
-
-    # Initial Search Loop - looking for OK values
-    # Define criteria
-    a_search, b_search, m_search, s_search, min_para, max_para = define_search_criteria(
-        init_param_a,
-        init_param_b,
-        cost_function,
-    )
-
-    # Initialise, values that will be set in the loop
-    max_r_sqr = [a_search[0], b_search[0], m_search[0], s_search[0], 0]
-    k_factors = costs ** 0
-
-    out_loop = 0
-    out_para = list()
-    for asv in a_search:
-        for bsv in b_search:
-            for msv in m_search:
-                for ssv in s_search:
-                    # Test we're running a sensible value
-                    if param_check(min_para, max_para, asv, bsv, msv, ssv):
-                        # Run gravity model
-                        out_loop += 1
-                        grav_run = gravity_model(
-                            log_path=log_path,
-                            target_tld=target_tld,
-                            dist_function=cost_function,
-                            par_data=[asv, bsv, msv, ssv],
-                            min_para=min_para,
-                            max_para=max_para,
-                            bs_con_target=bs_con_target,
-                            target_r_gap=target_r_gap,
-                            furness_target=0.1,
-                            productions=productions,
-                            attractions=attractions,
-                            costs=costs,
-                            k_factors=k_factors,  # 1s
-                            furness_loops=furness_loops,
-                            fitting_loops=fitting_loops,
-                            loop_number='1.' + str(out_loop),
-                            optimise=True
-                        )
-
-                        if max_r_sqr[4] < grav_run[6][4]:
-                            max_r_sqr = grav_run[6]
-                            # This will pass an out para even if it's not doing a great job
-                            # TODO: if it's not doing a good job, search more and better!
-
-                        if max_r_sqr[4] > bs_con_target:
-                            out_para, bs_con = grav_run[1], grav_run[6][4]
-
-                        if (check_con_val(grav_run[3], target_r_gap) or
-                                # Over 90
-                                (grav_run[6][4] >= bs_con_target - .05)):
-                            # Assign success values and leave loop - well done!
-                            out_para, bs_con = grav_run[1], grav_run[6][4]
-                            break
-
-                    if len(out_para) != 0:
-                        break
-                if len(out_para) != 0:
-                    break
-            if len(out_para) != 0:
-                break
-
-    # We did real bad. Just use the last run and output something
-    if len(out_para) == 0:
-        out_para, bs_con = grav_run[1], grav_run[6][4]
-    internal_pa = grav_run[0]
-
-    # Refine values
-    if len(list(set(out_para) - set(max_r_sqr))) > 0:
-        # Restore best R-squared loop
-        # Run gravity model
-        # Set total runs to 1
-        grav_run = gravity_model(
-            log_path=log_path,
-            target_tld=target_tld,
-            dist_function=cost_function,
-            par_data=max_r_sqr[0:4],
-            min_para=min_para,
-            max_para=max_para,
-            bs_con_target=bs_con_target,
-            target_r_gap=target_r_gap,
-            furness_target=0.1,
-            productions=productions,
-            attractions=attractions,
-            costs=costs,
-            k_factors=k_factors,  # 1s
-            furness_loops=furness_loops,
-            fitting_loops=1,
-            loop_number='2.0',
-            optimise=True,
-        )
-        out_para, bs_con, max_r_sqr = grav_run[1], grav_run[5], grav_run[6]
-        internal_pa = grav_run[0]
-
-    if param_check(min_para, max_para,
-                   max_r_sqr[0], max_r_sqr[1],
-                   max_r_sqr[2], max_r_sqr[3]):
-
-        internal_pa = grav_run[0]
-        num_band = len(min_dist)
-
-        est_trip, est_dist, cij_freq = [0] * num_band, [0] * num_band, [0] * num_band
-        for row in range(num_band):
-            # TODO(BT): Can this be replaced with a histogram function?
-            est_trip[row] = np.sum(
-                np.where((costs >= min_dist[row]) & (costs < max_dist[row]), internal_pa, 0))
-            est_dist[row] = np.sum(
-                np.where((costs >= min_dist[row]) & (costs < max_dist[row]), costs * internal_pa,
-                         0))
-            est_dist[row] = np.where(est_trip[row] > 0, est_dist[row] / est_trip[row],
-                                     (min_dist[row] + max_dist[row]) / 2)
-            obs_dist[row] = np.where(obs_dist[row] > 0, obs_dist[row], est_dist[row])
-            est_trip[row] = est_trip[row] / np.sum(internal_pa) * 100
-            cij_freq[row] = np.sum(
-                np.where((costs >= min_dist[row]) & (costs < max_dist[row]), len(costs), 0))
-            cij_freq[row] = cij_freq[row] / np.sum(len(costs)) * 100
-
-        # mean trip length
-        est_mean = np.sum(internal_pa * costs) / np.sum(internal_pa)
-        est_logm = np.sum(internal_pa * np.log(np.where(costs > 0, costs, 1))) / np.sum(
-            internal_pa)
-        est_stdv = (np.sum(internal_pa * (costs - est_mean) ** 2) / np.sum(internal_pa)) ** 0.5
-
-        # TODO(BT): Do the same as above, compare to the above results - REPORTING
-        obs_mean, obs_logm, obs_stdv = 0, 0, 0
-
-        # Auto-apply k-Factor
-        kfc_dist, kfc_trip = [0] * num_band, [0] * num_band
-        kfc_mean, kfc_logm, kfc_stdv, kfc_para, k_bs_con = est_mean, est_logm, est_stdv, out_para.copy(), bs_con
-        if apply_k_factoring:
-            out_loop = out_loop + 1
-            k_factors = costs ** 0
-            for row in range(num_band):
-                kfc_dist[row] = np.where(est_trip[row] > 0,
-                                         min(max(obs_trip[row] / est_trip[row], .2), 5), 1)
-                k_factors = np.where((costs >= min_dist[row]) & (costs < max_dist[row]),
-                                     kfc_dist[row], k_factors)
-            grav_run = gravity_model(
-                log_path=log_path,
-                target_tld=target_tld,
-                dist_function=cost_function,
-                par_data=kfc_para,
-                min_para=min_para,
-                max_para=max_para,
-                bs_con_target=bs_con_target,
-                target_r_gap=target_r_gap,
-                furness_target=0.1,
-                productions=productions,
-                attractions=attractions,
-                costs=costs,
-                k_factors=k_factors,
-                furness_loops=furness_loops,
-                fitting_loops=1,
-                loop_number="3.0",
-                optimise=True,
+            # Control to final matrix
+            adj_final, _, _ = furness.doubly_constrained_furness(
+                seed_vals=adj_final,
+                row_targets=self._jacobian_mats['final'].sum(axis=1),
+                col_targets=self._jacobian_mats['final'].sum(axis=0),
+                tol=1e-6,
+                max_iters=20,
+                warning=False,
             )
 
-            kfc_para, bs_con, k_r_sqr = grav_run[1], grav_run[5], grav_run[6]
+            # Turn into bands
+            achieved_band_shares = self._cost_distribution(adj_final)
 
-            if param_check(min_para, max_para,
-                           kfc_para[0], kfc_para[1],
-                           kfc_para[2], kfc_para[3]):
-                internal_pa = grav_run[0]
+            # Calculate the Jacobian for this cost param
+            jacobian_residuals = self.achieved_band_share - achieved_band_shares
+            cost_step = cost_kwargs[cost_param] * diff_step
+            cost_jacobian = jacobian_residuals / cost_step
 
-                # TODO(BT): Can this be replaced with a histogram function?
-                for row in range(num_band):
-                    kfc_trip[row] = np.sum(
-                        np.where((costs >= min_dist[row]) & (costs < max_dist[row]), internal_pa,
-                                 0))
-                    kfc_dist[row] = np.sum(
-                        np.where((costs >= min_dist[row]) & (costs < max_dist[row]),
-                                 costs * internal_pa, 0))
-                    kfc_dist[row] = np.where(kfc_trip[row] > 0, kfc_dist[row] / kfc_trip[row],
-                                             (min_dist[row] + max_dist[row]) / 2)
-                    kfc_trip[row] = kfc_trip[row] / np.sum(internal_pa) * 100
-                kfc_mean = np.sum(internal_pa * costs) / np.sum(internal_pa)
-                kfc_logm = np.sum(internal_pa * np.log(np.where(costs > 0, costs, 1))) / np.sum(
-                    internal_pa)
-                kfc_stdv = (np.sum(internal_pa * (costs - kfc_mean) ** 2) / np.sum(
-                    internal_pa)) ** 0.5
-    else:
-        raise ValueError('Grav model netherworld - what did you do?')
+            # Store in the Jacobian
+            jacobian[:, i] = cost_jacobian
 
-    # ########## End of alpha/beta search ########## #
+        return jacobian
 
-    # TODO: Add indices, back to pandas
-    internal_pa = pd.DataFrame(
-        internal_pa,
-        index=zones,
-        columns=zones,
-    )
+    def calibrate(self,
+                  init_params: Dict[str, Any],
+                  estimate_init_params: bool = False,
+                  calibrate_params: bool = True,
+                  diff_step: float = 1e-8,
+                  ftol: float = 1e-4,
+                  xtol: float = 1e-4,
+                  grav_max_iters: int = 100,
+                  verbose: int = 0,
+                  ):
+        """Finds the optimal parameters for self.cost_function
 
-    # ## GENERATE A TLD REPORT ## #
-    # Get distance into the right format
-    distance = pd.DataFrame(
-        data=costs,
-        index=zones,
-        columns=zones,
-    )
+        Optimal parameters are found using `scipy.optimize.least_squares`
+        to fit the distributed row/col targets to self.target_tld. Once
+        the optimal parameters are found, the gravity model is run one last
+        time to check the self.target_convergence has been met. This also
+        populates a number of attributes with values from the optimal run:
+        self.achieved_band_share
+        self.achieved_convergence
+        self.achieved_residuals
+        self.achieved_distribution
 
-    _, tld_report, _ = tld_utils.get_trip_length_by_band(
-        band_atl=target_tld,
-        distance=distance,
-        internal_pa=internal_pa,
-    )
+        Parameters
+        ----------
+        init_params:
+            A dictionary of {parameter_name: parameter_value} to pass
+            into the cost function as initial parameters.
 
-    tld_report['bs_con'] = bs_con
+        estimate_init_params:
+            Whether to ignore the given init_params and estimate new ones
+            using least squares, or just use the given init_params to start
+            with.
 
-    return internal_pa, tld_report
+        calibrate_params:
+            Whether to calibrate the cost parameters or not. If not
+            calibrating, the given init_params will be assumed to be
+            optimal.
+
+        diff_step:
+            Copied from scipy.optimize.least_squares documentation, where it
+            is passed to:
+            Determines the relative step size for the finite difference
+            approximation of the Jacobian. The actual step is computed as
+            x * diff_step. If None (default), then diff_step is taken to be a
+            conventional “optimal” power of machine epsilon for the finite
+            difference scheme used
+
+        ftol:
+            The tolerance to pass to scipy.optimize.least_squares. The search
+            will stop once this tolerance has been met. This is the
+            tolerance for termination by the change of the cost function
+
+        xtol:
+            The tolerance to pass to scipy.optimize.least_squares. The search
+            will stop once this tolerance has been met. This is the
+            tolerance for termination by the change of the independent
+            variables.
+
+        grav_max_iters:
+            The maximum number of calibration iterations to complete before
+            termination if the ftol has not been met.
+
+        verbose:
+            Copied from scipy.optimize.least_squares documentation, where it
+            is passed to:
+            Level of algorithm’s verbosity:
+            - 0 (default) : work silently.
+            - 1 : display a termination report.
+            - 2 : display progress during iterations (not supported by ‘lm’ method).
+
+        Returns
+        -------
+        optimal_cost_params:
+            Returns a dictionary of the same shape as init_params. The values
+            will be the optimal cost parameters to get the best band share
+            convergence.
+
+        Raises
+        ------
+        ValueError
+            If the generated trip matrix contains any
+            non-finite values.
+
+        See Also
+        --------
+        gravity_model
+        scipy.optimize.least_squares
+        """
+        # Validate init_params
+        self.cost_function.validate_params(init_params)
+
+        # Estimate what the initial params should be
+        if estimate_init_params:
+            result = optimize.least_squares(
+                self._guess_init_params,
+                x0=self._order_init_params(init_params),
+                method=self._least_squares_method,
+                bounds=self._order_bounds(),
+            )
+            init_params = self._cost_params_to_kwargs(result.x)
+
+            # TODO(BT): standardise this
+            if self.cost_function.name == 'LOG_NORMAL':
+                init_params['sigma'] *= 0.8
+                init_params['mu'] *= 0.5
+
+        # Initialise running params
+        self._loop_num = 1
+        self._loop_start_time = timing.current_milli_time()
+        self.initial_cost_params = None
+        self.initial_convergence = None
+
+        # Calculate the optimal cost parameters if we're calibrating
+        if calibrate_params is True:
+            result = optimize.least_squares(
+                fun=self._gravity_function,
+                x0=self._order_init_params(init_params),
+                method=self._least_squares_method,
+                bounds=self._order_bounds(),
+                jac=self._gravity_jacobian,
+                verbose=verbose,
+                ftol=ftol,
+                xtol=xtol,
+                max_nfev=grav_max_iters,
+                kwargs={'diff_step': diff_step},
+            )
+            optimal_params = result.x
+        else:
+            optimal_params = self._order_init_params(init_params)
+
+        # Run an optimal version of the gravity
+        self.optimal_cost_params = self._cost_params_to_kwargs(optimal_params)
+        self._gravity_function(optimal_params, diff_step=diff_step)
+
+        # Check the performance of the best run
+        if self.achieved_convergence < self.target_convergence:
+            warnings.warn(
+                "Calibration was not able to reach the target_convergence. "
+                "Perhaps K-Factors are needed to improve the convergence?\n"
+                "Target convergence: %s\n"
+                "Achieved convergence: %s"
+                % (self.target_convergence, self.achieved_convergence)
+            )
+
+        return self.optimal_cost_params
 
 
-def gravity_model(log_path: nd.PathLike,
-                  target_tld: pd.DataFrame,
-                  dist_function: str,
-                  par_data: list,
-                  min_para: list,
-                  max_para: list,
-                  bs_con_target: float,
-                  target_r_gap: float,
-                  furness_target: float,
-                  productions: np.ndarray,
-                  attractions: np.ndarray,
-                  costs,
-                  k_factors,
-                  furness_loops: int,
-                  fitting_loops: int,
-                  loop_number: str,
-                  optimise=True):
+def gravity_model(row_targets: np.ndarray,
+                  col_targets: np.ndarray,
+                  cost_function: cost.CostFunction,
+                  costs: np.ndarray,
+                  furness_max_iters: int,
+                  furness_tol: float,
+                  **cost_params
+                  ):
     """
-    Runs the outer loop of the gravity model, searching for the optimal
-    alpha and beta values for trip distribution.
+    Runs a gravity model and returns the distributed row/col targets
+
+    Uses the given cost function to generate an initial matrix which is
+    used in a double constrained furness to distribute the row and column
+    targets across a matrix. The cost_params can be used to achieve different
+    results based on the cost function.
 
     Parameters
     ----------
-    dist_log_path:
-        Path to the folder that the log for this distribution should be output.
+    row_targets:
+        The targets for the rows to sum to. These are usually Productions
+        in Trip Ends.
 
-    dist_log_fname:
-        The name of the file that the log for this distribution should be
-        output. This is joined to dist_log_path. Calib_params will be used to
-        personalise the name to this distribution.
+    col_targets:
+        The targets for the columns to sum to. These are usually Attractions
+        in Trip Ends.
 
-    calib_params:
-         Model calibration parameters for model.
+    cost_function:
+        A cost function class defining how to calculate the seed matrix based
+        on the given cost. cost_params will be passed directly into this
+        function.
 
-    dist_function:
-        distribution function, 'tanner' or 'ln'
+    costs:
+        A matrix of the base costs to use. This will be passed into
+        cost_function alongside cost_params. Usually this will need to be
+        the same shape as (len(row_targets), len(col_targets)).
 
-    par_data:
-        Input paramters as [alpha, beta, mu, sigma]
+    furness_max_iters:
+        The maximum number of iterations for the furness to complete before
+        giving up and outputting what it has managed to achieve.
 
-    bs_con_target:
-        Target convergence on band share. Ie. r squared.
+    furness_tol:
+        The R2 difference to try and achieve between the row/col targets
+        and the generated matrix. The smaller the tolerance the closer to the
+        targets the return matrix will be.
 
-    target_r_gap:
-        The ideal value for a good line fit
-
-    productions:
-        Productions as an np vector.
-
-    attractions:
-        Attractions as an np vector.
-
-    cost:
-        A matrix of cost of travel between zones.
-
-    k_factors:
-        K factors
-
-    furness_loops:
-        Number of inner loop iterations to do before abandoning.
-        5000 should work for everything up to -0.5 beta - left higher.
-
-    fitting_loops:
-        Number of outer loop iterations to complete before abandoning.
-
-    loop_number:
-        String defining the name of this outer loop.
-
-    verbose:
-        Indicates whether to print a log of the process to the terminal.
-        Useful to set verbose=False when using multi-threaded loops.
-
-    optimise = True:
-        Run the optimisation loop while searching or not
+    cost_params:
+        Any additional parameters that should be passed through to the cost
+        function.
 
     Returns
     -------
-    return_list:
-        A list of calculated values in the following order:
-        internal_pa:
-            Distributed internal pa matrix for a given segment.
+    distributed_matrix:
+        A matrix of the row/col targets distributed into a matrix of shape
+        (len(row_targets), len(col_targets))
 
-        run_log:
-            A dict log of performance in each iterations.
+    completed_iters:
+        The number of iterations completed by the doubly constrained furness
+        before exiting
 
-        gm_loop_counter:
-            A counter showing the number of loops completed
+    achieved_rmse:
+        The Root Mean Squared Error achieved by the doubly constrained furness
+        before exiting
 
-        trip_lengths:
-            The achieved trip lengths
-
-        band_share:
-            The achieved band shares
-
-        convergence_vals:
-            A list of convergence values in the following order:
-            [alpha_con, beta_con, bs_con, tl_con]
-
+    Raises
+    ------
+    TypeError:
+        If some of the cost_params are not valid cost parameters, or not all
+        cost parameters have been given.
     """
+    # Validate additional arguments passed in
+    equal, extra, missing = du.compare_sets(
+        set(cost_params.keys()),
+        set(cost_function.param_names),
+    )
 
-    # Check input params
-    assert dist_function.lower() in ['tanner', 'ln'], 'Not a valid function'
-
-    # Build min max vectors
-    # Convert miles from raw NTS to km
-    # TODO(BT): Calculate Band share, total trip length, total average
-    #  trip length in code
-    min_dist, max_dist, obs_trip, obs_dist_o = unpack_tlb(target_tld)
-
-    max_r_sqr, pre_data = [0, 0, 0, 0, 0], [0, 0, 0, 0]
-    pre_val1, pre_val2 = 0, 0
-
-    if dist_function.lower() == 'tanner':
-        max_r_sqr[0], max_r_sqr[1] = par_data[0], par_data[1]
-    else:
-        max_r_sqr[2], max_r_sqr[3] = par_data[2], par_data[3]
-
-    # Count bands
-    num_band = len(target_tld)
-    opt_loop = 0
-
-    # Seed calibration factors
-    est_trip, est_dist, obs_dist = [0] * num_band, [0] * num_band, [0] * num_band
-    obs_dist, est_trip, est_dist = np.array(obs_dist), np.array(est_trip), np.array(est_dist)
-
-    for ft_loop in range(fitting_loops):
-        gm_start = timing.current_milli_time()
-
-        if dist_function.lower() == 'tanner':  # x1, x2 - Tanner
-            min_val1, min_val2 = min_para[0], min_para[1]
-            max_val1, max_val2 = max_para[0], max_para[1]
-
-        elif dist_function.lower() == 'ln':
-            min_val1, min_val2 = min_para[2], min_para[3]
-            max_val1, max_val2 = max_para[2], max_para[3]
-
-        # Run furness process
-        model_run = run_furness(furness_loops,
-                                origin=productions,
-                                destination=attractions,
-                                par_data=par_data,
-                                cost=costs,
-                                k_factors=k_factors,
-                                min_pa_diff=furness_target)
-
-        gm_time_taken = timing.current_milli_time() - gm_start
-
-        internal_pa, fn_loops, pa_diff = model_run
-        del model_run
-
-        # Get rid of any NaNs that might have snuck in
-        internal_pa = np.nan_to_num(internal_pa)
-
-        # TODO(BT): Can this be replaced with a histogram function?
-        for i in range(num_band):
-            # Get trips by band
-            est_trip[i] = np.sum(
-                np.where((costs >= min_dist[i]) & (costs < max_dist[i]), internal_pa, 0))
-            # Get distance by band
-            est_dist[i] = np.sum(
-                np.where((costs >= min_dist[i]) & (costs < max_dist[i]), costs * internal_pa, 0))
-            # Get mean distance by band
-            est_dist[i] = np.where(est_trip[i] > 0, est_dist[i] / est_trip[i],
-                                   (max_dist[i] + min_dist[i]) / 2)
-            # Get observed distance by band
-            obs_dist[i] = np.where(obs_dist_o[i] > 0, obs_dist_o[i], est_dist[i])
-
-        # Control observed trips to PA volume
-        obs_trip = obs_trip * np.sum(internal_pa) / np.sum(obs_trip)
-
-        abs_diff = np.sum(np.abs(est_trip - obs_trip))
-        obj_func = np.sum(est_trip - obs_trip * (
-                np.where(est_trip > 0, np.log(
-                    est_trip), 0) - np.where(obs_trip > 0, np.log(obs_trip), 0)))
-        est_err = np.sum(est_trip * np.where(
-            est_trip > 0, np.log(est_trip), 0) ** 2) ** 0.5
-
-        # Figure out how to adjust the par_Data (alpha, beta etc...) for next iteration
-        if dist_function.lower() == 'tanner':  # x1, x2 - Tanner
-            cst_val1 = [np.where(obs_dist > 0, np.log(obs_dist), 0),
-                        np.where(est_dist > 0, np.log(est_dist), 0)]
-            cst_val2 = [obs_dist * 1, est_dist * 1]
-            par_val1, par_val2 = par_data[0], par_data[1]
-            fix_val1, fix_val2 = np.sum(obs_trip * cst_val1[0]), np.sum(obs_trip * cst_val2[0])
-            cur_val1, cur_val2 = np.sum(est_trip * cst_val1[1]), np.sum(est_trip * cst_val2[1])
-            gra_val1, gra_val2 = np.sum(est_trip * cst_val1[1] - obs_trip * cst_val1[0]), np.sum(
-                est_trip * cst_val2[1] - obs_trip * cst_val2[0])
-
-        elif dist_function.lower() == 'ln':  # mu, sigma - LogNormal f(Cij) = (1/(Cij*sigma*(2*np.pi)**0.5))*np.exp(-(np.log(Cij)-mu)**2/(2*sigma**2))
-            cst_val1 = [np.where(obs_dist > 0, (-np.log(obs_dist) ** 2 / 2), 0),
-                        np.where(est_dist > 0, (-np.log(est_dist) ** 2 / 2), 0)]  # mu
-            cst_val2 = [
-                np.where(obs_dist > 0, np.log(1 / (obs_dist * (2 * np.pi) ** 0.5)), 0) * cst_val1[
-                    0],
-                np.where(est_dist > 0, np.log(1 / (est_dist * (2 * np.pi) ** 0.5)), 0) * cst_val1[
-                    1]]  # sigma
-            par_val1, par_val2 = par_data[2], par_data[3]
-            fix_val1, fix_val2 = np.sum(obs_trip * cst_val1[0]), np.sum(obs_trip * cst_val2[0])
-            cur_val1, cur_val2 = np.sum(est_trip * cst_val1[1]), np.sum(est_trip * cst_val2[1])
-            gra_val1, gra_val2 = np.sum(obs_trip * cst_val1[0] - est_trip * cst_val1[1]), np.sum(
-                obs_trip * cst_val2[0] - est_trip * cst_val2[1])
-
-        else:
-            raise ValueError
-
-        con_val1 = np.where(fix_val1 != 0, np.abs(gra_val1 / fix_val1) * 100, 100)
-        con_val2 = np.where(fix_val2 != 0, np.abs(gra_val2 / fix_val2) * 100, 100)
-
-        # ## Calculate our estimating parameters and convergence factors
-        bs_con = max(1 - np.sum((est_trip - obs_trip) ** 2) / np.sum(
-            (obs_trip[1:] - np.sum(obs_trip) / (len(obs_trip) - 1)) ** 2), 0)
-
-        # Check if this coinvergence is better than previous best
-        if bs_con > max_r_sqr[4]:
-            if dist_function.lower() == 'tanner':
-                max_r_sqr[0], max_r_sqr[1] = par_val1, par_val2
-            else:
-                max_r_sqr[2], max_r_sqr[3] = par_val1, par_val2
-            max_r_sqr[4] = bs_con
-
-        # Log this iteration
-        log_dict = {'loop_number': str(loop_number),
-                    'fit_loop': str(ft_loop),
-                    'run_time': gm_time_taken,
-                    'par_val1': np.round(par_val1, 6),
-                    'par_val2': np.round(par_val2, 6),
-                    'abs_diff': np.round(abs_diff, 3),
-                    'obj_fun': np.round(obj_func, 3),
-                    'est_error': np.round(est_err, 3),
-                    'gra_val1': np.round(gra_val1, 3),
-                    'gra_val2': np.round(gra_val2, 3),
-                    'con_val1': np.round(con_val1, 6),
-                    'con_val2': np.round(con_val2, 6),
-                    'furness_loops': fn_loops,
-                    'pa_diff': np.round(pa_diff, 6),
-                    'bs_con': np.round(bs_con, 4)
-                    }
-
-        # Append this iteration to log file
-        file_ops.safe_dataframe_to_csv(pd.DataFrame(log_dict, index=[0]),
-                                       log_path,
-                                       mode='a',
-                                       header=(not os.path.exists(log_path)),
-                                       index=False)
-
-        # Break conditions
-        if np.isnan(pa_diff):
-            break
-        elif con_val1 <= target_r_gap and con_val2 <= target_r_gap:
-            break
-        elif bs_con >= bs_con_target:
-            break
-        elif par_val1 < min_val1 or par_val1 > max_val1 or par_val2 < min_val2 or par_val2 > max_val2 or np.sum(
-                internal_pa) == 0:
-            break
-        elif ft_loop == fitting_loops - 1:
-            break
-        else:
-            par_temp = [0, 0, 0, 0]
-            par_temp[0] = par_data[0] * (1 + min(max(gra_val1 / cur_val1, -0.5), 0.5))
-            par_temp[1] = par_data[1] * (1 + min(max(gra_val2 / cur_val2, -0.5), 0.5))
-            # sigma
-            par_temp[2] = par_data[2] * (1 + min(max(gra_val1 / cur_val1, -0.5), 0.5))
-            par_temp[3] = par_data[3] * (1 + min(max(gra_val2 / cur_val2, -0.5), 0.5))
-
-            if optimise:
-                opt_loop += 1
-                if opt_loop == 25:
-                    par_temp[0] = pre_data[0] + (0 - pre_val1) / (gra_val1 - pre_val1) * (
-                                par_data[0] - pre_data[0])
-                    par_temp[1] = pre_data[1] + (0 - pre_val2) / (gra_val2 - pre_val2) * (
-                                par_data[1] - pre_data[1])
-                    par_temp[2] = pre_data[2] + (0 - pre_val1) / (gra_val1 - pre_val1) * (
-                                par_data[2] - pre_data[2])
-                    par_temp[3] = pre_data[3] + (0 - pre_val2) / (gra_val2 - pre_val2) * (
-                                par_data[3] - pre_data[3])
-
-                    opt_loop = 0
-                if opt_loop == 15:
-                    pre_val1, pre_val2 = gra_val1, gra_val2
-                    pre_data = par_data * 1
-            par_data = par_temp
-
-    return [
-        internal_pa,
-        par_data,
-        [abs(gra_val1), abs(gra_val2)],
-        [con_val1, con_val2],
-        fn_loops,
-        bs_con,
-        max_r_sqr,
-    ]
-
-
-def run_furness(furness_loops,
-                origin,
-                destination,
-                par_data,
-                cost,
-                k_factors,
-                min_pa_diff=0.01):
-    """
-    Parameters
-    ----------
-    furness_loops:
-        Number of loops to run furness for
-
-    origin:
-        Vector of origin trips, usually productions for hb.
-
-    destination:
-        Vector of destination trips, usually attractions for hb.
-
-    par_data:
-        list of parameters in order alpha, beta, mu, sigma
-
-    cost:
-        Matrix of cost for distribution.
-
-    k_factors:
-        Vector of k factors for optimisation.
-
-    min_pa_diff:
-        Acceptable level of furness convergence. Default =0.1
-
-    Returns
-    ----------
-    mat_est:
-        Estimated converged matrix
-    fur_loop+1:
-        Number of furness loops before convergence
-    r_gap:
-        Achieved r gap at furness end.
-    """
-    gravity = True
-
-    # Unpack params
-    alpha, beta, mu, sigma = par_data
-
-    if alpha == 0 and beta == 0 and mu == 0 and sigma == 0:
-        gravity = False
-
-    # Tanner
-    if gravity:
-        mat_est = np.where(cost > 0,
-                           # Tanner
-                           (cost ** alpha) * np.exp(beta * cost) *
-                           # Log normal
-                           np.where(sigma > 0, (1 / (cost * sigma * (2 * np.pi) ** 0.5)) *
-                                    np.exp(-(np.log(cost) - mu) ** 2 / (2 * sigma ** 2)), 1),
-                           # K factor
-                           0) * k_factors
-
-    # Full furness
-    for fur_loop in range(furness_loops):
-
-        fur_loop += 1
-
-        mat_d = np.sum(mat_est, axis=0)
-        mat_d[mat_d == 0] = 1
-        mat_est = mat_est * destination / mat_d
-
-        mat_o = np.sum(mat_est, axis=1)
-        mat_o[mat_o == 0] = 1
-        mat_est = (mat_est.T * origin / mat_o).T
-
-        # Get pa diff
-        mat_o = np.sum(mat_est, axis=1)
-        mat_d = np.sum(mat_est, axis=0)
-        pa_diff = math_utils.get_pa_diff(mat_o,
-                                  origin,
-                                  mat_d,
-                                  destination)  # .max()
-
-        if pa_diff < min_pa_diff or np.isnan(np.sum(mat_est)):
-            break
-
-    return (mat_est,
-            fur_loop + 1,
-            pa_diff)
-
-
-def define_search_criteria(init_param_a,
-                           init_param_b,
-                           dist_function):
-    """
-    Sets search criteria for search loop depending on initial value and
-    fitting function.
-
-    Parameters
-    ----------
-    init_param_a:
-        First input param, will be alpha or mu.
-
-    init_param_b:
-        Second input param, will be beta or sigma.
-
-    dist_function:
-        Distribution function being used, should be 'tanner' or 'ln' for now.
-
-    Returns:
-    ----------
-    [0] alpha_search:
-        Vector of search terms for alpha.
-
-    [1] beta_search:
-        Vector of search terms for beta.
-
-    [2] mu_search:
-        Vector of search terms for mu.
-
-    [3] sigma_search:
-        Vector of search terms for param sigma.
-
-    [4] min_para:
-        Floor range of sensible terms for param a.
-
-    [5] max_para:
-        Ceiling range of sensible terms for param b.
-
-    """
-    # Assign blank lists in case nothing returns
-    alpha_search, beta_search, mu_search, sigma_search = [[0]] * 4
-
-    if dist_function == 'tanner':
-        alpha_search_factors = [1, -1, .5, -.5, 2, -2]
-        beta_search_factors = [1, -1]
-        # Multiply search range by input param to get search params
-        alpha_search = [x * init_param_a for x in alpha_search_factors]
-        beta_search = [x * init_param_b for x in beta_search_factors]
-        # Hard code min/max on what works
-        min_para = [-5, -5, 0, 0]
-        max_para = [5, 5, 0, 0]
-    elif dist_function == 'ln':
-        mu_search_factors = [1, .5, .2, 2, 5]
-        sigma_search_factors = [1, .5]
-        # Multiply search range by input param to get search params
-        mu_search = [x * init_param_a for x in mu_search_factors]
-        sigma_search = [x * init_param_b for x in sigma_search_factors]
-        # Hard code min/max on what works
-        min_para = [0, 0, 0, 0]
-        max_para = [0, 0, 9, 3]
-    else:
-        raise ValueError(
-            "Don't know what the dist function is %s"
-            % dist_function
+    if not equal:
+        raise TypeError(
+            "gravity_model() got one or more unexpected keyword arguments.\n"
+            "Received the following extra arguments: %s\n"
+            "While missing arguments: %s"
+            % (extra, missing)
         )
 
-    return (
-        alpha_search,
-        beta_search,
-        mu_search,
-        sigma_search,
-        min_para,
-        max_para,
+    # Calculate initial matrix through cost function
+    init_matrix = cost_function.calculate(costs, **cost_params)
+
+    # Furness trips to trip ends
+    matrix, iters, rmse = furness.doubly_constrained_furness(
+        seed_vals=init_matrix,
+        row_targets=row_targets,
+        col_targets=col_targets,
+        tol=furness_tol,
+        max_iters=furness_max_iters,
     )
 
-
-def param_check(min_para,
-                max_para,
-                alpha=0,
-                beta=0,
-                mu=0,
-                sig=0):
-    """
-    Checks that distribution params are within given range
-    """
-    return (
-        min_para[0] <= alpha <= max_para[0]
-        and min_para[1] <= beta <= max_para[1]
-        and min_para[2] <= mu <= max_para[2]
-        and min_para[3] <= sig <= max_para[3]
-    )
-
-
-def check_con_val(con_vals, target_r_gap):
-    """
-    Check convergence values are within acceptable range
-
-    con_vals:
-        Convergence values.
-    target_r_gap:
-        Acceptable gap
-    """
-
-    val_1 = False
-    val_2 = False
-
-    if 0 < con_vals[0] < max(10, target_r_gap):
-        val_1 = True
-    if 0 < con_vals[1] < max(10, target_r_gap):
-        val_2 = True
-
-    if val_1 and val_2:
-        return True
-    else:
-        return False
-
-
-def unpack_tlb(tlb):
-    """
-    Function to unpack a trip length band table into constituents.
-    Parameters
-    ----------
-    tlb:
-        A trip length band DataFrame
-    Returns
-    ----------
-    min_dist:
-        ndarray of minimum distance by band
-    max_dist:
-        ndarray of maximum distance by band
-    obs_trip:
-        Band share by band as fraction of 1
-    obs_dist:
-
-    """
-    _M_KM = 1.61
-
-    # Convert miles from raw NTS to km
-    min_dist = tlb['lower'].astype('float').to_numpy() * _M_KM
-    max_dist = tlb['upper'].astype('float').to_numpy() * _M_KM
-    obs_trip = tlb['band_share'].astype('float').to_numpy()
-    # TODO: Check that this works!!
-    obs_dist = tlb['ave_km'].astype(float).to_numpy()
-
-    return min_dist, max_dist, obs_trip, obs_dist
+    return matrix, iters, rmse
 

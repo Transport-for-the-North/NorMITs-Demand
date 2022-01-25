@@ -14,14 +14,18 @@ from normits_demand.utils.general import NormitsDemandError
 from normits_demand.utils.general import ExternalForecastSystemError
 from normits_demand.utils.general import InitialisationError
 from normits_demand.audits.audits import AuditError
-from normits_demand.elasticity import ElasticityError
+from normits_demand.errors import *
 from normits_demand.core.zoning import ZoningError
 from normits_demand.core.segments import SegmentationError
 from normits_demand.core.data_structures import DVectorError
 from normits_demand.pathing.errors import PathingError
 
-# Core enumerations
-from normits_demand.core.enumerations import Mode
+# Core Functionality
+from normits_demand.core import *
+
+# Costs
+from normits_demand.cost.cost_functions import BuiltInCostFunction
+from normits_demand.distribution import DistributionMethod
 
 # ## EXPOSE CLASS LAYER ## #
 # EFS Class Layer
@@ -34,14 +38,6 @@ from normits_demand.models.elasticity_model import ElasticityModel
 
 # NoTEM Class Layer
 from normits_demand.models.notem import NoTEM
-
-# Core getters
-from normits_demand.core import get_zoning_system
-from normits_demand.core import get_segmentation_level
-
-# Core classes
-from normits_demand.core import DVector
-
 
 # Useful utilities
 from normits_demand.utils import read_df
