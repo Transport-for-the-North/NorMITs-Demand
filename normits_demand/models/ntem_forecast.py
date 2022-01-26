@@ -219,8 +219,17 @@ class NTEMImportMatrices:
 
 
 ##### FUNCTIONS #####
+def _split_dvector(
+    dvector: nd_core.DVector
+) -> Tuple[nd_core.DVector, nd_core.DVector]:
+    # TODO(MB) Function should split a DVector into two,
+    # one for internal zones and one for external
+    raise NotImplementedError("WIP!")
+
+
 def trip_end_growth(
-    tempro_vectors: Dict[int, nd_core.DVector]
+    tempro_vectors: Dict[int, nd_core.DVector],
+    model_zone_system: str,
 ) -> Dict[int, nd_core.DVector]:
     """Calculate growth at LAD level and return it a `tempro_vectors` zone system.
 
@@ -234,11 +243,14 @@ def trip_end_growth(
         Trip end vectors from TEMPro for all study years,
         keys should be years and must include
         `normits_demand.efs_constants.BASE_YEAR`.
+    model_zone_system : str
+        Name of the zone system to convert the
+        TEMPro growth factors to.
 
     Returns
     -------
     Dict[int, nd_core.DVector]
-        Trip end growth factors in same zone system as
+        Trip end growth factors in `model_zone_system` as
         `tempro_vectors` base year, contains all years
         from `tempro_vectors` except the base year.
 
@@ -252,29 +264,41 @@ def trip_end_growth(
         raise NTEMForecastError(
             f"base year ({efs_consts.BASE_YEAR}) data not given"
         )
-    old_zone = tempro_vectors[efs_consts.BASE_YEAR].zoning_system
     growth_zone = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
-    base_data = tempro_vectors[efs_consts.BASE_YEAR
-                              ].translate_zoning(growth_zone)
-    # Convert to LADs and calculate growth from base year
+    model_zoning = nd_core.get_zoning_system(model_zone_system)
+    # Split data into internal and external DVectors
+    # for different growth calculations
+    areas = ("internal", "external")
+    base_data = dict(
+        zip(areas, _split_dvector(tempro_vectors[efs_consts.BASE_YEAR]))
+    )
+    base_data["internal"] = base_data["internal"].translate_zoning(growth_zone)
+    base_data["external"] = base_data["external"].translate_zoning(model_zoning)
+
     growth = {}
     # Ignore divide by zero warnings and fill with zeros
     with np.errstate(divide="ignore", invalid="ignore"):
         for yr, data in tempro_vectors.items():
             if yr == efs_consts.BASE_YEAR:
                 continue
-            data = data.translate_zoning(growth_zone) / base_data
-            # Set any nan or inf values created by dividing by 0 to 0 growth
-            data = data.segment_apply(
-                np.nan_to_num, nan=0.0, posinf=0.0, neginf=0.0
-            )
-            # Translate back to original zone system, without using
-            # weighting factors i.e. weighting factors of 1
-            growth[yr] = data.translate_zoning(old_zone, weighting="no_weight")
+            forecast = dict(zip(areas, _split_dvector(data)))
+            for a in areas:
+                forecast[a] = forecast[a].translate_zoning(
+                    growth_zone if a == "internal" else model_zoning
+                )
+                forecast[a] = forecast[a] / base_data[a]
+                # Set any nan or inf values created by dividing by 0 to 0 growth
+                forecast[a] = forecast[a].segment_apply(
+                    np.nan_to_num, nan=0.0, posinf=0.0, neginf=0.0
+                )
+                if a == "internal":
+                    forecast[a] = forecast[a].translate_zoning(model_zoning)
+            # TODO(MB) Combine the internal and external factors back together
+            growth[yr] = NotImplemented
     return growth
 
 
-def tempro_growth(tempro_data: TEMProTripEnds) -> TEMProTripEnds:
+def tempro_growth(tempro_data: TEMProTripEnds, model_zone_system: str,) -> TEMProTripEnds:
     """Calculate LAD growth factors and return at original zone system.
 
     Growth factors are calculated at LAD level but are
@@ -284,6 +308,9 @@ def tempro_growth(tempro_data: TEMProTripEnds) -> TEMProTripEnds:
     ----------
     tempro_data : TEMProTripEnds
         TEMPro trip end data for all study years.
+    model_zone_system : str
+        Name of the zone system to convert the
+        TEMPro growth factors to.
 
     Returns
     -------
@@ -304,7 +331,7 @@ def tempro_growth(tempro_data: TEMProTripEnds) -> TEMProTripEnds:
     for segment in dataclasses.fields(TEMProTripEnds):
         LOG.info("Calculating TEMPro trip end growth for %s", segment.name)
         grown[segment.name
-             ] = trip_end_growth(getattr(tempro_data, segment.name))
+             ] = trip_end_growth(getattr(tempro_data, segment.name), model_zone_system)
     return TEMProTripEnds(**grown)
 
 
@@ -396,63 +423,6 @@ def _check_matrix(
         LOG.error(err)
 
 
-def _target_proportions(
-    matrix: pd.DataFrame,
-    internals: np.ndarray,
-    targets: Dict[str, pd.Series],
-) -> Tuple[Dict[str, pd.Series], Dict[str, pd.Series]]:
-    """Calculate proportion of trip end `targets` for the internal and external zones.
-
-    Use the `matrix` internal trip end totals as a proportion
-    of the full `matrix` trip end totals to calculate internal
-    targets. Internal and external targets should sum to the
-    total `targets`.
-
-    Parameters
-    ----------
-    matrix : pd.DataFrame
-        Matrix to use for calculating the internal proportion.
-    internals : np.ndarray
-        The zones in the `matrix` which are internal.
-    targets : Dict[str, pd.Series]
-        The row and column trip end targets, should have keys
-        "row_targets" and "col_targets".
-
-    Returns
-    -------
-    Dict[str, pd.Series]
-        Internal targets dictionary, same format as `targets`.
-    Dict[str, pd.Series]
-        External targets dictionary, same format as `targets`.
-    """
-    internal_targets = {}
-    external_targets = {}
-    for i, nm in enumerate(("row", "col")):
-        int_totals = matrix.loc[internals, internals].sum(axis=i)
-        totals = matrix.sum(axis=i)
-        int_proportion = (int_totals / totals).fillna(0)
-        name = f"{nm}_targets"
-        internal_targets[name] = (
-            targets[name].loc[internals] * int_proportion.loc[internals]
-        )
-        internal_targets[name].name = targets[name].name
-        external_targets[name] = targets[name] * (1 - int_proportion)
-        external_targets[name].name = targets[name].name
-    return (
-        _trip_end_totals("Internal", **internal_targets),
-        _trip_end_totals("External", **external_targets),
-    )
-
-
-def _finite_series(series: pd.Series):
-    """Replace non-finite values in series with 0."""
-    return pd.Series(
-        np.nan_to_num(series, nan=0.0, posinf=0.0, neginf=0.0),
-        index=series.index,
-        name=series.name,
-    )
-
-
 def grow_matrix(
     matrix: pd.DataFrame,
     output_path: Path,
@@ -489,12 +459,16 @@ def grow_matrix(
         Trip `matrix` grown to match target `attractions`
         and `productions`.
     """
-    # Get single segment as a Series from DVectors
-    targets = {}
+    # Calculate internal-internal target trip ends by
+    # applying growth to matrix trip ends
+    internals = attractions.zoning_system.internal_zones
+    int_targets = {}
     growth = {}
-    dvectors = {"row_targets": productions, "col_targets": attractions}
-    for nm, dvec in dvectors.items():
-        mat_te = matrix.sum(axis=1 if nm == "row_targets" else 0)
+    dvectors = ("row_targets", productions), ("col_targets", attractions)
+    for nm, dvec in dvectors:
+        mat_te = matrix.loc[internals, internals].sum(
+            axis=1 if nm == "row_targets" else 0
+        )
         mat_te.name = "base_trips"
         mat_te.index.name = "model_zone_id"
         growth[nm] = pd.Series(
@@ -503,16 +477,12 @@ def grow_matrix(
             name="growth",
         )
         growth[nm].index.name = "model_zone_id"
-        targets[nm] = pd.concat([growth[nm], mat_te], axis=1)
-        # Calculate target trip end growth from base matrix
-        targets[nm].loc[:, "trips"] = (
-            targets[nm]["growth"] * targets[nm]["base_trips"]
+        int_targets[nm] = pd.concat([growth[nm], mat_te], axis=1)
+        int_targets[nm].loc[:, "trips"] = (
+            int_targets[nm]["growth"] * int_targets[nm]["base_trips"]
         )
-        targets[nm] = targets[nm]["trips"]
+        int_targets[nm] = int_targets[nm]["trips"]
 
-    # Get internal targets only and factor to the same totals
-    internals = attractions.zoning_system.internal_zones
-    int_targets, ext_targets = _target_proportions(matrix, internals, targets)
     # Distribute internal demand with 2D furnessing, targets
     # converted to DataFrames for this function
     int_future, iters, rms = furness.furness_pandas_wrapper(
@@ -528,10 +498,8 @@ def grow_matrix(
     )
     # Factor external demand to row and column targets, make sure
     # row and column targets have the same totals
-    col_factors = ext_targets["col_targets"] / matrix.sum(axis=0)
-    ext_future = matrix.mul(_finite_series(col_factors), axis="columns")
-    row_factors = ext_targets["row_targets"] / ext_future.sum(axis=1)
-    ext_future = ext_future.mul(_finite_series(row_factors), axis="index")
+    ext_future = matrix.mul(growth["col_targets"], axis="columns")
+    ext_future = ext_future.mul(growth["row_targets"], axis="index")
     # Set internal zones in factored matrix to 0 and add internal furnessed
     ext_future.loc[internals, internals] = 0
     combined_future = pd.concat([int_future, ext_future], axis=0)
@@ -684,7 +652,6 @@ def _pa_growth_comparison(
 def grow_all_matrices(
     matrices: NTEMImportMatrices,
     growth: TEMProTripEnds,
-    model: str,
     output_folder: Path,
 ) -> None:
     """Grow all base year `matrices` to all forecast years in `trip_ends`.
@@ -694,7 +661,9 @@ def grow_all_matrices(
     matrices : NTEMImportMatrices
         Paths to the base year PostME matrices.
     trip_ends : TEMProTripEnds
-        TEMPro growth factors for all forecast years.
+        TEMPro growth factors for all forecast years,
+        these factors should be in the same zone system
+        as the `matrices`.
     model : str
         Name of the model e.g. 'noham'.
     output_folder : Path
@@ -710,11 +679,6 @@ def grow_all_matrices(
     --------
     grow_matrix: for growing a single matrix.
     """
-    zone_translation_weights = {
-        **dict.fromkeys(("hb_attractions", "nhb_attractions"), "employment"),
-        **dict.fromkeys(("hb_productions", "nhb_productions"), "population"),
-    }
-    growth = growth.translate_zoning(model, weighting=zone_translation_weights)
     iterator = {
         "hb": (
             matrices.hb_paths,

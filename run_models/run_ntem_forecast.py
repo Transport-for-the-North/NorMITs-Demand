@@ -201,7 +201,7 @@ def main(params: NTEMForecastParameters):
 
     tempro_data = get_tempro_data()
     tempro_data = model_mode_subset(tempro_data, params.model_name)
-    tempro_growth = ntem_forecast.tempro_growth(tempro_data)
+    tempro_growth = ntem_forecast.tempro_growth(tempro_data, params.model_name)
     tempro_growth.save(params.export_path / "TEMPro Growth Factors")
 
     ntem_inputs = ntem_forecast.NTEMImportMatrices(
