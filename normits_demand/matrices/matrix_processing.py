@@ -69,8 +69,9 @@ def _aggregate(import_dir: str,
 
     if in_fnames == list():
         raise nd.NormitsDemandError(
-            "Couldn't find any matrices to aggregate up to create %s!"
-            % os.path.basename(export_path)
+            "Couldn't find any matrices to aggregate up to create %s!\n"
+            "Looking in %s"
+            % (os.path.basename(export_path), import_dir)
         )
 
     for fname in in_fnames:
@@ -384,8 +385,7 @@ def aggregate_matrices(import_dir: str,
     multiprocessing.multiprocess(
         fn=_aggregate_matrices_internal,
         kwargs=kwarg_list,
-        # process_count=process_count,
-        process_count=0,
+        process_count=process_count,
 
     )
 
