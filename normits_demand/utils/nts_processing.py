@@ -9,12 +9,15 @@ import os
 import pandas as pd
 
 from normits_demand import constants
-
+from normits_demand.utils import file_ops
 
 class NTSTripLengthBuilder:
     def __init__(self,
                  tlb_folder=None,
                  nts_import=None):
+
+        # TODO: Would be good if the options were parsed by the object first,
+        # then you could choose to run all instead of 1x1
 
         self.tlb_folder = tlb_folder
         self.nts_import = nts_import
@@ -30,9 +33,10 @@ class NTSTripLengthBuilder:
             for (i, option) in enumerate(band_options, 0):
                 print(i, option)
             selection_b = input('Choose bands to aggregate by (index): ')
+            band_text = band_options[int(selection_b)]
 
             bands = pd.read_csv(os.path.join(tlb_folder,
-                                             band_options[int(selection_b)]))
+                                             band_text))
             print('%d bands in selected' % len(bands))
             print(bands)
 
@@ -43,6 +47,7 @@ class NTSTripLengthBuilder:
 
         # Get user to select segmentation
         seg_options = [x for x in os.listdir(tlb_folder) if 'segment' in x]
+        seg_options = [x for x in seg_options if '.csv' in x]
         if len(seg_options) == 0:
             raise ValueError('no target segmentations in folder')
 
@@ -51,8 +56,10 @@ class NTSTripLengthBuilder:
             for (i, option) in enumerate(seg_options, 0):
                 print(i, option)
             selection_s = input('Choose segments to aggregate by (index): ')
+            segments_text = seg_options[int(selection_s)]
+
             segments = pd.read_csv(os.path.join(tlb_folder,
-                                                seg_options[int(selection_s)]))
+                                                segments_text))
             print('%d total segments in selected' % len(segments))
             for index, row in segments.iterrows():
                 print(row)
@@ -67,27 +74,98 @@ class NTSTripLengthBuilder:
         selection_g = input('Choose geo-area (index): ')
         self.geo_area = constants.GEO_AREAS[int(selection_g)]
 
+        print('Filter by household (home) or OD locations (gor)')
+        for (i, option) in enumerate(constants.REGION_FILTER_TYPES, 0):
+            print(i, option)
+        selection_r = input('How to apply region filter: ')
+        self.region_filter = constants.REGION_FILTER_TYPES[int(selection_r)]
+
         self.export = os.path.join(
             self.tlb_folder,
             self.geo_area,
-            'sandbox')
+            self.region_filter,
+            band_text.replace(' ', '_').replace('(', '').replace(')', '').replace('.csv',''),
+            segments_text.replace(' ', '_').replace('(', '').replace(')', '').replace('.csv',''))
 
-        print('Loading processed NTS data from:')
-        print(nts_import)
+        file_ops.create_folder(self.export)
+
+
+        print('Loading processed NTS data from %s' % nts_import)
         self.nts_import = pd.read_csv(nts_import)
         self.nts_import['weighted_trip'] = self.nts_import['W1'] * self.nts_import['W5xHH'] * self.nts_import['W2']
+
+    def _apply_geo_filter(self,
+                          output_dat):
+        """
+        output_dat: processed NTS data
+
+        if region filter is based on home, filters on a UA subset
+        if it's based on trip ends (gor) filters on trip O/D
+        """
+        # If region filters are home end, filter by LA
+        if self.region_filter == 'home':
+
+            if self.geo_area == 'north':
+                output_dat = output_dat[
+                    output_dat['HHoldOSLAUA_B01ID'].isin(
+                        constants.NORTH_LA)]
+                output_dat = output_dat.reset_index(drop=True)
+            elif self.geo_area == 'north_and_mids':
+                output_dat = output_dat[
+                    output_dat['HHoldOSLAUA'].isin(
+                        constants.NORTH_AND_MID_LA)]
+                output_dat = output_dat.reset_index(drop=True)
+            elif self.geo_area == 'north_incl_ie':
+                raise ValueError('i/e filter not compatible with home end filter')
+
+        elif self.region_filter == 'gor':
+
+            if self.geo_area == 'north':
+                # From O/D filter
+                output_dat = output_dat[
+                    output_dat['TripOrigGOR_B02ID'].isin(
+                        constants.NORTH_GOR)]
+                output_dat = output_dat.reset_index(drop=True)
+                # To O/D filter
+                output_dat = output_dat[
+                    output_dat['TripDestGOR_B02ID'].isin(
+                        constants.NORTH_GOR)]
+                output_dat = output_dat.reset_index(drop=True)
+            elif self.geo_area == 'north_incl_ie':
+                # From filter only
+                output_dat = output_dat[
+                    output_dat['TripOrigGOR_B02ID'].isin(
+                        constants.NORTH_GOR)]
+                output_dat = output_dat.reset_index(drop=True)
+            elif self.geo_area == 'north_and_mids':
+                output_dat = output_dat[
+                    output_dat['TripOrigGOR_B02ID'].isin(
+                        constants.NORTH_AND_MID_GOR)]
+                output_dat = output_dat.reset_index(drop=True)
+                # To O/D filter
+                output_dat = output_dat[
+                    output_dat['TripDestGOR_B02ID'].isin(
+                        constants.NORTH_AND_MID_GOR)]
+                output_dat = output_dat.reset_index(drop=True)
+            elif self.geo_area == 'north_and_mids_incl_ie':
+                output_dat = output_dat[
+                    output_dat['TripOrigGOR_B02ID'].isin(
+                        constants.NORTH_AND_MID_GOR)]
+        return output_dat
+
 
     def run_tlb_lookups(self,
                         weekdays=[1, 2, 3, 4, 5],
                         agg_purp=[13, 14, 15, 18],
                         write=True):
         """
+        weekdays: list of ints to consider default 1:5:
 
+        agg_purp: purposes to aggregate
+
+        region_filter: how to do regional subsets
         """
         # TODO: Need smart aggregation based on sample size threshold
-
-        north_la = constants.NORTH_LA
-        north_and_mids_la = constants.NORTH_AND_MID_LA
 
         # Set target cols
         target_cols = ['SurveyYear', 'TravelWeekDay_B01ID', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc_cat',
@@ -149,11 +227,8 @@ class NTSTripLengthBuilder:
             output_dat['TravelWeekDay_B01ID'].isin(weekdays)].reset_index(drop=True)
         records.append(len(output_dat))
 
-        # Geo filter
-        if self.geo_area == 'north':
-            output_dat = output_dat[
-                output_dat['HHoldOSLAUA_B01ID'].isin(
-                    north_la)].reset_index(drop=True)
+        # Geo filter on self.region_filter and self.geo_area
+        output_dat = self._apply_geo_filter(output_dat)
 
         out_mat = []
         for index, row in self.target_segmentation.iterrows():

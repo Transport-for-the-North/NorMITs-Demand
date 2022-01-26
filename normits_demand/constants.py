@@ -107,7 +107,7 @@ NORMS_VDM_MATRIX_NAMES = list(NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING.keys())
 # USEFUL GEO CONSTANTS
 # LAs in North area
 
-GEO_AREAS = ['gb', 'north', 'north_incl_ie', 'north_and_mids']
+GEO_AREAS = ['gb', 'north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie']
 
 NORTH_LA = [
     'E06000001', 'E06000002', 'E06000003', 'E06000004', 'E06000005',
@@ -153,6 +153,12 @@ NORTH_AND_MID_LA = NORTH_LA.copy()
 NORTH_AND_MID_LA = NORTH_AND_MID_LA + [x for x in MID_LA]
 NORTH_AND_MID_LA = list(set(NORTH_AND_MID_LA))
 
+REGION_FILTER_TYPES = ['home', 'gor']
+
+NORTH_GOR = [1, 2, 3]
+
+NORTH_AND_MID_GOR = [1, 2, 3, 4, 5]
+
 # TfN area type to aggregate area type
 AGG_AT = {
     'tfn_area_type': [1, 2, 3, 4, 5, 6, 7, 8],
@@ -195,5 +201,6 @@ HB_USER_CLASS_PURPOSES = {
 geo_areas = {
     0: 'north only',
     1: 'north including i/e',
-    2: 'gb'
+    2: 'north including midlands',
+    3: 'gb'
 }
