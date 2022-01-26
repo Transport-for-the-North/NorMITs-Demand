@@ -698,29 +698,29 @@ class ExternalForecastSystem:
             du.create_folder(path, verbose=False)
 
         # Distribute the internal trips, write to disk
-        # self._distribute_internal_demand(
-        #     p_vector=model_p_vector,
-        #     nhb_p_vector=model_nhb_p_vector,
-        #     a_vector=model_a_vector,
-        #     nhb_a_vector=model_nhb_a_vector,
-        #     years_needed=year_list,
-        #     hb_p_needed=hb_purposes_needed,
-        #     nhb_p_needed=nhb_purposes_needed,
-        #     m_needed=modes_needed,
-        #     soc_needed=soc_needed,
-        #     ns_needed=ns_needed,
-        #     ca_needed=car_availabilities_needed,
-        #     zone_col=model_zone_col,
-        #     internal_zones_path=self.imports['internal_zones'],
-        #     seed_dist_dir=self.imports['decomp_post_me'],
-        #     seed_infill=0,
-        #     normalise_seeds=False,
-        #     dist_out=int_dir,
-        #     report_out=self.exports['dist_reports'],
-        #     csv_out=False,
-        #     compress_out=True,
-        #     verbose=echo_distribution
-        # )
+        self._distribute_internal_demand(
+            p_vector=model_p_vector,
+            nhb_p_vector=model_nhb_p_vector,
+            a_vector=model_a_vector,
+            nhb_a_vector=model_nhb_a_vector,
+            years_needed=year_list,
+            hb_p_needed=hb_purposes_needed,
+            nhb_p_needed=nhb_purposes_needed,
+            m_needed=modes_needed,
+            soc_needed=soc_needed,
+            ns_needed=ns_needed,
+            ca_needed=car_availabilities_needed,
+            zone_col=model_zone_col,
+            internal_zones_path=self.imports['internal_zones'],
+            seed_dist_dir=self.imports['decomp_post_me'],
+            seed_infill=0,
+            normalise_seeds=False,
+            dist_out=int_dir,
+            report_out=self.exports['dist_reports'],
+            csv_out=False,
+            compress_out=True,
+            verbose=echo_distribution
+        )
 
         # Distribute the external trips, write to disk
         # DO NOT INCLUDE EG in external
@@ -1515,7 +1515,7 @@ class ExternalForecastSystem:
             # TODO: Create 24hr OD for HB
 
     def compile_matrices(self,
-                         year: int,
+                         years: List[int],
                          m_needed: List[int] = efs_consts.MODES_NEEDED,
                          tp_needed: List[int] = efs_consts.TIME_PERIODS,
                          round_dp: int = consts.DEFAULT_ROUNDING,
@@ -1568,18 +1568,19 @@ class ExternalForecastSystem:
                 import_dir=self.exports['od'],
                 export_dir=self.params['compile'],
                 matrix_format='od',
-                years_needed=[year],
+                years_needed=years,
                 m_needed=m_needed,
                 ca_needed=ca_needed,
                 tp_needed=tp_needed,
             )
 
-            mat_p.compile_matrices(
-                mat_import=self.exports['od'],
-                mat_export=self.exports['compiled_od'],
-                compile_params_path=compile_params_paths[0],
-                round_dp=round_dp,
-            )
+            for path in compile_params_paths:
+                mat_p.compile_matrices(
+                    mat_import=self.exports['od'],
+                    mat_export=self.exports['compiled_od'],
+                    compile_params_path=path,
+                    round_dp=round_dp,
+                )
             
             car_occupancies = pd.read_csv(os.path.join(
                 self.imports['home'],
@@ -1605,18 +1606,19 @@ class ExternalForecastSystem:
             path = os.path.join(self.imports['params'], fname)
             from_to_split_factors = pd.read_pickle(path)
 
-            # Compile
-            mat_p.compile_norms_to_vdm(
-                mat_import=self.exports[pa_import],
-                mat_export=self.exports['compiled_pa'],
-                params_export=self.params['compile'],
-                year=year,
-                m_needed=m_needed,
-                internal_zones=self.model_internal_zones,
-                external_zones=self.model_external_zones,
-                matrix_format='pa',
-                from_to_split_factors=from_to_split_factors,
-            )
+            for year in years:
+                # Compile
+                mat_p.compile_norms_to_vdm(
+                    mat_import=self.exports[pa_import],
+                    mat_export=self.exports['compiled_pa'],
+                    params_export=self.params['compile'],
+                    year=year,
+                    m_needed=m_needed,
+                    internal_zones=self.model_internal_zones,
+                    external_zones=self.model_external_zones,
+                    matrix_format='pa',
+                    from_to_split_factors=from_to_split_factors,
+                )
         else:
             raise ValueError(
                 "Not sure how to compile matrices for model %s"
