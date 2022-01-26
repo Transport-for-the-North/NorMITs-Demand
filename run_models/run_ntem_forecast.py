@@ -54,7 +54,7 @@ class NTEMForecastParameters:
     """
     import_path: Path = Path("I:/NorMITs Demand/import")
     model_name: str = "noham"
-    iteration: str = "1a"
+    iteration: str = "1c"
     export_path_fmt: str = "I:/NorMITs Demand/{model_name}/NTEM/iter{iteration}"
     export_path_params: Dict[str, Any] = None
     _export_path: Path = dataclasses.field(default=None, init=False, repr=False)
@@ -201,8 +201,8 @@ def main(params: NTEMForecastParameters):
 
     tempro_data = get_tempro_data()
     tempro_data = model_mode_subset(tempro_data, params.model_name)
-    future_tempro = ntem_forecast.grow_tempro_data(tempro_data)
-    future_tempro.save(params.export_path / "TEMProForecasts")
+    tempro_growth = ntem_forecast.tempro_growth(tempro_data)
+    tempro_growth.save(params.export_path / "TEMPro Growth Factors")
 
     ntem_inputs = ntem_forecast.NTEMImportMatrices(
         params.import_path,
@@ -212,7 +212,7 @@ def main(params: NTEMForecastParameters):
     pa_folder = params.export_path / "Matrices" / "PA"
     ntem_forecast.grow_all_matrices(
         ntem_inputs,
-        future_tempro,
+        tempro_growth,
         params.model_name,
         pa_folder,
     )

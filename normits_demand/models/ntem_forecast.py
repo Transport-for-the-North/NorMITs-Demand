@@ -8,7 +8,7 @@
 import dataclasses
 import re
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Union
 
 # Third party imports
 import numpy as np
@@ -274,52 +274,11 @@ def trip_end_growth(
     return growth
 
 
-def grow_trip_ends(
-    tempro_vectors: Dict[int, nd_core.DVector]
-) -> Dict[int, nd_core.DVector]:
-    """Grow TEMPro trip ends based on LAD growth.
+def tempro_growth(tempro_data: TEMProTripEnds) -> TEMProTripEnds:
+    """Calculate LAD growth factors and return at original zone system.
 
-    Growth factors are calculated at `LAD_ZONE_SYSTEM`
-    level but applied at the original zone system.
-
-    Parameters
-    ----------
-    tempro_vectors : Dict[int, nd_core.DVector]
-        Trip end vectors from TEMPro for all study years,
-        keys should be years and must include
-        `normits_demand.efs_constants.BASE_YEAR`.
-
-    Returns
-    -------
-    Dict[int, nd_core.DVector]
-        Future trip ends in same zone system as `tempro_vectors`
-        base year, contains all years from `tempro_vectors`
-        except the base year.
-
-    Raises
-    ------
-    ValueError
-        If `normits_demand.efs_constants.BASE_YEAR` is not
-        in `tempro_vectors`.
-
-    See Also
-    --------
-    trip_end_growth : for growth factor calculation
-    """
-    # Calculate growth at LAD level
-    te_growth = trip_end_growth(tempro_vectors)
-    base_data = tempro_vectors[efs_consts.BASE_YEAR]
-    future = {}
-    for yr, growth in te_growth.items():
-        future[yr] = base_data * growth
-    return future
-
-
-def grow_tempro_data(tempro_data: TEMProTripEnds) -> TEMProTripEnds:
-    """Calculate LAD growth factors and use them to grow `tempro_data`.
-
-    Growth factors are calculated at LAD level but are applied
-    to the `tempro_data` at MSOA level.
+    Growth factors are calculated at LAD level but are
+    returned at original zone system.
 
     Parameters
     ----------
@@ -329,18 +288,13 @@ def grow_tempro_data(tempro_data: TEMProTripEnds) -> TEMProTripEnds:
     Returns
     -------
     TEMProTripEnds
-        Forecasted TEMPro trip ends for all future
-        years.
+        TEMPro trip end growth factors for
+        all future years.
 
     Raises
     ------
     NTEMForecastError
         If `tempro_data` isn't an instance of `TEMProTripEnds`.
-
-    See Also
-    --------
-    grow_trip_ends: which will grow trip ends for all years for
-        a single dictionary e.g. `hb_attractions`.
     """
     if not isinstance(tempro_data, TEMProTripEnds):
         raise NTEMForecastError(
@@ -349,7 +303,8 @@ def grow_tempro_data(tempro_data: TEMProTripEnds) -> TEMProTripEnds:
     grown = {}
     for segment in dataclasses.fields(TEMProTripEnds):
         LOG.info("Calculating TEMPro trip end growth for %s", segment.name)
-        grown[segment.name] = grow_trip_ends(getattr(tempro_data, segment.name))
+        grown[segment.name
+             ] = trip_end_growth(getattr(tempro_data, segment.name))
     return TEMProTripEnds(**grown)
 
 
@@ -505,7 +460,7 @@ def grow_matrix(
     attractions: nd_core.DVector,
     productions: nd_core.DVector,
 ) -> pd.DataFrame:
-    """Grow `matrix` to trip end totals and save to `output_path`.
+    """Grow `matrix` based on given growth factors and save to `output_path`.
 
     Internal growth is done using a 2D furness and
     external growth is done by factoring the rows,
@@ -522,10 +477,10 @@ def grow_matrix(
         Name of the segment being grown, format
         `{purpose}_{mode}` e.g. `2_3`.
     attractions : nd_core.DVector
-        DVector for the attractions trip ends,
+        DVector for the attractions growth factors,
         should be the same zone system as matrix.
     productions : nd_core.DVector
-        DVector for the productions trip ends,
+        DVector for the productions growth factors,
         should be the same zone system as matrix.
 
     Returns
@@ -536,14 +491,24 @@ def grow_matrix(
     """
     # Get single segment as a Series from DVectors
     targets = {}
+    growth = {}
     dvectors = {"row_targets": productions, "col_targets": attractions}
     for nm, dvec in dvectors.items():
-        targets[nm] = pd.Series(
+        mat_te = matrix.sum(axis=1 if nm == "row_targets" else 0)
+        mat_te.name = "base_trips"
+        mat_te.index.name = "model_zone_id"
+        growth[nm] = pd.Series(
             dvec.get_segment_data(segment_name),
             index=dvec.zoning_system.unique_zones,
-            name="trips",
+            name="growth",
         )
-        targets[nm].index.name = "model_zone_id"
+        growth[nm].index.name = "model_zone_id"
+        targets[nm] = pd.concat([growth[nm], mat_te], axis=1)
+        # Calculate target trip end growth from base matrix
+        targets[nm].loc[:, "trips"] = (
+            targets[nm]["growth"] * targets[nm]["base_trips"]
+        )
+        targets[nm] = targets[nm]["trips"]
 
     # Get internal targets only and factor to the same totals
     internals = attractions.zoning_system.internal_zones
@@ -563,9 +528,9 @@ def grow_matrix(
     )
     # Factor external demand to row and column targets, make sure
     # row and column targets have the same totals
-    col_factors = ext_targets["col_targets"] / matrix.sum(axis=1)
+    col_factors = ext_targets["col_targets"] / matrix.sum(axis=0)
     ext_future = matrix.mul(_finite_series(col_factors), axis="columns")
-    row_factors = ext_targets["row_targets"] / ext_future.sum(axis=0)
+    row_factors = ext_targets["row_targets"] / ext_future.sum(axis=1)
     ext_future = ext_future.mul(_finite_series(row_factors), axis="index")
     # Set internal zones in factored matrix to 0 and add internal furnessed
     ext_future.loc[internals, internals] = 0
@@ -575,12 +540,150 @@ def grow_matrix(
     # Write future to file
     file_ops.write_df(combined_future, output_path)
     LOG.info("Written: %s", output_path)
+    _pa_growth_comparison(
+        {
+            "base": matrix,
+            "forecast": combined_future
+        },
+        {
+            "attractions": growth["col_targets"],
+            "productions": growth["row_targets"]
+        },
+        internals,
+        output_path.with_name(output_path.stem + "-growth_comparison.xlsx"),
+    )
     return combined_future
+
+
+def _pa_growth_comparison(
+    matrices: Dict[str, pd.DataFrame],
+    growth_data: Dict[str, pd.Series],
+    internals: np.ndarray,
+    output_path: Path,
+) -> Dict[str, Union[pd.DataFrame, float]]:
+    """Write summary spreadsheet for PA matrix growth.
+
+    Parameters
+    ----------
+    matrices : Dict[str, pd.DataFrame]
+        Base and forecast PA matrices, should contain
+        keys "base" and "forecast".
+    growth_data : Dict[str, pd.Series]
+        TEMPro trip end growth factors, should contain
+        keys "attractions" and "productions".
+    internals : np.ndarray
+        Array containing the internal zone numbers.
+    output_path : Path
+        Path to Excel file to create.
+
+    Returns
+    -------
+    Dict[str, Union[pd.DataFrame, float]]
+        Dictionary containing various summary
+        growth statistics that are written to
+        the Excel file.
+
+    Raises
+    ------
+    NTEMForecastError
+        - If any of the input dictionaries don't
+          contain the correct keys.
+        - If the indices for the input matrices and
+          growth factors aren't identical.
+    """
+    # Check dictionary keys and DataFrame/Series indices
+    missing = [k for k in ("base", "forecast") if k not in matrices]
+    if missing:
+        raise NTEMForecastError(
+            f"matrices dictionary is missing key(s): {missing}"
+        )
+    missing = [
+        k for k in ("attractions", "productions") if k not in growth_data
+    ]
+    if missing:
+        raise NTEMForecastError(
+            f"growth_data dictionary is missing key(s): {missing}"
+        )
+    for nm, mat in matrices.items():
+        if (mat.index != mat.columns).any():
+            raise NTEMForecastError(
+                f"{nm} matrix index and columns are not identical"
+            )
+    if (matrices["base"].index != matrices["forecast"].index).any():
+        raise NTEMForecastError(
+            "base and forecast matrices don't have indentical indices"
+        )
+    for nm, g in growth_data.items():
+        if (g.index != matrices["base"].index).any():
+            raise NTEMForecastError(
+                f"{nm} growth does not have the same index as the matrix"
+            )
+
+    # Calculate aggregated growths
+    growth_comparisons = {
+        "Matrix Total Growth":
+            (
+                np.sum(matrices["forecast"].values) /
+                np.sum(matrices["base"].values)
+            ),
+        "Matrix Mean Growth":
+            np.nanmean((matrices["forecast"] / matrices["base"]).values),
+    }
+    for nm, g in growth_data.items():
+        growth_comparisons[f"TEMPro Mean Growth - {nm.title()}"] = np.mean(
+            g.values
+        )
+
+    # Reindex with internals/externals
+    new_index = np.where(matrices["base"].index.isin(internals), "I", "E")
+    matrix_te = {}
+    for nm, mat in matrices.items():
+        mat = mat.copy()
+        mat.index = new_index
+        mat.columns = new_index
+        matrices[nm] = mat.groupby(level=0).sum().groupby(level=0, axis=1).sum()
+        matrix_te[nm] = pd.DataFrame(
+            {
+                "Attractions": matrices[nm].sum(axis=1),
+                "Productions": matrices[nm].sum(axis=0),
+            },
+            index=matrices[nm].index,
+        )
+        matrix_te[nm].loc["Total", :] = matrix_te[nm].sum()
+    for nm, g in growth_data.items():
+        g = g.copy()
+        g.index = new_index
+        growth_data[nm] = g.groupby(level=0).mean()
+
+    growth_comparisons["Matrix Trip End Growth"] = (
+        matrix_te["forecast"] / matrix_te["base"]
+    )
+    growth_comparisons["Matrix IE Growth"] = (
+        matrices["forecast"] / matrices["base"]
+    )
+    growth_comparisons["TEMPro Trip End Growth"] = pd.DataFrame(growth_data)
+
+    out = output_path.with_suffix(".xlsx")
+    with pd.ExcelWriter(out, engine="openpyxl") as excel:
+        pandas_types = (pd.DataFrame, pd.Series)
+        single_values = {
+            k: v
+            for k, v in growth_comparisons.items()
+            if not isinstance(v, pandas_types)
+        }
+        single_values = pd.Series(single_values)
+        single_values.to_excel(excel, sheet_name="Summary", header=False)
+        for nm, data in growth_comparisons.items():
+            if not isinstance(data, pandas_types):
+                continue
+            data.to_excel(excel, sheet_name=nm)
+    LOG.info("Written: %s", out)
+    return growth_comparisons
 
 
 def grow_all_matrices(
     matrices: NTEMImportMatrices,
-    trip_ends: TEMProTripEnds,
+    growth: TEMProTripEnds,
     model: str,
     output_folder: Path,
 ) -> None:
@@ -591,7 +694,7 @@ def grow_all_matrices(
     matrices : NTEMImportMatrices
         Paths to the base year PostME matrices.
     trip_ends : TEMProTripEnds
-        TEMPro trip end data for all forecast years.
+        TEMPro growth factors for all forecast years.
     model : str
         Name of the model e.g. 'noham'.
     output_folder : Path
@@ -611,21 +714,18 @@ def grow_all_matrices(
         **dict.fromkeys(("hb_attractions", "nhb_attractions"), "employment"),
         **dict.fromkeys(("hb_productions", "nhb_productions"), "population"),
     }
-    trip_ends = trip_ends.translate_zoning(
-        model, weighting=zone_translation_weights
-    )
+    growth = growth.translate_zoning(model, weighting=zone_translation_weights)
     iterator = {
-        "hb":
-            (
-                matrices.hb_paths,
-                trip_ends.hb_attractions,
-                trip_ends.hb_productions,
-            ),
+        "hb": (
+            matrices.hb_paths,
+            growth.hb_attractions,
+            growth.hb_productions,
+        ),
         "nhb":
             (
                 matrices.nhb_paths,
-                trip_ends.nhb_attractions,
-                trip_ends.nhb_productions,
+                growth.nhb_attractions,
+                growth.nhb_productions,
             ),
     }
     output_folder.mkdir(exist_ok=True, parents=True)
@@ -947,8 +1047,13 @@ def _compare_trip_ends(
 
             mat_data = dvec.to_df().rename(columns={"val": "matrix"})
             tempro = tempro_dvec.to_df().rename(columns={"val": "tempro"})
-            join_cols = [*dvec.segmentation.naming_order, f"{dvec.zoning_system.name}_zone_id",]
-            combined = mat_data.merge(tempro, on=join_cols, how="outer", validate="1:1")
+            join_cols = [
+                *dvec.segmentation.naming_order,
+                f"{dvec.zoning_system.name}_zone_id",
+            ]
+            combined = mat_data.merge(
+                tempro, on=join_cols, how="outer", validate="1:1"
+            )
             combined = combined.loc[:, join_cols + ["matrix", "tempro"]]
             combined.insert(0, "trip_end_type", te_type)
             combined.insert(0, "matrix_type", mat_type)
