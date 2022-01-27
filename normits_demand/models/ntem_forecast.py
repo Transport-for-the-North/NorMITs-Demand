@@ -264,7 +264,9 @@ def trip_end_growth(
     base = tempro_vectors[efs_consts.BASE_YEAR]
     base_data = {
         "internal": base.translate_zoning(growth_zone),
-        "external": base.translate_zoning(model_zoning),
+        # TODO(MB) Use either population or employment
+        #   weighting dependant on purpose
+        "external": base.translate_zoning(model_zoning, weighting="population"),
     }
     zoning = tempro_vectors.zoning_system
     masks = {
