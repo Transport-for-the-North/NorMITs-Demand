@@ -34,7 +34,7 @@ def main():
     apply_wfh_adjustments = True
 
     # Base EFS
-    run_base_efs = True
+    run_base_efs = False
     recreate_productions = False
     recreate_attractions = False
     recreate_nhb_productions = False
@@ -43,22 +43,22 @@ def main():
     # Running options
     run_bespoke_zones = False
     ignore_bespoke_zones = True
-    use_elasticity_to_od = False
+    use_elasticity_to_od = True
 
     # Compiling matrices
     run_pa_to_od = False
-    run_compile_mats = False
+    run_compile_mats = True
     run_decompile_post_me = False
 
     # Controls matrix conversion
-    output_years = efs_consts.ALL_YEARS
+    # output_years = efs_consts.ALL_YEARS
     output_years = efs_consts.FUTURE_YEARS
 
     # Controls I/O
-    scenario = consts.SC02_PP
+    scenario = consts.SC01_JAM
     iter_num = '3i'
     import_home = "I:/"
-    export_home = "D:/NorMITs/"
+    export_home = "I:/"
     # export_home = "I:/"
     model_name = efs_consts.MODEL_NAME
 
@@ -119,12 +119,11 @@ def main():
         )
 
     if run_compile_mats:
-        for year in output_years:
-            efs.compile_matrices(
-                year=year,
-                use_bespoke_pa=(not ignore_bespoke_zones),
-                use_elasticity_pa=use_elasticity_to_od,
-            )
+        efs.compile_matrices(
+            years=output_years,
+            use_bespoke_pa=(not ignore_bespoke_zones),
+            use_elasticity_pa=use_elasticity_to_od,
+        )
 
     if run_decompile_post_me:
         # Decompiles post-me base year matrices
