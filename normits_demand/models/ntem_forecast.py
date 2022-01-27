@@ -8,7 +8,7 @@
 import dataclasses
 import re
 from pathlib import Path
-from typing import Dict, Any, List, Tuple, Union
+from typing import Dict, Any, List, Union
 
 # Third party imports
 import numpy as np
@@ -219,23 +219,16 @@ class NTEMImportMatrices:
 
 
 ##### FUNCTIONS #####
-def _split_dvector(
-    dvector: nd_core.DVector
-) -> Tuple[nd_core.DVector, nd_core.DVector]:
-    # TODO(MB) Function should split a DVector into two,
-    # one for internal zones and one for external
-    raise NotImplementedError("WIP!")
-
-
 def trip_end_growth(
     tempro_vectors: Dict[int, nd_core.DVector],
     model_zone_system: str,
 ) -> Dict[int, nd_core.DVector]:
-    """Calculate growth at LAD level and return it a `tempro_vectors` zone system.
+    """Calculate growth at LAD level and return it a `model_zone_system`.
 
-    The trip ends are translated to `LAD_ZONE_SYSTEM` to
-    calculate growth factors then translated back to the
-    original zone system before returning.
+    The trip ends are translated to `LAD_ZONE_SYSTEM` to calculate
+    growth factors for the internal area and at `model_zone_system`
+    for calculating factors in the external area. The returned DVectors
+    are in the `model_zone_system`.
 
     Parameters
     ----------
@@ -268,41 +261,56 @@ def trip_end_growth(
     model_zoning = nd_core.get_zoning_system(model_zone_system)
     # Split data into internal and external DVectors
     # for different growth calculations
-    areas = ("internal", "external")
-    base_data = dict(
-        zip(areas, _split_dvector(tempro_vectors[efs_consts.BASE_YEAR]))
-    )
-    base_data["internal"] = base_data["internal"].translate_zoning(growth_zone)
-    base_data["external"] = base_data["external"].translate_zoning(model_zoning)
+    base = tempro_vectors[efs_consts.BASE_YEAR]
+    base_data = {
+        "internal": base.translate_zoning(growth_zone),
+        "external": base.translate_zoning(model_zoning),
+    }
+    zoning = tempro_vectors.zoning_system
+    masks = {
+        "internal": np.isin(zoning.unique_zones, zoning.internal_zones),
+        "external": np.isin(zoning.unique_zones, zoning.external_zones),
+    }
 
     growth = {}
+    # Function to set the segment values to 0 wherever mask is False
+    set_zero = lambda seg, m: np.where(m, seg, 0)
     # Ignore divide by zero warnings and fill with zeros
     with np.errstate(divide="ignore", invalid="ignore"):
         for yr, data in tempro_vectors.items():
             if yr == efs_consts.BASE_YEAR:
                 continue
-            forecast = dict(zip(areas, _split_dvector(data)))
-            for a in areas:
-                forecast[a] = forecast[a].translate_zoning(
-                    growth_zone if a == "internal" else model_zoning
+            forecast = {}
+            for area, base in base_data.items():
+                forecast[area] = data.translate_zoning(
+                    growth_zone if area == "internal" else model_zoning
                 )
-                forecast[a] = forecast[a] / base_data[a]
+                forecast[area] = forecast[area] / base
                 # Set any nan or inf values created by dividing by 0 to 0 growth
-                forecast[a] = forecast[a].segment_apply(
+                forecast[area] = forecast[area].segment_apply(
                     np.nan_to_num, nan=0.0, posinf=0.0, neginf=0.0
                 )
-                if a == "internal":
-                    forecast[a] = forecast[a].translate_zoning(model_zoning)
-            # TODO(MB) Combine the internal and external factors back together
-            growth[yr] = NotImplemented
+                # Set all zones not in the area to 0
+                forecast[area] = forecast[area].segment_apply(
+                    set_zero, masks[area]
+                )
+                if area == "internal":
+                    forecast[area] = forecast[area].translate_zoning(
+                        model_zoning, weight="no_weight"
+                    )
+            # Add the internal and external areas back together
+            growth[yr] = forecast["internal"] + forecast["external"]
     return growth
 
 
-def tempro_growth(tempro_data: TEMProTripEnds, model_zone_system: str,) -> TEMProTripEnds:
+def tempro_growth(
+    tempro_data: TEMProTripEnds,
+    model_zone_system: str,
+) -> TEMProTripEnds:
     """Calculate LAD growth factors and return at original zone system.
 
     Growth factors are calculated at LAD level but are
-    returned at original zone system.
+    returned at `model_zone_system`.
 
     Parameters
     ----------
@@ -330,8 +338,9 @@ def tempro_growth(tempro_data: TEMProTripEnds, model_zone_system: str,) -> TEMPr
     grown = {}
     for segment in dataclasses.fields(TEMProTripEnds):
         LOG.info("Calculating TEMPro trip end growth for %s", segment.name)
-        grown[segment.name
-             ] = trip_end_growth(getattr(tempro_data, segment.name), model_zone_system)
+        grown[segment.name] = trip_end_growth(
+            getattr(tempro_data, segment.name), model_zone_system
+        )
     return TEMProTripEnds(**grown)
 
 

@@ -508,6 +508,54 @@ class DVector:
             process_count=self.process_count,
         )
 
+    def __add__(self, other: DVector) -> DVector:
+        """
+        Builds a new Dvec by adding a and b together.
+
+        DVectors must have the same zone system, segmentation
+        and time format.
+
+        Retains process_count, df_chunk_size, and verbose params from a.
+
+        Parameters
+        ----------
+        self:
+            The first DVector to add
+
+        other:
+            The second DVector to add
+
+        Returns
+        -------
+        c:
+            A new DVector which is the sum of a and b.
+        """
+        # ## CHECK WE CAN ADD a AND b ## #
+        return_zoning_system = self._check_other(other, "multiply")
+        # TODO(MB) Add functionality for handling addition of DVectors
+        #   with different segmentation
+        if self.segmentation != other.segmentation:
+            raise DVectorError(
+                "Cannot add 2 DVectors with different segmentation"
+            )
+        if self.time_format != other.time_format:
+            raise DVectorError(
+                "Cannot add 2 DVectors with different time_format"
+            )
+
+        # Perform addition
+        dvec_data = {}
+        for segment in self.segmentation.segment_names:
+            dvec_data[segment] = self._data[segment] + other._data[segment]
+
+        return DVector(
+            zoning_system=return_zoning_system,
+            segmentation=self.segmentation,
+            time_format=self.time_format,
+            import_data=dvec_data,
+            process_count=self.process_count,
+        )
+
     def copy(self) -> DVector:
         """Returns a copy of this class"""
         return DVector(
