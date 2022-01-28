@@ -251,4 +251,8 @@ if __name__ == '__main__':
     nd_log.get_logger(
         nd_log.get_package_logger_name(), LOG_FILE, "Running NTEM forecast"
     )
-    main(NTEMForecastParameters())
+    try:
+        main(NTEMForecastParameters())
+    except Exception as err:
+        LOG.critical("NTEM forecasting error:", exc_info=True)
+        raise
