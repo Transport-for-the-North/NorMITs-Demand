@@ -210,13 +210,10 @@ def main(params: NTEMForecastParameters):
         params.model_name,
     )
     pa_folder = params.export_path / "Matrices" / "PA"
-    ntem_forecast.grow_all_matrices(
-        ntem_inputs,
-        tempro_growth,
-        params.model_name,
-        pa_folder,
+    ntem_forecast.grow_all_matrices(ntem_inputs, tempro_growth, pa_folder)
+    ntem_forecast.pa_matrix_comparison(
+        pa_folder, tempro_data, params.model_name
     )
-    ntem_forecast.pa_matrix_comparison(pa_folder, tempro_data, params.model_name)
     od_folder = pa_folder.with_name("OD")
     ntem_forecast.convert_to_od(
         pa_folder,

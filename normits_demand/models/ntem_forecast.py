@@ -222,6 +222,7 @@ class NTEMImportMatrices:
 def trip_end_growth(
     tempro_vectors: Dict[int, nd_core.DVector],
     model_zone_system: str,
+    zone_weighting: str,
 ) -> Dict[int, nd_core.DVector]:
     """Calculate growth at LAD level and return it a `model_zone_system`.
 
@@ -239,6 +240,9 @@ def trip_end_growth(
     model_zone_system : str
         Name of the zone system to convert the
         TEMPro growth factors to.
+    zone_weighting : str
+        Name of the weighting to use when translating
+        to `model_zone_system`.
 
     Returns
     -------
@@ -263,15 +267,16 @@ def trip_end_growth(
     # for different growth calculations
     base = tempro_vectors[efs_consts.BASE_YEAR]
     base_data = {
-        "internal": base.translate_zoning(growth_zone),
-        # TODO(MB) Use either population or employment
-        #   weighting dependant on purpose
-        "external": base.translate_zoning(model_zoning, weighting="population"),
+        "internal":
+            base.translate_zoning(growth_zone),
+        "external":
+            base.translate_zoning(model_zoning, weighting=zone_weighting),
     }
-    zoning = tempro_vectors.zoning_system
     masks = {
-        "internal": np.isin(zoning.unique_zones, zoning.internal_zones),
-        "external": np.isin(zoning.unique_zones, zoning.external_zones),
+        "internal":
+            np.isin(model_zoning.unique_zones, model_zoning.internal_zones),
+        "external":
+            np.isin(model_zoning.unique_zones, model_zoning.external_zones),
     }
 
     growth = {}
@@ -285,21 +290,22 @@ def trip_end_growth(
             forecast = {}
             for area, base in base_data.items():
                 forecast[area] = data.translate_zoning(
-                    growth_zone if area == "internal" else model_zoning
+                    growth_zone if area == "internal" else model_zoning,
+                    None if area == "internal" else zone_weighting,
                 )
                 forecast[area] = forecast[area] / base
                 # Set any nan or inf values created by dividing by 0 to 0 growth
                 forecast[area] = forecast[area].segment_apply(
                     np.nan_to_num, nan=0.0, posinf=0.0, neginf=0.0
                 )
+                if area == "internal":
+                    forecast[area] = forecast[area].translate_zoning(
+                        model_zoning, weighting="no_weight"
+                    )
                 # Set all zones not in the area to 0
                 forecast[area] = forecast[area].segment_apply(
                     set_zero, masks[area]
                 )
-                if area == "internal":
-                    forecast[area] = forecast[area].translate_zoning(
-                        model_zoning, weight="no_weight"
-                    )
             # Add the internal and external areas back together
             growth[yr] = forecast["internal"] + forecast["external"]
     return growth
@@ -337,11 +343,17 @@ def tempro_growth(
         raise NTEMForecastError(
             f"tempro_data should be TEMProTripEnds type not {type(tempro_data)}"
         )
+    zone_translation_weights = {
+        **dict.fromkeys(("hb_attractions", "nhb_attractions"), "employment"),
+        **dict.fromkeys(("hb_productions", "nhb_productions"), "population"),
+    }
     grown = {}
     for segment in dataclasses.fields(TEMProTripEnds):
         LOG.info("Calculating TEMPro trip end growth for %s", segment.name)
         grown[segment.name] = trip_end_growth(
-            getattr(tempro_data, segment.name), model_zone_system
+            getattr(tempro_data, segment.name),
+            model_zone_system,
+            zone_translation_weights[segment.name],
         )
     return TEMProTripEnds(**grown)
 
@@ -496,6 +508,7 @@ def grow_matrix(
 
     # Distribute internal demand with 2D furnessing, targets
     # converted to DataFrames for this function
+    int_targets = _trip_end_totals(segment_name, **int_targets)
     int_future, iters, rms = furness.furness_pandas_wrapper(
         matrix.loc[internals, internals],
         **{nm: data.reset_index() for nm, data in int_targets.items()},
