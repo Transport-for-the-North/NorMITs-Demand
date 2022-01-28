@@ -300,7 +300,7 @@ def trip_end_growth(
                 )
                 if area == "internal":
                     forecast[area] = forecast[area].translate_zoning(
-                        model_zoning, weighting="no_weight"
+                        model_zoning, weighting="average"
                     )
                 # Set all zones not in the area to 0
                 forecast[area] = forecast[area].segment_apply(
@@ -504,7 +504,7 @@ def grow_matrix(
         int_targets[nm].loc[:, "trips"] = (
             int_targets[nm]["growth"] * int_targets[nm]["base_trips"]
         )
-        int_targets[nm] = int_targets[nm]["trips"]
+        int_targets[nm] = int_targets[nm].loc[internals, "trips"]
 
     # Distribute internal demand with 2D furnessing, targets
     # converted to DataFrames for this function
