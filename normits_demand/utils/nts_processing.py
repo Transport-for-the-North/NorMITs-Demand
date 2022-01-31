@@ -11,6 +11,7 @@ import pandas as pd
 from normits_demand import constants
 from normits_demand.utils import file_ops
 
+
 class NTSTripLengthBuilder:
     def __init__(self,
                  tlb_folder=None,
@@ -112,7 +113,7 @@ class NTSTripLengthBuilder:
                 output_dat = output_dat.reset_index(drop=True)
             elif self.geo_area == 'north_and_mids':
                 output_dat = output_dat[
-                    output_dat['HHoldOSLAUA'].isin(
+                    output_dat['HHoldOSLAUA_B01ID'].isin(
                         constants.NORTH_AND_MID_LA)]
                 output_dat = output_dat.reset_index(drop=True)
             elif self.geo_area == 'north_incl_ie':
