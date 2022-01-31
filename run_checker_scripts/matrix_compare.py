@@ -21,6 +21,7 @@ import pandas as pd
 from tqdm import tqdm
 
 sys.path.append('..')
+import normits_demand as nd
 from normits_demand.concurrency import multiprocessing
 from normits_demand import constants as consts
 
@@ -72,10 +73,10 @@ TRIP_ORIGIN = None
 # REPORT_FNAME = 'efs_named_report.csv'
 
 # Compare NoRMS compiled to post-ME
-ORIGINAL_DIR = r'E:\NorMITs Demand\noham\EFS\iter3i\SC04_UZC\Matrices\OD Matrices'
-COMPARE_DIR = r'E:\NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\OD Matrices'
-OUTPUT_DIR = r'E:/'
-REPORT_FNAME = 'compiled_report.csv'
+ORIGINAL_DIR = r'F:\NorMITs Demand\noham\EFS\iter3i\SC01_JAM\Matrices\24hr PA Matrices - Elasticity\internal'
+COMPARE_DIR = r'I:\NorMITs Demand\noham\EFS\iter3i\SC01_JAM\Matrices\24hr PA Matrices - Elasticity\internal'
+OUTPUT_DIR = r'F:/'
+REPORT_FNAME = 'report.csv'
 
 
 def list_files(path):
@@ -91,8 +92,8 @@ def starts_with(s, x):
 def compare_mats_fn(mat_fname):
     report = dict()
 
-    orig = pd.read_csv(os.path.join(ORIGINAL_DIR, mat_fname), index_col=0)
-    comp = pd.read_csv(os.path.join(COMPARE_DIR, mat_fname), index_col=0)
+    orig = nd.read_df(os.path.join(ORIGINAL_DIR, mat_fname), index_col=0)
+    comp = nd.read_df(os.path.join(COMPARE_DIR, mat_fname), index_col=0)
 
     # Check the dimensions
     # noinspection PyTypeChecker
@@ -104,7 +105,7 @@ def compare_mats_fn(mat_fname):
         )
 
     # noinspection PyTypeChecker
-    if all(orig.index != comp.index):
+    if len(orig.index) != len(comp.index) or all(orig.index != comp.index):
         raise ValueError(
             "The index names of matrix %s do not match in the original "
             "and compare directories. Please check manually."
@@ -146,8 +147,8 @@ def main():
         raise ValueError("Cannot find directory %s" % COMPARE_DIR)
 
     # Get the files to compare
-    original_mats = [x for x in list_files(ORIGINAL_DIR) if '.csv' in x]
-    compare_mats = [x for x in list_files(COMPARE_DIR) if '.csv' in x]
+    original_mats = [x for x in list_files(ORIGINAL_DIR) if '.csv' in x or '.pbz2' in x]
+    compare_mats = [x for x in list_files(COMPARE_DIR) if '.csv' in x or '.pbz2' in x]
 
     # Filter if needed
     if TRIP_ORIGIN is not None:
