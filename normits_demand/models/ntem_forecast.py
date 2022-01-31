@@ -903,7 +903,8 @@ def _filename_contents(filename: str) -> Dict[str, Any]:
     Parameters
     ----------
     filename : str
-        Filename to extract information form.
+        Filename to extract information form,
+        should not include file suffix.
 
     Returns
     -------
@@ -922,11 +923,13 @@ def _filename_contents(filename: str) -> Dict[str, Any]:
         If `filename` isn't in the correct format.
     """
     pat = re.compile(
+        "^"
         r"(?P<matrix_type>nhb|hb)"
         r"_(?P<trip_end_type>pa|od)"
         r"_yr(?P<year>\d{4})"
         r"_p(?P<purpose>\d{,2})"
-        r"_m(?P<mode>\d)",
+        r"_m(?P<mode>\d)"
+        "$",
         re.IGNORECASE,
     )
     match = pat.match(filename)
@@ -1069,16 +1072,18 @@ def pa_matrix_comparison(
     output_folder.mkdir(exist_ok=True)
     # Extract information from filenames
     files = []
+    file_types = (".pbz2", ".csv")
     for p in pa_folder.iterdir():
-        if p.is_dir():
+        if p.is_dir() or p.suffix.lower() not in file_types:
             continue
         try:
-            file_data = _filename_contents(p.name)
+            file_data = _filename_contents(p.stem)
         except NTEMForecastError as err:
             LOG.error(err)
         file_data["path"] = p
         files.append(file_data)
     files = pd.DataFrame(files)
+    files.to_csv(pa_folder / "PA matrices list.csv", index=False)
 
     # Convert tempro_data to LA zoning and make sure segmentation is (n)hb_p_m
     tempro_data = tempro_data.translate_zoning(COMPARISON_ZONE_SYSTEM)
