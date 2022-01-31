@@ -19,6 +19,7 @@ from normits_demand.models import ntem_forecast, tempro_trip_ends
 from normits_demand import efs_constants as efs_consts
 from normits_demand import logging as nd_log
 from normits_demand.utils import timing
+from normits_demand.reports import ntem_forecast_checks
 
 ##### CONSTANTS #####
 LOG_FILE = "NTEM_forecast.log"
@@ -211,7 +212,7 @@ def main(params: NTEMForecastParameters):
     )
     pa_folder = params.export_path / "Matrices" / "PA"
     ntem_forecast.grow_all_matrices(ntem_inputs, tempro_growth, pa_folder)
-    ntem_forecast.pa_matrix_comparison(
+    ntem_forecast_checks.pa_matrix_comparison(
         pa_folder, tempro_data, params.model_name
     )
     od_folder = pa_folder.with_name("OD")
