@@ -9,26 +9,10 @@ environment. Data will be returned in a pandas Dataframe format.
 """
 
 import pyodbc
-import random
-
 import pandas as pd
 
 
-# import pangres as pang
-# from sqlalchemy import create_engine
-
-
 class PostGresConector:
-    # CLASS VARIABLES
-    user = ""
-    password = ""
-    postgres_driver = ""
-    server = ""
-    database = ""
-    port = ""
-    conn_string = ""
-    conn = ""  # pyodbc connection
-    cursor = ""  # pyodbc connection cursor
 
     def __init__(self,
                  user: str,
@@ -99,10 +83,6 @@ class PostGresConector:
         query_result:
             Requested data in pandas.DataFrame format.
         """
-        # query_text = open(
-        #     r'' + query_file, 'r')
-        # read_text = query_text.read()
-        # query_result = pd.read_sql_query(read_text, self.conn)
         query_result = pd.read_sql_query(query_file, self.conn)
         return query_result
 
@@ -128,50 +108,6 @@ class PostGresConector:
             r'' + query_file, 'r')
         read_text = query_text.read()
         self.cursor.execute(read_text)
-        self.conn.commit()
-        return 0
-
-    def update(self,
-               query_file,
-               dataframe,
-               schema,
-               staging_table_name=None
-               ):
-        if staging_table_name is None:
-            number = random.randint(100, 1000)
-            staging_table_name = "temp_table_" + str(number)
-
-        staging_table_location = schema + "." + staging_table_name
-        # configure schema, table_name and engine
-        # engine = create_engine("postgresql://" +
-        #                        self.user +
-        #                        ":" +
-        #                        self.password +
-        #                        "@" +
-        #                        self.server +
-        #                        ":" +
-        #                        self.port +
-        #                        "/" +
-        #                        self.database
-        #                        )
-        # pang.upsert(engine=engine,
-        #             df=dataframe,
-        #             schema=schema,
-        #             table_name=staging_table_name,
-        #             if_row_exists="update",
-        #             create_schema=False,  # default, creates schema if it does not exist
-        #             add_new_columns=True,  # default, adds any columns that are not in the postgres table
-        #             adapt_dtype_of_empty_db_columns=True,  # converts data type in postgres for empty columns
-        #             # (if we finally have data and it is necessary)
-        #             chunksize=10000)  # default, inserts 10000 rows at once
-
-        query_text = open(
-            r'' + query_file, 'r')
-        read_text = query_text.read()
-        self.cursor.execute(read_text)
-        self.conn.commit()
-
-        self.cursor.execute("DROP TABLE " + staging_table_location)
         self.conn.commit()
         return 0
 
