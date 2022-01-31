@@ -46,7 +46,7 @@ if __name__ == '__main__':
     if get_trip_ends:
         te_out = parser.get_trip_ends(trip_type=None,
                                       all_commute_hb=True,
-                                      aggregate_car=True,
+                                      aggregate_car=False,
                                       average_weekday=True)
         pa = ['productions', 'attractions']
         od = ['origins', 'destination']
