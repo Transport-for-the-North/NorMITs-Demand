@@ -18,8 +18,8 @@ from math import floor
 from datetime import datetime
 
 
-def current_milli_time():
-    return int(time.time() * 1000)
+def current_milli_time() -> float:
+    return time.perf_counter() * 1000
 
 
 def get_datetime(time_format: str = "%d-%m-%Y  %H:%M:%S.%f",
@@ -79,9 +79,11 @@ def time_taken(start_time: int,
     elapsed_secs = elapsed_time / 1000
 
     # Validate
-    if elapsed_time <= 0:
-        raise ValueError("Elapsed time is 0, or negative! Was the start_time "
-                         "and end_time given the wrong way around?")
+    if elapsed_time < 0:
+        raise ValueError(
+            "Elapsed time is negative! Was the start_time "
+            "and end_time given the wrong way around?"
+        )
 
     # Split into minutes and seconds
     seconds = elapsed_secs % 60

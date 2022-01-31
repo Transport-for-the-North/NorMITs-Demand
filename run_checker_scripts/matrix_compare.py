@@ -15,6 +15,7 @@ a report on their similarity
 import os
 import re
 import sys
+import operator
 
 import numpy as np
 import pandas as pd
@@ -61,7 +62,7 @@ TRIP_ORIGIN = None
 
 # Compare TMS PA to PA
 # ORIGINAL_DIR = r'I:\NorMITs Demand\import\norms\decompiled_post_me'
-# COMPARE_DIR = r'F:\NorMITs Demand\norms\EFS\iter3g\NTEM\Matrices\24hr PA Matrices'
+# COMPARE_DIR = r'I:\NorMITs Demand\norms\EFS\iter3i\NTEM\Matrices\24hr PA Matrices'
 # OUTPUT_DIR = r'F:/'
 # REPORT_FNAME = 'tfn_report.csv'
 
@@ -72,10 +73,15 @@ TRIP_ORIGIN = None
 # REPORT_FNAME = 'efs_named_report.csv'
 
 # Compare NoRMS compiled to post-ME
-ORIGINAL_DIR = r'E:\NorMITs Demand\noham\EFS\iter3i\SC04_UZC\Matrices\OD Matrices'
-COMPARE_DIR = r'E:\NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\OD Matrices'
-OUTPUT_DIR = r'E:/'
-REPORT_FNAME = 'compiled_report.csv'
+# ORIGINAL_DIR = r'E:\NorMITs Demand\noham\EFS\iter3i\SC04_UZC\Matrices\OD Matrices'
+# COMPARE_DIR = r'E:\NorMITs Demand\noham\EFS\iter3j\SC04_UZC\Matrices\OD Matrices'
+# OUTPUT_DIR = r'E:/'
+# REPORT_FNAME = 'compiled_report.csv'
+
+ORIGINAL_DIR = r'I:\NorMITs Demand\TMS\iter9.3.1\car_and_passenger\Final Outputs\Compiled OD Matrices\PCU'
+COMPARE_DIR = r'I:\NorMITs Demand\Distribution Model\iter9.3.2\car_and_passenger\Final Outputs\Compiled OD Matrices\PCU'
+OUTPUT_DIR = r'E:\tms_dm_reports'
+REPORT_FNAME = 'ext_compiled_report.csv'
 
 
 def list_files(path):
@@ -111,6 +117,26 @@ def compare_mats_fn(mat_fname):
             % mat_fname
         )
 
+    # # Get specific area
+    # split = 2516        # noham
+    # total = 2770        # noham
+    # internal = list(range(1, split+1))
+    # external = list(range(split+1, total+1))
+    #
+    # area = external
+    # join_fn = operator.or_
+    #
+    # # Create square masks for the rows and cols
+    # orig.columns = orig.columns.astype(int)
+    # col_mask = np.broadcast_to(orig.columns.isin(area), orig.shape)
+    # index_mask = np.broadcast_to(orig.index.isin(area), orig.shape).T
+    #
+    # # Combine together to get the full mask
+    # mask = join_fn(col_mask, index_mask)
+    #
+    # orig *= mask
+    # comp *= mask
+
     # extract just the values
     orig = orig.values
     comp = comp.values
@@ -120,6 +146,8 @@ def compare_mats_fn(mat_fname):
 
     # Store the comparison into a report
     report['matrix_name'] = mat_fname
+    report['orig_sum'] = orig.sum()
+    report['comp_sum'] = comp.sum()
     report['mean_diff'] = diff.mean()
     report['max_diff'] = diff.max()
     report['absolute_diff'] = diff.sum()

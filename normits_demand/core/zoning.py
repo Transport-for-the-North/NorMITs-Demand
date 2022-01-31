@@ -254,12 +254,18 @@ class ZoningSystem:
                 % (self.name, other.name)
             )
 
-        # Must exist if we are here, read in and validate
+        # Must exist if we are here, read in
         df = file_ops.read_df(file_path)
+
+        # Assume index col is weights
+        trans_col = self._translate_base_trans_col % (self.name, other.name)
+        df[trans_col] = df[trans_col].astype(np.float64)
+
+        # Keep only the columns we need
         index_cols = [
             self._translate_base_zone_col % self.name,
             self._translate_base_zone_col % other.name,
-            self._translate_base_trans_col % (self.name, other.name)
+            trans_col
         ]
         return pd_utils.reindex_cols(df, index_cols)
 
