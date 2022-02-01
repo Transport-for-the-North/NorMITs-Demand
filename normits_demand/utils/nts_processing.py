@@ -99,8 +99,9 @@ class NTSTripLengthBuilder:
             self.tlb_folder,
             self.geo_area,
             self.region_filter,
-            band_label,
-            segments_label)
+            segments_label,
+            band_label
+            )
 
         file_ops.create_folder(self.export)
 
@@ -203,7 +204,7 @@ class NTSTripLengthBuilder:
         6	Non driver and no car
         7	NA
         """
-        ca_map = pd.DataFrame({'CarAccess_B01ID':[1, 2, 3, 4, 5, 6, 7],
+        ca_map = pd.DataFrame({'CarAccess_B01ID': [1, 2, 3, 4, 5, 6, 7],
                                'ca': [2, 2, 2, 2, 1, 1, 1]})
 
         output_dat = output_dat.merge(ca_map,
