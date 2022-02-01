@@ -8,7 +8,7 @@
 # Standard imports
 import re
 from pathlib import Path
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Union
 
 # Third party imports
 import pandas as pd
@@ -24,6 +24,8 @@ from normits_demand import efs_constants as efs_consts
 LOG = nd_log.get_logger(__name__)
 COMPARISON_ZONE_SYSTEM = ntem_forecast.LAD_ZONE_SYSTEM
 
+Matrix = Union[Path, pd.DataFrame]
+"""Path to file (.csv or .pbz2), or DataFrame, containing matrix."""
 
 ##### FUNCTIONS #####
 def _filename_contents(filename: str) -> Dict[str, Any]:
@@ -72,13 +74,13 @@ def _filename_contents(filename: str) -> Dict[str, Any]:
     return data
 
 
-def _matrix_trip_ends(path: Path, trip_end_type: str) -> pd.DataFrame:
+def _matrix_trip_ends(matrix: Matrix, trip_end_type: str) -> pd.DataFrame:
     """Calculate trip ends for a matrix file.
 
     Parameters
     ----------
-    path : Path
-        Path to matrix file.
+    matrix : Matrix
+        Path to matrix file or DataFrame.
     trip_end_type : str, {'pa', 'od'}
         Whether trip ends are productions and attractions
         or origins and destinations.
@@ -105,7 +107,12 @@ def _matrix_trip_ends(path: Path, trip_end_type: str) -> pd.DataFrame:
         raise ntem_forecast.NTEMForecastError(
             f"trip_end_type should be 'pa' or 'od' not {trip_end_type}"
         )
-    matrix = file_ops.read_df(path, index_col=0, find_similar=True)
+    if isinstance(matrix, (str, Path)):
+        matrix = file_ops.read_df(matrix, index_col=0, find_similar=True)
+    elif isinstance(matrix, pd.DataFrame):
+        pass
+    else:
+        raise ntem_forecast.NTEMForecastError(f"matrix should be {Matrix} not {type(matrix)}")
     trip_ends = []
     for i, nm in enumerate(te_names):
         df = matrix.sum(axis=i)
@@ -194,7 +201,7 @@ def _compare_trip_ends(
 
 
 def matrix_dvectors(
-    matrices: Dict[int, Path],
+    matrices: Dict[int, Matrix],
     segmentation: str,
     trip_end_type: str,
     matrix_zoning: str,
@@ -204,9 +211,10 @@ def matrix_dvectors(
 
     Parameters
     ----------
-    matrices : Dict[int, Path]
-        Paths to the matrices by purpose (keys), the files
-        should be either '.csv' or '.pbz2'
+    matrices : Dict[int, Matrix]
+        Paths to, or DataFrames of, the matrices by
+        purpose (keys), the files should be either
+        '.csv' or '.pbz2'.
     segmentation : str
         Name of the segmentation level for the
         returned DVectors.
@@ -226,8 +234,8 @@ def matrix_dvectors(
     """
     # Get matrix trip ends
     trip_ends = []
-    for p, path in matrices.items():
-        df = _matrix_trip_ends(path, trip_end_type)
+    for p, mat in matrices.items():
+        df = _matrix_trip_ends(mat, trip_end_type)
         df.loc[:, "p"] = p
         df.loc[:, "m"] = mode
         trip_ends.append(df)
@@ -255,6 +263,55 @@ def matrix_dvectors(
     return dvectors
 
 
+def _find_matrices(folder: Path) -> pd.DataFrame:
+    """Find matrix files in given `folder`.
+
+    Finds all files with extension ('.pbz2' or '.csv')
+    and checks the filename is the correct format.
+
+    Parameters
+    ----------
+    folder : Path
+        Path to matrix folder.
+
+    Returns
+    -------
+    pd.DataFrame
+        Paths to all the matrices found with information
+        extracted from the filename, contains column 'path'
+        with the file paths and index columns:
+        - `matrix_type`: either 'hb' or 'nhb'
+        - `year`
+        - `mode`
+        - `purpose`
+    """
+    files = []
+    file_types = (".pbz2", ".csv")
+    for p in folder.iterdir():
+        if p.is_dir() or p.suffix.lower() not in file_types:
+            continue
+        try:
+            file_data = _filename_contents(p.stem)
+        except ntem_forecast.NTEMForecastError as err:
+            LOG.warning(err)
+            continue
+        file_data["path"] = p
+        files.append(file_data)
+    files = pd.DataFrame(files)
+    files.to_csv(folder / "Matrices list.csv", index=False)
+    index_cols = ["matrix_type", "year", "mode", "purpose"]
+    files = files.loc[:, index_cols + ["path"]].set_index(index_cols)
+    return files
+
+
+def _read_matrices(paths: Dict[int, Path]) -> Dict[int, pd.DataFrame]:
+    """Reads matrices and returns dictionary of DataFrames with the same keys."""
+    matrices = {}
+    for i, p in paths.items():
+        matrices[i] = file_ops.read_df(p, index_col=0, find_similar=True)
+    return matrices
+
+
 def pa_matrix_comparison(
     ntem_imports: ntem_forecast.NTEMImportMatrices,
     pa_folder: Path,
@@ -277,32 +334,19 @@ def pa_matrix_comparison(
     output_folder = pa_folder / "TEMPro Comparisons"
     output_folder.mkdir(exist_ok=True)
     # Extract information from filenames
-    files = []
-    file_types = (".pbz2", ".csv")
-    for p in pa_folder.iterdir():
-        if p.is_dir() or p.suffix.lower() not in file_types:
-            continue
-        try:
-            file_data = _filename_contents(p.stem)
-        except ntem_forecast.NTEMForecastError as err:
-            LOG.warning(err)
-            continue
-        file_data["path"] = p
-        files.append(file_data)
-    files = pd.DataFrame(files)
-    files.to_csv(pa_folder / "PA matrices list.csv", index=False)
-    index_cols = ["matrix_type", "year", "mode", "purpose"]
-    files = files.loc[:, index_cols + ["path"]].set_index(index_cols)
+    files = _find_matrices(pa_folder)
 
     # Read base matrices
     if ntem_imports.mode != 3:
         raise NotImplementedError("PA matrix comparison only works for mode 3")
     SEGMENTATION = {"hb": "hb_p_m_car", "nhb": "nhb_p_m_car"}
+    base_matrices = {}
     base_trip_ends = {}
     for nm, seg in SEGMENTATION.items():
         LOG.info("Getting trip ends for base %s", nm.upper())
+        base_matrices[nm] = _read_matrices(getattr(ntem_imports, f"{nm}_paths"))
         base_trip_ends[nm] = matrix_dvectors(
-            getattr(ntem_imports, f"{nm}_paths"),
+            base_matrices[nm],
             seg,
             "pa",
             ntem_imports.model_name,
@@ -313,12 +357,14 @@ def pa_matrix_comparison(
     tempro_data = tempro_data.translate_zoning(COMPARISON_ZONE_SYSTEM)
     # Compare trip ends to tempro for all purposes and years
     for yr in files.index.get_level_values("year").unique():
+        forecast_matrices = {}
         forecast_trip_ends = {}
         for nm, seg in SEGMENTATION.items():
             LOG.info("Getting trip ends for %s %s", yr, nm.upper())
             indices = pd.IndexSlice[nm, yr, ntem_imports.mode]
+            forecast_matrices[nm] = _read_matrices(files.loc[indices, "path"].to_dict())
             forecast_trip_ends[nm] = matrix_dvectors(
-                files.loc[indices, "path"].to_dict(),
+                forecast_matrices[nm],
                 seg,
                 "pa",
                 ntem_imports.model_name,
