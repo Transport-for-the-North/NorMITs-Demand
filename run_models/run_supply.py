@@ -59,8 +59,6 @@ def main():
         time_period=time_period,
         export_home=export_home,
     )
-    print("DONE")
-    exit()
     p.run(od_to_pa_conversion=False)
 
 

@@ -31,7 +31,6 @@ from normits_demand.core import zoning
 
 
 class NorMITsSupply(PostGresConector):
-    _log_fname = "NorMITs_Supply_log.log"
     # Constants
     _sql_col = "skim_id, scenario_id, users_id,value_id," \
                "skim_type_id,time_period,origin_zone,destination_zone,skim_value"
@@ -115,14 +114,6 @@ class NorMITsSupply(PostGresConector):
             database=database,
             port=port,
         )
-        # Create a logger
-        logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
-        log_file_path = os.path.join(self.export_home, self._log_fname)
-        self._logger = nd.get_logger(
-            logger_name=logger_name,
-            log_file_path=log_file_path,
-            instantiate_msg="Initialised NorMITs Supply Model",
-        )
 
     def run(self,
             od_to_pa_conversion: bool = False
@@ -146,20 +137,18 @@ class NorMITsSupply(PostGresConector):
         None
         """
         # Initialise timing
-
-        start_time = timing.current_milli_time()
-        self._logger.info("Starting NorMITs Supply Model")
+        print("Starting NorMITs Supply Model")
 
         # Run query on database
-        self._logger.info("Running query on the connected database")
+        print("Running query on the connected database")
         skims = self._cost_request()
         print(skims)
         print(skims.sum())
         skims1 = pd.DataFrame(skims)
-        skims1.to_csv(r"I:\NorMITs Demand\import\noham\post_me_tour_proportions\fh_th_factors\trial1.csv", index=False)
+        # skims1.to_csv(r"I:\NorMITs Demand\import\noham\post_me_tour_proportions\fh_th_factors\trial1.csv", index=False)
+        skims1.to_csv(r"E:\supply\trial1.csv", index=False)
 
-    def _cost_request(self,
-                      ):
+    def _cost_request(self):
         """
         Runs the cost query and return the output as numpy.
 
@@ -180,6 +169,9 @@ class NorMITsSupply(PostGresConector):
             self.skim_type_id)
 
         skims = self.query(query_name)
+        print(skims)
+        exit()
+
         od_matrix = {}
         j = 1
         for i in self._time_period_od:
