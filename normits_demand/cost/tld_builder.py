@@ -127,11 +127,8 @@ class TripLengthDistributionBuilder:
             selection_s = input('Choose segments to aggregate by (index): ')
             segments_text = seg_options[int(selection_s)]
 
-            segments = pd.read_csv(os.path.join(seg_path,
-                                                segments_text))
-            print('%d total segments in selected' % len(segments))
-            for index, row in segments.iterrows():
-                print(row)
+            segments = pd.read_csv(os.path.join(seg_path, segments_text))
+            print(segments)
 
             if input('Keep these bands y/n') == 'y':
                 segments_confirmed = True
@@ -167,8 +164,8 @@ class TripLengthDistributionBuilder:
             band_label,
         )
 
-        print("Output path generated: %s" % self.export)
-        if input('Output here? y/n: ').strip().lower() != 'y':
+        print("\nOutput path generated: %s" % self.export)
+        if input('Output here? y/n\n').strip().lower() != 'y':
             print("y/Y not detected. Exiting.")
             exit()
 
