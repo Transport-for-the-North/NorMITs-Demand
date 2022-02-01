@@ -17,14 +17,15 @@ class NTSTripLengthBuilder:
                  tlb_folder=None,
                  nts_import=None):
 
-        # TODO: Would be good if the options were parsed by the object first,
-        # then you could choose to run all instead of 1x1
+        # TODO: Would be good if the options were parsed by the class first,
+        #  then you could choose to run all instead of 1x1
 
         self.tlb_folder = tlb_folder
         self.nts_import = nts_import
 
         # Get user to select trip banding options
-        band_options = [x for x in os.listdir(tlb_folder) if 'bands' in x]
+        band_path = os.path.join(tlb_folder, 'config', 'bands')
+        band_options = os.listdir(band_path)
         band_options = [x for x in band_options if '.csv' in x]
         if len(band_options) == 0:
             raise ValueError('no trip length bands in folder')
@@ -45,9 +46,10 @@ class NTSTripLengthBuilder:
                 bands_confirmed = True
 
         self.trip_length_bands = bands
+        seg_path = os.path.join(tlb_folder, 'config', 'segmentations')
 
         # Get user to select segmentation
-        seg_options = [x for x in os.listdir(tlb_folder) if 'segment' in x]
+        seg_options = os.listdir(seg_path)
         seg_options = [x for x in seg_options if '.csv' in x]
         if len(seg_options) == 0:
             raise ValueError('no target segmentations in folder')
