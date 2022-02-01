@@ -37,7 +37,7 @@ class NTSTripLengthBuilder:
             selection_b = input('Choose bands to aggregate by (index): ')
             band_text = band_options[int(selection_b)]
 
-            bands = pd.read_csv(os.path.join(tlb_folder,
+            bands = pd.read_csv(os.path.join(band_path,
                                              band_text))
             print('%d bands in selected' % len(bands))
             print(bands)
@@ -61,7 +61,7 @@ class NTSTripLengthBuilder:
             selection_s = input('Choose segments to aggregate by (index): ')
             segments_text = seg_options[int(selection_s)]
 
-            segments = pd.read_csv(os.path.join(tlb_folder,
+            segments = pd.read_csv(os.path.join(seg_path,
                                                 segments_text))
             print('%d total segments in selected' % len(segments))
             for index, row in segments.iterrows():
@@ -83,15 +83,26 @@ class NTSTripLengthBuilder:
         selection_r = input('How to apply region filter: ')
         self.region_filter = constants.REGION_FILTER_TYPES[int(selection_r)]
 
+        # Build output ready labels
+        band_label = band_text.copy()
+        segments_label = segments_text.copy()
+
+        for char_out in [' ', '(', ')', '.csv']:
+            if char_out == ' ':
+                replace_char = '_'
+            else:
+                replace_char = ''
+            band_label = band_label.replace(char_out, replace_char)
+            segments_label = segments_label.replace(char_out, replace_char)
+
         self.export = os.path.join(
             self.tlb_folder,
             self.geo_area,
             self.region_filter,
-            band_text.replace(' ', '_').replace('(', '').replace(')', '').replace('.csv',''),
-            segments_text.replace(' ', '_').replace('(', '').replace(')', '').replace('.csv',''))
+            band_label,
+            segments_label)
 
         file_ops.create_folder(self.export)
-
 
         print('Loading processed NTS data from %s' % nts_import)
         self.nts_import = pd.read_csv(nts_import)
@@ -159,7 +170,7 @@ class NTSTripLengthBuilder:
 
     def run_tlb_lookups(self,
                         weekdays=[1, 2, 3, 4, 5],
-                        agg_purp=[13, 14, 15, 18],
+                        agg_purp=list(), #[13, 14, 15, 18]
                         write=True):
         """
         weekdays: list of ints to consider default 1:5:
