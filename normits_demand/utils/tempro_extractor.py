@@ -173,7 +173,7 @@ class TemproParser:
                       trip_type=None,
                       all_commute_hb: bool = True,
                       aggregate_car: bool = True,
-                      average_weekday: bool = True,
+                      average_weekday: bool = False,
                       verbose=True):
 
         """
