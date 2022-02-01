@@ -24,12 +24,14 @@ def main():
     # TODO(CS): path and smart search should be in constants
     _TLB_FOLDER = 'I:/NorMITs Demand/import/trip_length_distributions'
     _NTS_IMPORT = 'I:/NTS/classified builds/cb_tfn.csv'
+    output_home = r'I:\NorMITs Demand\import\trip_length_distributions\tld_tool_outputs'
 
     run_another = True
     while run_another:
         extract = tld_builder.TripLengthDistributionBuilder(
             tlb_folder=_TLB_FOLDER,
             nts_import=_NTS_IMPORT,
+            output_home=output_home,
         )
 
         extract.run_tlb_lookups()

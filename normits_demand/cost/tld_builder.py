@@ -10,27 +10,87 @@ Other updates made by:
 File purpose:
 
 """
-
+# Built-Ins
 import os
 
+# Third Party
 import pandas as pd
 
+# Local Imports
+import normits_demand as nd
 from normits_demand import constants
 from normits_demand.utils import file_ops
 
 
 class TripLengthDistributionBuilder:
+    # Class constants
+
+    _geo_areas = ['gb', 'north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie']
+    _region_filter_types = ['household', 'trip_OD']
+
+    # LA Definitions
+    _north_las = [
+        'E06000001', 'E06000002', 'E06000003', 'E06000004', 'E06000005',
+        'E06000006', 'E06000007', 'E06000008', 'E06000009', 'E06000010',
+        'E06000011', 'E06000012', 'E06000013', 'E06000014', 'E06000021',
+        'E06000047', 'E06000049', 'E06000050', 'E06000057', 'E07000026',
+        'E07000027', 'E07000028', 'E07000029', 'E07000030', 'E07000031',
+        'E07000033', 'E07000034', 'E07000035', 'E07000037', 'E07000038',
+        'E07000117', 'E07000118', 'E07000119', 'E07000120', 'E07000121',
+        'E07000122', 'E07000123', 'E07000124', 'E07000125', 'E07000126',
+        'E07000127', 'E07000128', 'E07000137', 'E07000142', 'E07000163',
+        'E07000164', 'E07000165', 'E07000166', 'E07000167', 'E07000168',
+        'E07000169', 'E07000170', 'E07000171', 'E07000174', 'E07000175',
+        'E07000198', 'E08000001', 'E08000002', 'E08000003', 'E08000004',
+        'E08000005', 'E08000006', 'E08000007', 'E08000008', 'E08000009',
+        'E08000010', 'E08000011', 'E08000012', 'E08000013', 'E08000014',
+        'E08000015', 'E08000016', 'E08000017', 'E08000018', 'E08000019',
+        'E08000021', 'E08000022', 'E08000023', 'E08000024', 'E08000032',
+        'E08000033', 'E08000034', 'E08000035', 'E08000036', 'E08000037',
+        'W06000001', 'W06000002', 'W06000003', 'W06000004', 'W06000005',
+        'W06000006',
+    ]
+    _mid_las = [
+        'E06000015', 'E06000016', 'E06000017', 'E06000018',
+        'E07000032', 'E07000033', 'E07000034', 'E07000035',
+        'E07000036', 'E07000037', 'E07000038', 'E07000039',
+        'E07000129', 'E07000130', 'E07000131', 'E07000132',
+        'E07000133', 'E07000134', 'E07000135', 'E07000136',
+        'E07000137', 'E07000138', 'E07000139', 'E07000140',
+        'E07000141', 'E07000142', 'E07000150', 'E07000151',
+        'E07000152', 'E07000153', 'E07000154', 'E07000155',
+        'E07000156', 'E07000170', 'E07000171', 'E07000172',
+        'E07000173', 'E07000174', 'E07000175', 'E07000176',
+        'E06000019', 'E06000020', 'E06000021', 'E06000051',
+        'E07000192', 'E07000193', 'E07000194', 'E07000195',
+        'E07000196', 'E07000197', 'E07000198', 'E07000199',
+        'E07000234', 'E07000235', 'E07000236', 'E07000237',
+        'E07000238', 'E07000239', 'E07000218', 'E07000219',
+        'E07000220', 'E07000221', 'E07000222', 'E08000025',
+        'E08000026', 'E08000027', 'E08000028', 'E08000029',
+        'E08000030', 'E08000031'
+    ]
+    _north_and_mid_las = list(set(_north_las + _mid_las))
+
+    # GOR definitions
+    _north_gors = [1, 2, 3]
+    _mid_gors = [4, 5]
+    _north_and_mid_gors = list(set(_north_gors + _mid_gors))
+
     def __init__(self,
-                 tlb_folder=None,
-                 nts_import=None):
+                 tlb_folder: nd.PathLike,
+                 nts_import: nd.PathLike,
+                 output_home: nd.PathLike,
+                 ):
 
         # TODO: Would be good if the options were parsed by the class first,
         #  then you could choose to run all instead of 1x1
 
         self.tlb_folder = tlb_folder
         self.nts_import = nts_import
+        self.output_home = output_home
 
-        # Get user to select trip banding options
+        # ## USER SELECTS WHICH BANDS TO USE ## #
         band_path = os.path.join(tlb_folder, 'config', 'bands')
         band_options = os.listdir(band_path)
         band_options = [x for x in band_options if '.csv' in x]
@@ -44,8 +104,7 @@ class TripLengthDistributionBuilder:
             selection_b = input('Choose bands to aggregate by (index): ')
             band_text = band_options[int(selection_b)]
 
-            bands = pd.read_csv(os.path.join(band_path,
-                                             band_text))
+            bands = pd.read_csv(os.path.join(band_path, band_text))
             print('%d bands in selected' % len(bands))
             print(bands)
 
@@ -55,7 +114,7 @@ class TripLengthDistributionBuilder:
         self.trip_length_bands = bands
         seg_path = os.path.join(tlb_folder, 'config', 'segmentations')
 
-        # Get user to select segmentation
+        # ## USER SELECTS SEGMENTATION TO USE ## #
         seg_options = os.listdir(seg_path)
         seg_options = [x for x in seg_options if '.csv' in x]
         if len(seg_options) == 0:
@@ -79,36 +138,39 @@ class TripLengthDistributionBuilder:
 
         self.target_segmentation = segments
 
-        for (i, option) in enumerate(constants.GEO_AREAS, 0):
+        # ## USER SELECTS GEOGRAPHICAL AREA TO USE ## #
+        for (i, option) in enumerate(self._geo_areas, 0):
             print(i, option)
         selection_g = input('Choose geo-area (index): ')
-        self.geo_area = constants.GEO_AREAS[int(selection_g)]
+        self.geo_area = self._geo_areas[int(selection_g)]
 
-        print('Filter by household (home) or OD locations (gor)')
-        for (i, option) in enumerate(constants.REGION_FILTER_TYPES, 0):
+        # ## USER SELECTS TRIP SELECTION CONSTRAINT TO USE ## #
+        print('Constrain to geographical areas by location of:')
+        for (i, option) in enumerate(self._region_filter_types, 0):
             print(i, option)
         selection_r = input('How to apply region filter: ')
-        self.region_filter = constants.REGION_FILTER_TYPES[int(selection_r)]
+        self.region_filter = self._region_filter_types[int(selection_r)]
 
-        # Build output ready labels
-        band_label = band_text.copy()
-        segments_label = segments_text.copy()
+        # ## GENERATE OUTPUT PATH AND CONFIRM SELECTION ## #
+        band_label = band_text.replace(' ', '_')
+        segments_label = segments_text.replace(' ', '_')
 
-        for char_out in [' ', '(', ')', '.csv']:
-            if char_out == ' ':
-                replace_char = '_'
-            else:
-                replace_char = ''
-            band_label = band_label.replace(char_out, replace_char)
-            segments_label = segments_label.replace(char_out, replace_char)
+        for char_out in ['(', ')', '.csv']:
+            band_label = band_label.replace(char_out, '')
+            segments_label = segments_label.replace(char_out, '')
 
         self.export = os.path.join(
-            self.tlb_folder,
+            self.output_home,
             self.geo_area,
             self.region_filter,
             segments_label,
-            band_label
-            )
+            band_label,
+        )
+
+        print("Output path generated: %s" % self.export)
+        if input('Output here? y/n: ').strip().lower() != 'y':
+            print("y/Y not detected. Exiting.")
+            exit()
 
         file_ops.create_folder(self.export)
 
@@ -125,54 +187,54 @@ class TripLengthDistributionBuilder:
         if it's based on trip ends (gor) filters on trip O/D
         """
         # If region filters are home end, filter by LA
-        if self.region_filter == 'home':
+        if self.region_filter == 'household':
 
             if self.geo_area == 'north':
                 output_dat = output_dat[
                     output_dat['HHoldOSLAUA_B01ID'].isin(
-                        constants.NORTH_LA)]
+                        self._north_las)]
                 output_dat = output_dat.reset_index(drop=True)
             elif self.geo_area == 'north_and_mids':
                 output_dat = output_dat[
                     output_dat['HHoldOSLAUA_B01ID'].isin(
-                        constants.NORTH_AND_MID_LA)]
+                        self._north_and_mid_las)]
                 output_dat = output_dat.reset_index(drop=True)
             elif self.geo_area == 'north_incl_ie':
                 raise ValueError('i/e filter not compatible with home end filter')
 
-        elif self.region_filter == 'gor':
+        elif self.region_filter == 'trip_OD':
 
             if self.geo_area == 'north':
                 # From O/D filter
                 output_dat = output_dat[
                     output_dat['TripOrigGOR_B02ID'].isin(
-                        constants.NORTH_GOR)]
+                        self._north_gors)]
                 output_dat = output_dat.reset_index(drop=True)
                 # To O/D filter
                 output_dat = output_dat[
                     output_dat['TripDestGOR_B02ID'].isin(
-                        constants.NORTH_GOR)]
+                        self._north_gors)]
                 output_dat = output_dat.reset_index(drop=True)
             elif self.geo_area == 'north_incl_ie':
                 # From filter only
                 output_dat = output_dat[
                     output_dat['TripOrigGOR_B02ID'].isin(
-                        constants.NORTH_GOR)]
+                        self._north_gors)]
                 output_dat = output_dat.reset_index(drop=True)
             elif self.geo_area == 'north_and_mids':
                 output_dat = output_dat[
                     output_dat['TripOrigGOR_B02ID'].isin(
-                        constants.NORTH_AND_MID_GOR)]
+                        self._north_and_mid_gors)]
                 output_dat = output_dat.reset_index(drop=True)
                 # To O/D filter
                 output_dat = output_dat[
                     output_dat['TripDestGOR_B02ID'].isin(
-                        constants.NORTH_AND_MID_GOR)]
+                        self._north_and_mid_gors)]
                 output_dat = output_dat.reset_index(drop=True)
             elif self.geo_area == 'north_and_mids_incl_ie':
                 output_dat = output_dat[
                     output_dat['TripOrigGOR_B02ID'].isin(
-                        constants.NORTH_AND_MID_GOR)]
+                        self._north_and_mid_gors)]
         return output_dat
 
 
