@@ -1,9 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Aug 26 16:47:54 2020
+Created on: 26/08/2020
+Updated on:
 
-@author: genie
+Original author: Chris Storey
+Last update made by: Ben Taylor
+Other updates made by:
+
+File purpose:
+
 """
+
 import os
 
 import pandas as pd
@@ -12,7 +19,7 @@ from normits_demand import constants
 from normits_demand.utils import file_ops
 
 
-class NTSTripLengthBuilder:
+class TripLengthDistributionBuilder:
     def __init__(self,
                  tlb_folder=None,
                  nts_import=None):

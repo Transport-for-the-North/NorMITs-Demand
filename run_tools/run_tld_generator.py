@@ -17,20 +17,22 @@ import sys
 
 # Local Imports
 sys.path.append("..")
-from normits_demand.utils import nts_processing as nts
+from normits_demand.cost import tld_builder
 
 
 def main():
-    # TODO: path and smart search should be in constants
+    # TODO(CS): path and smart search should be in constants
     _TLB_FOLDER = 'I:/NorMITs Demand/import/trip_length_distributions'
     _NTS_IMPORT = 'I:/NTS/classified builds/cb_tfn.csv'
 
     run_another = True
     while run_another:
-        extract = nts.NTSTripLengthBuilder(tlb_folder=_TLB_FOLDER,
-                                           nts_import=_NTS_IMPORT)
+        extract = tld_builder.TripLengthDistributionBuilder(
+            tlb_folder=_TLB_FOLDER,
+            nts_import=_NTS_IMPORT,
+        )
 
-        dat = extract.run_tlb_lookups()
+        extract.run_tlb_lookups()
 
         if input('Run another y/n').lower() == 'n':
             run_another = False
