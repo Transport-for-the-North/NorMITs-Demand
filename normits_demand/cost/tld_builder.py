@@ -77,6 +77,10 @@ class TripLengthDistributionBuilder:
     _mid_gors = [4, 5]
     _north_and_mid_gors = list(set(_north_gors + _mid_gors))
 
+    # HB/NHB definitions
+    _hb_purposes = [1, 2, 3, 4, 5, 6, 7, 8]
+    _nhb_purposes = [11, 12, 13, 14, 15, 16, 18]
+
     def __init__(self,
                  tlb_folder: nd.PathLike,
                  nts_import: nd.PathLike,
@@ -322,9 +326,9 @@ class TripLengthDistributionBuilder:
                 cost_type = row['cost_type']
             else:
                 if 'p' in row:
-                    if int(row['p']) in constants.ALL_HB_P:
+                    if int(row['p']) in self._hb_purposes:
                         cost_type = 'pa'
-                    elif int(row['p']) in constants.ALL_NHB_P:
+                    elif int(row['p']) in self._nhb_purposes:
                         cost_type = 'od'
                     else:
                         raise ValueError('%d non-recognised purpose' % row['p'])

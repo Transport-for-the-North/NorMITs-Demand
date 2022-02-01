@@ -112,7 +112,7 @@ AGG_AT = {
 
 # ## SEGMENTATIONS ## #
 ALL_HB_P = [1, 2, 3, 4, 5, 6, 7, 8]
-ALL_NHB_P = [11, 12, 13, 14, 15, 16, 18]
+ALL_NHB_P = [12, 13, 14, 15, 16, 18]
 ALL_P = ALL_HB_P + ALL_NHB_P
 
 SOC_P = [1, 2, 12]
@@ -141,11 +141,4 @@ HB_USER_CLASS_PURPOSES = {
     'commute': [1],
     'business': [2],
     'other': [3, 4, 5, 6, 7, 8]
-}
-
-geo_areas = {
-    0: 'north only',
-    1: 'north including i/e',
-    2: 'north including midlands',
-    3: 'gb'
 }
