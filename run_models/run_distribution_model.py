@@ -84,11 +84,20 @@ def main():
             nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_car')
         nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_car')
+
+        # Define segments
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
-        # Define kwargs for the distribution tiers
+        # Define target tld dirs
+        target_tld_version = 'v1'
+        geo_constraint_type = 'trip_OD'
+
         upper_calibration_area = 'gb'
+        upper_calibration_bands = 'dm_highway_bands'
+        upper_target_tld_dir = os.path.join(geo_constraint_type, upper_calibration_bands)
+        upper_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m')
+        upper_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_tp')
         upper_model_method = nd.DistributionMethod.GRAVITY
         upper_calibration_zones_fname = None
         upper_calibration_areas = upper_calibration_area
@@ -99,7 +108,11 @@ def main():
         # upper_calibration_areas = {1: 'north', 2: 'gb'}
         # upper_calibration_naming = {1: 'north', 2: 'other'}
 
-        lower_calibration_area = 'north'
+        lower_calibration_area = 'north_and_mids'
+        lower_calibration_bands = 'dm_highway_bands'
+        lower_target_tld_dir = os.path.join(geo_constraint_type, lower_calibration_bands)
+        lower_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m')
+        lower_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_tp')
         lower_model_method = nd.DistributionMethod.GRAVITY
         lower_calibration_zones_fname = None
         lower_calibration_areas = lower_calibration_area
@@ -153,17 +166,31 @@ def main():
             nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
         nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_bus')
+
+        # Define segments
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
+        # Define target tld dirs
+        target_tld_version = 'v1'
+        geo_constraint_type = 'trip_OD'
+
         # Define kwargs for the distribution tiers
         upper_calibration_area = 'gb'
+        upper_calibration_bands = 'dm_highway_bands'
+        upper_target_tld_dir = os.path.join(geo_constraint_type, upper_calibration_bands)
+        upper_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m')
+        upper_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_tp')
         upper_model_method = nd.DistributionMethod.GRAVITY
         upper_calibration_zones_fname = None
         upper_calibration_areas = upper_calibration_area
         upper_calibration_naming = None
 
-        lower_calibration_area = 'north'
+        lower_calibration_area = 'north_and_mids'
+        lower_calibration_bands = 'dm_highway_bands'
+        lower_target_tld_dir = os.path.join(geo_constraint_type, lower_calibration_bands)
+        lower_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m')
+        lower_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_tp')
         lower_model_method = nd.DistributionMethod.GRAVITY
         lower_calibration_zones_fname = None
         lower_calibration_areas = lower_calibration_area
@@ -217,17 +244,31 @@ def main():
             nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_ca_rail')
         nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday_rail')
+
+        # Define segments
         hb_seg_name = 'p_m_ca'
         nhb_seg_name = 'p_m_ca_tp'
 
+        # Define target tld dirs
+        target_tld_version = 'v1'
+        geo_constraint_type = 'trip_OD'
+
         # Define kwargs for the distribution tiers
         upper_calibration_area = 'gb'
+        upper_calibration_bands = 'dm_gb_rail_bands'
+        upper_target_tld_dir = os.path.join(geo_constraint_type, upper_calibration_bands)
+        upper_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m_ca')
+        upper_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_ca_tp')
         upper_model_method = nd.DistributionMethod.GRAVITY
         upper_calibration_zones_fname = None
         upper_calibration_areas = upper_calibration_area
         upper_calibration_naming = None
 
-        lower_calibration_area = 'north'
+        lower_calibration_area = 'north_and_mids'
+        lower_calibration_bands = 'dm_north_rail_bands'
+        lower_target_tld_dir = os.path.join(geo_constraint_type, lower_calibration_bands)
+        lower_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m_ca')
+        lower_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_ca_tp')
         lower_model_method = nd.DistributionMethod.GRAVITY
         lower_calibration_zones_fname = None
         lower_calibration_areas = lower_calibration_area
@@ -281,11 +322,21 @@ def main():
             nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_tram')
         nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_tram')
+
+        # Define segments
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
+        # Define target tld dirs
+        target_tld_version = 'v1'
+        geo_constraint_type = 'trip_OD'
+
         # Define kwargs for the distribution tiers
-        upper_calibration_area = 'north'
+        upper_calibration_area = 'north_and_mids'
+        upper_calibration_bands = 'dm_highway_bands'
+        upper_target_tld_dir = os.path.join(geo_constraint_type, upper_calibration_bands)
+        upper_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m')
+        upper_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_tp')
         upper_model_method = nd.DistributionMethod.GRAVITY
         upper_calibration_zones_fname = None
         upper_calibration_areas = upper_calibration_area
@@ -296,6 +347,8 @@ def main():
         lower_calibration_zones_fname = None
         lower_calibration_areas = None
         lower_calibration_naming = None
+        lower_hb_target_tld_dir = None
+        lower_nhb_target_tld_dir = None
 
         gm_cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
 
@@ -356,6 +409,7 @@ def main():
         'year': base_year,
         'import_home': dm_import_home,
         'running_mode': mode,
+        'target_tld_version': target_tld_version,
         'upper_zoning_system': upper_zoning_system,
         'upper_running_zones': upper_zoning_system.unique_zones,
         'upper_model_method': upper_model_method,
@@ -415,7 +469,8 @@ def main():
             running_segmentation=hb_running_seg,
             upper_init_params_fname=hb_upper_init_params_fname,
             lower_init_params_fname=hb_lower_init_params_fname,
-            target_tld_dir=hb_seg_name,
+            upper_target_tld_dir=upper_hb_target_tld_dir,
+            lower_target_tld_dir=lower_hb_target_tld_dir,
             **dmab_kwargs,
         )
 
@@ -445,7 +500,8 @@ def main():
             running_segmentation=nhb_running_seg,
             upper_init_params_fname=nhb_upper_init_params_fname,
             lower_init_params_fname=nhb_lower_init_params_fname,
-            target_tld_dir=nhb_seg_name,
+            upper_target_tld_dir=upper_nhb_target_tld_dir,
+            lower_target_tld_dir=lower_nhb_target_tld_dir,
             **dmab_kwargs,
         )
 

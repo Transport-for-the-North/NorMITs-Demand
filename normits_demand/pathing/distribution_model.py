@@ -634,6 +634,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
     # Trip Length Distribution constants
     _tld_dir_name = 'trip_length_distributions'
+    _tld_dir_name2 = 'demand_imports'
 
     def __init__(self,
                  import_home: nd.PathLike,
@@ -647,17 +648,19 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                  upper_running_zones: List[Any],
                  lower_zoning_system: nd.ZoningSystem,
                  lower_running_zones: List[Any],
-                 target_tld_dir: str,
+                 target_tld_version: str,
                  init_params_cols: List[str],
                  upper_model_method: nd.DistributionMethod,
                  upper_model_kwargs: Dict[str, Any],
                  upper_init_params_fname: str,
+                 upper_target_tld_dir: str,
                  upper_calibration_areas: Union[Dict[Any, str], str],
                  upper_calibration_zones_fname: Optional[str] = None,
                  upper_calibration_naming: Optional[Dict[Any, str]] = None,
                  lower_model_method: Optional[nd.DistributionMethod] = None,
                  lower_model_kwargs: Optional[Dict[str, Any]] = None,
                  lower_init_params_fname: Optional[str] = None,
+                 lower_target_tld_dir: str = None,
                  lower_calibration_areas: Optional[Union[Dict[Any, str], str]] = None,
                  lower_calibration_zones_fname: Optional[str] = None,
                  lower_calibration_naming: Optional[Dict[Any, str]] = None,
@@ -696,7 +699,9 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         self.attractions = attractions
 
         self.running_mode = running_mode
-        self.target_tld_dir = target_tld_dir
+        self.upper_target_tld_dir = upper_target_tld_dir
+        self.lower_target_tld_dir = lower_target_tld_dir
+        self.target_tld_version = target_tld_version
 
         self.init_params_cols = init_params_cols
 
@@ -778,15 +783,19 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
     def _get_target_cost_distribution(self,
                                       area: str,
                                       segment_params: Dict[str, Any],
+                                      target_tld_dir: str,
                                       ) -> pd.DataFrame:
         """Reads in the target cost distribution for this segment"""
         # Generate the path to the cost distribution file
         tcd_dir = os.path.join(
             self.import_home,
             self._tld_dir_name,
+            self._tld_dir_name2,
+            self.target_tld_version,
             area,
-            self.target_tld_dir,
+            target_tld_dir,
         )
+
         fname = self.running_segmentation.generate_file_name(
             trip_origin=self.trip_origin,
             file_desc="tlb",
@@ -892,7 +901,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return cost_matrices
 
-    def _build_target_cost_distributions(self, area: str):
+    def _build_target_cost_distributions(self, area: str, target_tld_dir: str):
         """Build the dictionary of target_cost_distributions for each segment"""
         # Generate by segment kwargs
         target_cost_distributions = dict()
@@ -902,6 +911,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             target_cost_distribution = self._get_target_cost_distribution(
                 area=area,
                 segment_params=segment_params,
+                target_tld_dir=target_tld_dir,
             )
 
             # Add to dictionary
@@ -986,7 +996,10 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         calib_area_keys = self.upper_calibration_areas.keys()
         target_cost_distributions = dict.fromkeys(calib_area_keys)
         for area_key, area_name in self.upper_calibration_areas.items():
-            area_targets = self._build_target_cost_distributions(area=area_name)
+            area_targets = self._build_target_cost_distributions(
+                area=area_name,
+                target_tld_dir=self.upper_target_tld_dir,
+            )
             target_cost_distributions[area_key] = area_targets
 
         if self.upper_calibration_naming is None:
@@ -1039,7 +1052,10 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         calib_area_keys = self.lower_calibration_areas.keys()
         target_cost_distributions = dict.fromkeys(calib_area_keys)
         for area_key, area_name in self.lower_calibration_areas.items():
-            area_targets = self._build_target_cost_distributions(area=area_name)
+            area_targets = self._build_target_cost_distributions(
+                area=area_name,
+                target_tld_dir=self.lower_target_tld_dir,
+            )
             target_cost_distributions[area_key] = area_targets
 
         if self.lower_calibration_naming is None:
