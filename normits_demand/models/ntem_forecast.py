@@ -485,7 +485,7 @@ def grow_matrix(
     internals = attractions.zoning_system.internal_zones
     int_targets = {}
     growth = {}
-    dvectors = ("row_targets", productions), ("col_targets", attractions)
+    dvectors = (("row_targets", productions), ("col_targets", attractions))
     for nm, dvec in dvectors:
         mat_te = matrix.loc[internals, internals].sum(
             axis=1 if nm == "row_targets" else 0
@@ -521,7 +521,10 @@ def grow_matrix(
     # Factor external demand to row and column targets, make sure
     # row and column targets have the same totals
     ext_future = matrix.mul(growth["col_targets"], axis="columns")
-    ext_future = ext_future.mul(growth["row_targets"], axis="index")
+    # Calculate additional growth to meet row growth target
+    row_growth = ext_future.sum(axis=1) / matrix.sum(axis=1)
+    additional_growth = growth["row_targets"] / row_growth
+    ext_future = ext_future.mul(additional_growth, axis="index")
     # Set internal zones in factored matrix to 0 and add internal furnessed
     ext_future.loc[internals, internals] = 0
     combined_future = pd.concat([int_future, ext_future], axis=0)
