@@ -44,9 +44,7 @@ class TEMProData:
         a list of integers.
     """
 
-    DATA_PATH = Path(
-        r"I:\NorMITs Demand\import\ntem_forecast\tempro_pa_data.csv"
-    )
+    DATA_PATH = Path(r"I:\Data\TEMPRO\tempro_pa_data_6_mode.csv")
     _columns = {
         "msoa_zone_id": str,
         "trip_end_type": str,
