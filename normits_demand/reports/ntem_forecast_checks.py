@@ -603,7 +603,7 @@ def _excel_matrix_formula(
     # Add total row and TEMPro data attractions
     row = len(zones) + 1
     ws.cell(startrow + row, startcol, "Total")
-    ws.cell(startrow + row + 1, startcol, "TEMPro Productions")
+    ws.cell(startrow + row + 1, startcol, "TEMPro Attractions")
     for col in range(1, len(zones) + 3):
         ws.cell(
             startrow + row,
@@ -624,15 +624,25 @@ def _excel_matrix_formula(
                     row_cell=cell_id(startrow, startcol + col),
                 )
             )
-        else:
-            # Final two columns in this row should also be row totals
+        elif col == len(zones) + 1:
+            # Calculate TEMPro row total
             ws.cell(
                 startrow + row + 1,
                 startcol + col,
                 total_formula.format(
-                    start=cell_id(startrow + row, startcol + 1),
-                    end=cell_id(startrow + row, startcol + col - 1),
+                    start=cell_id(startrow + row + 1, startcol + 1),
+                    end=cell_id(startrow + row + 1, startcol + col - 1),
                 ),
+            )
+        elif col == len(zones) + 2:
+            # Calculate TEMPro total
+            ws.cell(
+                startrow + row + 1,
+                startcol + col,
+                "={c1}+{c2}".format(
+                    c1=cell_id(startrow + row + 1, startcol + col - 1),
+                    c2=cell_id(startrow + row, startcol + col),
+                )
             )
     return startrow + row + 1, startcol + col + 1
 
