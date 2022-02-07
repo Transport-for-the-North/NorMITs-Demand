@@ -23,6 +23,7 @@ import numpy as np
 # Local Imports
 from normits_demand.cost import cost_functions
 from normits_demand.distribution import furness
+from normits_demand.concurrency import multithreading
 
 
 def loops_furness(
@@ -32,8 +33,6 @@ def loops_furness(
         col_targets,
 ):
     unique_area_codes = area_mats.keys()
-
-    print(seed_mats[1])
     
     seed_mat = np.zeros((len(row_targets), len(col_targets)))
     for area_code in unique_area_codes:
@@ -73,13 +72,17 @@ def loops(
 
     furnessed_mats = loops_furness(area_mats, seed_mats, row_targets, col_targets)
 
-    for i in unique_area_codes[:1]:
-        print(seed_mats[i])
-        print(furnessed_mats[i])
-        print()
+    seed_full = np.zeros_like(cost_matrix).astype(float)
+    furnessed_full = np.zeros_like(cost_matrix).astype(float)
+    for i in unique_area_codes:
+        seed_full += seed_mats[i]
+        furnessed_full += furnessed_mats[i]
+
+    print(seed_full)
+    print(furnessed_full)
 
 
-class FurnessThread(threading.Thread):
+class FurnessThread(multithreading.ReturnOrErrorThread):
 
     def __init__(
             self,
@@ -91,7 +94,7 @@ class FurnessThread(threading.Thread):
             *args,
             **kwargs,
     ):
-        threading.Thread.__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.row_targets = row_targets
         self.col_targets = col_targets
@@ -128,38 +131,26 @@ class FurnessThread(threading.Thread):
 
         return queue_data
 
-    def run(self):
-        # Run until told not to
-        while not self._stop_running:
+    def run_target(self):
+        # Wait for threads to hand over seed mats
+        waiting_threads = list(self.unique_area_keys)
+        seed_mats = self._get_gravity_queue_data(waiting_threads)
 
-            # Wait for threads to hand over seed mats
-            waiting_threads = list(self.unique_area_keys)
-            seed_mats = self._get_gravity_queue_data(waiting_threads)
+        # Furness, then split back out
+        furnessed_mats = loops_furness(
+            area_mats=self.area_mats,
+            seed_mats=seed_mats,
+            row_targets=self.row_targets,
+            col_targets=self.col_targets,
+        )
 
-            break
+        for area_id in self.unique_area_keys:
+            self.putter_qs[area_id].put(furnessed_mats[area_id])
 
-            # Furness, then split back out
-            furnessed_mats = loops_furness(
-                area_mats=self.area_mats,
-                seed_mats=seed_mats,
-                row_targets=self.row_targets,
-                col_targets=self.col_targets,
-            )
-
-            for area_id in self.unique_area_keys:
-                self.putter_qs[area_id].put(furnessed_mats[area_id])
-
-            print("Furness done one iter")
-
-        print("here")
-        exit()
-
-    def kill(self):
-        print("Killing")
-        self._stop_running = True
+        print("Furness done one iter")
 
 
-class GravityThread(threading.Thread):
+class GravityThread(multithreading.ReturnOrErrorThread):
 
     def __init__(
         self,
@@ -171,7 +162,7 @@ class GravityThread(threading.Thread):
         *args,
         **kwargs,
     ):
-        threading.Thread.__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.cost_matrix = cost_matrix
         self.mu = mu
@@ -179,9 +170,7 @@ class GravityThread(threading.Thread):
         self.putter_q = putter_q
         self.getter_q = getter_q
 
-        self._return_val = None
-
-    def run(self):
+    def run_target(self):
         seed_matrix = cost_functions.log_normal(
             self.cost_matrix,
             sigma=self.sigma,
@@ -192,11 +181,7 @@ class GravityThread(threading.Thread):
         self.putter_q.put(seed_matrix)
         furnessed_matrix = get_data_from_queue(self.getter_q)
 
-        self._return_val = furnessed_matrix
-
-    def join(self, *args, **kwargs):
-        threading.Thread.join(self, *args, **kwargs)
-        return self._return_val
+        return furnessed_matrix
 
 
 def get_data_from_queue(q):
@@ -259,14 +244,19 @@ def fake_scipy(
         )
         threads[area_code].start()
 
-    furnessed_mats = dict.fromkeys(unique_area_codes)
-    for area_code in unique_area_codes:
-        furnessed_mats[area_code] = threads[area_code].join()
+    furnessed_mats = multithreading.wait_for_thread_dict_return_or_error(
+        threads=threads,
+        pbar_kwargs={'disable': False}
+    )
 
-    for i in unique_area_codes[:1]:
-        print(seed_mats[i])
-        print(furnessed_mats[i])
-        print()
+    seed_full = np.zeros_like(cost_matrix).astype(float)
+    furnessed_full = np.zeros_like(cost_matrix).astype(float)
+    for i in unique_area_codes:
+        seed_full += seed_mats[i]
+        furnessed_full += furnessed_mats[i]
+
+    print(seed_full)
+    print(furnessed_full)
 
 
 def main():
@@ -288,6 +278,8 @@ def main():
         row_targets=row_targets,
         col_targets=col_targets,
     )
+
+    print("--" * 50)
 
     fake_scipy(
         area_matrix=area_matrix,
