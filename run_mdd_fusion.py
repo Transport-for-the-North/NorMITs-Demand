@@ -114,15 +114,23 @@ def fusion_factors():
         dct_distance = pk.load(log)
     # Import matrix type arrays
     # Origin types
-    origin_file = inputs_folder + '\\' + 'Origin_Type.csv'
+    # origin_file = inputs_folder + '\\' + 'Origin_Type.csv'
+    origin_file = inputs_folder + '\\' + 'Origin_Type-vS.csv'
     origin_type_matrix = pd.read_csv(origin_file, delimiter=',', header=0)
     origin_type_matrix = origin_type_matrix.to_numpy()
     # Destination types
-    dest_file = inputs_folder + '\\' + 'Dest_Type.csv'
+    # dest_file = inputs_folder + '\\' + 'Dest_Type.csv'
+    dest_file = inputs_folder + '\\' + 'Dest_Type-vS.csv'
     dest_type_matrix = pd.read_csv(dest_file, delimiter=',', header=0)
     dest_type_matrix = dest_type_matrix.to_numpy()
+    # Combine Origin and Destination types
+    ot = origin_type_matrix.astype('U')
+    dt = dest_type_matrix.astype('U')
+    od_type_matrix = np.core.defchararray.add(ot, '-')
+    od_type_matrix = np.core.defchararray.add(od_type_matrix, dt)
     # Import mdd demand
-    mdd_car_file = inputs_folder + '\\' + 'dct_MDDCar_UC_pcu.pkl'
+    # mdd_car_file = inputs_folder + '\\' + 'dct_MDDCar_UC_pcu.pkl'
+    mdd_car_file = inputs_folder + '\\' + 'dct_MDDCar_expanded-v2_UC_pcu.pkl'
     with open(mdd_car_file, 'rb') as log:
         dct_mdd_demand = pk.load(log)
     # Import NoHAM demand
@@ -130,7 +138,7 @@ def fusion_factors():
     with open(noham_car_file, 'rb') as log:
         dct_noham_demand = pk.load(log)
     # Import Min Distance cut offs
-    head_cut_dist_file = inputs_folder + '\\' + 'dictcutoff_v0.pkl'
+    head_cut_dist_file = inputs_folder + '\\' + 'dictcutoff_v1.pkl'
     with open(head_cut_dist_file, 'rb') as log:
         dct_head_cut_dist = pk.load(log)
 
@@ -164,13 +172,12 @@ def fusion_factors():
             print(min_dist_cut)
             fusion_matrix = mdd_fusion_engine.build_fusion_factor(input_matrix,
                                                                   distance_matrix,
-                                                                  origin_type_matrix,
-                                                                  dest_type_matrix,
+                                                                  od_type_matrix,
                                                                   chop_head=True,
                                                                   chop_tail=False,
-                                                                  origin_type=True,
-                                                                  dest_type=True,
-                                                                  inclusive=True,
+                                                                  type_filter=True,
+                                                                  include_type=['I-I', 'I-E', 'I-S', 'E-I', 'S-I'],
+                                                                  exclude_type=['E-S', 'S-E', 'E-E', 'S-S'],
                                                                   invert=False,
                                                                   min_dist=min_dist_cut,
                                                                   max_dist=9999,
@@ -191,13 +198,12 @@ def fusion_factors():
             print(min_dist_cut)
             fusion_matrix = mdd_fusion_engine.build_fusion_factor(input_matrix,
                                                                   distance_matrix,
-                                                                  origin_type_matrix,
-                                                                  dest_type_matrix,
+                                                                  od_type_matrix,
                                                                   chop_head=True,
                                                                   chop_tail=False,
-                                                                  origin_type=True,
-                                                                  dest_type=True,
-                                                                  inclusive=True,
+                                                                  type_filter=True,
+                                                                  include_type=['I-I', 'I-E', 'I-S', 'E-I', 'S-I'],
+                                                                  exclude_type=['E-S', 'S-E', 'E-E', 'S-S'],
                                                                   invert=True,
                                                                   min_dist=min_dist_cut,
                                                                   max_dist=9999,
@@ -232,20 +238,28 @@ def fusion_factors():
     dct_expansion_factor = {3: {1: {1: {1: {}, 2: {}, 3: {}},
                                     2: {1: {}, 2: {}, 3: {}},
                                     3: {1: {}, 2: {}, 3: {}}}}}
-    # TP1
-    dct_expansion_factor[3][1][1][1] = 1.04
-    dct_expansion_factor[3][1][1][2] = 1.37
-    dct_expansion_factor[3][1][1][3] = 1.47
-    # TP2
-    dct_expansion_factor[3][1][2][1] = 6.32
-    dct_expansion_factor[3][1][2][2] = 2.65
-    dct_expansion_factor[3][1][2][3] = 6.91
-    # TP3
-    dct_expansion_factor[3][1][3][1] = 2.94
-    dct_expansion_factor[3][1][3][2] = 2.98
-    dct_expansion_factor[3][1][3][3] = 2.71
-
-    expansion_applied = True
+    # Set expansion factors
+    set_manually = False
+    if set_manually:
+        # TP1
+        dct_expansion_factor[3][1][1][1] = 1.04
+        dct_expansion_factor[3][1][1][2] = 1.37
+        dct_expansion_factor[3][1][1][3] = 1.47
+        # TP2
+        dct_expansion_factor[3][1][2][1] = 6.32
+        dct_expansion_factor[3][1][2][2] = 2.65
+        dct_expansion_factor[3][1][2][3] = 6.91
+        # TP3
+        dct_expansion_factor[3][1][3][1] = 2.94
+        dct_expansion_factor[3][1][3][2] = 2.98
+        dct_expansion_factor[3][1][3][3] = 2.71
+    else:
+        # Set expansion with Loop
+        for uc in dctuc:
+            for tp in dcttp:
+                dct_expansion_factor[3][1][uc][tp] = round(dct_mdd_expand[3][1][uc][tp], 2)
+    # Apply expansion factors is required
+    expansion_applied = False
     dct_fusion_demand = {3: {}}
     dct_fusion_demand[3][1] = {}
     for uc in dctuc:
@@ -262,7 +276,7 @@ def fusion_factors():
                                                        tp]))
 
     unq_zones = list(range(1, 2771))
-    version = '3-6'
+    version = '5-X'
     export_folder = 'Y:/Mobile Data/Processing/3-1_Fusion_Demand'
     md = 3
     wd = 1

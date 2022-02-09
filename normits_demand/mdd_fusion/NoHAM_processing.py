@@ -456,9 +456,9 @@ def mdd_to_uc():
 
 
 def main():
-    run_noham_synthetic_package = True
-    run_noham_synthetic_merge = True
-    run_noham_synthetic_export = True
+    run_noham_synthetic_package = False
+    run_noham_synthetic_merge = False
+    run_noham_synthetic_export = False
     run_noham_synthetic_per_to_veh = True
 
     run_noham_car_package = False

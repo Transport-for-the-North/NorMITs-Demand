@@ -562,12 +562,13 @@ def expand_mdd(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\
     mdd_car_file = 'Y:\\Mobile Data\\Processing\\dct_MDDCar.pkl'
     with open(mdd_car_file, 'rb') as log:
         dct_mdd_car = pk.load(log)
-    mdd_global_factor_file = 'Y:\\Mobile Data\\Processing\\SOMETHING.pkl'
-    with open(mdd_car_file, 'rb') as log:
+    mdd_global_factor_file = 'Y:\\Mobile Data\\Processing\\dict_mnfactor_arrays_v1.pkl'
+    with open(mdd_global_factor_file, 'rb') as log:
         mdd_global_factor = pk.load(log)
     dct_mdd_expanded = {3: {}}
     dct_mdd_expanded[3][1] = {}
     for pp in dctmddpurp:
+        dct_mdd_expanded[3][1][pp] = {}
         for tp in dcttp:
             dct_mdd_expanded[3][1][pp][tp] = (dct_mdd_car[3][1][pp][tp] * mdd_global_factor[3][1][pp][tp])
     # If required export totals
@@ -575,7 +576,7 @@ def expand_mdd(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\
         # Build totals dictionary
         dct_total = {3: {1: {}}}
         for pp in dctmddpurp:
-            dct_total[3][1][uc] = {}
+            dct_total[3][1][pp] = {}
             for tp in dcttp:
                 print(str(3) + '-' + str(1) + '-' + str(pp) + '-' + str(tp))
                 dct_total[3][1][pp][tp] = np.sum(dct_mdd_expanded[3][1][pp][tp])
@@ -584,8 +585,8 @@ def expand_mdd(totals_check=False, check_location='Y:\\Mobile Data\\Processing\\
                                             for j in dct_total[i].keys()
                                             for k in dct_total[i][j].keys()},
                                            orient='index')
-        df_totals.to_csv(check_location + '\\MDD_Car_expanded_Totals.csv')
-    with open(r'Y:\Mobile Data\Processing\dct_MDDCar_expanded.pkl', 'wb') as log:
+        df_totals.to_csv(check_location + '\\MDD_Car_expanded_Totals-v2.csv')
+    with open(r'Y:\Mobile Data\Processing\dct_MDDCar_expanded-v2.pkl', 'wb') as log:
         pk.dump(dct_mdd_expanded, log, pk.HIGHEST_PROTOCOL)
 
 
@@ -602,7 +603,9 @@ def convert_mdd_purp_to_noham_uc(totals_check=False, check_location='Y:\\Mobile 
     dcttp = {1: ['AM', 3], 2: ['IP', 6], 3: ['PM', 3], 4: ['OP', 4]}
 
     # import input dictionaries
-    mdd_car_file = 'Y:\\Mobile Data\\Processing\\dct_MDDCar_expanded.pkl'
+    #mdd_car_file = 'Y:\\Mobile Data\\Processing\\dct_MDDCar_expanded.pkl'
+    #mdd_car_file = 'Y:\\Mobile Data\\Processing\\dct_MDDHW.pkl'
+    mdd_car_file = 'Y:\\Mobile Data\\Processing\\dct_MDDCar_expanded-v2.pkl'
     with open(mdd_car_file, 'rb') as log:
         dct_mdd_car = pk.load(log)
     """
@@ -671,11 +674,14 @@ def convert_mdd_purp_to_noham_uc(totals_check=False, check_location='Y:\\Mobile 
                                             for j in dct_total[i].keys()
                                             for k in dct_total[i][j].keys()},
                                            orient='index')
-        df_totals.to_csv(check_location + '\\MDD_Car_UC_Totals.csv')
+        df_totals.to_csv(check_location + '\\MDD_HW_Totals.csv')
     # Export to MDDHW pickle file
-    with open(r'Y:\Mobile Data\Processing\dct_MDDCar_expanded_UC.pkl', 'wb') as log:
+    with open(r'Y:\Mobile Data\Processing\dct_MDDCar_expanded-v2_UC.pkl', 'wb') as log:
         pk.dump(dct_mdd_demand_uc_comb, log, pk.HIGHEST_PROTOCOL)
     """
+    with open(r'Y:\Mobile Data\Processing\dct_MDDHW.pkl', 'wb') as log:
+        pk.dump(dct_mdd_demand_uc_comb, log, pk.HIGHEST_PROTOCOL)
+
     with open(r'Y:\Mobile Data\Processing\dct_MDDCar_UC.pkl', 'wb') as log:
         pk.dump(dct_mdd_demand_uc_comb, log, pk.HIGHEST_PROTOCOL)
     """

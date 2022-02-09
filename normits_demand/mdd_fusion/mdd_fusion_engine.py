@@ -38,18 +38,22 @@ def package_fusion_distances(inputs_path,
 
 def build_fusion_factor(input_matrix,
                         distance_matrix,
-                        origin_type_matrix,
-                        dest_type_matrix,
+                        od_type_matrix,
                         chop_head=False,
                         chop_tail=False,
-                        origin_type=False,
-                        dest_type=False,
-                        inclusive=False,
+                        type_filter=False,
+                        include_type=None,
+                        exclude_type=None,
                         invert=False,
                         min_dist=0,
                         max_dist=9999,
                         default_value=1):
-    print(str(chop_head) + ', ' + str(chop_tail) + ', ' + str(origin_type) + ', ' + str(dest_type))
+    if include_type is None:
+        include_type = ['I-I']
+    if exclude_type is None:
+        exclude_type = ['I-E', 'I-S', 'E-I', 'S-I', 'E-E', 'E-S', 'S-E', 'S-S']
+    unique_types = list(np.unique(od_type_matrix))
+    print(str(chop_head) + ', ' + str(chop_tail) + ', ' + str(type_filter))
     fusion_factor = (input_matrix * 0) + default_value
     if chop_head:
         head_factor = np.where(distance_matrix <= min_dist, 0, 1)
@@ -59,15 +63,17 @@ def build_fusion_factor(input_matrix,
         tail_factor = np.where(distance_matrix > max_dist, 0, 1)
     else:
         tail_factor = (input_matrix * 0) + 1
-    if origin_type and dest_type:
-        if inclusive:
-            type_factor = np.maximum(origin_type_matrix, dest_type_matrix)
-        else:
-            type_factor = np.minimum(origin_type_matrix, dest_type_matrix)
-    elif origin_type:
-        type_factor = origin_type_matrix
-    elif dest_type:
-        type_factor = dest_type_matrix
+    if type_filter:
+        type_factor = od_type_matrix
+        for unq in unique_types:
+            print(str(unq))
+            if unq in include_type:
+                type_factor = np.where(type_factor == unq, 1, type_factor)
+            elif unq in exclude_type:
+                type_factor = np.where(type_factor == unq, 0, type_factor)
+            else:
+                print('Variable (' + str(unq) + ') not in either include or exclude list')
+        type_factor = type_factor.astype(int)
     else:
         type_factor = (input_matrix * 0) + 1
     fusion_factor = (fusion_factor * head_factor * tail_factor * type_factor)

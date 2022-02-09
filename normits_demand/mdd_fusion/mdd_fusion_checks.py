@@ -28,9 +28,9 @@ noham_loc = 'Y:/Mobile Data/Processing'
 lad_loc = 'Y:/Mobile Data/Processing/MDD_Check/lookups/lads20_to_noham_correspondence.csv'
 noham_internal_loc = 'Y:/Mobile Data/Processing/MDD_Check/lookups/noham_internal.csv'
 sector_loc = 'Y:/Mobile Data/Processing/MDD_Check/lookups/sector_to_noham_correspondence.csv'
-distance_loc = 'Y:/NoHAM/17.TUBA_Runs/-TPT/Skims/RefDist_Skims/NoHAM_Base_2018_TS2_v106_Dist_Other.csv'
+distance_loc = 'O:/17.TUBA_Runs/-TPT/Skims/RefDist_Skims/NoHAM_Base_2018_TS2_v106_Dist_Other.csv'
 # Fusion version
-fusion_versions = ['3-5', '3-6']
+fusion_versions = ['5-X']
 # Read in reference NoHAM
 with open(r'Y:/Mobile Data/Processing/dct_NoHAM_Synthetic_PCU.pkl', 'rb') as log:
     dct_noham_pcu = pk.load(log)
@@ -74,7 +74,7 @@ for ver in fusion_versions:
     lad_cor = lad_cor.drop('lads_f', axis=1)
 
     zone_int = pd.read_csv(noham_internal_loc,
-                           names=['zone', 'internal'],
+                           names=['zone', 'internal', 'internal-scot'],
                            skiprows=1)
 
     sector_cor = pd.read_csv(sector_loc,
