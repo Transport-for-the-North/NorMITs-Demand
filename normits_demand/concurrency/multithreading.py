@@ -147,12 +147,12 @@ def wait_for_thread_dict_return_or_error(
 
 
 def wait_for_thread_return_or_error(
-        threads: List[ReturnOrErrorThread],
-        stop_event: threading.Event = None,
-        thread_timeout: float = 0.01,
-        total_timeout: float = 86400,
-        pbar_kwargs: Dict[str, Any] = None,
-        default_return_val: Any = None,
+    threads: List[ReturnOrErrorThread],
+    stop_event: threading.Event = None,
+    thread_timeout: float = 0.01,
+    total_timeout: float = 86400,
+    pbar_kwargs: Dict[str, Any] = None,
+    default_return_val: Any = None,
 ) -> List[Any]:
     """Retrieves the return values of threads, or throws a thread error
 
@@ -273,3 +273,72 @@ def wait_for_thread_return_or_error(
     pbar.close()
 
     return results
+
+
+def get_data_from_queue(
+    q: queue.Queue,
+    stop_event: threading.Event = None,
+    total_timeout: float = 86400,
+    default_return_val: Any = None,
+) -> Any:
+    """Retrieves data from the given queue.
+
+    Waits until data can be retrieved from q. If total_timeout is reached, a
+    Timeout error is thrown.
+
+    Parameters
+    ----------
+    q:
+        The queue to retrieve data from.
+
+    stop_event:
+        An event telling this function to stop waiting for return values.
+
+    total_timeout:
+        The total amount of time to wait before terminating.
+
+    default_return_val:
+        The default value to return if the stop event is set before the data
+        is able to be retrieved from the queue.
+
+    Returns
+    -------
+    q_data:
+        The data retrieved from queue
+
+    Raises
+    ------
+    TimeoutError:
+        If total_timeout is exceeded while waiting to get data from q.
+    """
+    # Init
+    start_time = time.time()
+    got_data = False
+    data = default_return_val.copy()
+
+    if stop_event is None:
+        stop_event = threading.Event()
+
+    # Loop while waiting for data
+    while not got_data:
+        # Wait for a little bit to avoid intensive looping
+        time.sleep(0.05)
+
+        # If told to stop, just return what we have so far
+        if stop_event.is_set():
+            return data
+
+        # Check if we've ran out of time
+        if (time.time() - start_time) > total_timeout:
+            raise TimeoutError(
+                "Ran out of time while waiting to retrieve data from queue."
+            )
+
+        # Try get the data, catch the error if not available
+        try:
+            data = q.get(block=False)
+            got_data = True
+        except queue.Empty:
+            pass
+
+    return data
