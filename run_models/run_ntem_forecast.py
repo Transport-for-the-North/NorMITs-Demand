@@ -231,10 +231,16 @@ def main(params: NTEMForecastParameters):
 
     # Compile to output formats
     ntem_forecast.compile_noham_for_norms(pa_folder, efs_consts.FUTURE_YEARS)
-    ntem_forecast.compile_noham(
+    compiled_od_path = ntem_forecast.compile_noham(
         od_folder,
         efs_consts.FUTURE_YEARS,
         params.car_occupancies_path,
+    )
+    ntem_forecast_checks.od_matrix_comparison(
+        ntem_inputs.od_matrix_folder,
+        compiled_od_path / "PCU",
+        params.model_name,
+        ntem_forecast_checks.COMPARISON_ZONE_SYSTEMS["matrix 1"],
     )
 
     LOG.info(

@@ -167,6 +167,13 @@ class NTEMImportMatrices:
             self._nhb_paths = self._get_paths("nhb")
         return self._nhb_paths.copy()
 
+    @property
+    def od_matrix_folder(self) -> Path:
+        """PostME OD matrices folder, assumed to be in
+            the parent folder of the PA matrices.
+        """
+        return self.matrix_folder.parent
+
     def output_filename(
         self,
         trip_origin: str,

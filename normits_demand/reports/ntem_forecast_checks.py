@@ -17,6 +17,7 @@ import openpyxl
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet import worksheet
 from openpyxl.utils import get_column_letter
+from tqdm import tqdm
 
 # Local imports
 from normits_demand import core as nd_core
@@ -453,12 +454,12 @@ def translate_matrix(
     # Translate matrix
     return translation.pandas_matrix_zone_translation(
         matrix,
-        lookup,
         f"{matrix_zoning_name}_zone_id",
         f"{new_zoning_name}_zone_id",
         f"{matrix_zoning_name}_to_{new_zoning_name}",
         matrix_zoning.unique_zones,
         new_zoning.unique_zones,
+        translation=lookup,
         **kwargs,
     )
 
@@ -638,9 +639,7 @@ def _excel_matrix_formula(
         elif col == len(zones) + 2:
             # Calculate TEMPro total
             ws.cell(
-                startrow + row + 1,
-                startcol + col,
-                "={c1}+{c2}".format(
+                startrow + row + 1, startcol + col, "={c1}+{c2}".format(
                     c1=cell_id(startrow + row + 1, startcol + col - 1),
                     c2=cell_id(startrow + row, startcol + col),
                 )
@@ -770,3 +769,133 @@ def matrix_comparison(
         years,
         zone_col,
     )
+
+
+def od_matrix_comparison(
+    base_folder: Path,
+    forecast_folder: Path,
+    matrix_zoning: str,
+    comparison_zoning: str,
+):
+    """Write spreadsheet summarising OD matrix growth.
+
+    Parameters
+    ----------
+    base_folder : Path
+        Folder containing base OD matrices.
+    forecast_folder : Path
+        Folder containing forecast OD matrices.
+    matrix_zoning : str
+        Name of the current matrix zoning system.
+    comparison_zoning : str
+        Name of the zoning system for the summaries.
+    """
+    OD_MATRIX_NAMES = {
+        "base": "od_m3_{purp}_tp{tp}_postME.csv",
+        "base2": "od_m3_{purp}_tp{tp}.csv",
+        "forecast": "od_{purp}_yr{yr}_m3_tp{tp}.csv",
+    }
+    for name, folder in (("base", base_folder), ("forecast", forecast_folder)):
+        if not folder.is_dir():
+            raise NotADirectoryError(f"{name} folder doesn't exist: {folder}")
+    LOG.info(
+        "Creating OD matrix summary using:\n\t"
+        "base folder: %s\n\tforecast folder: %s\n\t"
+        "at zoning system: %s",
+        base_folder,
+        forecast_folder,
+        comparison_zoning,
+    )
+    out_path = forecast_folder / f"OD_matrix_growth_summary-{comparison_zoning}.xlsx"
+    pbar = tqdm(
+        desc="Creating OD Matrix Summary",
+        total=len(efs_consts.USER_CLASSES) * len(efs_consts.TIME_PERIODS),
+        dynamic_ncols=True,
+    )
+    with pd.ExcelWriter(out_path) as writer:
+        for purpose in efs_consts.USER_CLASSES:
+            for tp in efs_consts.TIME_PERIODS:
+                base_path = base_folder / OD_MATRIX_NAMES["base"].format(
+                    purp=purpose, tp=tp
+                )
+                if not base_path.exists():
+                    base_path = base_path.with_name(
+                        OD_MATRIX_NAMES["base2"].format(purp=purpose, tp=tp)
+                    )
+                forecast_name = lambda p, t, y: OD_MATRIX_NAMES[
+                    "forecast"].format(purp=p, tp=t, yr=y)
+                forecast_paths = {
+                    y: forecast_folder / forecast_name(purpose, tp, y)
+                    for y in efs_consts.FUTURE_YEARS
+                }
+                _compare_od_matrices(
+                    writer,
+                    f"{purpose} TP{tp}",
+                    base_path,
+                    forecast_paths,
+                    matrix_zoning,
+                    comparison_zoning,
+                )
+                pbar.update()
+    pbar.close()
+    LOG.info("Written: %s", out_path)
+
+
+def _compare_od_matrices(
+    excel_writer,
+    sheet: str,
+    base_path: Path,
+    forecast_paths: Dict[int, Path],
+    matrix_zoning: str,
+    comparison_zoning: str,
+):
+    """Writes a single summary sheet to the spreadsheet.
+
+    Internal function for `od_matrix_comparison`.
+    """
+
+    def matrix_totals(matrix: pd.DataFrame) -> pd.DataFrame:
+        """Add total row and column to matrix."""
+        matrix.loc[:, "Total"] = matrix.sum(axis=1)
+        matrix.loc["Total"] = matrix.sum(axis=0)
+        return matrix
+
+    # Read base matrix which is in long format
+    base = file_ops.read_df(
+        base_path,
+        header=None,
+        index_col=[0, 1],
+        dtype={
+            0: int,
+            1: int,
+            2: float
+        },
+    )
+    base = base.unstack().fillna(0)
+    base.columns = base.columns.droplevel(0)
+    base = translate_matrix(base, matrix_zoning, comparison_zoning)
+    base = matrix_totals(base)
+    base.to_excel(excel_writer, sheet_name=sheet, index_label="Base")
+
+    for i, (yr, path) in enumerate(forecast_paths.items()):
+        # Read forecast matrix which is in square format
+        forecast = file_ops.read_df(path, index_col=0)
+        forecast.columns = pd.to_numeric(forecast.columns, downcast="integer")
+        forecast = translate_matrix(forecast, matrix_zoning, comparison_zoning)
+        forecast = matrix_totals(forecast)
+        col = i * (len(forecast) + 2)
+        forecast.to_excel(
+            excel_writer,
+            sheet_name=sheet,
+            index_label=f"Forecast - {yr}",
+            startrow=len(base) + 3,
+            startcol=col,
+        )
+        growth = forecast / base
+        growth.to_excel(
+            excel_writer,
+            sheet_name=sheet,
+            index_label=f"Growth - {yr}",
+            startrow=2 * (len(base) + 3),
+            startcol=col,
+        )
