@@ -24,21 +24,242 @@ from typing import Tuple
 from typing import Callable
 
 # self imports
+import normits_demand as nd
 from normits_demand import constants as consts
 
+from normits_demand.utils import timing
 from normits_demand.utils import file_ops
+from normits_demand.utils import math_utils
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.concurrency import multiprocessing
 from normits_demand.audits import audits
+from normits_demand.cost import utils as cost_utils
+
+
+class Furness3D:
+    # TODO(BT): Write Furness3D docs
+
+    _target_cost_distribution_cols = ['min', 'max', 'ave_km', 'band_share']
+
+    def __init__(self,
+                 row_targets: np.ndarray,
+                 col_targets: np.ndarray,
+                 cost_matrix: np.ndarray,
+                 base_matrix: np.ndarray,
+                 calibration_matrix: np.ndarray,
+                 target_cost_distributions: Dict[Any, pd.DataFrame],
+                 calibration_naming: Dict[Any, Any],
+                 target_convergence: float,
+                 furness_max_iters: int,
+                 furness_tol: float,
+                 calibration_ignore_val: Any = -1,
+                 running_log_path: nd.PathLike = None,
+                 ):
+
+        # TODO(BT): Write Furness3D __init__ docs
+        # Validate attributes
+        for key, tcd in target_cost_distributions.items():
+            tcd = pd_utils.reindex_cols(tcd, self._target_cost_distribution_cols)
+            target_cost_distributions[key] = tcd
+
+        if running_log_path is not None:
+            dir_name, _ = os.path.split(running_log_path)
+            if not os.path.exists(dir_name):
+                raise FileNotFoundError(
+                    "Cannot find the defined directory to write out a"
+                    "log. Given the following path: %s"
+                    % dir_name
+                )
+
+            if os.path.isfile(running_log_path):
+                warnings.warn(
+                    "Given a log path to a file that already exists. Logs "
+                    "will be appended to the end of the file at: %s"
+                    % running_log_path
+                )
+
+        # Get a list of keys for calibration zones
+        calib_keys = np.unique(calibration_matrix).tolist()
+        calib_keys = du.list_safe_remove(calib_keys, [calibration_ignore_val])
+
+        # Set attributes
+        self.row_targets = row_targets
+        self.col_targets = col_targets
+        self.cost_matrix = cost_matrix
+        self.base_matrix = base_matrix
+        self.calibration_keys = calib_keys
+        self.calibration_matrix = calibration_matrix
+        self.target_cost_distributions = target_cost_distributions
+        self.calibration_naming = calibration_naming
+        self.calibration_ignore_val = calibration_ignore_val
+        self.furness_max_iters = furness_max_iters
+        self.furness_tol = furness_tol
+        self.running_log_path = running_log_path
+
+        self.target_convergence = target_convergence
+
+        # Additional attributes
+        self.initial_convergences = None
+        self.achieved_band_shares = None
+        self.achieved_convergences = None
+        self.achieved_distribution = None
+
+    def _correct_band_share(self,
+                            matrix: np.ndarray,
+                            ) -> np.ndarray:
+        """Correct matrix to move band shares towards the target"""
+        # Init
+        out_matrix = np.zeros_like(matrix)
+
+        # Just copy over where there are ignore values
+        ignore_mask = (self.calibration_matrix == self.calibration_ignore_val)
+        ignore_values = matrix * ignore_mask
+        out_matrix += ignore_values
+
+        # Adjust band shares by calibration areas
+        for calib_key in self.calibration_keys:
+            # Filter down to this area
+            area_mask = (self.calibration_matrix == calib_key)
+            area_tcd = self.target_cost_distributions[calib_key]
+
+            area_matrix_values = matrix * area_mask
+            area_total = area_matrix_values.sum()
+            area_cost = self.cost_matrix * area_mask
+
+            # Adjust bands one at a time
+            for _, row in area_tcd.iterrows():
+                # Get proportion of all trips that should be in this band
+                target_band_share = row['band_share']
+                min_val = float(row['min'])
+                max_val = float(row['max'])
+
+                # Get proportion of all trips that are in this band
+                distance_mask = (area_cost >= min_val) & (area_cost < max_val)
+                band_trips = area_matrix_values * distance_mask
+
+                # Figure out the target and achieved
+                target_band_total = area_total * target_band_share
+                ach_band_total = band_trips.sum()
+
+                # We can't adjust if there are no trips in this band
+                if ach_band_total <= 0:
+                    adj_mat = band_trips
+
+                elif target_band_total <= 0:
+                    # Set to a really small value so furness can use still
+                    adj_mat = np.where(band_trips != 0, 1e-7, 0)
+
+                else:
+                    # Adjust the matrix towards target
+                    adjustment = target_band_total / ach_band_total
+                    adj_mat = band_trips * adjustment
+
+                # Add into the return matrix
+                out_matrix += adj_mat
+
+        return out_matrix
+
+    def fit(self,
+            outer_max_iters: int = 100,
+            calibrate: bool = True,
+            ):
+        # Make sure we always do at least 1 loop!
+        if outer_max_iters < 1 or not calibrate:
+            outer_max_iters = 1
+
+        # Seed base
+        matrix = self.base_matrix.copy()
+
+        # Perform a 3D furness
+        for iter_num in range(outer_max_iters):
+            iter_start_time = timing.current_milli_time()
+
+            # Push band shares towards targets
+            matrix = self._correct_band_share(matrix=matrix)
+
+            # Furness across the other 2 dimensions
+            matrix, furn_iters, furn_rmse = doubly_constrained_furness(
+                seed_vals=matrix,
+                row_targets=self.row_targets,
+                col_targets=self.col_targets,
+                tol=self.furness_tol,
+                max_iters=self.furness_max_iters,
+            )
+
+            # ## EVALUATE AND LOG THIS ITERATION ## #
+            # Initialise the log
+            iter_end_time = timing.current_milli_time()
+            time_taken = iter_end_time - iter_start_time
+
+            log_dict = {
+                'Loop Num': str(iter_num),
+                'run_time(s)': time_taken / 1000,
+                'furness_loops': furn_iters,
+                'furness_rmse': furn_rmse,
+            }
+
+            # Evaluate per calibration area
+            area_convergence_dict = dict()
+            area_band_share_dict = dict()
+            for calib_key in self.calibration_keys:
+                # Filter down to this area
+                area_mask = (self.calibration_matrix == calib_key)
+                area_tcd = self.target_cost_distributions[calib_key]
+
+                area_matrix_values = matrix * area_mask
+                area_cost = self.cost_matrix * area_mask
+
+                # Calculate the convergence of this area
+                achieved_band_shares = cost_utils.calculate_cost_distribution(
+                    matrix=area_matrix_values,
+                    cost_matrix=area_cost,
+                    min_bounds=area_tcd['min'].tolist(),
+                    max_bounds=area_tcd['max'].tolist(),
+                )
+                area_convergence = math_utils.curve_convergence(
+                    area_tcd['band_share'].values,
+                    achieved_band_shares,
+                )
+
+                # Store for recording runs
+                area_convergence_dict[calib_key] = area_convergence
+                area_band_share_dict[calib_key] = achieved_band_shares
+
+                # Add to log
+                area_name = '%s_bs_con' % self.calibration_naming[calib_key]
+                log_dict.update({area_name: np.round(area_convergence, 6)})
+
+            # Append this iteration to log file
+            file_ops.safe_dataframe_to_csv(
+                pd.DataFrame(log_dict, index=[0]),
+                self.running_log_path,
+                mode='a',
+                header=(not os.path.exists(self.running_log_path)),
+                index=False,
+            )
+
+            # log initial convergence if first iter
+            if iter_num == 0:
+                self.initial_convergences = area_convergence_dict
+
+            # Log current best performance
+            self.achieved_band_shares = area_band_share_dict
+            self.achieved_convergences = area_convergence_dict
+            self.achieved_distribution = matrix
+
+            # ## EXIT EARLY IF CONDITIONS MET ## #
+            if all([x > self.target_convergence for x in area_convergence_dict.values()]):
+                break
 
 
 def doubly_constrained_furness(seed_vals: np.array,
                                row_targets: np.array,
                                col_targets: np.array,
                                tol: float = 1e-9,
-                               max_iters: int = 5000
+                               max_iters: int = 5000,
+                               warning: bool = True,
                                ) -> Tuple[np.array, int, float]:
     """
     Performs a doubly constrained furness for max_iters or until tol is met
@@ -65,6 +286,11 @@ def doubly_constrained_furness(seed_vals: np.array,
     max_iters:
         The maximum number of iterations to complete before exiting.
 
+    warning:
+        Whether to print a warning or not when the tol cannot be met before
+        max_iters.
+
+
     Returns
     -------
     furnessed_matrix:
@@ -73,8 +299,8 @@ def doubly_constrained_furness(seed_vals: np.array,
     completed_iters:
         The number of completed iterations before exiting
 
-    achieved_r2:
-        The R-squared difference achieved before exiting
+    achieved_rmse:
+        The Root Mean Squared Error difference achieved before exiting
     """
     # Error check
     if seed_vals.shape != (len(row_targets), len(col_targets)):
@@ -87,53 +313,72 @@ def doubly_constrained_furness(seed_vals: np.array,
     # Init
     furnessed_mat = seed_vals.copy()
     early_exit = False
-    cur_diff = np.inf
+    cur_rmse = np.inf
     iter_num = 0
+    n_vals = len(row_targets)
 
     # Can return early if all 0 - probably shouldn't happen!
     if row_targets.sum() == 0 or col_targets.sum() == 0:
         warnings.warn("Furness given targets of 0. Returning all 0's")
-        return np.zeros(seed_vals.shape), iter_num, cur_diff
+        return np.zeros(seed_vals.shape), iter_num, cur_rmse
 
     for iter_num in range(max_iters):
         # ## COL CONSTRAIN ## #
         # Calculate difference factor
         col_ach = np.sum(furnessed_mat, axis=0)
-        col_ach = np.where(col_ach == 0, 1, col_ach)
-        diff_factor = col_targets / col_ach
+        diff_factor = np.divide(
+            col_targets,
+            col_ach,
+            where=col_ach != 0,
+            out=np.ones_like(col_targets, dtype=float),
+        )
 
         # adjust cols
-        furnessed_mat = furnessed_mat * diff_factor
+        furnessed_mat = np.multiply(
+            furnessed_mat,
+            diff_factor,
+            where=~np.isinf(diff_factor),
+            out=furnessed_mat.astype(float),
+        )
 
         # ## ROW CONSTRAIN ## #
         # Calculate difference factor
         row_ach = np.sum(furnessed_mat, axis=1)
-        row_ach = np.where(row_ach == 0, 1, row_ach)
-        diff_factor = row_targets / row_ach
+        diff_factor = np.divide(
+            row_targets,
+            row_ach,
+            where=row_ach != 0,
+            out=np.ones_like(row_targets, dtype=float),
+        )
 
         # adjust rows
-        furnessed_mat = (furnessed_mat.T * diff_factor).T
+        furnessed_mat = np.multiply(
+            furnessed_mat,
+            np.atleast_2d(diff_factor).T,
+            where=~np.isinf(diff_factor),
+            out=furnessed_mat.astype(float),
+        )
 
         # Calculate the diff - leave early if met
         row_diff = (row_targets - np.sum(furnessed_mat, axis=1)) ** 2
         col_diff = (col_targets - np.sum(furnessed_mat, axis=0)) ** 2
-        cur_diff = np.sum(row_diff + col_diff) ** .5
-        if cur_diff < tol:
+        cur_rmse = (np.sum(row_diff + col_diff) / n_vals) ** 0.5
+        if cur_rmse < tol:
             early_exit = True
             break
 
         # We got a NaN! Make sure to point out we didn't converge
-        if np.isnan(cur_diff):
+        if np.isnan(cur_rmse):
             return np.zeros(furnessed_mat.shape), iter_num, np.inf
 
     # Warn the user if we exhausted our number of loops
-    if not early_exit:
+    if not early_exit and warning:
         print("WARNING! The doubly constrained furness exhausted its max "
-              "number of loops (%d), while achieving an R^2 difference of "
+              "number of loops (%d), while achieving an RMSE difference of "
               "%f. The values returned may not be accurate."
-              % (max_iters, cur_diff))
+              % (max_iters, cur_rmse))
 
-    return furnessed_mat, iter_num + 1, cur_diff
+    return furnessed_mat, iter_num + 1, cur_rmse
 
 
 def _distribute_pa_internal(productions,
@@ -270,7 +515,7 @@ def _distribute_pa_internal(productions,
         bal_fac = productions[unique_col].sum() / a_weights[unique_col].sum()
         a_weights[unique_col] *= bal_fac
 
-    pa_dist, n_iters, achieved_r2 = furness_pandas_wrapper(
+    pa_dist, n_iters, achieved_rmse = furness_pandas_wrapper(
         row_targets=productions,
         col_targets=a_weights,
         seed_values=seed_dist,
@@ -289,7 +534,7 @@ def _distribute_pa_internal(productions,
     report = {
         'name': out_dist_name,
         'iterations': n_iters,
-        'convergence_gap': achieved_r2,
+        'furness_RMSE': achieved_rmse,
         'tolerance': furness_tol,
     }
 
@@ -742,8 +987,8 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     completed_iters:
         The number of completed iterations before exiting
 
-    achieved_r2:
-        The R-squared difference achieved before exiting
+    achieved_rmse:
+        The Root Mean Squared Error difference achieved before exiting
     """
     # Init
     row_targets = row_targets.copy()
@@ -795,7 +1040,7 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     col_targets = col_targets.values.flatten()
     seed_values = seed_values.values
 
-    furnessed_mat, n_iters, achieved_r2 = doubly_constrained_furness(
+    furnessed_mat, n_iters, achieved_rmse = doubly_constrained_furness(
         seed_vals=seed_values,
         row_targets=row_targets,
         col_targets=col_targets,
@@ -812,4 +1057,4 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
         data=furnessed_mat
     ).round(round_dp)
 
-    return furnessed_mat, n_iters, achieved_r2
+    return furnessed_mat, n_iters, achieved_rmse

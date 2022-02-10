@@ -367,6 +367,8 @@ class TramModel(TramExportPaths):
             report_ca_sector_paths=vector_reports.ca_sector,
             report_ie_sector_paths=vector_reports.ie_sector,
             lad_report_paths=vector_reports.lad_report,
+            balance_paths=self.hb_production.export_paths.notem_segmented,
+            split_weekday_weekend=True,
         )
 
         # Generate a LAD report before and after tram infill
@@ -433,6 +435,8 @@ class TramModel(TramExportPaths):
             report_ca_sector_paths=vector_reports.ca_sector,
             report_ie_sector_paths=vector_reports.ie_sector,
             lad_report_paths=vector_reports.lad_report,
+            balance_paths=self.nhb_production.export_paths.notem_segmented,
+            split_weekday_weekend=False,
         )
 
         # Generate a LAD report before and after tram infill
@@ -505,8 +509,10 @@ class TramModel(TramExportPaths):
                   report_ie_sector_paths: Dict[int, nd.PathLike],
                   lad_report_paths: Dict[int, nd.PathLike],
                   balance_paths: Dict[int, nd.PathLike] = None,
+                  split_weekday_weekend: bool = True,
                   ) -> None:
         """
+        TODO(BT): Update Tram Docs
         Runs the tram inclusion for the notem trip end output.
 
         Completes the following steps for each year:
@@ -643,7 +649,7 @@ class TramModel(TramExportPaths):
             # Need to add in m7 - get its segments from rail
             orig_dvec = orig_dvec.duplicate_segment_like(
                 segment_dict={'m': nd.Mode.TRAM.get_mode_num()},
-                like_segment_dict={'m': nd.Mode.TRAIN.get_mode_num()},
+                like_segment_dict={'m': nd.Mode.BUS.get_mode_num()},
                 out_segmentation=out_seg,
             )
 
@@ -655,6 +661,7 @@ class TramModel(TramExportPaths):
                 tram_dvec = self.balance_dvecs(
                     dvec=tram_dvec,
                     balance=nd.read_pickle(balance_paths[year]),
+                    split_weekday_weekend=split_weekday_weekend,
                 )
 
             # ## WRITE OUT THE DVEC AND REPORTS ## #
@@ -680,12 +687,16 @@ class TramModel(TramExportPaths):
         time_taken = timing.time_taken(start_time, end_time)
         self._logger.info("Tram Model took: %s" % time_taken)
 
-    def balance_dvecs(self, dvec: nd.DVector, balance: nd.DVector) -> nd.DVector:
+    def balance_dvecs(self,
+                      dvec: nd.DVector,
+                      balance: nd.DVector,
+                      split_weekday_weekend: bool,
+                      ) -> nd.DVector:
         """Balances given Dvec to balance using dvec.balance_at_segments()"""
         balanced_dvec = dvec.balance_at_segments(
             balance,
             balance_zoning=self.balance_zoning,
-            split_weekday_weekend=True,
+            split_weekday_weekend=split_weekday_weekend,
         )
 
         # ## ATTRACTIONS TOTAL CHECK ## #

@@ -36,18 +36,25 @@ from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.distribution import furness
+from normits_demand.cost import utils as cost_utils
 
 
 class GravityModelCalibrator:
     # TODO(BT): Write GravityModelCalibrator docs
 
-    _target_cost_distribution_cols = ['min', 'max', 'band_share']
+    _avg_cost_col = 'ave_km'        # Should be more generic
+    _target_cost_distribution_cols = ['min', 'max', 'trips'] + [_avg_cost_col]
+    _least_squares_method = 'trf'
+
+    # Cost amplification constants
+    _cost_amplify_min_dist = np.inf     # Turn off for now
+    _cost_amplify_power = 1
 
     def __init__(self,
                  row_targets: np.ndarray,
                  col_targets: np.ndarray,
                  cost_function: cost.CostFunction,
-                 costs: np.ndarray,
+                 cost_matrix: np.ndarray,
                  target_cost_distribution: pd.DataFrame,
                  target_convergence: float,
                  furness_max_iters: int,
@@ -81,8 +88,9 @@ class GravityModelCalibrator:
         self.row_targets = row_targets
         self.col_targets = col_targets
         self.cost_function = cost_function
-        self.costs = costs
-        self.target_cost_distribution = target_cost_distribution
+        self.cost_matrix = cost_matrix
+        self.target_cost_distribution = self._update_tcd(target_cost_distribution)
+        self.tcd_bin_edges = self._get_tcd_bin_edges()
         self.furness_max_iters = furness_max_iters
         self.furness_tol = furness_tol
         self.running_log_path = running_log_path
@@ -93,6 +101,7 @@ class GravityModelCalibrator:
         self._loop_num = -1
         self._loop_start_time = None
         self._loop_end_time = None
+        self._jacobian_mats = None
 
         # Additional attributes
         self.initial_cost_params = None
@@ -100,7 +109,29 @@ class GravityModelCalibrator:
         self.optimal_cost_params = None
         self.achieved_band_share = None
         self.achieved_convergence = None
+        self.achieved_residuals = None
         self.achieved_distribution = None
+
+    @staticmethod
+    def _update_tcd(tcd: pd.DataFrame) -> pd.DataFrame:
+        """Extrapolates data where needed"""
+        # Add in ave_km where needed
+        tcd['ave_km'] = np.where(
+            (tcd['ave_km'] == 0) | np.isnan(tcd['ave_km']),
+            tcd['min'],
+            tcd['ave_km'],
+        )
+
+        # Generate the band shares using the given data
+        tcd['band_share'] = tcd['trips'].copy()
+        tcd['band_share'] /= tcd['band_share'].values.sum()
+
+        return tcd
+
+    def _get_tcd_bin_edges(self) -> List[float]:
+        min_bounds = self.target_cost_distribution['min'].tolist()
+        max_bounds = self.target_cost_distribution['max'].tolist()
+        return [min_bounds[0]] + max_bounds
 
     def _order_cost_params(self, params: Dict[str, Any]) -> List[Any]:
         """Order params into a list that self.cost_function expects"""
@@ -133,66 +164,99 @@ class GravityModelCalibrator:
             self._order_cost_params(self.cost_function.param_max),
         )
 
-    def _calculate_cost_distribution(self, matrix: np.ndarray) -> np.ndarray:
-        """
-        Calculates the band share distribution of matrix.
+    def _cost_amplify(self, cost_matrix: np.ndarray) -> np.ndarray:
+        if not (0 < self._cost_amplify_min_dist < np.max(cost_matrix)):
+            return cost_matrix
 
-        Uses the bounds supplied in self.target_cost_distribution, and the costs in
-        self.costs to calculate the equivalent band shares in matrix.
+        factor = (cost_matrix / self._cost_amplify_min_dist) ** self._cost_amplify_power
+        new_cost = cost_matrix * factor
+        return np.where(
+            cost_matrix <= self._cost_amplify_min_dist,
+            cost_matrix,
+            new_cost,
+        )
 
-        Parameters
-        ----------
-        matrix:
-            The matrix to calculate the cost distribution for. This matrix
-            should be the same shape as self.costs
+    def _cost_distribution(self, matrix: np.ndarray) -> np.ndarray:
+        """Returns the distribution of matrix across self.tcd_bin_edges"""
+        return cost_utils.calculate_cost_distribution(
+            matrix=matrix,
+            cost_matrix=self.cost_matrix,
+            bin_edges=self.tcd_bin_edges,
+        )
 
-        Returns
-        -------
-        cost_distribution:
-            a numpy array of distributed costs, where the bands are equivalent
-            to min/max values in self.target_cost_distribution
-        """
-        # Init
-        min_costs = self.target_cost_distribution['min']
-        max_costs = self.target_cost_distribution['max']
+    def _guess_init_params(self, cost_args: List[float]):
+        """Guesses what the initial params should be.
 
-        total_trips = matrix.sum()
+        Uses the average cost in each band to estimate what changes in
+        the cost_params would do to the final cost distributions. This is a
+        very coarse grained estimation, but can be used to guess around about
+        where the best init params are.
 
-        # Calculate band shares
-        distribution = list()
-        for min_val, max_val in zip(min_costs, max_costs):
-            cost_mask = (self.costs >= min_val) & (self.costs < max_val)
-            band_trips = (matrix * cost_mask).sum()
-            band_share = band_trips / total_trips
-            distribution.append(band_share)
-
-        return np.array(distribution)
-
-    def _gm_distribution(self, _, *cost_args: float) -> np.ndarray:
-        """Runs gravity model with given parameters and returns distribution.
-
-        Used by the `optimize.curve_fit` function.
+        Used by the `optimize.least_squares` function.
         """
         # Convert the cost function args back into kwargs
         cost_kwargs = self._cost_params_to_kwargs(cost_args)
 
-        # Run gravity model
-        matrix, max_iters, r2 = gravity_model(
+        # Used to optionally increase the cost of long distance trips
+        avg_cost_vals = self.target_cost_distribution[self._avg_cost_col].values
+        avg_cost_vals = self._cost_amplify(avg_cost_vals)
+
+        # Estimate what the cost function will do to the costs - on average
+        estimated_cost_vals = self.cost_function.calculate(avg_cost_vals, **cost_kwargs)
+        estimated_band_shares = estimated_cost_vals / estimated_cost_vals.sum()
+
+        # return the residuals to the target
+        return self.target_cost_distribution['band_share'].values - estimated_band_shares
+
+    def _gravity_function(self, cost_args: List[float], diff_step: float):
+        """Returns residuals to target cost distribution
+
+        Runs gravity model with given parameters and converts into achieved
+        cost distribution. The residuals are then calculated between the
+        achieved and the target.
+
+        Used by the `optimize.least_squares` function.
+        """
+        # Convert the cost function args back into kwargs
+        cost_kwargs = self._cost_params_to_kwargs(cost_args)
+
+        # Used to optionally increase the cost of long distance trips
+        cost_matrix = self._cost_amplify(self.cost_matrix)
+
+        # Calculate initial matrix through cost function
+        init_matrix = self.cost_function.calculate(cost_matrix, **cost_kwargs)
+
+        # Do some prep for jacobian calculations
+        self._jacobian_mats = {'base': init_matrix.copy()}
+        for cost_param in self.cost_function.kw_order:
+            # Adjust cost slightly
+            adj_cost_kwargs = cost_kwargs.copy()
+            adj_cost_kwargs[cost_param] += adj_cost_kwargs[cost_param] * diff_step
+
+            # Calculate adjusted cost
+            adj_cost = self.cost_function.calculate(cost_matrix, **adj_cost_kwargs)
+
+            self._jacobian_mats[cost_param] = adj_cost
+
+        # Furness trips to trip ends
+        matrix, iters, rmse = furness.doubly_constrained_furness(
+            seed_vals=init_matrix,
             row_targets=self.row_targets,
             col_targets=self.col_targets,
-            cost_function=self.cost_function,
-            costs=self.costs,
-            furness_max_iters=self.furness_max_iters,
-            furness_tol=self.furness_tol,
-            **cost_kwargs,
+            tol=self.furness_tol,
+            max_iters=self.furness_max_iters,
         )
 
+        # Store for the jacobian calculations
+        self._jacobian_mats['final'] = matrix.copy()
+
         # Convert matrix into an achieved distribution curve
-        achieved_band_shares = self._calculate_cost_distribution(matrix)
-        convergence = math_utils.curve_convergence(
-            self.target_cost_distribution['band_share'].values,
-            achieved_band_shares,
-        )
+        achieved_band_shares = self._cost_distribution(matrix)
+
+        # Evaluate this run
+        target_band_shares = self.target_cost_distribution['band_share'].values
+        convergence = math_utils.curve_convergence(target_band_shares, achieved_band_shares)
+        achieved_residuals = target_band_shares - achieved_band_shares
 
         # Calculate the time this loop took
         self._loop_end_time = timing.current_milli_time()
@@ -205,8 +269,8 @@ class GravityModelCalibrator:
         }
         log_dict.update(cost_kwargs)
         log_dict.update({
-            'furness_iters': max_iters,
-            'furness_r2': np.round(r2, 6),
+            'furness_iters': iters,
+            'furness_rmse': np.round(rmse, 6),
             'bs_con': np.round(convergence, 4),
         })
 
@@ -227,6 +291,7 @@ class GravityModelCalibrator:
         # Update performance params
         self.achieved_band_share = achieved_band_shares
         self.achieved_convergence = convergence
+        self.achieved_residuals = achieved_residuals
         self.achieved_distribution = matrix
 
         # Store the initial values to log later
@@ -235,24 +300,85 @@ class GravityModelCalibrator:
         if self.initial_convergence is None:
             self.initial_convergence = convergence
 
-        return achieved_band_shares
+        return achieved_residuals
+
+    def _gravity_jacobian(self, cost_args: List[float], diff_step: float):
+        """Returns the Jacobian for _gravity_function
+
+        Uses the matrices stored in self._jacobian_mats (which were stored in
+        the previous call to self._gravity function) to estimate what a change
+        in the cost parameters would do to final furnessed matrix. This is
+        then formatted into a Jacobian for optimize.least_squares to use.
+
+        Used by the `optimize.least_squares` function.
+        """
+        # Initialise the output
+        n_bands = len(self.target_cost_distribution['band_share'].values)
+        n_cost_params = len(cost_args)
+        jacobian = np.zeros((n_bands, n_cost_params))
+
+        # Convert the cost function args back into kwargs
+        cost_kwargs = self._cost_params_to_kwargs(cost_args)
+
+        # Estimate what the furness does to the matrix
+        furness_factor = np.divide(
+            self._jacobian_mats['final'],
+            self._jacobian_mats['base'],
+            where=self._jacobian_mats['base'] != 0,
+            out=np.zeros_like(self._jacobian_mats['base']),
+        )
+
+        # Calculate the Jacobian section for each cost param
+        for i, cost_param in enumerate(self.cost_function.kw_order):
+            # Estimate how the final matrix would be different with a
+            # different input cost parameter
+            furness_mat = self._jacobian_mats[cost_param] * furness_factor
+            adj_weights = furness_mat / furness_mat.sum() if furness_mat.sum() != 0 else 0
+            adj_final = self._jacobian_mats['final'].sum() * adj_weights
+
+            # Control to final matrix
+            adj_final, _, _ = furness.doubly_constrained_furness(
+                seed_vals=adj_final,
+                row_targets=self._jacobian_mats['final'].sum(axis=1),
+                col_targets=self._jacobian_mats['final'].sum(axis=0),
+                tol=1e-6,
+                max_iters=20,
+                warning=False,
+            )
+
+            # Turn into bands
+            achieved_band_shares = self._cost_distribution(adj_final)
+
+            # Calculate the Jacobian for this cost param
+            jacobian_residuals = self.achieved_band_share - achieved_band_shares
+            cost_step = cost_kwargs[cost_param] * diff_step
+            cost_jacobian = jacobian_residuals / cost_step
+
+            # Store in the Jacobian
+            jacobian[:, i] = cost_jacobian
+
+        return jacobian
 
     def calibrate(self,
                   init_params: Dict[str, Any],
-                  diff_step: float = None,
-                  ftol: float = 1e-8,
-                  max_iters: int = 100,
+                  estimate_init_params: bool = False,
+                  calibrate_params: bool = True,
+                  diff_step: float = 1e-8,
+                  ftol: float = 1e-4,
+                  xtol: float = 1e-4,
+                  grav_max_iters: int = 100,
                   verbose: int = 0,
                   ):
         """Finds the optimal parameters for self.cost_function
 
-        Optimal parameters are found using `scipy.optimize.curve_fit`
+        Optimal parameters are found using `scipy.optimize.least_squares`
         to fit the distributed row/col targets to self.target_tld. Once
         the optimal parameters are found, the gravity model is run one last
         time to check the self.target_convergence has been met. This also
         populates a number of attributes with values from the optimal run:
         self.achieved_band_share
         self.achieved_convergence
+        self.achieved_residuals
         self.achieved_distribution
 
         Parameters
@@ -260,6 +386,16 @@ class GravityModelCalibrator:
         init_params:
             A dictionary of {parameter_name: parameter_value} to pass
             into the cost function as initial parameters.
+
+        estimate_init_params:
+            Whether to ignore the given init_params and estimate new ones
+            using least squares, or just use the given init_params to start
+            with.
+
+        calibrate_params:
+            Whether to calibrate the cost parameters or not. If not
+            calibrating, the given init_params will be assumed to be
+            optimal.
 
         diff_step:
             Copied from scipy.optimize.least_squares documentation, where it
@@ -272,12 +408,16 @@ class GravityModelCalibrator:
 
         ftol:
             The tolerance to pass to scipy.optimize.least_squares. The search
-            will stop once this tolerance has been met. 1e-8 By default,
-            however this is far more precise than the convergence
-            used in this code to evaluate results. 1e-8 should almost always
-            get a band share convergence of >0.99
+            will stop once this tolerance has been met. This is the
+            tolerance for termination by the change of the cost function
 
-        max_iters:
+        xtol:
+            The tolerance to pass to scipy.optimize.least_squares. The search
+            will stop once this tolerance has been met. This is the
+            tolerance for termination by the change of the independent
+            variables.
+
+        grav_max_iters:
             The maximum number of calibration iterations to complete before
             termination if the ftol has not been met.
 
@@ -305,11 +445,25 @@ class GravityModelCalibrator:
         See Also
         --------
         gravity_model
-        scipy.optimize.curve_fit
         scipy.optimize.least_squares
         """
         # Validate init_params
         self.cost_function.validate_params(init_params)
+
+        # Estimate what the initial params should be
+        if estimate_init_params:
+            result = optimize.least_squares(
+                self._guess_init_params,
+                x0=self._order_init_params(init_params),
+                method=self._least_squares_method,
+                bounds=self._order_bounds(),
+            )
+            init_params = self._cost_params_to_kwargs(result.x)
+
+            # TODO(BT): standardise this
+            if self.cost_function.name == 'LOG_NORMAL':
+                init_params['sigma'] *= 0.8
+                init_params['mu'] *= 0.5
 
         # Initialise running params
         self._loop_num = 1
@@ -317,22 +471,27 @@ class GravityModelCalibrator:
         self.initial_cost_params = None
         self.initial_convergence = None
 
-        # Calculate the optimal cost parameters
-        optimal_params, _ = optimize.curve_fit(
-            self._gm_distribution,
-            0,              # Doesn't matter what this is - it's ignored
-            self.target_cost_distribution['band_share'].values,
-            p0=self._order_init_params(init_params),
-            bounds=self._order_bounds(),
-            verbose=verbose,
-            diff_step=diff_step,
-            ftol=ftol,
-            max_nfev=max_iters,
-        )
+        # Calculate the optimal cost parameters if we're calibrating
+        if calibrate_params is True:
+            result = optimize.least_squares(
+                fun=self._gravity_function,
+                x0=self._order_init_params(init_params),
+                method=self._least_squares_method,
+                bounds=self._order_bounds(),
+                jac=self._gravity_jacobian,
+                verbose=verbose,
+                ftol=ftol,
+                xtol=xtol,
+                max_nfev=grav_max_iters,
+                kwargs={'diff_step': diff_step},
+            )
+            optimal_params = result.x
+        else:
+            optimal_params = self._order_init_params(init_params)
 
         # Run an optimal version of the gravity
         self.optimal_cost_params = self._cost_params_to_kwargs(optimal_params)
-        self._gm_distribution(0, *optimal_params)
+        self._gravity_function(optimal_params, diff_step=diff_step)
 
         # Check the performance of the best run
         if self.achieved_convergence < self.target_convergence:
@@ -406,8 +565,8 @@ def gravity_model(row_targets: np.ndarray,
         The number of iterations completed by the doubly constrained furness
         before exiting
 
-    achieved_r2:
-        The R-squared difference achieved by the doubly constarined furness
+    achieved_rmse:
+        The Root Mean Squared Error achieved by the doubly constrained furness
         before exiting
 
     Raises
@@ -432,10 +591,9 @@ def gravity_model(row_targets: np.ndarray,
 
     # Calculate initial matrix through cost function
     init_matrix = cost_function.calculate(costs, **cost_params)
-    init_matrix = np.where(init_matrix == 0, 1e-7, init_matrix)
 
     # Furness trips to trip ends
-    matrix, iters, r2 = furness.doubly_constrained_furness(
+    matrix, iters, rmse = furness.doubly_constrained_furness(
         seed_vals=init_matrix,
         row_targets=row_targets,
         col_targets=col_targets,
@@ -443,5 +601,5 @@ def gravity_model(row_targets: np.ndarray,
         max_iters=furness_max_iters,
     )
 
-    return matrix, iters, r2
+    return matrix, iters, rmse
 

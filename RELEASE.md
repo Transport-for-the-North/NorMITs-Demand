@@ -19,4 +19,14 @@ there.
 
 Below, a brief summary of patches made since the previous version can be found.
 
-### V0.4.7
+### V0.4.8
+- Distribution Model
+  - Cache was incorrectly not converting trip ends to average weekday.
+    This has been corrected in this version of the model.
+- General
+  - Low memory matrix translations now return all multiprocessed results in
+    order, instead of potentially out of order.
+- Tools
+  - A new folder has been created `run_tools`. This is for running tools that 
+    generate data for the NorMITs Framework, but aren't a model themselves.
+    The first tool to be added is the `TripLengthDistributionBuilder`.

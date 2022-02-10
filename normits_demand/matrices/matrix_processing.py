@@ -2370,7 +2370,7 @@ def _compile_matrices_internal(mat_import,
     for mat_name in input_mat_names:
         in_path = os.path.join(mat_import, mat_name)
         df = file_ops.read_df(in_path, index_col=0)
-        df.columns = df.columns.astype(int)
+        df.columns = df.columns.astype(df.index.dtype)
         in_mats.append(df)
 
     # Combine all matrices together
@@ -2633,7 +2633,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
     matrices being the second 4.
     If neither internal or external matrices is set, the first 4 returns are
     the full matrices, and the second 4 will be empty.
-    If only the external zones is set the first 4 returns will be empty, and
+    If only the internal zones is set the first 4 returns will be empty, and
     the second 4 will be the external matrices.
 
     Parameters
@@ -3428,6 +3428,10 @@ def _recombine_internal_external_internal(in_paths,
                                           force_csv_out,
                                           force_compress_out,
                                           ) -> None:
+    # Init
+    if force_csv_out and force_compress_out:
+        force_compress_out = False
+
     # Read in the matrices and compile
     partial_mats = [file_ops.read_df(x, index_col=0, find_similar=True) for x in in_paths]
     full_mat = functools.reduce(lambda x, y: x.values + y.values, partial_mats)
@@ -3449,6 +3453,106 @@ def _recombine_internal_external_internal(in_paths,
 
     # Write the complete matrix to disk
     file_ops.write_df(full_mat, output_path)
+    
+    
+def combine_partial_matrices(import_dirs: List[nd.PathLike],
+                             export_dir: List[nd.PathLike],
+                             segmentation: nd.SegmentationLevel,
+                             import_suffixes: List[str] = None,
+                             csv_out: bool = False,
+                             process_count: int = consts.PROCESS_COUNT,
+                             pbar_kwargs: Dict[str, Any] = None,
+                             **file_kwargs,
+                             ) -> None:
+    """Combines the matrices in import_dirs and writes out to export_dir
+
+    Parameters
+    ----------
+    import_dirs:
+        A list of the directories to read files from to combine
+
+    export_dir:
+        The directory to output the combined matrices to
+
+    segmentation:
+        The segmentation to use to generate the filenames
+
+    import_suffixes:
+        A list of the suffixes for each directory in import_dirs. Should be
+        a parallel list to import_dirs. Any directories without a suffix
+        should be set to None.
+
+    csv_out:
+        Whether to write the combined matrices out as csvs. If False, files
+        will be written out in compressed format.
+
+    process_count:
+        The number of processes to use when combining matrices.
+
+    pbar_kwargs:
+        A dictionary of keyword arguments to pass into tqdm.tqdm to make a 
+        progress bar. If left as None, not progress bar will be shown.
+    
+    file_kwargs:
+        Any additional arguments to pass to segmentation.generate_file_name().
+    """
+    # Init
+    if import_suffixes is None:
+        import_suffixes = [None] * len(import_dirs)
+
+    # Check paths exist
+    if not os.path.exists(export_dir):
+        raise FileExistsError(
+            "No directory exists for exporting files. Looking here:\n%s"
+            % export_dir
+        )
+
+    for in_dir in import_dirs:
+        if not os.path.exists(in_dir):
+            raise FileExistsError(
+                "One of the import directories does not exist. Looking here:\n%s"
+                % in_dir
+            )
+
+    # ## BUILD DICTIONARY OF MATRICES TO COMBINE ## #
+    combine_dict = dict()
+    for segment_params in segmentation:
+        # Get the output path
+        out_fname = segmentation.generate_file_name(
+            segment_params=segment_params,
+            compressed=True,
+            **file_kwargs,
+        )
+        out_path = os.path.join(export_dir, out_fname)
+
+        # Generate the input path
+        in_paths = list()
+        for in_dir, suffix in zip(import_dirs, import_suffixes):
+            fname = segmentation.generate_file_name(
+                segment_params=segment_params,
+                suffix=suffix,
+                **file_kwargs,
+            )
+            in_paths.append(os.path.join(in_dir, fname))
+
+        combine_dict[out_path] = in_paths
+
+    # ## COMPILE THE MATRICES ## #
+    kwarg_list = list()
+    for output_path, in_paths in combine_dict.items():
+        kwarg_list.append({
+            'output_path': output_path,
+            'in_paths': in_paths,
+            'force_csv_out': csv_out,
+            'force_compress_out': True,
+        })
+
+    multiprocessing.multiprocess(
+        fn=_recombine_internal_external_internal,
+        kwargs=kwarg_list,
+        process_count=process_count,
+        pbar_kwargs=pbar_kwargs,
+    )
 
 
 def recombine_internal_external(internal_import: nd.PathLike,
