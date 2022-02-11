@@ -11,7 +11,9 @@ File purpose:
 
 """
 # Built-Ins
+import os
 import sys
+import shutil
 
 # Third Party
 
@@ -38,6 +40,23 @@ def main():
 
         if input('Run another y/n').lower() == 'n':
             run_another = False
+
+
+def copy_across_tps():
+    in_dir = ''
+    out_dir = ''
+
+    for fname in os.listdir(in_dir):
+        if fname == 'full_export.csv':
+            continue
+
+        for tp in [1, 2, 3, 4]:
+            out_name = fname.replace('.csv', '_tp%s.csv' % tp)
+
+            shutil.copy(
+                src=os.path.join(in_dir, fname),
+                dst=os.path.join(out_dir, out_name),
+            )
 
 
 if __name__ == '__main__':
