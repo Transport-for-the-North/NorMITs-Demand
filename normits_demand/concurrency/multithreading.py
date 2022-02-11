@@ -20,6 +20,7 @@ sake of more stable code.
 """
 # Built-Ins
 import time
+import copy
 import queue
 import threading
 
@@ -54,13 +55,24 @@ class ReturnOrErrorThread(threading.Thread):
     """
     def __init__(
             self,
+            name: str = None,
             error_event: threading.Event = None,
             error_q: queue.Queue = None,
             daemon: bool = True,
             *args,
             **kwargs,
     ):
-        threading.Thread.__init__(self, daemon=daemon, *args, **kwargs)
+        # Add Thread to name if given
+        if name is not None and name.lower()[:6] != 'thread':
+            name = 'Thread-%s' % name
+
+        threading.Thread.__init__(
+            self,
+            name=name,
+            daemon=daemon,
+            *args,
+            **kwargs,
+        )
 
         if error_event is None:
             error_event = threading.Event()
@@ -314,7 +326,7 @@ def get_data_from_queue(
     # Init
     start_time = time.time()
     got_data = False
-    data = default_return_val.copy()
+    data = copy.copy(default_return_val)
 
     if stop_event is None:
         stop_event = threading.Event()
