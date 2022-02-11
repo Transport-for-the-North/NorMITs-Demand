@@ -4,22 +4,26 @@
 """
 
 ##### IMPORTS #####
+from __future__ import annotations
 # Standard imports
+import configparser
 import dataclasses
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # Third party imports
 
 # Add parent folder to path
 sys.path.append("..")
 # Local imports
+# pylint: disable=import-error,wrong-import-position
 from normits_demand.models import ntem_forecast, tempro_trip_ends
 from normits_demand import efs_constants as efs_consts
 from normits_demand import logging as nd_log
 from normits_demand.utils import timing
 from normits_demand.reports import ntem_forecast_checks
+# pylint: enable=import-error,wrong-import-position
 
 ##### CONSTANTS #####
 LOG_FILE = "NTEM_forecast.log"
@@ -37,6 +41,8 @@ class NTEMForecastParameters:
     ----------
     import_path : Path
         Path to the NorMITs demand imports.
+    tempro_data_path : Path
+        Path to the CSV containing the TEMPro data.
     model_name : str
         Name of the model.
     iteration : str
@@ -54,11 +60,16 @@ class NTEMForecastParameters:
         from `export_path_params`.
     """
     import_path: Path = Path("I:/NorMITs Demand/import")
+    tempro_data_path: Path = Path(
+        r"I:\Data\TEMPRO\tempro_pa_data_6_mode_exc_mode_4.csv"
+    )
     model_name: str = "noham"
     iteration: str = "1c"
     export_path_fmt: str = "I:/NorMITs Demand/{model_name}/NTEM/iter{iteration}"
-    export_path_params: Dict[str, Any] = None
-    _export_path: Path = dataclasses.field(default=None, init=False, repr=False)
+    export_path_params: Optional[Dict[str, Any]] = None
+    _export_path: Optional[Path] = dataclasses.field(
+        default=None, init=False, repr=False
+    )
 
     @property
     def export_path(self) -> Path:
@@ -76,11 +87,21 @@ class NTEMForecastParameters:
         return self._export_path
 
     def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}(import_path={self.import_path!r}, "
-            f"model_name={self.model_name!r}, iteration={self.iteration!r}, "
-            f"export_path={self.export_path!r})"
+        params = (
+            "import_path",
+            "tempro_data_path",
+            "export_path",
+            "model_name",
+            "iteration",
+            "car_occupancies_path",
         )
+        msg = f"{self.__class__.__name__}("
+        for p in params:
+            msg += f"\n\t{p}={getattr(self, p)!s}"
+        for p, val in self.pa_to_od_factors.items():
+            msg += f"\n\t{p}={val!s}"
+        msg += "\n)"
+        return msg
 
     @property
     def pa_to_od_factors(self) -> Dict[str, Path]:
@@ -112,10 +133,81 @@ class NTEMForecastParameters:
             )
         return path
 
+    def save(self, output_path: Optional[Path] = None):
+        """Save current parameters to config file.
+
+        Parameters
+        ----------
+        output_path : Path, optional
+            Path to the file to save, if not given saves to
+            'NTEM_forecast_parameters.txt' in `export_folder`.
+        """
+        if output_path is None:
+            output_path = self.export_path / "NTEM_forecast_parameters.txt"
+        config = configparser.ConfigParser()
+        config["parameters"] = {
+            "import_path": self.import_path,
+            "tempro_data_path": self.tempro_data_path,
+            "model_name": self.model_name,
+            "iteration": self.iteration,
+            "export_path_fmt": self.export_path_fmt,
+        }
+        if self.export_path_params is not None:
+            config["export_path_params"] = self.export_path_params
+        with open(output_path, "wt") as f:
+            config.write(f)
+        LOG.info("Written input parameters to: %s", output_path)
+
+    @staticmethod
+    def load(path: Path) -> NTEMForecastParameters:
+        """Load parameters from config file.
+
+        Parameters
+        ----------
+        path : Path
+            Path to config file.
+
+        Returns
+        -------
+        NTEMForecastParameters
+            New instance of the class with all parameters
+            filled in from the config file.
+
+        Raises
+        ------
+        FileNotFoundError
+            If `path` isn't a file.
+        tempro_trip_ends.NTEMForecastError
+            If the config file doesn't contain a
+            'parameters' section.
+        """
+        if not path.is_file():
+            raise FileNotFoundError(f"cannot find config file: {path}")
+        config = configparser.ConfigParser()
+        config.read(path)
+        param_sec = "parameters"
+        if not config.has_section(param_sec):
+            raise tempro_trip_ends.NTEMForecastError(
+                f"config file doesn't contain '{param_sec}' section"
+            )
+        params = dict(config[param_sec])
+        for p in ("import_path", "tempro_data_path"):
+            if p in params:
+                params[p] = Path(params[p])
+        export_params = "export_path_params"
+        if config.has_section(export_params):
+            params[export_params] = dict(config[export_params])
+        return NTEMForecastParameters(**params)
+
 
 ##### FUNCTIONS #####
-def get_tempro_data() -> tempro_trip_ends.TEMProTripEnds:
+def get_tempro_data(data_path: Path) -> tempro_trip_ends.TEMProTripEnds:
     """Read TEMPro data and convert it to DVectors.
+
+    Parameters
+    ----------
+    data_path : Path
+        Path to TEMPro data CSV.
 
     Returns
     -------
@@ -124,7 +216,7 @@ def get_tempro_data() -> tempro_trip_ends.TEMProTripEnds:
         attributes for base and all future years.
     """
     tempro_data = tempro_trip_ends.TEMProData(
-        [efs_consts.BASE_YEAR] + efs_consts.FUTURE_YEARS
+        data_path, [efs_consts.BASE_YEAR] + efs_consts.FUTURE_YEARS
     )
     # Read data and convert to DVectors
     trip_ends = tempro_data.produce_dvectors()
@@ -194,13 +286,15 @@ def main(params: NTEMForecastParameters):
     normits_demand.models.ntem_forecast
     """
     start = timing.current_milli_time()
+    LOG.info("Input parameters: %r", params)
     if params.export_path.exists():
         LOG.info("export folder already exists: %s", params.export_path)
     else:
         params.export_path.mkdir(parents=True)
         LOG.info("created export folder: %s", params.export_path)
+    params.save()
 
-    tempro_data = get_tempro_data()
+    tempro_data = get_tempro_data(params.tempro_data_path)
     tempro_data = model_mode_subset(tempro_data, params.model_name)
     tempro_growth = ntem_forecast.tempro_growth(tempro_data, params.model_name)
     tempro_growth.save(params.export_path / "TEMPro Growth Factors")
@@ -252,6 +346,7 @@ def main(params: NTEMForecastParameters):
 ##### MAIN #####
 if __name__ == '__main__':
     # Add log file output to main package logger
+    # TODO Move to main()
     nd_log.get_logger(
         nd_log.get_package_logger_name(), LOG_FILE, "Running NTEM forecast"
     )

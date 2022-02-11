@@ -34,17 +34,20 @@ class TEMProData:
 
     Parameters
     ----------
+    data_path : Path
+        Path to the TEMPro data CSV.
     years : List[int]
         List of year columns to read from data file.
 
     Raises
     ------
+    FileNotFoundError
+        If `data_path` isn't an existing file.
     NTEMForecastError
         If `years` isn't (or cannot be converted to)
         a list of integers.
     """
 
-    DATA_PATH = Path(r"I:\Data\TEMPRO\tempro_pa_data_6_mode_exc_mode_4.csv")
     _columns = {
         "msoa_zone_id": str,
         "trip_end_type": str,
@@ -57,7 +60,10 @@ class TEMProData:
     ZONE_SYSTEM = "msoa"
     TIME_FORMAT = "avg_day"
 
-    def __init__(self, years: List[int]) -> None:
+    def __init__(self, data_path: Path, years: List[int]) -> None:
+        self.data_path = Path(data_path)
+        if not self.data_path.is_file():
+            raise FileNotFoundError(f"cannot find TEMPro data: {self.data_path}")
         try:
             self._years = [int(i) for i in years]
         except (ValueError, TypeError) as err:
@@ -67,14 +73,14 @@ class TEMProData:
         self._columns.update({str(y): float for y in self._years})
         self._data = None
         self._dvectors = None
-        if not self.DATA_PATH.exists():
+        if not self.data_path.exists():
             raise FileNotFoundError(
-                f"TEMPro data file cannot be found: {self.DATA_PATH}"
+                f"TEMPro data file cannot be found: {self.data_path}"
             )
         # Read top 5 rows to check file format
         try:
             file_ops.read_df(
-                self.DATA_PATH,
+                self.data_path,
                 usecols=self._columns.keys(),
                 dtype=self._columns,
                 nrows=5,
@@ -103,9 +109,9 @@ class TEMProData:
               e.g. '2018', '2020'
         """
         if self._data is None:
-            LOG.info("Reading TEMPro data: %s", self.DATA_PATH)
+            LOG.info("Reading TEMPro data: %s", self.data_path)
             self._data = file_ops.read_df(
-                self.DATA_PATH,
+                self.data_path,
                 usecols=self._columns.keys(),
                 dtype=self._columns,
             )
