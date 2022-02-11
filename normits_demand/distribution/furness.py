@@ -290,7 +290,6 @@ def doubly_constrained_furness(seed_vals: np.array,
         Whether to print a warning or not when the tol cannot be met before
         max_iters.
 
-
     Returns
     -------
     furnessed_matrix:

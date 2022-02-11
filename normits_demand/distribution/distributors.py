@@ -34,6 +34,7 @@ from normits_demand import constants
 from normits_demand.cost import utils as cost_utils
 
 from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.distribution import gravity_model
@@ -231,9 +232,9 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
 
         # Validate calibration keys
         calib_keys = np.unique(calibration_matrix)
+        calib_keys = du.list_safe_remove(list(calib_keys), [self._calibration_ignore_val])
 
         missing = set(calib_keys) - set(target_cost_distributions.keys())
-        missing -= {self._calibration_ignore_val}
         if len(missing) > 0:
             raise ValueError(
                 "Target cost distributions can not be found for all key "
@@ -301,8 +302,8 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             fn=self.distribute_segment,
             kwargs=kwarg_list,
             pbar_kwargs=pbar_kwargs,
-            # process_count=0,
-            process_count=self.process_count,
+            process_count=0,
+            # process_count=self.process_count,
         )
 
     @staticmethod
@@ -608,15 +609,39 @@ class GravityDistributor(AbstractDistributor):
 
         # Convert to numpy for gravity model
         np_cost = cost_matrix.values
+        np_calibration_matrix = calibration_matrix.values
         np_productions = productions[self._pa_val_col].values
         np_attractions = attractions[self._pa_val_col].values
 
         # ## CALIBRATE THE GRAVITY MODEL ## #
-        calib = gravity_model.GravityModelCalibrator(
+        # calib = gravity_model.GravityModelCalibrator(
+        #     row_targets=np_productions,
+        #     col_targets=np_attractions,
+        #     cost_matrix=np_cost,
+        #     target_cost_distribution=target_cost_distribution,
+        #     running_log_path=log_path,
+        #     cost_function=kwargs.get('cost_function'),
+        #     target_convergence=kwargs.get('target_convergence'),
+        #     furness_max_iters=kwargs.get('furness_max_iters'),
+        #     furness_tol=kwargs.get('furness_tol'),
+        #     use_perceived_factors=kwargs.get('use_perceived_factors'),
+        # )
+        #
+        # optimal_cost_params = calib.calibrate(
+        #     init_params=kwargs.get('init_params'),
+        #     grav_max_iters=kwargs.get('grav_max_iters'),
+        #     calibrate_params=kwargs.get('calibrate_params', True),
+        #     ftol=kwargs.get('ftol', 1e-5),
+        #     verbose=kwargs.get('verbose', 2),
+        # )
+
+        calib = gravity_model.MultiTLDGravityModelCalibrator(
             row_targets=np_productions,
             col_targets=np_attractions,
+            calibration_matrix=np_calibration_matrix,
             cost_matrix=np_cost,
-            target_cost_distribution=target_cost_distribution,
+            target_cost_distributions=target_cost_distributions,
+            calibration_naming=calibration_naming,
             running_log_path=log_path,
             cost_function=kwargs.get('cost_function'),
             target_convergence=kwargs.get('target_convergence'),
@@ -632,6 +657,9 @@ class GravityDistributor(AbstractDistributor):
             ftol=kwargs.get('ftol', 1e-5),
             verbose=kwargs.get('verbose', 2),
         )
+
+        print("FONENEONE!")
+        exit()
 
         # ## GENERATE REPORTS AND WRITE OUT ## #
         # Generate the base filename
