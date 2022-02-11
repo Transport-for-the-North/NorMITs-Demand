@@ -104,8 +104,6 @@ class FurnessThread(multithreading.ReturnOrErrorThread):
 
         self.unique_area_keys = area_mats.keys()
 
-        self._stop_running = False
-
     def _get_gravity_queue_data(self, waiting_threads: List[int]):
         # init
         queue_data = dict.fromkeys(self.unique_area_keys)
