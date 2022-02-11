@@ -46,10 +46,10 @@ INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
 
 
 def main():
-    mode = nd.Mode.CAR
+    # mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
     # mode = nd.Mode.TRAIN
-    # mode = nd.Mode.TRAM
+    mode = nd.Mode.TRAM
 
     # Running params
     use_tram = True
@@ -59,8 +59,8 @@ def main():
     run_nhb = False
 
     run_all = False
-    run_upper_model = False
-    run_lower_model = True
+    run_upper_model = True
+    run_lower_model = False
     run_pa_matrix_reports = False
     run_pa_to_od = False
     run_od_matrix_reports = False
@@ -111,8 +111,8 @@ def main():
         lower_calibration_area = 'north_and_mids'
         lower_calibration_bands = 'dm_highway_bands'
         lower_target_tld_dir = os.path.join(geo_constraint_type, lower_calibration_bands)
-        lower_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m')
-        lower_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_tp')
+        lower_hb_target_tld_dir = os.path.join(lower_target_tld_dir, 'hb_p_m')
+        lower_nhb_target_tld_dir = os.path.join(lower_target_tld_dir, 'nhb_p_m_tp')
         lower_model_method = nd.DistributionMethod.GRAVITY
         lower_calibration_zones_fname = None
         lower_calibration_areas = lower_calibration_area
@@ -189,8 +189,8 @@ def main():
         lower_calibration_area = 'north_and_mids'
         lower_calibration_bands = 'dm_highway_bands'
         lower_target_tld_dir = os.path.join(geo_constraint_type, lower_calibration_bands)
-        lower_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m')
-        lower_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_tp')
+        lower_hb_target_tld_dir = os.path.join(lower_target_tld_dir, 'hb_p_m')
+        lower_nhb_target_tld_dir = os.path.join(lower_target_tld_dir, 'nhb_p_m_tp')
         lower_model_method = nd.DistributionMethod.GRAVITY
         lower_calibration_zones_fname = None
         lower_calibration_areas = lower_calibration_area
@@ -267,8 +267,8 @@ def main():
         lower_calibration_area = 'north_and_mids'
         lower_calibration_bands = 'dm_north_rail_bands'
         lower_target_tld_dir = os.path.join(geo_constraint_type, lower_calibration_bands)
-        lower_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m_ca')
-        lower_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_ca_tp')
+        lower_hb_target_tld_dir = os.path.join(lower_target_tld_dir, 'hb_p_m_ca')
+        lower_nhb_target_tld_dir = os.path.join(lower_target_tld_dir, 'nhb_p_m_ca_tp')
         lower_model_method = nd.DistributionMethod.GRAVITY
         lower_calibration_zones_fname = None
         lower_calibration_areas = lower_calibration_area
@@ -338,9 +338,9 @@ def main():
         upper_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m')
         upper_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_tp')
         upper_model_method = nd.DistributionMethod.GRAVITY
-        upper_calibration_zones_fname = None
-        upper_calibration_areas = upper_calibration_area
-        upper_calibration_naming = None
+        upper_calibration_zones_fname = 'msoa_individual_tram_zones.pbz2'
+        upper_calibration_areas = {x: 'north_and_mids' for x in [1, 2, 3]}
+        upper_calibration_naming = {1: 'manchester', 2: 'sheffield', 3: 'tyne_and_wear'}
 
         lower_calibration_area = None
         lower_model_method = None
