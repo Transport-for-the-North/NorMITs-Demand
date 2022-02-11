@@ -273,25 +273,36 @@ def model_mode_subset(
     return trip_ends.subset(segmentation)
 
 
-def main(params: NTEMForecastParameters):
+def main(params: NTEMForecastParameters, init_logger: bool = True):
     """Main function for running the NTEM forecasting.
 
     Parameters
     ----------
     params : NTEMForecastParameters
         Parameters for running NTEM forecasting.
+    init_logger : bool, default True
+        If True initialises logger with log file
+        in the export folder.
 
     See Also
     --------
     normits_demand.models.ntem_forecast
     """
     start = timing.current_milli_time()
-    LOG.info("Input parameters: %r", params)
     if params.export_path.exists():
-        LOG.info("export folder already exists: %s", params.export_path)
+        msg = "export folder already exists: %s"
     else:
         params.export_path.mkdir(parents=True)
-        LOG.info("created export folder: %s", params.export_path)
+        msg = "created export folder: %s"
+    if init_logger:
+        # Add log file output to main package logger
+        nd_log.get_logger(
+            nd_log.get_package_logger_name(),
+            params.export_path / LOG_FILE,
+            "Running NTEM forecast",
+        )
+    LOG.info(msg, params.export_path)
+    LOG.info("Input parameters: %r", params)
     params.save()
 
     tempro_data = get_tempro_data(params.tempro_data_path)
@@ -345,11 +356,6 @@ def main(params: NTEMForecastParameters):
 
 ##### MAIN #####
 if __name__ == '__main__':
-    # Add log file output to main package logger
-    # TODO Move to main()
-    nd_log.get_logger(
-        nd_log.get_package_logger_name(), LOG_FILE, "Running NTEM forecast"
-    )
     try:
         main(NTEMForecastParameters())
     except Exception as err:
