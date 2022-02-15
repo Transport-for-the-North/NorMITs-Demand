@@ -1696,15 +1696,15 @@ def build_compile_params(import_dir: str,
                 # Init
                 compile_mats = all_od_matrices.copy()
 
-                # include _ before and after to avoid clashes
+                # include _ or . before and after to avoid clashes
                 ps = ['_p' + str(x) + '_' for x in purposes]
-                mode_str = '_m' + str(mode) + '_'
-                year_str = '_yr' + str(year) + '_'
+                mode_strs = ['_m' + str(mode) + x for x in ['_', '.']]
+                year_strs = ['_yr' + str(year) + x for x in ['_', '.']]
 
                 # Narrow down to matrices for this compilation
-                compile_mats = [x for x in compile_mats if year_str in x]
+                compile_mats = [x for x in compile_mats if du.is_in_string(year_strs, x)]
                 compile_mats = [x for x in compile_mats if du.is_in_string(ps, x)]
-                compile_mats = [x for x in compile_mats if mode_str in x]
+                compile_mats = [x for x in compile_mats if du.is_in_string(mode_strs, x)]
 
                 # Narrow down further if we're using ca
                 if ca is not None:
@@ -2113,7 +2113,11 @@ def _nhb_tp_split_via_factors_internal(import_dir,
 
     # Apply the splitting factors and write out
     for tp, factors in tp_dict.items():
-        tp_mat = mat_24hr * factors
+        tp_mat = pd.DataFrame(
+            data=mat_24hr.values * factors.values,
+            columns=mat_24hr.columns,
+            index=mat_24hr.index,
+        )
 
         # Figure out the output_fname
         in_params = du.fname_to_calib_params(mat_24hr_fname)

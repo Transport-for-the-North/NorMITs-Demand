@@ -429,7 +429,7 @@ def decompile_norms(year: int,
     ext_dir = os.path.join(post_me_decompiled_export, 'external')
 
     for path in [int_dir, ext_dir]:
-        file_ops.create_folder(path, verbose=False)
+        file_ops.create_folder(path)
 
     # ## CONVERT MATRICES TO EFS VDM FORMAT ## #
     need_convert = need_to_convert_to_efs_matrices(
@@ -471,4 +471,5 @@ def decompile_norms(year: int,
         external_import=ext_dir,
         full_export=post_me_decompiled_export,
         force_csv_out=final_export_csv,
+        years=[year],
     )

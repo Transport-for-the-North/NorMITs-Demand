@@ -31,6 +31,7 @@ see [support](#sharing) for more information.
    - [Northern Trip End Model](#northern-trip-end-model)
    - [Travel Market Synthesiser](#travel-market-synthesiser)
    - [External Forecast System](#external-forecast-system)
+   - [NTEM Forecasting](#ntem-forecasting)
    - [Elasticity](#elasticity-model)
    - [NorMITs Matrix Tools](#matrix-tools)
 
@@ -289,6 +290,9 @@ in each section.
 ### [External Forecast System](#contents)
 - Working from home adjustments
 - Bespoke zone handling
+
+### [NTEM Forecasting](#contents)
+![NTEM forecasting process flow](docs/op_models/Images/NTEM_forecast.png)
 
 ### [Elasticity Model](#contents)
 - Types of elasticities
