@@ -39,6 +39,7 @@ class MultithreadingError(Exception):
     """
     Custom Error Wrapper to throw in this module
     """
+
     def __init__(self, message):
         super().__init__(message)
 
@@ -53,18 +54,19 @@ class ReturnOrErrorThread(threading.Thread):
     If no error occurs and the thread return successfully, the return item
     of self.run_target will be placed into self.return_val
     """
+
     def __init__(
-            self,
-            name: str = None,
-            error_event: threading.Event = None,
-            error_q: queue.Queue = None,
-            daemon: bool = True,
-            *args,
-            **kwargs,
+        self,
+        name: str = None,
+        error_event: threading.Event = None,
+        error_q: queue.Queue = None,
+        daemon: bool = True,
+        *args,
+        **kwargs,
     ):
         # Add Thread to name if given
-        if name is not None and name.lower()[:6] != 'thread':
-            name = 'Thread-%s' % name
+        if name is not None and name.lower()[:6] != "thread":
+            name = "Thread-%s" % name
 
         threading.Thread.__init__(
             self,
@@ -109,7 +111,7 @@ class ReturnOrErrorThread(threading.Thread):
             # Mark that there has been an error, and re-raise
             self._error_event.set()
             self._error_q.put(e)
-            
+
     def run_target(self) -> Any:
         """Method representing the thread's activity.
 
@@ -122,9 +124,9 @@ class ReturnOrErrorThread(threading.Thread):
 
 
 def wait_for_thread_dict_return_or_error(
-        threads: Dict[Any, ReturnOrErrorThread],
-        *args,
-        **kwargs,
+    threads: Dict[Any, ReturnOrErrorThread],
+    *args,
+    **kwargs,
 ) -> Dict[Any, Any]:
     """Wrapper around to allow a dictionary of threads instead.
 
@@ -223,19 +225,19 @@ def wait_for_thread_return_or_error(
 
     # If not given any kwargs, assume no pbar wanted
     if pbar_kwargs is None:
-        pbar_kwargs = {'disable': True}
+        pbar_kwargs = {"disable": True}
 
     # Context is meant to keep the pbar tidy
     with du.std_out_err_redirect_tqdm() as orig_stdout:
         # Additional args for context
-        pbar_kwargs['file'] = orig_stdout
-        pbar_kwargs['dynamic_ncols'] = True
+        pbar_kwargs["file"] = orig_stdout
+        pbar_kwargs["dynamic_ncols"] = True
         # Improves time prediction guessing
-        pbar_kwargs['smoothing'] = 0
+        pbar_kwargs["smoothing"] = 0
 
         # If no total given, we can add one!
-        if 'total' not in pbar_kwargs or pbar_kwargs['total'] == 0:
-            pbar_kwargs['total'] = len(threads)
+        if "total" not in pbar_kwargs or pbar_kwargs["total"] == 0:
+            pbar_kwargs["total"] = len(threads)
 
         # Finally, make to pbar!
         pbar = tqdm.tqdm(**pbar_kwargs)
