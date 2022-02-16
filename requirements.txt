@@ -5,8 +5,6 @@ setuptools>=49.2.0
 pytest>=6.2.1
 openpyxl>=3.0.5
 pyodbc>=4.0.30
-geopandas>=0.8.1
-packaging>=20.8
 
 scipy>=1.6.2
 matplotlib>=3.4.3
