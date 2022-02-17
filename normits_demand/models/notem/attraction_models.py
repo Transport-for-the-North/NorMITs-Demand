@@ -19,7 +19,7 @@ import itertools
 import os
 import warnings
 
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 # Third party imports
 import pandas as pd
@@ -999,3 +999,80 @@ class AttractionBalancingZones:
     def __iter__(self) -> Tuple[nd.ZoningSystem, List[str]]:
         """See `AttractionBalancingZones.zoning_groups`."""
         return self.zoning_groups()
+
+    @staticmethod
+    def build_single_segment_group(
+        segmentation: nd.SegmentationLevel,
+        default_zoning: nd.ZoningSystem,
+        segment_column: str,
+        segment_zones: Dict[Any, nd.ZoningSystem]
+    ) -> AttractionBalancingZones:
+        """Build `AttractionBalancingZones` for a single segment group.
+
+        Defines different zone systems for all unique values
+        in a single segment column.
+
+        Parameters
+        ----------
+        segmentation : nd.SegmentationLevel
+            Segmentation to use for the balancing.
+        default_zoning : nd.ZoningSystem
+            Default zone system for any undefined segments.
+        segment_column : str
+            Name of the segment column which will have
+            different zone system for each unique value.
+        segment_zones : Dict[Any, nd.ZoningSystem]
+            The unique segment values for `segment_column` and
+            their corresponding zone system. Any values not
+            include will use `default_zoning`.
+
+        Returns
+        -------
+        AttractionBalancingZones
+            Instance of class with different zone systems for
+            each segment corresponding to the `segment_zones`
+            given.
+
+        Raises
+        ------
+        ValueError
+            - If `segmentation` is not an instance of `SegmentationLevel`.
+            - If `group_name` is not the name of a `segmentation` column.
+            - If any keys in `segment_zones` aren't found in the `group_name`
+              segmentation column.
+
+        Examples
+        --------
+        The example below will create an instance for `hb_p_m` attraction balancing with
+        the zone system `lad_2020` for all segments with mode 1 and `msoa` for all with mode 2.
+        >>> hb_p_m_balancing = AttractionBalancingZones.build_single_segment_group(
+        >>>     nd.get_segmentation_level('hb_p_m'),
+        >>>     nd.get_zoning_system("gor"),
+        >>>     "m",
+        >>>     {1: nd.get_zoning_system("lad_2020"), 2: nd.get_zoning_system("msoa")},
+        >>> )
+        """
+        if not isinstance(segmentation, nd.SegmentationLevel):
+            raise ValueError(
+                f"segmentation should be SegmentationLevel not {type(segmentation)}"
+            )
+        if segment_column not in segmentation.naming_order:
+            raise ValueError(
+                f"group_name should be one of {segmentation.naming_order}"
+                f" for {segmentation.name} not {segment_column}"
+            )
+        # Check all segment values refer to a possible value for that column
+        unique_params = set(segmentation.segments[segment_column])
+        missing = [i for i in segment_zones if i not in unique_params]
+        if missing:
+            raise ValueError(
+                "segment values not present in segment "
+                f"column {segment_column}: {missing}"
+            )
+        segment_zoning = {}
+        for segment_params in segmentation:
+            value = segment_params[segment_column]
+            if value in segment_zones:
+                name = segmentation.get_segment_name(segment_params)
+                segment_zoning[name] = segment_zones[value]
+        return AttractionBalancingZones(segmentation, default_zoning, segment_zoning)
