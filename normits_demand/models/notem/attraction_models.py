@@ -15,10 +15,11 @@ Attraction Models for NoTEM
 from __future__ import annotations
 
 # Builtins
+import itertools
 import os
 import warnings
 
-from typing import Dict
+from typing import Dict, List, Tuple
 
 # Third party imports
 import pandas as pd
@@ -853,3 +854,148 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             self._logger.warning(msg)
 
         return balanced_attractions
+
+
+class AttractionBalancingZones:
+    """Stores the zoning systems for the attraction model balancing.
+
+    Allows a different zone system to be defined for each segment
+    and a default zone system. An instance of this class can be
+    iterated through to give the groups of segments defined for
+    each unique zone system.
+
+    Parameters
+    ----------
+    segmentation : SegmentationLevel
+        Segmentation level of the attractions being balanced.
+    default_zoning : ZoningSystem
+        Default zoning system to use for any segments which aren't
+        given in `segment_zoning`.
+    segment_zoning : Dict[str, ZoningSystem]
+        Dictionary containing the name of the segment (key) and
+        the zoning system for that segment (value).
+
+    Raises
+    ------
+    ValueError
+        If `segmentation` isn't an instance of `SegmentationLevel`.
+        If `default_zoning` isn't an instance of `ZoningSystem`.
+    """
+
+    def __init__(
+        self,
+        segmentation: nd.SegmentationLevel,
+        default_zoning: nd.ZoningSystem,
+        segment_zoning: Dict[str, nd.ZoningSystem]
+    ) -> None:
+        self._logger = nd.get_logger(f"{self.__module__}.{self.__class__.__name__}")
+        if not isinstance(segmentation, nd.SegmentationLevel):
+            raise ValueError(f"segmentation should be SegmentationLevel not {type(segmentation)}")
+        self._segmentation = segmentation
+        if not isinstance(default_zoning, nd.ZoningSystem):
+            raise ValueError(f"default_zoning should be ZoningSystem not {type(default_zoning)}")
+        self._default_zoning = default_zoning
+        self._segment_zoning = self._check_segments(segment_zoning)
+        self._unique_zoning = None
+
+
+    def _check_segments(
+        self, segment_zoning: Dict[str, nd.ZoningSystem]
+    ) -> Dict[str, nd.ZoningSystem]:
+        """Check `segment_zoning` types and return dictionary of segments.
+
+        Only adds value to dictionary if it is a segment name from
+        `self._segmentation` and it has a `ZoningSystem` defined.
+
+        Parameters
+        ----------
+        segment_zoning : Dict[str, ZoningSystem]
+            Dictionary containing the name of the segment (key)
+            and the zoning system for that segment (value).
+
+        Returns
+        -------
+        Dict[str, ZoningSystem]
+            Dictionary containing segment names and the defined `ZoningSystem`,
+            does not include any segment names which aren't defined or which
+            aren't present in `self._segmentation.segment_names`.
+        """
+        segments = {}
+        for nm, zoning in segment_zoning.items():
+            if nm not in self._segmentation.segment_names:
+                self._logger.warning(
+                    "%r not a segment in %s segmentation, ignoring",
+                    nm,
+                    self._segmentation.name,
+                )
+                continue
+            if not isinstance(zoning, nd.ZoningSystem):
+                self._logger.error(
+                    "%s segment zoning is %s not ZoningSystem, "
+                    "using default zoning instead",
+                    nm,
+                    type(zoning),
+                )
+                continue
+            segments[nm] = zoning
+        defaults = [s for s in self._segmentation.segment_names if s not in segments]
+        if defaults:
+            self._logger.info(
+                "default zoning (%s) used for segments: %s",
+                self._default_zoning.name,
+                ", ".join(defaults)
+            )
+        return segments
+
+    @property
+    def unique_zoning(self) -> Dict[str, nd.ZoningSystem]:
+        """Dict[str, ZoningSystem]: Dictionary containing a lookup of all
+            the unique `ZoningSystem` provided for the different segments.
+            The keys are the zone system name and values are the
+            `ZoningSystem` objects.
+        """
+        if self._unique_zoning is None:
+            self._unique_zoning = {}
+            for zoning in self._segment_zoning.values():
+                if zoning.name not in self._unique_zoning:
+                    self._unique_zoning[zoning.name] = zoning
+            self._unique_zoning[self._default_zoning.name] = self._default_zoning
+        return self._unique_zoning
+
+    def get_zoning(self, segment_name: str) -> nd.ZoningSystem:
+        """Return `ZoningSystem` for given `segment_name`
+
+        Parameters
+        ----------
+        segment_name : str
+            Name of the segment to return, if a zone system isn't
+            defined for this name then the default is used.
+
+        Returns
+        -------
+        ZoningSystem
+            Zone system for given segment, or default.
+        """
+        if segment_name not in self._segment_zoning:
+            return self._default_zoning
+        return self._segment_zoning[segment_name]
+
+    def zoning_groups(self) -> Tuple[nd.ZoningSystem, List[str]]:
+        """Iterates through the unique zoning systems and provides list of segments.
+
+        Yields
+        ------
+        ZoningSystem
+            Zone system for this group of segments.
+        List[str]
+            List of segment names which use this zone system.
+        """
+        zone_name = lambda s: self.get_zoning(s).name
+        zone_ls = sorted(self._segmentation.segment_names, key=zone_name)
+        for zone_name, segments in itertools.groupby(zone_ls, key=zone_name):
+            zoning = self.unique_zoning[zone_name]
+            yield zoning, list(segments)
+
+    def __iter__(self) -> Tuple[nd.ZoningSystem, List[str]]:
+        """See `AttractionBalancingZones.zoning_groups`."""
+        return self.zoning_groups()
