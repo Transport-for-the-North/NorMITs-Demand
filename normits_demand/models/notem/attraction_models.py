@@ -220,6 +220,11 @@ class HBAttractionModel(HBAttractionModelPaths):
             log_file_path=log_file_path,
             instantiate_msg="Initialised HB Attraction Model",
         )
+        # Save balancing zones to file
+        if self.balance_zoning is not None:
+            self.balance_zoning.save(
+                os.path.join(self.export_home, "HB_balancing_zones.ini")
+            )
 
     def run(self,
             export_pure_attractions: bool = False,
@@ -658,6 +663,11 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             log_file_path=log_file_path,
             instantiate_msg="Initialised NHB Attraction Model",
         )
+        # Save balancing zones to file
+        if self.balance_zoning is not None:
+            self.balance_zoning.save(
+                os.path.join(self.export_home, "NHB_balancing_zones.ini")
+            )
 
     def run(self,
             export_nhb_pure_attractions: bool = False,

@@ -41,7 +41,7 @@ def main():
     # Define different balancing zones for each mode
     mode_balancing_zones = {3: nd.get_zoning_system("lad_2020")}
     hb_attraction_balance_zoning = nd.BalancingZones.build_single_segment_group(
-        nd.get_segmentation_level('hb_p_m'),
+        nd.get_segmentation_level('notem_hb_output'),
         nd.get_zoning_system('gor'),
         "m",
         mode_balancing_zones,
