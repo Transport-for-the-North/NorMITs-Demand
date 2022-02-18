@@ -14,8 +14,8 @@ semver_regex = (
 # fmt: on
 
 version_match = re.search(semver_regex, __version__)
-MAJOR = version_match.group('major')
-MINOR = version_match.group('minor')
-PATCH = version_match.group('patch')
-PRE_RELEASE = version_match.group('prerelease')
-BUILD_META_DATA = version_match.group('buildmetadata')
+MAJOR = version_match.group("major")
+MINOR = version_match.group("minor")
+PATCH = version_match.group("patch")
+PRE_RELEASE = version_match.group("prerelease")
+BUILD_META_DATA = version_match.group("buildmetadata")
