@@ -34,6 +34,7 @@ from typing import Optional
 # Third Party
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 # Local Imports
 import normits_demand as nd
@@ -2051,6 +2052,11 @@ class DVector:
 
         else:
             data_list = list()
+            pbar = tqdm(
+                desc=f"Balancing Segments",
+                total=len(self.segmentation.segment_names),
+                dynamic_ncols=True,
+            )
             # Loop through balancing zone groups
             for zoning, segments in balance_zoning:
                 # Figure out the masks for zone groups
@@ -2069,7 +2075,8 @@ class DVector:
                         split_weekday_weekend=split_weekday_weekend,
                     )
                     data_list.append(adjusted)
-
+                pbar.update(len(segments))
+            pbar.close()
             # Sum the zone groups together
             dvec_data = du.combine_dict_list(data_list, operator.add)
 
