@@ -2067,6 +2067,7 @@ class DVector:
                 dynamic_ncols=True,
             )
             # Loop through balancing zone groups
+            # TODO Add multiprocessing
             for zoning, segments in balance_zoning:
                 # Figure out the masks for zone groups
                 translation = self.zoning_system.translate(zoning)
