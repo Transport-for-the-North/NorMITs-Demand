@@ -38,7 +38,20 @@ def main():
     hb_attraction_import_version = '1.6'
     nhb_production_import_version = '2.0'
 
-    attraction_balance_zoning = nd.get_zoning_system('gor')
+    # Define different balancing zones for each mode
+    mode_balancing_zones = {3: nd.get_zoning_system("lad_2020")}
+    hb_attraction_balance_zoning = nd.BalancingZones.build_single_segment_group(
+        nd.get_segmentation_level('hb_p_m'),
+        nd.get_zoning_system('gor'),
+        "m",
+        mode_balancing_zones,
+    )
+    nhb_attraction_balance_zoning = nd.BalancingZones.build_single_segment_group(
+        nd.get_segmentation_level('notem_nhb_output'),
+        nd.get_zoning_system('gor'),
+        "m",
+        mode_balancing_zones,
+    )
 
     import_builder = NoTEMImportPaths(
         import_home=notem_import_home,
@@ -58,10 +71,11 @@ def main():
         iteration_name=notem_iter,
         import_builder=import_builder,
         export_home=notem_export_home,
-        attraction_balance_zoning=attraction_balance_zoning,
+        hb_attraction_balance_zoning=hb_attraction_balance_zoning,
+        nhb_attraction_balance_zoning=nhb_attraction_balance_zoning,
     )
     n.run(
-        generate_all=False,
+        generate_all=True,
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,

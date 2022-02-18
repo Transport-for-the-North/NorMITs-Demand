@@ -437,6 +437,11 @@ class BalancingZones:
         return segments
 
     @property
+    def segmentation(self) -> nd.SegmentationLevel:
+        """nd.SegmentationLevel: Segmentation level of balancing zones."""
+        return self._segmentation
+
+    @property
     def unique_zoning(self) -> Dict[str, ZoningSystem]:
         """Dict[str, ZoningSystem]: Dictionary containing a lookup of all
             the unique `ZoningSystem` provided for the different segments.
@@ -486,7 +491,7 @@ class BalancingZones:
             yield zoning, list(segments)
 
     def __iter__(self) -> Tuple[ZoningSystem, List[str]]:
-        """See `AttractionBalancingZones.zoning_groups`."""
+        """See `BalancingZones.zoning_groups`."""
         return self.zoning_groups()
 
     @staticmethod
@@ -496,7 +501,7 @@ class BalancingZones:
         segment_column: str,
         segment_zones: Dict[Any, ZoningSystem]
     ) -> BalancingZones:
-        """Build `AttractionBalancingZones` for a single segment group.
+        """Build `BalancingZones` for a single segment group.
 
         Defines different zone systems for all unique values
         in a single segment column.
