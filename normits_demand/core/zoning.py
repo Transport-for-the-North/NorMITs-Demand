@@ -15,10 +15,12 @@ systems
 from __future__ import annotations
 
 # Builtins
+import configparser
 import itertools
 import os
 import warnings
 
+from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 
 # Third Party
@@ -371,6 +373,11 @@ class BalancingZones:
         If `default_zoning` isn't an instance of `ZoningSystem`.
     """
 
+    OUTPUT_FILE_SECTIONS = {
+        "main": "BALANCING ZONES PARAMETERS",
+        "zone_groups": "BALANCING ZONES GROUPS",
+    }
+
     def __init__(
         self,
         segmentation: nd.SegmentationLevel,
@@ -494,6 +501,68 @@ class BalancingZones:
         """See `BalancingZones.zoning_groups`."""
         return self.zoning_groups()
 
+    def save(self, path: Path) -> None:
+        """Saves balancing zones to output file.
+
+        Output file is saved in format defined by
+        `configparser`.
+
+        Parameters
+        ----------
+        path : Path
+            Path to output file to save.
+        """
+        config = configparser.ConfigParser()
+        config[self.OUTPUT_FILE_SECTIONS["main"]] = {
+            "segmentation": self.segmentation.name,
+            "default_zoning": self._default_zoning.name,
+        }
+        config[self.OUTPUT_FILE_SECTIONS["zone_groups"]] = {
+            zs.name: ", ".join(segs) for zs, segs in self.zoning_groups()
+        }
+        with open(path, "wt") as f:
+            config.write(f)
+        self._logger.info("Saved balancing zones to: %s", path)
+
+    @classmethod
+    def load(cls, path: Path) -> BalancingZones:
+        """Load balancing zones from config file.
+
+        Parameters
+        ----------
+        path : Path
+            Path to config file, should be the format defined
+            by `configparser` with section names defined in
+            `BalancingZones.OUTPUT_FILE_SECTIONS`.
+
+        Returns
+        -------
+        BalancingZones
+            Balancing zones with loaded parameters.
+        """
+        config = configparser.ConfigParser()
+        config.read(path)
+        params = {}
+        params["segmentation"] = nd.get_segmentation_level(
+            config.get(cls.OUTPUT_FILE_SECTIONS["main"], "segmentation")
+        )
+        default_zoning = config.get(cls.OUTPUT_FILE_SECTIONS["main"], "default_zoning")
+        params["default_zoning"] = nd.get_zoning_system(default_zoning)
+        params["segment_zoning"] = {}
+        for zone, segments in config[cls.OUTPUT_FILE_SECTIONS["zone_groups"]].items():
+            if zone == default_zoning:
+                # Don't bother to define segments which use default zoning
+                continue
+            params["segment_zoning"].update(
+                dict.fromkeys(
+                    (s.strip() for s in segments.split(",")),
+                    nd.get_zoning_system(zone),
+                )
+            )
+        balancing_zones = BalancingZones(**params)
+        balancing_zones._logger.info("Loaded balancing zones from: %s", path)
+        return balancing_zones
+
     @staticmethod
     def build_single_segment_group(
         segmentation: nd.SegmentationLevel,
@@ -570,6 +639,18 @@ class BalancingZones:
                 name = segmentation.get_segment_name(segment_params)
                 segment_zoning[name] = segment_zones[value]
         return BalancingZones(segmentation, default_zoning, segment_zoning)
+
+    def __eq__(self, other: BalancingZones) -> bool:
+        if not isinstance(other, self.__class__):
+            return False
+        if other.segmentation != self.segmentation:
+            return False
+        if other._default_zoning != self._default_zoning:
+            return False
+        for seg_name in self.segmentation.segment_names:
+            if other.get_zoning(seg_name) != self.get_zoning(seg_name):
+                return False
+        return True
 
 
 # ## FUNCTIONS ##
