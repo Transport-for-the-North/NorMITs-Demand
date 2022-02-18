@@ -437,9 +437,9 @@ class BalancingZones:
         defaults = [s for s in self._segmentation.segment_names if s not in segments]
         if defaults:
             self._logger.info(
-                "default zoning (%s) used for segments: %s",
+                "default zoning (%s) used for %s segments",
                 self._default_zoning.name,
-                ", ".join(defaults)
+                len(defaults),
             )
         return segments
 
