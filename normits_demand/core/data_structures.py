@@ -1939,8 +1939,11 @@ class DVector:
 
                     # Balance each segment
                     for segment, self_data in zip(segment_group, self_data_lst):
+                        # Only perform balancing for given segments
+                        if segment not in segment_names:
+                            continue
                         dvec_data[segment] = self_data * factor
-                    pbar.update(len(segment_group))
+                        pbar.update()
 
         else:
             # Control given segments as normal
