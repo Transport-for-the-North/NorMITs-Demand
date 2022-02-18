@@ -1896,6 +1896,12 @@ class DVector:
         """Internal balancing function of self.balance_at_segments()"""
         # Init
         dvec_data = dict.fromkeys(segment_names)
+        pbar = tqdm(
+            desc="Balancing segments",
+            total=len(segment_names),
+            dynamic_ncols=True,
+            leave=False,
+        )
 
         if split_weekday_weekend:
             # Get the grouped segment lists
@@ -1934,6 +1940,7 @@ class DVector:
                     # Balance each segment
                     for segment, self_data in zip(segment_group, self_data_lst):
                         dvec_data[segment] = self_data * factor
+                    pbar.update(len(segment_group))
 
         else:
             # Control given segments as normal
@@ -1952,7 +1959,8 @@ class DVector:
 
                 # Balance
                 dvec_data[segment] = self_data * (np.sum(other_data) / np.sum(self_data))
-
+                pbar.update()
+        pbar.close()
         return dvec_data
 
     def balance_at_segments(self,
@@ -2047,13 +2055,14 @@ class DVector:
             dvec_data = self._balance_at_segments_internal(
                 other=other,
                 zone_mask=np.ones(self.zoning_system.unique_zones.shape),
+                segment_names=self.segmentation.segment_names,
                 split_weekday_weekend=split_weekday_weekend,
             )
 
         else:
             data_list = list()
             pbar = tqdm(
-                desc=f"Balancing Segments",
+                desc=f"Balancing segments",
                 total=len(self.segmentation.segment_names),
                 dynamic_ncols=True,
             )

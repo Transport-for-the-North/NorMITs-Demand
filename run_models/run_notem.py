@@ -39,7 +39,7 @@ def main():
     nhb_production_import_version = '2.0'
 
     # Define different balancing zones for each mode
-    mode_balancing_zones = {3: nd.get_zoning_system("lad_2020")}
+    mode_balancing_zones = {3: nd.get_zoning_system("ca_sector_2020")}
     hb_attraction_balance_zoning = nd.BalancingZones.build_single_segment_group(
         nd.get_segmentation_level('notem_hb_output'),
         nd.get_zoning_system('gor'),
@@ -75,11 +75,11 @@ def main():
         nhb_attraction_balance_zoning=nhb_attraction_balance_zoning,
     )
     n.run(
-        generate_all=True,
+        generate_all=False,
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,
-        generate_hb_attraction=False,
+        generate_hb_attraction=True,
         generate_nhb_production=False,
         generate_nhb_attraction=True,
     )
