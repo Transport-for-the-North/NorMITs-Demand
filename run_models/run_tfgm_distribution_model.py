@@ -55,89 +55,89 @@ def main():
     overwrite_cache = False
 
     run_hb = True
-    run_nhb = False
+    run_nhb = True
 
     run_all = False
     run_upper_model = True
-    run_lower_model = False
+    run_lower_model = True
     run_pa_matrix_reports = False
     run_pa_to_od = False
     run_od_matrix_reports = False
     compile_to_assignment = False
 
+    # ## DEFINE HOW TO RUN ## #
+    upper_zoning_system = nd.get_zoning_system('msoa')
+    lower_zoning_system = nd.get_zoning_system('tfgm_pt')
+    compile_zoning_system = None
+
     if mode == nd.Mode.WALK:
-        raise NotImplementedError
-
-    elif mode == nd.Mode.CYCLE:
-        raise NotImplementedError
-
-    elif mode == nd.Mode.BUS:
-        # Define zoning systems
-        upper_zoning_system = nd.get_zoning_system('msoa')
-        lower_zoning_system = nd.get_zoning_system('noham')
-        compile_zoning_system = None
-
         # Define cost arguments
         intrazonal_cost_infill = 0.5
 
         # Define segmentations for trip ends and running
-        if use_tram:
-            hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
-        else:
-            hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        hb_agg_seg = nd.get_segmentation_level('hb_p_m')
+        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        hb_running_seg = nd.get_segmentation_level('hb_p_m_walk')
+        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_walk')
+        hb_seg_name = 'p_m'
+        nhb_seg_name = 'p_m_tp'
+
+    elif mode == nd.Mode.CYCLE:
+        # Define cost arguments
+        intrazonal_cost_infill = 0.5
+
+        # Define segmentations for trip ends and running
+        hb_agg_seg = nd.get_segmentation_level('hb_p_m')
+        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        hb_running_seg = nd.get_segmentation_level('hb_p_m_cycle')
+        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_cycle')
+        hb_seg_name = 'p_m'
+        nhb_seg_name = 'p_m_tp'
+
+    elif mode == nd.Mode.BUS:
+        # Define cost arguments
+        intrazonal_cost_infill = 0.5
+
+        # Define segmentations for trip ends and running
+        hb_agg_seg = nd.get_segmentation_level('hb_p_m')
+        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
         nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_bus')
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
-        # Define kwargs for the distribution tiers
-        upper_calibration_area = 'gb'
-        upper_model_method = nd.DistributionMethod.GRAVITY
-        upper_calibration_zones_fname = None
-        upper_calibration_areas = upper_calibration_area
-        upper_calibration_naming = None
-
-        lower_calibration_area = 'north'
-        lower_model_method = nd.DistributionMethod.GRAVITY
-        lower_calibration_zones_fname = None
-        lower_calibration_areas = lower_calibration_area
-        lower_calibration_naming = None
-
-        gm_cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
-
-        gravity_kwargs = {
-            'cost_function': gm_cost_function,
-            'target_convergence': 0.9,
-            'grav_max_iters': 100,
-            'furness_max_iters': 3000,
-            'furness_tol': 0.1,
-            'calibrate_params': True,
-            'estimate_init_params': False
-        }
-
-        # Args only work for upper atm!
-        furness3d_kwargs = {
-            'target_convergence': 0.9,
-            'outer_max_iters': 50,
-            'furness_max_iters': 3000,
-            'furness_tol': 0.1,
-            'calibrate': True,
-        }
-
-        # Choose the correct kwargs
-        gravity = (nd.DistributionMethod.GRAVITY, gravity_kwargs)
-        furness3d = (nd.DistributionMethod.FURNESS3D, furness3d_kwargs)
-        choice = [gravity, furness3d]
-
-        upper_distributor_kwargs = [x[1].copy() for x in choice if x[0] == upper_model_method][0]
-        lower_distributor_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
-
     else:
         raise ValueError(
             "Don't know what mode %s is!" % mode.value
         )
+
+    # ## DEFINE HOW TO RUN DISTRIBUTIONS ## #
+    upper_calibration_area = 'gb'
+    upper_model_method = nd.DistributionMethod.GRAVITY
+    upper_calibration_zones_fname = None
+    upper_calibration_areas = upper_calibration_area
+    upper_calibration_naming = None
+
+    lower_calibration_area = 'north_and_mids'
+    lower_model_method = nd.DistributionMethod.GRAVITY
+    lower_calibration_zones_fname = None
+    lower_calibration_areas = lower_calibration_area
+    lower_calibration_naming = None
+
+    gm_cost_function = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
+
+    gravity_kwargs = {
+        'cost_function': gm_cost_function,
+        'target_convergence': 0.9,
+        'grav_max_iters': 100,
+        'furness_max_iters': 3000,
+        'furness_tol': 0.1,
+        'calibrate_params': True,
+        'estimate_init_params': False
+    }
+
+    upper_distributor_kwargs = gravity_kwargs.copy()
+    lower_distributor_kwargs = gravity_kwargs.copy()
 
     # ## GET TRIP ENDS ## #
     hb_productions, hb_attractions, nhb_productions, nhb_attractions = build_trip_ends(
@@ -151,7 +151,9 @@ def main():
     )
 
     # ## BUILD ARGUMENTS ## #
-    if lower_zoning_system is not None:
+    if lower_zoning_system.name == 'tfgm_pt':
+        lower_running_zones = lower_zoning_system
+    elif lower_zoning_system is not None:
         lower_running_zones = lower_zoning_system.internal_zones
     else:
         lower_running_zones = None
