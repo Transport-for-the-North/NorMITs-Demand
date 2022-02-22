@@ -105,10 +105,15 @@ class NoTEM:
         self._logger = nd.get_logger(
             logger_name=logger_name,
             log_file_path=log_file_path,
-            instantiate_msg="Initialised new NoTEM Logger",
+            instantiate_msg=f"Initialised new {self.name} Logger",
         )
 
         self._write_running_report()
+
+    @property
+    def name(self) -> str:
+        """Name of the model."""
+        return self.__class__.__name__
 
     def _write_running_report(self):
         """
@@ -117,7 +122,7 @@ class NoTEM:
         # Define the lines to output
         out_lines = [
             'Code Version: %s' % str(nd.__version__),
-            'NoTEM Iteration: %s' % str(self.exports.iteration_name),
+            '%s Iteration: %s' % (self.name, str(self.exports.iteration_name)),
             'Scenario: %s' % str(self.scenario),
             '',
             '### HB Productions ###',
@@ -188,7 +193,7 @@ class NoTEM:
         # TODO(BT): Add checks to make sure input paths exist when models
         #  depend on one another
         start_time = timing.current_milli_time()
-        self._logger.info("Starting a new run of NoTEM")
+        self._logger.info("Starting a new run of %s", self.name)
 
         # Determine which models to run
         if generate_all:
@@ -224,7 +229,7 @@ class NoTEM:
 
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("NoTEM run complete! Took %s" % time_taken)
+        self._logger.info("%s run complete! Took %s" % (self.name, time_taken))
 
     def _generate_hb_production(self) -> None:
         """
