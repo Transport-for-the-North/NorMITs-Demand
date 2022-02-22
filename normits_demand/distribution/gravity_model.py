@@ -10,20 +10,26 @@ Other updates made by:
 File purpose:
 
 """
+from __future__ import annotations
+
 # Built-Ins
 import os
 import abc
+import enum
 import time
+import copy
 import queue
 import warnings
 import operator
 import functools
+import threading
 import dataclasses
 
 from typing import Any
 from typing import List
 from typing import Dict
 from typing import Tuple
+from typing import Iterable
 
 # Third Party
 import numpy as np
@@ -45,20 +51,41 @@ from normits_demand.validation import checks
 from normits_demand.distribution import furness
 from normits_demand.cost import utils as cost_utils
 from normits_demand.concurrency import multithreading
+from normits_demand.concurrency import communication
 
 
 @dataclasses.dataclass(frozen=True)
 class FurnessResults:
-    matrix: np.ndarray
+    area_bool_mat: np.ndarray
     completed_iters: int
     achieved_rmse: float
 
 
 @dataclasses.dataclass(frozen=True)
 class PartialFurnessRequest:
-    matrix: np.ndarray
     row_targets: np.ndarray
     col_targets: np.ndarray
+
+
+@dataclasses.dataclass(frozen=True)
+class FurnessSetup:
+    area_mats: Dict[Any, np.ndarray]
+    gravity_putter_qs: Dict[Any, np.ndarray]
+    gravity_getter_qs: Dict[Any, np.ndarray]
+    jacobian_putter_qs: Dict[Any, np.ndarray]
+    jacobian_getter_qs: Dict[Any, np.ndarray]
+
+    complete_events: Dict[Any, threading.Event]
+    all_complete_event: threading.Event
+
+    furness_interface: multithreading.ReturnOrErrorThread
+    gravity_furness: multithreading.ReturnOrErrorThread
+    jacobian_furness: multithreading.ReturnOrErrorThread
+    all_threads: List[multithreading.ReturnOrErrorThread] = dataclasses.field(init=False)
+
+    def __post_init__(self):
+        val = [self.furness_interface, self.gravity_furness, self.jacobian_furness]
+        super().__setattr__('all_threads', val)
 
 
 class FurnessThreadBase(abc.ABC, multithreading.ReturnOrErrorThread):
@@ -74,6 +101,8 @@ class FurnessThreadBase(abc.ABC, multithreading.ReturnOrErrorThread):
                  area_mats: Dict[Any, np.ndarray],
                  getter_qs: Dict[Any, queue.Queue],
                  putter_qs: Dict[Any, queue.Queue],
+                 getter_array: communication.SharedNumpyArrayHelper,
+                 putter_array: communication.SharedNumpyArrayHelper,
                  furness_tol: float,
                  furness_max_iters: int,
                  warning: bool,
@@ -95,7 +124,7 @@ class FurnessThreadBase(abc.ABC, multithreading.ReturnOrErrorThread):
         putter_qs:
             A dictionary of Queues for each area_id. Queues are used to pass
             furnessed partial matrices on.
-            
+
         furness_tol:
             The maximum difference between the achieved and the target values
             in the furness to tolerate before exiting early. Root mean squared
@@ -108,18 +137,39 @@ class FurnessThreadBase(abc.ABC, multithreading.ReturnOrErrorThread):
         warning:
             Whether to print a warning or not when the tol cannot be met before
             max_iters.
+
+        furness_dtype:
+            The datatype being used by the furness. Assumed np.float64 by
+            default.
         """
         multithreading.ReturnOrErrorThread.__init__(self, *args, **kwargs)
 
         self.getter_qs = getter_qs
         self.putter_qs = putter_qs
         self.area_mats = area_mats
+        self._furness_shape = list(area_mats.values())[0].shape
 
         self.furness_tol = furness_tol
         self.furness_max_iters = furness_max_iters
         self.warning = warning
 
         self.calib_area_keys = area_mats.keys()
+
+        # Create numpy arrays to communicate with
+        self._array_in = getter_array
+        self._array_out = putter_array
+
+        # Make sure the in and out arrays are initialised to 0
+        self._array_in.reset_zeros()
+        self._array_out.reset_zeros()
+
+    @property
+    def array_in(self):
+        return self._array_in
+
+    @property
+    def array_out(self):
+        return self._array_out
 
     def _get_q_data(self, need_area_keys: List[int]):
         # TODO(BT): USE multithreading.get_data_from_queue(), but update it
@@ -192,12 +242,7 @@ class FurnessThreadBase(abc.ABC, multithreading.ReturnOrErrorThread):
             # Wait for threads to hand over seed mats
             need_area_keys = list(self.calib_area_keys)
 
-            seed_mats, row_targets, col_targets = self.get_furness_data(need_area_keys)
-
-            # Add all seed mats together
-            seed_mat = np.zeros((len(row_targets), len(col_targets)))
-            for area_code in self.calib_area_keys:
-                seed_mat += seed_mats[area_code]
+            seed_mat, row_targets, col_targets = self.get_furness_data(need_area_keys)
 
             # Run the furness
             furnessed_mat, iters, rmse = furness.doubly_constrained_furness(
@@ -209,15 +254,21 @@ class FurnessThreadBase(abc.ABC, multithreading.ReturnOrErrorThread):
                 warning=self.warning,
             )
 
-            # Split the furnessed matrix back out
-            furnessed_mats = dict.fromkeys(self.calib_area_keys)
-            for area_code in furnessed_mats:
-                furnessed_mats[area_code] = furnessed_mat * self.area_mats[area_code]
+            # fname = os.path.join('E:/temp/threads', '%s_mat.csv' % self.name)
+            # pd.DataFrame(furnessed_mat).to_csv(fname)
+            fname = os.path.join('E:/temp/threads', '%s_row.csv' % self.name)
+            pd.DataFrame(row_targets).to_csv(fname)
+            fname = os.path.join('E:/temp/threads', '%s_col.csv' % self.name)
+            pd.DataFrame(col_targets).to_csv(fname)
+
+            # Put the furnessed matrix in the return array
+            self._array_out.write_local_data(furnessed_mat)
 
             # Put the data back on the queues
+            # Also lets threads know data is waiting
             for area_id in self.calib_area_keys:
                 data = FurnessResults(
-                    matrix=furnessed_mats[area_id],
+                    area_bool_mat=self.area_mats[area_id],  # Return area_mat
                     completed_iters=iters,
                     achieved_rmse=rmse,
                 )
@@ -250,7 +301,7 @@ class GravityModelBase(abc.ABC):
             target_cost_distribution,
             self._target_cost_distribution_cols,
         )
-        
+
         if running_log_path is not None:
             dir_name, _ = os.path.split(running_log_path)
             if not os.path.exists(dir_name):
@@ -962,7 +1013,6 @@ class GravityModelCalibrator(GravityModelBase):
             xtol=xtol,
             grav_max_iters=grav_max_iters,
             verbose=verbose,
-
         )
 
         # Just return if not using perceived factors
@@ -1013,6 +1063,278 @@ class GravityModelCalibrator(GravityModelBase):
             )
 
         return self.optimal_cost_params
+
+
+class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
+    """Communicates between multiple furness callers and receivers
+
+    Uses flags and a recent cache to make sure calling threads cannot get
+    stuck waiting for different FurnessThreadBase classes to complete.
+    A priority of threads needs to be given. With this the class will decide
+    when to re-send data to allow threads to progress and "catch-up" with
+    one another.
+
+    e.g.
+    If there are two FurnessThreadBase instances. `furness_a`, and `furness_b`
+    and `furness_a` takes priority over `furness_b`.
+    When some threads (`threads_a`) are waiting for `furness_a` to complete,
+    and some ('threads_b') for `furness_b`, this interface will send a copy
+    of `threads_a` previously sent data to `furness_b`. This allows
+    `threads_b` to progress towards `furness_a`, where the process can carry
+    on as normal.
+    """
+
+    # Class constants
+    _default_gravity_furness_key = 'furness'
+    _default_jacobian_key = 'jacobian'
+
+    @dataclasses.dataclass(frozen=True)
+    class FurnessKeys:
+        gravity: str
+        jacobian: str
+        all: List[str] = dataclasses.field(init=False)
+
+        def __post_init__(self):
+            super().__setattr__('all', [self.gravity, self.jacobian])
+
+    @enum.unique
+    class ThreadStatus(enum.Enum):
+        UNKNOWN = 'unknown'
+        DONE = 'done'
+        GRAVITY = 'gravity'
+        JACOBIAN = 'jacobian'
+
+    def __init__(
+        self,
+        furness_wait_events: Dict[str, Dict[Any, threading.Event]],
+        complete_events: Dict[Any, threading.Event],
+        all_complete_event: threading.Event,
+        getter_qs: Dict[str, Dict[Any, queue.Queue]],
+        putter_qs: Dict[str, Dict[Any, queue.Queue]],
+        thread_ids: List[Any] = None,
+        gravity_furness_key: str = None,
+        jacobian_key: str = None,
+        *args,
+        **kwargs,
+    ):
+        """
+        Parameters
+        ----------
+        furness_wait_events:
+            A nested dictionary, where the first set of keys are the names of
+            the furness threads, as defined in furness_priority. The second
+            set of keys are the identifiers for each thread calling the
+            furnesses. The values are the events that will be set by a thread
+            when it is waiting for that furness to complete - the event should
+            also be cleared once a thread has received its data.
+
+        complete_events:
+            A dictionary of events. The keys should be the same as thread_ids.
+            The values are event indicating if the thread with that key is
+            complete or not.
+
+        getter_qs:
+            A dictionary in the same format as those nested in
+            furness_wait_events. The keys should correspond to thread_ids, and
+            the values the Queues to expect data to come in from each thread.
+
+        putter_qs:
+            A dictionary in the same format as those nested in
+            furness_wait_events. The keys should correspond to thread_ids, and
+            the values the Queues to expect data to come in from each thread.
+
+        thread_ids:
+            A list of ids to identify each thread. This should correspond to
+            the second key in furness_wait_events. If left as None, this is
+            assumed from `furness_wait_events[furness_priority[0]].keys()`
+
+        gravity_furness_key:
+            The key name used within furness_wait_events, getter_qs, and
+            putter_qs to identify objects relating the gravity furness.
+            If left as None, self._default_gravity_furness_key is used.
+
+        jacobian_key:
+            The key name used within furness_wait_events, getter_qs, and
+            putter_qs to identify objects relating the gravity furness.
+            If left as None, self._default_jacobian_key is used.
+        """
+        super().__init__(*args, **kwargs)
+
+        # Set default values if not given
+        if gravity_furness_key is None:
+            gravity_furness_key = self._default_gravity_furness_key
+        if jacobian_key is None:
+            jacobian_key = self._default_jacobian_key
+
+        if thread_ids is None:
+            thread_ids = list(furness_wait_events[gravity_furness_key].keys())
+
+        # Build keys dataclass. Needed for further validation
+        self.furness_keys = self.FurnessKeys(
+            gravity=gravity_furness_key,
+            jacobian=jacobian_key
+        )
+
+        # Validate inputs
+        name_dict = {
+            'furness_wait_events': furness_wait_events,
+            'getter_qs': getter_qs,
+            'putter_qs': putter_qs,
+        }
+
+        for name, dict_to_check in name_dict.items():
+            if not checks.all_keys_exist(dict_to_check, self.furness_keys.all):
+                raise ValueError(
+                    "%s needs to contain values for all "
+                    "furness_priority."
+                    "Keys needed: %s\n"
+                    "Keys found: %s\n"
+                    % (name, self.furness_keys.all, list(dict_to_check.keys()))
+                )
+
+            for key, value in dict_to_check.items():
+                if not checks.all_keys_exist(value, thread_ids):
+                    raise ValueError(
+                        "%s[%s] needs to contain values for all "
+                        "thread_ids."
+                        "Keys needed: %s\n"
+                        "Keys found: %s\n"
+                        % (name, key, thread_ids, list(value.keys()))
+                    )
+
+        # Attributes
+        self.furness_wait_events = furness_wait_events
+        self.complete_events = complete_events
+        self.all_complete_event = all_complete_event
+        self.getter_qs = getter_qs
+        self.putter_qs = putter_qs
+        self.thread_ids = thread_ids
+
+        # internal running attributes
+        self._gravity_cache = dict.fromkeys(thread_ids)
+        self._jacobian_cache = dict.fromkeys(thread_ids)
+
+    def _create_thread_status(self) -> Dict[Any, FurnessThreadInterface.ThreadStatus]:
+        """Builds a dictionary of ThreadStatus set to Unknown"""
+        return {x: self.ThreadStatus.UNKNOWN for x in self.thread_ids}
+
+    def _get_thread_status(self, thread_id: Any) -> FurnessThreadInterface.ThreadStatus:
+        """Gets the status of thread and returns it."""
+        # Loop until the status is gotten
+        while True:
+            # Wait for a little bit to avoid intensive looping
+            time.sleep(0.05)
+
+            # Check if done
+            if self.complete_events[thread_id].is_set():
+                return self.ThreadStatus.DONE
+
+            # Check if waiting for gravity
+            if not self.getter_qs[self.furness_keys.gravity][thread_id].empty():
+                return self.ThreadStatus.GRAVITY
+
+            # Check if waiting for jacobian
+            if not self.getter_qs[self.furness_keys.jacobian][thread_id].empty():
+                return self.ThreadStatus.JACOBIAN
+
+    @staticmethod
+    def _all_status_same(
+        statuses: Iterable[FurnessThreadInterface.ThreadStatus],
+        check_status: FurnessThreadInterface.ThreadStatus,
+    ) -> bool:
+        """Check if all statuses are set to check_status
+
+        Parameters
+        ----------
+        statuses:
+            An iterable of statuses to check.
+
+        check_status:
+            The status to check that all statuses are.
+
+        Returns
+        -------
+        all_same:
+            True if all statuses are set to check_status. Else False
+        """
+        for status in statuses:
+            if status != check_status:
+                return False
+        return True
+
+    def run_target(self):
+        """Handles passing data to furnesses to keep everything running.
+
+        Each furness thread does not follow a deterministic path, e.g.
+        run a furness, then jacobian, then furness etc...
+        It appears the running is more like:
+        1. Always run a furness
+        2. Run 0 or more Jacobians
+
+        Furthermore, it is unlikely that all gravity threads will finish at
+        the same time.
+
+        Therefore some functionality is needed to manage the threads to keep
+        them in sync, and all able to complete. That is the aim of this thread.
+
+        Until program termination, this thread will:
+        1. Try to find that status of all threads
+        2. If a jacobian or furness complete event is set, reset relevant
+           thread status
+        3. Once all status gathered do one of the following.
+            3.1. If all threads complete mark all complete event.
+            3.2. If all thread events are the same, do nothing.
+            3.3. If some threads are waiting to furness and:
+                3.3.1. some jacobian: send furness_waiting threads previous
+                       jacobian data to the jacobian.
+                3.3.2. some done: send done threads previous furness data to
+                       the furness.
+                3.3.3. some done, and some jacobian: Send the previous jacobian
+                       data of the done and the furness waiting threads to
+                       the jacobian.
+            3.4. If some threads are waiting to Jacobian and some threads are
+                 done, send done threads previous jacobian to the jacobian.
+        """
+        # run until program exit, or all threads complete
+        while True:
+            # Reset thread statuses
+            thread_statuses = self._create_thread_status()
+
+            # Try to get the status of each thread
+            for thread_id in thread_statuses:
+                thread_statuses[thread_id] = self._get_thread_status(thread_id)
+
+            # If all done, mark all done event and exit
+            if self._all_status_same(thread_statuses.values(), self.ThreadStatus.DONE):
+                self.all_complete_event.set()
+                break
+
+            # If all waiting for furness, cache data and send
+            if self._all_status_same(thread_statuses.values(), self.ThreadStatus.GRAVITY):
+                for thread_id in self.thread_ids:
+                    # Cache the data
+                    data = multithreading.get_data_from_queue(
+                        q=self.getter_qs[self.furness_keys.gravity][thread_id]
+                    )
+                    self._gravity_cache[thread_id] = data
+
+                    # Send a copy to the gravity furness
+                    self.putter_qs[self.furness_keys.gravity][thread_id].put(copy.copy(data))
+
+            # If all waiting for jacobian, cache data and send
+            elif self._all_status_same(thread_statuses.values(), self.ThreadStatus.JACOBIAN):
+                for thread_id in self.thread_ids:
+                    # Cache the data
+                    data = multithreading.get_data_from_queue(
+                        q=self.getter_qs[self.furness_keys.jacobian][thread_id]
+                    )
+                    self._jacobian_cache[thread_id] = data
+
+                    # Send a copy to the jacobian
+                    self.putter_qs[self.furness_keys.jacobian][thread_id].put(copy.copy(data))
+
+            else:
+                raise NotImplementedError
 
 
 class GravityFurnessThread(FurnessThreadBase):
@@ -1081,8 +1403,15 @@ class GravityFurnessThread(FurnessThreadBase):
             The col targets to be used for the furness.
             i.e the target of np.sum(furnessed_matrix, axis=0)
         """
+        # Doesn't matter on data. Use to know data has been sent
+        self._get_q_data(need_area_keys)
+
+        # Get the shared data, and reset the shared memory
+        seed_mat = self._array_in.get_local_copy()
+        self._array_in.reset_zeros()
+
         return (
-            self._get_q_data(need_area_keys),
+            seed_mat,
             self.row_targets,
             self.col_targets,
         )
@@ -1124,12 +1453,14 @@ class JacobianFurnessThread(FurnessThreadBase):
         # Get all the data
         partial_furness_requests = self._get_q_data(need_area_keys)
 
-        # Split out items
-        seed_mats = dict()
+        # Get the shared data, and reset the shared memory
+        seed_mat = self._array_in.get_local_copy()
+        self._array_in.reset_zeros()
+
+        # Get the row and col targets
         row_targets_list = list()
         col_targets_list = list()
         for key, request in partial_furness_requests.items():
-            seed_mats[key] = request.matrix
             row_targets_list.append(request.row_targets)
             col_targets_list.append(request.col_targets)
 
@@ -1137,7 +1468,7 @@ class JacobianFurnessThread(FurnessThreadBase):
         row_targets = functools.reduce(operator.add, row_targets_list)
         col_targets = functools.reduce(operator.add, col_targets_list)
 
-        return seed_mats, row_targets, col_targets
+        return seed_mat, row_targets, col_targets
 
 
 class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModelBase):
@@ -1155,8 +1486,14 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
                  init_params: Dict[str, Any],
                  gravity_putter_q: queue.Queue,
                  gravity_getter_q: queue.Queue,
+                 gravity_putter_array: communication.SharedNumpyArrayHelper,
+                 gravity_getter_array: communication.SharedNumpyArrayHelper,
                  jacobian_putter_q: queue.Queue,
                  jacobian_getter_q: queue.Queue,
+                 jacobian_putter_array: communication.SharedNumpyArrayHelper,
+                 jacobian_getter_array: communication.SharedNumpyArrayHelper,
+                 thread_complete_event: threading.Event,
+                 all_done_event: threading.Event,
                  use_perceived_factors: bool = True,
                  estimate_init_params: bool = False,
                  running_log_path: nd.PathLike = None,
@@ -1206,8 +1543,14 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
         # Threading attributes
         self.gravity_putter_q = gravity_putter_q
         self.gravity_getter_q = gravity_getter_q
+        self.gravity_putter_array = gravity_putter_array
+        self.gravity_getter_array = gravity_getter_array
         self.jacobian_putter_q = jacobian_putter_q
         self.jacobian_getter_q = jacobian_getter_q
+        self.jacobian_putter_array = jacobian_putter_array
+        self.jacobian_getter_array = jacobian_getter_array
+        self.thread_complete_event = thread_complete_event
+        self.all_done_event = all_done_event
 
     def run_target(self) -> Dict[str, Any]:
         """Finds the optimal parameters for self.cost_function
@@ -1248,6 +1591,8 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
             grav_max_iters=self.grav_max_iters,
             verbose=self.verbose,
         )
+        print("I'm done! %s" % self.name)
+
         return
 
     def gravity_furness(self,
@@ -1284,10 +1629,23 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
         achieved_rmse:
             The Root Mean Squared Error difference achieved before exiting
         """
-        self.gravity_putter_q.put(seed_matrix)
+        # ## SEND ## #
+        # Add the data to the shared array - and mark queue
+        self.gravity_putter_array.apply_local_data(seed_matrix, operator.add)
+        self.gravity_putter_q.put(1)
+        print("%s sent data to furness: %s\n" % (self.name, seed_matrix.sum()))
+
+        # ## RECEIVE ## #
+        # Wait until we're told there is data to collect
         furness_data = multithreading.get_data_from_queue(self.gravity_getter_q)
+
+        # Extract our chunk of the matrix
+        furnessed_mat = self.gravity_getter_array.get_local_copy()
+        furnessed_mat *= furness_data.area_bool_mat
+        print("%s got data to furness: %s\n" % (self.name, furnessed_mat.sum()))
+
         return (
-            furness_data.matrix,
+            furnessed_mat,
             furness_data.completed_iters,
             furness_data.achieved_rmse,
         )
@@ -1326,19 +1684,29 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
         achieved_rmse:
             The Root Mean Squared Error difference achieved before exiting
         """
+        # ## SEND ## #
+        # Add this seed to shared memory
+        self.jacobian_putter_array.apply_local_data(seed_matrix, operator.add)
+
         # Create a request and place on the queue
         request = PartialFurnessRequest(
-            matrix=seed_matrix,
             row_targets=row_targets,
             col_targets=col_targets,
         )
-
         self.jacobian_putter_q.put(request)
+        print("%s sent data to jacob: %s\n" % (self.name, seed_matrix.sum()))
 
-        # Get the return data
+        # ## RECEIVE ## #
+        # Wait until we're told there is data to collect
         furness_data = multithreading.get_data_from_queue(self.jacobian_getter_q)
+
+        # Extract our chunk of the matrix
+        furnessed_mat = self.jacobian_getter_array.get_local_copy()
+        furnessed_mat *= furness_data.area_bool_mat
+        print("%s got data to jacob: %s\n" % (self.name, furnessed_mat.sum()))
+
         return (
-            furness_data.matrix,
+            furnessed_mat,
             furness_data.completed_iters,
             furness_data.achieved_rmse,
         )
@@ -1431,6 +1799,103 @@ class MultiTLDGravityModelCalibrator:
         # self.achieved_residuals = None
         # self.achieved_distribution = None
 
+    def _setup_furness_threads(self,
+                               gravity_array_in: communication.SharedNumpyArrayHelper,
+                               gravity_array_out: communication.SharedNumpyArrayHelper,
+                               jacobian_array_in: communication.SharedNumpyArrayHelper,
+                               jacobian_array_out: communication.SharedNumpyArrayHelper,
+                               ) -> FurnessSetup:
+        """Sets up all the furness/jacobian threads for calibration runs"""
+        # Init
+        gravity_furness_key = 'furness',
+        jacobian_key = 'jacobian',
+
+        # Function to construct FurnessThreadInterface objects
+        def create_interface_input(constructor):
+            ret_val = dict()
+            for name in [gravity_furness_key, jacobian_key]:
+                nested_dict = dict.fromkeys(self.calib_areas)
+                for key in nested_dict:
+                    nested_dict[key] = constructor()
+                ret_val[name] = nested_dict
+            return ret_val
+
+        # Use above function to create objects
+        interface_putter_qs = create_interface_input(lambda: queue.Queue(1))
+        interface_getter_qs = create_interface_input(lambda: queue.Queue(1))
+        furness_return_qs = create_interface_input(lambda: queue.Queue(1))
+        furness_wait_events = create_interface_input(lambda: threading.Event())
+
+        # Generate the complete event
+        all_complete_event = threading.Event()
+
+        # Generate the area mats and complete events for each thread
+        area_mats = dict.fromkeys(self.calib_areas)
+        complete_events = dict.fromkeys(self.calib_areas)
+        for area_id in self.calib_areas:
+            area_mats[area_id] = self.calibration_matrix == area_id
+            complete_events[area_id] = threading.Event()
+
+        # Initialise the interface between gravity and furnesses
+        furness_interface = FurnessThreadInterface(
+            name='FurnessInterface',
+            daemon=True,
+            furness_wait_events=furness_wait_events,
+            getter_qs=interface_getter_qs,
+            putter_qs=interface_putter_qs,
+            complete_events=complete_events,
+            all_complete_event=all_complete_event,
+            thread_ids=self.calib_areas,
+            gravity_furness_key=gravity_furness_key,
+            jacobian_key=jacobian_key,
+        )
+        furness_interface.start()
+
+        # Initialise the central gravity furness thread
+        gravity_furness = GravityFurnessThread(
+            name='Furness',
+            daemon=True,
+            row_targets=self.row_targets,
+            col_targets=self.col_targets,
+            getter_qs=interface_putter_qs[gravity_furness_key],
+            putter_qs=furness_return_qs[gravity_furness_key],
+            getter_array=gravity_array_in,
+            putter_array=gravity_array_out,
+            area_mats=area_mats,
+            furness_tol=self.furness_tol,
+            furness_max_iters=self.furness_max_iters,
+            warning=True,
+        )
+        gravity_furness.start()
+
+        # Initialise the central jacobian furness thread
+        jacobian_furness = JacobianFurnessThread(
+            name='Jacobian',
+            daemon=True,
+            getter_qs=interface_putter_qs[jacobian_key],
+            putter_qs=furness_return_qs[jacobian_key],
+            getter_array=jacobian_array_in,
+            putter_array=jacobian_array_out,
+            area_mats=area_mats,
+            furness_tol=1e-6,
+            furness_max_iters=50,
+            warning=False,
+        )
+        jacobian_furness.start()
+
+        return FurnessSetup(
+            area_mats=area_mats,
+            gravity_putter_qs=interface_getter_qs[gravity_furness_key],
+            gravity_getter_qs=furness_return_qs[gravity_furness_key],
+            jacobian_putter_qs=interface_getter_qs[jacobian_key],
+            jacobian_getter_qs=furness_return_qs[jacobian_key],
+            complete_events=complete_events,
+            all_complete_event=all_complete_event,
+            furness_interface=furness_interface,
+            gravity_furness=gravity_furness,
+            jacobian_furness=jacobian_furness,
+        )
+
     def _threaded_calibrate(self,
                             init_params: Dict[str, Any],
                             estimate_init_params: bool,
@@ -1451,84 +1916,71 @@ class MultiTLDGravityModelCalibrator:
         # Init
         optimal_params = dict.fromkeys(self.calib_areas)
 
-        # Set up the queues for threads to communicate
-        area_mats = dict.fromkeys(self.calib_areas)
-        gravity_putter_qs = dict.fromkeys(self.calib_areas)
-        gravity_getter_qs = dict.fromkeys(self.calib_areas)
-        jacobian_putter_qs = dict.fromkeys(self.calib_areas)
-        jacobian_getter_qs = dict.fromkeys(self.calib_areas)
-        for area_id in self.calib_areas:
-            area_mats[area_id] = self.calibration_matrix == area_id
-            gravity_putter_qs[area_id] = queue.Queue(1)
-            gravity_getter_qs[area_id] = queue.Queue(1)
-            jacobian_putter_qs[area_id] = queue.Queue(1)
-            jacobian_getter_qs[area_id] = queue.Queue(1)
+        # Create the shared arrays for all to communicate
+        init_mat = np.zeros_like(self.cost_matrix)
+        with communication.SharedNumpyArrayHelper('Grav_in', init_mat) as grav_in, \
+             communication.SharedNumpyArrayHelper('Grav_out', init_mat) as grav_out, \
+             communication.SharedNumpyArrayHelper('Jac_in', init_mat) as jac_in, \
+             communication.SharedNumpyArrayHelper('Jac_out', init_mat) as jac_out:
 
-        # Initialise the central gravity furness thread
-        gravity_furness_thread = GravityFurnessThread(
-            daemon=True,
-            row_targets=self.row_targets,
-            col_targets=self.col_targets,
-            getter_qs=gravity_putter_qs,
-            putter_qs=gravity_getter_qs,
-            area_mats=area_mats,
-            furness_tol=self.furness_tol,
-            furness_max_iters=self.furness_max_iters,
-            warning=True,
-        )
-        gravity_furness_thread.start()
-
-        # Initialise the central jacobian furness thread
-        jacobian_furness_thread = JacobianFurnessThread(
-            daemon=True,
-            getter_qs=jacobian_putter_qs,
-            putter_qs=jacobian_getter_qs,
-            area_mats=area_mats,
-            furness_tol=1e-6,
-            furness_max_iters=50,
-            warning=False,
-        )
-        jacobian_furness_thread.start()
-
-        # Start the gravity processes
-        calibrator_threads = dict.fromkeys(self.calib_areas)
-        for area_id in self.calib_areas:
-            # Get just the costs for this area
-            area_cost = self.cost_matrix * area_mats[area_id]
-
-            # Set up where to put the logs
-            dir_name, fname = os.path.split(self.running_log_path)
-            area_dir_name = os.path.join(dir_name, self.calibration_naming[area_id])
-            file_ops.create_folder(area_dir_name)
-            area_running_log_path = os.path.join(area_dir_name, fname)
-
-            # Start a thread to calibrate each area
-            calibrator_threads[area_id] = SingleTLDCalibratorThread(
-                thread_name=self.calibration_naming[area_id],
-                cost_function=self.cost_function,
-                cost_matrix=area_cost,
-                init_params=init_params,
-                estimate_init_params=estimate_init_params,
-                target_cost_distribution=self.target_cost_distributions[area_id],
-                target_convergence=self.target_convergence,
-                running_log_path=area_running_log_path,
-                gravity_putter_q=gravity_putter_qs[area_id],
-                gravity_getter_q=gravity_getter_qs[area_id],
-                jacobian_putter_q=jacobian_putter_qs[area_id],
-                jacobian_getter_q=jacobian_getter_qs[area_id],
-                calibrate_params=calibrate_params,
-                diff_step=diff_step,
-                ftol=ftol,
-                xtol=xtol,
-                grav_max_iters=grav_max_iters,
-                verbose=verbose,
+            # Set up the furness threads for gravity threads
+            furness_setup = self._setup_furness_threads(
+                gravity_array_in=grav_in,
+                gravity_array_out=grav_out,
+                jacobian_array_in=jac_in,
+                jacobian_array_out=jac_out,
             )
-            calibrator_threads[area_id].start()
 
-        furnessed_mats = multithreading.wait_for_thread_dict_return_or_error(
-            threads=calibrator_threads,
-            pbar_kwargs={'disable': False}
-        )
+            # Start the gravity processes
+            calibrator_threads = dict.fromkeys(self.calib_areas)
+            for area_id in self.calib_areas:
+                # Get just the costs for this area
+                area_cost = self.cost_matrix * furness_setup.area_mats[area_id]
+
+                # Set up where to put the logs
+                dir_name, fname = os.path.split(self.running_log_path)
+                area_dir_name = os.path.join(dir_name, self.calibration_naming[area_id])
+                file_ops.create_folder(area_dir_name)
+                area_running_log_path = os.path.join(area_dir_name, fname)
+
+                # Replace the log if it already exists
+                if os.path.isfile(area_running_log_path):
+                    os.remove(area_running_log_path)
+
+                # Start a thread to calibrate each area
+                calibrator_threads[area_id] = SingleTLDCalibratorThread(
+                    thread_name=self.calibration_naming[area_id],
+                    cost_function=self.cost_function,
+                    cost_matrix=area_cost,
+                    init_params=init_params,
+                    estimate_init_params=estimate_init_params,
+                    target_cost_distribution=self.target_cost_distributions[area_id],
+                    target_convergence=self.target_convergence,
+                    running_log_path=area_running_log_path,
+                    gravity_putter_q=furness_setup.gravity_putter_qs[area_id],
+                    gravity_getter_q=furness_setup.gravity_getter_qs[area_id],
+                    gravity_putter_array=grav_in,
+                    gravity_getter_array=grav_out,
+                    jacobian_putter_array=jac_in,
+                    jacobian_getter_array=jac_out,
+                    jacobian_putter_q=furness_setup.jacobian_putter_qs[area_id],
+                    jacobian_getter_q=furness_setup.jacobian_getter_qs[area_id],
+                    thread_complete_event=furness_setup.complete_events[area_id],
+                    all_done_event=furness_setup.all_complete_event,
+                    calibrate_params=calibrate_params,
+                    diff_step=diff_step,
+                    ftol=ftol,
+                    xtol=xtol,
+                    grav_max_iters=grav_max_iters,
+                    verbose=verbose,
+                )
+                calibrator_threads[area_id].start()
+
+            furnessed_mats = multithreading.wait_for_thread_dict_return_or_error(
+                return_threads=calibrator_threads,
+                error_threads_list=furness_setup.all_threads,
+                pbar_kwargs={'disable': False}
+            )
 
         print(self.calibration_matrix.sum())
         print(self.target_cost_distributions)
