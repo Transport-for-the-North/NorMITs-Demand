@@ -15,6 +15,7 @@
 
 # Local imports
 from normits_demand.models.notem import NoTEM
+from normits_demand.pathing import MiTEMExportPaths
 
 
 ##### CLASSES #####
@@ -25,5 +26,5 @@ class MiTEM(NoTEM):
     --------
     `normits_demand.models.notem.notem.NoTEM`
     """
-
+    EXPORT_PATHS_CLASS = MiTEMExportPaths
     _log_fname = "MiTEM_log.log"

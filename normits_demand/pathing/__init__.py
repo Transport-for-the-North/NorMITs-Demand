@@ -19,4 +19,4 @@ from normits_demand.pathing.tram import TramImportPaths
 from normits_demand.pathing.tram import TramExportPaths
 
 # MiTEM Paths
-from normits_demand.pathing.mitem import MiTEMImportPaths
+from normits_demand.pathing.mitem import MiTEMImportPaths, MiTEMExportPaths

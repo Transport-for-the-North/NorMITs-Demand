@@ -28,3 +28,12 @@ class MiTEMImportPaths(notem_paths.NoTEMImportPaths):
     --------
     `normits_demand.pathing.notem.NoTEMImportPaths`
     """
+
+
+class MiTEMExportPaths(notem_paths.NoTEMExportPaths):
+    """Export paths class for the MiTEM model.
+
+    See Also
+    --------
+    `normits_demand.pathing.notem.NoTEMExportPaths`
+    """
