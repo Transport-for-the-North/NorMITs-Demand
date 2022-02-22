@@ -27,6 +27,7 @@ import threading
 from typing import Any
 from typing import List
 from typing import Dict
+from typing import Union
 
 # Third Party
 import tqdm
@@ -124,7 +125,9 @@ class ReturnOrErrorThread(threading.Thread):
 
 
 def wait_for_thread_dict_return_or_error(
-    threads: Dict[Any, ReturnOrErrorThread],
+    return_threads: Dict[Any, ReturnOrErrorThread],
+    error_threads: Dict[Any, ReturnOrErrorThread] = None,
+    error_threads_list: List[ReturnOrErrorThread] = None,
     *args,
     **kwargs,
 ) -> Dict[Any, Any]:
@@ -134,21 +137,34 @@ def wait_for_thread_dict_return_or_error(
 
     Parameters
     ----------
-    threads:
+    return_threads:
         A dictionary of the threads to attempt to retrieve the return
         values from.
+
+    error_threads:
+        A dictionary of the threads to check there have been no errors in,
+        but no return values need to be retrieved.
+
+    error_threads_list:
+        A list of the threads to check there have been no errors in,
+        but no return values need to be retrieved.
 
     See Also
     --------
     `wait_for_thread_return_or_error()`
     """
+    # Init
+    error_threads = dict() if error_threads is None else error_threads
+    error_threads_list = list() if error_threads_list is None else error_threads_list
+
     # Convert dict to list
-    key_order = list(threads.keys())
-    thread_list = [threads[x] for x in key_order]
+    key_order = list(return_threads.keys())
+    return_thread_list = [return_threads[x] for x in key_order]
 
     # Call original function
     results_list = wait_for_thread_return_or_error(
-        threads=thread_list,
+        return_threads=return_thread_list,
+        error_threads=list(error_threads.values()) + error_threads_list,
         *args,
         **kwargs,
     )
@@ -161,7 +177,8 @@ def wait_for_thread_dict_return_or_error(
 
 
 def wait_for_thread_return_or_error(
-    threads: List[ReturnOrErrorThread],
+    return_threads: List[ReturnOrErrorThread],
+    error_threads: List[ReturnOrErrorThread] = None,
     stop_event: threading.Event = None,
     thread_timeout: float = 0.01,
     total_timeout: float = 86400,
@@ -176,8 +193,12 @@ def wait_for_thread_return_or_error(
 
     Parameters
     ----------
-    threads:
+    return_threads:
         A list of the threads to attempt to retrieve the return values from.
+
+    error_threads:
+        A list of the threads to check there have been no errors in, but no
+        return values need to be retrieved.
 
     stop_event:
         An event telling this function to stop waiting for return values.
@@ -213,15 +234,16 @@ def wait_for_thread_return_or_error(
         If an error has occurred in one of the threads.
     """
     # init
-    start_time = time.time()
     got_all_results = False
-    results = [default_return_val] * len(threads)
+    results = [default_return_val] * len(return_threads)
+    error_threads = list() if error_threads is None else error_threads
+    start_time = time.time()
 
     if stop_event is None:
         stop_event = threading.Event()
 
     # Add index to save original order
-    idx_threads = list(enumerate(threads))
+    idx_threads = list(enumerate(return_threads))
 
     # If not given any kwargs, assume no pbar wanted
     if pbar_kwargs is None:
@@ -237,7 +259,7 @@ def wait_for_thread_return_or_error(
 
         # If no total given, we can add one!
         if "total" not in pbar_kwargs or pbar_kwargs["total"] == 0:
-            pbar_kwargs["total"] = len(threads)
+            pbar_kwargs["total"] = len(return_threads)
 
         # Finally, make to pbar!
         pbar = tqdm.tqdm(**pbar_kwargs)
@@ -254,6 +276,17 @@ def wait_for_thread_return_or_error(
             # Check if we've ran out of time
             if (time.time() - start_time) > total_timeout:
                 raise TimeoutError("Ran out of time while waiting for results.")
+
+            # Check if there's been any errors in the error_threads
+            for thread in error_threads:
+                thread.join(timeout=thread_timeout)
+                if thread.is_alive():
+                    continue
+
+                # If here, thread must be finished. Check for errors
+                if thread.error_event.is_set():
+                    msg = "Error occurred in thread: %s" % thread.name
+                    raise MultithreadingError(msg) from thread.error_q.get()
 
             # Check if any results are ready
             done_threads = list()
@@ -336,7 +369,7 @@ def get_data_from_queue(
     # Loop while waiting for data
     while not got_data:
         # Wait for a little bit to avoid intensive looping
-        time.sleep(0.05)
+        time.sleep(0.01)
 
         # If told to stop, just return what we have so far
         if stop_event.is_set():
@@ -344,13 +377,11 @@ def get_data_from_queue(
 
         # Check if we've ran out of time
         if (time.time() - start_time) > total_timeout:
-            raise TimeoutError(
-                "Ran out of time while waiting to retrieve data from queue."
-            )
+            raise TimeoutError("Ran out of time while waiting to retrieve data from queue.")
 
         # Try get the data, catch the error if not available
         try:
-            data = q.get(block=False)
+            data = q.get_nowait()
             got_data = True
         except queue.Empty:
             pass
