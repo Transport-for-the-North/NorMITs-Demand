@@ -58,7 +58,7 @@ def main():
     run_nhb = True
 
     run_all = False
-    run_upper_model = True
+    run_upper_model = False
     run_lower_model = True
     run_pa_matrix_reports = False
     run_pa_to_od = False
@@ -151,9 +151,7 @@ def main():
     )
 
     # ## BUILD ARGUMENTS ## #
-    if lower_zoning_system.name == 'tfgm_pt':
-        lower_running_zones = lower_zoning_system
-    elif lower_zoning_system is not None:
+    if lower_zoning_system is not None:
         lower_running_zones = lower_zoning_system.internal_zones
     else:
         lower_running_zones = None
