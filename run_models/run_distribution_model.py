@@ -586,6 +586,7 @@ def import_pa(production_import_path,
               use_tram,
               ) -> Tuple[nd.DVector, nd.DVector]:
 
+    # TODO(MB) Make model name more flexible
     model_name = 'tram' if use_tram else 'notem'
 
     # Determine the required segmentation

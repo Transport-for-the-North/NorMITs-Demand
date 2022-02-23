@@ -11,10 +11,12 @@ import sys
 
 # Local imports
 sys.path.append("..")
+# pylint: disable=import-error,wrong-import-position
+import run_notem
 import normits_demand as nd
 from normits_demand.models import MiTEM
 from normits_demand.pathing import MiTEMImportPaths
-import run_notem
+# pylint: enable=import-error,wrong-import-position
 
 
 ##### CONSTANTS #####
@@ -31,6 +33,7 @@ mitem_export_home = r"T:\MidMITs Demand\MiTEM"
 
 ##### FUNCTIONS #####
 def main():
+    """Run MiTEM."""
     hb_production_import_version = '2.1'
     hb_attraction_import_version = '1.6'
     nhb_production_import_version = '2.0'
