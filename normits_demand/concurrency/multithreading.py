@@ -27,7 +27,6 @@ import threading
 from typing import Any
 from typing import List
 from typing import Dict
-from typing import Union
 
 # Third Party
 import tqdm
@@ -387,3 +386,58 @@ def get_data_from_queue(
             pass
 
     return data
+
+
+def empty_queue(
+    q: queue.Queue,
+    wait_for_items: bool = False,
+    wait_time: float = 0.1,
+) -> List[Any]:
+    """Empties q by getting and discarding all items
+
+    Parameters
+    ----------
+    q:
+        The Queue to empty out.
+
+    wait_for_items:
+        Whether to wait for new items to be added once the queue has been
+        emptied. Useful when a small queue is used and threads are waiting to
+        put items on the queue as soon as there is space.
+
+    wait_time:
+        Only used when wait_for_items is True. The amount of time to wait
+        while items are added to the queue before trying to empty again.
+        This value will be passed to time.sleep()
+
+    Returns
+    -------
+    discarded_items:
+        A list of all items that were collected from the queue.
+    """
+    # init
+    items = list()
+
+    # Empty queue and wait until queue is empty
+    while True:
+
+        # If queue is still empty, we are done
+        if q.empty():
+            break
+
+        # Try and get all data from the queue
+        while True:
+            # Try get the data
+            try:
+                items.append(q.get_nowait())
+            except queue.Empty:
+                break
+
+        # Just leave if we're not waiting
+        if not wait_for_items:
+            break
+
+        # Otherwise, wait and loop again
+        time.sleep(wait_time)
+
+    return items

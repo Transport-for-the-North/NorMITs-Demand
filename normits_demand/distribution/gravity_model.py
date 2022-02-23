@@ -254,13 +254,6 @@ class FurnessThreadBase(abc.ABC, multithreading.ReturnOrErrorThread):
                 warning=self.warning,
             )
 
-            # fname = os.path.join('E:/temp/threads', '%s_mat.csv' % self.name)
-            # pd.DataFrame(furnessed_mat).to_csv(fname)
-            fname = os.path.join('E:/temp/threads', '%s_row.csv' % self.name)
-            pd.DataFrame(row_targets).to_csv(fname)
-            fname = os.path.join('E:/temp/threads', '%s_col.csv' % self.name)
-            pd.DataFrame(col_targets).to_csv(fname)
-
             # Put the furnessed matrix in the return array
             self._array_out.write_local_data(furnessed_mat)
 
@@ -1108,9 +1101,11 @@ class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
         self,
         furness_wait_events: Dict[str, Dict[Any, threading.Event]],
         complete_events: Dict[Any, threading.Event],
+        area_mats: Dict[Any, np.ndarray],
         all_complete_event: threading.Event,
         getter_qs: Dict[str, Dict[Any, queue.Queue]],
         putter_qs: Dict[str, Dict[Any, queue.Queue]],
+        shared_arrays: Dict[str, communication.SharedNumpyArrayHelper],
         thread_ids: List[Any] = None,
         gravity_furness_key: str = None,
         jacobian_key: str = None,
@@ -1133,6 +1128,11 @@ class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
             The values are event indicating if the thread with that key is
             complete or not.
 
+        area_mats:
+            A dictionary of boolean numpy arrays. The keys should be the same
+            as thread_ids. The values indicating which cells are within
+            an area, and which are not.
+
         getter_qs:
             A dictionary in the same format as those nested in
             furness_wait_events. The keys should correspond to thread_ids, and
@@ -1142,6 +1142,11 @@ class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
             A dictionary in the same format as those nested in
             furness_wait_events. The keys should correspond to thread_ids, and
             the values the Queues to expect data to come in from each thread.
+
+        shared_arrays:
+            A dictionary of the shared input arrays for the jacobian and
+            gravity furness. Keys should be gravity_furness_key and
+            jacobian_key.
 
         thread_ids:
             A list of ids to identify each thread. This should correspond to
@@ -1203,16 +1208,20 @@ class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
                     )
 
         # Attributes
+        self.area_mats = area_mats
         self.furness_wait_events = furness_wait_events
         self.complete_events = complete_events
         self.all_complete_event = all_complete_event
         self.getter_qs = getter_qs
         self.putter_qs = putter_qs
+        self.shared_arrays = shared_arrays
         self.thread_ids = thread_ids
 
         # internal running attributes
-        self._gravity_cache = dict.fromkeys(thread_ids)
-        self._jacobian_cache = dict.fromkeys(thread_ids)
+        self._gravity_q_cache = dict.fromkeys(thread_ids)
+        self._gravity_array_cache = dict.fromkeys(thread_ids)
+        self._jacobian_q_cache = dict.fromkeys(thread_ids)
+        self._jacobian_array_cache = dict.fromkeys(thread_ids)
 
     def _create_thread_status(self) -> Dict[Any, FurnessThreadInterface.ThreadStatus]:
         """Builds a dictionary of ThreadStatus set to Unknown"""
@@ -1262,6 +1271,112 @@ class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
                 return False
         return True
 
+    @staticmethod
+    def _any_status(
+        statuses: Iterable[FurnessThreadInterface.ThreadStatus],
+        check_status: FurnessThreadInterface.ThreadStatus,
+    ) -> bool:
+        """Check if any statuses are set to check_status
+
+        Parameters
+        ----------
+        statuses:
+            An iterable of statuses to check.
+
+        check_status:
+            The status to check that any status is.
+
+        Returns
+        -------
+        all_same:
+            True if any status is set to check_status. Else False
+        """
+        for status in statuses:
+            if status == check_status:
+                return True
+        return False
+
+    def _cache_and_send(
+        self,
+        furness_key: str,
+        thread_id: Any,
+        q_cache: Dict[Any, Any],
+        array_cache: Dict[Any, np.ndarray],
+    ) -> None:
+        """Gets the data, caches it, and then sends a copy on
+
+        Parameters
+        ----------
+        furness_key:
+            The key in the getter and putter queue dictionaries defining
+            which furness is being used.
+
+        thread_id:
+            The key in the getter and putter queue dictionaries defining
+            which thread is being used.
+
+        q_cache:
+            A dictionary of thread_id keys, where the data gotten from the
+            getter queue will be cached.
+
+        array_cache:
+            A dictionary of thread_id keys, where the data gotten from the
+            shared array will be cached.
+        """
+        # Init
+        getter_q = self.getter_qs[furness_key][thread_id]
+        putter_q = self.putter_qs[furness_key][thread_id]
+
+        # Get and cache the queue data
+        q_data = multithreading.get_data_from_queue(q=getter_q)
+        q_cache[thread_id] = q_data
+
+        # Send a copy to the gravity furness
+        putter_q.put(copy.copy(q_data))
+
+        # Get and cache a copy of the array data
+        array_data = self.shared_arrays[furness_key].get_local_copy()
+        array_data *= self.area_mats[thread_id]
+        array_cache[thread_id] = array_data
+
+    def _retrieve_cache_and_send(
+        self,
+        furness_key: str,
+        thread_id: Any,
+        q_cache: Dict[Any, Any],
+        array_cache: Dict[Any, np.ndarray],
+    ) -> None:
+        """Gets the cached data and sends a copy on
+
+        Parameters
+        ----------
+        furness_key:
+            The key in the getter and putter queue dictionaries defining
+            which furness is being used.
+
+        thread_id:
+            The key in the getter and putter queue dictionaries defining
+            which thread is being used.
+
+        q_cache:
+            A dictionary of thread_id keys, where the data gotten from the
+            getter queue has been cached.
+
+        array_cache:
+            A dictionary of thread_id keys, where the data gotten from the
+            shared array has been cached.
+        """
+        # Send the cached queue data
+        q_data = copy.copy(q_cache[thread_id])
+        self.putter_qs[furness_key][thread_id].put(q_data)
+
+        # Add the cached matrix data to the shared array
+        array_data = copy.copy(array_cache[thread_id])
+        self.shared_arrays[furness_key].apply_local_data(
+            data=array_data,
+            operation=operator.add,
+        )
+
     def run_target(self):
         """Handles passing data to furnesses to keep everything running.
 
@@ -1284,16 +1399,14 @@ class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
         3. Once all status gathered do one of the following.
             3.1. If all threads complete mark all complete event.
             3.2. If all thread events are the same, do nothing.
-            3.3. If some threads are waiting to furness and:
-                3.3.1. some jacobian: send furness_waiting threads previous
-                       jacobian data to the jacobian.
-                3.3.2. some done: send done threads previous furness data to
-                       the furness.
-                3.3.3. some done, and some jacobian: Send the previous jacobian
-                       data of the done and the furness waiting threads to
-                       the jacobian.
-            3.4. If some threads are waiting to Jacobian and some threads are
-                 done, send done threads previous jacobian to the jacobian.
+            3.3. If some threads are waiting to Jacobian:
+                 Send the cached data of the threads which are either done,
+                 or waiting to furness.
+            3.4. If some threads are waiting to Furness:
+                 Should only be done threads left, send their cache.
+
+        NOTE: Do we still need to run the furness / jacobian and evaluate if
+        a thread is done?? keeps the jacobian and furness up to date.
         """
         # run until program exit, or all threads complete
         while True:
@@ -1302,6 +1415,7 @@ class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
 
             # Try to get the status of each thread
             for thread_id in thread_statuses:
+                print("Getting status of %s" % thread_id)
                 thread_statuses[thread_id] = self._get_thread_status(thread_id)
 
             # If all done, mark all done event and exit
@@ -1309,32 +1423,60 @@ class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
                 self.all_complete_event.set()
                 break
 
+            if self._any_status(thread_statuses.values(), self.ThreadStatus.DONE):
+                raise NotImplementedError("Don't know what to do when some threads are done")
+
             # If all waiting for furness, cache data and send
             if self._all_status_same(thread_statuses.values(), self.ThreadStatus.GRAVITY):
                 for thread_id in self.thread_ids:
-                    # Cache the data
-                    data = multithreading.get_data_from_queue(
-                        q=self.getter_qs[self.furness_keys.gravity][thread_id]
+                    self._cache_and_send(
+                        furness_key=self.furness_keys.gravity,
+                        thread_id=thread_id,
+                        q_cache=self._gravity_q_cache,
+                        array_cache=self._gravity_array_cache,
                     )
-                    self._gravity_cache[thread_id] = data
-
-                    # Send a copy to the gravity furness
-                    self.putter_qs[self.furness_keys.gravity][thread_id].put(copy.copy(data))
 
             # If all waiting for jacobian, cache data and send
             elif self._all_status_same(thread_statuses.values(), self.ThreadStatus.JACOBIAN):
                 for thread_id in self.thread_ids:
-                    # Cache the data
-                    data = multithreading.get_data_from_queue(
-                        q=self.getter_qs[self.furness_keys.jacobian][thread_id]
+                    self._cache_and_send(
+                        furness_key=self.furness_keys.jacobian,
+                        thread_id=thread_id,
+                        q_cache=self._jacobian_q_cache,
+                        array_cache=self._jacobian_array_cache,
                     )
-                    self._jacobian_cache[thread_id] = data
 
-                    # Send a copy to the jacobian
-                    self.putter_qs[self.furness_keys.jacobian][thread_id].put(copy.copy(data))
+            # If any waiting for the Jacobian, try to move them along first
+            elif self._any_status(thread_statuses.values(), self.ThreadStatus.JACOBIAN):
+                print("HERE")
+                for thread_id in self.thread_ids:
+                    # Cache and send data if waiting for jacobian
+                    if thread_statuses[thread_id] == self.ThreadStatus.JACOBIAN:
+                        self._cache_and_send(
+                            furness_key=self.furness_keys.jacobian,
+                            thread_id=thread_id,
+                            q_cache=self._jacobian_q_cache,
+                            array_cache=self._jacobian_array_cache,
+                        )
 
+                        total = self._jacobian_array_cache[thread_id].sum()
+                        print("Sending data from %s: %s" % (thread_id, total))
+
+                    # Otherwise, must be waiting for gravity.
+                    # Send the cached data
+                    else:
+                        total = self._jacobian_array_cache[thread_id].sum()
+                        print("Sending cached data from %s: %s" % (thread_id, total))
+                        self._retrieve_cache_and_send(
+                            furness_key=self.furness_keys.jacobian,
+                            thread_id=thread_id,
+                            q_cache=self._jacobian_q_cache,
+                            array_cache=self._jacobian_array_cache,
+                        )
             else:
-                raise NotImplementedError
+                raise NotImplementedError(
+                    "This case shouldn't be able to happen!"
+                )
 
 
 class GravityFurnessThread(FurnessThreadBase):
@@ -1592,6 +1734,7 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
             verbose=self.verbose,
         )
         print("I'm done! %s" % self.name)
+        self.thread_complete_event.set()
 
         return
 
@@ -1629,6 +1772,14 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
         achieved_rmse:
             The Root Mean Squared Error difference achieved before exiting
         """
+        # Make sure receive is empty before sending
+        if not self.gravity_getter_q.empty():
+            raise nd.NormitsDemandError(
+                "The gravity furness receive queue contained data before any "
+                "data had been sent. "
+                "The gravity threads must have come out of sync somewhere."
+            )
+
         # ## SEND ## #
         # Add the data to the shared array - and mark queue
         self.gravity_putter_array.apply_local_data(seed_matrix, operator.add)
@@ -1684,6 +1835,15 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
         achieved_rmse:
             The Root Mean Squared Error difference achieved before exiting
         """
+        # Make sure the receive queue is empty - might be data left
+        # In there from other threads needing Jacobian
+        discarded_items = multithreading.empty_queue(
+            q=self.jacobian_getter_q,
+            wait_for_items=True,
+            wait_time=0.3,
+        )
+        print("%s discarded %s items\n" % (self.name, len(discarded_items)))
+
         # ## SEND ## #
         # Add this seed to shared memory
         self.jacobian_putter_array.apply_local_data(seed_matrix, operator.add)
@@ -1810,6 +1970,11 @@ class MultiTLDGravityModelCalibrator:
         gravity_furness_key = 'furness',
         jacobian_key = 'jacobian',
 
+        shared_in_arrays = {
+            gravity_furness_key: gravity_array_in,
+            jacobian_key: jacobian_array_in,
+        }
+
         # Function to construct FurnessThreadInterface objects
         def create_interface_input(constructor):
             ret_val = dict()
@@ -1823,7 +1988,7 @@ class MultiTLDGravityModelCalibrator:
         # Use above function to create objects
         interface_putter_qs = create_interface_input(lambda: queue.Queue(1))
         interface_getter_qs = create_interface_input(lambda: queue.Queue(1))
-        furness_return_qs = create_interface_input(lambda: queue.Queue(1))
+        furness_return_qs = create_interface_input(lambda: queue.Queue(10))
         furness_wait_events = create_interface_input(lambda: threading.Event())
 
         # Generate the complete event
@@ -1841,8 +2006,10 @@ class MultiTLDGravityModelCalibrator:
             name='FurnessInterface',
             daemon=True,
             furness_wait_events=furness_wait_events,
+            area_mats=area_mats,
             getter_qs=interface_getter_qs,
             putter_qs=interface_putter_qs,
+            shared_arrays=shared_in_arrays,
             complete_events=complete_events,
             all_complete_event=all_complete_event,
             thread_ids=self.calib_areas,
