@@ -17,6 +17,7 @@ from __future__ import annotations
 # Builtins
 import configparser
 import itertools
+import logging
 import os
 import warnings
 
@@ -32,6 +33,9 @@ import normits_demand as nd
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import pandas_utils as pd_utils
+
+
+LOG = logging.getLogger(__name__)
 
 
 class ZoningSystem:
@@ -271,7 +275,26 @@ class ZoningSystem:
             self._translate_base_zone_col % other.name,
             trans_col
         ]
-        return pd_utils.reindex_cols(df, index_cols)
+        df = pd_utils.reindex_cols(df, index_cols)
+        self._check_translation_zones(other, df, *index_cols[:2])
+        return df
+
+    def _check_translation_zones(self,
+                                 other: ZoningSystem,
+                                 translation: pd.DataFrame,
+                                 self_col: str,
+                                 other_col: str,
+                                 ) -> None:
+        """Check if any zones are missing from the translation DataFrame."""
+        translation_name = f"{self.name} to {other.name}"
+        for zone_system, column in ((self, self_col), (other, other_col)):
+            missing = ~np.isin(zone_system.unique_zones, translation[column])
+            LOG.warning(
+                "%s %s zones missing from translation %s",
+                np.sum(missing),
+                zone_system.name,
+                translation_name,
+            )
 
     def copy(self):
         """Returns a copy of this class"""
