@@ -29,42 +29,44 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 
 # ## CONSTANTS ## #
 # Trip end import args
-notem_iteration_name = '9.3'
+notem_iteration_name = '9.4'
+tour_props_version = 'v%s' % notem_iteration_name
+
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
 tram_export_home = r"I:\NorMITs Demand\Tram"
-cache_path = "F:/dm_cache"
+cache_path = "E:/dm_cache"
 
 # Distribution running args
 base_year = 2018
 scenario = consts.SC01_JAM
-dm_iteration_name = '9.3.3'
+dm_iteration_name = '9.4.1'
 dm_import_home = r"I:\NorMITs Demand\import"
-dm_export_home = r"F:\NorMITs Demand\Distribution Model"
+dm_export_home = r"E:\NorMITs Demand\Distribution Model"
 
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
 
 
 def main():
-    # mode = nd.Mode.CAR
+    mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
     # mode = nd.Mode.TRAIN
-    mode = nd.Mode.TRAM
+    # mode = nd.Mode.TRAM
 
     # Running params
     use_tram = True
     overwrite_cache = False
 
-    run_hb = False
+    run_hb = True
     run_nhb = True
 
     run_all = False
-    run_upper_model = True
+    run_upper_model = False
     run_lower_model = False
     run_pa_matrix_reports = False
-    run_pa_to_od = False
+    run_pa_to_od = True
     run_od_matrix_reports = False
-    compile_to_assignment = False
+    compile_to_assignment = True
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
@@ -347,6 +349,11 @@ def main():
     else:
         lower_running_zones = None
 
+    if compile_zoning_system is not None:
+        tour_props_zoning_name = compile_zoning_system.name
+    else:
+        tour_props_zoning_name = lower_zoning_system.name
+
     # arg builder
     dmab_kwargs = {
         'year': base_year,
@@ -366,6 +373,8 @@ def main():
         'lower_calibration_zones_fname': lower_calibration_zones_fname,
         'lower_calibration_areas': lower_calibration_areas,
         'lower_calibration_naming': lower_calibration_naming,
+        'tour_props_version': tour_props_version,
+        'tour_props_zoning_name': tour_props_zoning_name,
         'init_params_cols': gm_cost_function.parameter_names,
         'intrazonal_cost_infill': intrazonal_cost_infill,
         'cache_path': cache_path,
