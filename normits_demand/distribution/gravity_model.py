@@ -1234,10 +1234,6 @@ class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
             # Wait for a little bit to avoid intensive looping
             time.sleep(0.05)
 
-            # Check if done
-            if self.complete_events[thread_id].is_set():
-                return self.ThreadStatus.DONE
-
             # Check if waiting for gravity
             if not self.getter_qs[self.furness_keys.gravity][thread_id].empty():
                 return self.ThreadStatus.GRAVITY
@@ -1245,6 +1241,13 @@ class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
             # Check if waiting for jacobian
             if not self.getter_qs[self.furness_keys.jacobian][thread_id].empty():
                 return self.ThreadStatus.JACOBIAN
+
+    def _all_threads_complete(self) -> bool:
+        """Checks whether all threads are complete or not"""
+        for thread_id in self.thread_ids:
+            if not self.complete_events[thread_id].is_set():
+                return False
+        return True
 
     @staticmethod
     def _all_status_same(
@@ -1415,16 +1418,16 @@ class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
 
             # Try to get the status of each thread
             for thread_id in thread_statuses:
-                print("Getting status of %s" % thread_id)
                 thread_statuses[thread_id] = self._get_thread_status(thread_id)
+
+            # Check if all the threads are complete
+            if self._all_threads_complete():
+                self.all_complete_event.set()
 
             # If all done, mark all done event and exit
             if self._all_status_same(thread_statuses.values(), self.ThreadStatus.DONE):
                 self.all_complete_event.set()
                 break
-
-            if self._any_status(thread_statuses.values(), self.ThreadStatus.DONE):
-                raise NotImplementedError("Don't know what to do when some threads are done")
 
             # If all waiting for furness, cache data and send
             if self._all_status_same(thread_statuses.values(), self.ThreadStatus.GRAVITY):
@@ -1448,7 +1451,6 @@ class FurnessThreadInterface(multithreading.ReturnOrErrorThread):
 
             # If any waiting for the Jacobian, try to move them along first
             elif self._any_status(thread_statuses.values(), self.ThreadStatus.JACOBIAN):
-                print("HERE")
                 for thread_id in self.thread_ids:
                     # Cache and send data if waiting for jacobian
                     if thread_statuses[thread_id] == self.ThreadStatus.JACOBIAN:
@@ -1733,10 +1735,23 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
             grav_max_iters=self.grav_max_iters,
             verbose=self.verbose,
         )
-        print("I'm done! %s" % self.name)
         self.thread_complete_event.set()
+        print("%s complete!" % self.name)
 
-        return
+        # Once we have the optimal cost params, keep running until all
+        # threads are complete
+        while not self.all_done_event.is_set():
+            print("%s complete + jac" % self.name)
+            self._jacobian_function(
+                cost_args=self._order_cost_params(self.optimal_cost_params),
+                diff_step=self.diff_step,
+            )
+
+            print("%s complete + grav" % self.name)
+            self._gravity_function(
+                cost_args=self._order_cost_params(self.optimal_cost_params),
+                diff_step=self.diff_step,
+            )
 
     def gravity_furness(self,
                         seed_matrix: np.ndarray,
@@ -2143,16 +2158,20 @@ class MultiTLDGravityModelCalibrator:
                 )
                 calibrator_threads[area_id].start()
 
-            furnessed_mats = multithreading.wait_for_thread_dict_return_or_error(
+            multithreading.wait_for_thread_dict_return_or_error(
                 return_threads=calibrator_threads,
                 error_threads_list=furness_setup.all_threads,
                 pbar_kwargs={'disable': False}
             )
 
+        print("Made it!")
+        for area_id in self.calib_areas:
+            optimal_params = calibrator_threads[area_id].optimal_cost_params
+            print("%s optimal params: %s" % (area_id, optimal_params))
+
         print(self.calibration_matrix.sum())
         print(self.target_cost_distributions)
         print(self.calibration_naming)
-        print("Made it!")
         exit()
 
     def _multi_tld_calibrate(self,

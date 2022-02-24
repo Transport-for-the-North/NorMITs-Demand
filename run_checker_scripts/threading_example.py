@@ -243,7 +243,7 @@ def fake_scipy(
         threads[area_code].start()
 
     furnessed_mats = multithreading.wait_for_thread_dict_return_or_error(
-        threads=threads,
+        return_threads=threads,
         pbar_kwargs={'disable': False}
     )
 
