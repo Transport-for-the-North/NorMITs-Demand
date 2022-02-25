@@ -34,3 +34,10 @@ Below, a brief summary of patches made since the previous version can be found.
   - A new folder has been created `run_tools`. This is for running tools that 
     generate data for the NorMITs Framework, but aren't a model themselves.
     The first tool to be added is the `TripLengthDistributionBuilder`.
+- NTEM Forecast
+  - Added an NTEM Forecast model. Similar to the EFS, but for NTEM trip ends
+    specifically.
+- Core
+  - Updates to the DVector to allow almost any operation to be applied to a 
+    DVector.
+  - Added a division function to the Dvector.

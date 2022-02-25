@@ -397,6 +397,28 @@ class DVector:
         """
         return [x.value for x in TimeFormat]
 
+    def _check_other(self, other: DVector, method: str) -> core.ZoningSystem:
+        """Check `other` is a `DVector` with the same zoning system."""
+        # We can only multiply, or divide, with other DVectors
+        if not isinstance(other, DVector):
+            raise nd.NormitsDemandError(
+                "The %s operator can only be used with."
+                "a DVector objects on each side. Got %s and %s."
+                % (method, type(self), type(other))
+            )
+        if self.zoning_system == other.zoning_system:
+            return self.zoning_system
+        if self.zoning_system is None:
+            return other.zoning_system
+        if other.zoning_system is None:
+            return self.zoning_system
+        raise nd.ZoningError(
+            "Cannot %s two Dvectors using different zoning systems.\n"
+            "zoning system of a: %s\n"
+            "zoning system of b: %s\n"
+            % (method, self.zoning_system.name, other.zoning_system.name)
+        )
+
     # BUILT IN METHODS
     def __mul__(self: DVector, other: DVector) -> DVector:
         """
@@ -420,28 +442,8 @@ class DVector:
         c:
             A new DVector which is the product of multiplying a and b.
         """
-        # We can only multiply against other DVectors
-        if not isinstance(other, DVector):
-            raise nd.NormitsDemandError(
-                "The __mul__ operator can only be used with."
-                "a DVector objects on each side. Got %s and %s."
-                % (type(self), type(other))
-            )
-
         # ## CHECK WE CAN MULTIPLY a AND b ## #
-        if self.zoning_system == other.zoning_system:
-            return_zoning_system = self.zoning_system
-        elif self.zoning_system is None:
-            return_zoning_system = other.zoning_system
-        elif other.zoning_system is None:
-            return_zoning_system = self.zoning_system
-        else:
-            raise nd.ZoningError(
-                "Cannot multiply two Dvectors using different zoning systems.\n"
-                "zoning system of a: %s\n"
-                "zoning system of b: %s\n"
-                % (self.zoning_system.name, other.zoning_system.name)
-            )
+        return_zoning_system = self._check_other(other, "multiply")
 
         # ## DO MULTIPLICATION ## #
         # Use the segmentations to figure out what to multiply
@@ -456,6 +458,96 @@ class DVector:
             zoning_system=return_zoning_system,
             segmentation=return_segmentation,
             time_format=self._choose_time_format(other),
+            import_data=dvec_data,
+            process_count=self.process_count,
+        )
+
+    def __truediv__(self: DVector, other: DVector) -> DVector:
+        """
+        Builds a new Dvec by dividing a by b.
+
+        How to join the two Dvectors is defined by the segmentation of each
+        Dvector.
+
+        Retains process_count, df_chunk_size, and verbose params from a.
+
+        Parameters
+        ----------
+        self:
+            The first DVector to divide
+
+        other:
+            The second DVector to divide
+
+        Returns
+        -------
+        c:
+            A new DVector which is the result of dividing a by b.
+        """
+        # ## CHECK WE CAN DIVIDE a AND b ## #
+        return_zoning_system = self._check_other(other, "divide")
+
+        # ## DO DIVISION ## #
+        # Use the segmentations to figure out what to multiply
+        division_dict, return_segmentation = self.segmentation / other.segmentation
+
+        # Build the dvec data here with division
+        dvec_data = dict.fromkeys(division_dict.keys())
+        for final_seg, (self_key, other_key) in division_dict.items():
+            dvec_data[final_seg] = self._data[self_key] / other._data[other_key]
+
+        return DVector(
+            zoning_system=return_zoning_system,
+            segmentation=return_segmentation,
+            time_format=self._choose_time_format(other),
+            import_data=dvec_data,
+            process_count=self.process_count,
+        )
+
+    def __add__(self, other: DVector) -> DVector:
+        """
+        Builds a new Dvec by adding a and b together.
+
+        DVectors must have the same zone system, segmentation
+        and time format.
+
+        Retains process_count, df_chunk_size, and verbose params from a.
+
+        Parameters
+        ----------
+        self:
+            The first DVector to add
+
+        other:
+            The second DVector to add
+
+        Returns
+        -------
+        c:
+            A new DVector which is the sum of a and b.
+        """
+        # ## CHECK WE CAN ADD a AND b ## #
+        return_zoning_system = self._check_other(other, "multiply")
+        # TODO(MB) Add functionality for handling addition of DVectors
+        #   with different segmentation
+        if self.segmentation != other.segmentation:
+            raise DVectorError(
+                "Cannot add 2 DVectors with different segmentation"
+            )
+        if self.time_format != other.time_format:
+            raise DVectorError(
+                "Cannot add 2 DVectors with different time_format"
+            )
+
+        # Perform addition
+        dvec_data = {}
+        for segment in self.segmentation.segment_names:
+            dvec_data[segment] = self._data[segment] + other._data[segment]
+
+        return DVector(
+            zoning_system=return_zoning_system,
+            segmentation=self.segmentation,
+            time_format=self.time_format,
             import_data=dvec_data,
             process_count=self.process_count,
         )
@@ -731,6 +823,8 @@ class DVector:
         # Rename the segment columns if needed
         if segment_naming_conversion is not None:
             df = self.segmentation.rename_segment_cols(df, segment_naming_conversion)
+            # Set to None so the columns aren't renamed again in `create_segement_col`
+            segment_naming_conversion = None
 
         # Make sure we don't have any extra columns
         extra_cols = set(list(df)) - set(required_cols)
@@ -2151,6 +2245,51 @@ class DVector:
         dvec = dvec.translate_zoning(lad)
         dvec.to_df().to_csv(lad_report_path, index=False)
 
+    def segment_apply(self,
+                      func: Callable[[np.ndarray], np.ndarray],
+                      *args,
+                      **kwargs
+                      ) -> DVector:
+        """Applies a function to each segment array, separately.
+
+        The function is applied to a copy of the data
+        so will not edit the current DVector.
+
+        Parameters
+        ----------
+        func : Callable[[np.ndarray], np.ndarray]
+            Function which will be applied to each segment
+            in turn, should return a np.ndarray with the
+            same shape as the input array.
+
+        Returns
+        -------
+        DVector
+            A new DVector with the same metadata as self
+            but with new segment data.
+
+        Raises
+        ------
+        ValueError
+            If `func` is not callable.
+        """
+        if not callable(func):
+            raise ValueError(
+                "func is not callable. func must be a function that "
+                "takes a np.ndarray of values and returns a np.ndarray."
+            )
+        dvec_data = {}
+        # TODO(MB): Add optional multiprocessing if self._data
+        # is big enough
+        for seg, data in self._data.items():
+            dvec_data[seg] = func(data.copy(), *args, **kwargs)
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=self.segmentation,
+            time_format=self.time_format,
+            import_data=dvec_data,
+            process_count=self.process_count,
+        )
 
 class DVectorError(nd.NormitsDemandError):
     """
