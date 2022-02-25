@@ -289,12 +289,13 @@ class ZoningSystem:
         translation_name = f"{self.name} to {other.name}"
         for zone_system, column in ((self, self_col), (other, other_col)):
             missing = ~np.isin(zone_system.unique_zones, translation[column])
-            LOG.warning(
-                "%s %s zones missing from translation %s",
-                np.sum(missing),
-                zone_system.name,
-                translation_name,
-            )
+            if np.sum(missing) > 0:
+                LOG.warning(
+                    "%s %s zones missing from translation %s",
+                    np.sum(missing),
+                    zone_system.name,
+                    translation_name,
+                )
 
     def copy(self):
         """Returns a copy of this class"""
