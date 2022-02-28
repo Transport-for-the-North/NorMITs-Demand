@@ -58,7 +58,7 @@ class ZoningSystem:
     _base_col_name = "%s_zone_id"
 
     # File names
-    _valid_ftypes = ['.csv', '.pbz2']
+    _valid_ftypes = ['.csv', '.pbz2', '.csv.bz2', '.bz2']
     _zones_csv_fname = "zones.csv"
     _zones_compress_fname = "zones.pbz2"
     _zones_compress_fname2 = "zones.csv.bz2"
