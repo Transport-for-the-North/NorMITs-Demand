@@ -1,1 +1,0 @@
-All zone translations are extracted from: [normits_drive]\Data\Zone Translations
