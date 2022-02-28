@@ -36,10 +36,10 @@ from normits_demand.utils import file_ops
 # ## GLOBALS ## #
 # Running variables
 MODEL_NAME = 'noham'
-MODE = 3
+MODE = 5
 
-TOUR_PROP_DIR = r'I:\NorMITs Demand\import\modal\car_and_passenger\pre_me_tour_proportions'
-TOUR_FACTOR_DIR = r'I:\NorMITs Demand\import\modal\car_and_passenger\pre_me_tour_proportions\fh_th_factors'
+TOUR_PROP_DIR = r'I:\NorMITs Demand\import\modal\bus\pre_me_tour_proportions\v9.4\noham'
+TOUR_FACTOR_DIR = os.path.join(TOUR_PROP_DIR, 'fh_th_factors')
 
 # CONSTANTS
 BASE_YEAR = 2018
