@@ -38,7 +38,7 @@ from normits_demand.concurrency import multiprocessing as multiprocessing
 from normits_demand.utils.general import list_files
 
 # CONSTANTS
-PD_COMPRESSION = {'.zip', '.gzip', '.bz2', '.zstd', 'csv.bz2'}
+PD_COMPRESSION = {'.zip', '.gzip', '.bz2', '.zstd', '.csv.bz2'}
 
 
 def cast_to_pathlib_path(path: nd.PathLike) -> pathlib.Path:
@@ -420,7 +420,7 @@ def find_filename(path: nd.PathLike,
         return ret_path.name
 
     if alt_types is None:
-        alt_types = ['.pbz2', '.csv'] + PD_COMPRESSION
+        alt_types = ['.pbz2', '.csv'] + list(PD_COMPRESSION)
 
     # Make sure they all start with a dot
     temp_alt_types = list()
