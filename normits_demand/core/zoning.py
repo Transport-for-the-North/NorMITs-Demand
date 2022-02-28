@@ -61,6 +61,7 @@ class ZoningSystem:
     _valid_ftypes = ['.csv', '.pbz2']
     _zones_csv_fname = "zones.csv"
     _zones_compress_fname = "zones.pbz2"
+    _zones_compress_fname2 = "zones.csv.bz2"
     _internal_zones_fname = "internal_zones.csv"
     _external_zones_fname = "external_zones.csv"
 
@@ -364,24 +365,28 @@ def _get_zones(name: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     # ## READ IN THE UNIQUE ZONES ## #
     # Build the two possible paths
     compress_fname = ZoningSystem._zones_compress_fname
+    compress_fname2 = ZoningSystem._zones_compress_fname2
     csv_fname = ZoningSystem._zones_csv_fname
 
     compress_path = os.path.join(import_home, compress_fname)
+    compress_path2 = os.path.join(import_home, compress_fname2)
     csv_path = os.path.join(import_home, csv_fname)
 
     # Determine which path to use
     file_path = compress_path
     if not os.path.isfile(compress_path):
-        file_path = csv_path
-        if not os.path.isfile(csv_path):
-            # Can't find either!
-            raise nd.NormitsDemandError(
-                "We don't seem to have any zone data for the zoning system %s.\n"
-                "Tried looking for the data here:"
-                "%s\n"
-                "%s"
-                % (name, compress_path, csv_path)
-            )
+        file_path = compress_path2
+        if not os.path.isfile(compress_path2):
+            file_path = csv_path
+            if not os.path.isfile(csv_path):
+                # Can't find either!
+                raise nd.NormitsDemandError(
+                    "We don't seem to have any zone data for the zoning system %s.\n"
+                    "Tried looking for the data here:"
+                    "%s\n"
+                    "%s"
+                    % (name, compress_path, csv_path)
+                )
 
     # Read in the file
     df = file_ops.read_df(file_path)
