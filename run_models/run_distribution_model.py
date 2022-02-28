@@ -29,7 +29,7 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 
 # ## CONSTANTS ## #
 # Trip end import args
-notem_iteration_name = '9.4'
+notem_iteration_name = '9.3'
 tour_props_version = 'v%s' % notem_iteration_name
 
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
@@ -48,25 +48,27 @@ INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
 
 
 def main():
-    mode = nd.Mode.CAR
+    # mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
     # mode = nd.Mode.TRAIN
-    # mode = nd.Mode.TRAM
+    mode = nd.Mode.TRAM
 
     # Running params
     use_tram = True
     overwrite_cache = False
 
+    calibrate_params = False
+
     run_hb = True
     run_nhb = False
 
     run_all = False
-    run_upper_model = False
+    run_upper_model = True
     run_lower_model = False
     run_pa_matrix_reports = False
-    run_pa_to_od = True
+    run_pa_to_od = False
     run_od_matrix_reports = False
-    compile_to_assignment = True
+    compile_to_assignment = False
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
@@ -128,7 +130,7 @@ def main():
             'grav_max_iters': 100,
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
-            'calibrate_params': True,
+            'calibrate_params': calibrate_params,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
@@ -206,7 +208,7 @@ def main():
             'grav_max_iters': 100,
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
-            'calibrate_params': True,
+            'calibrate_params': calibrate_params,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
@@ -284,7 +286,7 @@ def main():
             'grav_max_iters': 100,
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
-            'calibrate_params': True,
+            'calibrate_params': calibrate_params,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
@@ -360,7 +362,7 @@ def main():
             'grav_max_iters': 100,
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
-            'calibrate_params': True,
+            'calibrate_params': calibrate_params,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
@@ -408,8 +410,10 @@ def main():
 
     if compile_zoning_system is not None:
         tour_props_zoning_name = compile_zoning_system.name
-    else:
+    elif lower_zoning_system is not None:
         tour_props_zoning_name = lower_zoning_system.name
+    else:
+        tour_props_zoning_name = upper_zoning_system.name
 
     # arg builder
     dmab_kwargs = {
