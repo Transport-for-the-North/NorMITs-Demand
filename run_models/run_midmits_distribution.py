@@ -44,12 +44,14 @@ def main() -> None:
     paths = dist_params.DistributionModelPaths(
         import_home=r"I:\NorMITs Demand\import",
         export_home=r"T:\MidMITs Demand\Distribution Model",
-        cache_path=run_distribution_model.cache_path,
+        notem_export_home=run_mitem.mitem_export_home,
+        tram_export_home=None,
+        cache_path="c:/dm_cache",
         overwrite_cache=False,
     )
     # Trip end export paths
     export_paths = pathing.MiTEMExportPaths(
-        base_year=[base_year],
+        path_years=[base_year],
         scenario=consts.SC01_JAM,
         iteration_name=run_mitem.mitem_iter,
         export_home=run_mitem.mitem_export_home,
