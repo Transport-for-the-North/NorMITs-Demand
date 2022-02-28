@@ -39,3 +39,6 @@ Below, a brief summary of patches made since the previous version can be found.
   - Updates to the DVector to allow almost any operation to be applied to a 
     DVector.
   - Added a division function to the Dvector.
+  - Started moving towards using `.csv.bz2` compression by default.
+    This removes dependencies on pandas versions and we can then depend on
+    pandas `.to_csv()` and `.from_csv` to handle csv data I/O. 
