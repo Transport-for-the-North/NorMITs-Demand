@@ -339,6 +339,10 @@ class TripLengthDistributionBuilder:
 
             for subset, value in row.iteritems():
                 if subset == 'trip_origin':
+                    # Does this remove the entire point of the PA/OD distinction?
+                    # How can you filter for nhb without removing trips to home?
+                    # To get what we need:
+                    # TODO: figure out how to be properly hb/nhb agnostic and not break below
                     op_sub = op_sub[op_sub['trip_origin'] == value].reset_index(drop=True)
                     trip_origin = value
                 if subset == 'p':
