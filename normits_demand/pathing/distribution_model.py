@@ -575,6 +575,8 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                  lower_calibration_areas: Optional[Union[Dict[Any, str], str]] = None,
                  lower_calibration_zones_fname: Optional[str] = None,
                  lower_calibration_naming: Optional[Dict[Any, str]] = None,
+                 tour_props_version: Optional[str] = None,
+                 tour_props_zoning_name: Optional[str] = None,
                  intrazonal_cost_infill: Optional[float] = None,
                  cache_path: Optional[nd.PathLike] = None,
                  overwrite_cache: Optional[nd.PathLike] = False,
@@ -627,6 +629,10 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         self.lower_calibration_areas = lower_calibration_areas
         self.lower_calibration_zones_fname = lower_calibration_zones_fname
         self.lower_calibration_naming = lower_calibration_naming
+
+        # Tour proportions params
+        self.tour_props_version = tour_props_version
+        self.tour_props_zoning_name = tour_props_zoning_name
 
         self.intrazonal_cost_infill = intrazonal_cost_infill
 
@@ -1006,6 +1012,8 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             self._modal_dir_name,
             self.running_mode.value,
             self._tour_props_dir_name,
+            self.tour_props_version,
+            self.tour_props_zoning_name,
             self._fh_th_factors_dir_name,
         )
 

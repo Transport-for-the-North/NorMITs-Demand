@@ -3,11 +3,12 @@
 Created on: Wednesday October 20th 2021
 Updated on:
 
-Original author: Nirmal Kumar
-
+Original author: Ben Taylor
+Last update made by: Nirmal Kumar
+Other updates made by:
 
 File purpose:
-TMS tour proportions Generation
+Pre ME tour proportions Generation
 """
 
 # Built-Ins
@@ -27,13 +28,15 @@ import normits_demand as nd
 from normits_demand.utils import general as du
 
 # ## GLOBALS ## #
-MODES = [3]
+MODES = [6]
 YEARS = [2018]
 TPS = [1, 2, 3, 4]
-ZONING_SYSTEM = "noham"
+ZONING_SYSTEM = "norms"
+NOTEM_ITER = '9.4'
+out_folder = r"E:\test\tour props"
 
 phi_import_folder = r"I:\NorMITs Demand\import\phi_factors"
-notem_import_folder = r"I:\NorMITs Demand\NoTEM\iter4.2\SC01_JAM\hb_productions"
+notem_import_folder = r"I:\NorMITs Demand\NoTEM\iter%s\SC01_JAM\hb_productions" % NOTEM_ITER
 phi_fname = "mode_%d_fhp_tp_pa_to_od.csv"
 prod_vec_fname = "hb_msoa_notem_segmented_%d_dvec.pkl"
 zone_translate_dir = r"I:\NorMITs Demand\import\zone_translation\one_to_one"
@@ -42,7 +45,6 @@ MODEL_FNAME = "hb_tour_proportions_yr%d_p%d_m%d.pkl"
 LAD_FNAME = "hb_lad_tour_proportions_yr%d_p%d_m%d.pkl"
 TFN_FNAME = "hb_tfn_tour_proportions_yr%d_p%d_m%d.pkl"
 # out_folder = r"I:\NorMITs Demand\import\noham\pre_me_tour_proportions\example_new"
-out_folder = r'E:\test'
 
 
 def tms_tour_prop():
@@ -51,6 +53,7 @@ def tms_tour_prop():
         for mode in MODES:
 
             # ## GRAB PHI FACTORS BY MODE ## #
+            print("Reading in Phi factors...")
             phi_file = phi_fname % mode
             phi_df = pd.read_csv(os.path.join(phi_import_folder, phi_file))
 
@@ -78,6 +81,7 @@ def tms_tour_prop():
             ).reset_index()
 
             # ## GRAB TP SPLITS BY PURPOSE AND ZONE ## #
+            print("Reading in NoTEM time period split factors...")
             notem_file = prod_vec_fname % year
             notem_dvec = nd.read_pickle(os.path.join(notem_import_folder, notem_file))
 
@@ -99,6 +103,7 @@ def tms_tour_prop():
             notem_df = notem_df.drop(columns='sum')
 
             # ## CALCULATE TOUR PROPS PER ZONE ## #
+            print("Beginning tour props calculation...")
             full_df = pd.merge(
                 left=notem_df,
                 right=phi_df,
