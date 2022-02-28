@@ -36,6 +36,7 @@ INIT_PARAMS_BASE = run_distribution_model.INIT_PARAMS_BASE
 def main() -> None:
     """Run MidMITs distribution model."""
     # Distribution running args
+    mitem_iteration_name = run_mitem.mitem_iter
     dm_iteration_name = '9.3.3'
     base_year = 2018
     mode = nd.Mode.CAR
@@ -53,12 +54,18 @@ def main() -> None:
     export_paths = pathing.MiTEMExportPaths(
         path_years=[base_year],
         scenario=consts.SC01_JAM,
-        iteration_name=run_mitem.mitem_iter,
+        iteration_name=mitem_iteration_name,
         export_home=run_mitem.mitem_export_home,
     )
 
     params = mode_lookup(
-        paths, export_paths, dm_iteration_name, base_year, mode, use_tram
+        paths,
+        export_paths,
+        dm_iteration_name,
+        base_year,
+        mode,
+        use_tram,
+        tour_props_version=f"v{mitem_iteration_name}",
     )
     model_runs = dist_params.DistributionModelRuns(
         run_hb=True,
@@ -82,6 +89,7 @@ def mode_lookup(
     base_year: int,
     mode: nd.Mode,
     use_tram: bool,
+    tour_props_version: str,
 ) -> dist_params.DistributionModelParameters:
     """Lookup distribution model parameters for a single mode.
 
@@ -100,6 +108,8 @@ def mode_lookup(
         Mode being ran.
     use_tram : bool
         Whether to use tram data or not.
+    tour_props_version : str
+        Version of the tour proportions to use.
 
     Returns
     -------
@@ -233,6 +243,7 @@ def mode_lookup(
         gm_cost_function=gm_cost,
         upper_distributor_kwargs=dist_kwargs[upper_cal.method],
         lower_distributor_kwargs=dist_kwargs[lower_cal.method],
+        tour_proportions_version=tour_props_version,
     )
 
 

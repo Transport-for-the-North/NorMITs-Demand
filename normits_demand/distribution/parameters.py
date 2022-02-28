@@ -67,6 +67,7 @@ class DistributionModelParameters(NamedTuple):
     gm_cost_function: cost.CostFunction
     upper_distributor_kwargs: Dict[str, Any]
     lower_distributor_kwargs: Dict[str, Any]
+    tour_proportions_version: str
 
 
 class DistributionModelKwargs(NamedTuple):
@@ -107,6 +108,10 @@ def build_dm_kwargs(params: DistributionModelParameters) -> DistributionModelKwa
         lower_running_zones = params.zone_systems.lower.internal_zones
     else:
         lower_running_zones = None
+    if params.zone_systems.compile_ is not None:
+        tour_props_zoning_name = params.zone_systems.compile_.name
+    else:
+        tour_props_zoning_name = params.zone_systems.lower.name
     dmab_kwargs = {
         'year': params.base_year,
         'import_home': params.paths.import_home,
@@ -125,6 +130,8 @@ def build_dm_kwargs(params: DistributionModelParameters) -> DistributionModelKwa
         'lower_calibration_zones_fname': params.lower_calibration.zones_fname,
         'lower_calibration_areas': params.lower_calibration.areas,
         'lower_calibration_naming': params.lower_calibration.naming,
+        'tour_props_version': params.tour_proportions_version,
+        'tour_props_zoning_name': tour_props_zoning_name,
         'init_params_cols': params.gm_cost_function.parameter_names,
         'intrazonal_cost_infill': params.intrazonal_infill,
         'cache_path': params.paths.cache_path,
