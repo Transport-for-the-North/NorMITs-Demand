@@ -277,8 +277,9 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Initialising the Upper Model")
         # Can only handle 9 processes if doing an MSOA gravity model
         if self.upper_model_zoning.name == 'msoa':
-            if self.process_count > 9 or self.process_count < 0:
-                self.process_count = 9
+            if os.cpu_count() > 9:
+                if self.process_count > 9 or self.process_count < 0:
+                    self.process_count = 9
 
         upper_model = self.upper_model_method.get_distributor(
                 year=self.year,

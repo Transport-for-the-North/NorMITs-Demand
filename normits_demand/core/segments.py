@@ -89,6 +89,7 @@ class SegmentationLevel:
     _segmentation_import_fname = "segmentations"
     _unique_segments_csv_fname = "unique_segments.csv"
     _unique_segments_compress_fname = "unique_segments.pbz2"
+    _unique_segments_compress_fname2 = "unique_segments.csv.bz2"
     _naming_order_fname = "naming_order.csv"
     _segment_type_fname = "types.csv"
 
@@ -1932,7 +1933,7 @@ class SegmentationLevel:
         if csv:
             final_name += '.csv'
         elif compressed:
-            final_name += consts.COMPRESSION_SUFFIX
+            final_name += '.csv.bz2'
 
         return final_name
 
@@ -2065,24 +2066,28 @@ def _get_valid_segments(name: str) -> pd.DataFrame:
     # ## READ IN THE UNIQUE SEGMENTS ## #
     # Build the two possible paths
     compress_fname = SegmentationLevel._unique_segments_compress_fname
+    compress_fname2 = SegmentationLevel._unique_segments_compress_fname2
     csv_fname = SegmentationLevel._unique_segments_csv_fname
 
     compress_path = os.path.join(import_home, compress_fname)
+    compress_path2 = os.path.join(import_home, compress_fname2)
     csv_path = os.path.join(import_home, csv_fname)
 
     # Determine which path to use
     file_path = compress_path
     if not os.path.isfile(compress_path):
-        file_path = csv_path
-        if not os.path.isfile(csv_path):
-            # Can't find either!
-            raise nd.NormitsDemandError(
-                "We don't seem to have any valid segment data for the segmentation %s.\n"
-                "Tried looking for the data here:"
-                "%s\n"
-                "%s"
-                % (name, compress_path, csv_path)
-            )
+        file_path = compress_path2
+        if not os.path.isfile(compress_path2):
+            file_path = csv_path
+            if not os.path.isfile(csv_path):
+                # Can't find either!
+                raise nd.NormitsDemandError(
+                    "We don't seem to have any valid segment data for the segmentation %s.\n"
+                    "Tried looking for the data here:"
+                    "%s\n"
+                    "%s"
+                    % (name, compress_path, csv_path)
+                )
 
     # Read in the file
     df = file_ops.read_df(file_path, find_similar=True)
