@@ -63,6 +63,16 @@ class FurnessResults:
 
 
 @dataclasses.dataclass(frozen=True)
+class GravityResults:
+    band_share: np.ndarray
+    convergence: float
+    residuals: np.ndarray
+    distribution: np.ndarray
+    completed_iters: int
+    achieved_rmse: float
+
+
+@dataclasses.dataclass(frozen=True)
 class PartialFurnessRequest:
     row_targets: np.ndarray
     col_targets: np.ndarray
@@ -874,7 +884,7 @@ class GravityModelCalibrator(GravityModelBase):
                   xtol: float = 1e-4,
                   grav_max_iters: int = 100,
                   verbose: int = 0,
-                  ):
+                  ) -> Dict[str, Any]:
         """Finds the optimal parameters for self.cost_function
 
         Optimal parameters are found using `scipy.optimize.least_squares`
@@ -2081,23 +2091,68 @@ class MultiTLDGravityModelCalibrator:
             )
 
         self.calibration_naming = calibration_naming
-        self.target_cost_distributions = target_cost_distributions
+        self.target_cost_distributions = self._update_tcds(target_cost_distributions)
+        self.tcd_bin_edges = self._get_tcd_bin_edges(target_cost_distributions)
 
-        # Running attributes
-        # self._loop_num = -1
-        # self._loop_start_time = None
-        # self._loop_end_time = None
-        # self._jacobian_mats = None
-        # self._perceived_factors = None
-        #
-        # # Additional attributes
-        # self.initial_cost_params = None
-        # self.initial_convergence = None
-        # self.optimal_cost_params = None
-        # self.achieved_band_share = None
-        # self.achieved_convergence = None
-        # self.achieved_residuals = None
-        # self.achieved_distribution = None
+        # Additional attributes
+        self.initial_cost_params = dict.fromkeys(self.calib_areas)
+        self.initial_convergence = dict.fromkeys(self.calib_areas)
+        self.optimal_cost_params = dict.fromkeys(self.calib_areas)
+        self.achieved_convergence = dict.fromkeys(self.calib_areas)
+        self.achieved_residuals = dict.fromkeys(self.calib_areas)
+        self.achieved_distribution = dict.fromkeys(self.calib_areas)
+
+        # Attributes to store from runs
+        self.achieved_band_share = dict.fromkeys(self.calib_areas)
+        self.perceived_factors = dict.fromkeys(self.calib_areas)
+        
+    @staticmethod
+    def _update_tcds(
+        target_cost_distributions: Dict[Any, pd.DataFrame],
+    ) -> Dict[Any, pd.DataFrame]:
+        """Extrapolates data where needed"""
+        # Init
+        tcd_dict = dict.fromkeys(target_cost_distributions.keys())
+
+        # Get the edges for each bin
+        for key, tcd in target_cost_distributions.items():
+            tcd_dict[key] = GravityModelBase._update_tcd(tcd)
+
+        return tcd_dict
+
+    @staticmethod
+    def _get_tcd_bin_edges(
+        target_cost_distributions: Dict[Any, pd.DataFrame],
+    ) -> Dict[Any, pd.DataFrame]:
+        """Gets the edges of each TCD band as a list"""
+        # Init
+        bin_edges = dict.fromkeys(target_cost_distributions.keys())
+
+        # Get the edges for each bin
+        for key, tcd in target_cost_distributions.items():
+            bin_edges[key] = GravityModelBase._get_tcd_bin_edges(tcd)
+
+        return bin_edges
+
+    def _cost_params_to_kwargs(self, args: List[Any]) -> Dict[str, Any]:
+        """Converts a list or args into kwargs that self.cost_function expects"""
+        if len(args) != len(self.cost_function.kw_order):
+            raise ValueError(
+                "Received the wrong number of args to convert to cost function "
+                "kwargs. Expected %s args, but got %s."
+                % (len(self.cost_function.kw_order), len(args))
+            )
+
+        return {k: v for k, v in zip(self.cost_function.kw_order, args)}
+
+    def _order_cost_params(self, params: Dict[str, Any]) -> List[Any]:
+        """Order params into a list that self.cost_function expects"""
+        ordered_params = [0] * len(self.cost_function.kw_order)
+        for name, value in params.items():
+            index = self.cost_function.kw_order.index(name)
+            ordered_params[index] = value
+
+        return ordered_params
 
     def _setup_furness_threads(self,
                                shared_arrays: SharedArrays
@@ -2227,25 +2282,208 @@ class MultiTLDGravityModelCalibrator:
             jacobian_out=jacobian_out,
         )
 
-    def _threaded_calibrate(self,
-                            init_params: Dict[str, Any],
-                            estimate_init_params: bool,
-                            calibrate_params: bool,
-                            diff_step: float = 1e-8,
-                            ftol: float = 1e-4,
-                            xtol: float = 1e-4,
-                            grav_max_iters: int = 100,
-                            verbose: int = 0,
-                            ) -> Dict[Any, Dict[str, Any]]:
-        """Core of the calibration method - nested inside _calibrate
+    def _gravity_function(
+        self,
+        cost_param_dict: Dict[Any, Dict[str, Any]],
+        perceived_factors: Dict[Any, np.ndarray] = None,
+    ) -> Tuple[np.ndarray, Dict[Any, GravityResults]]:
+        """Runs a multi-TLD gravity model and returns the results
+
+        Parameters
+        ----------
+        cost_param_dict:
+            A dictionary of cost kwargs. The first key should be one of the
+            values in self.calib_areas, and the values should be a kwargs
+            dictionary to pass into self.cost_function.
+
+        perceived_factors:
+            A dictionary of perceived factors. These factors will be multiplied
+            by the cost matrix for each zone to produce a matrix of
+            "perceived costs" which are then handed over to the cost function
+            in place of the raw cost matrix.
 
         Returns
         -------
-        optimal_params:
-            A dictionary of optimal parameters for each calibration area.
+        achieved_distribution:
+            A full matrix of the achieved distribution across all areas.
+
+        gravity_results_dict:
+            A dictionary of GravityResults objects. The keys are the same as
+            those passed in to cost_param_dict.
         """
         # Init
-        optimal_params = dict.fromkeys(self.calib_areas)
+        seed_matrix = np.zeros_like(self.cost_matrix, dtype=float)
+
+        # Check the given keys are valid
+        given_keys = set(cost_param_dict.keys())
+        valid_keys = set(self.calib_areas)
+        invalid_keys = given_keys - valid_keys
+        if len(invalid_keys) > 0:
+            raise ValueError(
+                "Invalid keys given in the cost_param_dict. The following "
+                "keys have no area ID defined in "
+                "self.calibration_matrix:\n%s"
+                % invalid_keys
+            )
+
+        # Build the seed matrix
+        for area_id, cost_params in cost_param_dict.items():
+            # Extract the relevant cost
+            area_bool = self.calibration_matrix == area_id
+            area_cost = self.cost_matrix * area_bool
+
+            # Calculate the seed matrix
+            if perceived_factors is not None:
+                area_cost *= perceived_factors[area_id]
+            seed_matrix += self.cost_function.calculate(area_cost, **cost_params)
+
+        # Furness trips to trip ends
+        furnessed_matrix, iters, rmse = furness.doubly_constrained_furness(
+            seed_vals=seed_matrix,
+            row_targets=self.row_targets,
+            col_targets=self.col_targets,
+            tol=self.furness_tol,
+            max_iters=self.furness_max_iters,
+        )
+
+        # Calculate the achieved results by each area
+        results = dict.fromkeys(cost_param_dict.keys())
+        for area_id in results:
+            # Extract this area
+            area_bool = self.calibration_matrix == area_id
+            area_matrix = furnessed_matrix * area_bool
+            area_cost = self.cost_matrix * area_bool
+
+            # Convert matrix into an achieved distribution curve
+            achieved_band_shares = cost_utils.calculate_cost_distribution(
+                matrix=area_matrix,
+                cost_matrix=area_cost,
+                bin_edges=self.tcd_bin_edges[area_id],
+            )
+
+            # Evaluate this run
+            target_band_shares = self.target_cost_distributions[area_id]['band_share'].values
+            convergence = math_utils.curve_convergence(
+                target=target_band_shares,
+                achieved=achieved_band_shares,
+            )
+            achieved_residuals = target_band_shares - achieved_band_shares
+
+            results[area_id] = GravityResults(
+                band_share=achieved_band_shares,
+                convergence=convergence,
+                residuals=achieved_residuals,
+                distribution=area_matrix,
+                completed_iters=iters,
+                achieved_rmse=rmse,
+            )
+
+        return furnessed_matrix, results
+
+    def calibrate(
+        self,
+        init_params: Dict[str, Any],
+        estimate_init_params: bool,
+        calibrate_params: bool,
+        diff_step: float = 1e-8,
+        ftol: float = 1e-4,
+        xtol: float = 1e-4,
+        grav_max_iters: int = 100,
+        verbose: int = 0,
+    ) -> Dict[Any, Dict[str, Any]]:
+        """Finds the optimal parameters for self.cost_function
+
+        Optimal parameters are found using `scipy.optimize.least_squares`
+        to fit the distributed row/col targets to self.target_tld. Once
+        the optimal parameters are found, the gravity model is run one last
+        time to check the self.target_convergence has been met. This also
+        populates a number of attributes with values from the optimal run:
+            self.achieved_band_share
+        self.achieved_convergence
+        self.achieved_residuals
+        self.achieved_distribution
+        self.optimal_cost_params
+
+        As this is a multiple-area gravity model, multiple gravity model
+        calibrations are used. One for each area in self.calibration_matrix.
+        The optimal cost parameters are calibrated for each area
+        simultaneously, and they all share a furness during calibration.
+
+                Parameters
+        ----------
+        init_params:
+            A dictionary of {parameter_name: parameter_value} to pass
+            into the cost function as initial parameters.
+
+        estimate_init_params:
+            Whether to ignore the given init_params and estimate new ones
+            using least squares, or just use the given init_params to start
+            with.
+
+        calibrate_params:
+            Whether to calibrate the cost parameters or not. If not
+            calibrating, the given init_params will be assumed to be
+            optimal.
+
+        diff_step:
+            Copied from scipy.optimize.least_squares documentation, where it
+            is passed to:
+            Determines the relative step size for the finite difference
+            approximation of the Jacobian. The actual step is computed as
+            x * diff_step. If None (default), then diff_step is taken to be a
+            conventional “optimal” power of machine epsilon for the finite
+            difference scheme used
+
+        ftol:
+            The tolerance to pass to scipy.optimize.least_squares. The search
+            will stop once this tolerance has been met. This is the
+            tolerance for termination by the change of the cost function
+
+        xtol:
+            The tolerance to pass to scipy.optimize.least_squares. The search
+            will stop once this tolerance has been met. This is the
+            tolerance for termination by the change of the independent
+            variables.
+
+        grav_max_iters:
+            The maximum number of calibration iterations to complete before
+            termination if the ftol has not been met.
+
+        verbose:
+            Copied from scipy.optimize.least_squares documentation, where it
+            is passed to:
+            Level of algorithm’s verbosity:
+            - 0 (default) : work silently.
+            - 1 : display a termination report.
+            - 2 : display progress during iterations (not supported by ‘lm’ method).
+
+        Returns
+        -------
+        optimal_cost_params:
+            Returns a dictionary of dictionaries. The keys are the unique
+            values from self.calibration matrix, and the values are of the
+            same shape as init_params. The values of the nested dictionaries
+            will be the optimal cost parameters to get the best band share
+            convergence. (With perceived factors applied, if they are being
+            used)
+
+        Raises
+        ------
+        ValueError
+            If the generated trip matrix contains any
+            non-finite values.
+
+        See Also
+        --------
+        gravity_model
+        scipy.optimize.least_squares
+        """
+        # Validate init_params
+        self.cost_function.validate_params(init_params)
+
+        # Assign the initial cost params
+        for key in self.initial_cost_params:
+            self.initial_cost_params[key] = init_params.copy()
 
         # Create the shared arrays for all to communicate
         init_mat = np.zeros_like(self.cost_matrix)
@@ -2307,82 +2545,37 @@ class MultiTLDGravityModelCalibrator:
             multithreading.wait_for_thread_dict_return_or_error(
                 return_threads=calibrator_threads,
                 error_threads_list=furness_setup.all_threads,
-                pbar_kwargs={'disable': False}
+                pbar_kwargs={'disable': False},
             )
 
-        print("Made it!")
+        # Save the optimal cost params for each area
         for area_id in self.calib_areas:
             optimal_params = calibrator_threads[area_id].optimal_cost_params
-            print("%s optimal params: %s" % (area_id, optimal_params))
+            perceived_factors = calibrator_threads[area_id]._perceived_factors
+            self.optimal_cost_params[area_id] = optimal_params
+            self.perceived_factors[area_id] = perceived_factors
 
-        print(self.calibration_matrix.sum())
-        print(self.target_cost_distributions)
-        print(self.calibration_naming)
-        exit()
+        # Do a run with init_params, so we know where we started
 
-    def _multi_tld_calibrate(self,
-                             init_params: Dict[str, Any],
-                             estimate_init_params: bool,
-                             calibrate_params: bool = True,
-                             diff_step: float = 1e-8,
-                             ftol: float = 1e-4,
-                             xtol: float = 1e-4,
-                             grav_max_iters: int = 100,
-                             verbose: int = 0,
-                             ):
-        """Internal function of calibrate.
+        # Run an optimal version of the gravity - store convergences
+        matrix, results = self._gravity_function(self.initial_cost_params)
+        for area_id in self.initial_convergence:
+            self.initial_convergence[area_id] = results[area_id].convergence
+            print("initial conv %s: %s" % (area_id, results[area_id].convergence))
 
-        Runs multiple gravity models, one for each area_id, and calibrates
-        the optimal cost parameters if calibrate params is set to True.
-
-
-        This function will populate and update:
-        self.achieved_band_share
-        self.achieved_convergence
-        self.achieved_residuals
-        self.achieved_distribution
-        self.optimal_cost_params
-        """
-        # Calculate the optimal cost parameters if we're calibrating
-        self._threaded_calibrate(
-            init_params=init_params,
-            estimate_init_params=estimate_init_params,
-            calibrate_params=calibrate_params,
-            diff_step=diff_step,
-            ftol=ftol,
-            xtol=xtol,
-            grav_max_iters=grav_max_iters,
-            verbose=verbose,
+        # Do a run with optimal_params, so we know what we achieved
+        matrix, results = self._gravity_function(
+            cost_param_dict=self.optimal_cost_params,
+            perceived_factors=self.perceived_factors,
         )
 
-        # TODO(BT): Pull the best param data from each thread?
-        #  Logs the best params at the end!
+        for area_id in self.calib_areas:
+            self.achieved_band_share[area_id] = results.band_share
+            self.achieved_convergence[area_id] = results.convergence
+            self.achieved_residuals[area_id] = results.residuals
+            self.achieved_distribution[area_id] = results.distribution
 
-    def calibrate(self,
-                  init_params: Dict[str, Any],
-                  estimate_init_params: bool = False,
-                  calibrate_params: bool = True,
-                  diff_step: float = 1e-8,
-                  ftol: float = 1e-4,
-                  xtol: float = 1e-4,
-                  grav_max_iters: int = 100,
-                  verbose: int = 0,
-                  ):
-        # TODO(BT): WRITE DOCS!
-        # Validate init_params
-        self.cost_function.validate_params(init_params)
-
-        # Figure out the optimal cost params
-        self._multi_tld_calibrate(
-            init_params=init_params,
-            estimate_init_params=estimate_init_params,
-            calibrate_params=calibrate_params,
-            diff_step=diff_step,
-            ftol=ftol,
-            xtol=xtol,
-            grav_max_iters=grav_max_iters,
-            verbose=verbose,
-        )
+        return self.optimal_cost_params
 
 
 def gravity_model(row_targets: np.ndarray,
