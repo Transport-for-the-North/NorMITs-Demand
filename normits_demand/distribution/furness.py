@@ -254,55 +254,6 @@ class Furness3D:
                 break
 
 
-def _furness_overflow(
-    x1: np.ndarray,
-    x2: np.ndarray,
-    x1_name: str = None,
-    x2_name: str = None,
-) -> pd.DataFrame:
-    """Handles overflow error messaging from doubly_constrained_furness
-    
-    Parameters
-    ----------
-    x1:
-        The array, that when divided by x2, produces overflow errors
-
-    x2:
-        The array, that when x1 is divided by it, produces overflow errors
-
-    x1_name:
-        The name to give to the x1 column in the output error table. If
-        left as None, will default to 'x1'.
-
-    x2_name:
-        The name to give to the x2 column in the output error table. If
-        left as None, will default to 'x2'.
-
-    Returns
-    -------
-    tuple_of_arrays:
-        Indices of elements that are non-zero
-    """
-    # Init
-    x1_name = 'x1' if x1_name is None else x1_name
-    x2_name = 'x2' if x2_name is None else x2_name
-
-    # Complete the calculation to find the culprit
-    with np.errstate(over='ignore'):
-        x3 = np.divide(x1, x2, where=x2 != 0, out=np.ones_like(x1, dtype=float))
-
-    # Find all infs
-    inf_idxs = np.isinf(x3).nonzero()
-
-    # Format error as a table
-    return pd.DataFrame({
-        'row_idx': inf_idxs[0],
-        'col_idx': inf_idxs[1],
-        x1_name: x1[inf_idxs],
-        x2_name: x2[inf_idxs],
-    })
-
-
 def doubly_constrained_furness(seed_vals: np.array,
                                row_targets: np.array,
                                col_targets: np.array,
@@ -379,17 +330,22 @@ def doubly_constrained_furness(seed_vals: np.array,
         for iter_num in range(max_iters):
             # ## COL CONSTRAIN ## #
             # Calculate difference factor
+            col_ach = np.sum(furnessed_mat, axis=0)
+            kwargs = {
+                'where': col_ach != 0,
+                'out': np.ones_like(col_targets, dtype=float)
+            }
             try:
-                col_ach = np.sum(furnessed_mat, axis=0)
-                diff_factor = np.divide(
-                    col_targets,
-                    col_ach,
-                    where=col_ach != 0,
-                    out=np.ones_like(col_targets, dtype=float),
-                )
+                diff_factor = np.divide(col_targets, col_ach, **kwargs)
             except FloatingPointError as err:
                 print(err)
-                print(_furness_overflow(col_targets, col_ach))
+                print(math_utils.overflow_msg(
+                    x1=col_targets,
+                    x2=col_ach,
+                    x1_name='col_targets',
+                    x2_name='col_achieved',
+                    **kwargs
+                ))
 
             # adjust cols
             furnessed_mat = np.multiply(
@@ -401,17 +357,22 @@ def doubly_constrained_furness(seed_vals: np.array,
 
             # ## ROW CONSTRAIN ## #
             # Calculate difference factor
+            row_ach = np.sum(furnessed_mat, axis=1)
+            kwargs = {
+                'where': row_ach != 0,
+                'out': np.ones_like(row_targets, dtype=float)
+            }
             try:
-                row_ach = np.sum(furnessed_mat, axis=1)
-                diff_factor = np.divide(
-                    row_targets,
-                    row_ach,
-                    where=row_ach != 0,
-                    out=np.ones_like(row_targets, dtype=float),
-                )
+                diff_factor = np.divide(row_targets, row_ach, **kwargs)
             except FloatingPointError as err:
                 print(err)
-                print(_furness_overflow(col_targets, col_ach))
+                print(math_utils.overflow_msg(
+                    x1=col_targets,
+                    x2=col_ach,
+                    x1_name='row_targets',
+                    x2_name='row_achieved',
+                    **kwargs,
+                ))
 
             # adjust rows
             furnessed_mat = np.multiply(
