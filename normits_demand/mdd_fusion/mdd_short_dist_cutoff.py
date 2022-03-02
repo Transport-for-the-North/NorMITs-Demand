@@ -34,13 +34,13 @@ distance_loc = 'Y:/NoHAM/17.TUBA_Runs/-TPT/Skims/RefDist_Skims/NoHAM_Base_2018_T
 # Read in MDD
 with open(r'Y:/Mobile Data/Processing/dct_MDDCar.pkl', 'rb') as log:
         dct_mdd_car = pk.load(log)
-# [md][wd][pp][hr]
+# [md][wd][pp][tp]
 # [3][1][1-5][1-3]
 
 # Read in NoHAM
 with open(r'Y:/Mobile Data/Processing/dctNoHAM_mddpurp.pkl', 'rb') as log:
         dct_noham_car = pk.load(log)
-# [md][wd][pp][hr]
+# [md][wd][pp][tp]
 # [3][1][1-5][1-4]
 
 
@@ -188,20 +188,27 @@ for md in dctmode:
                 # Add cutoff value to dictionary
                 cutoff_dict[md][wd][pp][tp] = cutoff
 
-                # Create MND-NoHAM global factor
-                mat1 = mat[(mat['dband'] >= cutoff) & ((mat['o_int'] == 1) | (mat['d_int'] == 1))]
+                # Create MND-NoHAM global factor - I-I
+                mat1 = mat[(mat['dband'] >= cutoff) & ((mat['o_int'] == 1) & (mat['d_int'] == 1))]
                 # add linear regression for zone-zone
                 d = np.polyfit(mat1['nmtrip'], mat1['mddtrip'], 1)
-                mnfactor = (1 / d[0]).round(3)
+                mnfactorII = (1 / d[0]).round(3)
+
+                # Create MND-NoHAM global factor - I-E/E-I
+                mat1 = mat[(mat['dband'] >= cutoff) & ((mat['o_int'] == 1) ^ (mat['d_int'] == 1))]
+                # add linear regression for zone-zone
+                d = np.polyfit(mat1['nmtrip'], mat1['mddtrip'], 1)
+                mnfactorIE = (1 / d[0]).round(3)
 
                 # Create factor array for application
                 conditions = [
                     (mat['o_int'] == 0) & (mat['d_int'] == 0),
                     (mat['o_int'] == 2) & (mat['d_int'] == 2),
+                    (mat['o_int'] == 1) & (mat['d_int'] == 1),
                     (mat['dband'] < cutoff)
                 ]
-                f_choice = [1, 1, 1]
-                mat['mnfactor'] = np.select(conditions, f_choice, default=mnfactor)
+                f_choice = [1, 1, 1, mnfactorII]
+                mat['mnfactor'] = np.select(conditions, f_choice, default=mnfactorIE)
                 # Add as array to dictionary
                 export_array = mat.pivot(index='o_zone',
                                          columns='d_zone',
