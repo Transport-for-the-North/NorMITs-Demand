@@ -370,8 +370,8 @@ for md in dctmode:
                     sec_list.append(mat_sec)
                     
                     ######
-                    #Trip length distribution
-                    #join distance
+                    # Trip length distribution
+                    # join distance
                     mat = pd.merge(mat,
                                    distance,
                                    on=['o_zone', 'd_zone'])
