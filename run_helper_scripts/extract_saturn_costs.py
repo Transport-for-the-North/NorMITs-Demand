@@ -5,8 +5,12 @@
 """
 
 ##### IMPORTS #####
+from __future__ import annotations
+
 # Standard imports
 import argparse
+import configparser
+import dataclasses
 import itertools
 import os
 import re
@@ -53,6 +57,123 @@ class SkimDetails(NamedTuple):
     user_class: int
 
 
+@dataclasses.dataclass
+class ExtractCostsInputs:
+    """Class to store and manage input parameters for `extract_saturn_costs`.
+
+    Parameters
+    ----------
+    output_folder : Path
+        Path to folder to store outputs.
+    run_skims : bool, default True
+        Should SATURN skimming be ran.
+    assignments_folder : Path, optional
+        Folder containing SATURN assignments, required
+        if `run_skims` is True.
+    saturn_folder : Path, optional
+        Folder containing SATURN EXES, required
+        if `run_skims` is True.
+    user_classes : set[int], optional
+        User classes to get costs for, if not given
+        gets costs for all user classes.
+    """
+
+    _CONFIG_SECTION = "EXTRACT COSTS PARAMETERS"
+
+    output_folder: Path
+    run_skims: bool = True
+    assignments_folder: Path = None
+    saturn_folder: Path = None
+    user_classes: set[int] = None
+
+    def _run_skim_parameters(self) -> None:
+        """Checks the required parameters when run skims is True."""
+        for nm in ("assignments_folder", "saturn_folder"):
+            if getattr(self, nm) is None:
+                raise ValueError(f"cannot run skims without {nm} parameter")
+            path = Path(getattr(self, nm))
+            if not path.is_dir():
+                raise NotADirectoryError(f"{nm} doesn't exist: {path}")
+            setattr(self, nm, path)
+
+    def __post_init__(self) -> None:
+        """Check parameters are valid."""
+        self.run_skims = bool(self.run_skims)
+        if self.run_skims:
+            self._run_skim_parameters()
+
+        self.output_folder = Path(self.output_folder)
+        if not self.output_folder.is_dir():
+            raise NotADirectoryError(
+                f"output_folder doesn't exist: {self.output_folder}"
+            )
+
+        if self.user_classes:
+            self.user_classes = {int(i) for i in self.user_classes}
+
+    @property
+    def skim_folder(self) -> Path:
+        """Path: Path to the folder for saving skims."""
+        return self.output_folder / SKIM_FOLDER
+
+    def save(self, path: Path) -> None:
+        """Save parameters to config file.
+
+        Parameters
+        ----------
+        path : Path
+            Path to file to save.
+        """
+        config = configparser.ConfigParser()
+        config[self._CONFIG_SECTION] = {
+            k: "" if v is None else str(v) for k, v in dataclasses.asdict(self).items()
+        }
+
+        with open(path, "wt") as file:
+            config.write(file)
+        LOG.info("Extract cost parameters saved to: %s", path)
+
+    @classmethod
+    def load(cls, path: Path) -> ExtractCostsInputs:
+        """Load parameters from config file.
+
+        Parameters
+        ----------
+        path : Path
+            Path to config file.
+
+        Returns
+        -------
+        ExtractCostsInputs
+            Parameters loaded from `path`.
+
+        Raises
+        ------
+        configparser.NoSectionError
+            If the config file is missing a required section.
+        """
+        converters = {
+            "path": Path,
+            "optpath": lambda p: None if p.strip() == "" else Path(p),
+            "list": lambda s: None if s.strip() == "" else s.split(),
+        }
+
+        config = configparser.ConfigParser(converters=converters)
+        config.read(path)
+
+        if not config.has_section(cls._CONFIG_SECTION):
+            raise configparser.NoSectionError(cls._CONFIG_SECTION)
+        section = config[cls._CONFIG_SECTION]
+
+        params = {}
+        params["output_folder"] = section.getpath("output_folder")
+        params["run_skims"] = section.getboolean("run_skims", fallback=cls.run_skims)
+        params["assignments_folder"] = section.getoptpath("assignments_folder")
+        params["saturn_folder"] = section.getoptpath("saturn_folder")
+        params["user_classes"] = section.getlist("user_classes")
+        return ExtractCostsInputs(**params)
+
+
 ##### FUNCTIONS #####
 def update_env(saturn_path: Path) -> os._Environ:  # pylint: disable=protected-access
     """Creates a copy of environment variables and adds SATURN path.
@@ -85,12 +206,7 @@ def get_arguments() -> argparse.Namespace:
     """Parse the commandline arguments.
 
     Positional arguments:
-    - `saturn_folder`: Path to SATURN EXES folder
-    - `assignments_folder`: Path to folder containing assignments
-
-    Optional arguments:
-    - `user_classes`: List of individual user classes to run the skim
-      for, if not given produces the skim for all userclasses combined.
+    - config: path to the config file
 
     Returns
     -------
@@ -99,40 +215,21 @@ def get_arguments() -> argparse.Namespace:
 
     Raises
     ------
-    NotADirectoryError
-        If the input folders don't exist.
+    FileNotFoundError
+        If the config file doesn't exist.
     """
-    # TODO Add argument to turn of skimming if not needed
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("saturn_folder", type=Path, help="Path to SATURN EXES folder")
-    parser.add_argument(
-        "assignments_folder", type=Path, help="Path to folder containing assignments"
-    )
-    parser.add_argument(
-        "-u",
-        "--user_classes",
-        type=int,
-        nargs="+",
-        help="List of individual user classes to run the skim for, "
-        "if not given produces the skim for all userclasses combined.",
-    )
-    parser.add_argument(
-        "-o", "--output_folder", type=Path, help="Path to folder to save outputs"
-    )
-
+    parser.add_argument("config", type=Path, help="Path to config file")
     args = parser.parse_args()
-    for nm in ("saturn_folder", "assignments_folder", "output_folder"):
-        if not hasattr(args, nm):
-            continue
-        path = getattr(args, nm)
-        if not path.is_dir():
-            raise NotADirectoryError(f"{nm} is not an existing folder: {path}")
+
+    if not args.config.is_file():
+        raise FileNotFoundError(f"cannot find config file: {args.config}")
     return args
 
 
 def _cmd_strip(stdout: bytes) -> str:
     """Convert to str and strip newlines from subprocess `stdout` or `stderr`."""
-    return stdout.decode().strip().replace("\n\r", "\n")
+    return stdout.decode().strip().replace("\r\n", "\n")
 
 
 def ufms_to_csvs(
@@ -289,7 +386,9 @@ def parse_skim_name(path: Path) -> SkimDetails:
     return SkimDetails(time_slice, name_params["skim_type"], user_class)
 
 
-def find_csv_skims(skim_folder: Path, skim_type: str = None) -> dict[SkimDetails, Path]:
+def find_csv_skims(
+    skim_folder: Path, skim_type: str = None, user_classes: list[int] = None
+) -> dict[SkimDetails, Path]:
     """Find CSV files with valid skim names in `skim_folder`.
 
     Expects skim files to be CSVs with SKIM somewhere in the file name.
@@ -301,6 +400,9 @@ def find_csv_skims(skim_folder: Path, skim_type: str = None) -> dict[SkimDetails
     skim_type : str, optional
         Only include skims with this type in the output,
         by default include all skims found.
+    user_classes : list[int], optional
+        Only include skims with given user class, by default
+        include all skims found.
 
     Returns
     -------
@@ -313,32 +415,36 @@ def find_csv_skims(skim_folder: Path, skim_type: str = None) -> dict[SkimDetails
             details = parse_skim_name(path)
         except SkimFileNameError as err:
             LOG.warning("%s: %s", err.__class__.__name__, err)
-        if skim_type is None or details.skim_type == skim_type:
-            skims[details] = path
+        if skim_type and details.skim_type == skim_type:
+            continue
+        if user_classes and details.user_class not in user_classes:
+            continue
+        skims[details] = path
+    LOG.info("Found %s skim CSVs", len(skims))
     return skims
 
 
 def main(init_logger: bool = True) -> None:
     """Get commandline arguments and produce skims."""
     args = get_arguments()
-    if hasattr(args, "output_folder"):
-        output_folder = args.output_folder
-        skim_folder = output_folder / SKIM_FOLDER
-    else:
-        output_folder = args.assignments_folder / SKIM_FOLDER
-        skim_folder = output_folder
+    params = ExtractCostsInputs.load(args.config)
 
     if init_logger:
         nd_log.get_logger(
             nd_log.get_package_logger_name(),
-            output_folder / LOG_FILE,
+            params.output_folder / LOG_FILE,
             "Running SATURN Skims",
         )
+    params.save(params.output_folder / "Extract_costs_parameters.ini")
 
-    skim_assignments(
-        args.assignments_folder, skim_folder, args.saturn_folder, args.user_classes
-    )
-    skims = find_csv_skims(skim_folder, "D")
+    if params.run_skims:
+        skim_assignments(
+            params.assignments_folder,
+            params.skim_folder,
+            params.saturn_folder,
+            params.user_classes,
+        )
+    dist_skims = find_csv_skims(params.skim_folder, "D", params.user_classes)
     # TODO Convert skims into distribution model cost format, output to cost folder
 
 
