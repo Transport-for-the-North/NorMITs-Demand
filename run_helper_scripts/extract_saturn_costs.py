@@ -20,14 +20,18 @@ from pathlib import Path
 from typing import NamedTuple
 
 # Third party imports
+import pandas as pd
 from tqdm import tqdm
 
 # Local imports
 sys.path.append("..")
 # pylint: disable=import-error,wrong-import-position
+import normits_demand as nd
 from normits_demand import logging as nd_log
-
+from normits_demand import constants as nd_consts
+from normits_demand.utils import file_ops
 # pylint: enable=import-error,wrong-import-position
+
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(
@@ -36,11 +40,11 @@ LOG = nd_log.get_logger(
 LOG_FILE = "Skim_SATURN.log"
 SKIM_TYPES = {"T": "Time", "D": "Distance", "M": "Toll", "P": "Penalty"}
 TIME_PERIODS = {1: "AM", 2: "IP", 3: "PM", 4: "OP"}
-SKIM_FOLDER = "Skims"
-OUTPUT_FOLDER_FORMAT = "{import_home}/modal/car_and_passenger/costs/{model_name}"
+MODEL_USER_CLASSES = {"commute": 1, "business": 2, "other": 3}
+INTRAZONAL_COST_FACTOR = 0.5
 
 ##### CLASSES #####
-class SkimFileNameError(Exception):
+class SkimFileNameError(nd.NormitsDemandError):
     """Error raised when parsing an invalid skim file name."""
 
     def __init__(self, path: Path, message: str, *args: object) -> None:
@@ -63,6 +67,8 @@ class ExtractCostsInputs:
 
     Parameters
     ----------
+    model_name : str
+        Name of the model costs are extracted from.
     output_folder : Path
         Path to folder to store outputs.
     run_skims : bool, default True
@@ -80,6 +86,7 @@ class ExtractCostsInputs:
 
     _CONFIG_SECTION = "EXTRACT COSTS PARAMETERS"
 
+    model_name: str
     output_folder: Path
     run_skims: bool = True
     assignments_folder: Path = None
@@ -90,7 +97,7 @@ class ExtractCostsInputs:
         """Checks the required parameters when run skims is True."""
         for nm in ("assignments_folder", "saturn_folder"):
             if getattr(self, nm) is None:
-                raise ValueError(f"cannot run skims without {nm} parameter")
+                raise nd.NormitsDemandError(f"cannot run skims without {nm} parameter")
             path = Path(getattr(self, nm))
             if not path.is_dir():
                 raise NotADirectoryError(f"{nm} doesn't exist: {path}")
@@ -98,6 +105,9 @@ class ExtractCostsInputs:
 
     def __post_init__(self) -> None:
         """Check parameters are valid."""
+        if self.model_name is None:
+            raise nd.NormitsDemandError("model_name parameter is required")
+
         self.run_skims = bool(self.run_skims)
         if self.run_skims:
             self._run_skim_parameters()
@@ -114,7 +124,7 @@ class ExtractCostsInputs:
     @property
     def skim_folder(self) -> Path:
         """Path: Path to the folder for saving skims."""
-        return self.output_folder / SKIM_FOLDER
+        return self.output_folder / "Skims"
 
     def save(self, path: Path) -> None:
         """Save parameters to config file.
@@ -166,6 +176,7 @@ class ExtractCostsInputs:
         section = config[cls._CONFIG_SECTION]
 
         params = {}
+        params["model_name"] = section.get("model_name")
         params["output_folder"] = section.getpath("output_folder")
         params["run_skims"] = section.getboolean("run_skims", fallback=cls.run_skims)
         params["assignments_folder"] = section.getoptpath("assignments_folder")
@@ -415,7 +426,7 @@ def find_csv_skims(
             details = parse_skim_name(path)
         except SkimFileNameError as err:
             LOG.warning("%s: %s", err.__class__.__name__, err)
-        if skim_type and details.skim_type == skim_type:
+        if skim_type and details.skim_type != skim_type:
             continue
         if user_classes and details.user_class not in user_classes:
             continue
@@ -424,8 +435,130 @@ def find_csv_skims(
     return skims
 
 
+def _purp_to_user_class(purpose: int) -> int:
+    """Convert `purpose` to model user class."""
+    uc_name = None
+    for nm, purps in nd_consts.USER_CLASS_PURPOSES.items():
+        if purpose in purps:
+            uc_name = nm.strip().lower()
+            break
+    else:
+        raise nd.NormitsDemandError(f"unknown purpose {purpose}")
+    if uc_name not in MODEL_USER_CLASSES:
+        raise nd.NormitsDemandError(f"unknown user class {uc_name}")
+    return MODEL_USER_CLASSES[uc_name]
+
+
+def _read_skim(
+    path: Path, zoning: nd.ZoningSystem, intra_factor: float
+) -> pd.DataFrame:
+    """Read cost skim and infill intrazonal costs.
+
+    Cost skim is assumed to be a CSV in the SATURN TUBA 2 format.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the cost skim.
+    zoning : nd.ZoningSystem
+        Zoning system of the cost skim.
+    intra_factor : float
+        Factor for multiplying the nearest neighbour cost by
+        to infill intrazonal costs.
+
+    Returns
+    -------
+    pd.DataFrame
+        Cost matrix with intrazonals filled in.
+    """
+    # Read skim and make sure zone system is consitent with zoning
+    zones = zoning.unique_zones
+    df = file_ops.read_df(
+        path, index_col=[0, 1], header=None, names=["origin", "destination", "cost"]
+    )
+    df = df.reindex(index=pd.MultiIndex.from_product((zones, zones)))
+
+    # Calculate nearest neighbour cost
+    row_min = df.groupby(level=0).min()
+    col_min = df.groupby(level=1).min()
+    nearest_neighbour = pd.concat([row_min, col_min], axis=1).min(axis=1)
+    nearest_neighbour.index = pd.MultiIndex.from_arrays(
+        (nearest_neighbour.index, nearest_neighbour.index)
+    )
+    intra_mask = df.index.get_level_values(0) == df.index.get_level_values(1)
+    # Apply factored nearest neighbour cost to intrazonals
+    df.loc[intra_mask, "cost"] = intra_factor * nearest_neighbour
+
+    nan = df["cost"].isna().sum()
+    if nan > 0:
+        LOG.error("%s (%.1%) cells have missing costs in %s", nan, path.stem)
+
+    df = df.unstack()
+    df = df.droplevel(0, axis=1)
+    return df
+
+
+def nhb_costs(
+    dist_skims: dict[SkimDetails, Path],
+    output_folder: Path,
+    model_name: str,
+    intrazonal_factor: float,
+) -> None:
+    """Create NHB cost files for the distribution model.
+
+    Parameters
+    ----------
+    dist_skims : dict[SkimDetails, Path]
+        Paths to cost skim CSVs.
+    output_folder : Path
+        Folder to save the NHB cost files to.
+    model_name : str
+        Name of the model the cost data is from.
+    intrazonal_factor : float
+        Factor to use for infilling intrazonal costs, this is
+        multiplied by the zones nearest neighbour cost.
+    """
+    LOG.info("Creating NHB distribution model costs in: %s", output_folder)
+    zoning = nd.get_zoning_system(model_name)
+
+    time_periods = list(range(1, 5))
+    pbar = tqdm(
+        total=len(time_periods) * len(nd_consts.ALL_NHB_P),
+        dynamic_ncols=True,
+        desc="Creating NHB Costs",
+    )
+    for tp in time_periods:
+        # Cache to avoid reading the same file twice
+        # when multiple purposes use the same user class
+        cache = {}
+
+        for purp in nd_consts.ALL_NHB_P:
+            uc = _purp_to_user_class(purp)
+            out_file = output_folder / f"nhb_{model_name}_cost_p{purp}_m3_tp{tp}.pbz2"
+
+            key = SkimDetails(tp, "D", uc)
+            try:
+                skim_path = dist_skims[key]
+            except KeyError:
+                LOG.warning("cannot find skim for %s", key)
+                continue
+
+            if key not in cache:
+                cache[key] = _read_skim(skim_path, zoning, intrazonal_factor)
+            file_ops.write_df(cache[key], out_file)
+            LOG.debug("Written: %s", out_file)
+            pbar.update()
+
+    pbar.close()
+
+
+def hb_costs(skims: dict[SkimDetails, Path], output_folder: Path) -> None:
+    # TODO Function to convert distance skim CSVs to HB costs for distribution model
+    raise NotImplementedError("Not yet implemented!")
+
+
 def main(init_logger: bool = True) -> None:
-    """Get commandline arguments and produce skims."""
+    """Get commandline arguments and produce skims and cost files."""
     args = get_arguments()
     params = ExtractCostsInputs.load(args.config)
 
@@ -433,7 +566,7 @@ def main(init_logger: bool = True) -> None:
         nd_log.get_logger(
             nd_log.get_package_logger_name(),
             params.output_folder / LOG_FILE,
-            "Running SATURN Skims",
+            "Running Extract SATURN Costs",
         )
     params.save(params.output_folder / "Extract_costs_parameters.ini")
 
@@ -445,7 +578,12 @@ def main(init_logger: bool = True) -> None:
             params.user_classes,
         )
     dist_skims = find_csv_skims(params.skim_folder, "D", params.user_classes)
-    # TODO Convert skims into distribution model cost format, output to cost folder
+
+    # Create distribution model costs
+    cost_output = params.output_folder / f"Distribution Model Costs/{params.model_name}"
+    cost_output.mkdir(exist_ok=True)
+    nhb_costs(dist_skims, cost_output, params.model_name, INTRAZONAL_COST_FACTOR)
+    hb_costs(dist_skims, cost_output)
 
 
 ##### MAIN #####
