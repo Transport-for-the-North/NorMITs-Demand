@@ -37,6 +37,9 @@ from normits_demand.concurrency import multiprocessing as multiprocessing
 # Imports that need moving into here
 from normits_demand.utils.general import list_files
 
+# CONSTANTS
+PD_COMPRESSION = {'.zip', '.gzip', '.bz2', '.zstd', '.csv.bz2'}
+
 
 def cast_to_pathlib_path(path: nd.PathLike) -> pathlib.Path:
     """
@@ -260,8 +263,7 @@ def read_df(path: nd.PathLike,
             raise FileNotFoundError(
                 "No such file or directory: '%s'" % path
             )
-        alt_types = ['.csv', consts.COMPRESSION_SUFFIX]
-        path = find_filename(path, alt_types=alt_types)
+        path = find_filename(path)
 
     # Determine how to read in df
     if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
@@ -280,6 +282,9 @@ def read_df(path: nd.PathLike,
         return df
 
     elif pathlib.Path(path).suffix == '.csv':
+        return pd.read_csv(path, index_col=index_col, **kwargs)
+
+    elif pathlib.Path(path).suffix in PD_COMPRESSION:
         return pd.read_csv(path, index_col=index_col, **kwargs)
 
     else:
@@ -317,6 +322,9 @@ def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
         compress.write_out(df, path)
 
     elif pathlib.Path(path).suffix == '.csv':
+        df.to_csv(path, **kwargs)
+
+    elif pathlib.Path(path).suffix in PD_COMPRESSION:
         df.to_csv(path, **kwargs)
 
     else:
@@ -412,7 +420,7 @@ def find_filename(path: nd.PathLike,
         return ret_path.name
 
     if alt_types is None:
-        alt_types = ['.pbz2', '.csv']
+        alt_types = ['.pbz2', '.csv'] + list(PD_COMPRESSION)
 
     # Make sure they all start with a dot
     temp_alt_types = list()
