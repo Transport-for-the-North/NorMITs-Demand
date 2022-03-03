@@ -30,6 +30,7 @@ import normits_demand as nd
 from normits_demand import logging as nd_log
 from normits_demand import constants as nd_consts
 from normits_demand.utils import file_ops
+
 # pylint: enable=import-error,wrong-import-position
 
 
@@ -491,7 +492,12 @@ def _read_skim(
 
     nan = df["cost"].isna().sum()
     if nan > 0:
-        LOG.error("%s (%.1%) cells have missing costs in %s", nan, path.stem)
+        LOG.error(
+            "%s (%.1f%%) cells have missing costs in %s",
+            nan,
+            (nan / len(df)) * 100,
+            path.stem,
+        )
 
     df = df.unstack()
     df = df.droplevel(0, axis=1)
@@ -541,6 +547,7 @@ def nhb_costs(
                 skim_path = dist_skims[key]
             except KeyError:
                 LOG.warning("cannot find skim for %s", key)
+                pbar.update()
                 continue
 
             if key not in cache:
