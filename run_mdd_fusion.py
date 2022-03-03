@@ -19,7 +19,7 @@ from pathlib import Path
 from normits_demand.mdd_fusion import mdd_fusion_engine
 
 
-distance_folder = r'Y:\NoHAM\17.TUBA_Runs\-TPT\Skims\RefDist_Skims'
+distance_folder = r'O\17.TUBA_Runs\-TPT\Skims\RefDist_Skims'
 inputs_folder = r'Y:\Mobile Data\Processing\Fusion_Inputs'
 # TODO: Add looping dictionaries
 
@@ -181,7 +181,7 @@ def fusion_factors():
                                                                   invert=False,
                                                                   min_dist=min_dist_cut,
                                                                   max_dist=9999,
-                                                                  default_value=1)
+                                                                  default_value=0.5)
             dct_mdd_fusion_factors[3][1][uc][tp] = fusion_matrix
     # package noham fusion factors
     dct_noham_fusion_factors = {3: {}}
@@ -272,11 +272,13 @@ def fusion_factors():
             else:
                 dct_fusion_demand[3][1][uc][tp] = ((dct_mdd_demand[3][1][uc][tp] * dct_mdd_fusion_factors[3][1][uc][tp])
                                                    +
+                                                   (dct_noham_demand[3][1][uc][tp] * dct_mdd_fusion_factors[3][1][uc][tp])
+                                                   +
                                                    (dct_noham_demand[3][1][uc][tp] * dct_noham_fusion_factors[3][1][uc][
                                                        tp]))
 
     unq_zones = list(range(1, 2771))
-    version = '5-X'
+    version = '6-X'
     export_folder = 'Y:/Mobile Data/Processing/3-1_Fusion_Demand'
     md = 3
     wd = 1

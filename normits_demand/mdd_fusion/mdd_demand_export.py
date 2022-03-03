@@ -102,7 +102,7 @@ def mdd_person_uc_export():
                     folder_path = (export_folder + '/v' + str(version) + '/PersonTrips')
                     Path(folder_path).mkdir(parents=True, exist_ok=True)
                     file_path = (folder_path + '/' +
-                                 'od_' + str(dctmddpurp[uc][2]) + '_p' + str(uc) +
+                                 'od_' + str(dctuc[uc][0]) + '_p' + str(uc) +
                                  '_yr2018_m' + str(md) +
                                  '_tp' + str(tp) + '.csv')
                     print(file_path)
