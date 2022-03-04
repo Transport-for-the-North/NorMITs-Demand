@@ -114,6 +114,7 @@ class HBAttractionModel(HBAttractionModelPaths):
                  production_balance_paths: Dict[int, nd.PathLike],
                  trip_weights_path: str,
                  mode_splits_path: str,
+                 non_resi_path: str, # TODO Remove temp parameter replacement for land use
                  export_home: str,
                  balance_zoning: nd.BalancingZones = None,
                  constraint_paths: Dict[int, nd.PathLike] = None,
@@ -146,6 +147,11 @@ class HBAttractionModel(HBAttractionModelPaths):
             Should have the columns as defined in:
             HBAttractionModel._target_cols['mode_split']
 
+        non_resi_path: str
+            Path to the non residential data used as a temporary replacement
+            for land use data. TODO Remove this parameter when using new version
+            of land use.
+
         export_home:
             Path to export attraction outputs.
 
@@ -171,7 +177,8 @@ class HBAttractionModel(HBAttractionModelPaths):
         [file_ops.check_file_exists(x, find_similar=True) for x in employment_paths.values()]
         [file_ops.check_file_exists(x) for x in production_balance_paths.values()]
         file_ops.check_file_exists(trip_weights_path, find_similar=True)
-        file_ops.check_file_exists(mode_splits_path, find_similar=True)
+        # TODO Uncomment when back to using land use data
+        # file_ops.check_file_exists(mode_splits_path, find_similar=True)
 
         if constraint_paths is not None:
             [file_ops.check_file_exists(x, find_similar=True) for x in constraint_paths.values()]
@@ -197,6 +204,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         self.production_balance_paths = production_balance_paths
         self.trip_weights_path = trip_weights_path
         self.mode_splits_path = mode_splits_path
+        self.non_resi_path = non_resi_path # TODO Remove this parameter when using new land use
         self.balance_zoning = balance_zoning
         self.constraint_paths = constraint_paths
         self.process_count = process_count
@@ -288,7 +296,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         # Generate the attractions for each year
         for year in self.years:
             year_start_time = timing.current_milli_time()
-
+            """ TODO Re-implement these statements with new version of land use data
             # ## GENERATE PURE ATTRACTIONS ## #
             self._logger.info("Loading the employment data")
             emp_dvec = self._read_land_use_data(year)
@@ -323,6 +331,9 @@ class HBAttractionModel(HBAttractionModelPaths):
                 )
                 self._logger.warning(msg)
                 warnings.warn(msg)
+            """
+            # TODO Remove temporary replacement for land use data
+            fully_segmented = self._generate_attractions_non_resi()
 
             # Output attractions before any aggregation
             if export_fully_segmented:
@@ -369,7 +380,56 @@ class HBAttractionModel(HBAttractionModelPaths):
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
         self._logger.info("HB Attraction Model took: %s" % time_taken)
-        self._logger.info("HB Attraction Model Finished")        
+        self._logger.info("HB Attraction Model Finished")
+
+    # TODO Remove this function when using new land use data
+    def _generate_attractions_non_resi(self) -> nd.DVector:
+        """Generate attractions from the non-residential data.
+
+        This method is a temporary replacement for the land use based
+        attraction calculations.
+
+        Returns
+        -------
+        nd.DVector
+            HB attraction trip ends before production balancing,
+            with segmentation `hb_p_m`.
+        """
+        dtype = {"msoa_zone_id": str, "sic_code": int, "people": int}
+        emp = file_ops.read_df(
+            path=self.non_resi_path,
+            find_similar=True,
+            usecols=dtype.keys(),
+            dtype=dtype,
+        )
+        dtype = {"purpose": int, "mode": int, "sic_code": int, "trip_rate": float}
+        trip_rates = file_ops.read_df(
+            self.trip_weights_path,
+            find_similar=True,
+            usecols=dtype.keys(),
+            dtype=dtype,
+        )
+
+        # Calculate attractions by MSOA, purpose and mode
+        attractions = emp.merge(trip_rates, on="sic_code", how="left")
+        del emp, trip_rates
+        attractions.loc[:, "trips"] = attractions["people"] * attractions["trip_rate"]
+        attractions = attractions.drop(columns=["sic_code", "people", "trip_rate"])
+        attractions = attractions.groupby(
+            ["msoa_zone_id", "purpose", "mode"], as_index=False
+        ).sum()
+        # Drop modes 4 (passenger) and 7 (tram)
+        mask = ~attractions["mode"].isin((4, 7))
+        attractions = attractions.loc[mask]
+
+        return nd.DVector(
+            nd.get_segmentation_level("hb_p_m"),
+            attractions,
+            nd.get_zoning_system("msoa"),
+            zone_col="msoa_zone_id",
+            val_col="trips",
+            df_naming_conversion={"p": "purpose", "m": "mode"},
+        )
 
     def _read_land_use_data(self, year: int) -> nd.DVector:
         """

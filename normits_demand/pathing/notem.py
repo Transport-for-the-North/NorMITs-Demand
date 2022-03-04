@@ -172,6 +172,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
     _hb_attractions_dname = "hb_attractions"
     _hba_trip_weight_fname = "hb_trip_weights_v{version}.csv"
     _hba_mode_split_fname = "hb_mode_splits_v{version}.csv"
+    _hba_non_resi_fname = "hb_non_resi_data_v{version}.csv"
 
     # NHB Productions
     _nhb_productions_dname = "nhb_productions"
@@ -333,11 +334,14 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
         import_home = os.path.join(self.import_home, self._hb_attractions_dname)
         trip_weights = self._hba_trip_weight_fname.format(version=self.hb_attraction_import_version)
         mode_split = self._hba_mode_split_fname.format(version=self.hb_attraction_import_version)
+        non_resi = self._hba_non_resi_fname.format(version=self.hb_attraction_import_version)
 
         return {
             'employment_paths': self.employment_paths,
             'trip_weights_path': os.path.join(import_home, trip_weights),
             'mode_splits_path': os.path.join(import_home, mode_split),
+            # TODO Remove temporary path replacement for land use data
+            'non_resi_path': os.path.join(import_home, non_resi)
         }
 
     def generate_nhb_production_imports(self) -> Dict[str, nd.PathLike]:
