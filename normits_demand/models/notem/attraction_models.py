@@ -395,15 +395,17 @@ class HBAttractionModel(HBAttractionModelPaths):
             HB attraction trip ends before production balancing,
             with segmentation `hb_p_m`.
         """
+        # TODO Add flexibility for multiple segmentation columns, more than just sic_code
+        # the same column in trip weights
         dtype = {"msoa_zone_id": str, "sic_code": int, "people": int}
         emp = file_ops.read_df(
-            path=self.non_resi_path,
+            path=self.non_resi_path, # TODO CHANGE PATHH TO INCLUDE YEAR
             find_similar=True,
             usecols=dtype.keys(),
             dtype=dtype,
         )
-        dtype = {"purpose": int, "mode": int, "sic_code": int, "trip_rate": float}
-        trip_rates = file_ops.read_df(
+        dtype = {"purpose": int, "mode": int, "sic_code": int, "trip_weight": float}
+        trip_weights = file_ops.read_df(
             self.trip_weights_path,
             find_similar=True,
             usecols=dtype.keys(),
@@ -411,10 +413,11 @@ class HBAttractionModel(HBAttractionModelPaths):
         )
 
         # Calculate attractions by MSOA, purpose and mode
-        attractions = emp.merge(trip_rates, on="sic_code", how="left")
-        del emp, trip_rates
-        attractions.loc[:, "trips"] = attractions["people"] * attractions["trip_rate"]
-        attractions = attractions.drop(columns=["sic_code", "people", "trip_rate"])
+        # TODO Merge should be on all segmentation columns
+        attractions = emp.merge(trip_weights, on="sic_code", how="left")
+        del emp, trip_weights
+        attractions.loc[:, "trips"] = attractions["people"] * attractions["trip_weight"]
+        attractions = attractions.drop(columns=["sic_code", "people", "trip_weight"])
         attractions = attractions.groupby(
             ["msoa_zone_id", "purpose", "mode"], as_index=False
         ).sum()
@@ -422,6 +425,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         mask = ~attractions["mode"].isin((4, 7))
         attractions = attractions.loc[mask]
 
+        # TODO Add flexibility for the output segmentation
         return nd.DVector(
             nd.get_segmentation_level("hb_p_m"),
             attractions,
