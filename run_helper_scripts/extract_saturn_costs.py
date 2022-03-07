@@ -36,7 +36,7 @@ from normits_demand.utils import file_ops
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(
-    nd_log.get_package_logger_name() + ".run_helper_scripts.skim_saturn_assignments"
+    nd_log.get_package_logger_name() + ".run_helper_scripts.extract_saturn_costs"
 )
 LOG_FILE = "Skim_SATURN.log"
 SKIM_TYPES = {"T": "Time", "D": "Distance", "M": "Toll", "P": "Penalty"}
