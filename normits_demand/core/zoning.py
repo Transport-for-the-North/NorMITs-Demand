@@ -15,11 +15,14 @@ systems
 from __future__ import annotations
 
 # Builtins
+import configparser
+import itertools
+import logging
 import os
 import warnings
 
-from typing import Tuple
-from typing import Optional
+from pathlib import Path
+from typing import Any, Dict, List, Tuple, Optional
 
 # Third Party
 import numpy as np
@@ -30,6 +33,9 @@ import normits_demand as nd
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import pandas_utils as pd_utils
+
+
+LOG = logging.getLogger(__name__)
 
 
 class ZoningSystem:
@@ -270,7 +276,27 @@ class ZoningSystem:
             self._translate_base_zone_col % other.name,
             trans_col
         ]
-        return pd_utils.reindex_cols(df, index_cols)
+        df = pd_utils.reindex_cols(df, index_cols)
+        self._check_translation_zones(other, df, *index_cols[:2])
+        return df
+
+    def _check_translation_zones(self,
+                                 other: ZoningSystem,
+                                 translation: pd.DataFrame,
+                                 self_col: str,
+                                 other_col: str,
+                                 ) -> None:
+        """Check if any zones are missing from the translation DataFrame."""
+        translation_name = f"{self.name} to {other.name}"
+        for zone_system, column in ((self, self_col), (other, other_col)):
+            missing = ~np.isin(zone_system.unique_zones, translation[column])
+            if np.sum(missing) > 0:
+                LOG.warning(
+                    "%s %s zones missing from translation %s",
+                    np.sum(missing),
+                    zone_system.name,
+                    translation_name,
+                )
 
     def copy(self):
         """Returns a copy of this class"""
@@ -344,6 +370,312 @@ class ZoningError(nd.NormitsDemandError):
     def __init__(self, message=None):
         self.message = message
         super().__init__(self.message)
+
+
+class BalancingZones:
+    """Stores the zoning systems for the attraction model balancing.
+
+    Allows a different zone system to be defined for each segment
+    and a default zone system. An instance of this class can be
+    iterated through to give the groups of segments defined for
+    each unique zone system.
+
+    Parameters
+    ----------
+    segmentation : SegmentationLevel
+        Segmentation level of the attractions being balanced.
+    default_zoning : ZoningSystem
+        Default zoning system to use for any segments which aren't
+        given in `segment_zoning`.
+    segment_zoning : Dict[str, ZoningSystem]
+        Dictionary containing the name of the segment (key) and
+        the zoning system for that segment (value).
+
+    Raises
+    ------
+    ValueError
+        If `segmentation` isn't an instance of `SegmentationLevel`.
+        If `default_zoning` isn't an instance of `ZoningSystem`.
+    """
+
+    OUTPUT_FILE_SECTIONS = {
+        "main": "BALANCING ZONES PARAMETERS",
+        "zone_groups": "BALANCING ZONES GROUPS",
+    }
+
+    def __init__(
+        self,
+        segmentation: nd.SegmentationLevel,
+        default_zoning: ZoningSystem,
+        segment_zoning: Dict[str, ZoningSystem]
+    ) -> None:
+        self._logger = nd.get_logger(f"{self.__module__}.{self.__class__.__name__}")
+        if not isinstance(segmentation, nd.SegmentationLevel):
+            raise ValueError(f"segmentation should be SegmentationLevel not {type(segmentation)}")
+        self._segmentation = segmentation
+        if not isinstance(default_zoning, ZoningSystem):
+            raise ValueError(f"default_zoning should be ZoningSystem not {type(default_zoning)}")
+        self._default_zoning = default_zoning
+        self._segment_zoning = self._check_segments(segment_zoning)
+        self._unique_zoning = None
+
+
+    def _check_segments(
+        self, segment_zoning: Dict[str, ZoningSystem]
+    ) -> Dict[str, ZoningSystem]:
+        """Check `segment_zoning` types and return dictionary of segments.
+
+        Only adds value to dictionary if it is a segment name from
+        `self._segmentation` and it has a `ZoningSystem` defined.
+
+        Parameters
+        ----------
+        segment_zoning : Dict[str, ZoningSystem]
+            Dictionary containing the name of the segment (key)
+            and the zoning system for that segment (value).
+
+        Returns
+        -------
+        Dict[str, ZoningSystem]
+            Dictionary containing segment names and the defined `ZoningSystem`,
+            does not include any segment names which aren't defined or which
+            aren't present in `self._segmentation.segment_names`.
+        """
+        segments = {}
+        for nm, zoning in segment_zoning.items():
+            if nm not in self._segmentation.segment_names:
+                self._logger.warning(
+                    "%r not a segment in %s segmentation, ignoring",
+                    nm,
+                    self._segmentation.name,
+                )
+                continue
+            if not isinstance(zoning, ZoningSystem):
+                self._logger.error(
+                    "%s segment zoning is %s not ZoningSystem, "
+                    "using default zoning instead",
+                    nm,
+                    type(zoning),
+                )
+                continue
+            segments[nm] = zoning
+        defaults = [s for s in self._segmentation.segment_names if s not in segments]
+        if defaults:
+            self._logger.info(
+                "default zoning (%s) used for %s segments",
+                self._default_zoning.name,
+                len(defaults),
+            )
+        return segments
+
+    @property
+    def segmentation(self) -> nd.SegmentationLevel:
+        """nd.SegmentationLevel: Segmentation level of balancing zones."""
+        return self._segmentation
+
+    @property
+    def unique_zoning(self) -> Dict[str, ZoningSystem]:
+        """Dict[str, ZoningSystem]: Dictionary containing a lookup of all
+            the unique `ZoningSystem` provided for the different segments.
+            The keys are the zone system name and values are the
+            `ZoningSystem` objects.
+        """
+        if self._unique_zoning is None:
+            self._unique_zoning = {}
+            for zoning in self._segment_zoning.values():
+                if zoning.name not in self._unique_zoning:
+                    self._unique_zoning[zoning.name] = zoning
+            self._unique_zoning[self._default_zoning.name] = self._default_zoning
+        return self._unique_zoning
+
+    def get_zoning(self, segment_name: str) -> ZoningSystem:
+        """Return `ZoningSystem` for given `segment_name`
+
+        Parameters
+        ----------
+        segment_name : str
+            Name of the segment to return, if a zone system isn't
+            defined for this name then the default is used.
+
+        Returns
+        -------
+        ZoningSystem
+            Zone system for given segment, or default.
+        """
+        if segment_name not in self._segment_zoning:
+            return self._default_zoning
+        return self._segment_zoning[segment_name]
+
+    def zoning_groups(self) -> Tuple[ZoningSystem, List[str]]:
+        """Iterates through the unique zoning systems and provides list of segments.
+
+        Yields
+        ------
+        ZoningSystem
+            Zone system for this group of segments.
+        List[str]
+            List of segment names which use this zone system.
+        """
+        zone_name = lambda s: self.get_zoning(s).name
+        zone_ls = sorted(self._segmentation.segment_names, key=zone_name)
+        for zone_name, segments in itertools.groupby(zone_ls, key=zone_name):
+            zoning = self.unique_zoning[zone_name]
+            yield zoning, list(segments)
+
+    def __iter__(self) -> Tuple[ZoningSystem, List[str]]:
+        """See `BalancingZones.zoning_groups`."""
+        return self.zoning_groups()
+
+    def save(self, path: Path) -> None:
+        """Saves balancing zones to output file.
+
+        Output file is saved in format defined by
+        `configparser`.
+
+        Parameters
+        ----------
+        path : Path
+            Path to output file to save.
+        """
+        config = configparser.ConfigParser()
+        config[self.OUTPUT_FILE_SECTIONS["main"]] = {
+            "segmentation": self.segmentation.name,
+            "default_zoning": self._default_zoning.name,
+        }
+        config[self.OUTPUT_FILE_SECTIONS["zone_groups"]] = {
+            zs.name: ", ".join(segs) for zs, segs in self.zoning_groups()
+        }
+        with open(path, "wt") as f:
+            config.write(f)
+        self._logger.info("Saved balancing zones to: %s", path)
+
+    @classmethod
+    def load(cls, path: Path) -> BalancingZones:
+        """Load balancing zones from config file.
+
+        Parameters
+        ----------
+        path : Path
+            Path to config file, should be the format defined
+            by `configparser` with section names defined in
+            `BalancingZones.OUTPUT_FILE_SECTIONS`.
+
+        Returns
+        -------
+        BalancingZones
+            Balancing zones with loaded parameters.
+        """
+        config = configparser.ConfigParser()
+        config.read(path)
+        params = {}
+        params["segmentation"] = nd.get_segmentation_level(
+            config.get(cls.OUTPUT_FILE_SECTIONS["main"], "segmentation")
+        )
+        default_zoning = config.get(cls.OUTPUT_FILE_SECTIONS["main"], "default_zoning")
+        params["default_zoning"] = nd.get_zoning_system(default_zoning)
+        params["segment_zoning"] = {}
+        for zone, segments in config[cls.OUTPUT_FILE_SECTIONS["zone_groups"]].items():
+            if zone == default_zoning:
+                # Don't bother to define segments which use default zoning
+                continue
+            params["segment_zoning"].update(
+                dict.fromkeys(
+                    (s.strip() for s in segments.split(",")),
+                    nd.get_zoning_system(zone),
+                )
+            )
+        balancing_zones = BalancingZones(**params)
+        balancing_zones._logger.info("Loaded balancing zones from: %s", path)
+        return balancing_zones
+
+    @staticmethod
+    def build_single_segment_group(
+        segmentation: nd.SegmentationLevel,
+        default_zoning: ZoningSystem,
+        segment_column: str,
+        segment_zones: Dict[Any, ZoningSystem]
+    ) -> BalancingZones:
+        """Build `BalancingZones` for a single segment group.
+
+        Defines different zone systems for all unique values
+        in a single segment column.
+
+        Parameters
+        ----------
+        segmentation : nd.SegmentationLevel
+            Segmentation to use for the balancing.
+        default_zoning : ZoningSystem
+            Default zone system for any undefined segments.
+        segment_column : str
+            Name of the segment column which will have
+            different zone system for each unique value.
+        segment_zones : Dict[Any, ZoningSystem]
+            The unique segment values for `segment_column` and
+            their corresponding zone system. Any values not
+            include will use `default_zoning`.
+
+        Returns
+        -------
+        BalancingZones
+            Instance of class with different zone systems for
+            each segment corresponding to the `segment_zones`
+            given.
+
+        Raises
+        ------
+        ValueError
+            - If `segmentation` is not an instance of `SegmentationLevel`.
+            - If `group_name` is not the name of a `segmentation` column.
+            - If any keys in `segment_zones` aren't found in the `group_name`
+              segmentation column.
+
+        Examples
+        --------
+        The example below will create an instance for `hb_p_m` attraction balancing with
+        the zone system `lad_2020` for all segments with mode 1 and `msoa` for all with mode 2.
+        >>> hb_p_m_balancing = AttractionBalancingZones.build_single_segment_group(
+        >>>     nd.get_segmentation_level('hb_p_m'),
+        >>>     nd.get_zoning_system("gor"),
+        >>>     "m",
+        >>>     {1: nd.get_zoning_system("lad_2020"), 2: nd.get_zoning_system("msoa")},
+        >>> )
+        """
+        if not isinstance(segmentation, nd.SegmentationLevel):
+            raise ValueError(
+                f"segmentation should be SegmentationLevel not {type(segmentation)}"
+            )
+        if segment_column not in segmentation.naming_order:
+            raise ValueError(
+                f"group_name should be one of {segmentation.naming_order}"
+                f" for {segmentation.name} not {segment_column}"
+            )
+        # Check all segment values refer to a possible value for that column
+        unique_params = set(segmentation.segments[segment_column])
+        missing = [i for i in segment_zones if i not in unique_params]
+        if missing:
+            raise ValueError(
+                "segment values not present in segment "
+                f"column {segment_column}: {missing}"
+            )
+        segment_zoning = {}
+        for segment_params in segmentation:
+            value = segment_params[segment_column]
+            if value in segment_zones:
+                name = segmentation.get_segment_name(segment_params)
+                segment_zoning[name] = segment_zones[value]
+        return BalancingZones(segmentation, default_zoning, segment_zoning)
+
+    def __eq__(self, other: BalancingZones) -> bool:
+        if not isinstance(other, self.__class__):
+            return False
+        if other.segmentation != self.segmentation:
+            return False
+        if other._default_zoning != self._default_zoning:
+            return False
+        for seg_name in self.segmentation.segment_names:
+            if other.get_zoning(seg_name) != self.get_zoning(seg_name):
+                return False
+        return True
 
 
 # ## FUNCTIONS ##

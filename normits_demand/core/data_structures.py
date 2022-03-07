@@ -34,6 +34,7 @@ from typing import Optional
 # Third Party
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 # Local Imports
 import normits_demand as nd
@@ -1889,11 +1890,18 @@ class DVector:
     def _balance_at_segments_internal(self,
                                       other: DVector,
                                       zone_mask: np.ndarray,
+                                      segment_names: List[str],
                                       split_weekday_weekend: bool = False,
                                       ):
         """Internal balancing function of self.balance_at_segments()"""
         # Init
-        dvec_data = dict.fromkeys(self.segmentation.segment_names)
+        dvec_data = dict.fromkeys(segment_names)
+        pbar = tqdm(
+            desc="Balancing segments",
+            total=len(segment_names),
+            dynamic_ncols=True,
+            leave=False,
+        )
 
         if split_weekday_weekend:
             # Get the grouped segment lists
@@ -1907,6 +1915,9 @@ class DVector:
                     self_data_lst = list()
                     other_data_lst = list()
                     for segment in segment_group:
+                        # Only perform balancing for given segments
+                        if segment not in segment_names:
+                            continue
                         # Get data
                         self_data = self._data[segment]
                         other_data = other._data[segment]
@@ -1928,11 +1939,15 @@ class DVector:
 
                     # Balance each segment
                     for segment, self_data in zip(segment_group, self_data_lst):
+                        # Only perform balancing for given segments
+                        if segment not in segment_names:
+                            continue
                         dvec_data[segment] = self_data * factor
+                        pbar.update()
 
         else:
-            # Control all segments as normal
-            for segment in self.segmentation.segment_names:
+            # Control given segments as normal
+            for segment in segment_names:
                 # Get data
                 self_data = self._data[segment]
                 other_data = other._data[segment]
@@ -1947,13 +1962,14 @@ class DVector:
 
                 # Balance
                 dvec_data[segment] = self_data * (np.sum(other_data) / np.sum(self_data))
-
+                pbar.update()
+        pbar.close()
         return dvec_data
 
     def balance_at_segments(self,
                             other: DVector,
                             split_weekday_weekend: bool = False,
-                            balance_zoning: nd.core.zoning.ZoningSystem = None,
+                            balance_zoning: nd.BalancingZones = None,
                             ) -> DVector:
         """
         Balance segment totals to other, ignoring zoning splits.
@@ -1975,9 +1991,9 @@ class DVector:
 
 
         balance_zoning:
-            The zoning system to balance at. If not given, the balance will
-            ignore all zones and just balance segments. If given, a
-            translation needs to exist between the given DVectors zoning
+            The zoning systems to balance at per segment. If not given, the
+            balance will ignore all zones and just balance segments. If given,
+            a translation needs to exist between the given DVectors zoning
             systems, and the zoning we are balancing at.
 
         Returns
@@ -2004,11 +2020,16 @@ class DVector:
 
         # Validate inputs
         if balance_zoning is not None:
-            if not isinstance(balance_zoning, nd.core.zoning.ZoningSystem):
+            if not isinstance(balance_zoning, nd.BalancingZones):
                 raise ValueError(
                     "balance_zoning is not the correct type. "
-                    "Expected ZoningSystem, got %s"
+                    "Expected BalancingZones, got %s"
                     % type(balance_zoning)
+                )
+            if balance_zoning.segmentation != self.segmentation:
+                raise ValueError(
+                    "balance_zoning should have segmentation %s, not %s"
+                    % (self.segmentation.name, balance_zoning.segmentation.name)
                 )
 
             if self.zoning_system != other.zoning_system:
@@ -2037,27 +2058,38 @@ class DVector:
             dvec_data = self._balance_at_segments_internal(
                 other=other,
                 zone_mask=np.ones(self.zoning_system.unique_zones.shape),
+                segment_names=self.segmentation.segment_names,
                 split_weekday_weekend=split_weekday_weekend,
             )
 
         else:
-            # Figure out the masks for zone groups
-            translation = self.zoning_system.translate(balance_zoning)
-
-            # Balance at each group
             data_list = list()
-            for zone_mask in translation.T:
-                # Skip this if no zones translate
-                if zone_mask.sum() == 0:
-                    continue
+            pbar = tqdm(
+                desc=f"Balancing segments",
+                total=len(self.segmentation.segment_names),
+                dynamic_ncols=True,
+            )
+            # Loop through balancing zone groups
+            # TODO Add multiprocessing
+            for zoning, segments in balance_zoning:
+                # Figure out the masks for zone groups
+                translation = self.zoning_system.translate(zoning)
 
-                adjusted = self._balance_at_segments_internal(
-                    other=other,
-                    zone_mask=zone_mask,
-                    split_weekday_weekend=split_weekday_weekend,
-                )
-                data_list.append(adjusted)
+                # Balance at each group
+                for zone_mask in translation.T:
+                    # Skip this if no zones translate
+                    if zone_mask.sum() == 0:
+                        continue
 
+                    adjusted = self._balance_at_segments_internal(
+                        other=other,
+                        zone_mask=zone_mask,
+                        segment_names=segments,
+                        split_weekday_weekend=split_weekday_weekend,
+                    )
+                    data_list.append(adjusted)
+                pbar.update(len(segments))
+            pbar.close()
             # Sum the zone groups together
             dvec_data = du.combine_dict_list(data_list, operator.add)
 

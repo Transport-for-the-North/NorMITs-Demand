@@ -115,7 +115,7 @@ class HBAttractionModel(HBAttractionModelPaths):
                  trip_weights_path: str,
                  mode_splits_path: str,
                  export_home: str,
-                 balance_zoning: nd.core.zoning.ZoningSystem = None,
+                 balance_zoning: nd.BalancingZones = None,
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
                  ) -> None:
@@ -150,10 +150,10 @@ class HBAttractionModel(HBAttractionModelPaths):
             Path to export attraction outputs.
 
         balance_zoning:
-            The zoning system to balance the attractions to the productions at.
-            A translation must exist between this and the running zoning
-            system, which is MSOA by default. If left as None, then no spatial
-            balance is done, only a segmental balance.
+            The zoning systems to balance the attractions to the productions at for
+            each segment of the attractions segmentation. A translation must exist
+            between this and the running zoning system, which is MSOA by default.
+            If left as None, then no spatial balance is done, only a segmental balance.
 
         constraint_paths:
             Dictionary of {year: constraint_path} pairs.
@@ -220,6 +220,11 @@ class HBAttractionModel(HBAttractionModelPaths):
             log_file_path=log_file_path,
             instantiate_msg="Initialised HB Attraction Model",
         )
+        # Save balancing zones to file
+        if self.balance_zoning is not None:
+            self.balance_zoning.save(
+                os.path.join(self.export_home, "HB_balancing_zones.ini")
+            )
 
     def run(self,
             export_pure_attractions: bool = False,
@@ -567,7 +572,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
                  hb_attraction_paths: Dict[int, nd.PathLike],
                  nhb_production_paths: Dict[int, nd.PathLike],
                  export_home: str,
-                 balance_zoning: nd.core.zoning.ZoningSystem = None,
+                 balance_zoning: nd.BalancingZones = None,
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT
                  ) -> None:
@@ -591,10 +596,10 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             Path to export NHB attraction outputs.
 
         balance_zoning:
-            The zoning system to balance the attractions to the productions at.
-            A translation must exist between this and the running zoning
-            system, which is MSOA by default. If left as None, then no spatial
-            balance is done, only a segmental balance.
+            The zoning systems to balance the attractions to the productions at for
+            each segment of the attractions segmentation. A translation must exist
+            between this and the running zoning system, which is MSOA by default.
+            If left as None, then no spatial balance is done, only a segmental balance.
 
         constraint_paths:
             Dictionary of {year: constraint_path} pairs.
@@ -658,6 +663,11 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             log_file_path=log_file_path,
             instantiate_msg="Initialised NHB Attraction Model",
         )
+        # Save balancing zones to file
+        if self.balance_zoning is not None:
+            self.balance_zoning.save(
+                os.path.join(self.export_home, "NHB_balancing_zones.ini")
+            )
 
     def run(self,
             export_nhb_pure_attractions: bool = False,
