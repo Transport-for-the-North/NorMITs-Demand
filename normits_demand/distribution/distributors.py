@@ -663,29 +663,38 @@ class GravityDistributor(AbstractDistributor):
         )
 
         # ## GENERATE REPORTS AND WRITE OUT ## #
+        # Multiprocessing setup
+        unchanging_kwargs = {
+            'segment_params': segment_params,
+            'running_segmentation': running_segmentation,
+            'init_cost_params': kwargs.get('init_params'),
+            'cost_matrix': np_cost,
+        }
+
         # Need to generate reports for each calibration area
+        kwarg_list = list()
         for calib_id, calib_name in calibration_naming.items():
+            calib_kwargs = unchanging_kwargs.copy()
+            calib_kwargs.update({
+                'optimal_cost_params': optimal_cost_params[calib_id],
+                'min_bounds': target_cost_distributions[calib_id]['min'].values,
+                'max_bounds': target_cost_distributions[calib_id]['max'].values,
+                'target_ave_cost': target_cost_distributions[calib_id]['ave_km'].values,
+                'target_band_share': target_cost_distributions[calib_id]['band_share'].values,
+                'initial_convergence': calib.initial_convergence[calib_id],
+                'achieved_convergence': calib.achieved_convergence[calib_id],
+                'achieved_band_share': calib.achieved_band_share[calib_id],
+                'achieved_distribution': calib.achieved_distribution[calib_id],
+                'subdir_name': calib_name,
+            })
+            kwarg_list.append(calib_kwargs)
 
-            # TODO(BT): Multiprocess
-            print(timing.get_time())
-            print("Doing logs for %s" % calib_name)
-
-            self.write_out_reports(
-                segment_params=segment_params,
-                running_segmentation=running_segmentation,
-                init_cost_params=kwargs.get('init_params'),
-                optimal_cost_params=optimal_cost_params[calib_id],
-                min_bounds=target_cost_distributions[calib_id]['min'].values,
-                max_bounds=target_cost_distributions[calib_id]['max'].values,
-                target_ave_cost=target_cost_distributions[calib_id]['ave_km'].values,
-                target_band_share=target_cost_distributions[calib_id]['band_share'].values,
-                initial_convergence=calib.initial_convergence[calib_id],
-                achieved_convergence=calib.achieved_convergence[calib_id],
-                achieved_band_share=calib.achieved_band_share[calib_id],
-                achieved_distribution=calib.achieved_distribution[calib_id],
-                cost_matrix=np_cost,
-                subdir_name=calib_name
-            )
+        # Generate the reports
+        multiprocessing.multiprocess(
+            fn=self.write_out_reports,
+            kwargs=kwarg_list,
+            process_count=self.process_count,
+        )
 
         # ## WRITE THE FULL DISTRIBUTED DEMAND ## #
         # Put the demand into a df
@@ -826,7 +835,6 @@ class GravityDistributor(AbstractDistributor):
             segment_params=segment_params,
         )
 
-        print("[%s] Generating cost dist report..." % timing.get_time())
         report = self.generate_cost_distribution_report(
             min_bounds=min_bounds,
             max_bounds=max_bounds,
@@ -837,7 +845,6 @@ class GravityDistributor(AbstractDistributor):
             achieved_distribution=achieved_distribution,
             cost_matrix=cost_matrix,
         )
-        print("[%s] Writing out..." % timing.get_time())
 
         # Write out report
         csv_fname = fname + '.csv'
@@ -847,7 +854,6 @@ class GravityDistributor(AbstractDistributor):
         # Convert to a graph and write out
         graph_fname = fname + '.png'
         graph_path = os.path.join(report_dir, graph_fname)
-        print("[%s] Generating cost dist graph..." % timing.get_time())
         self.generate_cost_distribution_graph(
             min_bounds=min_bounds,
             max_bounds=max_bounds,
@@ -859,7 +865,6 @@ class GravityDistributor(AbstractDistributor):
             graph_path=graph_path,
         )
 
-        print("[%s] Writing out demand..." % timing.get_time())
         # ## WRITE DISTRIBUTED DEMAND ## #
         # Put the demand into a df
         demand_df = pd.DataFrame(
