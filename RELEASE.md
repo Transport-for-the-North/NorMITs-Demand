@@ -41,6 +41,9 @@ Below, a brief summary of patches made since the previous version can be found.
 - Core
   - Updates to the DVector to allow almost any operation to be applied to a 
     DVector.
+  - Updated the compression used in the core files that define segmentations 
+    and zoning systems. This removes dependencies on specific version of 
+    pandas in order to read in files.
   - Added a division function to the Dvector.
   - Started moving towards using `.csv.bz2` compression by default.
     This removes dependencies on pandas versions and we can then depend on
