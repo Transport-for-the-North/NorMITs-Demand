@@ -23,6 +23,9 @@ Below, a brief summary of patches made since the previous version can be found.
 - Distribution Model
   - Cache was incorrectly not converting trip ends to average weekday.
     This has been corrected in this version of the model.
+- NoTEM
+  - Updated NoTEM to use `BalancingZones` to balance different attraction
+    segments across different zoning systems.
 - General
   - Low memory matrix translations now return all multiprocessed results in
     order, instead of potentially out of order.
@@ -42,3 +45,9 @@ Below, a brief summary of patches made since the previous version can be found.
   - Started moving towards using `.csv.bz2` compression by default.
     This removes dependencies on pandas versions and we can then depend on
     pandas `.to_csv()` and `.from_csv` to handle csv data I/O. 
+  - Added class (`BalancingZones`) for storing the balancing zone systems for
+    different segments
+    - Added functionality to build an instance of the class with separate
+      balancing zones for each mode
+    - Updated DVector to use the new balancing zone class and added progress bars 
+    - Saves the `BalancingZones` class to NoTEM output folder
