@@ -1748,7 +1748,7 @@ class JacobianFurnessThread(FurnessThreadBase):
 class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModelBase):
     """Calibrate Gravity Model params for a single TLD
 
-    Used internally in MultiTLDGravityModelCalibrator. Each TLD is split out
+    Used internally in MultiAreaGravityModelCalibrator. Each TLD is split out
     with its data, then handed over to one of these threads to find the
     optimal params alongside one another.
     """
@@ -1866,18 +1866,15 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
             verbose=self.verbose,
         )
         self.thread_complete_event.set()
-        print("%s complete!" % self.name)
 
         # Once we have the optimal cost params, keep running until all
         # threads are complete
         while not self.all_done_event.is_set():
-            print("%s complete + jac" % self.name)
             self._jacobian_function(
                 cost_args=self._order_cost_params(self.optimal_cost_params),
                 diff_step=self.diff_step,
             )
 
-            print("%s complete + grav" % self.name)
             self._gravity_function(
                 cost_args=self._order_cost_params(self.optimal_cost_params),
                 diff_step=self.diff_step,
@@ -1929,7 +1926,6 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
         # Add the data to the shared array - and mark queue
         self.gravity_putter_array.apply_local_data(seed_matrix, operator.add)
         self.gravity_putter_q.put(1)
-        print("%s sent data to furness: %s\n" % (self.name, seed_matrix.sum()))
 
         # ## RECEIVE ## #
         # Wait until we're told there is data to collect
@@ -1938,7 +1934,6 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
         # Extract our chunk of the matrix
         furnessed_mat = self.gravity_getter_array.get_local_copy()
         furnessed_mat *= furness_data.area_bool_mat
-        print("%s got data to furness: %s\n" % (self.name, furnessed_mat.sum()))
 
         return (
             furnessed_mat,
@@ -1984,12 +1979,11 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
         """
         # Make sure the receive queue is empty - might be data left
         # In there from other threads needing Jacobian
-        discarded_items = multithreading.empty_queue(
+        multithreading.empty_queue(
             q=self.jacobian_getter_q,
             wait_for_items=True,
             wait_time=0.3,
         )
-        print("%s discarded %s items\n" % (self.name, len(discarded_items)))
 
         # ## SEND ## #
         # Add this seeds to shared memory
@@ -1998,7 +1992,6 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
                 data=seed_matrix,
                 operation=operator.add,
             )
-            print("%s sent data to jacob: %s\n" % (self.name, seed_matrix.sum()))
 
         # Create a request and place on the queue
         request = PartialFurnessRequest(
@@ -2017,13 +2010,12 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
             furnessed_mat = getter_array.get_local_copy()
             furnessed_mat *= furness_data.area_bool_mat
             return_mats[cost_param] = furnessed_mat
-            print("%s got data to jacob: %s\n" % (self.name, furnessed_mat.sum()))
 
         return return_mats
 
 
-class MultiTLDGravityModelCalibrator:
-    # TODO(BT): Write MultiTLDGravityModelCalibrator docs
+class MultiAreaGravityModelCalibrator:
+    # TODO(BT): Write MultiAreaGravityModelCalibrator docs
 
     _ignore_calib_area_value = -1
 
@@ -2041,7 +2033,7 @@ class MultiTLDGravityModelCalibrator:
                  use_perceived_factors: bool = True,
                  running_log_path: nd.PathLike = None,
                  ):
-        # TODO(BT): Write MultiTLDGravityModelCalibrator __init__ docs
+        # TODO(BT): Write MultiAreaGravityModelCalibrator __init__ docs
         # Set up logging
         if running_log_path is not None:
             dir_name, _ = os.path.split(running_log_path)
@@ -2100,6 +2092,7 @@ class MultiTLDGravityModelCalibrator:
         self.optimal_cost_params = dict.fromkeys(self.calib_areas)
         self.achieved_convergence = dict.fromkeys(self.calib_areas)
         self.achieved_residuals = dict.fromkeys(self.calib_areas)
+        self.achieved_full_distribution = None
         self.achieved_distribution = dict.fromkeys(self.calib_areas)
 
         # Attributes to store from runs
@@ -2383,8 +2376,8 @@ class MultiTLDGravityModelCalibrator:
     def calibrate(
         self,
         init_params: Dict[str, Any],
-        estimate_init_params: bool,
-        calibrate_params: bool,
+        estimate_init_params: bool = False,
+        calibrate_params: bool = True,
         diff_step: float = 1e-8,
         ftol: float = 1e-4,
         xtol: float = 1e-4,
@@ -2545,7 +2538,6 @@ class MultiTLDGravityModelCalibrator:
             multithreading.wait_for_thread_dict_return_or_error(
                 return_threads=calibrator_threads,
                 error_threads_list=furness_setup.all_threads,
-                pbar_kwargs={'disable': False},
             )
 
         # Save the optimal cost params for each area
@@ -2555,13 +2547,10 @@ class MultiTLDGravityModelCalibrator:
             self.optimal_cost_params[area_id] = optimal_params
             self.perceived_factors[area_id] = perceived_factors
 
-        # Do a run with init_params, so we know where we started
-
         # Run an optimal version of the gravity - store convergences
         matrix, results = self._gravity_function(self.initial_cost_params)
         for area_id in self.initial_convergence:
             self.initial_convergence[area_id] = results[area_id].convergence
-            print("initial conv %s: %s" % (area_id, results[area_id].convergence))
 
         # Do a run with optimal_params, so we know what we achieved
         matrix, results = self._gravity_function(
@@ -2569,11 +2558,13 @@ class MultiTLDGravityModelCalibrator:
             perceived_factors=self.perceived_factors,
         )
 
+        # Assign all of the achieved results
+        self.achieved_full_distribution = matrix
         for area_id in self.calib_areas:
-            self.achieved_band_share[area_id] = results.band_share
-            self.achieved_convergence[area_id] = results.convergence
-            self.achieved_residuals[area_id] = results.residuals
-            self.achieved_distribution[area_id] = results.distribution
+            self.achieved_band_share[area_id] = results[area_id].band_share
+            self.achieved_convergence[area_id] = results[area_id].convergence
+            self.achieved_residuals[area_id] = results[area_id].residuals
+            self.achieved_distribution[area_id] = results[area_id].distribution
 
         return self.optimal_cost_params
 
