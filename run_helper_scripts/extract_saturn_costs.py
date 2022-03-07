@@ -559,9 +559,69 @@ def nhb_costs(
     pbar.close()
 
 
-def hb_costs(skims: dict[SkimDetails, Path], output_folder: Path) -> None:
-    # TODO Function to convert distance skim CSVs to HB costs for distribution model
-    raise NotImplementedError("Not yet implemented!")
+def hb_costs(
+    dist_skims: dict[SkimDetails, Path],
+    output_folder: Path,
+    model_name: str,
+    intrazonal_factor: float,
+) -> None:
+    """Calculate HB costs from assignment distance skims.
+
+    HB costs are calculated as a weighted average of all time periods.
+
+    Parameters
+    ----------
+    dist_skims : dict[SkimDetails, Path]
+        Paths to cost skim CSVs.
+    output_folder : Path
+        Folder to save the NHB cost files to.
+    model_name : str
+        Name of the model the cost data is from.
+    intrazonal_factor : float
+        Factor to use for infilling intrazonal costs, this is
+        multiplied by the zones nearest neighbour cost.
+    """
+    LOG.info("Creating HB distribution model costs in: %s", output_folder)
+    zoning = nd.get_zoning_system(model_name)
+    tp_weights = {1: 3, 2: 6, 3: 3}
+    LOG.info(
+        "HB costs calculated using weighted average"
+        " of each time period, weightings are %s",
+        tp_weights,
+    )
+
+    pbar = tqdm(
+        nd_consts.ALL_HB_P,
+        dynamic_ncols=True,
+        desc="Creating HB Costs",
+    )
+    # Cache to avoid reading the same file twice
+    # when multiple purposes use the same user class
+    cache = {}
+
+    for purp in pbar:
+        uc = _purp_to_user_class(purp)
+        out_file = output_folder / f"hb_{model_name}_cost_p{purp}_m3.pbz2"
+
+        if uc not in cache:
+            skim_paths = {}
+            try:
+                key = None
+                for tp in tp_weights:
+                    key = SkimDetails(tp, "D", uc)
+                    skim_paths[tp] = dist_skims[key]
+            except KeyError:
+                LOG.warning("cannot find skim for %s", key)
+                continue
+
+            costs = []
+            for tp, path in skim_paths.items():
+                df = _read_skim(path, zoning, intrazonal_factor)
+                costs.append(df * tp_weights[tp])
+            cache[uc] = sum(costs) / sum(tp_weights.values())
+
+        file_ops.write_df(cache[uc], out_file)
+        LOG.debug("Written: %s", out_file)
 
 
 def main(init_logger: bool = True) -> None:
@@ -590,7 +650,7 @@ def main(init_logger: bool = True) -> None:
     cost_output = params.output_folder / f"Distribution Model Costs/{params.model_name}"
     cost_output.mkdir(exist_ok=True)
     nhb_costs(dist_skims, cost_output, params.model_name, INTRAZONAL_COST_FACTOR)
-    hb_costs(dist_skims, cost_output)
+    hb_costs(dist_skims, cost_output, params.model_name, INTRAZONAL_COST_FACTOR)
 
 
 ##### MAIN #####
