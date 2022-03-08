@@ -17,6 +17,7 @@ import warnings
 from typing import Any
 from typing import Dict
 from typing import Union
+from typing import Tuple
 
 # Third Party
 import numpy as np
@@ -194,7 +195,7 @@ def overflow_msg(
     x1_name: str = None,
     x2_name: str = None,
     **kwargs,
-) -> pd.DataFrame:
+) -> Tuple[np.ndarray, pd.DataFrame]:
     """Handles overflow error messaging from a numpy divide
 
     Parameters
@@ -237,7 +238,7 @@ def overflow_msg(
     all_cols = idx_cols.copy()
     all_cols.update(other_cols)
 
-    return pd.DataFrame(all_cols)
+    return x3, pd.DataFrame(all_cols)
 
 
 def np_divide_with_overflow_error(*args, **kwargs) -> pd.DataFrame:
@@ -271,6 +272,28 @@ def np_divide_with_overflow_error(*args, **kwargs) -> pd.DataFrame:
     # Set up numpy overflow errors
     with np.errstate(over='raise'):
         return np.divide(*args, **kwargs)
+
+
+def clip_small_non_zero(a: np.ndarray, min_val: float) -> np.ndarray:
+    """Clips all small, non-zero values in a up to min_val
+
+    Any 0 values will be left as is, and only the values less than min_val,
+    and greater than 0 will be changed to min_val.
+
+    Parameters
+    ----------
+    a:
+        The array to clip
+
+    min_val:
+        The minimum non-zero value to allow in a.
+
+    Returns
+    -------
+    clipped_a:
+        a, with all non-zero values clipped to min_val.
+    """
+    return np.where((min_val > a) & (a > 0), min_val, a)
 
 
 def get_pa_diff(new_p,

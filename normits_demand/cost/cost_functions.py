@@ -70,6 +70,7 @@ class CostFunction:
         self.param_max = {k: max(v) for k, v in params.items()}
 
         self.kw_order = list(inspect.signature(self.function).parameters.keys())[1:]
+        self.kw_order.remove('min_return_val')
 
         # Validate the params and cost function
         try:
@@ -166,7 +167,7 @@ class CostFunction:
 
 
 def tanner(
-    base_cost: np.ndarray, alpha: float, beta: float, min_return_val: float = 1e-50,
+    base_cost: np.ndarray, alpha: float, beta: float, min_return_val: float = 1e-150,
 ) -> np.ndarray:
     r"""Implementation of the tanner cost function.
 
@@ -211,11 +212,11 @@ def tanner(
     exp = np.exp(beta * base_cost)
 
     # Clip the min values to the min_val
-    return np.maximum(power * exp, min_return_val)
+    return math_utils.clip_small_non_zero(power * exp, min_return_val)
 
 
 def log_normal(
-    base_cost: np.ndarray, sigma: float, mu: float, min_return_val: float = 1e-50,
+    base_cost: np.ndarray, sigma: float, mu: float, min_return_val: float = 1e-150,
 ) -> np.ndarray:
     r"""Implementation of the log normal cost function.
 
