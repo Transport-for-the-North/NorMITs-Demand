@@ -14,15 +14,19 @@ Holds the SegmentationLevel Class which stores all information on segmentations
 from __future__ import annotations
 
 # Builtins
+import io
 import os
 import math
 import itertools
 import collections
 
+from os import PathLike
+
 from typing import Any
 from typing import List
 from typing import Dict
 from typing import Tuple
+from typing import Union
 from typing import Optional
 
 # Third Party
@@ -36,6 +40,7 @@ from normits_demand import constants as consts
 from normits_demand.concurrency import multiprocessing
 
 from normits_demand.utils import file_ops
+from normits_demand.utils import compress
 from normits_demand.utils import general as du
 from normits_demand.utils import math_utils
 from normits_demand.utils import pandas_utils as pd_utils
@@ -1936,6 +1941,61 @@ class SegmentationLevel:
             final_name += '.csv.bz2'
 
         return final_name
+
+    def save(self, path: PathLike = None) -> Union[None, Dict[str, Any]]:
+        """Saves SegmentationLevel to file
+
+        Aims to remove dependencies to pandas versioning when reading/writing.
+        Use `load()` to load in the written out file.
+
+        Parameters
+        ----------
+        path:
+            Path to output file to save.
+
+        Returns
+        -------
+        none_or_instance_dict:
+            If path is set, None is returned.
+            If path is not set, the instance dict that would otherwise
+            be sent to disk is returned.
+        """
+        # Create a dictionary of objects needed to recreate this instance
+        instance_dict = {
+            "name": self._name,
+            "naming_order": self._naming_order,
+            "segment_types": self._segment_types,
+
+            # Write as a csv to avoid pandas dependencies
+            "valid_segments": self._segments.to_csv(index=False),
+        }
+
+        # Write out to disk and compress
+        compress.write_out(instance_dict, path)
+
+    @staticmethod
+    def load(path_or_instance_dict: PathLike):
+        """Loads SegmentationLevel from file
+
+        Aims to remove dependencies to pandas versioning when reading/writing.
+        Use `save()` to save the data in the correct format.
+
+        Parameters
+        ----------
+        path_or_instance_dict:
+            Path to read the data in from.
+        """
+        if isinstance(path_or_instance_dict, dict):
+            instance_dict = path_or_instance_dict
+        else:
+            instance_dict = compress.read_in(path_or_instance_dict)
+
+        # Convert the valid_segments back into a pd.DataFrame
+        df = pd.read_csv(io.StringIO(instance_dict["valid_segments"]))
+        instance_dict["valid_segments"] = df
+
+        # Instantiate a new object
+        return SegmentationLevel(**instance_dict)
 
 
 class SegmentationError(nd.NormitsDemandError):
