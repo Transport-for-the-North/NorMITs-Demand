@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-    Script to skim all SATURN assignments in a given folder
-    to extract cost matrices.
+    Script to skim all SATURN assignments in a given folder to extract
+    cost matrices and then convert to the HB and NHB purpose costs for
+    the distribution model.
 """
 
 ##### IMPORTS #####
@@ -478,6 +479,8 @@ def _read_skim(
         path, index_col=[0, 1], header=None, names=["origin", "destination", "cost"]
     )
     df = df.reindex(index=pd.MultiIndex.from_product((zones, zones)))
+    # Convert to kms
+    df.loc[:, "cost"] = df["cost"] / 1000
 
     # Calculate nearest neighbour cost
     row_min = df.groupby(level=0).min()
