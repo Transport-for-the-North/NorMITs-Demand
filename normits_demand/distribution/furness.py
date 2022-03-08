@@ -331,21 +331,12 @@ def doubly_constrained_furness(seed_vals: np.array,
             # ## COL CONSTRAIN ## #
             # Calculate difference factor
             col_ach = np.sum(furnessed_mat, axis=0)
-            kwargs = {
-                'where': col_ach != 0,
-                'out': np.ones_like(col_targets, dtype=float)
-            }
-            try:
-                diff_factor = np.divide(col_targets, col_ach, **kwargs)
-            except FloatingPointError as err:
-                print(err)
-                print(math_utils.overflow_msg(
-                    x1=col_targets,
-                    x2=col_ach,
-                    x1_name='col_targets',
-                    x2_name='col_achieved',
-                    **kwargs
-                ))
+            diff_factor = np.divide(
+                col_targets,
+                col_ach,
+                where=col_ach != 0,
+                out=np.ones_like(col_targets, dtype=float),
+            )
 
             # adjust cols
             furnessed_mat = np.multiply(
@@ -358,21 +349,12 @@ def doubly_constrained_furness(seed_vals: np.array,
             # ## ROW CONSTRAIN ## #
             # Calculate difference factor
             row_ach = np.sum(furnessed_mat, axis=1)
-            kwargs = {
-                'where': row_ach != 0,
-                'out': np.ones_like(row_targets, dtype=float)
-            }
-            try:
-                diff_factor = np.divide(row_targets, row_ach, **kwargs)
-            except FloatingPointError as err:
-                print(err)
-                print(math_utils.overflow_msg(
-                    x1=col_targets,
-                    x2=col_ach,
-                    x1_name='row_targets',
-                    x2_name='row_achieved',
-                    **kwargs,
-                ))
+            diff_factor = np.divide(
+                row_targets,
+                row_ach,
+                where=row_ach != 0,
+                out=np.ones_like(row_targets, dtype=float),
+            )
 
             # adjust rows
             furnessed_mat = np.multiply(
