@@ -648,7 +648,7 @@ def main(init_logger: bool = True) -> None:
 
     # Create distribution model costs
     cost_output = params.output_folder / f"Distribution Model Costs/{params.model_name}"
-    cost_output.mkdir(exist_ok=True)
+    cost_output.mkdir(exist_ok=True, parents=True)
     nhb_costs(dist_skims, cost_output, params.model_name, INTRAZONAL_COST_FACTOR)
     hb_costs(dist_skims, cost_output, params.model_name, INTRAZONAL_COST_FACTOR)
 
