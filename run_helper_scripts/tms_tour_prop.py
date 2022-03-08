@@ -31,12 +31,12 @@ from normits_demand.utils import general as du
 MODES = [6]
 YEARS = [2018]
 TPS = [1, 2, 3, 4]
-ZONING_SYSTEM = "norms"
-NOTEM_ITER = '9.4'
-out_folder = r"E:\test\tour props"
+ZONING_SYSTEM = "miham"
+NOTEM_ITER = '9.3'
+out_folder = r"C:\WSP_Projects\MidMITs\01 Pre-processing\Tour Proportions"
 
 phi_import_folder = r"I:\NorMITs Demand\import\phi_factors"
-notem_import_folder = r"I:\NorMITs Demand\NoTEM\iter%s\SC01_JAM\hb_productions" % NOTEM_ITER
+notem_import_folder = r"T:\MidMITs Demand\MiTEM\iter%s\SC01_JAM\hb_productions" % NOTEM_ITER
 phi_fname = "mode_%d_fhp_tp_pa_to_od.csv"
 prod_vec_fname = "hb_msoa_notem_segmented_%d_dvec.pkl"
 zone_translate_dir = r"I:\NorMITs Demand\import\zone_translation\one_to_one"
@@ -121,16 +121,22 @@ def tms_tour_prop():
             purposes = full_df['p'].unique()
 
             # Load the zone aggregation dictionaries for this zoning
-            model2lad = du.get_zone_translation(
-                import_dir=zone_translate_dir,
-                from_zone=ZONING_SYSTEM,
-                to_zone='lad'
-            )
-            model2tfn = du.get_zone_translation(
-                import_dir=zone_translate_dir,
-                from_zone=ZONING_SYSTEM,
-                to_zone='tfn_sectors'
-            )
+            try:
+                model2lad = du.get_zone_translation(
+                    import_dir=zone_translate_dir,
+                    from_zone=ZONING_SYSTEM,
+                    to_zone='lad'
+                )
+            except FileNotFoundError:
+                model2lad = None
+            try:
+                model2tfn = du.get_zone_translation(
+                    import_dir=zone_translate_dir,
+                    from_zone=ZONING_SYSTEM,
+                    to_zone='tfn_sectors'
+                )
+            except FileNotFoundError:
+                model2tfn = None
 
             # Define the default value for the nested defaultdict
             def empty_tour_prop():
@@ -145,8 +151,14 @@ def tms_tour_prop():
 
                 # Loop through zones
                 model_tour_props = dict.fromkeys(zones)
-                lad_tour_props = collections.defaultdict(empty_tour_prop)
-                tfn_tour_props = collections.defaultdict(empty_tour_prop)
+                if model2lad:
+                    lad_tour_props = collections.defaultdict(empty_tour_prop)
+                else:
+                    lad_tour_props = None
+                if model2tfn:
+                    tfn_tour_props = collections.defaultdict(empty_tour_prop)
+                else:
+                    tfn_tour_props = None
                 for orig in zones:
                     # Extract values from the DF
                     vals = p_df[p_df[zoning.col_name] == orig].copy()
@@ -161,27 +173,33 @@ def tms_tour_prop():
                     model_tour_props[orig] = dest_dict
 
                     # Aggregate the tour props
-                    lad_orig = model2lad.get(orig, -1)
-                    lad_tour_props[lad_orig] += props
+                    if model2lad:
+                        lad_orig = model2lad.get(orig, -1)
+                        lad_tour_props[lad_orig] += props
 
-                    tfn_orig = model2tfn.get(orig, -1)
-                    tfn_tour_props[tfn_orig] += props
+                    if model2tfn:
+                        tfn_orig = model2tfn.get(orig, -1)
+                        tfn_tour_props[tfn_orig] += props
 
                 # Expand aggregated dicts  - these will all be the same
                 # due to the phi factors not being zonally split
-                dest_dict = dict.fromkeys(lad_tour_props.keys())
-                for orig, props in lad_tour_props.items():
-                    dest_dict = {k: props.copy() for k in dest_dict.keys()}
-                    lad_tour_props[orig] = dest_dict
+                if lad_tour_props:
+                    dest_dict = dict.fromkeys(lad_tour_props.keys())
+                    for orig, props in lad_tour_props.items():
+                        dest_dict = {k: props.copy() for k in dest_dict.keys()}
+                        lad_tour_props[orig] = dest_dict
 
-                dest_dict = dict.fromkeys(tfn_tour_props.keys())
-                for orig, props in tfn_tour_props.items():
-                    dest_dict = {k: props.copy() for k in dest_dict.keys()}
-                    tfn_tour_props[orig] = dest_dict
+                if tfn_tour_props:
+                    dest_dict = dict.fromkeys(tfn_tour_props.keys())
+                    for orig, props in tfn_tour_props.items():
+                        dest_dict = {k: props.copy() for k in dest_dict.keys()}
+                        tfn_tour_props[orig] = dest_dict
 
                 # Normalise all of the tour proportion matrices to 1
                 print("Normalising to 1...")
                 for agg_tour_props in [model_tour_props, lad_tour_props, tfn_tour_props]:
+                    if agg_tour_props is None:
+                        continue
                     for key1, inner_dict in agg_tour_props.items():
                         for key2, mat in inner_dict.items():
                             # Avoid warning if 0
@@ -190,21 +208,25 @@ def tms_tour_prop():
                             agg_tour_props[key1][key2] = mat / mat.sum()
 
                 # Write files out
-                lad_tour_props = du.defaultdict_to_regular(lad_tour_props)
-                tfn_tour_props = du.defaultdict_to_regular(tfn_tour_props)
+                if lad_tour_props:
+                    lad_tour_props = du.defaultdict_to_regular(lad_tour_props)
+                if tfn_tour_props:
+                    tfn_tour_props = du.defaultdict_to_regular(tfn_tour_props)
 
                 print("Writing files out...")
                 out_file = MODEL_FNAME % (year, purpose, mode)
                 out_path = os.path.join(out_folder, out_file)
                 nd.write_pickle(model_tour_props, out_path)
 
-                out_file = LAD_FNAME % (year, purpose, mode)
-                out_path = os.path.join(out_folder, out_file)
-                nd.write_pickle(lad_tour_props, out_path)
+                if lad_tour_props:
+                    out_file = LAD_FNAME % (year, purpose, mode)
+                    out_path = os.path.join(out_folder, out_file)
+                    nd.write_pickle(lad_tour_props, out_path)
 
-                out_file = TFN_FNAME % (year, purpose, mode)
-                out_path = os.path.join(out_folder, out_file)
-                nd.write_pickle(tfn_tour_props, out_path)
+                if tfn_tour_props:
+                    out_file = TFN_FNAME % (year, purpose, mode)
+                    out_path = os.path.join(out_folder, out_file)
+                    nd.write_pickle(tfn_tour_props, out_path)
 
 
 if __name__ == '__main__':
