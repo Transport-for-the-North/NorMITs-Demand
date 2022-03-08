@@ -305,8 +305,8 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             fn=self.distribute_segment,
             kwargs=kwarg_list,
             pbar_kwargs=pbar_kwargs,
-            process_count=0,
-            # process_count=self.process_count,
+            # process_count=0,
+            process_count=self.process_count,
         )
 
     def generate_cost_distribution_report(
@@ -549,179 +549,7 @@ class GravityDistributor(AbstractDistributor):
             instantiate_msg="Initialised new Gravity Model Logger",
         )
 
-    def _single_area_distribution(
-        self,
-        segment_params: Dict[str, Any],
-        np_productions: np.ndarray,
-        np_attractions: np.ndarray,
-        np_cost: np.ndarray,
-        target_cost_distribution: pd.DataFrame,
-        running_segmentation: nd.SegmentationLevel,
-        **kwargs,
-    ):
-        # ## SET UP SEGMENT LOG ## #
-        # Logging set up
-        log_fname = running_segmentation.generate_file_name(
-            trip_origin=self.trip_origin,
-            file_desc='gravity_log',
-            segment_params=segment_params,
-            csv=True,
-        )
-        log_path = os.path.join(self.report_paths.model_log_dir, log_fname)
-
-        # Replace the log if it already exists
-        if os.path.isfile(log_path):
-            os.remove(log_path)
-
-        # ## CALIBRATE THE GRAVITY MODEL ## #
-        calib = gravity_model.GravityModelCalibrator(
-            row_targets=np_productions,
-            col_targets=np_attractions,
-            cost_matrix=np_cost,
-            target_cost_distribution=target_cost_distribution,
-            running_log_path=log_path,
-            cost_function=kwargs.get('cost_function'),
-            target_convergence=kwargs.get('target_convergence'),
-            furness_max_iters=kwargs.get('furness_max_iters'),
-            furness_tol=kwargs.get('furness_tol'),
-            use_perceived_factors=kwargs.get('use_perceived_factors'),
-        )
-
-        optimal_cost_params = calib.calibrate(
-            init_params=kwargs.get('init_params'),
-            grav_max_iters=kwargs.get('grav_max_iters'),
-            calibrate_params=kwargs.get('calibrate_params', True),
-            ftol=kwargs.get('ftol', 1e-5),
-            verbose=kwargs.get('verbose', 2),
-        )
-
-        # ## GENERATE REPORTS AND WRITE OUT ## #
-        self.write_out_reports(
-            segment_params=segment_params,
-            running_segmentation=running_segmentation,
-            init_cost_params=kwargs.get('init_params'),
-            optimal_cost_params=optimal_cost_params,
-            min_bounds=target_cost_distribution['min'].values,
-            max_bounds=target_cost_distribution['max'].values,
-            target_ave_cost=target_cost_distribution['ave_km'].values,
-            target_band_share=target_cost_distribution['band_share'].values,
-            initial_convergence=calib.initial_convergence,
-            achieved_convergence=calib.achieved_convergence,
-            achieved_band_share=calib.achieved_band_share,
-            achieved_distribution=calib.achieved_distribution,
-            cost_matrix=np_cost,
-        )
-
-    def _multi_area_distribution(
-            self,
-            segment_params: Dict[str, Any],
-            np_productions: np.ndarray,
-            np_attractions: np.ndarray,
-            np_cost: np.ndarray,
-            np_calibration_matrix: np.ndarray,
-            calibration_naming: Dict[Any, str],
-            target_cost_distributions: Dict[Any, pd.DataFrame],
-            running_segmentation: nd.SegmentationLevel,
-            **kwargs,
-    ):
-        # ## SET UP SEGMENT LOG ## #
-        # Logging set up
-        log_fname = running_segmentation.generate_file_name(
-            trip_origin=self.trip_origin,
-            file_desc='gravity_log',
-            segment_params=segment_params,
-            csv=True,
-        )
-        log_path = os.path.join(self.report_paths.model_log_dir, log_fname)
-
-        # Replace the log if it already exists
-        if os.path.isfile(log_path):
-            os.remove(log_path)
-
-        # ## CALIBRATE THE GRAVITY MODEL ## #
-        calib = gravity_model.MultiAreaGravityModelCalibrator(
-            row_targets=np_productions,
-            col_targets=np_attractions,
-            calibration_matrix=np_calibration_matrix,
-            cost_matrix=np_cost,
-            target_cost_distributions=target_cost_distributions,
-            calibration_naming=calibration_naming,
-            running_log_path=log_path,
-            cost_function=kwargs.get('cost_function'),
-            target_convergence=kwargs.get('target_convergence'),
-            furness_max_iters=kwargs.get('furness_max_iters'),
-            furness_tol=kwargs.get('furness_tol'),
-            use_perceived_factors=kwargs.get('use_perceived_factors'),
-        )
-
-        optimal_cost_params = calib.calibrate(
-            init_params=kwargs.get('init_params'),
-            grav_max_iters=kwargs.get('grav_max_iters'),
-            calibrate_params=kwargs.get('calibrate_params', True),
-            ftol=kwargs.get('ftol', 1e-5),
-            verbose=kwargs.get('verbose', 2),
-        )
-
-        # ## GENERATE REPORTS AND WRITE OUT ## #
-        # Multiprocessing setup
-        unchanging_kwargs = {
-            'segment_params': segment_params,
-            'running_segmentation': running_segmentation,
-            'init_cost_params': kwargs.get('init_params'),
-            'cost_matrix': np_cost,
-        }
-
-        # Need to generate reports for each calibration area
-        kwarg_list = list()
-        for calib_id, calib_name in calibration_naming.items():
-            calib_kwargs = unchanging_kwargs.copy()
-            calib_kwargs.update({
-                'optimal_cost_params': optimal_cost_params[calib_id],
-                'min_bounds': target_cost_distributions[calib_id]['min'].values,
-                'max_bounds': target_cost_distributions[calib_id]['max'].values,
-                'target_ave_cost': target_cost_distributions[calib_id]['ave_km'].values,
-                'target_band_share': target_cost_distributions[calib_id]['band_share'].values,
-                'initial_convergence': calib.initial_convergence[calib_id],
-                'achieved_convergence': calib.achieved_convergence[calib_id],
-                'achieved_band_share': calib.achieved_band_share[calib_id],
-                'achieved_distribution': calib.achieved_distribution[calib_id],
-                'subdir_name': calib_name,
-            })
-            kwarg_list.append(calib_kwargs)
-
-        # Generate the reports
-        multiprocessing.multiprocess(
-            fn=self.write_out_reports,
-            kwargs=kwarg_list,
-            process_count=self.process_count,
-        )
-
-        # ## WRITE THE FULL DISTRIBUTED DEMAND ## #
-        # Put the demand into a df
-        demand_df = pd.DataFrame(
-            index=self.running_zones,
-            columns=self.running_zones,
-            data=calib.achieved_full_distribution.astype(np.float32),
-        )
-
-        demand_df = demand_df.reindex(
-            index=self.zoning_system.unique_zones,
-            columns=self.zoning_system.unique_zones,
-            fill_value=0,
-        )
-
-        # Generate path and write out
-        fname = running_segmentation.generate_file_name(
-            trip_origin=self.trip_origin,
-            year=str(self.year),
-            file_desc='synthetic_pa',
-            segment_params=segment_params,
-            compressed=True,
-        )
-        path = os.path.join(self.export_paths.matrix_dir, fname)
-        nd.write_df(demand_df, path)
-
-    def write_out_reports(
+    def _write_out_reports(
         self,
         segment_params: Dict[str, Any],
         running_segmentation: nd.SegmentationLevel,
@@ -907,6 +735,178 @@ class GravityDistributor(AbstractDistributor):
             index=False,
         )
 
+    def _single_area_distribution(
+        self,
+        segment_params: Dict[str, Any],
+        np_productions: np.ndarray,
+        np_attractions: np.ndarray,
+        np_cost: np.ndarray,
+        target_cost_distribution: pd.DataFrame,
+        running_segmentation: nd.SegmentationLevel,
+        **kwargs,
+    ):
+        # ## SET UP SEGMENT LOG ## #
+        # Logging set up
+        log_fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            file_desc='gravity_log',
+            segment_params=segment_params,
+            csv=True,
+        )
+        log_path = os.path.join(self.report_paths.model_log_dir, log_fname)
+
+        # Replace the log if it already exists
+        if os.path.isfile(log_path):
+            os.remove(log_path)
+
+        # ## CALIBRATE THE GRAVITY MODEL ## #
+        calib = gravity_model.GravityModelCalibrator(
+            row_targets=np_productions,
+            col_targets=np_attractions,
+            cost_matrix=np_cost,
+            target_cost_distribution=target_cost_distribution,
+            running_log_path=log_path,
+            cost_function=kwargs.get('cost_function'),
+            target_convergence=kwargs.get('target_convergence'),
+            furness_max_iters=kwargs.get('furness_max_iters'),
+            furness_tol=kwargs.get('furness_tol'),
+            use_perceived_factors=kwargs.get('use_perceived_factors'),
+        )
+
+        optimal_cost_params = calib.calibrate(
+            init_params=kwargs.get('init_params'),
+            grav_max_iters=kwargs.get('grav_max_iters'),
+            calibrate_params=kwargs.get('calibrate_params', True),
+            ftol=kwargs.get('ftol', 1e-5),
+            verbose=kwargs.get('verbose', 2),
+        )
+
+        # ## GENERATE REPORTS AND WRITE OUT ## #
+        self._write_out_reports(
+            segment_params=segment_params,
+            running_segmentation=running_segmentation,
+            init_cost_params=kwargs.get('init_params'),
+            optimal_cost_params=optimal_cost_params,
+            min_bounds=target_cost_distribution['min'].values,
+            max_bounds=target_cost_distribution['max'].values,
+            target_ave_cost=target_cost_distribution['ave_km'].values,
+            target_band_share=target_cost_distribution['band_share'].values,
+            initial_convergence=calib.initial_convergence,
+            achieved_convergence=calib.achieved_convergence,
+            achieved_band_share=calib.achieved_band_share,
+            achieved_distribution=calib.achieved_distribution,
+            cost_matrix=np_cost,
+        )
+
+    def _multi_area_distribution(
+            self,
+            segment_params: Dict[str, Any],
+            np_productions: np.ndarray,
+            np_attractions: np.ndarray,
+            np_cost: np.ndarray,
+            np_calibration_matrix: np.ndarray,
+            calibration_naming: Dict[Any, str],
+            target_cost_distributions: Dict[Any, pd.DataFrame],
+            running_segmentation: nd.SegmentationLevel,
+            **kwargs,
+    ):
+        # ## SET UP SEGMENT LOG ## #
+        # Logging set up
+        log_fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            file_desc='gravity_log',
+            segment_params=segment_params,
+            csv=True,
+        )
+        log_path = os.path.join(self.report_paths.model_log_dir, log_fname)
+
+        # Replace the log if it already exists
+        if os.path.isfile(log_path):
+            os.remove(log_path)
+
+        # ## CALIBRATE THE GRAVITY MODEL ## #
+        calib = gravity_model.MultiAreaGravityModelCalibrator(
+            row_targets=np_productions,
+            col_targets=np_attractions,
+            calibration_matrix=np_calibration_matrix,
+            cost_matrix=np_cost,
+            target_cost_distributions=target_cost_distributions,
+            calibration_naming=calibration_naming,
+            running_log_path=log_path,
+            cost_function=kwargs.get('cost_function'),
+            target_convergence=kwargs.get('target_convergence'),
+            furness_max_iters=kwargs.get('furness_max_iters'),
+            furness_tol=kwargs.get('furness_tol'),
+            use_perceived_factors=kwargs.get('use_perceived_factors'),
+        )
+
+        optimal_cost_params = calib.calibrate(
+            init_params=kwargs.get('init_params'),
+            grav_max_iters=kwargs.get('grav_max_iters'),
+            calibrate_params=kwargs.get('calibrate_params', True),
+            ftol=kwargs.get('ftol', 1e-5),
+            verbose=kwargs.get('verbose', 2),
+        )
+
+        # ## GENERATE REPORTS AND WRITE OUT ## #
+        # Multiprocessing setup
+        unchanging_kwargs = {
+            'segment_params': segment_params,
+            'running_segmentation': running_segmentation,
+            'init_cost_params': kwargs.get('init_params'),
+            'cost_matrix': np_cost,
+        }
+
+        # Need to generate reports for each calibration area
+        kwarg_list = list()
+        for calib_id, calib_name in calibration_naming.items():
+            calib_kwargs = unchanging_kwargs.copy()
+            calib_kwargs.update({
+                'optimal_cost_params': optimal_cost_params[calib_id],
+                'min_bounds': target_cost_distributions[calib_id]['min'].values,
+                'max_bounds': target_cost_distributions[calib_id]['max'].values,
+                'target_ave_cost': target_cost_distributions[calib_id]['ave_km'].values,
+                'target_band_share': target_cost_distributions[calib_id]['band_share'].values,
+                'initial_convergence': calib.initial_convergence[calib_id],
+                'achieved_convergence': calib.achieved_convergence[calib_id],
+                'achieved_band_share': calib.achieved_band_share[calib_id],
+                'achieved_distribution': calib.achieved_distribution[calib_id],
+                'subdir_name': calib_name,
+            })
+            kwarg_list.append(calib_kwargs)
+
+        # Generate the reports
+        multiprocessing.multiprocess(
+            fn=self._write_out_reports,
+            kwargs=kwarg_list,
+            process_count=self.process_count,
+        )
+
+        # ## WRITE THE FULL DISTRIBUTED DEMAND ## #
+        # Put the demand into a df
+        demand_df = pd.DataFrame(
+            index=self.running_zones,
+            columns=self.running_zones,
+            data=calib.achieved_full_distribution.astype(np.float32),
+        )
+
+        demand_df = demand_df.reindex(
+            index=self.zoning_system.unique_zones,
+            columns=self.zoning_system.unique_zones,
+            fill_value=0,
+        )
+
+        # Generate path and write out
+        fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            file_desc='synthetic_pa',
+            segment_params=segment_params,
+            compressed=True,
+        )
+        path = os.path.join(self.export_paths.matrix_dir, fname)
+        nd.write_df(demand_df, path)
+
     def distribute_segment(
         self,
         segment_params: Dict[str, Any],
@@ -970,9 +970,6 @@ class GravityDistributor(AbstractDistributor):
                 running_segmentation=running_segmentation,
                 **kwargs,
             )
-
-        print("FONENEONE!")
-        exit()
 
     def distribute(self, *args, **kwargs):
         # Make new log if one already exists
