@@ -16,7 +16,6 @@ from __future__ import annotations
 
 # Builtins
 import os
-import io
 import logging
 import warnings
 import itertools
@@ -400,7 +399,7 @@ class ZoningSystem:
         return instance_dict
 
     @staticmethod
-    def load(path_or_instance_dict: PathLike) -> ZoningSystem:
+    def load(path_or_instance_dict: Union[PathLike, Dict[str, Any]]) -> ZoningSystem:
         """Creates a ZoningSystem instance from path_or_instance_dict
 
         If path_or_instance_dict is a path, the file is loaded in and

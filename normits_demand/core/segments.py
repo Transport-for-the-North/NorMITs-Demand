@@ -1980,9 +1980,13 @@ class SegmentationLevel:
         return instance_dict
 
     @staticmethod
-    def load(path_or_instance_dict: PathLike):
-        """Loads SegmentationLevel from file
+    def load(path_or_instance_dict: Union[PathLike, Dict[str, Any]]) -> SegmentationLevel:
+        """Creates a ZoningSystem instance from path_or_instance_dict
 
+        If path_or_instance_dict is a path, the file is loaded in and
+        the instance_dict extracted.
+        The instance_dict is then used to recreate the saved instance, using
+        the class constructor.
         Aims to remove dependencies to pandas versioning when reading/writing.
         Use `save()` to save the data in the correct format.
 
