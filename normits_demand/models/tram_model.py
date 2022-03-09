@@ -644,7 +644,7 @@ class TramModel(TramExportPaths):
 
             # ## CONVERT BACK TO ORIGINAL SEGMENTATION ## #
             # Original DVec at full segmentation
-            orig_dvec = nd.read_pickle(vector_import_paths[year])
+            orig_dvec = nd.DVector.load(vector_import_paths[year])
 
             # Need to add in m7 - get its segments from rail
             orig_dvec = orig_dvec.duplicate_segment_like(
@@ -660,13 +660,13 @@ class TramModel(TramExportPaths):
             if balance_paths is not None:
                 tram_dvec = self.balance_dvecs(
                     dvec=tram_dvec,
-                    balance=nd.read_pickle(balance_paths[year]),
+                    balance=nd.DVector.load(balance_paths[year]),
                     split_weekday_weekend=split_weekday_weekend,
                 )
 
             # ## WRITE OUT THE DVEC AND REPORTS ## #
             self._logger.info("Writing Produced Tram data to disk")
-            tram_dvec.to_pickle(export_paths[year])
+            tram_dvec.save(export_paths[year])
 
             self._logger.info("Writing Tram reports to disk")
             tram_dvec.write_sector_reports(
@@ -833,7 +833,7 @@ class TramModel(TramExportPaths):
             to a pandas dataframe.
         """
         # Read in the vector
-        vector_dvec = nd.read_pickle(vector_path)
+        vector_dvec = nd.DVector.load(vector_path)
 
         # Aggregate the dvector to the required segmentation
         if trip_origin == 'hb':

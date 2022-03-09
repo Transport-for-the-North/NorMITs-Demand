@@ -298,7 +298,7 @@ class HBAttractionModel(HBAttractionModelPaths):
 
             if export_pure_attractions:
                 self._logger.info("Exporting pure attractions to disk")
-                pure_attractions.to_pickle(self.export_paths.pure_demand[year])
+                pure_attractions.save(self.export_paths.pure_demand[year])
 
             if export_reports:
                 self._logger.info("Exporting pure demand reports to disk")               
@@ -327,7 +327,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             # Output attractions before any aggregation
             if export_fully_segmented:
                 self._logger.info("Exporting fully segmented attractions to disk")
-                fully_segmented.to_pickle(self.export_paths.fully_segmented[year])
+                fully_segmented.save(self.export_paths.fully_segmented[year])
 
             # Control the attractions to the productions - this also adds in
             # some segmentation to bring it in line with the productions
@@ -339,7 +339,7 @@ class HBAttractionModel(HBAttractionModelPaths):
 
             if export_notem_segmentation:
                 self._logger.info("Exporting notem segmented attractions to disk")
-                notem_segmented.to_pickle(self.export_paths.notem_segmented[year])
+                notem_segmented.save(self.export_paths.notem_segmented[year])
 
             if export_reports:
                 self._logger.info("Exporting notem segmented reports to disk")
@@ -513,7 +513,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             a_dvec controlled to p_dvec
         """
         # Read in the productions DVec from disk
-        p_dvec = nd.read_pickle(p_dvec_path)
+        p_dvec = nd.DVector.load(p_dvec_path)
 
         # Split a_dvec into p_dvec segments and balance
         a_dvec = a_dvec.split_segmentation_like(p_dvec)
@@ -724,7 +724,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
 
             if export_nhb_pure_attractions:
                 self._logger.info("Exporting NHB pure attractions to disk")
-                pure_nhb_attr.to_pickle(self.export_paths.pure_demand[year])
+                pure_nhb_attr.save(self.export_paths.pure_demand[year])
 
             if export_reports:
                 self._logger.info("Exporting pure NHB attractions reports to disk")
@@ -744,7 +744,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
 
             if export_notem_segmentation:
                 self._logger.info("Exporting notem segmented attractions to disk")
-                notem_segmented.to_pickle(self.export_paths.notem_segmented[year])
+                notem_segmented.save(self.export_paths.notem_segmented[year])
 
             if export_reports:
                 self._logger.info("Exporting notem segmented attractions reports to disk")
@@ -800,7 +800,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         segmentation = nd.get_segmentation_level('notem_nhb_output')
 
         # Reading the notem segmented HB attractions compressed pickle
-        hb_attr_notem = nd.read_pickle(self.hb_attraction_paths[year])
+        hb_attr_notem = nd.DVector.load(self.hb_attraction_paths[year])
         df = hb_attr_notem.to_df()
 
         # Removing p1 and p7
@@ -842,7 +842,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             a_dvec controlled to p_dvec
         """
         # Read in the productions DVec from disk
-        p_dvec = nd.read_pickle(p_dvec_path)
+        p_dvec = nd.DVector.load(p_dvec_path)
 
         balanced_attractions = a_dvec.balance_at_segments(
             p_dvec,

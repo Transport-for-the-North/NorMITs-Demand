@@ -285,7 +285,7 @@ def compare_dvectors(new: Path, old: Path, output_folder: Path) -> None:
     no_zones = {}
     for nm, p in (("new", new), ("old", old)):
         print(f"Reading: {nm}")
-        dvec: nd.DVector = file_ops.read_pickle(p)
+        dvec: nd.DVector = nd.DVector.load(p)
         df = dvec.to_df()
         del dvec
 

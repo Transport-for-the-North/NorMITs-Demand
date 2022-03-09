@@ -1132,19 +1132,6 @@ class DVector:
 
         return compress.write_out(self, path, overwrite_suffix=False)
 
-    def to_pickle(self, path: nd.PathLike) -> None:
-        """
-        Pickle (serialize) object to file.
-
-        Parameters
-        ----------
-        path:
-            Filepath to store the pickled object
-
-        """
-        with open(path, 'wb') as f:
-            pickle.dump(self, f)
-
     @staticmethod
     def _multiply_and_aggregate_internal(aggregation_keys_chunk,
                                          aggregation_dict,
