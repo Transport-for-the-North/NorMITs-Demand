@@ -649,7 +649,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                 "%s" % trip_end
             )
 
-        return nd.read_pickle(trip_end)
+        return nd.DVector.load(trip_end)
 
     def _read_calibration_zones_matrix(self, fname: str) -> np.ndarray:
         """Reads in the matrix of calibration zones"""
