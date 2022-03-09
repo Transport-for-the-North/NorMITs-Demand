@@ -1943,10 +1943,12 @@ class SegmentationLevel:
         return final_name
 
     def save(self, path: PathLike = None) -> Union[None, Dict[str, Any]]:
-        """Saves SegmentationLevel to file
+        """Converts SegmentationLevel into and instance dict and saves to disk
 
+        The instance_dict contains just enough information to be able to
+        recreate this instance of the class when 'load()' is called.
         Aims to remove dependencies to pandas versioning when reading/writing.
-        Use `load()` to load in the written out file.
+        Use `load()` to load in the written out file or instance_dict.
 
         Parameters
         ----------
@@ -1971,7 +1973,11 @@ class SegmentationLevel:
         }
 
         # Write out to disk and compress
-        compress.write_out(instance_dict, path)
+        if path is not None:
+            compress.write_out(instance_dict, path)
+            return None
+
+        return instance_dict
 
     @staticmethod
     def load(path_or_instance_dict: PathLike):
