@@ -81,6 +81,23 @@ class TripLengthDistributionBuilder:
     _hb_purposes = [1, 2, 3, 4, 5, 6, 7, 8]
     _nhb_purposes = [11, 12, 13, 14, 15, 16, 18]
 
+    # Maps for non-classified categories
+    _car_access_to_ca = {'CarAccess_B01ID': [1, 2, 3, 4, 5, 6, 7],
+                         'ca': [2, 2, 2, 2, 1, 1, 1]}
+
+    _a_gor_from = pd.DataFrame({'agg_gor_from': [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
+                                'TripOrigGOR_B02ID': [1, 2, 3, 4, 6,
+                                                      7, 8, 5, 9, 10, 11]})
+    _a_gor_to = pd.DataFrame({'agg_gor_to': [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
+                              'TripDestGOR_B02ID': [1, 2, 3, 4, 6,
+                                                    7, 8, 5, 9, 10, 11]})
+
+    _tfn_at_to_agg_at = {'tfn_at': [1, 2, 3, 4, 5, 6, 7, 8],
+                         'agg_tfn_at': [1, 1, 2, 2, 3, 3, 4, 4]}
+
+    # Define weekdays
+    _weekdays = [1, 2, 3, 4, 5]
+
     def __init__(self,
                  tlb_folder: nd.PathLike,
                  nts_import: nd.PathLike,
@@ -238,9 +255,8 @@ class TripLengthDistributionBuilder:
                         self._north_and_mid_gors)]
         return output_dat
 
-
     def run_tlb_lookups(self,
-                        weekdays=[1, 2, 3, 4, 5],
+                        weekday: bool = True,
                         agg_purp=list(), #[13, 14, 15, 18]
                         write=True):
         """
@@ -253,10 +269,10 @@ class TripLengthDistributionBuilder:
         # TODO: Need smart aggregation based on sample size threshold
 
         # Set target cols
-        target_cols = ['SurveyYear', 'TravelWeekDay_B01ID', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc_cat',
-                       'ns_sec', 'main_mode', 'hb_purpose', 'nhb_purpose', 'nhb_purpose_hb_leg', 'Sex_B01ID',
+        target_cols = ['SurveyYear', 'TravelWeekDay_B01ID', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc',
+                       'ns', 'main_mode', 'hb_purpose', 'nhb_purpose', 'nhb_purpose_hb_leg', 'Sex_B01ID',
                        'trip_origin', 'start_time', 'TripDisIncSW', 'TripOrigGOR_B02ID',
-                       'TripDestGOR_B02ID', 'tfn_area_type', 'weighted_trip']
+                       'TripDestGOR_B02ID', 'tfn_at', 'trip_type', 'weighted_trip']
 
         output_dat = self.nts_import.reindex(target_cols, axis=1)
 
@@ -264,56 +280,38 @@ class TripLengthDistributionBuilder:
         records = list()
         records.append(len(output_dat))
 
-        # CA Map
-        """
-        1	Main driver of company car
-        2	Other main driver
-        3	Not main driver of household car
-        4	Household car but non driver
-        5	Driver but no car
-        6	Non driver and no car
-        7	NA
-        """
-        ca_map = pd.DataFrame({'CarAccess_B01ID': [1, 2, 3, 4, 5, 6, 7],
-                               'ca': [2, 2, 2, 2, 1, 1, 1]})
-
-        output_dat = output_dat.merge(ca_map,
-                                      how='left',
-                                      on='CarAccess_B01ID')
-
-        # map agg gor
-        a_gor_from_map = pd.DataFrame({'agg_gor_from': [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
-                                         'TripOrigGOR_B02ID': [1, 2, 3, 4, 6,
-                                                               7, 8, 5, 9, 10, 11]})
-        a_gor_to_map = pd.DataFrame({'agg_gor_to': [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
-                                       'TripDestGOR_B02ID': [1, 2, 3, 4, 6,
-                                                             7, 8, 5, 9, 10, 11]})
-
-        output_dat = output_dat.merge(a_gor_from_map,
-                                      how='left',
-                                      on='TripOrigGOR_B02ID')
-
-        output_dat = output_dat.merge(a_gor_to_map,
-                                      how='left',
-                                      on='TripDestGOR_B02ID')
-
-        # Aggregate area type application
-        agg_at = pd.DataFrame({'tfn_area_type': [1, 2, 3, 4, 5, 6, 7, 8],
-                               'agg_tfn_area_type': [1, 1, 2, 2, 3, 3, 4, 4]})
-
-        output_dat = output_dat.merge(agg_at,
-                                      how='left',
-                                      on='tfn_area_type')
+        # Map categories not classified in classified build
+        # Car availability
+        output_dat = self.map_dict(output_dat,
+                                   self._car_access_to_ca,
+                                   'CarAccess_B01ID')
+        # Aggregate GOR
+        # From
+        output_dat = self.map_dict(output_dat,
+                                   self._a_gor_from,
+                                   'TripOrigGOR_B02ID')
+        # To
+        output_dat = self.map_dict(output_dat,
+                                   self._a_gor_to,
+                                   'TripDestGOR_B02ID')
+        # Aggregate area types
+        output_dat = self.map_dict(output_dat,
+                                   self.__tfn_at_to_agg_at,
+                                   'agg_tfn_at')
 
         records.append(len(output_dat))
 
         # Filter to weekdays only
-        output_dat = output_dat[
-            output_dat['TravelWeekDay_B01ID'].isin(weekdays)].reset_index(drop=True)
+        if weekday:
+            output_dat = self.filter_to_weekday(output_dat)
+
         records.append(len(output_dat))
 
         # Geo filter on self.region_filter and self.geo_area
         output_dat = self._apply_geo_filter(output_dat)
+
+        # TODO: Single function to deal with these
+        # TODO: Build name vector here
 
         out_mat = []
         for index, row in self.target_segmentation.iterrows():
@@ -375,28 +373,28 @@ class TripLengthDistributionBuilder:
                         op_sub = op_sub[
                             op_sub['start_time'].isin(
                                 time_vec)].reset_index(drop=True)
-                if subset == 'soc_cat':
+                if subset == 'soc':
                     soc = value
                     if value != 0:
                         op_sub = op_sub[
-                            op_sub['soc_cat'] == value].reset_index(drop=True)
-                if subset == 'ns_sec':
+                            op_sub['soc'] == value].reset_index(drop=True)
+                if subset == 'ns':
                     ns = value
                     if value != 0:
                         op_sub = op_sub[
-                            op_sub['ns_sec'] == value].reset_index(drop=True)
-                if subset == 'tfn_area_type':
+                            op_sub['ns'] == value].reset_index(drop=True)
+                if subset == 'tfn_at':
                     tfn_at = value
                     if value != 0:
                         op_sub = op_sub[
                             op_sub[
-                                'tfn_area_type'] == value].reset_index(drop=True)
-                if subset == 'agg_tfn_area_type':
+                                'tfn_at'] == value].reset_index(drop=True)
+                if subset == 'agg_tfn_at':
                     agg_at = value
                     if value != 0:
                         op_sub = op_sub[
                             op_sub[
-                                'agg_tfn_area_type'] == value].reset_index(drop=True)
+                                'agg_tfn_at'] == value].reset_index(drop=True)
                 if subset == 'g':
                     g = value
                     if value != 0:
@@ -418,6 +416,8 @@ class TripLengthDistributionBuilder:
             out['ave_km'] = 0
             out['trips'] = 0
 
+            # TODO: Function to run bands here
+
             for line, thres in self.trip_length_bands.iterrows():
 
                 tlb_sub = op_sub.copy()
@@ -430,6 +430,7 @@ class TripLengthDistributionBuilder:
                 tlb_sub = tlb_sub[
                     tlb_sub['TripDisIncSW'] < upper].reset_index(drop=True)
 
+                # TODO: Better km constant here please
                 mean_val = (tlb_sub['TripDisIncSW'].mean() * 1.61)
                 total_trips = (tlb_sub['weighted_trip'].sum())
 
@@ -451,9 +452,9 @@ class TripLengthDistributionBuilder:
                 name = name + '_aat' + str(agg_at)
             if tp != 0:
                 name = name + '_tp' + str(tp)
-            if soc != 0 or (purpose in [1,2,12] and 'soc_cat' in list(self.target_segmentation)):
+            if soc != 0 or (purpose in [1,2,12] and 'soc' in list(self.target_segmentation)):
                 name = name + '_soc' + str(soc)
-            if ns != 0 and 'ns_sec' in list(self.target_segmentation):
+            if ns != 0 and 'ns' in list(self.target_segmentation):
                 name = name + '_ns' + str(ns)
             if g != 0:
                 name = name + '_g' + str(g)
@@ -473,8 +474,8 @@ class TripLengthDistributionBuilder:
             out['purpose'] = purpose
             out['soc'] = soc
             out['ns'] = ns
-            out['tfn_area_type'] = tfn_at
-            out['agg_tfn_area_type'] = agg_at
+            out['tfn_at'] = tfn_at
+            out['agg_tfn_at'] = agg_at
             out['g'] = g
             out['agg_gor_from'] = agg_gor_from
             out['agg_gor_to'] = agg_gor_to
@@ -489,3 +490,72 @@ class TripLengthDistributionBuilder:
             final.to_csv(full_name, index=False)
 
         return out_mat, final
+
+    def run_tour_props(self,
+                       default_to_p: bool = True):
+
+        # TODO: Translate R method to Python
+
+        target_cols = ['SurveyYear', 'TravelWeekDay_B01ID', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc',
+                       'ns', 'main_mode', 'hb_purpose', 'nhb_purpose', 'nhb_purpose_hb_leg', 'Sex_B01ID',
+                       'trip_origin', 'start_time', 'end_time', 'TripDisIncSW', 'TripOrigGOR_B02ID',
+                       'TripDestGOR_B02ID', 'tfn_at', 'trip_group', 'trip_type', 'frh_p', 'frh_tp', 'toh_tp', 'weighted_trip']
+
+        output_dat = self.nts_import.reindex(target_cols, axis=1)
+
+        subset = output_dat[output_dat['main_mode'] == 3]
+        f_t = ['frh', 'toh']
+        # Drop NHB trips
+        subset = subset[subset['trip_type'].isin(f_t)]
+
+        toh = subset[subset['trip_type'] == 'toh']
+        tohgroupcols = ['main_mode', 'hb_purpose', 'frh_p', 'frh_tp', 'start_time']
+        toh = toh.groupby(tohgroupcols)
+        toh = toh['weighted_trip'].sum()
+        toh = toh.reset_index()
+
+        # phis on the toh_purpose
+
+        toh.to_csv('car_phi_test.csv', index=False)
+
+        toh = subset[subset['trip_type'] == 'toh']
+        tohgroupcols = ['main_mode', 'hb_purpose', 'nhb_purpose_hb_leg', 'frh_tp', 'start_time']
+        toh = toh.groupby(tohgroupcols)
+        toh = toh['weighted_trip'].sum()
+        toh = toh.reset_index()
+
+        toh.to_csv('toh_phi_test.csv', index=False)
+
+        return 0
+
+    def map_dict(self,
+                 output_dat: pd.DataFrame,
+                 map_dict: dict,
+                 key: str):
+
+        """
+        Analogue of pd.map for filling out a category from a dictionary
+        output_dat: a DataFrame of NTS dataset
+        map: a dictionary in category: list format
+        key: string for join, existing category in output_dat
+        """
+
+        map_frame = pd.DataFrame(map_dict)
+
+        output_dat = output_dat.merge(map_frame,
+                                      how='left',
+                                      on=key)
+
+        return output_dat
+
+    def filter_to_weekday(self,
+                          output_dat):
+        """
+        Subset a NTS table to weekdays only using 'TravelWeekDay'
+        Correct weekdays defined in class
+        """
+        w_d = self.weekdays
+        output_dat = output_dat[output_dat['TravelWeekDay_B01ID'].isin(w_d)]
+        output_dat = output_dat.reset_index(drop=True)
+
+        return output_dat

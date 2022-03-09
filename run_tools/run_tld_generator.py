@@ -34,7 +34,9 @@ def main():
             output_home=output_home,
         )
 
-        extract.run_tlb_lookups()
+        extract.run_tlb_lookups(weekday=True)
+
+        extract.run_tour_props(default_to_p = True)
 
         if input('Run another y/n').lower() == 'n':
             run_another = False
