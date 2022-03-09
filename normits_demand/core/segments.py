@@ -1995,10 +1995,19 @@ class SegmentationLevel:
         path_or_instance_dict:
             Path to read the data in from.
         """
+        # Read in the file if needed
         if isinstance(path_or_instance_dict, dict):
             instance_dict = path_or_instance_dict
         else:
             instance_dict = compress.read_in(path_or_instance_dict)
+
+        # Validate we have a dictionary
+        if not isinstance(instance_dict, dict):
+            raise ValueError(
+                "Expected instance_dict to be a dictionary. "
+                "Got %s instead"
+                % type(instance_dict)
+            )
 
         # Convert the valid_segments back into a pd.DataFrame
         df = pd.read_csv(io.StringIO(instance_dict["valid_segments"]))
