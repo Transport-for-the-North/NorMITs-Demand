@@ -620,11 +620,11 @@ def build_trip_ends(use_tram,
             trip_origin='hb',
             use_tram=use_tram,
         )
-        hb_productions.to_pickle(hbp_path)
-        hb_attractions.to_pickle(hba_path)
+        hb_productions.save(hbp_path)
+        hb_attractions.save(hba_path)
     else:
-        hb_productions = nd.read_pickle(hbp_path)
-        hb_attractions = nd.read_pickle(hba_path)
+        hb_productions = nd.DVector.load(hbp_path)
+        hb_attractions = nd.DVector.load(hba_path)
 
     if not os.path.exists(nhbp_path) or not os.path.exists(nhba_path):
         nhb_productions, nhb_attractions = import_pa(
@@ -636,11 +636,11 @@ def build_trip_ends(use_tram,
             trip_origin='nhb',
             use_tram=use_tram,
         )
-        nhb_productions.to_pickle(nhbp_path)
-        nhb_attractions.to_pickle(nhba_path)
+        nhb_productions.save(nhbp_path)
+        nhb_attractions.save(nhba_path)
     else:
-        nhb_productions = nd.read_pickle(nhbp_path)
-        nhb_attractions = nd.read_pickle(nhba_path)
+        nhb_productions = nd.DVector.load(nhbp_path)
+        nhb_attractions = nd.DVector.load(nhba_path)
 
     return (
         hb_productions,
@@ -675,7 +675,7 @@ def import_pa(production_import_path,
         raise ValueError("Invalid trip origin")
 
     # Reading pickled Dvector
-    prod_dvec = nd.read_pickle(production_import_path)
+    prod_dvec = nd.DVector.load(production_import_path)
 
     # Reduce nhb 11 into 12 if needed
     if reduce_seg is not None:
@@ -691,7 +691,7 @@ def import_pa(production_import_path,
     prod_dvec = prod_dvec.translate_zoning(zoning_system, "population")
 
     # Reading pickled Dvector
-    attr_dvec = nd.read_pickle(attraction_import_path)
+    attr_dvec = nd.DVector.load(attraction_import_path)
 
     # Reduce nhb 11 into 12 if needed
     if reduce_seg is not None:

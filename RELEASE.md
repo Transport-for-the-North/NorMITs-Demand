@@ -19,7 +19,15 @@ there.
 
 Below, a brief summary of patches made since the previous version can be found.
 
-### V0.4.9
+### V0.5.0
+- Core
+  - Added 'save()' and 'load()' functions (to remove implicit pandas
+    dependencies when using pickles) to:
+    - DVector
+    - SegmentationLevel
+    - ZoningSystem
+- Updated NoTEM and Distribution Model to read in DVectors using the new
+  `Dvector.load()` method. This makes loads faster and safer.
 - Distribution Model
   - Reporting
     - Automatically generates vector reports on the production and attraction
