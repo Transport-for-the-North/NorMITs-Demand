@@ -44,7 +44,10 @@ from normits_demand.utils import compress
 from normits_demand.utils import general as du
 from normits_demand.utils import math_utils
 from normits_demand.utils import pandas_utils as pd_utils
+from normits_demand import logging as nd_log
 
+
+LOG = nd_log.get_logger(__name__)
 
 # ## CLASSES ## #
 class SegmentationLevel:
@@ -1075,6 +1078,7 @@ class SegmentationLevel:
 
         # Same segmentation naming order
         if self.naming_order == other.naming_order:
+            LOG.warning("Aggregating from/to the same segmentation: %s", self.name)
             return dict(
                 zip(self.segment_names, [[n] for n in self.segment_names])
             )

@@ -94,9 +94,9 @@ class HBAttractionModel(HBAttractionModelPaths):
 
     # Define segmentations used
     _segmentations = {
-        'employment': 'hb_sic',
+        'employment': 'sic',
         'trip_weights': 'hb_p_m_sic',
-        'fully_segmented': 'hb_p_m',
+        'pure_attractions': 'hb_p_m',
     }
 
     # Define segment renames needed
@@ -225,7 +225,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             )
 
     def run(self,
-            export_fully_segmented: bool = False,
+            export_pure_attractions: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
             ) -> None:
@@ -236,10 +236,10 @@ class HBAttractionModel(HBAttractionModelPaths):
             - Reads in the land use employment data given in the constructor.
             - Reads in the trip rates data given in the constructor.
             - Multiplies the employment and trip rates on relevant segments,
-              producing "fully segmented attractions".
-            - Optionally writes out a pickled DVector of "fully segmented attractions"
+              producing "pure attractions".
+            - Optionally writes out a pickled DVector of "pure attractions"
               at self.export_paths.fully_segmented[year].
-            - Balances "fully segmented attractions" to production notem segmentation,
+            - Balances "pure attractions" to production notem segmentation,
               producing "notem segmented" attractions.
             - Optionally writes out a pickled DVector of "notem segmented attractions"
               at self.export_paths.notem_segmented[year].
@@ -248,9 +248,9 @@ class HBAttractionModel(HBAttractionModelPaths):
 
         Parameters
         ----------
-        export_fully_segmented:
-            Whether to export the fully segmented attractions to disk or not.
-            Will be written out to: self.export_paths.fully_segmented[year]
+        export_pure_attractions:
+            Whether to export the pure attractions to disk or not.
+            Will be written out to: self.export_paths.pure_demand[year]
 
         export_notem_segmentation:
             Whether to export the notem segmented demand to disk or not.
@@ -277,18 +277,26 @@ class HBAttractionModel(HBAttractionModelPaths):
             emp_dvec = self._read_land_use_data(year)
 
             self._logger.info("Applying trip rates")
-            fully_segmented = self._generate_attractions(emp_dvec)
+            pure_attractions = self._generate_attractions(emp_dvec)
 
-            # Output attractions before any aggregation
-            if export_fully_segmented:
-                self._logger.info("Exporting fully segmented attractions to disk")
-                fully_segmented.save(self.export_paths.fully_segmented[year])
+            if export_pure_attractions:
+                self._logger.info("Exporting pure attractions to disk")
+                pure_attractions.save(self.export_paths.pure_demand[year])
+
+            if export_reports:
+                self._logger.info("Exporting pure demand reports to disk")               
+                pure_demand_paths = self.report_paths.pure_demand
+                pure_attractions.write_sector_reports(
+                    segment_totals_path=pure_demand_paths.segment_total[year],
+                    ca_sector_path=pure_demand_paths.ca_sector[year],
+                    ie_sector_path=pure_demand_paths.ie_sector[year],
+                )
 
             # Control the attractions to the productions - this also adds in
             # some segmentation to bring it in line with the productions
             self._logger.info("Balancing to productions")
             notem_segmented = self._attractions_balance(
-                a_dvec=fully_segmented,
+                a_dvec=pure_attractions,
                 p_dvec_path=self.production_balance_paths[year],
             )
 
@@ -372,13 +380,13 @@ class HBAttractionModel(HBAttractionModelPaths):
 
         Returns
         -------
-        fully_segmented:
+        pure_attraction:
             Returns the product of employment and attraction trip rate Dvector.
-            ie., fully segmented attractions
+            ie., pure attraction
         """
         # Define the zoning and segmentations we want to use
         trip_weights_seg = nd.get_segmentation_level(self._segmentations['trip_weights'])
-        attractions_seg = nd.get_segmentation_level(self._segmentations['fully_segmented'])
+        attractions_seg = nd.get_segmentation_level(self._segmentations['pure_attractions'])
 
         # ## CREATE THE TRIP RATES DVEC ## #
         trip_rates = file_ops.read_df(
