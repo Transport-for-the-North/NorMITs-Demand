@@ -261,7 +261,7 @@ class HBProductionModel(HBProductionModelPaths):
 
             if export_pure_demand:
                 self._logger.info("Exporting pure demand to disk")
-                pure_demand.to_pickle(self.export_paths.pure_demand[year])
+                pure_demand.save(self.export_paths.pure_demand[year])
 
             if export_reports:
                 self._logger.info("Exporting pure demand reports to disk")
@@ -291,7 +291,7 @@ class HBProductionModel(HBProductionModelPaths):
             # Output productions before any aggregation
             if export_fully_segmented:
                 self._logger.info("Exporting fully segmented productions to disk.")
-                fully_segmented.to_pickle(self.export_paths.fully_segmented[year])
+                fully_segmented.save(self.export_paths.fully_segmented[year])
 
             # ## AGGREGATE INTO RETURN SEGMENTATION ## #
             return_seg = nd.get_segmentation_level(self._return_segmentation_name)
@@ -302,7 +302,7 @@ class HBProductionModel(HBProductionModelPaths):
 
             if export_notem_segmentation:
                 self._logger.info("Exporting notem segmented demand to disk")
-                productions.to_pickle(self.export_paths.notem_segmented[year])
+                productions.save(self.export_paths.notem_segmented[year])
 
             if export_reports:
                 self._logger.info("Exporting notem segmented reports to disk")
@@ -705,7 +705,7 @@ class NHBProductionModel(NHBProductionModelPaths):
 
             if export_nhb_pure_demand:
                 self._logger.info("Exporting NHB pure demand to disk")
-                pure_nhb_demand.to_pickle(self.export_paths.pure_demand[year])
+                pure_nhb_demand.save(self.export_paths.pure_demand[year])
 
             if export_reports:
                 self._logger.info("Exporting NHB pure demand reports to disk")
@@ -734,7 +734,7 @@ class NHBProductionModel(NHBProductionModelPaths):
 
             if export_fully_segmented:
                 self._logger.info("Exporting fully segmented demand to disk")
-                fully_segmented.to_pickle(self.export_paths.fully_segmented[year])
+                fully_segmented.save(self.export_paths.fully_segmented[year])
 
             # Renaming
             notem_segmented = self._rename(fully_segmented)
@@ -753,7 +753,7 @@ class NHBProductionModel(NHBProductionModelPaths):
 
             if export_notem_segmentation:
                 self._logger.info("Exporting notem segmented demand to disk")
-                notem_segmented.to_pickle(self.export_paths.notem_segmented[year])
+                notem_segmented.save(self.export_paths.notem_segmented[year])
 
             if export_reports:
                 self._logger.info("Exporting notem segmented reports to disk\n")
@@ -860,7 +860,7 @@ class NHBProductionModel(NHBProductionModelPaths):
 
         # ## CONVERT THE ATTRACTIONS INTO DESIRED FORMAT ## #
         # Read the notem segmented compressed pickle
-        hb_attr_notem = nd.read_pickle(self.hb_attraction_paths[year])
+        hb_attr_notem = nd.DVector.load(self.hb_attraction_paths[year])
 
         # Remove time period and add in tfn_at
         hb_attr = hb_attr_notem.aggregate(notem_no_tp_seg)

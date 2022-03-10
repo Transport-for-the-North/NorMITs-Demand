@@ -19,26 +19,12 @@ there.
 
 Below, a brief summary of patches made since the previous version can be found.
 
-### V0.4.8
-- Distribution Model
-  - Cache was incorrectly not converting trip ends to average weekday.
-    This has been corrected in this version of the model.
-- General
-  - Low memory matrix translations now return all multiprocessed results in
-    order, instead of potentially out of order.
-- Tools
-  - A new folder has been created `run_tools`. This is for running tools that 
-    generate data for the NorMITs Framework, but aren't a model themselves.
-    The first tool to be added is the `TripLengthDistributionBuilder`.
-  - Added version and zoning systems into the pre-me tour proportions
-    path building.
-- NTEM Forecast
-  - Added an NTEM Forecast model. Similar to the EFS, but for NTEM trip ends
-    specifically.
+### V0.5.0
 - Core
-  - Updates to the DVector to allow almost any operation to be applied to a 
-    DVector.
-  - Added a division function to the Dvector.
-  - Started moving towards using `.csv.bz2` compression by default.
-    This removes dependencies on pandas versions and we can then depend on
-    pandas `.to_csv()` and `.from_csv` to handle csv data I/O. 
+  - Added 'save()' and 'load()' functions (to remove implicit pandas
+    dependencies when using pickles) to:
+    - DVector
+    - SegmentationLevel
+    - ZoningSystem
+- Updated NoTEM and Distribution Model to read in DVectors using the new
+  `Dvector.load()` method. This makes loads faster and safer.
