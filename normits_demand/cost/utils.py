@@ -11,7 +11,7 @@ File purpose:
 
 """
 # Built-Ins
-import bisect
+import dataclasses
 from typing import List
 from typing import Dict
 
@@ -30,6 +30,46 @@ import normits_demand as nd
 sns.set_theme(style="darkgrid")
 
 
+@dataclasses.dataclass
+class DistributionReportCols:
+    min: str = 'Min'
+    max: str = 'Max'
+    mid: str = 'Mid'
+    target_ave_cost: str = 'Target Average Cost'
+    achieved_ave_cost: str = 'Achieved Average Cost'
+    target_band_share: str = 'Target Band Share'
+    achieved_band_share: str = 'Achieved Band Share'
+
+    achieved_band_count: str = 'Achieved Band Count'
+    cell_count: str = 'Cell Count'
+    cell_proportion: str = 'Cell Proportion'
+    convergence: str = 'Convergence'
+
+    cost_units: str = None
+
+    def __post_init__(self):
+        # Attach cost_units where relevant
+        if self.cost_units is None:
+            return
+
+        relevant_cols = [
+            self.min,
+            self.max,
+            self.mid,
+            self.target_ave_cost,
+            self.achieved_ave_cost,
+        ]
+
+        for col in relevant_cols:
+            col += ' (%s)' % self.cost_units
+
+    def col_order(self):
+        """Return a list of columns, in their expected output order"""
+        order = list(dataclasses.astuple(self))
+        order.remove(self.cost_units)
+        return order
+
+
 def cells_in_bounds(min_bounds: np.ndarray,
                     max_bounds: np.ndarray,
                     cost: np.ndarray,
@@ -38,7 +78,7 @@ def cells_in_bounds(min_bounds: np.ndarray,
     for min_val, max_val in zip(min_bounds, max_bounds):
         band_mask = (cost >= min_val) & (cost < max_val)
         cell_counts.append(band_mask.sum())
-    return cell_counts
+    return np.array(cell_counts)
 
 
 def iz_infill_costs(cost: pd.DataFrame,
@@ -294,3 +334,29 @@ def calculate_average_cost_in_bounds(min_bounds: np.ndarray,
         average_costs.append(band_average)
 
     return np.array(average_costs)
+
+
+def get_band_mid_points(
+    min_bounds: np.ndarray,
+    max_bounds: np.ndarray,
+) -> np.ndarray:
+    """Calculates the mid point in each of the band bounds
+
+    Parameters
+    ----------
+    min_bounds:
+        The minimum bounds for each cost band. Corresponds to max_bounds.
+
+    max_bounds:
+        The maximum bounds for each cost band. Corresponds to min_bounds.
+
+    Returns
+    -------
+    bound_mid_points:
+        The mid points of each of the bands defined by min_bounds
+        and max_bounds.
+    """
+    mid_points = list()
+    for min_val, max_val in zip(min_bounds, max_bounds):
+        mid_points.append((min_val + max_val) / 2)
+    return np.array(mid_points)

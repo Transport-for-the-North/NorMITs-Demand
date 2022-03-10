@@ -164,8 +164,8 @@ class TripLengthDistributionBuilder:
             self.output_home,
             self.geo_area,
             self.region_filter,
-            segments_label,
             band_label,
+            segments_label,
         )
 
         print("\nOutput path generated: %s" % self.export)

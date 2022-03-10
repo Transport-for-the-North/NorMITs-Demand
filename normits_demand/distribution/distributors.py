@@ -33,9 +33,10 @@ from normits_demand import constants
 
 from normits_demand.cost import utils as cost_utils
 
+from normits_demand.utils import timing
 from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
-from normits_demand.utils import trip_length_distributions as tld_utils
 
 from normits_demand.distribution import gravity_model
 from normits_demand.distribution import furness
@@ -52,7 +53,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
 
     # Internal variables for consistent naming
     _pa_val_col = 'trips'
-    _calibration_ignore_val = -1
+    calibration_ignore_val = -1
 
     def __init__(self,
                  year: int,
@@ -64,6 +65,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  zone_col: str = None,
                  name: str = None,
+                 cost_units: str = None,
                  ):
         # Validate inputs
         if not isinstance(zoning_system, nd.core.zoning.ZoningSystem):
@@ -87,6 +89,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         self.zoning_system = zoning_system
         self.running_zones = running_zones
         self.zone_col = zone_col
+        self.cost_units = cost_units
         self.export_home = export_home
         self.process_count = process_count
 
@@ -232,9 +235,9 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
 
         # Validate calibration keys
         calib_keys = np.unique(calibration_matrix)
+        calib_keys = du.list_safe_remove(list(calib_keys), [self.calibration_ignore_val])
 
         missing = set(calib_keys) - set(target_cost_distributions.keys())
-        missing -= {self._calibration_ignore_val}
         if len(missing) > 0:
             raise ValueError(
                 "Target cost distributions can not be found for all key "
@@ -306,31 +309,43 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             process_count=self.process_count,
         )
 
-    @staticmethod
-    def generate_cost_distribution_report(target: pd.DataFrame,
-                                          achieved_band_share: np.ndarray,
-                                          achieved_convergence: float,
-                                          achieved_distribution: np.ndarray,
-                                          cost_matrix: np.ndarray,
-                                          ) -> pd.DataFrame:
+    def generate_cost_distribution_report(
+        self,
+        min_bounds: np.ndarray,
+        max_bounds: np.ndarray,
+        target_ave_cost: np.ndarray,
+        target_band_share: np.ndarray,
+        achieved_band_share: np.ndarray,
+        achieved_convergence: float,
+        achieved_distribution: np.ndarray,
+        cost_matrix: np.ndarray,
+        report_cols: cost_utils.DistributionReportCols = None,
+    ) -> pd.DataFrame:
         """Generates a report of the target and achieved cost distribution
 
         Parameters
         ----------
-        target:
-            A pandas dataframe defining the target cost distribution.
-            This should be in the same format as that handed over to
-            distribute_segment as target_cost_distribution.
-            i.e. Have at least 4 columns named:
-            ['min', 'max', 'ave_km', 'band_share'].
+        min_bounds:
+            The minimum bounds for each cost band. Corresponds to max_bounds.
+
+        max_bounds:
+            The maximum bounds for each cost band. Corresponds to min_bounds.
+
+        target_ave_cost:
+            The average cost achieved by each of the bands within min_bounds
+            and max_bounds at the same index.
+
+        target_band_share:
+            The target band shares within min_bounds and max_bounds at the
+            same index.
 
         achieved_band_share:
             A numpy array of the achieved band share values. Must
-            correspond to target['band_share']
+            correspond to target_band_share
 
         achieved_convergence:
             The value describing the convergence that was achieved between
-            achieved_band_share and target['band_share']
+            achieved_band_share and target_band_share
 
         achieved_distribution:
             The matrix of distributed values that produces achieved_band_share
@@ -338,84 +353,67 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         cost_matrix:
             The matrix of costs from zone to zone.
 
+        report_cols:
+            A DistributionReportCols object defining how to name the columns
+            in the output report. If left as None, a new DistributionReportCols
+            is made, and self.cost_units is given.
+
         Returns
         -------
         report:
-            A report with the following columns:
-            col_order = [
-                'min (km)',
-                'max (km)',
-                'target_ave_length (km)',
-                'ach_ave_length (km)',
-                'target_band_share',
-                'ach_band_share',
-                'ach_band_trips',
-                'cell count',
-                'cell proportions',
-                'convergence',
-            ]
-
+            A report with column names as defined in report_cols.
         """
-        # Create tld report
-        rename = {
-            'min': 'min (km)',
-            'max': 'max (km)',
-            'ave_km': 'target_ave_length (km)',
-            'band_share': 'target_band_share',
-        }
-        report = pd_utils.reindex_cols(target, rename.keys())
-        report = report.rename(columns=rename)
+        # Init
+        if report_cols is None:
+            report_cols = cost_utils.DistributionReportCols(cost_units=self.cost_units)
 
-        # Add in achieved values
-        report['ach_band_share'] = achieved_band_share
-        report['convergence'] = achieved_convergence
-        report['ach_band_trips'] = report['ach_band_share'].copy()
-        report['ach_band_trips'] *= achieved_distribution.sum()
-
-        report['ach_ave_length (km)'] = cost_utils.calculate_average_cost_in_bounds(
-            min_bounds=report['min (km)'].values,
-            max_bounds=report['max (km)'].values,
+        # Calculate remaining achieved values
+        achieved_band_count = achieved_band_share * achieved_distribution.sum()
+        achieved_ave_cost = cost_utils.calculate_average_cost_in_bounds(
+            min_bounds=min_bounds,
+            max_bounds=max_bounds,
             cost_matrix=cost_matrix,
             trips=achieved_distribution,
         )
 
         # Calculate cost distributions
-        report['cell count'] = cost_utils.cells_in_bounds(
-            min_bounds=report['min (km)'].values,
-            max_bounds=report['max (km)'].values,
+        cell_count = cost_utils.cells_in_bounds(
+            min_bounds=min_bounds,
+            max_bounds=max_bounds,
             cost=cost_matrix,
         )
-        report['cell proportions'] = report['cell count'].copy()
-        report['cell proportions'] /= report['cell proportions'].values.sum()
+        cell_proportions = cell_count / cell_count.sum()
+
+        # Create tld report
+        report = pd.DataFrame({
+            report_cols.min: min_bounds,
+            report_cols.max: max_bounds,
+            report_cols.mid: cost_utils.get_band_mid_points(min_bounds, max_bounds),
+            report_cols.target_ave_cost: target_ave_cost,
+            report_cols.achieved_ave_cost: achieved_ave_cost,
+            report_cols.target_band_share: target_band_share,
+            report_cols.achieved_band_share: achieved_band_share,
+            report_cols.achieved_band_count: achieved_band_count,
+            report_cols.cell_count: cell_count,
+            report_cols.cell_proportion: cell_proportions,
+            report_cols.convergence: achieved_convergence,
+        })
 
         # Order columns for output
-        col_order = [
-            'min (km)',
-            'max (km)',
-            'target_ave_length (km)',
-            'ach_ave_length (km)',
-            'target_band_share',
-            'ach_band_share',
-            'ach_band_trips',
-            'cell count',
-            'cell proportions',
-            'convergence',
-        ]
-        report = pd_utils.reindex_cols(report, col_order)
-
-        return report
+        return pd_utils.reindex_cols(report, report_cols.col_order())
 
     @staticmethod
-    def generate_cost_distribution_graph(target: pd.DataFrame,
-                                         achieved_band_share: np.ndarray,
-                                         achieved_convergence: float,
-                                         achieved_distribution: np.ndarray,
-                                         achieved_cost_params: Dict[str, float],
-                                         cost_matrix: np.ndarray,
-                                         plot_title: str,
-                                         graph_path: nd.PathLike,
-                                         **graph_kwargs,
-                                         ) -> None:
+    def generate_cost_distribution_graph(
+        min_bounds: np.ndarray,
+        max_bounds: np.ndarray,
+        target_band_share: np.ndarray,
+        achieved_band_share: np.ndarray,
+        achieved_convergence: float,
+        achieved_cost_params: Dict[str, float],
+        plot_title: str,
+        graph_path: nd.PathLike,
+        **graph_kwargs,
+    ) -> None:
         """Generates and writes out a graph of cost distributions
 
         Compares target and achieved cost distribution, generates a graph,
@@ -423,29 +421,26 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
 
         Parameters
         ----------
-        target:
-            A pandas dataframe defining the target cost distribution.
-            This should be in the same format as that handed over to
-            distribute_segment as target_cost_distribution.
-            i.e. Have at least 4 columns named:
-            ['min', 'max', 'ave_km', 'band_share'].
+        min_bounds:
+            The minimum bounds for each cost band. Corresponds to max_bounds.
+
+        max_bounds:
+            The maximum bounds for each cost band. Corresponds to min_bounds.
+
+        target_band_share:
+            The target band shares within min_bounds and max_bounds at the
+            same index.
 
         achieved_band_share:
-            A numpy array of the achieved band share values. Must
-            correspond to target['band_share']
+            The achieved band shares within min_bounds and max_bounds at the
+            same index.
 
         achieved_convergence:
             The value describing the convergence that was achieved between
-            achieved_band_share and target['band_share']
-
-        achieved_distribution:
-            The matrix of distributed values that produces achieved_band_share
+            achieved_band_share and target_band_share
 
         achieved_cost_params:
-            The cost parameters that were used to generate achieved_distribution.
-
-        cost_matrix:
-            The matrix of costs from zone to zone.
+            The cost parameters that were used to generate achieved_band_share.
 
         plot_title:
             The title to give to the generated plot
@@ -465,19 +460,17 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         if 'dpi' not in graph_kwargs:
             graph_kwargs['dpi'] = 300
 
-        # Get the average cost values of the achieved
-        average_costs = cost_utils.calculate_average_cost_in_bounds(
-            min_bounds=target['min'].values,
-            max_bounds=target['max'].values,
-            cost_matrix=cost_matrix,
-            trips=achieved_distribution,
+        # Get the mid points of each band - more similar to calibration method
+        mid_points = cost_utils.get_band_mid_points(
+            min_bounds=min_bounds,
+            max_bounds=max_bounds,
         )
 
         # Plot the graph and write out
         cost_utils.plot_cost_distribution(
-            target_x=target['ave_km'].values,
-            target_y=target['band_share'].values,
-            achieved_x=average_costs,
+            target_x=mid_points,
+            target_y=target_band_share,
+            achieved_x=mid_points,
             achieved_y=achieved_band_share,
             convergence=achieved_convergence,
             cost_params=achieved_cost_params,
@@ -523,6 +516,7 @@ class GravityDistributor(AbstractDistributor):
                  running_zones: List[Any],
                  export_home: nd.PathLike,
                  zone_col: str = None,
+                 cost_units: str = None,
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  ):
         # Validate inputs
@@ -543,7 +537,7 @@ class GravityDistributor(AbstractDistributor):
             zone_col=zone_col,
             export_home=export_home,
             process_count=process_count,
-
+            cost_units=cost_units,
         )
 
         # Create a logger
@@ -555,27 +549,202 @@ class GravityDistributor(AbstractDistributor):
             instantiate_msg="Initialised new Gravity Model Logger",
         )
 
-    def distribute_segment(self,
-                           segment_params: Dict[str, Any],
-                           productions: pd.DataFrame,
-                           attractions: pd.DataFrame,
-                           cost_matrix: pd.DataFrame,
-                           calibration_matrix: pd.DataFrame,
-                           target_cost_distributions: Dict[Any, pd.DataFrame],
-                           calibration_naming: Dict[Any, Any],
-                           running_segmentation: nd.SegmentationLevel,
-                           **kwargs,
-                           ):
-        seg_name = running_segmentation.generate_file_name(segment_params)
-        self._logger.info("Running for %s" % seg_name)
+    def _write_out_reports(
+        self,
+        segment_params: Dict[str, Any],
+        running_segmentation: nd.SegmentationLevel,
+        init_cost_params: Dict[str, Any],
+        optimal_cost_params: Dict[str, Any],
+        min_bounds: np.ndarray,
+        max_bounds: np.ndarray,
+        target_ave_cost: np.ndarray,
+        target_band_share: np.ndarray,
+        initial_convergence: float,
+        achieved_convergence: float,
+        achieved_band_share: np.ndarray,
+        achieved_distribution: np.ndarray,
+        cost_matrix: np.ndarray,
+        subdir_name: str = None,
+    ) -> None:
+        """Generates and writes out standard gravity model reports
 
-        # TODO(BT): Multi-TLDs not supported yet.
-        # Do this to ignore for now
-        target_cost_distribution = target_cost_distributions[1]
-        # calibration_matrix
-        # target_cost_distributions
-        # calibration_naming
+        Generated reports are written out to the following places:
+        Reports: self.report_paths.tld_report_dir
+        Matrices: self.export_paths.matrix_dir
+        Overall log: self.report_paths.overall_log
 
+        If subdir_name is defined, this name is append to each of the paths
+        to create a unique place to store the generated reports.
+
+        Parameters
+        ----------
+        segment_params:
+            Passed into `running_segmentation.generate_file_name()`
+            to generate filenames.
+
+        running_segmentation:
+            The currently running segmentation. Used to generate filenames
+            alongside segment_params.
+
+        init_cost_params:
+            A dictionary of kwargs defining the initial cost params used
+            to generate initial_convergence.
+
+        optimal_cost_params:
+            A dictionary of kwargs defining the optimal cost params used
+            to generate achieved_band_share, achieved_convergence, and
+            achieved_distribution.
+
+        min_bounds:
+            The minimum bounds for each cost band. Corresponds to max_bounds.
+
+        max_bounds:
+            The maximum bounds for each cost band. Corresponds to min_bounds.
+
+        target_ave_cost:
+            The average cost achieved by each of the bands within min_bounds
+            and max_bounds at the same index.
+
+        target_band_share:
+            The target band shares within min_bounds and max_bounds at the
+            same index.
+
+        initial_convergence
+            The value describing the convergence that was achieved between
+            target_band_share, and the band share created when running a
+            gravity model with init_cost_params.
+
+        achieved_convergence:
+            The value describing the convergence that was achieved between
+            achieved_band_share and target_band_share
+
+        achieved_band_share:
+             A numpy array of the achieved band share values. Must
+            correspond to target_band_share
+
+        achieved_distribution:
+            The matrix of distributed values that produces achieved_band_share
+
+        cost_matrix:
+            The matrix of costs from zone to zone.
+
+        subdir_name:
+            The optional name of the subdirectory to create and place the
+            generated reports into.
+
+        Returns
+        -------
+        None.
+        """
+        # Init
+        if subdir_name is not None:
+            # Add in the subdir_name to paths
+            report_dir = os.path.join(self.report_paths.tld_report_dir, subdir_name)
+            matrix_dir = os.path.join(self.export_paths.matrix_dir, subdir_name)
+
+            # Create the paths if they don't already exist
+            file_ops.create_folder(report_dir)
+            file_ops.create_folder(matrix_dir)
+
+            # Add subdir into final filename
+            stem, ext = os.path.splitext(self.report_paths.overall_log)
+            overall_path = "{stem}_{id}{ext}".format(stem=stem, id=subdir_name, ext=ext)
+        else:
+            report_dir = self.report_paths.tld_report_dir
+            matrix_dir = self.export_paths.matrix_dir
+            overall_path = self.report_paths.overall_log
+
+        # ## DISTRIBUTION REPORTS ## #
+        # Generate the base filename
+        fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            file_desc='tld_report',
+            segment_params=segment_params,
+        )
+
+        report = self.generate_cost_distribution_report(
+            min_bounds=min_bounds,
+            max_bounds=max_bounds,
+            target_ave_cost=target_ave_cost,
+            target_band_share=target_band_share,
+            achieved_band_share=achieved_band_share,
+            achieved_convergence=achieved_convergence,
+            achieved_distribution=achieved_distribution,
+            cost_matrix=cost_matrix,
+        )
+
+        # Write out report
+        csv_fname = fname + '.csv'
+        path = os.path.join(report_dir, csv_fname)
+        report.to_csv(path, index=False)
+
+        # Convert to a graph and write out
+        graph_fname = fname + '.png'
+        graph_path = os.path.join(report_dir, graph_fname)
+        self.generate_cost_distribution_graph(
+            min_bounds=min_bounds,
+            max_bounds=max_bounds,
+            target_band_share=target_band_share,
+            achieved_band_share=achieved_band_share,
+            achieved_convergence=achieved_convergence,
+            achieved_cost_params=optimal_cost_params,
+            plot_title=fname,
+            graph_path=graph_path,
+        )
+
+        # ## WRITE DISTRIBUTED DEMAND ## #
+        # Put the demand into a df
+        demand_df = pd.DataFrame(
+            index=self.running_zones,
+            columns=self.running_zones,
+            data=achieved_distribution.astype(np.float32),
+        )
+
+        demand_df = demand_df.reindex(
+            index=self.zoning_system.unique_zones,
+            columns=self.zoning_system.unique_zones,
+            fill_value=0,
+        )
+
+        # Generate path and write out
+        fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            file_desc='synthetic_pa',
+            segment_params=segment_params,
+            compressed=True,
+        )
+        path = os.path.join(matrix_dir, fname)
+        nd.write_df(demand_df, path)
+
+        # ## ADD TO THE OVERALL LOG ## #
+        # Generate the log
+        log_dict = segment_params.copy()
+        log_dict.update({"init_%s" % k: v for k, v in init_cost_params.items()})
+        log_dict.update({'init_bs_con': initial_convergence})
+        log_dict.update({"final_%s" % k: v for k, v in optimal_cost_params.items()})
+        log_dict.update({'final_bs_con': achieved_convergence})
+
+        # Append this iteration to log file
+        file_ops.safe_dataframe_to_csv(
+            pd.DataFrame(log_dict, index=[0]),
+            overall_path,
+            mode='a',
+            header=(not os.path.exists(overall_path)),
+            index=False,
+        )
+
+    def _single_area_distribution(
+        self,
+        segment_params: Dict[str, Any],
+        np_productions: np.ndarray,
+        np_attractions: np.ndarray,
+        np_cost: np.ndarray,
+        target_cost_distribution: pd.DataFrame,
+        running_segmentation: nd.SegmentationLevel,
+        **kwargs,
+    ):
         # ## SET UP SEGMENT LOG ## #
         # Logging set up
         log_fname = running_segmentation.generate_file_name(
@@ -590,28 +759,6 @@ class GravityDistributor(AbstractDistributor):
         if os.path.isfile(log_path):
             os.remove(log_path)
 
-        # ## MAKE SURE COST AND P/A ARE IN SAME ORDER ## #
-        # Sort the cost
-        cost_matrix = cost_matrix.reindex(
-            columns=self.running_zones,
-            index=self.running_zones,
-        ).fillna(0)
-
-        # TODO(BT): Fix this problem at the cost source
-        # Fill any zero costs with 0.2
-        cost_matrix = cost_matrix.mask(cost_matrix == 0, 0.2)
-
-        # sort the productions and attractions
-        productions = productions.set_index(self.zone_col)
-        productions = productions.reindex(self.running_zones).fillna(0)
-        attractions = attractions.set_index(self.zone_col)
-        attractions = attractions.reindex(self.running_zones).fillna(0)
-
-        # Convert to numpy for gravity model
-        np_cost = cost_matrix.values
-        np_productions = productions[self._pa_val_col].values
-        np_attractions = attractions[self._pa_val_col].values
-
         # ## CALIBRATE THE GRAVITY MODEL ## #
         calib = gravity_model.GravityModelCalibrator(
             row_targets=np_productions,
@@ -623,6 +770,7 @@ class GravityDistributor(AbstractDistributor):
             target_convergence=kwargs.get('target_convergence'),
             furness_max_iters=kwargs.get('furness_max_iters'),
             furness_tol=kwargs.get('furness_tol'),
+            use_perceived_factors=kwargs.get('use_perceived_factors'),
         )
 
         optimal_cost_params = calib.calibrate(
@@ -634,47 +782,115 @@ class GravityDistributor(AbstractDistributor):
         )
 
         # ## GENERATE REPORTS AND WRITE OUT ## #
-        # Generate the base filename
-        fname = running_segmentation.generate_file_name(
-            trip_origin=self.trip_origin,
-            year=str(self.year),
-            file_desc='tld_report',
+        self._write_out_reports(
             segment_params=segment_params,
-        )
-
-        report = self.generate_cost_distribution_report(
-            target=target_cost_distribution,
-            achieved_band_share=calib.achieved_band_share,
+            running_segmentation=running_segmentation,
+            init_cost_params=kwargs.get('init_params'),
+            optimal_cost_params=optimal_cost_params,
+            min_bounds=target_cost_distribution['min'].values,
+            max_bounds=target_cost_distribution['max'].values,
+            target_ave_cost=target_cost_distribution['ave_km'].values,
+            target_band_share=target_cost_distribution['band_share'].values,
+            initial_convergence=calib.initial_convergence,
             achieved_convergence=calib.achieved_convergence,
-            achieved_distribution=calib.achieved_distribution,
-            cost_matrix=cost_matrix.values,
-        )
-
-        # Write out report
-        csv_fname = fname + '.csv'
-        path = os.path.join(self.report_paths.tld_report_dir, csv_fname)
-        report.to_csv(path, index=False)
-
-        # Convert to a graph and write out
-        graph_fname = fname + '.png'
-        graph_path = os.path.join(self.report_paths.tld_report_dir, graph_fname)
-        self.generate_cost_distribution_graph(
-            target=target_cost_distribution,
             achieved_band_share=calib.achieved_band_share,
-            achieved_convergence=calib.achieved_convergence,
             achieved_distribution=calib.achieved_distribution,
-            achieved_cost_params=optimal_cost_params,
-            cost_matrix=cost_matrix.values,
-            plot_title=fname,
-            graph_path=graph_path,
+            cost_matrix=np_cost,
         )
 
-        # ## WRITE DISTRIBUTED DEMAND ## #
+    def _multi_area_distribution(
+            self,
+            segment_params: Dict[str, Any],
+            np_productions: np.ndarray,
+            np_attractions: np.ndarray,
+            np_cost: np.ndarray,
+            np_calibration_matrix: np.ndarray,
+            calibration_naming: Dict[Any, str],
+            target_cost_distributions: Dict[Any, pd.DataFrame],
+            running_segmentation: nd.SegmentationLevel,
+            **kwargs,
+    ):
+        # ## SET UP SEGMENT LOG ## #
+        # Logging set up
+        log_fname = running_segmentation.generate_file_name(
+            trip_origin=self.trip_origin,
+            file_desc='gravity_log',
+            segment_params=segment_params,
+            csv=True,
+        )
+        log_path = os.path.join(self.report_paths.model_log_dir, log_fname)
+
+        # Replace the log if it already exists
+        if os.path.isfile(log_path):
+            os.remove(log_path)
+
+        # ## CALIBRATE THE GRAVITY MODEL ## #
+        calib = gravity_model.MultiAreaGravityModelCalibrator(
+            row_targets=np_productions,
+            col_targets=np_attractions,
+            calibration_matrix=np_calibration_matrix,
+            cost_matrix=np_cost,
+            target_cost_distributions=target_cost_distributions,
+            calibration_naming=calibration_naming,
+            running_log_path=log_path,
+            cost_function=kwargs.get('cost_function'),
+            target_convergence=kwargs.get('target_convergence'),
+            furness_max_iters=kwargs.get('furness_max_iters'),
+            furness_tol=kwargs.get('furness_tol'),
+            use_perceived_factors=kwargs.get('use_perceived_factors'),
+        )
+
+        optimal_cost_params = calib.calibrate(
+            init_params=kwargs.get('init_params'),
+            grav_max_iters=kwargs.get('grav_max_iters'),
+            calibrate_params=kwargs.get('calibrate_params', True),
+            ftol=kwargs.get('ftol', 1e-5),
+            verbose=kwargs.get('verbose', 2),
+        )
+
+        # ## GENERATE REPORTS AND WRITE OUT ## #
+        # Multiprocessing setup
+        unchanging_kwargs = {
+            'segment_params': segment_params,
+            'running_segmentation': running_segmentation,
+            'init_cost_params': kwargs.get('init_params'),
+            'cost_matrix': np_cost,
+        }
+
+        # Need to generate reports for each calibration area
+        kwarg_list = list()
+        for calib_id, calib_name in calibration_naming.items():
+            calib_kwargs = unchanging_kwargs.copy()
+            calib_kwargs.update({
+                'optimal_cost_params': optimal_cost_params[calib_id],
+                'min_bounds': target_cost_distributions[calib_id]['min'].values,
+                'max_bounds': target_cost_distributions[calib_id]['max'].values,
+                'target_ave_cost': target_cost_distributions[calib_id]['ave_km'].values,
+                'target_band_share': target_cost_distributions[calib_id]['band_share'].values,
+                'initial_convergence': calib.initial_convergence[calib_id],
+                'achieved_convergence': calib.achieved_convergence[calib_id],
+                'achieved_band_share': calib.achieved_band_share[calib_id],
+                'achieved_distribution': calib.achieved_distribution[calib_id],
+                'subdir_name': calib_name,
+            })
+            kwarg_list.append(calib_kwargs)
+
+        # Generate the reports
+        # TODO(BT): Can't actually multiprocess here as we're
+        #  already in a multiprocess!
+        multiprocessing.multiprocess(
+            fn=self._write_out_reports,
+            kwargs=kwarg_list,
+            # process_count=0,
+            process_count=self.process_count,
+        )
+
+        # ## WRITE THE FULL DISTRIBUTED DEMAND ## #
         # Put the demand into a df
         demand_df = pd.DataFrame(
             index=self.running_zones,
             columns=self.running_zones,
-            data=calib.achieved_distribution.astype(np.float32),
+            data=calib.achieved_full_distribution.astype(np.float32),
         )
 
         demand_df = demand_df.reindex(
@@ -694,26 +910,69 @@ class GravityDistributor(AbstractDistributor):
         path = os.path.join(self.export_paths.matrix_dir, fname)
         nd.write_df(demand_df, path)
 
-        # ## ADD TO THE OVERALL LOG ## #
-        # Rename keys for log
-        init_cost_params = {"init_%s" % k: v for k, v in kwargs.get('init_params').items()}
-        optimal_cost_params = {"final_%s" % k: v for k, v in optimal_cost_params.items()}
+    def distribute_segment(
+        self,
+        segment_params: Dict[str, Any],
+        productions: pd.DataFrame,
+        attractions: pd.DataFrame,
+        cost_matrix: pd.DataFrame,
+        calibration_matrix: pd.DataFrame,
+        target_cost_distributions: Dict[Any, pd.DataFrame],
+        calibration_naming: Dict[Any, Any],
+        running_segmentation: nd.SegmentationLevel,
+        **kwargs,
+    ):
+        # Init
+        seg_name = running_segmentation.generate_file_name(segment_params)
+        self._logger.info("Running for %s" % seg_name)
+        use_multi_area = len(target_cost_distributions) > 1
 
-        # Generate the log
-        log_dict = segment_params.copy()
-        log_dict.update(init_cost_params)
-        log_dict.update({'init_bs_con': calib.initial_convergence})
-        log_dict.update(optimal_cost_params)
-        log_dict.update({'final_bs_con': calib.achieved_convergence})
+        # ## MAKE SURE COST AND P/A ARE IN SAME ORDER ## #
+        # Sort the cost
+        cost_matrix = cost_matrix.reindex(
+            columns=self.running_zones,
+            index=self.running_zones,
+        ).fillna(0)
 
-        # Append this iteration to log file
-        file_ops.safe_dataframe_to_csv(
-            pd.DataFrame(log_dict, index=[0]),
-            self.report_paths.overall_log,
-            mode='a',
-            header=(not os.path.exists(self.report_paths.overall_log)),
-            index=False,
-        )
+        # # TODO(BT): Fix this problem at the cost source
+        # # Fill any zero costs with 0.2
+        # cost_matrix = cost_matrix.mask(cost_matrix == 0, 0.2)
+
+        # sort the productions and attractions
+        productions = productions.set_index(self.zone_col)
+        productions = productions.reindex(self.running_zones).fillna(0)
+        attractions = attractions.set_index(self.zone_col)
+        attractions = attractions.reindex(self.running_zones).fillna(0)
+
+        # Convert to numpy for gravity model
+        np_cost = cost_matrix.values
+        np_calibration_matrix = calibration_matrix.values
+        np_productions = productions[self._pa_val_col].values
+        np_attractions = attractions[self._pa_val_col].values
+
+        # Pick which calibrator to use and run!
+        if not use_multi_area:
+            self._single_area_distribution(
+                segment_params=segment_params,
+                np_productions=np_productions,
+                np_attractions=np_attractions,
+                np_cost=np_cost,
+                target_cost_distribution=target_cost_distributions[1],  # Default Key
+                running_segmentation=running_segmentation,
+                **kwargs,
+            )
+        else:
+            self._multi_area_distribution(
+                segment_params=segment_params,
+                np_productions=np_productions,
+                np_attractions=np_attractions,
+                np_cost=np_cost,
+                np_calibration_matrix=np_calibration_matrix,
+                calibration_naming=calibration_naming,
+                target_cost_distributions=target_cost_distributions,
+                running_segmentation=running_segmentation,
+                **kwargs,
+            )
 
     def distribute(self, *args, **kwargs):
         # Make new log if one already exists
@@ -740,6 +999,7 @@ class Furness3dDistributor(AbstractDistributor):
                  running_zones: List[Any],
                  export_home: nd.PathLike,
                  zone_col: str = None,
+                 cost_units: str = None,
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  ):
         # Validate inputs
@@ -760,7 +1020,7 @@ class Furness3dDistributor(AbstractDistributor):
             zone_col=zone_col,
             export_home=export_home,
             process_count=process_count,
-
+            cost_units=cost_units,
         )
 
         # Create a logger
@@ -839,7 +1099,7 @@ class Furness3dDistributor(AbstractDistributor):
             calibration_matrix=np_calibration_matrix,
             target_cost_distributions=target_cost_distributions,
             calibration_naming=calibration_naming,
-            calibration_ignore_val=self._calibration_ignore_val,
+            calibration_ignore_val=self.calibration_ignore_val,
             running_log_path=log_path,
             target_convergence=kwargs.get('target_convergence'),
             furness_max_iters=kwargs.get('furness_max_iters'),
@@ -861,7 +1121,10 @@ class Furness3dDistributor(AbstractDistributor):
 
             # Generate report
             report = self.generate_cost_distribution_report(
-                target=target_cost_distributions[calib_key],
+                min_bounds=target_cost_distributions[calib_key]['min'].values,
+                max_bounds=target_cost_distributions[calib_key]['max'].values,
+                target_ave_cost=target_cost_distributions[calib_key]['ave_km'].values,
+                target_band_share=target_cost_distributions[calib_key]['band_share'].values,
                 achieved_band_share=calib.achieved_band_shares[calib_key],
                 achieved_convergence=calib.achieved_convergences[calib_key],
                 achieved_distribution=area_distribution,
