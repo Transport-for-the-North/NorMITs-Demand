@@ -33,10 +33,14 @@ class SharedNumpyArrayHelper:
         data: np.ndarray,
         create: bool = True,
         lock: threading.Lock = None,
+        dtype: np.dtype = None,
     ):
         # Set defaults
         if lock is None:
             lock = threading.Lock()
+
+        if dtype is not None:
+            data = data.astype(dtype)
 
         # Assign attributes
         self._name = name

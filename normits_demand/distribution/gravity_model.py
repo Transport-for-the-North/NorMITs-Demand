@@ -2250,16 +2250,20 @@ class MultiAreaGravityModelCalibrator:
                              ) -> SharedArrays:
         """Sets up the needed shared arrays"""
         # Init
-        jac_base_name = 'Jac_%s_%s'
+        jac_base_name = 'Jac_%s_%s_%s' % ('%s', '%s', os.getpid())
 
         # Simplify creation
         def enter_array_context(name: str):
-            array = communication.SharedNumpyArrayHelper(name, copy.copy(init_mat))
+            array = communication.SharedNumpyArrayHelper(
+                name=name,
+                data=copy.copy(init_mat),
+                dtype=np.float32,
+            )
             return ctx_manager.enter_context(array)
 
             # Create the gravity furness arrays
-        gravity_in = enter_array_context('Grav_in')
-        gravity_out = enter_array_context('Grav_out')
+        gravity_in = enter_array_context('Grav_in_%s' % os.getpid())
+        gravity_out = enter_array_context('Grav_out_%s' % os.getpid())
 
         # Create the Jacobian furness objects - need one for each cost param
         jacobian_in = dict.fromkeys(self.cost_function.kw_order)

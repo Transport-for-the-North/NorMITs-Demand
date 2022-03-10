@@ -53,7 +53,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
 
     # Internal variables for consistent naming
     _pa_val_col = 'trips'
-    _calibration_ignore_val = -1
+    calibration_ignore_val = -1
 
     def __init__(self,
                  year: int,
@@ -235,7 +235,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
 
         # Validate calibration keys
         calib_keys = np.unique(calibration_matrix)
-        calib_keys = du.list_safe_remove(list(calib_keys), [self._calibration_ignore_val])
+        calib_keys = du.list_safe_remove(list(calib_keys), [self.calibration_ignore_val])
 
         missing = set(calib_keys) - set(target_cost_distributions.keys())
         if len(missing) > 0:
@@ -876,9 +876,12 @@ class GravityDistributor(AbstractDistributor):
             kwarg_list.append(calib_kwargs)
 
         # Generate the reports
+        # TODO(BT): Can't actually multiprocess here as we're
+        #  already in a multiprocess!
         multiprocessing.multiprocess(
             fn=self._write_out_reports,
             kwargs=kwarg_list,
+            # process_count=0,
             process_count=self.process_count,
         )
 
@@ -1096,7 +1099,7 @@ class Furness3dDistributor(AbstractDistributor):
             calibration_matrix=np_calibration_matrix,
             target_cost_distributions=target_cost_distributions,
             calibration_naming=calibration_naming,
-            calibration_ignore_val=self._calibration_ignore_val,
+            calibration_ignore_val=self.calibration_ignore_val,
             running_log_path=log_path,
             target_convergence=kwargs.get('target_convergence'),
             furness_max_iters=kwargs.get('furness_max_iters'),
