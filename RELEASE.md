@@ -33,3 +33,12 @@ Below, a brief summary of patches made since the previous version can be found.
     - Automatically generates vector reports on the production and attraction
       vectors generated when converting the upper model outputs for the
       lower model.
+    - Updated the gravity model reports output format. More standardised.
+  - Multi-Area Gravity Model
+    - Initial implementation of a multi-area gravity model. Each area calibrates
+      its own cost params, and aims for its own target cost distribution. All
+      areas share the same Furness and Jacobian matrices via threading. 
+- Concurrency
+  - Multi-threading framework added to make multi-threading simpler in codebase
+  - `SharedNumpyArrayHelper` added to make communication of large numpy 
+    arrays between threads/processes faster and easier, at the cost of memory.  
