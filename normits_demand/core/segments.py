@@ -556,7 +556,7 @@ class SegmentationLevel:
         """
         Returns the definition for expanding tfn_tt into its components.
         """
-        return file_ops.read_df(self._tfn_tt_expansion_path)
+        return file_ops.read_df(self._tfn_tt_expansion_path, find_similar=True)
 
     def _get_reduce_definition(self,
                                other: SegmentationLevel,
