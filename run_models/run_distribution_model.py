@@ -13,6 +13,7 @@ File purpose:
 # Built-Ins
 import os
 import sys
+import numpy as np
 
 from typing import Tuple
 
@@ -29,19 +30,19 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 
 # ## CONSTANTS ## #
 # Trip end import args
-notem_iteration_name = '9.4'
+notem_iteration_name = '9.3'
 tour_props_version = 'v%s' % notem_iteration_name
 
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
 tram_export_home = r"I:\NorMITs Demand\Tram"
-cache_path = "E:/dm_cache"
+cache_path = "C:/PW/TfN/dm_cache"
 
 # Distribution running args
 base_year = 2018
 scenario = consts.SC01_JAM
-dm_iteration_name = '9.4.1'
+dm_iteration_name = '9.3.3'
 dm_import_home = r"I:\NorMITs Demand\import"
-dm_export_home = r"E:\NorMITs Demand\Distribution Model"
+dm_export_home = r"I:\NorMITs Demand\Distribution Model"
 
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
@@ -63,10 +64,10 @@ def main():
     run_all = False
     run_upper_model = False
     run_lower_model = False
-    run_pa_matrix_reports = False
-    run_pa_to_od = True
+    run_pa_matrix_reports = True
+    run_pa_to_od = False
     run_od_matrix_reports = False
-    compile_to_assignment = True
+    compile_to_assignment = False
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
@@ -643,6 +644,24 @@ def import_pa(production_import_path,
     attr_dvec = attr_dvec.translate_zoning(zoning_system, "employment")
 
     return prod_dvec, attr_dvec
+
+
+def run_pa_reports():
+    # PA RUN REPORTS
+    # Matrix Trip End totals
+    # Sector Reports Dvec style
+    # TLD curve
+    #   single mile bands - p/m (ca ) segments full matrix
+
+    # Import steps
+    mat = nd.read_df(path="I:/NorMITs Demand/Distribution Model/iter9.3.3/car_and_passenger/Final Outputs/Full PA Matrices/hb_synthetic_pa_yr2018_p1_m3.pbz2")
+
+    # Matrix Trip Ends
+    col_t = mat.sum(axis=0)
+    row_t = mat.sum(axis=1)
+    col_t.head()
+    nd.dvector()
+
 
 
 if __name__ == '__main__':
