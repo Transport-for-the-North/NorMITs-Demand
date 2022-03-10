@@ -263,7 +263,7 @@ def log_normal(base_cost: np.ndarray, sigma: float, mu: float) -> np.ndarray:
     log = np.log(
         base_cost,
         where=base_cost != 0,
-        out=np.zeros_like(base_cost),
+        out=np.zeros_like(base_cost).astype(float),
     )
     exp_numerator = (log - mu) ** 2
     exp_denominator = 2 * sigma ** 2

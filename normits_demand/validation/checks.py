@@ -16,6 +16,9 @@ import warnings
 
 from typing import Any
 from typing import List
+from typing import Dict
+from typing import Union
+from typing import Iterable
 
 # Local imports
 import normits_demand as nd
@@ -185,3 +188,58 @@ def all_values_set(values: List[Any],
     # If we're still here, just print the message
     if msg is not None:
         print(msg)
+
+
+def all_keys_exist(dict_or_keys: Union[Dict[Any, Any], Iterable],
+                   check_keys: Iterable,
+                   ) -> bool:
+    """Checks if all check_keys exist in dict_or_keys
+
+    Parameters
+    ----------
+    dict_or_keys:
+        A dictionary, or an iterable of dictionary keys, to check.
+
+    check_keys:
+        The keys to check for within dict_or_keys.
+
+    Returns
+    -------
+    keys_exist:
+        True if all check_keys exist in dict_or_keys. False otherwise.
+    """
+    # Convert to iterable if we have dict
+    if isinstance(dict_or_keys, dict):
+        dict_or_keys = dict_or_keys.keys()
+
+    # Convert to sets for faster comparison
+    return len(set(check_keys) - set(dict_or_keys)) == 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -69,6 +69,7 @@ _DM_ReportPaths_NT = collections.namedtuple(
         'home',
         'pa_reports_dir',
         'od_reports_dir',
+        'lower_vector_reports_dir',
     ]
 )
 
@@ -101,6 +102,11 @@ class DMArgumentBuilderBase(abc.ABC):
     # Cache
     _production_base_cache = '{trip_origin}p_{zoning}_{mode}_{tier}_cache.pbz2'
     _attraction_base_cache = '{trip_origin}a_{zoning}_{mode}_{tier}_cache.pbz2'
+
+    # Lower vector report filenames
+    _segment_totals_bname = '{trip_origin}_{vec_name}_lower_vector_{year}_segment_totals.csv'
+    _ca_sector_bname = '{trip_origin}_{vec_name}_lower_vector_{year}_ca_sector_totals.csv'
+    _ie_sector_bname = '{trip_origin}_{vec_name}_lower_vector_{year}_ie_sector_totals.csv'
 
     def __init__(self,
                  year: int,
@@ -202,9 +208,43 @@ class DMArgumentBuilderBase(abc.ABC):
         # Write out
         file_ops.write_df(df, out_path)
 
+    def _report_vector(self,
+                       df: pd.DataFrame,
+                       df_name: str,
+                       report_dir: nd.PathLike,
+                       ) -> None:
+
+        # Convert to Dvec
+        dvec = nd.DVector(
+            zoning_system=self.lower_zoning_system,
+            segmentation=self.running_segmentation,
+            import_data=df,
+            zone_col=self.lower_zoning_system.col_name,
+            val_col='val',
+            time_format='avg_day',
+        )
+
+        # Generate filenames
+        kwargs = {
+            'trip_origin': self.trip_origin,
+            'vec_name': df_name,
+            'year': self.year,
+        }
+        segment_totals_fname = self._segment_totals_bname.format(**kwargs)
+        ca_sector_fname = self._ca_sector_bname.format(**kwargs)
+        ie_sector_fname = self._ie_sector_bname.format(**kwargs)
+
+        # Generate and write reports
+        dvec.write_sector_reports(
+            segment_totals_path=os.path.join(report_dir, segment_totals_fname),
+            ca_sector_path=os.path.join(report_dir, ca_sector_fname),
+            ie_sector_path=os.path.join(report_dir, ie_sector_fname),
+        )
+
     def _convert_upper_pa_to_lower(self,
                                    upper_model_matrix_dir: nd.PathLike,
                                    external_matrix_output_dir: nd.PathLike,
+                                   lower_model_vector_report_dir: nd.PathLike,
                                    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Converts Upper matrices into vectors for lower model
 
@@ -217,6 +257,11 @@ class DMArgumentBuilderBase(abc.ABC):
             The directory to output all of the external demand, in the
             lower zoning system. I.E. All demand in lower_zoning_system,
             that is not also in the lower_running_zones.
+
+        lower_model_vector_report_dir:
+            The directory to output standard reports of the vectors generated
+            for the lower model. This is all demand in the lower_running_zones,
+            and all data that is not in the external_matrix_output_dir.
 
         Returns
         -------
@@ -320,6 +365,10 @@ class DMArgumentBuilderBase(abc.ABC):
         attractions = vector.drop(columns=['productions'])
         attractions = attractions.rename(columns={'attractions': 'val'})
 
+        # Generate standard vector reports
+        self._report_vector(productions, 'productions', lower_model_vector_report_dir)
+        self._report_vector(attractions, 'attractions', lower_model_vector_report_dir)
+
         return productions, attractions
 
     def _get_latest_matrix_time(self, matrix_dir: nd.PathLike) -> float:
@@ -396,6 +445,7 @@ class DMArgumentBuilderBase(abc.ABC):
     def _maybe_convert_upper_pa_to_lower(self,
                                          upper_model_matrix_dir: nd.PathLike,
                                          external_matrix_output_dir: nd.PathLike,
+                                         lower_model_vector_report_dir: nd.PathLike,
                                          productions_cache: nd.PathLike,
                                          attractions_cache: nd.PathLike,
                                          overwrite_cache: bool,
@@ -415,6 +465,11 @@ class DMArgumentBuilderBase(abc.ABC):
             The directory to output all of the external demand, in the
             lower zoning system. I.E. All demand in lower_zoning_system,
             that is not also in the lower_running_zones.
+
+        lower_model_vector_report_dir:
+            The directory to output standard reports of the vectors generated
+            for the lower model. This is all demand in the lower_running_zones,
+            and all data that is not in the external_matrix_output_dir.
 
         productions_cache:
             Path to where the productions should be cached.
@@ -456,6 +511,7 @@ class DMArgumentBuilderBase(abc.ABC):
         productions, attractions = self._convert_upper_pa_to_lower(
             upper_model_matrix_dir=upper_model_matrix_dir,
             external_matrix_output_dir=external_matrix_output_dir,
+            lower_model_vector_report_dir=lower_model_vector_report_dir,
         )
 
         # Save into cache
@@ -467,12 +523,41 @@ class DMArgumentBuilderBase(abc.ABC):
     def read_lower_pa(self,
                       upper_model_matrix_dir: nd.PathLike,
                       external_matrix_output_dir: nd.PathLike,
+                      lower_model_vector_report_dir: nd.PathLike,
                       ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Converts Upper matrices into vectors for lower model
+
+        Parameters
+        ----------
+        upper_model_matrix_dir:
+            The directory containing the upper model's output matrices
+
+        external_matrix_output_dir:
+            The directory to output all of the external demand, in the
+            lower zoning system. I.E. All demand in lower_zoning_system,
+            that is not also in the lower_running_zones.
+
+        lower_model_vector_report_dir:
+            The directory to output standard reports of the vectors generated
+            for the lower model. This is all demand in the lower_running_zones,
+            and all data that is not in the external_matrix_output_dir.
+
+        Returns
+        -------
+        productions:
+            pandas DataFrame of productions. Will have columns named after:
+            self.lower_zoning_system.name, segment_names, and 'productions'
+
+        attractions:
+            pandas DataFrame of attractions. Will have columns named after:
+            self.lower_zoning_system.name, segment_names, and 'attractions'
+        """
         # If no cache path, just get the vectors
         if self.cache_path is None:
             return self._convert_upper_pa_to_lower(
                 upper_model_matrix_dir=upper_model_matrix_dir,
                 external_matrix_output_dir=external_matrix_output_dir,
+                lower_model_vector_report_dir=lower_model_vector_report_dir,
             )
 
         # Generate cache_paths
@@ -496,6 +581,7 @@ class DMArgumentBuilderBase(abc.ABC):
         return self._maybe_convert_upper_pa_to_lower(
             upper_model_matrix_dir=upper_model_matrix_dir,
             external_matrix_output_dir=external_matrix_output_dir,
+            lower_model_vector_report_dir=lower_model_vector_report_dir,
             productions_cache=productions_cache,
             attractions_cache=attractions_cache,
             overwrite_cache=self.overwrite_cache,
@@ -548,6 +634,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
     # Trip Length Distribution constants
     _tld_dir_name = 'trip_length_distributions'
+    _tld_dir_name2 = 'demand_imports'
 
     def __init__(self,
                  import_home: nd.PathLike,
@@ -561,17 +648,19 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                  upper_running_zones: List[Any],
                  lower_zoning_system: nd.ZoningSystem,
                  lower_running_zones: List[Any],
-                 target_tld_dir: str,
+                 target_tld_version: str,
                  init_params_cols: List[str],
                  upper_model_method: nd.DistributionMethod,
-                 upper_distributor_kwargs: Dict[str, Any],
+                 upper_model_kwargs: Dict[str, Any],
                  upper_init_params_fname: str,
+                 upper_target_tld_dir: str,
                  upper_calibration_areas: Union[Dict[Any, str], str],
                  upper_calibration_zones_fname: Optional[str] = None,
                  upper_calibration_naming: Optional[Dict[Any, str]] = None,
                  lower_model_method: Optional[nd.DistributionMethod] = None,
-                 lower_distributor_kwargs: Optional[Dict[str, Any]] = None,
+                 lower_model_kwargs: Optional[Dict[str, Any]] = None,
                  lower_init_params_fname: Optional[str] = None,
+                 lower_target_tld_dir: str = None,
                  lower_calibration_areas: Optional[Union[Dict[Any, str], str]] = None,
                  lower_calibration_zones_fname: Optional[str] = None,
                  lower_calibration_naming: Optional[Dict[Any, str]] = None,
@@ -612,19 +701,21 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         self.attractions = attractions
 
         self.running_mode = running_mode
-        self.target_tld_dir = target_tld_dir
+        self.upper_target_tld_dir = upper_target_tld_dir
+        self.lower_target_tld_dir = lower_target_tld_dir
+        self.target_tld_version = target_tld_version
 
         self.init_params_cols = init_params_cols
 
         self.upper_model_method = upper_model_method
-        self.upper_distributor_kwargs = upper_distributor_kwargs
+        self.upper_model_kwargs = upper_model_kwargs
         self.upper_init_params_fname = upper_init_params_fname
         self.upper_calibration_areas = upper_calibration_areas
         self.upper_calibration_zones_fname = upper_calibration_zones_fname
         self.upper_calibration_naming = upper_calibration_naming
 
         self.lower_model_method = lower_model_method
-        self.lower_distributor_kwargs = lower_distributor_kwargs
+        self.lower_model_kwargs = lower_model_kwargs
         self.lower_init_params_fname = lower_init_params_fname
         self.lower_calibration_areas = lower_calibration_areas
         self.lower_calibration_zones_fname = lower_calibration_zones_fname
@@ -698,15 +789,19 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
     def _get_target_cost_distribution(self,
                                       area: str,
                                       segment_params: Dict[str, Any],
+                                      target_tld_dir: str,
                                       ) -> pd.DataFrame:
         """Reads in the target cost distribution for this segment"""
         # Generate the path to the cost distribution file
         tcd_dir = os.path.join(
             self.import_home,
             self._tld_dir_name,
+            self._tld_dir_name2,
+            self.target_tld_version,
             area,
-            self.target_tld_dir,
+            target_tld_dir,
         )
+
         fname = self.running_segmentation.generate_file_name(
             trip_origin=self.trip_origin,
             file_desc="tlb",
@@ -812,7 +907,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return cost_matrices
 
-    def _build_target_cost_distributions(self, area: str):
+    def _build_target_cost_distributions(self, area: str, target_tld_dir: str):
         """Build the dictionary of target_cost_distributions for each segment"""
         # Generate by segment kwargs
         target_cost_distributions = dict()
@@ -822,6 +917,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             target_cost_distribution = self._get_target_cost_distribution(
                 area=area,
                 segment_params=segment_params,
+                target_tld_dir=target_tld_dir,
             )
 
             # Add to dictionary
@@ -906,7 +1002,10 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         calib_area_keys = self.upper_calibration_areas.keys()
         target_cost_distributions = dict.fromkeys(calib_area_keys)
         for area_key, area_name in self.upper_calibration_areas.items():
-            area_targets = self._build_target_cost_distributions(area=area_name)
+            area_targets = self._build_target_cost_distributions(
+                area=area_name,
+                target_tld_dir=self.upper_target_tld_dir,
+            )
             target_cost_distributions[area_key] = area_targets
 
         if self.upper_calibration_naming is None:
@@ -928,7 +1027,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             running_zones=self.upper_running_zones,
         )
 
-        final_kwargs = self.upper_distributor_kwargs.copy()
+        final_kwargs = self.upper_model_kwargs.copy()
         final_kwargs.update(further_dist_args)
         final_kwargs.update({
             'productions': productions.to_df(),
@@ -959,7 +1058,10 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         calib_area_keys = self.lower_calibration_areas.keys()
         target_cost_distributions = dict.fromkeys(calib_area_keys)
         for area_key, area_name in self.lower_calibration_areas.items():
-            area_targets = self._build_target_cost_distributions(area=area_name)
+            area_targets = self._build_target_cost_distributions(
+                area=area_name,
+                target_tld_dir=self.lower_target_tld_dir,
+            )
             target_cost_distributions[area_key] = area_targets
 
         if self.lower_calibration_naming is None:
@@ -981,7 +1083,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             running_zones=self.lower_running_zones,
         )
 
-        final_kwargs = self.lower_distributor_kwargs.copy()
+        final_kwargs = self.lower_model_kwargs.copy()
         final_kwargs.update(further_dist_args)
         final_kwargs.update({
             'running_segmentation': self.running_segmentation,
@@ -1116,6 +1218,7 @@ class DistributionModelExportPaths:
     _reports_dirname = 'Reports'
     _pa_report_dir = 'PA Reports'
     _od_report_dir = 'OD Reports'
+    _lower_vector_report_dir = 'Lower Vector Reports'
 
     def __init__(self,
                  year: int,
@@ -1232,6 +1335,7 @@ class DistributionModelExportPaths:
             home=report_home,
             pa_reports_dir=os.path.join(report_home, self._pa_report_dir),
             od_reports_dir=os.path.join(report_home, self._od_report_dir),
+            lower_vector_reports_dir=os.path.join(report_home, self._lower_vector_report_dir),
         )
 
         # Make paths that don't exist
