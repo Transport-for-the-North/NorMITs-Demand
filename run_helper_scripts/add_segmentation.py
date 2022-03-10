@@ -16,9 +16,7 @@ import pandas as pd
 # Local imports
 sys.path.append("..")
 # pylint: disable=import-error,wrong-import-position
-import normits_demand as nd
 from normits_demand import logging as nd_log
-from normits_demand import constants as nd_consts
 from normits_demand.utils import file_ops
 
 # pylint: enable=import-error,wrong-import-position
@@ -115,9 +113,7 @@ def add_segment(name: str, unique_segments: Path, overwrite: bool = False) -> No
         LOG.warning("Dropped %s rows containing duplicate segments", before - len(df))
 
     LOG.info("Found %s unique segments", len(df))
-    file_ops.write_df(
-        df, seg_folder / f"unique_segments{nd_consts.COMPRESSION_SUFFIX}", index=False
-    )
+    file_ops.write_df(df, seg_folder / f"unique_segments.csv.bz2", index=False)
 
     naming_order = [str(c).strip() for c in df.columns]
     LOG.info("Segment naming: %s", naming_order)
