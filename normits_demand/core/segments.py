@@ -1068,6 +1068,12 @@ class SegmentationLevel:
                 % type(other)
             )
 
+        # Same segmentation naming order
+        if self.naming_order == other.naming_order:
+            return dict(
+                zip(self.segment_names, [[n] for n in self.segment_names])
+            )
+
         join_cols, translate_cols = self._get_aggregation_definition(other)
 
         # Translate any columns we need to in order to join
