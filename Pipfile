@@ -12,6 +12,7 @@ pandas = "*"
 tqdm = "*"
 openpyxl = "*"
 geopandas = "*"
+seaborn = "*"
 
 [requires]
 python_version = "3.8"
