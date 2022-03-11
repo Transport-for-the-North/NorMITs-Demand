@@ -876,13 +876,12 @@ class GravityDistributor(AbstractDistributor):
             kwarg_list.append(calib_kwargs)
 
         # Generate the reports
-        # TODO(BT): Can't actually multiprocess here as we're
-        #  already in a multiprocess!
+        # Multiprocess here only if we aren't already
+        process_count = -2 if self.process_count == 0 else self.process_count
         multiprocessing.multiprocess(
             fn=self._write_out_reports,
             kwargs=kwarg_list,
-            # process_count=0,
-            process_count=self.process_count,
+            process_count=process_count
         )
 
         # ## WRITE THE FULL DISTRIBUTED DEMAND ## #

@@ -550,7 +550,8 @@ def main():
                 running_segmentation=hb_running_seg,
                 upper_init_params_fname=hb_upper_init_params_fname,
                 lower_init_params_fname=hb_lower_init_params_fname,
-                target_tld_dir=os.path.join(upper_calibration_area, hb_seg_name),
+                upper_target_tld_dir=upper_hb_target_tld_dir,
+                lower_target_tld_dir=lower_hb_target_tld_dir,
                 **dmab_kwargs,
             )
 
