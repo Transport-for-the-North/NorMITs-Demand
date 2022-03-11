@@ -140,54 +140,6 @@ class DMArgumentBuilderBase(abc.ABC):
             weight_col_name=self._translation_weight_col
         )
 
-    def _get_upper_keep_zones(self):
-        # Get translation into a DataFrame
-        def get_keep_zones(weighting):
-            full_translation = self.upper_zoning_system.translate(
-                other=self.lower_zoning_system,
-                weighting=weighting,
-            )
-            full_translation = pd.DataFrame(
-                data=full_translation,
-                index=self.upper_zoning_system.unique_zones,
-                columns=self.lower_zoning_system.unique_zones,
-            )
-
-            # Filter to zones we want to keep
-            df = full_translation.reindex(columns=self.lower_running_zones)
-            df = df[(df != 0).any(axis=1)].copy()
-
-            # Check we actually have some translation left
-            if df.values.sum() == 0:
-                raise ValueError(
-                    "All zones were dropped while getting the '%s' "
-                    "translation. Are the upper/lower running zones defined "
-                    "in the same type as the upper/lower zoning systems?"
-                    % weighting
-                )
-
-            # Determine which upper zones to keep
-            upper_zones = df.index.tolist()
-
-            # Melt and name columns
-            full_translation = pd_utils.wide_to_long_infill(
-                df=full_translation,
-                index_col_1_name=self.upper_zoning_system.col_name,
-                index_col_2_name=self.lower_zoning_system.col_name,
-                value_col_name=self._translation_weight_col,
-            )
-
-            return upper_zones, full_translation
-
-        # Get the translations
-        pop_keep, pop_trans = get_keep_zones('population')
-        emp_keep, emp_trans = get_keep_zones('employment')
-
-        # Build a single list of upper zones to keep
-        keep_zones = list(set(pop_keep + emp_keep))
-
-        return keep_zones, pop_trans, emp_trans
-
     def _save_external_demand(self,
                               df: pd.DataFrame,
                               segment_params: Dict[str, Any],
@@ -526,6 +478,14 @@ class DMArgumentBuilderBase(abc.ABC):
                       lower_model_vector_report_dir: nd.PathLike,
                       ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Converts Upper matrices into vectors for lower model
+
+        During the process of conversion, the external area (the area
+        not being used by the lower model) is converted into the
+        lower_zoning_system and written out to
+        external_matrix_output_dir.
+        A set of standard reports are also generated based off of the
+        generated vectors. There reports are written out to
+        lower_model_vector_report_dir
 
         Parameters
         ----------
