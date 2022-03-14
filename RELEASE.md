@@ -26,6 +26,13 @@ Below, a brief summary of patches made since the previous version can be found.
     - DVector
     - SegmentationLevel
     - ZoningSystem
+- NoTEM
+  - Updated Attraction Model to accept a new form of Land Use data and attraction
+    trip weights. This should lead to more accurate attraction trip ends.
+  - Updated the Tram Model to balance at different zoning systems for different
+    modes - similar to how NoTEM now balances bus trips.
+  - Applied a fix to the tram model where negative train trips were being
+    predicted before balancing.
 - Updated NoTEM and Distribution Model to read in DVectors using the new
   `Dvector.load()` method. This makes loads faster and safer.
 - Distribution Model

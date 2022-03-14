@@ -18,13 +18,14 @@ from normits_demand.models.tram_model import TramModel
 from normits_demand.pathing import TramImportPaths
 
 # GLOBAL VARIABLES
-years = [2018, 2033, 2040, 2050]
+# years = [2018, 2033, 2040, 2050]
+years = [2018]
 scenario = nd.constants.SC01_JAM
-notem_iter = '9.3'
+notem_iter = '9.6'
 tram_import_home = r"I:\NorMITs Demand\import\modal\tram\tram_pa"
-notem_export_home = r"E:\NorMITs Demand\NoTEM"
+notem_export_home = r"F:\NorMITs Demand\NoTEM"
 
-export_home = r"E:\NorMITs Demand\Tram"
+export_home = r"F:\NorMITs Demand\Tram"
 
 
 def main():
@@ -34,7 +35,22 @@ def main():
     nhb_production_data_version = '1.1'
     nhb_attraction_data_version = '1.1'
 
-    attraction_balance_zoning = nd.get_zoning_system('gor')
+    # Define different balancing zones for each mode
+    mode_balancing_zones = {5: nd.get_zoning_system("ca_sector_2020")}
+    hb_balance_zoning = nd.BalancingZones.build_single_segment_group(
+        nd.get_segmentation_level('tram_hb_output'),
+        nd.get_zoning_system('gor'),
+        "m",
+        mode_balancing_zones,
+    )
+    nhb_balance_zoning = nd.BalancingZones.build_single_segment_group(
+        nd.get_segmentation_level('tram_nhb_output'),
+        nd.get_zoning_system('gor'),
+        "m",
+        mode_balancing_zones,
+    )
+
+    # Define which modes compete with tram
     tram_competitors = [nd.Mode.CAR, nd.Mode.BUS, nd.Mode.TRAIN]
 
     # Generate the imports
@@ -63,7 +79,8 @@ def main():
         import_builder=import_builder,
         export_home=export_home,
         tram_competitors=tram_competitors,
-        attraction_balance_zoning=attraction_balance_zoning,
+        hb_balance_zoning=hb_balance_zoning,
+        nhb_balance_zoning=nhb_balance_zoning,
     )
 
     n.run_tram(
@@ -71,10 +88,10 @@ def main():
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,
-        generate_hb_attraction=False,
+        generate_hb_attraction=True,
         generate_nhb_production=False,
-        generate_nhb_attraction=True,
-        before_after_report=True,
+        generate_nhb_attraction=False,
+        before_after_report=False,
     )
 
 
