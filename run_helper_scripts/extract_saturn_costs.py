@@ -13,7 +13,6 @@ import argparse
 import configparser
 import dataclasses
 import itertools
-import os
 import re
 import subprocess
 import sys
@@ -31,6 +30,7 @@ import normits_demand as nd
 from normits_demand import logging as nd_log
 from normits_demand import constants as nd_consts
 from normits_demand.utils import file_ops
+from normits_demand.matrices import ufm_converter
 
 # pylint: enable=import-error,wrong-import-position
 
@@ -188,33 +188,6 @@ class ExtractCostsInputs:
 
 
 ##### FUNCTIONS #####
-def update_env(saturn_path: Path) -> os._Environ:  # pylint: disable=protected-access
-    """Creates a copy of environment variables and adds SATURN path.
-
-    Parameters
-    ----------
-    saturn_path: Path
-        Path to folder containing SATURN batch files.
-
-    Returns
-    -------
-    os._Environ
-        A copy of `os.environ` with the `saturn_path` added to the
-        "PATH" variable.
-
-    Raises
-    ------
-    NotADirectoryError
-        If `saturn_path` isn't an existing folder.
-    """
-    if not saturn_path.is_dir():
-        raise NotADirectoryError(saturn_path)
-    new_env = os.environ.copy()
-    sat_paths = rf'"{saturn_path.resolve()}";"{saturn_path.resolve()}\BATS";'
-    new_env["PATH"] = sat_paths + new_env["PATH"]
-    return new_env
-
-
 def get_arguments() -> argparse.Namespace:
     """Parse the commandline arguments.
 
@@ -240,14 +213,7 @@ def get_arguments() -> argparse.Namespace:
     return args
 
 
-def _cmd_strip(stdout: bytes) -> str:
-    """Convert to str and strip newlines from subprocess `stdout` or `stderr`."""
-    return stdout.decode().strip().replace("\r\n", "\n")
-
-
-def ufms_to_csvs(
-    path: Path, saturn_env: os._Environ  # pylint: disable=protected-access
-) -> None:
+def ufms_to_csvs(path: Path, converter: ufm_converter.UFMConverter) -> None:
     """Convert all UFMs with given starting `path` to CSVs.
 
     CSVs are produced in SATURNs TUBA 2 format.
@@ -258,24 +224,11 @@ def ufms_to_csvs(
         Path stem for files to search for, finds any files in folder
         `path.parent` which start with `path.stem` and have the
         suffix '.UFM'.
-    saturn_env : os._Environ
-        Environment with the SATURN path included.
+    converter : normits_demand.matrices.ufm.UFMConverter
+        Class for converting between UFMs and CSVs.
     """
     for mat in path.parent.glob(f"{path.stem}*.UFM"):
-        csv = mat.with_suffix(".csv")
-        comp_proc = subprocess.run(
-            ["UFM2TBA2", str(mat), str(csv)],
-            capture_output=True,
-            env=saturn_env,
-            check=True,
-            shell=True,
-        )
-        LOG.debug(
-            "Converting to CSV: %s\n%s\n%s",
-            mat,
-            _cmd_strip(comp_proc.stdout),
-            _cmd_strip(comp_proc.stderr),
-        )
+        converter.ufm_to_tba2(mat)
 
 
 def skim_assignments(
@@ -312,7 +265,7 @@ def skim_assignments(
         desc="Skimming assignments",
         dynamic_ncols=True,
     )
-    saturn_env = update_env(saturn_path)
+    converter = ufm_converter.UFMConverter(saturn_path)
     for path, uc in pbar:
         path = path.resolve()
         if uc is not None:
@@ -325,21 +278,21 @@ def skim_assignments(
         comp_proc = subprocess.run(
             command,
             capture_output=True,
-            env=saturn_env,
+            env=converter.environment,
             check=True,
             shell=True,
         )
         LOG.debug(
             "Skimmed: %s\n%s\n%s",
             path,
-            _cmd_strip(comp_proc.stdout),
-            _cmd_strip(comp_proc.stderr),
+            ufm_converter.cmd_strip(comp_proc.stdout),
+            ufm_converter.cmd_strip(comp_proc.stderr),
         )
-        ufms_to_csvs(output, saturn_env)
+        ufms_to_csvs(output, converter)
 
 
 def parse_skim_name(path: Path) -> SkimDetails:
-    """Parser a skim file name to extract details.
+    """Parses a skim file name to extract details.
 
     Extracts time period, skim type and user class from file name.
 
@@ -428,6 +381,7 @@ def find_csv_skims(
             details = parse_skim_name(path)
         except SkimFileNameError as err:
             LOG.warning("%s: %s", err.__class__.__name__, err)
+            continue
         if skim_type and details.skim_type != skim_type:
             continue
         if user_classes and details.user_class not in user_classes:

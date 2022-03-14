@@ -20,6 +20,7 @@ import normits_demand as nd
 # TODO: Class wrapper
 # TODO: Search for Saturn instance
 # TODO: Classify saturn instance
+# TODO: Move functionality to normits_demand.matrices.ufm_converter
 
 class CsvToUFM:
 
