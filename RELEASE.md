@@ -33,6 +33,8 @@ Below, a brief summary of patches made since the previous version can be found.
     modes - similar to how NoTEM now balances bus trips.
   - Applied a fix to the tram model where negative train trips were being
     predicted before balancing.
+  - Applied a fix to the tram model where output attractions always had a 
+    tiny infill.
 - Updated NoTEM and Distribution Model to read in DVectors using the new
   `Dvector.load()` method. This makes loads faster and safer.
 - Distribution Model

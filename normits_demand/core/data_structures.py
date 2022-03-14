@@ -1956,6 +1956,7 @@ class DVector:
                     # Get data and infill zeros
                     self_data_lst = list()
                     other_data_lst = list()
+                    zero_mask_lst = list()
                     for segment in segment_group:
                         # Only perform balancing for given segments
                         if segment not in segment_names:
@@ -1964,6 +1965,11 @@ class DVector:
                         self_data = self._data[segment]
                         other_data = other._data[segment]
 
+                        # Infill zeros for balance
+                        zero_mask = self_data <= 0
+                        self_data = np.where(zero_mask <= 0, self._zero_infill, self_data)
+                        other_data = np.where(other_data <= 0, self._zero_infill, other_data)
+
                         # Remove the zones we don't care about
                         self_data *= zone_mask
                         other_data *= zone_mask
@@ -1971,6 +1977,7 @@ class DVector:
                         # Append
                         self_data_lst.append(self_data)
                         other_data_lst.append(other_data)
+                        zero_mask_lst.append(zero_mask)
 
                     # Get the control factor
                     if np.sum(self_data_lst) == 0:
@@ -1979,11 +1986,12 @@ class DVector:
                         factor = np.sum(other_data_lst) / np.sum(self_data_lst)
 
                     # Balance each segment
-                    for segment, self_data in zip(segment_group, self_data_lst):
+                    iterator = zip(segment_group, self_data_lst, zero_mask_lst)
+                    for segment, self_data, zero_mask in iterator:
                         # Only perform balancing for given segments
                         if segment not in segment_names:
                             continue
-                        dvec_data[segment] = self_data * factor
+                        dvec_data[segment] = self_data * factor * ~zero_mask
                         pbar.update()
 
         else:
@@ -1992,6 +2000,11 @@ class DVector:
                 # Get data
                 self_data = self._data[segment]
                 other_data = other._data[segment]
+
+                # Infill zeros for balance
+                zero_mask = self_data <= 0
+                self_data = np.where(self_data <= 0, self._zero_infill, self_data)
+                other_data = np.where(other_data <= 0, self._zero_infill, other_data)
 
                 # Remove the zones we don't care about
                 self_data *= zone_mask
@@ -2002,7 +2015,7 @@ class DVector:
                     factor = 1
                 else:
                     factor = np.sum(other_data) / np.sum(self_data)
-                dvec_data[segment] = self_data * factor
+                dvec_data[segment] = self_data * factor * ~zero_mask
                 pbar.update()
         pbar.close()
         return dvec_data
