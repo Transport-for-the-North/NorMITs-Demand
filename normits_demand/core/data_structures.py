@@ -1932,6 +1932,7 @@ class DVector:
                                       zone_mask: np.ndarray,
                                       segment_names: List[str],
                                       split_weekday_weekend: bool = False,
+                                      show_pbar: bool = True,
                                       ):
         """Internal balancing function of self.balance_at_segments()"""
         # Init
@@ -1941,6 +1942,7 @@ class DVector:
             total=len(segment_names),
             dynamic_ncols=True,
             leave=False,
+            disable=not show_pbar
         )
 
         if split_weekday_weekend:
@@ -1962,10 +1964,6 @@ class DVector:
                         self_data = self._data[segment]
                         other_data = other._data[segment]
 
-                        # Infill zeros
-                        self_data = np.where(self_data <= 0, self._zero_infill, self_data)
-                        other_data = np.where(other_data <= 0, self._zero_infill, other_data)
-
                         # Remove the zones we don't care about
                         self_data *= zone_mask
                         other_data *= zone_mask
@@ -1975,7 +1973,10 @@ class DVector:
                         other_data_lst.append(other_data)
 
                     # Get the control factor
-                    factor = np.sum(other_data_lst) / np.sum(self_data_lst)
+                    if np.sum(self_data_lst) == 0:
+                        factor = 1
+                    else:
+                        factor = np.sum(other_data_lst) / np.sum(self_data_lst)
 
                     # Balance each segment
                     for segment, self_data in zip(segment_group, self_data_lst):
@@ -1992,16 +1993,16 @@ class DVector:
                 self_data = self._data[segment]
                 other_data = other._data[segment]
 
-                # Infill zeros
-                self_data = np.where(self_data <= 0, self._zero_infill, self_data)
-                other_data = np.where(other_data <= 0, self._zero_infill, other_data)
-
                 # Remove the zones we don't care about
                 self_data *= zone_mask
                 other_data *= zone_mask
 
                 # Balance
-                dvec_data[segment] = self_data * (np.sum(other_data) / np.sum(self_data))
+                if np.sum(self_data) == 0:
+                    factor = 1
+                else:
+                    factor = np.sum(other_data) / np.sum(self_data)
+                dvec_data[segment] = self_data * factor
                 pbar.update()
         pbar.close()
         return dvec_data
@@ -2100,6 +2101,7 @@ class DVector:
                 zone_mask=np.ones(self.zoning_system.unique_zones.shape),
                 segment_names=self.segmentation.segment_names,
                 split_weekday_weekend=split_weekday_weekend,
+                show_pbar=True,
             )
 
         else:
@@ -2110,7 +2112,7 @@ class DVector:
                 dynamic_ncols=True,
             )
             # Loop through balancing zone groups
-            # TODO Add multiprocessing
+            # TODO Add multiprocessing?
             for zoning, segments in balance_zoning:
                 # Figure out the masks for zone groups
                 translation = self.zoning_system.translate(zoning)
@@ -2126,6 +2128,7 @@ class DVector:
                         zone_mask=zone_mask,
                         segment_names=segments,
                         split_weekday_weekend=split_weekday_weekend,
+                        show_pbar=False,
                     )
                     data_list.append(adjusted)
                 pbar.update(len(segments))
