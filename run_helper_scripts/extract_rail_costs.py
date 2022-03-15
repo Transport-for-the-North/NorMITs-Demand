@@ -345,7 +345,7 @@ def nhb_costs(
             for ca in nd_consts.VALID_CA:
                 out_file = (
                     output_folder
-                    / f"nhb_{model_name}_cost_p{purp}_m{MODE_N}_ca{ca}_tp{ts}.pbz2"
+                    / f"nhb_{model_name}_cost_p{purp}_m{MODE_N}_ca{ca}_tp{ts}.csv.bz2"
                 )
 
                 file_ops.write_df(costs[uc], out_file)
@@ -398,7 +398,7 @@ def hb_costs(
         uc = purp_to_uc[purp]
         for ca in nd_consts.VALID_CA:
             out_file = (
-                output_folder / f"hb_{model_name}_cost_p{purp}_m{MODE_N}_ca{ca}.pbz2"
+                output_folder / f"hb_{model_name}_cost_p{purp}_m{MODE_N}_ca{ca}.csv.bz2"
             )
 
             file_ops.write_df(costs[uc], out_file)

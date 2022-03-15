@@ -497,7 +497,7 @@ def nhb_costs(
 
         for purp in nd_consts.ALL_NHB_P:
             uc = _purp_to_user_class(purp)
-            out_file = output_folder / f"nhb_{model_name}_cost_p{purp}_m3_tp{tp}.pbz2"
+            out_file = output_folder / f"nhb_{model_name}_cost_p{purp}_m3_tp{tp}.csv.bz2"
 
             key = SkimDetails(tp, "D", uc)
             try:
@@ -558,7 +558,7 @@ def hb_costs(
 
     for purp in pbar:
         uc = _purp_to_user_class(purp)
-        out_file = output_folder / f"hb_{model_name}_cost_p{purp}_m3.pbz2"
+        out_file = output_folder / f"hb_{model_name}_cost_p{purp}_m3.csv.bz2"
 
         if uc not in cache:
             skim_paths = {}
