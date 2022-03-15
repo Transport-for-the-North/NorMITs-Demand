@@ -83,7 +83,7 @@ def tms_tour_prop():
             # ## GRAB TP SPLITS BY PURPOSE AND ZONE ## #
             print("Reading in NoTEM time period split factors...")
             notem_file = prod_vec_fname % year
-            notem_dvec = nd.read_pickle(os.path.join(notem_import_folder, notem_file))
+            notem_dvec = nd.DVector.load(os.path.join(notem_import_folder, notem_file))
 
             # Convert to needed segments and translate
             week_seg = nd.get_segmentation_level("hb_p_tp_week")

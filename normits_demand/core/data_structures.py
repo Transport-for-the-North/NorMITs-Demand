@@ -24,6 +24,8 @@ import warnings
 import operator
 import itertools
 
+from os import PathLike
+
 from typing import Any
 from typing import Dict
 from typing import List
@@ -34,6 +36,7 @@ from typing import Optional
 # Third Party
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 # Local Imports
 import normits_demand as nd
@@ -57,42 +60,49 @@ class TimeFormat(enum.Enum):
     AVG_DAY = 'avg_day'
     AVG_HOUR = 'avg_hour'
 
-    @classmethod
-    def get_time_periods(cls) -> List[int]:
+    @staticmethod
+    def _valid_time_formats() -> List[str]:
+        """
+        Returns a list of valid strings to pass for time_format
+        """
+        return [x.value for x in TimeFormat]
+
+    @staticmethod
+    def get_time_periods() -> List[int]:
         return [1, 2, 3, 4, 5, 6]
 
-    @classmethod
-    def conversion_order(cls) -> List[TimeFormat]:
-        return [cls.AVG_WEEK, cls.AVG_DAY, cls.AVG_HOUR]
+    @staticmethod
+    def conversion_order() -> List[TimeFormat]:
+        return [TimeFormat.AVG_WEEK, TimeFormat.AVG_DAY, TimeFormat.AVG_HOUR]
 
-    @classmethod
-    def _week_to_hour_factors(cls) -> Dict[int, float]:
+    @staticmethod
+    def _week_to_hour_factors() -> Dict[int, float]:
         """Compound week to day and day to hour factors"""
         return du.combine_dict_list(
-            dict_list=[cls._week_to_day_factors(), cls._day_to_hour_factors()],
+            dict_list=[TimeFormat._week_to_day_factors(), TimeFormat._day_to_hour_factors()],
             operation=operator.mul,
         )
 
-    @classmethod
-    def _hour_to_week_factors(cls) -> Dict[int, float]:
+    @staticmethod
+    def _hour_to_week_factors() -> Dict[int, float]:
         """Compound hour to day and day to week factors"""
         return du.combine_dict_list(
-            dict_list=[cls._hour_to_day_factors(), cls._day_to_week_factors()],
+            dict_list=[TimeFormat._hour_to_day_factors(), TimeFormat._day_to_week_factors()],
             operation=operator.mul,
         )
 
-    @classmethod
-    def _hour_to_day_factors(cls) -> Dict[int, float]:
+    @staticmethod
+    def _hour_to_day_factors() -> Dict[int, float]:
         """Inverse of day to hour factors"""
-        return {k: 1 / v for k, v in cls._day_to_hour_factors().items()}
+        return {k: 1 / v for k, v in TimeFormat._day_to_hour_factors().items()}
 
-    @classmethod
-    def _day_to_week_factors(cls) -> Dict[int, float]:
+    @staticmethod
+    def _day_to_week_factors() -> Dict[int, float]:
         """Inverse of week to day factors"""
-        return {k: 1 / v for k, v in cls._week_to_day_factors().items()}
+        return {k: 1 / v for k, v in TimeFormat._week_to_day_factors().items()}
 
-    @classmethod
-    def _week_to_day_factors(cls) -> Dict[int, float]:
+    @staticmethod
+    def _week_to_day_factors() -> Dict[int, float]:
         return {
             1: 0.2,
             2: 0.2,
@@ -102,8 +112,8 @@ class TimeFormat(enum.Enum):
             6: 1,
         }
 
-    @classmethod
-    def _day_to_hour_factors(cls) -> Dict[int, float]:
+    @staticmethod
+    def _day_to_hour_factors() -> Dict[int, float]:
         return {
             1: 1/3,
             2: 1/6,
@@ -112,6 +122,50 @@ class TimeFormat(enum.Enum):
             5: 1/24,
             6: 1/24,
         }
+
+    @staticmethod
+    def get(value: str) -> TimeFormat:
+        """Get an instance of this with value
+
+        Parameters
+        ----------
+        value:
+            The value of the enum to get the entire class for
+
+        Returns
+        -------
+        time_format:
+            The gotten time format
+
+        Raises
+        ------
+        ValueError:
+            If the given value cannot be found in the class enums.
+        """
+        # Check we've got a valid value
+        value = value.strip().lower()
+        if value not in TimeFormat._valid_time_formats():
+            raise ValueError(
+                "The given time_format is not valid.\n"
+                "\tGot: %s\n"
+                "\tExpected one of: %s"
+                % (value, TimeFormat._valid_time_formats())
+            )
+
+        # Convert into a TimeFormat constant
+        return_val = None
+        for name, time_format_obj in TimeFormat.__members__.items():
+            if name.lower() == value:
+                return_val = time_format_obj
+                break
+
+        if return_val is None:
+            raise ValueError(
+                "We checked that the given time_format was valid, but it "
+                "wasn't set when we tried to set it. This shouldn't be "
+                "possible!"
+            )
+        return return_val
 
     def get_conversion_factors(self,
                                to_time_format: TimeFormat,
@@ -390,8 +444,8 @@ class DVector:
             return None
         return self._time_format.name
 
-    @classmethod
-    def _valid_time_formats(cls) -> List[str]:
+    @staticmethod
+    def _valid_time_formats() -> List[str]:
         """
         Returns a list of valid strings to pass for time_format
         """
@@ -1077,19 +1131,6 @@ class DVector:
             path = path.parent / (path.stem + self._dvec_suffix)
 
         return compress.write_out(self, path, overwrite_suffix=False)
-
-    def to_pickle(self, path: nd.PathLike) -> None:
-        """
-        Pickle (serialize) object to file.
-
-        Parameters
-        ----------
-        path:
-            Filepath to store the pickled object
-
-        """
-        with open(path, 'wb') as f:
-            pickle.dump(self, f)
 
     @staticmethod
     def _multiply_and_aggregate_internal(aggregation_keys_chunk,
@@ -1889,11 +1930,20 @@ class DVector:
     def _balance_at_segments_internal(self,
                                       other: DVector,
                                       zone_mask: np.ndarray,
+                                      segment_names: List[str],
                                       split_weekday_weekend: bool = False,
+                                      show_pbar: bool = True,
                                       ):
         """Internal balancing function of self.balance_at_segments()"""
         # Init
-        dvec_data = dict.fromkeys(self.segmentation.segment_names)
+        dvec_data = dict.fromkeys(segment_names)
+        pbar = tqdm(
+            desc="Balancing segments",
+            total=len(segment_names),
+            dynamic_ncols=True,
+            leave=False,
+            disable=not show_pbar
+        )
 
         if split_weekday_weekend:
             # Get the grouped segment lists
@@ -1906,13 +1956,18 @@ class DVector:
                     # Get data and infill zeros
                     self_data_lst = list()
                     other_data_lst = list()
+                    zero_mask_lst = list()
                     for segment in segment_group:
+                        # Only perform balancing for given segments
+                        if segment not in segment_names:
+                            continue
                         # Get data
                         self_data = self._data[segment]
                         other_data = other._data[segment]
 
-                        # Infill zeros
-                        self_data = np.where(self_data <= 0, self._zero_infill, self_data)
+                        # Infill zeros for balance
+                        zero_mask = self_data <= 0
+                        self_data = np.where(zero_mask <= 0, self._zero_infill, self_data)
                         other_data = np.where(other_data <= 0, self._zero_infill, other_data)
 
                         # Remove the zones we don't care about
@@ -1922,22 +1977,32 @@ class DVector:
                         # Append
                         self_data_lst.append(self_data)
                         other_data_lst.append(other_data)
+                        zero_mask_lst.append(zero_mask)
 
                     # Get the control factor
-                    factor = np.sum(other_data_lst) / np.sum(self_data_lst)
+                    if np.sum(self_data_lst) == 0:
+                        factor = 1
+                    else:
+                        factor = np.sum(other_data_lst) / np.sum(self_data_lst)
 
                     # Balance each segment
-                    for segment, self_data in zip(segment_group, self_data_lst):
-                        dvec_data[segment] = self_data * factor
+                    iterator = zip(segment_group, self_data_lst, zero_mask_lst)
+                    for segment, self_data, zero_mask in iterator:
+                        # Only perform balancing for given segments
+                        if segment not in segment_names:
+                            continue
+                        dvec_data[segment] = self_data * factor * ~zero_mask
+                        pbar.update()
 
         else:
-            # Control all segments as normal
-            for segment in self.segmentation.segment_names:
+            # Control given segments as normal
+            for segment in segment_names:
                 # Get data
                 self_data = self._data[segment]
                 other_data = other._data[segment]
 
-                # Infill zeros
+                # Infill zeros for balance
+                zero_mask = self_data <= 0
                 self_data = np.where(self_data <= 0, self._zero_infill, self_data)
                 other_data = np.where(other_data <= 0, self._zero_infill, other_data)
 
@@ -1946,14 +2011,19 @@ class DVector:
                 other_data *= zone_mask
 
                 # Balance
-                dvec_data[segment] = self_data * (np.sum(other_data) / np.sum(self_data))
-
+                if np.sum(self_data) == 0:
+                    factor = 1
+                else:
+                    factor = np.sum(other_data) / np.sum(self_data)
+                dvec_data[segment] = self_data * factor * ~zero_mask
+                pbar.update()
+        pbar.close()
         return dvec_data
 
     def balance_at_segments(self,
                             other: DVector,
                             split_weekday_weekend: bool = False,
-                            balance_zoning: nd.core.zoning.ZoningSystem = None,
+                            balance_zoning: nd.BalancingZones = None,
                             ) -> DVector:
         """
         Balance segment totals to other, ignoring zoning splits.
@@ -1975,9 +2045,9 @@ class DVector:
 
 
         balance_zoning:
-            The zoning system to balance at. If not given, the balance will
-            ignore all zones and just balance segments. If given, a
-            translation needs to exist between the given DVectors zoning
+            The zoning systems to balance at per segment. If not given, the
+            balance will ignore all zones and just balance segments. If given,
+            a translation needs to exist between the given DVectors zoning
             systems, and the zoning we are balancing at.
 
         Returns
@@ -2004,11 +2074,16 @@ class DVector:
 
         # Validate inputs
         if balance_zoning is not None:
-            if not isinstance(balance_zoning, nd.core.zoning.ZoningSystem):
+            if not isinstance(balance_zoning, nd.BalancingZones):
                 raise ValueError(
                     "balance_zoning is not the correct type. "
-                    "Expected ZoningSystem, got %s"
+                    "Expected BalancingZones, got %s"
                     % type(balance_zoning)
+                )
+            if balance_zoning.segmentation != self.segmentation:
+                raise ValueError(
+                    "balance_zoning should have segmentation %s, not %s"
+                    % (self.segmentation.name, balance_zoning.segmentation.name)
                 )
 
             if self.zoning_system != other.zoning_system:
@@ -2037,27 +2112,40 @@ class DVector:
             dvec_data = self._balance_at_segments_internal(
                 other=other,
                 zone_mask=np.ones(self.zoning_system.unique_zones.shape),
+                segment_names=self.segmentation.segment_names,
                 split_weekday_weekend=split_weekday_weekend,
+                show_pbar=True,
             )
 
         else:
-            # Figure out the masks for zone groups
-            translation = self.zoning_system.translate(balance_zoning)
-
-            # Balance at each group
             data_list = list()
-            for zone_mask in translation.T:
-                # Skip this if no zones translate
-                if zone_mask.sum() == 0:
-                    continue
+            pbar = tqdm(
+                desc=f"Balancing segments",
+                total=len(self.segmentation.segment_names),
+                dynamic_ncols=True,
+            )
+            # Loop through balancing zone groups
+            # TODO Add multiprocessing?
+            for zoning, segments in balance_zoning:
+                # Figure out the masks for zone groups
+                translation = self.zoning_system.translate(zoning)
 
-                adjusted = self._balance_at_segments_internal(
-                    other=other,
-                    zone_mask=zone_mask,
-                    split_weekday_weekend=split_weekday_weekend,
-                )
-                data_list.append(adjusted)
+                # Balance at each group
+                for zone_mask in translation.T:
+                    # Skip this if no zones translate
+                    if zone_mask.sum() == 0:
+                        continue
 
+                    adjusted = self._balance_at_segments_internal(
+                        other=other,
+                        zone_mask=zone_mask,
+                        segment_names=segments,
+                        split_weekday_weekend=split_weekday_weekend,
+                        show_pbar=False,
+                    )
+                    data_list.append(adjusted)
+                pbar.update(len(segments))
+            pbar.close()
             # Sum the zone groups together
             dvec_data = du.combine_dict_list(data_list, operator.add)
 
@@ -2290,6 +2378,81 @@ class DVector:
             import_data=dvec_data,
             process_count=self.process_count,
         )
+
+    def save(self, path: PathLike = None) -> Union[None, Dict[str, Any]]:
+        """Converts DVector into and instance dict and saves to disk
+
+        The instance_dict contains just enough information to be able to
+        recreate this instance of the class when 'load()' is called.
+        Aims to remove dependencies to pandas versioning when reading/writing.
+        Use `load()` to load in the written out file or instance_dict.
+
+        Parameters
+        ----------
+        path:
+            Path to output file to save.
+
+        Returns
+        -------
+        none_or_instance_dict:
+            If path is set, None is returned.
+            If path is not set, the instance dict that would otherwise
+            be sent to disk is returned.
+        """
+        # Create a dictionary of objects needed to recreate this instance
+        instance_dict = {
+            "zoning_system": self.zoning_system.save(),
+            "segmentation": self.segmentation.save(),
+            "time_format": self._time_format,
+            "data": self._data,
+        }
+
+        # Write out to disk and compress
+        if path is not None:
+            with open(path, 'wb') as f:
+                pickle.dump(instance_dict, f)
+            return None
+
+        return instance_dict
+
+    @staticmethod
+    def load(path_or_instance_dict: Union[PathLike, Dict[str, Any]]) -> DVector:
+        """Creates a DVector instance from path_or_instance_dict
+
+        If path_or_instance_dict is a path, the file is loaded in and
+        the instance_dict extracted.
+        The instance_dict is then used to recreate the saved instance, using
+        the class constructor.
+        Use `save()` to save the data in the correct format.
+
+        Parameters
+        ----------
+        path_or_instance_dict:
+            Path to read the data in from.
+        """
+        # Read in the file if needed
+        if isinstance(path_or_instance_dict, dict):
+            instance_dict = path_or_instance_dict
+        else:
+            with open(path_or_instance_dict, 'rb') as f:
+                instance_dict = pickle.load(f)
+
+        # Validate we have a dictionary
+        if not isinstance(instance_dict, dict):
+            raise ValueError(
+                "Expected instance_dict to be a dictionary. "
+                "Got %s instead"
+                % type(instance_dict)
+            )
+
+        # Instantiate a new object
+        return DVector(
+            zoning_system=core.ZoningSystem.load(instance_dict['zoning_system']),
+            segmentation=core.SegmentationLevel.load(instance_dict['segmentation']),
+            time_format=instance_dict['time_format'],
+            import_data=instance_dict['data'],
+        )
+
 
 class DVectorError(nd.NormitsDemandError):
     """
