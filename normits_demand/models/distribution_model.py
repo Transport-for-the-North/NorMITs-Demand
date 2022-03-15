@@ -368,6 +368,41 @@ class DistributionModel(DistributionModelExportPaths):
         # TLD curve
         #   single mile bands - p/m (ca ) segments full matrix
         #   NorMITs Vis
+        print("test")
+        print(self.export_paths.full_pa_dir)
+        print(self.report_paths.pa_reports_dir)
+        in_dir = self.export_paths.full_pa_dir
+        out_dir = self.report_paths.pa_reports_dir
+
+
+        for segment_params in self.running_segmentation:
+            fname = self.running_segmentation.generate_file_name(
+                segment_params=segment_params,
+                file_desc="synthetic_pa",
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                csv=True
+            )
+
+            path = os.path.join(in_dir, fname)
+            print(path)
+            df = nd.read_df(path=path,
+                            find_similar=True,
+                            index_col=0)
+            sector_zoning = nd.get_zoning_system("ca_sector_2020")
+            pop_translation, emp_translation = translation.get_long_pop_emp_translations(
+                in_zoning_system=self.compile_zoning_system,
+                out_zoning_system=sector_zoning
+            )
+            df = translation.pandas_matrix_zone_translation(
+                matrix=df,
+                row_translation=pop_translation,
+                col_translation=emp_translation,
+                from_zone_col=self.compile_zoning_system.col_name,
+                to_zone_col=sector_zoning.col_name,
+                from_unique_zones=self.compile_zoning_system.unique_zones,
+                to_unique_zones=sector_zoning.unique_zones
+            )
 
         pass
 

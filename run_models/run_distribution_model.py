@@ -14,6 +14,7 @@ File purpose:
 import os
 import sys
 import numpy as np
+import pandas as pd
 
 from typing import Tuple
 
@@ -49,10 +50,10 @@ INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
 
 
 def main():
-    # mode = nd.Mode.CAR
+    mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
     # mode = nd.Mode.TRAIN
-    mode = nd.Mode.TRAM
+    # mode = nd.Mode.TRAM
 
     # Running params
     use_tram = True
@@ -64,7 +65,7 @@ def main():
     run_nhb = False
 
     run_all = False
-    run_upper_model = True
+    run_upper_model = False
     run_lower_model = False
     run_pa_matrix_reports = True
     run_pa_to_od = False
@@ -712,21 +713,88 @@ def import_pa(production_import_path,
 
 
 def run_pa_reports():
-    # PA RUN REPORTS
+    # PA/OD RUN REPORTS
     # Matrix Trip End totals
     # Sector Reports Dvec style
     # TLD curve
     #   single mile bands - p/m (ca ) segments full matrix
 
+    # Requires CA sectors
+    sector_loc = 'Y:/Mobile Data/Processing/MDD_Check/lookups/sector_to_noham_correspondence.csv'
+    sector_cor = pd.read_csv(sector_loc,
+                             names=['sector', 'zone', 'factor', 'internal'],
+                             skiprows=1)
+
+    # Variable names to be replaced
+    md = 3
+    pp = 1
+    yr = 2018
+    pa_od = 'pa'
+    # TODO: if handling of pa/od
+    #tp = 1
+    zone_te_list = []
+    sec_list = []
+
     # Import steps
-    mat = nd.read_df(path="I:/NorMITs Demand/Distribution Model/iter9.3.3/car_and_passenger/Final Outputs/Full PA Matrices/hb_synthetic_pa_yr2018_p1_m3.pbz2")
+    mat = nd.read_df(path=f"I:/NorMITs Demand/Distribution Model/iter9.3.3/car_and_passenger/Final Outputs/Full PA Matrices/hb_synthetic_{pa_od}_yr{yr}_p{pp}_m{md}.pbz2")
+    zones = mat.index
 
-    # Matrix Trip Ends
-    col_t = mat.sum(axis=0)
-    row_t = mat.sum(axis=1)
-    col_t.head()
+    # Convert to pandas dataframe
+    wide_mat = pd.DataFrame(mat,
+                            index=zones,
+                            columns=zones).reset_index()
+    mat = pd.melt(wide_mat,
+                  id_vars=['index'],
+                  var_name='d_zone',
+                  value_name='trip',
+                  col_level=0)
+    mat = mat.rename(columns={'index': 'o_zone'})
+
+    # Zone tripends
+    o_trips = mat.groupby(['o_zone']).agg({'trip': sum}).reset_index()
+    d_trips = mat.groupby(['d_zone']).agg({'trip': sum}).reset_index()
+    # Join
+    zone_te = pd.merge(o_trips,
+                       d_trips,
+                       left_on=['o_zone'],
+                       right_on=['d_zone'])
+    zone_te = zone_te[['o_zone',
+                       'trip_x',
+                       'trip_y']]
+    zone_te = zone_te.rename(columns={'o_zone': 'zone', 'trip_x': 'trip_o', 'trip_y': 'trip_d'})
+
+    # Build master tripend list - for dvector
+    zone_te['mode'] = md
+    zone_te['purp'] = pp
+    #zone_te['tp'] = tp
+    zone_te_list.append(zone_te)
+
+    # Sector-Sector
+    mat_sec = pd.merge(mat,
+                       sector_cor,
+                       left_on=['o_zone'],
+                       right_on=['zone'])
+    mat_sec['trip_sec'] = mat_sec['trip'] * mat_sec['factor']
+    mat_sec = mat_sec.groupby(['sector', 'd_zone']).agg({'trip_sec': sum}).reset_index()
+    mat_sec = mat_sec.rename(columns={'sector': 'o_sec'})
+
+    mat_sec = pd.merge(mat_sec,
+                       sector_cor,
+                       left_on=['d_zone'],
+                       right_on=['zone'])
+    mat_sec['mdd_lad'] = mat_sec['trip_sec'] * mat_sec['factor']
+    mat_sec = mat_sec.groupby(['o_sec', 'sector']).agg({'trip_sec': sum}).reset_index()
+    mat_sec = mat_sec.rename(columns={'sector': 'd_sec'})
+
+    # Build master sector list - for dvector
+    mat_sec['mode'] = md
+    mat_sec['purp'] = pp
+    # zone_te['tp'] = tp
+    sec_list.append(mat_sec)
+
+    # Export - openpyxl
     nd.dvector()
-
+    # separate csv outputs + openpyxl
 
 
 if __name__ == '__main__':
