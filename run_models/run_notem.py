@@ -21,10 +21,10 @@ from normits_demand.pathing import NoTEMImportPaths
 
 
 # GLOBAL VARIABLES
-years = [2018, 2033, 2040, 2050]
-# years = [2018]
+# years = [2018, 2033, 2040, 2050]
+years = [2018]
 scenario = constants.SC01_JAM
-notem_iter = '9.5'
+notem_iter = '9.6'
 lu_drive = "I:/"
 by_iteration = "iter3e"
 fy_iteration = "iter3e"
@@ -35,7 +35,7 @@ notem_export_home = r"E:\NorMITs Demand\NoTEM"
 
 def main():
     hb_production_import_version = '2.2'
-    hb_attraction_import_version = '1.6'
+    hb_attraction_import_version = '2.3'
     nhb_production_import_version = '2.1'
 
     # Define different balancing zones for each mode

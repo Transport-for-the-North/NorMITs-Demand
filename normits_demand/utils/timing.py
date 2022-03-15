@@ -22,6 +22,10 @@ def current_milli_time() -> float:
     return time.perf_counter() * 1000
 
 
+def get_time() -> str:
+    return get_datetime(time_format="%H:%M:%S.%f", precision='millisecond')
+
+
 def get_datetime(time_format: str = "%d-%m-%Y  %H:%M:%S.%f",
                  precision: str = None
                  ) -> str:

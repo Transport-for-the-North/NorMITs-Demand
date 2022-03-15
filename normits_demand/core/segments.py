@@ -14,15 +14,19 @@ Holds the SegmentationLevel Class which stores all information on segmentations
 from __future__ import annotations
 
 # Builtins
+import io
 import os
 import math
 import itertools
 import collections
 
+from os import PathLike
+
 from typing import Any
 from typing import List
 from typing import Dict
 from typing import Tuple
+from typing import Union
 from typing import Optional
 
 # Third Party
@@ -36,10 +40,14 @@ from normits_demand import constants as consts
 from normits_demand.concurrency import multiprocessing
 
 from normits_demand.utils import file_ops
+from normits_demand.utils import compress
 from normits_demand.utils import general as du
 from normits_demand.utils import math_utils
 from normits_demand.utils import pandas_utils as pd_utils
+from normits_demand import logging as nd_log
 
+
+LOG = nd_log.get_logger(__name__)
 
 # ## CLASSES ## #
 class SegmentationLevel:
@@ -551,7 +559,7 @@ class SegmentationLevel:
         """
         Returns the definition for expanding tfn_tt into its components.
         """
-        return file_ops.read_df(self._tfn_tt_expansion_path)
+        return file_ops.read_df(self._tfn_tt_expansion_path, find_similar=True)
 
     def _get_reduce_definition(self,
                                other: SegmentationLevel,
@@ -1066,6 +1074,13 @@ class SegmentationLevel:
                 "out_segmentation is not the correct type. "
                 "Expected SegmentationLevel, got %s"
                 % type(other)
+            )
+
+        # Same segmentation naming order
+        if self.naming_order == other.naming_order:
+            LOG.warning("Aggregating from/to the same segmentation: %s", self.name)
+            return dict(
+                zip(self.segment_names, [[n] for n in self.segment_names])
             )
 
         join_cols, translate_cols = self._get_aggregation_definition(other)
@@ -1936,6 +1951,80 @@ class SegmentationLevel:
             final_name += '.csv.bz2'
 
         return final_name
+
+    def save(self, path: PathLike = None) -> Union[None, Dict[str, Any]]:
+        """Converts SegmentationLevel into and instance dict and saves to disk
+
+        The instance_dict contains just enough information to be able to
+        recreate this instance of the class when 'load()' is called.
+        Aims to remove dependencies to pandas versioning when reading/writing.
+        Use `load()` to load in the written out file or instance_dict.
+
+        Parameters
+        ----------
+        path:
+            Path to output file to save.
+
+        Returns
+        -------
+        none_or_instance_dict:
+            If path is set, None is returned.
+            If path is not set, the instance dict that would otherwise
+            be sent to disk is returned.
+        """
+        # Create a dictionary of objects needed to recreate this instance
+        instance_dict = {
+            "name": self._name,
+            "naming_order": self._naming_order,
+            "segment_types": self._segment_types,
+
+            # Write as a csv to avoid pandas dependencies
+            "valid_segments": self._segments.to_csv(index=False),
+        }
+
+        # Write out to disk and compress
+        if path is not None:
+            compress.write_out(instance_dict, path)
+            return None
+
+        return instance_dict
+
+    @staticmethod
+    def load(path_or_instance_dict: Union[PathLike, Dict[str, Any]]) -> SegmentationLevel:
+        """Creates a ZoningSystem instance from path_or_instance_dict
+
+        If path_or_instance_dict is a path, the file is loaded in and
+        the instance_dict extracted.
+        The instance_dict is then used to recreate the saved instance, using
+        the class constructor.
+        Aims to remove dependencies to pandas versioning when reading/writing.
+        Use `save()` to save the data in the correct format.
+
+        Parameters
+        ----------
+        path_or_instance_dict:
+            Path to read the data in from.
+        """
+        # Read in the file if needed
+        if isinstance(path_or_instance_dict, dict):
+            instance_dict = path_or_instance_dict
+        else:
+            instance_dict = compress.read_in(path_or_instance_dict)
+
+        # Validate we have a dictionary
+        if not isinstance(instance_dict, dict):
+            raise ValueError(
+                "Expected instance_dict to be a dictionary. "
+                "Got %s instead"
+                % type(instance_dict)
+            )
+
+        # Convert the valid_segments back into a pd.DataFrame
+        df = pd.read_csv(io.StringIO(instance_dict["valid_segments"]))
+        instance_dict["valid_segments"] = df
+
+        # Instantiate a new object
+        return SegmentationLevel(**instance_dict)
 
 
 class SegmentationError(nd.NormitsDemandError):

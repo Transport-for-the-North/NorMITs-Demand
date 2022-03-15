@@ -6,7 +6,6 @@
 ##### IMPORTS #####
 # Standard imports
 import dataclasses
-import logging
 import re
 from pathlib import Path
 from typing import Dict, Set, Tuple
@@ -19,13 +18,16 @@ from tqdm import tqdm
 # Local imports
 # pylint: disable=import-error
 import normits_demand as nd
-from normits_demand.utils import file_ops
+from normits_demand import logging as nd_log
 
 # pylint: enable=import-error
 
 
 ###### CONSTANTS #####
-LOG = logging.getLogger(__name__)
+LOG = nd_log.get_logger(
+    nd_log.get_package_logger_name() + ".run_checker_scripts.notem_iter_comparison"
+)
+LOG_FILE = "NoTEM_iter_comparison.log"
 
 
 ###### CLASSES #####
@@ -34,7 +36,7 @@ class ComparisonInputs:
     """Input parameters for running NoTEM iter comparison script."""
 
     base_folder: Path = Path(r"I:\NorMITs Demand\NoTEM")
-    compare_iters: tuple[str, str] = ("iter9.5", "iter9.4")
+    compare_iters: tuple[str, str] = ("iter9.6", "iter9.5")
     scenario: str = "SC01_JAM"
     output_folder: Path = Path(
         r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Outputs\Attraction Balancing Checks"
@@ -74,6 +76,11 @@ def find_notem_reports(
         - `year`
         - `sector`: type of zoning or sector system report e.g. `lad_totals`
         - `pa`: productions or attractions
+
+    Raises
+    ------
+    NotADirectoryError
+        If either of the `iters` folders don't exist.
     """
     pattern = re.compile(
         r"^(?P<trip_origin>n?hb)_"
@@ -82,19 +89,21 @@ def find_notem_reports(
         r"(?P<sector>\w+)$",
         re.I,
     )
-    new_folder = base_folder / iters[0]
-    old_folder = base_folder / iters[1]
-    files = []
+    folders = {"new": base_folder / iters[0], "old": base_folder / iters[1]}
+    for nm, path in folders.items():
+        if not path.is_dir():
+            raise NotADirectoryError(f"{nm} iteration folder doesn't exist: {path}")
 
+    files = []
     pbar = tqdm(
-        desc=f"Finding files in {new_folder}",
+        desc=f"Finding files in {folders['new']}",
         bar_format="{l_bar} {n_fmt} [{elapsed}, {rate_fmt}{postfix}]",
     )
     for trip_origin in ("hb", "nhb"):
         for pa in ("productions", "attractions"):
-            report_dir = new_folder / scenario / f"{trip_origin}_{pa}" / "reports"
+            report_dir = folders["new"] / scenario / f"{trip_origin}_{pa}" / "reports"
             for path in report_dir.iterdir():
-                test_path = old_folder / path.relative_to(new_folder)
+                test_path = folders["old"] / path.relative_to(folders["new"])
 
                 match = pattern.match(path.stem)
                 if match is None:
@@ -142,8 +151,14 @@ def _compare_dataframes(new: pd.DataFrame, old: pd.DataFrame) -> Dict:
     comparisons = {}
     comparisons["identical"] = new.equals(old)
     if not comparisons["identical"]:
-        comparisons["identical_columns"] = (new.columns == old.columns).all()
-        comparisons["identical_index"] = (new.index == old.index).all()
+        try:
+            comparisons["identical_columns"] = (new.columns == old.columns).all()
+        except ValueError:
+            comparisons["identical_columns"] = False
+        try:
+            comparisons["identical_index"] = (new.index == old.index).all()
+        except ValueError:
+            comparisons["identical_index"] = False
         comparisons["max_difference"] = np.max(np.abs((new - old).values))
         comparisons["max_%_difference"] = np.max(np.abs((new / old) - 1).values)
     return comparisons
@@ -254,7 +269,7 @@ def find_dvectors(new_folder: Path, old_folder: Path) -> pd.DataFrame:
     return pd.DataFrame(files)
 
 
-def compare_dvectors(new: Path, old: Path, output_folder: Path) -> None:
+def compare_dvectors(new: Path, old: Path, output_folder: Path) -> Path:
     """Compare 2 DVector files.
 
     Creates the following comparison files in a new sub-folder:
@@ -273,6 +288,11 @@ def compare_dvectors(new: Path, old: Path, output_folder: Path) -> None:
     output_folder : Path
         Folder to save comparison outputs, a new folder
         will be created with the name `new.stem`.
+
+    Returns
+    -------
+    Path
+        Folder where outputs are saved.
     """
 
     def diffs(new, old) -> Dict[str, pd.DataFrame]:
@@ -284,8 +304,7 @@ def compare_dvectors(new: Path, old: Path, output_folder: Path) -> None:
     grouped = {}
     no_zones = {}
     for nm, p in (("new", new), ("old", old)):
-        print(f"Reading: {nm}")
-        dvec: nd.DVector = file_ops.read_pickle(p)
+        dvec: nd.DVector = nd.DVector.load(p)
         df = dvec.to_df()
         del dvec
 
@@ -297,16 +316,12 @@ def compare_dvectors(new: Path, old: Path, output_folder: Path) -> None:
         grouped[nm] = grpd
         no_zones[nm] = grpd.droplevel(0).groupby(level=["p", "tp"]).sum()
 
-    # FIXME Distinguish between productions and attractions in output folder name
-    # currently the out_folder is named purely with the stem of the DVector file
-    # name, which causes overwriting when running for both attractions and productions
-    out_folder = output_folder / f"{new.stem} comparisons"
+    out_folder = output_folder / new.parent.name / f"{new.stem} comparisons"
     out_folder.mkdir(exist_ok=True, parents=True)
     out = out_folder / "DVector_comparison_summary.xlsx"
     with pd.ExcelWriter(out) as writer:
         for nm, df in diffs(**no_zones).items():
             df.to_excel(writer, sheet_name=nm)
-    print(f"Written: {out}")
 
     csvs = {
         **diffs(**grouped),
@@ -316,22 +331,35 @@ def compare_dvectors(new: Path, old: Path, output_folder: Path) -> None:
     for nm, df in csvs.items():
         out = out_folder / f"{nm}.csv"
         df.to_csv(out)
-        print(f"Written: {nm}")
+
+    return out_folder
 
 
-def main(params: ComparisonInputs) -> None:
+def main(params: ComparisonInputs, init_logger: bool = True) -> None:
     """Compares the reports and DVectors between 2 NoTEM iterations.
 
     Parameters
     ----------
     params : ComparisonInputs
         Parameters for the comparison.
+    init_logger : bool, default True
+        Initialise logger with log file in `params.output_folder`.
+
+    Raises
+    ------
+    NotADirectorError
+        If `params.base_folder` doesn't exist.
     """
-    print(
-        f"Folder: {params.base_folder}",
-        f"Exist: {params.base_folder.exists()}",
-        sep="\n",
-    )
+    if init_logger:
+        nd_log.get_logger(
+            nd_log.get_package_logger_name(),
+            params.output_folder / LOG_FILE,
+            "Adding Segmentation",
+        )
+
+    if not params.base_folder.is_dir():
+        raise NotADirectoryError(f"base folder doesn't exist: {params.base_folder}")
+    LOG.info("Base folder: %s", params.base_folder)
 
     # Find and compare all NoTEM reports CSVs
     files = find_notem_reports(
@@ -339,21 +367,33 @@ def main(params: ComparisonInputs) -> None:
         params.compare_iters,
         params.scenario,
     )
+    name = "{}_to_{}_comparison".format(*params.compare_iters)
     file_comparisons = compare_reports(files, {"val"})
-    file_comparisons.to_excel(
-        params.output_folder
-        / "{}_to_{}_report_comparison.xlsx".format(*params.compare_iters),
-        index=False,
-    )
+    out = params.output_folder / (name + "-reports.xlsx")
+    file_comparisons.to_excel(out, index=False)
+    LOG.info("Written: %s", out)
 
+    # Find and compare all DVectors
     dvectors = find_dvectors(
         params.base_folder / params.compare_iters[0],
         params.base_folder / params.compare_iters[1],
     )
-    # TODO Iterate through dvectors to compare each one separately
-    # Compare the first DVectors found
-    new, old = dvectors.iloc[0, :2]
-    compare_dvectors(new, old, params.output_folder)
+    out = params.output_folder / (name + "-DVector_summary.csv")
+    dvectors.to_csv(out, index=False)
+    LOG.info("Written: %s", out)
+
+    pbar = tqdm(
+        dvectors.itertuples(index=False),
+        total=len(dvectors),
+        desc="Comparing DVectors",
+        dynamic_ncols=True,
+    )
+    for row in pbar:
+        if row.old_exists:
+            out = compare_dvectors(row.new, row.old, params.output_folder)
+            tqdm.write(f"Outputs saved to: {out}")
+
+    LOG.info("Comparisons saved to: %s", params.output_folder)
 
 
 ##### MAIN #####

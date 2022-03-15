@@ -15,14 +15,15 @@ systems
 from __future__ import annotations
 
 # Builtins
-import configparser
-import itertools
-import logging
 import os
+import logging
 import warnings
+import itertools
+import configparser
 
+from os import PathLike
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Union, Optional
 
 # Third Party
 import numpy as np
@@ -32,6 +33,7 @@ import pandas as pd
 import normits_demand as nd
 
 from normits_demand.utils import file_ops
+from normits_demand.utils import compress
 from normits_demand.utils import pandas_utils as pd_utils
 
 
@@ -361,6 +363,72 @@ class ZoningSystem:
         )
 
         return translation.values
+
+    def save(self, path: PathLike = None) -> Union[None, Dict[str, Any]]:
+        """Converts ZoningSystem into an instance dict and saves to disk
+
+        The instance_dict contains just enough information to be able to
+        recreate this instance of the class when 'load()' is called.
+        Use `load()` to load in the written out file or instance_dict.
+
+        Parameters
+        ----------
+        path:
+            Path to output file to save.
+
+        Returns
+        -------
+        none_or_instance_dict:
+            If path is set, None is returned.
+            If path is not set, the instance dict that would otherwise
+            be sent to disk is returned.
+        """
+        # Create a dictionary of objects needed to recreate this instance
+        instance_dict = {
+            "name": self._name,
+            "unique_zones": self._unique_zones,
+            "internal_zones": self._internal_zones,
+            "external_zones": self._external_zones,
+        }
+
+        # Write out to disk and compress
+        if path is not None:
+            compress.write_out(instance_dict, path)
+            return None
+
+        return instance_dict
+
+    @staticmethod
+    def load(path_or_instance_dict: Union[PathLike, Dict[str, Any]]) -> ZoningSystem:
+        """Creates a ZoningSystem instance from path_or_instance_dict
+
+        If path_or_instance_dict is a path, the file is loaded in and
+        the instance_dict extracted.
+        The instance_dict is then used to recreate the saved instance, using
+        the class constructor.
+        Use `save()` to save the data in the correct format.
+
+        Parameters
+        ----------
+        path_or_instance_dict:
+            Path to read the data in from.
+        """
+        # Read in the file if needed
+        if isinstance(path_or_instance_dict, dict):
+            instance_dict = path_or_instance_dict
+        else:
+            instance_dict = compress.read_in(path_or_instance_dict)
+
+        # Validate we have a dictionary
+        if not isinstance(instance_dict, dict):
+            raise ValueError(
+                "Expected instance_dict to be a dictionary. "
+                "Got %s instead"
+                % type(instance_dict)
+            )
+
+        # Instantiate a new object
+        return ZoningSystem(**instance_dict)
 
 
 class ZoningError(nd.NormitsDemandError):

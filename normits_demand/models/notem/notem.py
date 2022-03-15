@@ -280,7 +280,6 @@ class NoTEM(NoTEMExportPaths):
         self._logger.info("Running the Home-Based Attraction Model")
         hb_attr.run(
             export_pure_attractions=False,
-            export_fully_segmented=False,
             export_notem_segmentation=True,
             export_reports=True,
         )
