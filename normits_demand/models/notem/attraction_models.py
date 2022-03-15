@@ -81,39 +81,38 @@ class HBAttractionModel(HBAttractionModelPaths):
     _target_col_dtypes = {
         'employment': {
             'msoa_zone_id': str,
-            'employment_cat': str,
-            'soc': int,
+            'sic_code': int,
             'people': float
         },
         'trip_weight': {
-            'msoa_zone_id': str,
-            'employment_cat': str,
             'purpose': int,
-            'soc': int,
+            'mode': int,
+            'sic_code': int,
             'trip_rate': float
         },
-        'mode_split': {
-            'msoa_zone_id': str,
-            'p': int,
-            'm': int,
-            'mode_share': float
-        },
+    }
+
+    # Define segmentations used
+    _segmentations = {
+        'employment': 'sic',
+        'trip_weights': 'hb_p_m_sic',
+        'pure_attractions': 'hb_p_m',
     }
 
     # Define segment renames needed
     _seg_rename = {
-        'employment_cat': 'e_cat',
-        'people': 'people',
-        'area_type': 'tfn_at',
+        'sic_code': 'sic',
         'purpose': 'p',
-        'mode_share': 'split'
+        'mode': 'm',
     }
+
+    _zoning = 'msoa'
 
     def __init__(self,
                  employment_paths: Dict[int, nd.PathLike],
                  production_balance_paths: Dict[int, nd.PathLike],
                  trip_weights_path: str,
-                 mode_splits_path: str,
+                 non_resi_path: str, # TODO Remove temp parameter replacement for land use
                  export_home: str,
                  balance_zoning: nd.BalancingZones = None,
                  constraint_paths: Dict[int, nd.PathLike] = None,
@@ -141,10 +140,10 @@ class HBAttractionModel(HBAttractionModelPaths):
             Should have the columns as defined in:
             HBAttractionModel._target_cols['trip_weight']
 
-        mode_splits_path:
-            The path to attraction mode split.
-            Should have the columns as defined in:
-            HBAttractionModel._target_cols['mode_split']
+        non_resi_path: str
+            Path to the non residential data used as a temporary replacement
+            for land use data. TODO Remove this parameter when using new version
+            of land use.
 
         export_home:
             Path to export attraction outputs.
@@ -171,7 +170,6 @@ class HBAttractionModel(HBAttractionModelPaths):
         [file_ops.check_file_exists(x, find_similar=True) for x in employment_paths.values()]
         [file_ops.check_file_exists(x) for x in production_balance_paths.values()]
         file_ops.check_file_exists(trip_weights_path, find_similar=True)
-        file_ops.check_file_exists(mode_splits_path, find_similar=True)
 
         if constraint_paths is not None:
             [file_ops.check_file_exists(x, find_similar=True) for x in constraint_paths.values()]
@@ -196,7 +194,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         self.employment_paths = employment_paths
         self.production_balance_paths = production_balance_paths
         self.trip_weights_path = trip_weights_path
-        self.mode_splits_path = mode_splits_path
+        self.non_resi_path = non_resi_path # TODO Remove this parameter when using new land use
         self.balance_zoning = balance_zoning
         self.constraint_paths = constraint_paths
         self.process_count = process_count
@@ -228,7 +226,6 @@ class HBAttractionModel(HBAttractionModelPaths):
 
     def run(self,
             export_pure_attractions: bool = False,
-            export_fully_segmented: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
             ) -> None:
@@ -240,18 +237,9 @@ class HBAttractionModel(HBAttractionModelPaths):
             - Reads in the trip rates data given in the constructor.
             - Multiplies the employment and trip rates on relevant segments,
               producing "pure attractions".
-            - Optionally writes out a pickled DVector of "pure attractions" at
-              self.export_paths.pure_demand[year]
-            - Optionally writes out a number of "pure attractions" reports, if
-              reports is True.
-            - Reads in the mode splits given in the constructor.
-            - Multiplies the "pure attractions" and mode splits on relevant
-              segments, producing "fully segmented attractions".
-            - Checks the attraction totals before and after mode split and throws
-              error if they don't match.
-            - Optionally writes out a pickled DVector of "fully segmented attractions"
+            - Optionally writes out a pickled DVector of "pure attractions"
               at self.export_paths.fully_segmented[year].
-            - Balances "fully segmented attractions" to production notem segmentation,
+            - Balances "pure attractions" to production notem segmentation,
               producing "notem segmented" attractions.
             - Optionally writes out a pickled DVector of "notem segmented attractions"
               at self.export_paths.notem_segmented[year].
@@ -263,10 +251,6 @@ class HBAttractionModel(HBAttractionModelPaths):
         export_pure_attractions:
             Whether to export the pure attractions to disk or not.
             Will be written out to: self.export_paths.pure_demand[year]
-
-        export_fully_segmented:
-            Whether to export the fully segmented attractions to disk or not.
-            Will be written out to: self.export_paths.fully_segmented[year]
 
         export_notem_segmentation:
             Whether to export the notem segmented demand to disk or not.
@@ -281,7 +265,6 @@ class HBAttractionModel(HBAttractionModelPaths):
         None
         """
         # Initialise timing
-        
         start_time = timing.current_milli_time()
         self._logger.info("Starting HB Attraction Model")
 
@@ -289,7 +272,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         for year in self.years:
             year_start_time = timing.current_milli_time()
 
-            # ## GENERATE PURE ATTRACTIONS ## #
+            # ## GENERATE ATTRACTIONS BY MODE ## #
             self._logger.info("Loading the employment data")
             emp_dvec = self._read_land_use_data(year)
 
@@ -309,31 +292,11 @@ class HBAttractionModel(HBAttractionModelPaths):
                     ie_sector_path=pure_demand_paths.ie_sector[year],
                 )
 
-            # ## SPLIT PURE ATTRACTIONS BY MODE ## #
-            self._logger.info("Splitting by mode")
-            fully_segmented = self._split_by_mode(pure_attractions)
-
-            # ## ATTRACTIONS TOTAL CHECK ## #
-            if not pure_attractions.sum_is_close(fully_segmented):
-                msg = (
-                    "The attraction totals before and after mode split are not same.\n"
-                    "Expected %f\n"
-                    "Got %f"
-                    % (pure_attractions.sum(), fully_segmented.sum())
-                )
-                self._logger.warning(msg)
-                warnings.warn(msg)
-
-            # Output attractions before any aggregation
-            if export_fully_segmented:
-                self._logger.info("Exporting fully segmented attractions to disk")
-                fully_segmented.save(self.export_paths.fully_segmented[year])
-
             # Control the attractions to the productions - this also adds in
             # some segmentation to bring it in line with the productions
             self._logger.info("Balancing to productions")
             notem_segmented = self._attractions_balance(
-                a_dvec=fully_segmented,
+                a_dvec=pure_attractions,
                 p_dvec_path=self.production_balance_paths[year],
             )
 
@@ -363,13 +326,13 @@ class HBAttractionModel(HBAttractionModelPaths):
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
-            self._logger.info("HB Attraction in year %s took: %s\n" % (year, time_taken))
+            self._logger.info("HB Attraction in year %s took: %s\n", year, time_taken)
 
         # End timing
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("HB Attraction Model took: %s" % time_taken)
-        self._logger.info("HB Attraction Model Finished")        
+        self._logger.info("HB Attraction Model took: %s", time_taken)
+        self._logger.info("HB Attraction Model Finished")
 
     def _read_land_use_data(self, year: int) -> nd.DVector:
         """
@@ -386,30 +349,23 @@ class HBAttractionModel(HBAttractionModelPaths):
             Returns employment as a Dvector
         """
         # Define the zoning and segmentations we want to use
-        msoa_zoning = nd.get_zoning_system('msoa')
-        emp_seg = nd.get_segmentation_level('notem_lu_emp')
+        zoning = nd.get_zoning_system(self._zoning)
+        emp_seg = nd.get_segmentation_level(self._segmentations['employment'])
 
         # Read the land use data corresponding to the year
         emp = file_ops.read_df(
-            path=self.employment_paths[year],
+            # path=self.employment_paths[year],
+            path=self.non_resi_path.format(year=year),  # TODO Revert back to using employment path
             find_similar=True,
+            usecols=self._target_col_dtypes['employment'].keys(),
+            dtype=self._target_col_dtypes['employment'],
         )
 
-        # TODO(BT): Remove this in Land Use 4.0 Update
-        # Little hack until Land Use is updated
-        if str(year) in list(emp):
-            emp = emp.rename(columns={str(year): 'people'})
-
-        emp = pd_utils.reindex_cols(emp, self._target_col_dtypes['employment'].keys())
-        for col, dt in self._target_col_dtypes['employment'].items():
-            emp[col] = emp[col].astype(dt)
-
-        # Instantiate
         return nd.DVector(
-            zoning_system=msoa_zoning,
+            zoning_system=zoning,
             segmentation=emp_seg,
             import_data=emp.rename(columns=self._seg_rename),
-            zone_col="msoa_zone_id",
+            zone_col=f"{zoning.name}_zone_id",
             val_col="people",
         )
 
@@ -429,67 +385,25 @@ class HBAttractionModel(HBAttractionModelPaths):
             ie., pure attraction
         """
         # Define the zoning and segmentations we want to use
-        msoa_zoning = nd.get_zoning_system('msoa')
-        trip_weights_seg = nd.get_segmentation_level('notem_hb_attractions_trip_weights')
-        pure_attractions_seg = nd.get_segmentation_level('notem_hb_attractions_pure')
+        trip_weights_seg = nd.get_segmentation_level(self._segmentations['trip_weights'])
+        attractions_seg = nd.get_segmentation_level(self._segmentations['pure_attractions'])
 
         # ## CREATE THE TRIP RATES DVEC ## #
-        # Reading trip rates
-        trip_rates = du.safe_read_csv(
+        trip_rates = file_ops.read_df(
             self.trip_weights_path,
+            find_similar=True,
             usecols=self._target_col_dtypes['trip_weight'].keys(),
             dtype=self._target_col_dtypes['trip_weight'],
         )
 
-        # make DVec
         trip_weights_dvec = nd.DVector(
-            zoning_system=msoa_zoning,
+            zoning_system=None,
             segmentation=trip_weights_seg,
             import_data=trip_rates.rename(columns=self._seg_rename),
-            zone_col="msoa_zone_id",
             val_col="trip_rate",
         )
 
-        # ## MULTIPLY TOGETHER ## #
-        # Remove un-needed ecat column too
-        return emp_dvec.multiply_and_aggregate(trip_weights_dvec, pure_attractions_seg)
-
-    def _split_by_mode(self,
-                       attractions: nd.DVector,
-                       ) -> nd.DVector:
-        """
-        Applies mode splits to the given balanced pure attractions.
-
-        Parameters
-        ----------
-        attractions:
-            Dvector containing the attractions to split.
-
-        Returns
-        -------
-        full_segmented_attractions:
-            A DVector containing pure_attractions split by mode.
-        """
-        # Define the segmentation we want to use
-        m_pure_attractions_seg = nd.get_segmentation_level('hb_p_m')
-        msoa_zoning = nd.get_zoning_system('msoa')
-
-        # Create the mode-time splits DVector
-        mode_splits = pd.read_csv(
-            self.mode_splits_path,
-            usecols=self._target_col_dtypes['mode_split'].keys(),
-            dtype=self._target_col_dtypes['mode_split'],
-        )
-
-        mode_splits_dvec = nd.DVector(
-            zoning_system=msoa_zoning,
-            segmentation=m_pure_attractions_seg,
-            import_data=mode_splits.rename(columns=self._seg_rename),
-            val_col="split",
-            zone_col="msoa_zone_id",
-        )
-
-        return attractions * mode_splits_dvec
+        return emp_dvec.multiply_and_aggregate(trip_weights_dvec, attractions_seg)
 
     def _attractions_balance(self,
                              a_dvec: nd.DVector,
