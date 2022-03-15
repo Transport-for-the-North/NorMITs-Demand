@@ -81,7 +81,8 @@ class UFMConverter:
             ["UFM2TBA2", str(ufm), str(csv)],
             capture_output=True,
             env=self.environment,
-            check=True,
+            cwd=ufm.parent,
+            check=False,
             shell=True,
         )
 
@@ -150,7 +151,8 @@ class UFMConverter:
             ["MX", "I", "KEY", str(key_path), "VDU", str(key_path.with_suffix(".VDU"))],
             capture_output=True,
             env=self.environment,
-            check=True,
+            cwd=key_path.parent,
+            check=False,
             shell=True,
         )
         msg_data = (ufm, cmd_strip(comp_proc.stdout), cmd_strip(comp_proc.stderr))
@@ -158,8 +160,62 @@ class UFMConverter:
             LOG.debug("Created UFM: %s\n%s\n%s", *msg_data)
         else:
             LOG.error("Failed creating UFM: %s\n%s\n%s", *msg_data)
-            raise FileNotFoundError(f"error creating {csv}")
-        return csv
+            raise FileNotFoundError(f"error creating {ufm}")
+        return ufm
+
+    def stack(self, matrices: list[Path], ufm: Path) -> Path:
+        """Runs SATURN's UFMSTACK to stack `matrices` into a single UFM.
+
+        Parameters
+        ----------
+        matrices : list[Path]
+            Paths to all UFM files to be stacked together.
+        ufm : Path
+            Path to the output UFM file to create.
+
+        Returns
+        -------
+        Path
+            Path to output UFM created.
+
+        Raises
+        ------
+        FileNotFoundError
+            If any files in `matrices` don't exist, or aren't files.
+            If their is an error creating the stacked UFM.
+        """
+        LOG.debug("Stacking UFMs to %s", ufm)
+        matrices = [Path(m) for m in matrices]
+        missing = list(filter(lambda p: not p.is_file(), matrices))
+        if missing:
+            raise FileNotFoundError(f"cannot find matrices: {missing}")
+
+        # Control file contains path of output then path to all input matrices, without suffix
+        control_data = [
+            ufm.resolve(),
+            *[p.resolve().with_name(p.stem) for p in matrices],
+        ]
+        control_path = ufm.with_name(ufm.stem + "-STACK.dat")
+        with open(control_path, "wt") as file:
+            file.writelines(f"{l}\n" for l in control_data)
+        LOG.debug("Written control file: %s", control_path)
+
+        comp_proc = subprocess.run(
+            ["UFMSTACK", str(control_path.resolve())],
+            capture_output=True,
+            env=self.environment,
+            cwd=control_path.parent,
+            check=False,
+            shell=True,
+        )
+
+        msg_data = (ufm, cmd_strip(comp_proc.stdout), cmd_strip(comp_proc.stderr))
+        if ufm.exists():
+            LOG.debug("Created UFM: %s\n%s\n%s", *msg_data)
+        else:
+            LOG.error("Failed creating UFM: %s\n%s\n%s", *msg_data)
+            raise FileNotFoundError(f"error creating {ufm}")
+        return ufm
 
 
 ##### FUNCTIONS #####
