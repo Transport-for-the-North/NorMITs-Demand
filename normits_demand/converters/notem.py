@@ -22,11 +22,8 @@ from typing import Union
 # Local Imports
 import normits_demand as nd
 
-from normits_demand.pathing import NoTEMExportPaths
 from normits_demand import core as nd_core
-
-# Module logger
-LOG = logging.getLogger(__name__)
+from normits_demand.pathing import NoTEMExportPaths
 
 
 class ToDistributionModel:
@@ -38,9 +35,33 @@ class ToDistributionModel:
         hb_attractions_path: pathlib.Path = None,
         nhb_productions_path: pathlib.Path = None,
         nhb_attractions_path: pathlib.Path = None,
-        cache_path: pathlib.Path = None,
+        cache_dir: pathlib.Path = None,
         time_format: nd_core.TimeFormat = nd_core.TimeFormat.AVG_DAY,
     ):
+        """
+        Parameters
+        ----------
+        output_zoning:
+            The zoning system the output DVectors should be in
+
+        hb_productions_path:
+            The path to the pickled DVector of home-based productions.
+
+        hb_attractions_path:
+            The path to the pickled DVector of home-based attractions.
+
+        nhb_productions_path:
+            The path to the pickled DVector of non-home-based productions.
+
+        nhb_attractions_path:
+            The path to the pickled DVector of non-home-based attractions.
+
+        cache_dir:
+            A path to the directory to store the cached DVectors.
+
+        time_format:
+            The nd_core.TimeFormat to use in the output DVectors.
+        """
         # Assign attributes
         self.hb_productions_path = hb_productions_path
         self.hb_attractions_path = hb_attractions_path
@@ -48,7 +69,7 @@ class ToDistributionModel:
         self.nhb_attractions_path = nhb_attractions_path
 
         self.output_zoning = output_zoning
-        self.cache_path = cache_path
+        self.cache_dir = cache_dir
         self.time_format = time_format
 
     def convert_hb(
@@ -63,7 +84,7 @@ class ToDistributionModel:
         defined by: reduce_segmentation, subset_segmentation,
         aggregation_segmentation, and modal_segmentation.
         Optionally makes use of a cached version the converted DVector if one
-        exists, ignore_cache is False, and self.cache_path is set.
+        exists, ignore_cache is False, and self.cache_dir is set.
 
         Parameters
         ----------
@@ -105,7 +126,7 @@ class ToDistributionModel:
         defined by: reduce_segmentation, subset_segmentation,
         aggregation_segmentation, and modal_segmentation.
         Optionally makes use of a cached version the converted DVector if one
-        exists, ignore_cache is False, and self.cache_path is set.
+        exists, ignore_cache is False, and self.cache_dir is set.
 
         Parameters
         ----------
@@ -147,7 +168,7 @@ class ToDistributionModel:
         defined by: reduce_segmentation, subset_segmentation,
         aggregation_segmentation, and modal_segmentation.
         Optionally makes use of a cached version the converted DVector if one
-        exists, ignore_cache is False, and self.cache_path is set.
+        exists, ignore_cache is False, and self.cache_dir is set.
 
         Parameters
         ----------
@@ -166,10 +187,20 @@ class ToDistributionModel:
         converted_dvec:
             The convert trip_end_or_path DVector
 
+        Raises
+        ------
+        ValueError:
+            If self.hb_productions_path has not been set before calling.
+
         See Also
         --------
         `self.maybe_read_and_convert_trip_end()`
         """
+        if self.hb_productions_path is None:
+            raise ValueError(
+                "Cannot convert the hb_productions as no path was given"
+                "to the home-based productions."
+            )
 
         return self.maybe_read_and_convert_trip_end(
             dvector_path=self.hb_productions_path,
@@ -192,7 +223,7 @@ class ToDistributionModel:
         defined by: reduce_segmentation, subset_segmentation,
         aggregation_segmentation, and modal_segmentation.
         Optionally makes use of a cached version the converted DVector if one
-        exists, ignore_cache is False, and self.cache_path is set.
+        exists, ignore_cache is False, and self.cache_dir is set.
 
         Parameters
         ----------
@@ -211,10 +242,20 @@ class ToDistributionModel:
         converted_dvec:
             The convert trip_end_or_path DVector
 
+        Raises
+        ------
+        ValueError:
+            If self.hb_attractions_path has not been set before calling.
+
         See Also
         --------
         `self.maybe_read_and_convert_trip_end()`
         """
+        if self.hb_attractions_path is None:
+            raise ValueError(
+                "Cannot convert the hb_attractions as no path was given"
+                "to the home-based attractions."
+            )
 
         return self.maybe_read_and_convert_trip_end(
             dvector_path=self.hb_attractions_path,
@@ -237,7 +278,7 @@ class ToDistributionModel:
         defined by: reduce_segmentation, subset_segmentation,
         aggregation_segmentation, and modal_segmentation.
         Optionally makes use of a cached version the converted DVector if one
-        exists, ignore_cache is False, and self.cache_path is set.
+        exists, ignore_cache is False, and self.cache_dir is set.
 
         Parameters
         ----------
@@ -256,10 +297,20 @@ class ToDistributionModel:
         converted_dvec:
             The convert trip_end_or_path DVector
 
+        Raises
+        ------
+        ValueError:
+            If self.nhb_productions_path has not been set before calling.
+
         See Also
         --------
         `self.maybe_read_and_convert_trip_end()`
         """
+        if self.nhb_productions_path is None:
+            raise ValueError(
+                "Cannot convert the nhb_productions as no path was given"
+                "to the non-home-based productions."
+            )
 
         return self.maybe_read_and_convert_trip_end(
             dvector_path=self.nhb_productions_path,
@@ -282,7 +333,7 @@ class ToDistributionModel:
         defined by: reduce_segmentation, subset_segmentation,
         aggregation_segmentation, and modal_segmentation.
         Optionally makes use of a cached version the converted DVector if one
-        exists, ignore_cache is False, and self.cache_path is set.
+        exists, ignore_cache is False, and self.cache_dir is set.
 
         Parameters
         ----------
@@ -301,10 +352,21 @@ class ToDistributionModel:
         converted_dvec:
             The convert trip_end_or_path DVector
 
+        Raises
+        ------
+        ValueError:
+            If self.nhb_attractions_path has not been set before calling.
+
+
         See Also
         --------
         `self.maybe_read_and_convert_trip_end()`
         """
+        if self.nhb_attractions_path is None:
+            raise ValueError(
+                "Cannot convert the nhb_attractions as no path was given"
+                "to the non-home-based attractions."
+            )
 
         return self.maybe_read_and_convert_trip_end(
             dvector_path=self.nhb_attractions_path,
@@ -368,13 +430,13 @@ class ToDistributionModel:
             The convert trip_end_or_path DVector
         """
         # Ignore cache if no path given
-        if self.cache_path is None:
+        if self.cache_dir is None:
             ignore_cache = True
             cache_path = None
 
         # Figure out if the cache already exists and is valid
         else:
-            cache_path = self.cache_path / cache_fname
+            cache_path = self.cache_dir / cache_fname
 
             # Ignore cache if DVec was more recently modified
             dvec_modified_time = os.path.getmtime(dvector_path)
@@ -384,7 +446,11 @@ class ToDistributionModel:
 
         # Return the cache only if it's safe to
         if not ignore_cache and cache_path.is_file():
-            return nd_core.DVector.load(cache_path)
+            dvec = nd_core.DVector.load(cache_path)
+
+            # Do a few checks
+            if dvec.zoning_system == self.output_zoning:
+                return dvec
 
         # If here, we need to recreate the cache
         converted_dvec = self.read_and_convert_trip_end(
@@ -472,3 +538,73 @@ class ToDistributionModel:
         dvec = dvec.translate_zoning(self.output_zoning, translation_weighting)
 
         return dvec
+
+
+class NoTEMToDistributionModel(ToDistributionModel):
+    """Helper class to convert NoTEM outputs into Distribution Model inputs"""
+    # BACKLOG: Build a tool which guesses internal segmentations to use and
+    #  build into the converters
+    #  labels: QoL, NoTEM
+
+    def __init__(
+        self,
+        output_zoning: nd_core.ZoningSystem,
+        base_year: int,
+        scenario: nd_core.Scenario,
+        notem_iteration_name: str,
+        notem_export_home: pathlib.Path,
+        cache_dir: pathlib.Path = None,
+        time_format: nd_core.TimeFormat = nd_core.TimeFormat.AVG_DAY,
+    ):
+        """
+        Parameters
+        ----------
+        output_zoning:
+            The zoning system the output DVectors should be in
+
+        base_year:
+            The year the Distribution Model is running for. Needed for
+            compatibility with nd.pathing.NoTEMExportPaths
+
+        scenario:
+            The name of the scenario to run for. Needed for
+            compatibility with nd.pathing.NoTEMExportPaths
+
+        notem_iteration_name:
+            The name of this iteration of the NoTEM models. Will be passed to
+            nd.pathing.NoTEMExportPaths to generate the NoTEM paths.
+
+        notem_export_home:
+            The home directory of all the export paths. Will be passed to
+            nd.pathing.NoTEMExportPaths to generate the NoTEM paths.
+
+        cache_dir:
+            A path to the directory to store the cached DVectors.
+
+        time_format:
+            The nd_core.TimeFormat to use in the output DVectors.
+        """
+        # Get the path to the NoTEM Exports
+        notem_exports = NoTEMExportPaths(
+            path_years=[base_year],
+            scenario=scenario.value,
+            iteration_name=notem_iteration_name,
+            export_home=notem_export_home,
+        )
+
+        # Extract shorthand paths
+        hbp_path = notem_exports.hb_production.export_paths.notem_segmented[base_year]
+        hba_path = notem_exports.hb_attraction.export_paths.notem_segmented[base_year]
+        nhbp_path = notem_exports.nhb_production.export_paths.notem_segmented[base_year]
+        nhba_path = notem_exports.nhb_attraction.export_paths.notem_segmented[base_year]
+
+        # Pass the generated paths over to the converter
+        super().__init__(
+            output_zoning=output_zoning,
+            hb_productions_path=hbp_path,
+            hb_attractions_path=hba_path,
+            nhb_productions_path=nhbp_path,
+            nhb_attractions_path=nhba_path,
+            cache_dir=cache_dir,
+            time_format=time_format,
+        )
