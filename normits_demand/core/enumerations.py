@@ -83,3 +83,24 @@ class Mode(enum.Enum):
 
     def get_name(self):
         return self.value
+
+
+@enum.unique
+class Scenario(enum.Enum):
+    NTEM = 'NTEM'
+    SC01_JAM = 'SC01_JAM'
+    SC02_PP = 'SC02_PP'
+    SC03_DD = 'SC03_DD'
+    SC04_UZC = 'SC04_UZC'
+
+    def get_name(self):
+        return self.value
+
+    @staticmethod
+    def tfn_scenarios():
+        return [
+            Scenario.SC01_JAM,
+            Scenario.SC02_PP,
+            Scenario.SC03_DD,
+            Scenario.SC04_UZC,
+        ]
