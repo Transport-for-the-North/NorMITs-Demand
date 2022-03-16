@@ -449,6 +449,7 @@ class NoTEMExportPaths:
             The home directory of all the export paths. A sub-directory will
             be made for each of the NoTEM sub models.
         """
+        # TODO(BT): Integrate new scenario enum
         # Init
         file_ops.check_path_exists(export_home)
 

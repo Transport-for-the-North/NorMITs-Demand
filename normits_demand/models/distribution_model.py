@@ -57,6 +57,8 @@ class DistributionModel(DistributionModelExportPaths):
 
     _dist_overall_log_name = '{trip_origin}_overall_log.csv'
 
+    # Trip End cache constants
+
     def __init__(self,
                  year: int,
                  running_mode: nd.Mode,
@@ -290,8 +292,12 @@ class DistributionModel(DistributionModelExportPaths):
 
     def run_upper_model(self):
         self._logger.info("Building arguments for the Upper Model")
-        kwargs = self.arg_builder.build_upper_model_arguments()
+        kwargs = self.arg_builder.build_upper_model_arguments(
+            cache_dir=self.cache_paths.upper_trip_ends,
+        )
         process_count = self.process_count
+
+        exit()
 
         # Have to limit process usage if doing an MSOA gravity model
         if self.upper_model_zoning.name == 'msoa':
@@ -342,6 +348,7 @@ class DistributionModel(DistributionModelExportPaths):
 
         self._logger.info("Converting Upper Model Outputs for Lower Model")
         productions, attractions = self.arg_builder.read_lower_pa(
+            cache_dir=self.cache_paths.lower_trip_ends,
             upper_model_matrix_dir=self.upper.export_paths.matrix_dir,
             external_matrix_output_dir=self.export_paths.upper_external_pa,
             lower_model_vector_report_dir=self.report_paths.lower_vector_reports_dir,
@@ -625,6 +632,3 @@ class DistributionModel(DistributionModelExportPaths):
                 "format :("
                 % self.running_mode.value
             )
-
-
-

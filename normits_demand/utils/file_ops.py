@@ -20,8 +20,11 @@ import pickle
 import pathlib
 import warnings
 
+from os import PathLike
+
 from typing import Any
 from typing import List
+from typing import Iterable
 
 # Third Party
 import pandas as pd
@@ -853,3 +856,30 @@ def safe_dataframe_to_csv(df, out_path, **to_csv_kwargs):
                       "Waiting for permission to write...\n")
                 waiting = True
             time.sleep(1)
+
+
+def get_latest_modified_time(paths: Iterable[PathLike]) -> float:
+    """Gets the latest modified time of all files in paths
+
+    Parameters
+    ----------
+    paths:
+        An iterable of paths to check.
+
+    Returns
+    -------
+    latest_modified_time:
+        The latest modified time of all paths.
+        If paths is an empty iterable, -1.0 is returned.
+    """
+    # init
+    latest_time = -1.0
+
+    # Check the latest time of all paths
+    for path in paths:
+        # Keep the latest time
+        modified_time = os.path.getmtime(path)
+        if modified_time > latest_time:
+            latest_time = modified_time
+
+    return latest_time
