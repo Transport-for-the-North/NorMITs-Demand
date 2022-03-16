@@ -135,8 +135,8 @@ class DMArgumentBuilderBase(abc.ABC):
     def _get_translations(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Get the translations between upper and lower zoning"""
         return translation.get_long_pop_emp_translations(
-            in_zoning_system=self.upper_zoning_system,
-            out_zoning_system=self.lower_zoning_system,
+            from_zoning_system=self.upper_zoning_system,
+            to_zoning_system=self.lower_zoning_system,
             weight_col_name=self._translation_weight_col
         )
 

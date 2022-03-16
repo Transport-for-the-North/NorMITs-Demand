@@ -359,6 +359,9 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Lower Model Done!")
 
     def run_pa_matrix_reports(self):
+        # TODO(BT, PW): Need to make sure we have the full pa matrices
+        #  generated before trying to generate these reports
+
         # PA RUN REPORTS
         # Matrix Trip ENd totals
         #   Inter / Intra Report by segment?
@@ -374,8 +377,8 @@ class DistributionModel(DistributionModelExportPaths):
         in_dir = self.export_paths.full_pa_dir
         out_dir = self.report_paths.pa_reports_dir
 
-
-        for segment_params in self.running_segmentation:
+        desc = "Generating PA Reports"
+        for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
             fname = self.running_segmentation.generate_file_name(
                 segment_params=segment_params,
                 file_desc="synthetic_pa",
@@ -390,19 +393,12 @@ class DistributionModel(DistributionModelExportPaths):
                             find_similar=True,
                             index_col=0)
             sector_zoning = nd.get_zoning_system("ca_sector_2020")
-            pop_translation, emp_translation = translation.get_long_pop_emp_translations(
-                in_zoning_system=self.compile_zoning_system,
-                out_zoning_system=sector_zoning
-            )
-            df = translation.pandas_matrix_zone_translation(
+            sector_df = translation.translate_matrix_zoning(
                 matrix=df,
-                row_translation=pop_translation,
-                col_translation=emp_translation,
-                from_zone_col=self.compile_zoning_system.col_name,
-                to_zone_col=sector_zoning.col_name,
-                from_unique_zones=self.compile_zoning_system.unique_zones,
-                to_unique_zones=sector_zoning.unique_zones
+                from_zoning_system=self.compile_zoning_system,
+                to_zoning_system=sector_zoning,
             )
+            print(sector_df)
 
         pass
 
@@ -477,8 +473,8 @@ class DistributionModel(DistributionModelExportPaths):
 
         # Get the translations
         pop_trans, emp_trans = translation.get_long_pop_emp_translations(
-            in_zoning_system=current_zoning,
-            out_zoning_system=self.compile_zoning_system,
+            from_zoning_system=current_zoning,
+            to_zoning_system=self.compile_zoning_system,
             weight_col_name=translation_weight_col
         )
 

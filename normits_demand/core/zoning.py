@@ -260,9 +260,9 @@ class ZoningSystem:
         # If not found again, we don't know what to do
         if file_path is None:
             raise ZoningError(
-                "Cannot translate '%s' into '%s' as no definition for the "
-                "translation exists."
-                % (self.name, other.name)
+                "Cannot translate '%s' into '%s' using the weighting %s."
+                "No definition for the translation exists."
+                % (self.name, other.name, weight_name)
             )
 
         # Must exist if we are here, read in
