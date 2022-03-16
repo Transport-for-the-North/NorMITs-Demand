@@ -44,24 +44,34 @@ from normits_demand.utils.general import list_files
 PD_COMPRESSION = {'.zip', '.gzip', '.bz2', '.zstd', '.csv.bz2'}
 
 
-def cast_to_pathlib_path(path: nd.PathLike) -> pathlib.Path:
-    """
-    Tries to cast path to pathlib.Path
+def remove_suffixes(path: pathlib.Path) -> pathlib.Path:
+    """Removes all suffixes from path
 
     Parameters
     ----------
     path:
-        The path to convert
+        The path to remove the suffixes from
 
     Returns
     -------
     path:
-        path, converted to a pathlib.Path object
+        path with all suffixes removed
     """
-    if isinstance(path, pathlib.Path):
-        return path
+    # Init
+    parent = path.parent
+    prev = pathlib.Path(path.name)
 
-    return pathlib.Path(path)
+    # Remove a suffix then check if all are removed
+    while True:
+        new = pathlib.Path(prev.stem)
+
+        # No more suffixes to remove
+        if new.suffix == '':
+            break
+
+        prev = new
+
+    return parent / new
 
 
 def file_exists(file_path: nd.PathLike) -> bool:
@@ -318,7 +328,7 @@ def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
         The read in df at path.
     """
     # Init
-    path = cast_to_pathlib_path(path)
+    path = pathlib.Path(path)
 
     # Determine how to read in df
     if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
@@ -365,8 +375,8 @@ def filename_in_list(filename: nd.PathLike,
         return filename in lst
 
     # Init
-    filename = cast_to_pathlib_path(filename)
-    lst = [cast_to_pathlib_path(x) for x in lst]
+    filename = pathlib.Path(filename)
+    lst = [pathlib.Path(x) for x in lst]
 
     # Compare the names
     for item in lst:
@@ -414,7 +424,7 @@ def find_filename(path: nd.PathLike,
         extensions.
     """
     # Init
-    path = cast_to_pathlib_path(path)
+    path = pathlib.Path(path)
 
     # Wrapper around return to deal with full path or not
     def return_fn(ret_path):
@@ -462,7 +472,7 @@ def _copy_all_files_internal(import_dir: nd.PathLike,
     """
     internal function of copy_all_files
     """
-    in_fname = cast_to_pathlib_path(in_fname)
+    in_fname = pathlib.Path(in_fname)
 
     # Do we need to convert the file? We do with
     # if not(force_csv_out and in_fname.suffix != '.csv'):
@@ -521,8 +531,8 @@ def copy_all_files(import_dir: nd.PathLike,
     """
     # Init
     fnames = du.list_files(import_dir)
-    import_dir = cast_to_pathlib_path(import_dir)
-    export_dir = cast_to_pathlib_path(export_dir)
+    import_dir = pathlib.Path(import_dir)
+    export_dir = pathlib.Path(export_dir)
 
     # ## MULTIPROCESS THE COPY ## #
     unchanging_kwargs = {
@@ -565,7 +575,7 @@ def remove_from_fname(path: nd.PathLike,
         path without to_remove in it
     """
     # Init
-    path = cast_to_pathlib_path(path)
+    path = pathlib.Path(path)
 
     # Get a version of the filename without the suffix
     new_fname = path.stem.replace(to_remove, '')
@@ -593,7 +603,7 @@ def add_to_fname(path: nd.PathLike,
         path with to_add in it
     """
     # Init
-    path = cast_to_pathlib_path(path)
+    path = pathlib.Path(path)
 
     # Get a version of the filename without the suffix
     new_fname = path.stem + to_add

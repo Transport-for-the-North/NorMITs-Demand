@@ -1125,7 +1125,7 @@ class DVector:
             If the path cannot be found.
         """
         # Init
-        path = file_ops.cast_to_pathlib_path(path)
+        path = pathlib.Path(path)
 
         if path.suffix != self._dvec_suffix:
             path = path.parent / (path.stem + self._dvec_suffix)
