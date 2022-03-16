@@ -12,9 +12,9 @@ File purpose:
 """
 # Built-Ins
 import os
-import logging
 import pathlib
 
+from typing import Tuple
 from typing import Union
 
 # Third Party
@@ -77,7 +77,7 @@ class ToDistributionModel:
         ignore_cache: bool = False,
         *args,
         **kwargs,
-    ) -> nd_core.DVector:
+    ) -> Tuple[nd_core.DVector, nd_core.DVector]:
         """Reads in and converts the hb_production and hb_attraction Dvectors
 
         Converts into the format required by the distribution model, which is
@@ -119,7 +119,7 @@ class ToDistributionModel:
         ignore_cache: bool = False,
         *args,
         **kwargs,
-    ) -> nd_core.DVector:
+    ) -> Tuple[nd_core.DVector, nd_core.DVector]:
         """Reads in and converts the nhb_production and nhb_attraction Dvectors
 
         Converts into the format required by the distribution model, which is
@@ -204,7 +204,7 @@ class ToDistributionModel:
 
         return self.maybe_read_and_convert_trip_end(
             dvector_path=self.hb_productions_path,
-            cache_fname=self.hb_productions_path.name,
+            cache_fname='hb_productions_dvec.pkl',
             ignore_cache=ignore_cache,
             translation_weighting='population',
             *args,
@@ -259,7 +259,7 @@ class ToDistributionModel:
 
         return self.maybe_read_and_convert_trip_end(
             dvector_path=self.hb_attractions_path,
-            cache_fname=self.hb_attractions_path.name,
+            cache_fname='hb_attractions_dvec.pkl',
             ignore_cache=ignore_cache,
             translation_weighting='employment',
             *args,
@@ -314,7 +314,7 @@ class ToDistributionModel:
 
         return self.maybe_read_and_convert_trip_end(
             dvector_path=self.nhb_productions_path,
-            cache_fname=self.nhb_productions_path.name,
+            cache_fname='nhb_productions_dvec.pkl',
             ignore_cache=ignore_cache,
             translation_weighting='population',
             *args,
@@ -370,7 +370,7 @@ class ToDistributionModel:
 
         return self.maybe_read_and_convert_trip_end(
             dvector_path=self.nhb_attractions_path,
-            cache_fname=self.nhb_attractions_path.name,
+            cache_fname='nhb_attractions_dvec.pkl',
             ignore_cache=ignore_cache,
             translation_weighting='employment',
             *args,
@@ -439,10 +439,11 @@ class ToDistributionModel:
             cache_path = self.cache_dir / cache_fname
 
             # Ignore cache if DVec was more recently modified
-            dvec_modified_time = os.path.getmtime(dvector_path)
-            cache_modified_time = os.path.getmtime(cache_path)
-            if dvec_modified_time > cache_modified_time:
-                ignore_cache = True
+            if cache_path.is_file():
+                dvec_modified_time = os.path.getmtime(dvector_path)
+                cache_modified_time = os.path.getmtime(cache_path)
+                if dvec_modified_time > cache_modified_time:
+                    ignore_cache = True
 
         # Return the cache only if it's safe to
         if not ignore_cache and cache_path.is_file():
@@ -552,7 +553,7 @@ class NoTEMToDistributionModel(ToDistributionModel):
         base_year: int,
         scenario: nd_core.Scenario,
         notem_iteration_name: str,
-        notem_export_home: pathlib.Path,
+        export_home: pathlib.Path,
         cache_dir: pathlib.Path = None,
         time_format: nd_core.TimeFormat = nd_core.TimeFormat.AVG_DAY,
     ):
@@ -574,7 +575,7 @@ class NoTEMToDistributionModel(ToDistributionModel):
             The name of this iteration of the NoTEM models. Will be passed to
             nd.pathing.NoTEMExportPaths to generate the NoTEM paths.
 
-        notem_export_home:
+        export_home:
             The home directory of all the export paths. Will be passed to
             nd.pathing.NoTEMExportPaths to generate the NoTEM paths.
 
@@ -589,7 +590,7 @@ class NoTEMToDistributionModel(ToDistributionModel):
             path_years=[base_year],
             scenario=scenario.value,
             iteration_name=notem_iteration_name,
-            export_home=notem_export_home,
+            export_home=export_home,
         )
 
         # Extract shorthand paths
@@ -601,10 +602,10 @@ class NoTEMToDistributionModel(ToDistributionModel):
         # Pass the generated paths over to the converter
         super().__init__(
             output_zoning=output_zoning,
-            hb_productions_path=hbp_path,
-            hb_attractions_path=hba_path,
-            nhb_productions_path=nhbp_path,
-            nhb_attractions_path=nhba_path,
+            hb_productions_path=pathlib.Path(hbp_path),
+            hb_attractions_path=pathlib.Path(hba_path),
+            nhb_productions_path=pathlib.Path(nhbp_path),
+            nhb_attractions_path=pathlib.Path(nhba_path),
             cache_dir=cache_dir,
             time_format=time_format,
         )
