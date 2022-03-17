@@ -297,8 +297,6 @@ class DistributionModel(DistributionModelExportPaths):
         )
         process_count = self.process_count
 
-        exit()
-
         # Have to limit process usage if doing an MSOA gravity model
         if self.upper_model_zoning.name == 'msoa':
             # Can only handle 1 process if multi-area

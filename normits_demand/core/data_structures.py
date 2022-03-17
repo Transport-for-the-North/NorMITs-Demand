@@ -1967,7 +1967,7 @@ class DVector:
 
                         # Infill zeros for balance
                         zero_mask = self_data <= 0
-                        self_data = np.where(zero_mask <= 0, self._zero_infill, self_data)
+                        self_data = np.where(self_data <= 0, self._zero_infill, self_data)
                         other_data = np.where(other_data <= 0, self._zero_infill, other_data)
 
                         # Remove the zones we don't care about
