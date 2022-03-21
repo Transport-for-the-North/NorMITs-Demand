@@ -67,7 +67,7 @@ class DistributionModelParameters(NamedTuple):
     upper_calibration: CalibrationParams
     lower_calibration: CalibrationParams
     gm_cost_function: cost.CostFunction
-    upper_distributor_kwargs: Dict[str, Any]
+    upper_model_kwargs: Dict[str, Any]
     lower_distributor_kwargs: Dict[str, Any]
     tour_proportions_version: str
     target_tld_version: str
@@ -123,7 +123,7 @@ def build_dm_kwargs(params: DistributionModelParameters) -> DistributionModelKwa
         'upper_zoning_system': params.zone_systems.upper,
         'upper_running_zones': params.zone_systems.upper.unique_zones,
         'upper_model_method': params.upper_calibration.method,
-        'upper_distributor_kwargs': params.upper_distributor_kwargs,
+        'upper_model_kwargs': params.upper_model_kwargs,
         'upper_calibration_zones_fname': params.upper_calibration.zones_fname,
         'upper_calibration_areas': params.upper_calibration.areas,
         'upper_calibration_naming': params.upper_calibration.naming,
