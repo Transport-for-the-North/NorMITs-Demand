@@ -457,11 +457,11 @@ def build_trip_ends(
             trip_origin='hb',
             use_tram=params.use_tram,
         )
-        hb_productions.to_pickle(paths["hbp"])
-        hb_attractions.to_pickle(paths["hba"])
+        hb_productions.save(paths["hbp"])
+        hb_attractions.save(paths["hba"])
     else:
-        hb_productions = nd.read_pickle(paths["hbp"])
-        hb_attractions = nd.read_pickle(paths["hba"])
+        hb_productions = nd.DVector.load(paths["hbp"])
+        hb_attractions = nd.DVector.load(paths["hba"])
 
     if not os.path.exists(paths["nhbp"]) or not os.path.exists(paths["nhba"]):
         nhb_productions, nhb_attractions = run_distribution_model.import_pa(
@@ -473,11 +473,11 @@ def build_trip_ends(
             trip_origin='nhb',
             use_tram=params.use_tram,
         )
-        nhb_productions.to_pickle(paths["nhbp"])
-        nhb_attractions.to_pickle(paths["nhba"])
+        nhb_productions.save(paths["nhbp"])
+        nhb_attractions.save(paths["nhba"])
     else:
-        nhb_productions = nd.read_pickle(paths["nhbp"])
-        nhb_attractions = nd.read_pickle(paths["nhba"])
+        nhb_productions = nd.DVector.load(paths["nhbp"])
+        nhb_attractions = nd.DVector.load(paths["nhba"])
 
     return (
         hb_productions,
