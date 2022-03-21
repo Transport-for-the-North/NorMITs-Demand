@@ -39,6 +39,8 @@ class CalibrationParams(NamedTuple):
     areas: Optional[Union[Dict[int, str], str]] = None
     zones_fname: Optional[str] = None
     naming: Optional[str] = None
+    hb_target_tld_dir: str = None
+    nhb_target_tld_dir: str = None
 
 
 class DistributionModelPaths(NamedTuple):
@@ -68,6 +70,7 @@ class DistributionModelParameters(NamedTuple):
     upper_distributor_kwargs: Dict[str, Any]
     lower_distributor_kwargs: Dict[str, Any]
     tour_proportions_version: str
+    target_tld_version: str
 
 
 class DistributionModelKwargs(NamedTuple):
@@ -116,6 +119,7 @@ def build_dm_kwargs(params: DistributionModelParameters) -> DistributionModelKwa
         'year': params.base_year,
         'import_home': params.paths.import_home,
         'running_mode': params.mode,
+        'target_tld_version': params.target_tld_version,
         'upper_zoning_system': params.zone_systems.upper,
         'upper_running_zones': params.zone_systems.upper.unique_zones,
         'upper_model_method': params.upper_calibration.method,

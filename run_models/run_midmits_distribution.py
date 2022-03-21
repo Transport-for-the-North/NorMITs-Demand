@@ -124,6 +124,7 @@ def mode_lookup(
     """
     # Default values across all modes
     intra_infill = 0.5
+    target_tld_version = 'v1'
     gm_cost = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
     dist_kwargs = {
         nd.DistributionMethod.GRAVITY: {
@@ -160,11 +161,21 @@ def mode_lookup(
             'p_m',
             'p_m_tp',
         )
+        target_tld_dir = 'gb\\dm_highway_bands'
         upper_cal = dist_params.CalibrationParams(
-            'gb', nd.DistributionMethod.GRAVITY, 'gb'
+            'gb',
+            nd.DistributionMethod.GRAVITY,
+            'gb',
+            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m'),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_tp'),
         )
+        target_tld_dir = 'north_and_mids\\dm_highway_bands'
         lower_cal = dist_params.CalibrationParams(
-            'north', nd.DistributionMethod.GRAVITY, 'north'
+            'north',
+            nd.DistributionMethod.GRAVITY,
+            'north',
+            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m'),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_tp'),
         )
     elif mode == nd.Mode.BUS:
         zone_systems = dist_params.DistributionZoneSystems(
@@ -181,11 +192,21 @@ def mode_lookup(
             'p_m',
             'p_m_tp',
         )
+        target_tld_dir = 'gb\\dm_highway_bands'
         upper_cal = dist_params.CalibrationParams(
-            'gb', nd.DistributionMethod.GRAVITY, 'gb'
+            'gb',
+            nd.DistributionMethod.GRAVITY,
+            'gb',
+            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m'),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_tp'),
         )
+        target_tld_dir = 'north_and_mids\\dm_highway_bands'
         lower_cal = dist_params.CalibrationParams(
-            'north', nd.DistributionMethod.GRAVITY, 'north'
+            'north',
+            nd.DistributionMethod.GRAVITY,
+            'north',
+            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m'),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_tp'),
         )
     elif mode == nd.Mode.TRAIN:
         zone_systems = dist_params.DistributionZoneSystems(
@@ -203,11 +224,21 @@ def mode_lookup(
             'p_m_ca',
             'p_m_ca_tp',
         )
+        target_tld_dir = 'gb\\dm_gb_rail_bands'
         upper_cal = dist_params.CalibrationParams(
-            'gb', nd.DistributionMethod.GRAVITY, 'gb'
+            'gb',
+            nd.DistributionMethod.GRAVITY,
+            'gb',
+            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m_ca'),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_ca_tp'),
         )
+        target_tld_dir = 'north_and_mids\\dm_north_rail_bands'
         lower_cal = dist_params.CalibrationParams(
-            'north', nd.DistributionMethod.GRAVITY, 'north'
+            'north',
+            nd.DistributionMethod.GRAVITY,
+            'north',
+            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m_ca'),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_ca_tp'),
         )
     elif mode == nd.Mode.TRAM:
         zone_systems = dist_params.DistributionZoneSystems(nd.get_zoning_system('msoa'))
@@ -221,8 +252,13 @@ def mode_lookup(
             'p_m',
             'p_m_tp',
         )
+        target_tld_dir = 'north_and_mids\\dm_highway_bands'
         upper_cal = dist_params.CalibrationParams(
-            'north', nd.DistributionMethod.GRAVITY, 'north'
+            'north',
+            nd.DistributionMethod.GRAVITY,
+            'north',
+            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m'),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_tp'),
         )
         lower_cal = dist_params.CalibrationParams()
     else:
@@ -244,6 +280,7 @@ def mode_lookup(
         upper_distributor_kwargs=dist_kwargs[upper_cal.method],
         lower_distributor_kwargs=dist_kwargs[lower_cal.method],
         tour_proportions_version=tour_props_version,
+        target_tld_version=target_tld_version,
     )
 
 
@@ -306,7 +343,8 @@ def run_models(
             running_segmentation=params.segmentations.hb_running_seg,
             upper_init_params_fname=hb_upper_init_params_fname,
             lower_init_params_fname=hb_lower_init_params_fname,
-            target_tld_dir=params.segmentations.hb_seg_name,
+            upper_target_tld_dir=params.upper_calibration.hb_target_tld_dir,
+            lower_target_tld_dir=params.lower_calibration.hb_target_tld_dir,
             **dmab_kwargs,
         )
 
@@ -336,7 +374,8 @@ def run_models(
             running_segmentation=params.segmentations.nhb_running_seg,
             upper_init_params_fname=nhb_upper_init_params_fname,
             lower_init_params_fname=nhb_lower_init_params_fname,
-            target_tld_dir=params.segmentations.nhb_seg_name,
+            upper_target_tld_dir=params.upper_calibration.nhb_target_tld_dir,
+            lower_target_tld_dir=params.lower_calibration.nhb_target_tld_dir,
             **dmab_kwargs,
         )
 
@@ -372,9 +411,8 @@ def run_models(
                 running_segmentation=params.segmentations.hb_running_seg,
                 upper_init_params_fname=hb_upper_init_params_fname,
                 lower_init_params_fname=hb_lower_init_params_fname,
-                target_tld_dir=os.path.join(
-                    params.upper_calibration.area, params.segmentations.hb_seg_name
-                ),
+                upper_target_tld_dir=params.upper_calibration.hb_target_tld_dir,
+                lower_target_tld_dir=params.lower_calibration.hb_target_tld_dir,
                 **dmab_kwargs,
             )
 
