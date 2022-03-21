@@ -278,7 +278,7 @@ def mode_lookup(
         lower_calibration=lower_cal,
         gm_cost_function=gm_cost,
         upper_model_kwargs=dist_kwargs[upper_cal.method],
-        lower_distributor_kwargs=dist_kwargs[lower_cal.method],
+        lower_model_kwargs=dist_kwargs[lower_cal.method],
         tour_proportions_version=tour_props_version,
         target_tld_version=target_tld_version,
     )

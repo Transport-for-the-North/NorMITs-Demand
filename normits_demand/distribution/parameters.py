@@ -68,7 +68,7 @@ class DistributionModelParameters(NamedTuple):
     lower_calibration: CalibrationParams
     gm_cost_function: cost.CostFunction
     upper_model_kwargs: Dict[str, Any]
-    lower_distributor_kwargs: Dict[str, Any]
+    lower_model_kwargs: Dict[str, Any]
     tour_proportions_version: str
     target_tld_version: str
 
@@ -130,7 +130,7 @@ def build_dm_kwargs(params: DistributionModelParameters) -> DistributionModelKwa
         'lower_zoning_system': params.zone_systems.lower,
         'lower_running_zones': lower_running_zones,
         'lower_model_method': params.lower_calibration.method,
-        'lower_distributor_kwargs': params.lower_distributor_kwargs,
+        'lower_model_kwargs': params.lower_model_kwargs,
         'lower_calibration_zones_fname': params.lower_calibration.zones_fname,
         'lower_calibration_areas': params.lower_calibration.areas,
         'lower_calibration_naming': params.lower_calibration.naming,
