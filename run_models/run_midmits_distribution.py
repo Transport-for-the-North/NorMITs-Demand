@@ -37,9 +37,9 @@ def main() -> None:
     """Run MidMITs distribution model."""
     # Distribution running args
     mitem_iteration_name = run_mitem.mitem_iter
-    dm_iteration_name = '9.3.3'
+    dm_iteration_name = f'{mitem_iteration_name}.1'
     base_year = 2018
-    mode = nd.Mode.CAR
+    mode = nd.Mode.TRAIN
     use_tram = False
     # Distribution model paths
     paths = dist_params.DistributionModelPaths(
@@ -71,12 +71,12 @@ def main() -> None:
         run_hb=True,
         run_nhb=True,
         run_all=True,
-        run_upper_model=False,
-        run_lower_model=False,
-        run_pa_matrix_reports=False,
-        run_pa_to_od=False,
-        run_od_matrix_reports=False,
-        compile_to_assignment=False,
+        run_upper_model=True,
+        run_lower_model=True,
+        run_pa_matrix_reports=True,
+        run_pa_to_od=True,
+        run_od_matrix_reports=True,
+        compile_to_assignment=True,
     )
 
     run_models(params, model_runs)
