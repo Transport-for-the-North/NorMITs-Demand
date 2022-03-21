@@ -34,11 +34,16 @@ mitem_export_home = r"T:\MidMITs Demand\MiTEM"
 ##### FUNCTIONS #####
 def main():
     """Run MiTEM."""
-    hb_production_import_version = '2.1'
-    hb_attraction_import_version = '1.6'
-    nhb_production_import_version = '2.0'
+    hb_production_import_version = "2.2"
+    hb_attraction_import_version = "2.3"
+    nhb_production_import_version = "2.1"
 
-    attraction_balance_zoning = nd.get_zoning_system('gor')
+    hb_attraction_balance_zoning = nd.BalancingZones(
+        nd.get_segmentation_level("notem_hb_output"), nd.get_zoning_system("gor"), dict()
+    )
+    nhb_attraction_balance_zoning = nd.BalancingZones(
+        nd.get_segmentation_level("notem_nhb_output"), nd.get_zoning_system("gor"), dict()
+    )
 
     import_builder = MiTEMImportPaths(
         import_home=mitem_import_home,
@@ -58,18 +63,20 @@ def main():
         iteration_name=mitem_iter,
         import_builder=import_builder,
         export_home=mitem_export_home,
-        attraction_balance_zoning=attraction_balance_zoning,
+        hb_attraction_balance_zoning=hb_attraction_balance_zoning,
+        nhb_attraction_balance_zoning=nhb_attraction_balance_zoning,
     )
     m.run(
         generate_all=True,
-        generate_hb=False,
-        generate_nhb=False,
-        generate_hb_production=False,
-        generate_hb_attraction=False,
-        generate_nhb_production=False,
-        generate_nhb_attraction=False,
+        generate_hb=True,
+        generate_nhb=True,
+        generate_hb_production=True,
+        generate_hb_attraction=True,
+        generate_nhb_production=True,
+        generate_nhb_attraction=True,
     )
 
+
 ##### MAIN #####
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
