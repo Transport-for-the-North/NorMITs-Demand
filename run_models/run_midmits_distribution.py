@@ -125,6 +125,7 @@ def mode_lookup(
     # Default values across all modes
     intra_infill = 0.5
     target_tld_version = 'v1'
+    geo_constraint_type = 'trip_OD'
     gm_cost = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
     dist_kwargs = {
         nd.DistributionMethod.GRAVITY: {
@@ -161,7 +162,7 @@ def mode_lookup(
             'p_m',
             'p_m_tp',
         )
-        target_tld_dir = 'gb\\dm_highway_bands'
+        target_tld_dir = os.path.join(geo_constraint_type, 'dm_highway_bands')
         upper_cal = dist_params.CalibrationParams(
             'gb',
             nd.DistributionMethod.GRAVITY,
@@ -169,7 +170,6 @@ def mode_lookup(
             hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m'),
             nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_tp'),
         )
-        target_tld_dir = 'north_and_mids\\dm_highway_bands'
         lower_cal = dist_params.CalibrationParams(
             'north',
             nd.DistributionMethod.GRAVITY,
@@ -192,7 +192,7 @@ def mode_lookup(
             'p_m',
             'p_m_tp',
         )
-        target_tld_dir = 'gb\\dm_highway_bands'
+        target_tld_dir = os.path.join(geo_constraint_type, 'dm_highway_bands')
         upper_cal = dist_params.CalibrationParams(
             'gb',
             nd.DistributionMethod.GRAVITY,
@@ -200,7 +200,6 @@ def mode_lookup(
             hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m'),
             nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_tp'),
         )
-        target_tld_dir = 'north_and_mids\\dm_highway_bands'
         lower_cal = dist_params.CalibrationParams(
             'north',
             nd.DistributionMethod.GRAVITY,
@@ -224,7 +223,7 @@ def mode_lookup(
             'p_m_ca',
             'p_m_ca_tp',
         )
-        target_tld_dir = 'gb\\dm_gb_rail_bands'
+        target_tld_dir = os.path.join(geo_constraint_type, 'dm_gb_rail_bands')
         upper_cal = dist_params.CalibrationParams(
             'gb',
             nd.DistributionMethod.GRAVITY,
@@ -232,7 +231,7 @@ def mode_lookup(
             hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m_ca'),
             nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_ca_tp'),
         )
-        target_tld_dir = 'north_and_mids\\dm_north_rail_bands'
+        target_tld_dir = os.path.join(geo_constraint_type, 'dm_north_rail_bands')
         lower_cal = dist_params.CalibrationParams(
             'north',
             nd.DistributionMethod.GRAVITY,
@@ -252,7 +251,7 @@ def mode_lookup(
             'p_m',
             'p_m_tp',
         )
-        target_tld_dir = 'north_and_mids\\dm_highway_bands'
+        target_tld_dir = os.path.join(geo_constraint_type, 'dm_highway_bands')
         upper_cal = dist_params.CalibrationParams(
             'north',
             nd.DistributionMethod.GRAVITY,

@@ -146,9 +146,9 @@ def build_dm_kwargs(params: DistributionModelParameters) -> DistributionModelKwa
     dm_kwargs = {
         'iteration_name': params.iteration,
         'upper_model_method': params.upper_calibration.method,
-        'upper_model_kwargs': None,
+        'upper_distributor_kwargs': None,
         'lower_model_method': params.lower_calibration.method,
-        'lower_model_kwargs': None,
+        'lower_distributor_kwargs': None,
         'export_home': params.paths.export_home,
         'process_count': -2,
     }
