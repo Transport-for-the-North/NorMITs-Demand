@@ -1063,7 +1063,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             'p_needed': self.running_segmentation.segments['p'].unique(),
             'm_needed': self.running_segmentation.segments['m'].unique(),
         }
-        if 'ca' in self.running_segmentation.segment_names:
+        if 'ca' in self.running_segmentation.naming_order:
             seg_params.update({
                 'ca_needed': self.running_segmentation.segments['ca'].unique(),
             })
