@@ -211,7 +211,7 @@ def mode_lookup(
         zone_systems = dist_params.DistributionZoneSystems(
             nd.get_zoning_system('msoa'),
             nd.get_zoning_system('msoa'),
-            nd.get_zoning_system('norms'),
+            nd.get_zoning_system('miranda'),
         )
         segmentations = dist_params.DistributionSegmentations(
             nd.get_segmentation_level('hb_p_m7_ca' if use_tram else 'hb_p_m_ca'),

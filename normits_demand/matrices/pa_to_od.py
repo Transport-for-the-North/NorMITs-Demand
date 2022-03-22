@@ -901,12 +901,9 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
     )
     path = os.path.join(pa_import, input_dist_name)
     pa_24 = nd.read_df(path, index_col=0, find_similar=True)
-    pa_24.columns = pa_24.columns.astype(int)
-    pa_24.index = pa_24.index.astype(int)
-
-    # Get a list of the zone names for iterating - make sure integers
-    orig_vals = [int(x) for x in pa_24.index.values]
-    dest_vals = [int(x) for x in list(pa_24)]
+    to_numeric = lambda a: pd.to_numeric(a, errors="ignore", downcast="integer")
+    pa_24.columns = to_numeric(pa_24.columns)
+    pa_24.index = to_numeric(pa_24.index)
 
     # ## Load the from home and to home factors - always generated on base year ## #
     # Load the model zone tour proportions
@@ -926,7 +923,7 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
     th_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, th_factor_fname))
 
     fh_mats, th_mats = to_od_via_tour_props(
-        n_od_vals=len(orig_vals),
+        n_od_vals=len(pa_24.index),
         pa_24=pa_24,
         fh_factor_dict=fh_factor_dict,
         th_factor_dict=th_factor_dict,
