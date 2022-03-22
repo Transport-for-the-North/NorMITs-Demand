@@ -3443,18 +3443,19 @@ def _recombine_internal_external_internal(in_paths,
         columns=partial_mats[0].columns,
     )
 
+    output_path = file_ops.cast_to_pathlib_path(output_path)
     if force_csv_out:
-        output_path = file_ops.cast_to_pathlib_path(output_path)
-        output_path = output_path.parent / (output_path.stem + '.csv')
+        output_path = output_path.with_suffix('.csv')
 
-    if force_compress_out:
-        output_path = file_ops.cast_to_pathlib_path(output_path)
-        output_path = output_path.parent / (output_path.stem + consts.COMPRESSION_SUFFIX)
+    # Don't add new compression suffix if one is already there
+    full_suffix = (''.join(output_path.suffixes)).lower()
+    if force_compress_out and full_suffix not in file_ops.PD_COMPRESSION:
+        output_path = output_path.with_suffix(consts.COMPRESSION_SUFFIX)
 
     # Write the complete matrix to disk
     file_ops.write_df(full_mat, output_path)
-    
-    
+
+
 def combine_partial_matrices(import_dirs: List[nd.PathLike],
                              export_dir: List[nd.PathLike],
                              segmentation: nd.SegmentationLevel,
