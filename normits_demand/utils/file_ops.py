@@ -728,7 +728,7 @@ def create_folder(folder_path: nd.PathLike,
         du.print_w_toggle('Folder already exists', verbose=verbose_exists)
         return
 
-    os.makedirs(folder_path)
+    os.makedirs(folder_path, exist_ok=True)
     du.print_w_toggle(
         "New project folder created at %s" % folder_path,
         verbose=verbose_create,

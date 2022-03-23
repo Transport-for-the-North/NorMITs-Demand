@@ -268,7 +268,7 @@ def log_normal(
     )
 
     # Now calculate the exponential
-    log = np.log(base_cost, where=base_cost != 0, out=np.zeros_like(base_cost),)
+    log = np.log(base_cost, where=base_cost != 0, out=np.zeros_like(base_cost).astype(float),)
     exp_numerator = (log - mu) ** 2
     exp_denominator = 2 * sigma ** 2
     exp = np.exp(-exp_numerator / exp_denominator)

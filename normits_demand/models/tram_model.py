@@ -102,7 +102,8 @@ class TramModel(TramExportPaths):
                  import_builder: nd.pathing.TramImportPathsBase,
                  export_home: nd.PathLike,
                  tram_competitors: List[nd.Mode],
-                 attraction_balance_zoning: nd.core.zoning.ZoningSystem = None,
+                 hb_balance_zoning: nd.BalancingZones = None,
+                 nhb_balance_zoning: nd.BalancingZones = None,
                  ):
         """
         Assigns the attributes needed for tram inclusion model.
@@ -134,11 +135,17 @@ class TramModel(TramExportPaths):
             These are the modes which will be used to remove trips from in
             order to add in tram trips
 
-        attraction_balance_zoning:
-            The zoning system to balance the attractions to the productions at.
-            A translation must exist between this and the running zoning
-            system, which is MSOA by default. If left as None, then no spatial
-            balance is done, only a segmental balance.
+        hb_balance_zoning:
+            The zoning systems to balance the home-based trip ends
+            at. A translation must exist
+            between this and the running zoning system, which is MSOA by default.
+            If left as None, then no spatial balance is done, only a segmental balance.
+
+        nhb_balance_zoning:
+            The zoning systems to balance the non-home-based trip ends
+            at. A translation must exist
+            between this and the running zoning system, which is MSOA by default.
+            If left as None, then no spatial balance is done, only a segmental balance.
         """
         # Validate inputs
         if not isinstance(import_builder, nd.pathing.TramImportPathsBase):
@@ -155,7 +162,8 @@ class TramModel(TramExportPaths):
         self.import_builder = import_builder
         self.base_train = pd.DataFrame()
         self.tram_competitors = tram_competitors
-        self.balance_zoning = attraction_balance_zoning
+        self.hb_balance_zoning = hb_balance_zoning
+        self.nhb_balance_zoning = nhb_balance_zoning
 
         # Generate the zoning system
         self.zoning_system = nd.get_zoning_system(self._zoning_name)
@@ -449,7 +457,7 @@ class TramModel(TramExportPaths):
             )
 
     def _infill_tram(self,
-                     vector: nd.DVector,
+                     trip_end: pd.DataFrame,
                      tram_data: pd.DataFrame,
                      ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """Internal function on self._add_tram()"""
@@ -459,7 +467,7 @@ class TramModel(TramExportPaths):
 
         # Runs tram infill for 275 internal tram msoa zones
         tram_zone_infilled, more_tram_report = self._infill_tram_zones(
-            vector=vector,
+            trip_end=trip_end,
             tram_data=tram_data,
             tram_zones=tram_zones,
             tram_competitors=self.tram_competitors,
@@ -467,7 +475,7 @@ class TramModel(TramExportPaths):
 
         # Runs tram infill for entire north
         tram_north_infilled, more_tram_north_report = self._infill_tram_north(
-            vector=vector,
+            trip_end=trip_end,
             tram_data=tram_data,
             north_zones=north_zones,
             tram_competitors=self.tram_competitors,
@@ -476,7 +484,7 @@ class TramModel(TramExportPaths):
         # Runs tram infill for internal non tram msoa zones
         # Returns the untouched external zones too
         non_tram_infilled, non_tram_adj_factors = self._infill_non_tram_zones(
-            vector=vector,
+            trip_end=trip_end,
             tram_zone_infilled=tram_zone_infilled,
             tram_north_infilled=tram_north_infilled,
             tram_zones=tram_zones,
@@ -570,7 +578,7 @@ class TramModel(TramExportPaths):
             year_start = timing.current_milli_time()
 
             # Load in the starting vector
-            starting_vector = self._read_vector_data(
+            starting_trip_end = self._read_vector_data(
                 trip_origin=trip_origin,
                 vector_path=vector_import_paths[year],
             )
@@ -579,7 +587,7 @@ class TramModel(TramExportPaths):
             tram_data = self._read_tram_data(tram_import_path)
             tram_data, growth_factors = self._grow_tram_by_rail(
                 base_data=base_vector,
-                future_data=starting_vector,
+                future_data=starting_trip_end,
                 base_tram=tram_data,
             )
 
@@ -589,7 +597,7 @@ class TramModel(TramExportPaths):
 
             # Infill the tram data into tram and non-tram areas
             returns = self._infill_tram(
-                vector=starting_vector,
+                trip_end=starting_trip_end,
                 tram_data=tram_data,
             )
 
@@ -604,7 +612,7 @@ class TramModel(TramExportPaths):
 
             # ## MAKE SURE NOTHING HAS BEEN DROPPED ## #
             # We want to do this first as it's faster with less segments
-            expected_total = starting_vector[self._val_col].values.sum()
+            expected_total = starting_trip_end[self._val_col].values.sum()
             final_total = tram_infilled_vector[self._val_col].values.sum()
             if not math_utils.is_almost_equal(expected_total, final_total, rel_tol=0.001):
                 raise ValueError(
@@ -644,7 +652,7 @@ class TramModel(TramExportPaths):
 
             # ## CONVERT BACK TO ORIGINAL SEGMENTATION ## #
             # Original DVec at full segmentation
-            orig_dvec = nd.read_pickle(vector_import_paths[year])
+            orig_dvec = nd.DVector.load(vector_import_paths[year])
 
             # Need to add in m7 - get its segments from rail
             orig_dvec = orig_dvec.duplicate_segment_like(
@@ -660,13 +668,14 @@ class TramModel(TramExportPaths):
             if balance_paths is not None:
                 tram_dvec = self.balance_dvecs(
                     dvec=tram_dvec,
-                    balance=nd.read_pickle(balance_paths[year]),
+                    trip_origin=trip_origin,
+                    balance=nd.DVector.load(balance_paths[year]),
                     split_weekday_weekend=split_weekday_weekend,
                 )
 
             # ## WRITE OUT THE DVEC AND REPORTS ## #
             self._logger.info("Writing Produced Tram data to disk")
-            tram_dvec.to_pickle(export_paths[year])
+            tram_dvec.save(export_paths[year])
 
             self._logger.info("Writing Tram reports to disk")
             tram_dvec.write_sector_reports(
@@ -689,13 +698,24 @@ class TramModel(TramExportPaths):
 
     def balance_dvecs(self,
                       dvec: nd.DVector,
+                      trip_origin: str,
                       balance: nd.DVector,
                       split_weekday_weekend: bool,
                       ) -> nd.DVector:
         """Balances given Dvec to balance using dvec.balance_at_segments()"""
+        # Init
+        if trip_origin == 'hb':
+            balance_zoning = self.hb_balance_zoning
+        elif trip_origin == 'nhb':
+            balance_zoning = self.nhb_balance_zoning
+        else:
+            raise ValueError(
+                "Trip origin '%s' is not recognised" % trip_origin
+            )
+
         balanced_dvec = dvec.balance_at_segments(
             balance,
-            balance_zoning=self.balance_zoning,
+            balance_zoning=balance_zoning,
             split_weekday_weekend=split_weekday_weekend,
         )
 
@@ -833,7 +853,7 @@ class TramModel(TramExportPaths):
             to a pandas dataframe.
         """
         # Read in the vector
-        vector_dvec = nd.read_pickle(vector_path)
+        vector_dvec = nd.DVector.load(vector_path)
 
         # Aggregate the dvector to the required segmentation
         if trip_origin == 'hb':
@@ -856,7 +876,7 @@ class TramModel(TramExportPaths):
         return df.rename(columns={vector_dvec.val_col: self._val_col})
 
     def _infill_tram_zones(self,
-                           vector: pd.DataFrame,
+                           trip_end: pd.DataFrame,
                            tram_data: pd.DataFrame,
                            tram_zones: List[Any],
                            tram_competitors: List[nd.Mode],
@@ -867,7 +887,7 @@ class TramModel(TramExportPaths):
 
         Parameters
         ----------
-        vector:
+        trip_end:
             A pandas DataFrame of the date that we should be infilling with
             tram data
             
@@ -900,12 +920,12 @@ class TramModel(TramExportPaths):
         tram_data = tram_data.copy()
 
         # Keep only the vector data in tram zones
-        mask = vector[self._zoning_system_col].isin(tram_zones)
-        vector = vector[mask].copy()
+        mask = trip_end[self._zoning_system_col].isin(tram_zones)
+        trip_end = trip_end[mask].copy()
 
         # Infills tram data
         infilled_tram_zones, more_tram_report = self._infill_internal(
-            vector=vector,
+            trip_end=trip_end,
             tram_vector=tram_data,
             tram_competitors=tram_competitors,
             non_val_cols=[self._zoning_system_col] + self._tram_segment_cols,
@@ -915,7 +935,7 @@ class TramModel(TramExportPaths):
         return infilled_tram_zones, more_tram_report
 
     def _infill_tram_north(self,
-                           vector: pd.DataFrame,
+                           trip_end: pd.DataFrame,
                            tram_data: pd.DataFrame,
                            north_zones: List[Any],
                            tram_competitors: List[nd.Mode],
@@ -926,7 +946,7 @@ class TramModel(TramExportPaths):
 
         Parameters
         ----------
-        vector:
+        trip_end:
             A pandas DataFrame of the date that we should be infilling with
             tram data
 
@@ -956,18 +976,18 @@ class TramModel(TramExportPaths):
         tram_data = tram_data.copy()
 
         # Keep only the vector data in tram zones
-        mask = vector[self._zoning_system_col].isin(north_zones)
-        vector = vector[mask].copy()
+        mask = trip_end[self._zoning_system_col].isin(north_zones)
+        trip_end = trip_end[mask].copy()
 
         # Aggregate tram and vector data to north level
         index_cols = self._tram_segment_cols + [self._val_col]
 
-        vector = pd_utils.reindex_and_groupby(vector, index_cols, [self._val_col])
+        trip_end = pd_utils.reindex_and_groupby(trip_end, index_cols, [self._val_col])
         tram_data = pd_utils.reindex_and_groupby(tram_data, index_cols, [self._val_col])
 
         # Infills tram data
         tram_north_infilled, more_tram_report = self._infill_internal(
-            vector=vector,
+            trip_end=trip_end,
             tram_vector=tram_data,
             tram_competitors=tram_competitors,
             non_val_cols=self._tram_segment_cols,
@@ -1055,7 +1075,7 @@ class TramModel(TramExportPaths):
         return future_tram, growth_df
 
     def _infill_non_tram_zones(self,
-                               vector: pd.DataFrame,
+                               trip_end: pd.DataFrame,
                                tram_zone_infilled: pd.DataFrame,
                                tram_north_infilled: pd.DataFrame,
                                tram_zones: List[str],
@@ -1069,7 +1089,7 @@ class TramModel(TramExportPaths):
 
         Parameters
         ----------
-        vector:
+        trip_end:
             The vector in infill the tram data into
 
         tram_zone_infilled:
@@ -1108,11 +1128,11 @@ class TramModel(TramExportPaths):
 
         # ## SPLIT ORIGINAL VECTOR INTO PARTS ## #
         # Split the original vector into north and non-north
-        non_north_mask = vector[self._zoning_system_col].isin(non_north_zones)
-        non_north_vector = vector[non_north_mask].copy()
+        non_north_mask = trip_end[self._zoning_system_col].isin(non_north_zones)
+        non_north_vector = trip_end[non_north_mask].copy()
 
-        north_mask = vector[self._zoning_system_col].isin(north_zones)
-        north_vector = vector[north_mask].copy()
+        north_mask = trip_end[self._zoning_system_col].isin(north_zones)
+        north_vector = trip_end[north_mask].copy()
 
         # Filter down to non-tram zones
         tram_mask = north_vector[self._zoning_system_col].isin(tram_zones)
@@ -1225,7 +1245,7 @@ class TramModel(TramExportPaths):
         return new_df, non_tram_adj_factors
 
     def _infill_internal(self,
-                         vector: pd.DataFrame,
+                         trip_end: pd.DataFrame,
                          tram_vector: pd.DataFrame,
                          tram_competitors: List[nd.Mode],
                          non_val_cols: List[str],
@@ -1236,7 +1256,7 @@ class TramModel(TramExportPaths):
 
         Parameters
         ----------
-        vector:
+        trip_end:
             The original Vector to add tram_vector into.
 
         tram_vector:
@@ -1256,7 +1276,7 @@ class TramModel(TramExportPaths):
 
         """
         # Init
-        df = pd.concat([vector, tram_vector], ignore_index=True)
+        df = pd.concat([trip_end, tram_vector], ignore_index=True)
 
         # Create needed masks
         train_mask = df[mode_col] == nd.Mode.TRAIN.get_mode_num()
@@ -1285,8 +1305,7 @@ class TramModel(TramExportPaths):
 
         # Generate a report where there are more tram than train trips
         more_tram_than_train = tram_train_df['tram'] > tram_train_df['train']
-        more_tram_report = tram_train_df[more_tram_than_train]
-        removed_tram_trips = (more_tram_report['tram'] - more_tram_report['train']).values.sum()
+        more_tram_report = tram_train_df[more_tram_than_train].copy()
 
         # TODO(BT): Report where tram is > 50% rail
 
@@ -1298,7 +1317,7 @@ class TramModel(TramExportPaths):
 
         # Remove tram trips from train
         tram_train_df['new_train'] = tram_train_df['train'].copy()
-        tram_train_df['new_train'] -= tram_train_df['tram']
+        tram_train_df['new_train'] -= tram_train_df['new_tram']
 
         # Get back into input format
         train_cols = common_cols + ['train', 'new_train']
@@ -1343,7 +1362,7 @@ class TramModel(TramExportPaths):
         new_df = pd.concat([compet_df, non_compet_df], ignore_index=True)
 
         # Check we haven't dropped anything
-        expected_total = df[~tram_mask][self._val_col].values.sum() - removed_tram_trips
+        expected_total = trip_end[self._val_col].values.sum()
         final_total = new_df['new_val'].values.sum()
         if not math_utils.is_almost_equal(expected_total, final_total):
             raise ValueError(
