@@ -31,9 +31,9 @@ from normits_demand.utils import general as du
 MODES = [6]
 YEARS = [2018]
 TPS = [1, 2, 3, 4]
-ZONING_SYSTEM = "miham"
-NOTEM_ITER = '9.3'
-out_folder = r"C:\WSP_Projects\MidMITs\01 Pre-processing\Tour Proportions"
+ZONING_SYSTEM = "miranda"
+NOTEM_ITER = '9.6'
+out_folder = r"C:\Users\Kirkland\Documents\MidMITs\Tour Proportions"
 
 phi_import_folder = r"I:\NorMITs Demand\import\phi_factors"
 notem_import_folder = r"T:\MidMITs Demand\MiTEM\iter%s\SC01_JAM\hb_productions" % NOTEM_ITER
