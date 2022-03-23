@@ -19,6 +19,7 @@ import os
 import math
 import itertools
 import collections
+import pathlib
 
 from os import PathLike
 
@@ -2214,3 +2215,21 @@ def get_segmentation_level(name: str) -> SegmentationLevel:
         segment_types=segment_types,
         valid_segments=valid_segments,
     )
+
+def list_segmentations() -> List[str]:
+    """List names of all available segmentations.
+
+    Returns
+    -------
+    List[str]
+        Names of all segmentations found in NorMITs demand
+        segmentation folder.
+    """
+    seg_folder = pathlib.Path(SegmentationLevel._segment_definitions_path)
+
+    segmentations = []
+    for path in seg_folder.iterdir():
+        if path.is_dir() and not path.name.startswith("_"):
+            segmentations.append(path.name)
+
+    return segmentations
