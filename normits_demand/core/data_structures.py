@@ -1131,7 +1131,7 @@ class DVector:
             If the path cannot be found.
         """
         # Init
-        path = file_ops.cast_to_pathlib_path(path)
+        path = pathlib.Path(path)
 
         if path.suffix != self._dvec_suffix:
             path = path.parent / (path.stem + self._dvec_suffix)
@@ -1903,8 +1903,22 @@ class DVector:
                 other_segs = [np.mean(other._data[s]) for s in out_seg_names]
                 split_factors = other_segs / np.sum(other_segs)
             else:
-                other_segs = [other._data[s] for s in out_seg_names]
-                split_factors = other_segs / np.sum(other_segs, axis=0)
+                other_segs = np.array([other._data[s] for s in out_seg_names])
+                zonal_sums = np.sum(other_segs, axis=0)
+                with np.errstate(divide='ignore'):
+                    split_factors = other_segs / zonal_sums
+
+                # If any divide by 0s, split evenly
+                zero_sums = (zonal_sums == 0)
+                if np.count_nonzero(zero_sums) > 0:
+                    # Get even split
+                    n_segs = len(other_segs)
+                    even_split = np.ones((n_segs, 1)) * (1 / n_segs)
+
+                    # Infill the NaNs
+                    zero_loc = zero_sums.nonzero()
+                    for loc in zero_loc:
+                        split_factors[:, loc] = even_split
 
             # Get the original value
             self_seg = self._data[in_seg_name]
@@ -1973,7 +1987,7 @@ class DVector:
 
                         # Infill zeros for balance
                         zero_mask = self_data <= 0
-                        self_data = np.where(zero_mask <= 0, self._zero_infill, self_data)
+                        self_data = np.where(self_data <= 0, self._zero_infill, self_data)
                         other_data = np.where(other_data <= 0, self._zero_infill, other_data)
 
                         # Remove the zones we don't care about
