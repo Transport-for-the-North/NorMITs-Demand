@@ -30,16 +30,16 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 # ## CONSTANTS ## #
 # Trip end import args
 notem_iteration_name = '9.3'
-notem_export_home = r"G:\NorMITs Demand\NoTEM"
+notem_export_home = r"I:\NorMITs Demand\NoTEM"
 tram_export_home = ""   # Not needed as not using TRAM
-cache_path = "E:/dm_cache"      # Set locally for now for a local cache
+cache_path = "F:/dm_cache"      # Set locally for now for a local cache
 
 # Distribution running args
 base_year = 2018
 scenario = consts.SC01_JAM
 dm_iteration_name = '9.3.3-tfgm'
 dm_import_home = r"G:\NorMITs Demand\import"
-dm_export_home = r"E:\NorMITs Demand\Distribution Model"
+dm_export_home = r"F:\NorMITs Demand\Distribution Model"
 
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
@@ -47,8 +47,8 @@ INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
 
 def main():
     # mode = nd.Mode.WALK
-    # mode = nd.Mode.CYCLE
-    mode = nd.Mode.BUS
+    mode = nd.Mode.CYCLE
+    # mode = nd.Mode.BUS
 
     # Running params
     use_tram = False
@@ -112,13 +112,25 @@ def main():
         )
 
     # ## DEFINE HOW TO RUN DISTRIBUTIONS ## #
+    # Define target tld dirs
+    target_tld_version = 'v1'
+    geo_constraint_type = 'trip_OD'
+
     upper_calibration_area = 'gb'
+    upper_calibration_bands = 'dm_highway_bands'
+    upper_target_tld_dir = os.path.join(geo_constraint_type, upper_calibration_bands)
+    upper_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m')
+    upper_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_tp')
     upper_model_method = nd.DistributionMethod.GRAVITY
     upper_calibration_zones_fname = None
     upper_calibration_areas = upper_calibration_area
     upper_calibration_naming = None
 
     lower_calibration_area = 'north_and_mids'
+    lower_calibration_bands = 'dm_highway_bands'
+    lower_target_tld_dir = os.path.join(geo_constraint_type, lower_calibration_bands)
+    lower_hb_target_tld_dir = os.path.join(lower_target_tld_dir, 'hb_p_m')
+    lower_nhb_target_tld_dir = os.path.join(lower_target_tld_dir, 'nhb_p_m_tp')
     lower_model_method = nd.DistributionMethod.GRAVITY
     lower_calibration_zones_fname = None
     lower_calibration_areas = lower_calibration_area
@@ -136,8 +148,8 @@ def main():
         'estimate_init_params': False
     }
 
-    upper_distributor_kwargs = gravity_kwargs.copy()
-    lower_distributor_kwargs = gravity_kwargs.copy()
+    upper_model_kwargs = gravity_kwargs.copy()
+    lower_model_kwargs = gravity_kwargs.copy()
 
     # ## GET TRIP ENDS ## #
     hb_productions, hb_attractions, nhb_productions, nhb_attractions = build_trip_ends(
@@ -161,17 +173,18 @@ def main():
         'year': base_year,
         'import_home': dm_import_home,
         'running_mode': mode,
+        'target_tld_version': target_tld_version,
         'upper_zoning_system': upper_zoning_system,
         'upper_running_zones': upper_zoning_system.unique_zones,
         'upper_model_method': upper_model_method,
-        'upper_distributor_kwargs': upper_distributor_kwargs,
+        'upper_model_kwargs': upper_model_kwargs,
         'upper_calibration_zones_fname': upper_calibration_zones_fname,
         'upper_calibration_areas': upper_calibration_areas,
         'upper_calibration_naming': upper_calibration_naming,
         'lower_zoning_system': lower_zoning_system,
         'lower_running_zones': lower_running_zones,
         'lower_model_method': lower_model_method,
-        'lower_distributor_kwargs': lower_distributor_kwargs,
+        'lower_model_kwargs': lower_model_kwargs,
         'lower_calibration_zones_fname': lower_calibration_zones_fname,
         'lower_calibration_areas': lower_calibration_areas,
         'lower_calibration_naming': lower_calibration_naming,
@@ -185,10 +198,11 @@ def main():
     dm_kwargs = {
         'iteration_name': dm_iteration_name,
         'upper_model_method': upper_model_method,
-        'upper_model_kwargs': None,
+        'upper_distributor_kwargs': None,
         'lower_model_method': lower_model_method,
-        'lower_model_kwargs': None,
+        'lower_distributor_kwargs': None,
         'export_home': dm_export_home,
+        'report_lower_vectors': False,
         'process_count': -2,
     }
 
@@ -220,7 +234,8 @@ def main():
             running_segmentation=hb_running_seg,
             upper_init_params_fname=hb_upper_init_params_fname,
             lower_init_params_fname=hb_lower_init_params_fname,
-            target_tld_dir=hb_seg_name,
+            upper_target_tld_dir=upper_hb_target_tld_dir,
+            lower_target_tld_dir=lower_hb_target_tld_dir,
             **dmab_kwargs,
         )
 
@@ -250,7 +265,8 @@ def main():
             running_segmentation=nhb_running_seg,
             upper_init_params_fname=nhb_upper_init_params_fname,
             lower_init_params_fname=nhb_lower_init_params_fname,
-            target_tld_dir=nhb_seg_name,
+            upper_target_tld_dir=upper_nhb_target_tld_dir,
+            lower_target_tld_dir=lower_nhb_target_tld_dir,
             **dmab_kwargs,
         )
 
@@ -286,7 +302,8 @@ def main():
                 running_segmentation=hb_running_seg,
                 upper_init_params_fname=hb_upper_init_params_fname,
                 lower_init_params_fname=hb_lower_init_params_fname,
-                target_tld_dir=os.path.join(upper_calibration_area, hb_seg_name),
+                upper_target_tld_dir=upper_hb_target_tld_dir,
+                lower_target_tld_dir=lower_hb_target_tld_dir,
                 **dmab_kwargs,
             )
 
