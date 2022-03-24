@@ -367,15 +367,18 @@ class DistributionModel(DistributionModelExportPaths):
         #   Inter / Intra Report by segment?
         #   Aggregate segments and report again too? (CBO)
         # Sector Reports Dvec style
-        #   Output 24x24 square at 12 hours
+        #   Output 24x24 square at 12 hours, 24hr
         # TLD curve
         #   single mile bands - p/m (ca ) segments full matrix
         #   NorMITs Vis
         print("test")
-        print(self.export_paths.full_pa_dir)
-        print(self.report_paths.pa_reports_dir)
+        print("demand dir:" + self.export_paths.full_pa_dir)
+        print("output dir:" + self.report_paths.pa_reports_dir)
         in_dir = self.export_paths.full_pa_dir
         out_dir = self.report_paths.pa_reports_dir
+        sector_list = []
+        ter_list = []
+        tec_list = []
 
         desc = "Generating PA Reports"
         for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
@@ -387,11 +390,14 @@ class DistributionModel(DistributionModelExportPaths):
                 csv=True
             )
 
+            print(segment_params)
             path = os.path.join(in_dir, fname)
             print(path)
+            # Read demand matrix
             df = nd.read_df(path=path,
                             find_similar=True,
                             index_col=0)
+            # Build sector matrix
             sector_zoning = nd.get_zoning_system("ca_sector_2020")
             sector_df = translation.translate_matrix_zoning(
                 matrix=df,
@@ -399,6 +405,93 @@ class DistributionModel(DistributionModelExportPaths):
                 to_zoning_system=sector_zoning,
             )
             print(sector_df)
+
+            # Get tripends and assign to dataframe
+            trow = df.sum(axis=1)
+            dfr = trow.to_frame(name='val')
+
+            tcol = df.sum(axis=0)
+            dfc = tcol.to_frame(name='val')
+
+            for key in segment_params:
+                dfr.insert(loc=0,
+                           column=key,
+                           value=segment_params[key],
+                           allow_duplicates=True)
+                dfc.insert(loc=0,
+                           column=key,
+                           value=segment_params[key],
+                           allow_duplicates=True)
+                sector_df.insert(loc=0,
+                                 column=key,
+                                 value=segment_params[key],
+                                 allow_duplicates=True)
+
+
+            sector_list.append(sector_df)
+
+            dfr.index.name = self.compile_zoning_system.col_name
+            dfc.index.name = self.compile_zoning_system.col_name
+            dfr = dfr.reset_index()
+            dfc = dfc.reset_index()
+            ter_list.append(dfr)
+            tec_list.append(dfc)
+
+            break
+        print(dfr)
+
+        # Trip Ends to DVector
+        master_ter = pd.concat(ter_list, ignore_index=True)
+        print(master_ter)
+        master_tec = pd.concat(tec_list, ignore_index=True)
+
+        dvec_r = nd.DVector(
+            import_data=master_ter,
+            segmentation=self.running_segmentation,
+            zoning_system=self.compile_zoning_system
+        )
+        print(dvec_r)
+        dvec_c = nd.DVector(
+            import_data=master_tec,
+            segmentation=self.running_segmentation,
+            zoning_system=self.compile_zoning_system
+        )
+
+        # Export Sectors - openpyxl
+        master_sector = pd.concat(sector_list)
+
+        from openpyxl import load_workbook
+        # from openpyxl.utils.dataframe import dataframe_to_rows
+        path = os.path.join(out_dir, 'Reporting_Summary.xlsx')
+        # wb = load_workbook(filename=path)
+        # ws = wb['sector_data']
+        #
+        # for r in dataframe_to_rows(master_sector, index=True, header=True):
+        #     ws.append(r)
+        #
+        # wb.save(filename=path)
+
+        path = os.path.join(out_dir, 'Reporting_Summary.xlsx')
+        wb = load_workbook(filename=path)
+        xl_writer = pd.ExcelWriter(path=path, engine='openpyxl')
+        xl_writer.book = wb
+        xl_writer.sheets = {ws.title: ws for ws in wb.worksheets}
+        master_sector.to_excel(xl_writer,
+                               sheet_name='sector_data',
+                               index=True,
+                               header=True,
+                               startcol=1,
+                               startrow=1)
+        xl_writer.save()
+
+        # post loop DVector
+        # dvec = nd.DVector(
+        #     segmentation=self.running_segmentation,
+        #     zoning_system=self.compile_zoning_system
+        # )
+
+
+
 
         pass
 
