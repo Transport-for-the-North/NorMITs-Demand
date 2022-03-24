@@ -928,10 +928,12 @@ class GravityDistributor(AbstractDistributor):
 
         # ## MAKE SURE COST AND P/A ARE IN SAME ORDER ## #
         # Sort the cost
-        cost_matrix = cost_matrix.reindex(
+        cost_matrix = pd_utils.reindex_rows_and_cols(
+            df=cost_matrix,
             columns=self.running_zones,
             index=self.running_zones,
-        ).fillna(0)
+            fill_value=0,
+        )
 
         # # TODO(BT): Fix this problem at the cost source
         # # Fill any zero costs with 0.2

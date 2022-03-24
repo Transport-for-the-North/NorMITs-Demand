@@ -89,6 +89,62 @@ def reindex_cols(df: pd.DataFrame,
     return df.reindex(columns=columns, **kwargs)
 
 
+def reindex_rows_and_cols(
+    df: pd.DataFrame,
+    index: List[Any],
+    columns: List[Any],
+    fill_value: Any = np.nan,
+    **kwargs,
+) -> pd.DataFrame:
+    """
+    Wrapper around `df.reindex()` to make sure index/col types don't clash
+
+    If the type of the index of the column names in df does not match the
+    types given in index or columns, the index types will be cast to the
+    desired types before calling the reindex.
+
+    Parameters
+    ----------
+    df:
+        The pandas.DataFrame that should be reindexed
+
+    index:
+        The index to reindex df to.
+
+    columns:
+        The columns to reindex df to.
+
+    fill_value:
+        Value to use for missing values. Defaults to NaN, but can be
+        any “compatible” value.
+
+    kwargs:
+        Any extra arguments to pass into df.reindex
+
+    Returns
+    -------
+    reindexed_df:
+        The given df, reindexed to the index and columns given.
+    """
+    # Init
+    idx_dtype = type(index[0])
+    col_dtype = type(columns[0])
+
+    # Cast types if needed
+    if df.index.dtype != idx_dtype:
+        df.index = df.index.astype(idx_dtype)
+
+    if df.columns.dtype != col_dtype:
+        df.columns = df.columns.astype(idx_dtype)
+
+    return df.reindex(
+        columns=columns,
+        index=index,
+        fill_value=fill_value,
+        **kwargs
+    )
+
+
 def reindex_and_groupby(df: pd.DataFrame,
                         index_cols: List[str],
                         value_cols: List[str],
