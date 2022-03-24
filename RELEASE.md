@@ -26,6 +26,7 @@ Below, a brief summary of patches made since the previous version can be found.
     - DVector
     - SegmentationLevel
     - ZoningSystem
+  - Added Enumerations for scenarios
 - NoTEM
   - Updated Attraction Model to accept a new form of Land Use data and attraction
     trip weights. This should lead to more accurate attraction trip ends.
@@ -46,11 +47,17 @@ Below, a brief summary of patches made since the previous version can be found.
   - Multi-Area Gravity Model
     - Initial implementation of a multi-area gravity model. Each area calibrates
       its own cost params, and aims for its own target cost distribution. All
-      areas share the same Furness and Jacobian matrices via threading. 
+      areas share the same Furness and Jacobian matrices via threading.
+  - Added a built int cache method for trip end inputs
 - Concurrency
   - Multi-threading framework added to make multi-threading simpler in codebase
   - `SharedNumpyArrayHelper` added to make communication of large numpy 
     arrays between threads/processes faster and easier, at the cost of memory
+- Converters
+  - Added a converter module to convert I/O between Demand Models and for
+    inputs and outputs into NorMITs Demand
+  - Added classes to convert demand from NoTEM/Tram Models into Distribution 
+    Model.
 - Bug Fixes
   - Updated the TfGM translations and zoning definitions
   - Fixed some overflow handling in the `doubly_contstrained_furness()`
@@ -62,3 +69,5 @@ Below, a brief summary of patches made since the previous version can be found.
     gravity model
   - Allow some reporting in the distribution model to be optional when the
     translation files don't exist
+  - Fixed an infill 0 bug in `DVector.balance_at_segments()`
+  - Fixed a divide by 0 bug in `DVector.split_segment_like()`
