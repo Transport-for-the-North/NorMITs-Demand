@@ -50,4 +50,15 @@ Below, a brief summary of patches made since the previous version can be found.
 - Concurrency
   - Multi-threading framework added to make multi-threading simpler in codebase
   - `SharedNumpyArrayHelper` added to make communication of large numpy 
-    arrays between threads/processes faster and easier, at the cost of memory.  
+    arrays between threads/processes faster and easier, at the cost of memory
+- Bug Fixes
+  - Updated the TfGM translations and zoning definitions
+  - Fixed some overflow handling in the `doubly_contstrained_furness()`
+  - Clip non-zero values being returned from cost functions to prevent overflow
+    errors in the gravity model
+  - Fixed a bug where a DVector would fail to initialise when a zoning_system
+    wasn't given
+  - Fixed a bug where the cost matrices were being replaces with 0s in the lower
+    gravity model
+  - Allow some reporting in the distribution model to be optional when the
+    translation files don't exist
