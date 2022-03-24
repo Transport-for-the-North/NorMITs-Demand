@@ -54,7 +54,7 @@ def main():
     use_tram = False
     overwrite_cache = False
 
-    run_hb = True
+    run_hb = False
     run_nhb = True
 
     run_all = False
@@ -113,7 +113,7 @@ def main():
 
     # ## DEFINE HOW TO RUN DISTRIBUTIONS ## #
     # Define target tld dirs
-    target_tld_version = 'v1'
+    target_tld_version = 'v1.1'
     geo_constraint_type = 'trip_OD'
 
     upper_calibration_area = 'gb'
