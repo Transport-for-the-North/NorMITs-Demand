@@ -265,7 +265,7 @@ class DMArgumentBuilderBase(abc.ABC):
                 compressed=True,
             )
             path = os.path.join(upper_model_matrix_dir, fname)
-            df = file_ops.read_df(path, index_col=0)
+            df = file_ops.read_df(path, index_col=0, find_similar=True)
 
             # Make sure index and columns are the same type
             df.columns = df.columns.astype(df.index.dtype)

@@ -279,7 +279,7 @@ def read_df(path: nd.PathLike,
         path = find_filename(path)
 
     # Determine how to read in df
-    if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
+    if pathlib.Path(path).suffix == '.pbz2':
         df = compress.read_in(path)
 
         # Optionally try and set the index
@@ -303,7 +303,9 @@ def read_df(path: nd.PathLike,
     else:
         raise ValueError(
             "Cannot determine the filetype of the given path. Expected "
-            "either '.csv' or '%s'" % consts.COMPRESSION_SUFFIX
+            "either '.csv' or '%s'\n"
+            "Got path: %s"
+            % (consts.COMPRESSION_SUFFIX, path)
         )
 
 
@@ -450,11 +452,12 @@ def find_filename(path: nd.PathLike,
 
     # Try to find similar paths
     attempted_paths = list()
+    base_path = remove_suffixes(path)
     for ftype in alt_types:
-        path = path.parent / (path.stem + ftype)
-        attempted_paths.append(path)
-        if os.path.exists(path):
-            return return_fn(path)
+        i_path = base_path.with_suffix(ftype)
+        attempted_paths.append(i_path)
+        if os.path.exists(i_path):
+            return return_fn(i_path)
 
     # If here, no paths were found!
     raise FileNotFoundError(
