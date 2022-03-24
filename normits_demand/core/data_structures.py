@@ -379,8 +379,14 @@ class DVector:
             self._chunk_divider = self.process_count * 3
 
         # Set defaults if args not set
-        zone_col = self._zone_col if zone_col is None else zone_col
         val_col = self._val_col if val_col is None else val_col
+        if zone_col is None:
+            if zoning_system is not None:
+                self.zone_col = zoning_system.col_name
+            else:
+                self.zone_col = None
+        else:
+            self.zone_col = zone_col
 
         # Try to convert the given data into DVector format
         if isinstance(import_data, pd.DataFrame):

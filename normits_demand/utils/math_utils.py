@@ -17,9 +17,11 @@ import warnings
 from typing import Any
 from typing import Dict
 from typing import Union
+from typing import Tuple
 
 # Third Party
 import numpy as np
+import pandas as pd
 
 # Local Imports
 
@@ -185,6 +187,113 @@ def curve_convergence(target: np.array,
 
     # Limit between 0 and 1
     return max(1 - convergence, 0)
+
+
+def overflow_msg(
+    x1: np.ndarray,
+    x2: np.ndarray,
+    x1_name: str = None,
+    x2_name: str = None,
+    **kwargs,
+) -> Tuple[np.ndarray, pd.DataFrame]:
+    """Handles overflow error messaging from a numpy divide
+
+    Parameters
+    ----------
+    x1:
+        The array, that when divided by x2, produces overflow errors
+
+    x2:
+        The array, that when x1 is divided by it, produces overflow errors
+
+    x1_name:
+        The name to give to the x1 column in the output error table. If
+        left as None, will default to 'x1'.
+
+    x2_name:
+        The name to give to the x2 column in the output error table. If
+        left as None, will default to 'x2'.
+
+    Returns
+    -------
+    overflow_report:
+        A pandas dataframe indicating which values in which arrays, at
+        which indexes caused the overflow error.
+    """
+    # Init
+    x1_name = 'x1' if x1_name is None else x1_name
+    x2_name = 'x2' if x2_name is None else x2_name
+
+    # Complete the calculation to find the culprit
+    with np.errstate(over='ignore'):
+        x3 = np.divide(x1, x2, **kwargs)
+
+    # Find all infs
+    inf_idxs = np.isinf(x3).nonzero()
+
+    # Format error as a table
+    idx_cols = {'axis_%s' % i: x for i, x in enumerate(inf_idxs)}
+    other_cols = {x1_name: x1[inf_idxs], x2_name: x2[inf_idxs]}
+
+    all_cols = idx_cols.copy()
+    all_cols.update(other_cols)
+
+    return x3, pd.DataFrame(all_cols)
+
+
+def np_divide_with_overflow_error(*args, **kwargs) -> pd.DataFrame:
+    """Call `np.divide` with overflow error raising turned on
+
+    Use in conjunction with 'math_utils.overflow_msg' to get a nice
+    print out of the error
+
+    Parameters
+    ----------
+    *args:
+        passed into `np.divide`
+
+    **kwargs:
+        passed into `np.divide`
+
+    Returns
+    -------
+    divide_result:
+        The result of: `np.divide(*args, **kwargs)`
+
+    Raises
+    ------
+    FloatingPointError:
+        If an overflow error occurs during the `np.divide` call
+
+    See Also
+    --------
+    `np.divide`
+    """
+    # Set up numpy overflow errors
+    with np.errstate(over='raise'):
+        return np.divide(*args, **kwargs)
+
+
+def clip_small_non_zero(a: np.ndarray, min_val: float) -> np.ndarray:
+    """Clips all small, non-zero values in a up to min_val
+
+    Any 0 values will be left as is, and only the values less than min_val,
+    and greater than 0 will be changed to min_val.
+
+    Parameters
+    ----------
+    a:
+        The array to clip
+
+    min_val:
+        The minimum non-zero value to allow in a.
+
+    Returns
+    -------
+    clipped_a:
+        a, with all non-zero values clipped to min_val.
+    """
+    return np.where((min_val > a) & (a > 0), min_val, a)
 
 
 def get_pa_diff(new_p,

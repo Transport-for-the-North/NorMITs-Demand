@@ -76,6 +76,7 @@ class DistributionModel(DistributionModelExportPaths):
                  lower_running_zones: List[Any] = None,
                  lower_distributor_kwargs: Dict[str, Any] = None,
                  compile_zoning_system: nd.ZoningSystem = None,
+                 report_lower_vectors: bool = True,
                  process_count: int = constants.PROCESS_COUNT,
                  ):
         # Make sure all are set if one is
@@ -117,6 +118,7 @@ class DistributionModel(DistributionModelExportPaths):
         self.lower_model_zoning = lower_model_zoning
         self.lower_running_zones = lower_running_zones
         self.lower_distributor_kwargs = lower_distributor_kwargs
+        self.report_lower_vectors = report_lower_vectors
 
         # Control output zoning systems depending on what we've been given
         if compile_zoning_system is not None:
@@ -350,6 +352,7 @@ class DistributionModel(DistributionModelExportPaths):
             upper_model_matrix_dir=self.upper.export_paths.matrix_dir,
             external_matrix_output_dir=self.export_paths.upper_external_pa,
             lower_model_vector_report_dir=self.report_paths.lower_vector_reports_dir,
+            report_vectors=self.report_lower_vectors,
         )
 
         self._logger.info("Building arguments for the Lower Model")

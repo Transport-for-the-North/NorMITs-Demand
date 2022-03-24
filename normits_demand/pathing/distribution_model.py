@@ -206,6 +206,7 @@ class DMArgumentBuilderBase(abc.ABC):
                                    upper_model_matrix_dir: nd.PathLike,
                                    external_matrix_output_dir: nd.PathLike,
                                    lower_model_vector_report_dir: nd.PathLike,
+                                   report_vectors: bool = True,
                                    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Converts Upper matrices into vectors for lower model
 
@@ -223,6 +224,10 @@ class DMArgumentBuilderBase(abc.ABC):
             The directory to output standard reports of the vectors generated
             for the lower model. This is all demand in the lower_running_zones,
             and all data that is not in the external_matrix_output_dir.
+
+        report_vectors:
+            Whether to write out a set of reports describing how the generated
+            vectors look or not.
 
         Returns
         -------
@@ -327,8 +332,9 @@ class DMArgumentBuilderBase(abc.ABC):
         attractions = attractions.rename(columns={'attractions': 'val'})
 
         # Generate standard vector reports
-        self._report_vector(productions, 'productions', lower_model_vector_report_dir)
-        self._report_vector(attractions, 'attractions', lower_model_vector_report_dir)
+        if report_vectors:
+            self._report_vector(productions, 'productions', lower_model_vector_report_dir)
+            self._report_vector(attractions, 'attractions', lower_model_vector_report_dir)
 
         return productions, attractions
 
@@ -410,6 +416,7 @@ class DMArgumentBuilderBase(abc.ABC):
                                          productions_cache: nd.PathLike,
                                          attractions_cache: nd.PathLike,
                                          overwrite_cache: bool,
+                                         report_vectors: bool = True,
                                          ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Cache wrapper for self._convert_upper_pa_to_lower()
 
@@ -440,6 +447,10 @@ class DMArgumentBuilderBase(abc.ABC):
 
         overwrite_cache:
             Whether to overwrite any cache that exists, no matter what.
+
+        report_vectors:
+            Whether to write out a set of reports describing how the generated
+            vectors look or not.
 
         Returns
         -------
@@ -473,6 +484,7 @@ class DMArgumentBuilderBase(abc.ABC):
             upper_model_matrix_dir=upper_model_matrix_dir,
             external_matrix_output_dir=external_matrix_output_dir,
             lower_model_vector_report_dir=lower_model_vector_report_dir,
+            report_vectors=report_vectors,
         )
 
         # Save into cache
@@ -485,6 +497,7 @@ class DMArgumentBuilderBase(abc.ABC):
                       upper_model_matrix_dir: nd.PathLike,
                       external_matrix_output_dir: nd.PathLike,
                       lower_model_vector_report_dir: nd.PathLike,
+                      report_vectors: bool = True,
                       cache_dir: nd.PathLike = None,
                       overwrite_cache: bool = False
                       ) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -513,6 +526,10 @@ class DMArgumentBuilderBase(abc.ABC):
             for the lower model. This is all demand in the lower_running_zones,
             and all data that is not in the external_matrix_output_dir.
 
+        report_vectors:
+            Whether to write out a set of reports describing how the generated
+            vectors look or not.
+
         cache_dir:
             The optional directory to store a cached version of the converted
             trip ends.
@@ -537,6 +554,7 @@ class DMArgumentBuilderBase(abc.ABC):
                 upper_model_matrix_dir=upper_model_matrix_dir,
                 external_matrix_output_dir=external_matrix_output_dir,
                 lower_model_vector_report_dir=lower_model_vector_report_dir,
+                report_vectors=report_vectors,
             )
 
         # Generate cache_paths
@@ -564,6 +582,7 @@ class DMArgumentBuilderBase(abc.ABC):
             productions_cache=productions_cache,
             attractions_cache=attractions_cache,
             overwrite_cache=overwrite_cache,
+            report_vectors=report_vectors,
         )
 
     def build_distribution_model_init_args(self):
