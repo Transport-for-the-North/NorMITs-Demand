@@ -367,7 +367,7 @@ class DistributionModel(DistributionModelExportPaths):
         #   Inter / Intra Report by segment?
         #   Aggregate segments and report again too? (CBO)
         # Sector Reports Dvec style
-        #   Output 24x24 square at 12 hours, 24hr
+        #   Output 24x24 square at 24hr
         # TLD curve
         #   single mile bands - p/m (ca ) segments full matrix
         #   NorMITs Vis
@@ -406,6 +406,13 @@ class DistributionModel(DistributionModelExportPaths):
             )
             print(sector_df)
 
+            # Export sector square matrix csv
+            purp = segment_params['p']
+            mode = segment_params['m']
+            sector_name = f'ca_sector_p{purp}_m{mode}.csv'
+            sector_path = os.path.join(out_dir, sector_name)
+            sector_df.to_csv(sector_path, header=False, index=False)
+
             # Get tripends and assign to dataframe
             trow = df.sum(axis=1)
             dfr = trow.to_frame(name='val')
@@ -427,22 +434,23 @@ class DistributionModel(DistributionModelExportPaths):
                                  value=segment_params[key],
                                  allow_duplicates=True)
 
+            sector_df.index.name = 'sector_o'
+            sector_df = sector_df.reset_index()
+            sector_long = pd.melt(sector_df,
+                               id_vars=['sector_o', 'p', 'm'],
+                               var_name='sector_d',
+                               value_name='val')
+            sector_list.append(sector_long)
 
-            sector_list.append(sector_df)
-
-            dfr.index.name = self.compile_zoning_system.col_name
-            dfc.index.name = self.compile_zoning_system.col_name
+            dfr.index.name = 'zone'
+            dfc.index.name = 'zone'
             dfr = dfr.reset_index()
             dfc = dfc.reset_index()
             ter_list.append(dfr)
             tec_list.append(dfc)
 
-            break
-        print(dfr)
-
         # Trip Ends to DVector
         master_ter = pd.concat(ter_list, ignore_index=True)
-        print(master_ter)
         master_tec = pd.concat(tec_list, ignore_index=True)
 
         dvec_r = nd.DVector(
@@ -450,48 +458,117 @@ class DistributionModel(DistributionModelExportPaths):
             segmentation=self.running_segmentation,
             zoning_system=self.compile_zoning_system
         )
-        print(dvec_r)
         dvec_c = nd.DVector(
             import_data=master_tec,
             segmentation=self.running_segmentation,
             zoning_system=self.compile_zoning_system
         )
 
+        # Dvector reports
+        dvec_r.write_sector_reports(
+            segment_totals_path=os.path.join(self.report_paths.pa_reports_dir, 'segment_totals_rows.csv'),
+            ca_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ca_sector_rows.csv'),
+            ie_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ie_sector_rows.csv')
+        )
+        dvec_c.write_sector_reports(
+            segment_totals_path=os.path.join(self.report_paths.pa_reports_dir, 'segment_totals_cols.csv'),
+            ca_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ca_sector_cols.csv'),
+            ie_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ie_sector_cols.csv')
+        )
+
         # Export Sectors - openpyxl
         master_sector = pd.concat(sector_list)
 
+        def append_df_to_excel(filename, dframe, sheet_name='Sheet1', startrow=None,
+                               truncate_sheet=False,
+                               **to_excel_kwargs):
+            """
+            Append a DataFrame [dframe] to existing Excel file [filename]
+            into [sheet_name] Sheet.
+            If [filename] doesn't exist, then this function will create it.
+
+            @param filename: File path or existing ExcelWriter
+                             (Example: '/path/to/file.xlsx')
+            @param dframe: DataFrame to save to workbook
+            @param sheet_name: Name of sheet which will contain DataFrame.
+                               (default: 'Sheet1')
+            @param startrow: upper left cell row to dump data frame.
+                             Per default (startrow=None) calculate the last row
+                             in the existing DF and write to the next row...
+            @param truncate_sheet: truncate (remove and recreate) [sheet_name]
+                                   before writing DataFrame to Excel file
+            @param to_excel_kwargs: arguments which will be passed to `DataFrame.to_excel()`
+                                    [can be a dictionary]
+            @return: None
+
+            Usage examples:
+
+            append_df_to_excel('d:/temp/test.xlsx', df)
+
+            append_df_to_excel('d:/temp/test.xlsx', df, header=None, index=False)
+
+            append_df_to_excel('d:/temp/test.xlsx', df, sheet_name='Sheet2',
+                                index=False)
+
+            append_df_to_excel('d:/temp/test.xlsx', df, sheet_name='Sheet2',
+                                index=False, startrow=25)
+
+            (c) [MaxU](https://stackoverflow.com/users/5741205/maxu?tab=profile)
+            """
+            # Excel file doesn't exist - saving and exiting
+            if not os.path.isfile(filename):
+                dframe.to_excel(
+                    filename,
+                    sheet_name=sheet_name,
+                    startrow=startrow if startrow is not None else 0,
+                    **to_excel_kwargs)
+                return
+
+            # ignore [engine] parameter if it was passed
+            if 'engine' in to_excel_kwargs:
+                to_excel_kwargs.pop('engine')
+
+            writer = pd.ExcelWriter(filename, engine='openpyxl', mode='a')
+
+            # try to open an existing workbook
+            writer.book = load_workbook(filename)
+
+            # get the last row in the existing Excel sheet
+            # if it was not specified explicitly
+            if startrow is None and sheet_name in writer.book.sheetnames:
+                startrow = writer.book[sheet_name].max_row
+
+            # truncate sheet
+            if truncate_sheet and sheet_name in writer.book.sheetnames:
+                # index of [sheet_name] sheet
+                idx = writer.book.sheetnames.index(sheet_name)
+                # remove [sheet_name]
+                writer.book.remove(writer.book.worksheets[idx])
+                # create an empty sheet [sheet_name] using old index
+                writer.book.create_sheet(sheet_name, idx)
+
+            # copy existing sheets
+            writer.sheets = {ws.title: ws for ws in writer.book.worksheets}
+
+            if startrow is None:
+                startrow = 0
+
+            # write out the new sheet
+            dframe.to_excel(writer, sheet_name, startrow=startrow, **to_excel_kwargs)
+
+            # save the workbook
+            writer.save()
+
         from openpyxl import load_workbook
-        # from openpyxl.utils.dataframe import dataframe_to_rows
         path = os.path.join(out_dir, 'Reporting_Summary.xlsx')
-        # wb = load_workbook(filename=path)
-        # ws = wb['sector_data']
-        #
-        # for r in dataframe_to_rows(master_sector, index=True, header=True):
-        #     ws.append(r)
-        #
-        # wb.save(filename=path)
-
-        path = os.path.join(out_dir, 'Reporting_Summary.xlsx')
-        wb = load_workbook(filename=path)
-        xl_writer = pd.ExcelWriter(path=path, engine='openpyxl')
-        xl_writer.book = wb
-        xl_writer.sheets = {ws.title: ws for ws in wb.worksheets}
-        master_sector.to_excel(xl_writer,
-                               sheet_name='sector_data',
-                               index=True,
-                               header=True,
-                               startcol=1,
-                               startrow=1)
-        xl_writer.save()
-
-        # post loop DVector
-        # dvec = nd.DVector(
-        #     segmentation=self.running_segmentation,
-        #     zoning_system=self.compile_zoning_system
-        # )
-
-
-
+        append_df_to_excel(
+            filename=path,
+            dframe=master_sector,
+            sheet_name='sector_data',
+            startrow=0,
+            index=False,
+            header=True
+        )
 
         pass
 
