@@ -72,6 +72,62 @@ class ToDistributionModel:
         self.cache_dir = cache_dir
         self.time_format = time_format
 
+    def convert(
+        self,
+        trip_origin: nd_core.TripOrigin,
+        ignore_cache: bool = False,
+        *args,
+        **kwargs,
+    ) -> Tuple[nd_core.DVector, nd_core.DVector]:
+        """Reads in and converts the trip origin Dvectors
+
+        Wrapper class for `self.convert_hb()` or `self.convert_nhb()`.
+
+        Converts into the format required by the distribution model, which is
+        defined by: reduce_segmentation, subset_segmentation,
+        aggregation_segmentation, and modal_segmentation.
+        Optionally makes use of a cached version the converted DVector if one
+        exists, ignore_cache is False, and self.cache_dir is set.
+
+        Parameters
+        ----------
+        trip_origin:
+            The trip origin to convert. Used to determine whether to pick the
+            `self.convert_hb()` or `self.convert_nhb()` function.
+
+        ignore_cache:
+            Whether to ignore the cache and recreate the cache no matter
+            what.
+
+        args:
+            Used for compatibility with `self.maybe_read_and_convert_trip_end()`
+
+        kwargs:
+            Used for compatibility with `self.maybe_read_and_convert_trip_end()`
+
+        Returns
+        -------
+        converted_dvec:
+            The convert trip_end_or_path DVector
+
+        See Also
+        --------
+        `self.convert_hb()`
+        `self.convert_nhb()`
+        `self.convert_hb_productions()`
+        `self.convert_hb_attractions()`
+        `self.maybe_read_and_convert_trip_end()`
+        """
+        if trip_origin == nd_core.TripOrigin.HB:
+            return self.convert_hb(ignore_cache=ignore_cache, *args, **kwargs)
+        elif trip_origin == nd_core.TripOrigin.NHB:
+            return self.convert_nhb(ignore_cache=ignore_cache, *args, **kwargs)
+        else:
+            raise ValueError(
+                "Don't know how to convert the trip ends for trip origin: %s"
+                % trip_origin.value
+            )
+
     def convert_hb(
         self,
         ignore_cache: bool = False,

@@ -17,3 +17,4 @@ from normits_demand.core.segments import get_segmentation_level
 # ## ENUMERATIONS ## #
 from normits_demand.core.enumerations import Mode
 from normits_demand.core.enumerations import Scenario
+from normits_demand.core.enumerations import TripOrigin
