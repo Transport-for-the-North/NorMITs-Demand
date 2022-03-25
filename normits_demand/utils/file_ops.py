@@ -333,7 +333,7 @@ def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
     path = pathlib.Path(path)
 
     # Determine how to read in df
-    if pathlib.Path(path).suffix == consts.COMPRESSION_SUFFIX:
+    if pathlib.Path(path).suffix == '.pbz2':
         compress.write_out(df, path)
 
     elif pathlib.Path(path).suffix == '.csv':

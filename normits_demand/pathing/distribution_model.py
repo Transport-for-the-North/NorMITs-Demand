@@ -114,8 +114,8 @@ class DMArgumentBuilderBase(abc.ABC):
     _external_suffix = 'ext'
 
     # Cache
-    _production_base_cache = '{trip_origin}p_{zoning}_{mode}_{tier}_cache.pbz2'
-    _attraction_base_cache = '{trip_origin}a_{zoning}_{mode}_{tier}_cache.pbz2'
+    _production_base_cache = '{trip_origin}p_{zoning}_{mode}_{tier}_cache.csv.bz2'
+    _attraction_base_cache = '{trip_origin}a_{zoning}_{mode}_{tier}_cache.csv.bz2'
 
     # Lower vector report filenames
     _segment_totals_bname = '{trip_origin}_{vec_name}_lower_vector_{year}_segment_totals.csv'
