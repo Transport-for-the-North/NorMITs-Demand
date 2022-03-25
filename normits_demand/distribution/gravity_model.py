@@ -1745,7 +1745,7 @@ class JacobianFurnessThread(FurnessThreadBase):
                 self.putter_qs[area_id].put(data)
 
 
-class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModelBase):
+class SingleTLDCalibratorThreadBase(multithreading.ReturnOrErrorThread, GravityModelBase):
     """Calibrate Gravity Model params for a single TLD
 
     Used internally in MultiAreaGravityModelCalibrator. Each TLD is split out
@@ -1758,14 +1758,6 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
                  target_cost_distribution: pd.DataFrame,
                  target_convergence: float,
                  init_params: Dict[str, Any],
-                 gravity_putter_q: queue.Queue,
-                 gravity_getter_q: queue.Queue,
-                 gravity_putter_array: communication.SharedNumpyArrayHelper,
-                 gravity_getter_array: communication.SharedNumpyArrayHelper,
-                 jacobian_putter_q: queue.Queue,
-                 jacobian_getter_q: queue.Queue,
-                 jacobian_putter_array: Dict[str, communication.SharedNumpyArrayHelper],
-                 jacobian_getter_array: Dict[str, communication.SharedNumpyArrayHelper],
                  thread_complete_event: threading.Event,
                  all_done_event: threading.Event,
                  use_perceived_factors: bool = True,
@@ -1815,14 +1807,6 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
         self.verbose = verbose
 
         # Threading attributes
-        self.gravity_putter_q = gravity_putter_q
-        self.gravity_getter_q = gravity_getter_q
-        self.gravity_putter_array = gravity_putter_array
-        self.gravity_getter_array = gravity_getter_array
-        self.jacobian_putter_q = jacobian_putter_q
-        self.jacobian_getter_q = jacobian_getter_q
-        self.jacobian_putter_array = jacobian_putter_array
-        self.jacobian_getter_array = jacobian_getter_array
         self.thread_complete_event = thread_complete_event
         self.all_done_event = all_done_event
 
@@ -1879,6 +1863,101 @@ class SingleTLDCalibratorThread(multithreading.ReturnOrErrorThread, GravityModel
                 cost_args=self._order_cost_params(self.optimal_cost_params),
                 diff_step=self.diff_step,
             )
+
+    def gravity_furness(self,
+                        seed_matrix: np.ndarray,
+                        row_targets: np.ndarray,
+                        col_targets: np.ndarray,
+                        ) -> Tuple[np.array, int, float]:
+        raise NotImplementedError(
+            "When a class inherits from %s it needs to implement a method "
+            "for gravity_furness()"
+            % self.__class__.__name__
+        )
+
+    def jacobian_furness(self,
+                         seed_matrices: Dict[str, np.ndarray],
+                         row_targets: np.ndarray,
+                         col_targets: np.ndarray,
+                         ) -> Tuple[np.array, int, float]:
+        raise NotImplementedError(
+            "When a class inherits from %s it needs to implement a method "
+            "for jacobian_furness()"
+            % self.__class__.__name__
+        )
+
+
+class SingleTLDCalibratorThreadSharedArrays(SingleTLDCalibratorThreadBase):
+
+    def __init__(
+        self,
+        gravity_putter_q: queue.Queue,
+        gravity_getter_q: queue.Queue,
+        gravity_putter_array: communication.SharedNumpyArrayHelper,
+        gravity_getter_array: communication.SharedNumpyArrayHelper,
+        jacobian_putter_q: queue.Queue,
+        jacobian_getter_q: queue.Queue,
+        jacobian_putter_array: Dict[str, communication.SharedNumpyArrayHelper],
+        jacobian_getter_array: Dict[str, communication.SharedNumpyArrayHelper],
+        *args,
+        **kwargs,
+    ):
+        """
+        Parameters
+        ----------
+        gravity_putter_q:
+            A queue object that the gravity furness will use to let the
+            furness handler know there is data in gravity_putter_array to collect.
+
+        gravity_getter_q:
+            A queue object that the furness handler will use to let the
+            gravity furness know there is data in gravity_getter_array to collect.
+
+        gravity_putter_array:
+            A shared array between processes that will be used by the gravity
+            furness to pass matrices over to be furnessed.
+
+        gravity_getter_array:
+            A shared array between processes that will be used by the gravity
+            furness to receive furnessed matrices.
+            
+        jacobian_putter_q:
+            A queue object that the jacobian furness will use to let the
+            furness handler know there is data in jacobian_putter_array to collect.
+
+        jacobian_getter_q:
+            A queue object that the jacobian handler will use to let the
+            gravity furness know there is data in jacobian_getter_array to collect.
+
+        jacobian_putter_array:
+            A shared array between processes that will be used by the jacobian
+            furness to pass matrices over to be furnessed.
+
+        jacobian_getter_array:
+            A shared array between processes that will be used by the jacobian
+            furness to receive furnessed matrices.
+
+        args:
+            Used to pass further arguments to `SingleTLDCalibratorThreadBase`
+            
+        kwargs:
+            Used to pass further arguments to `SingleTLDCalibratorThreadBase`
+
+        See Also
+        --------
+        `SingleTLDCalibratorThreadBase`
+        """
+        SingleTLDCalibratorThreadBase.__init__(self, *args, **kwargs)
+
+        # Shared array specific arguments
+        self.gravity_putter_q = gravity_putter_q
+        self.gravity_getter_q = gravity_getter_q
+        self.gravity_putter_array = gravity_putter_array
+        self.gravity_getter_array = gravity_getter_array
+        self.jacobian_putter_q = jacobian_putter_q
+        self.jacobian_getter_q = jacobian_getter_q
+        self.jacobian_putter_array = jacobian_putter_array
+        self.jacobian_getter_array = jacobian_getter_array
 
     def gravity_furness(self,
                         seed_matrix: np.ndarray,
@@ -2425,7 +2504,7 @@ class MultiAreaGravityModelCalibrator:
 
                 # Start a thread to calibrate each area
                 # TODO(BT): pass in objects rather than individual
-                calibrator_threads[area_id] = SingleTLDCalibratorThread(
+                calibrator_threads[area_id] = SingleTLDCalibratorThreadSharedArrays(
                     thread_name=self.calibration_naming[area_id],
                     cost_function=self.cost_function,
                     cost_matrix=area_cost,
@@ -2458,6 +2537,8 @@ class MultiAreaGravityModelCalibrator:
                 error_threads_list=furness_setup.all_threads,
             )
 
+        return calibrator_threads
+
     def _calibrate_memory_optimised(
         self,
         init_params: Dict[str, Any],
@@ -2475,7 +2556,59 @@ class MultiAreaGravityModelCalibrator:
         --------
         `self.calibrate()`
         """
-        raise NotImplementedError
+        # ## SETUP FOR THREADS ## #
+        # Set up the furness threads for gravity threads
+        # furness_setup = self._setup_furness_threads()
+
+        # ## START EACH THREAD ## #
+        # Start the gravity processes
+        calibrator_threads = dict.fromkeys(self.calib_areas)
+        for area_id in self.calib_areas:
+            # Get just the costs for this area
+            area_cost = self.cost_matrix * furness_setup.area_mats[area_id]
+
+            # Set up where to put the logs
+            dir_name, fname = os.path.split(self.running_log_path)
+            area_dir_name = os.path.join(dir_name, self.calibration_naming[area_id])
+            file_ops.create_folder(area_dir_name)
+            area_running_log_path = os.path.join(area_dir_name, fname)
+
+            # Replace the log if it already exists
+            if os.path.isfile(area_running_log_path):
+                os.remove(area_running_log_path)
+
+            # Start a thread to calibrate each area
+            # TODO(BT): pass in objects rather than individual
+            calibrator_threads[area_id] = SingleTLDCalibratorThread(
+                thread_name=self.calibration_naming[area_id],
+                cost_function=self.cost_function,
+                cost_matrix=area_cost,
+                init_params=init_params,
+                estimate_init_params=estimate_init_params,
+                target_cost_distribution=self.target_cost_distributions[area_id],
+                target_convergence=self.target_convergence,
+                running_log_path=area_running_log_path,
+                gravity_putter_q=furness_setup.gravity_putter_qs[area_id],
+                gravity_getter_q=furness_setup.gravity_getter_qs[area_id],
+                jacobian_putter_q=furness_setup.jacobian_putter_qs[area_id],
+                jacobian_getter_q=furness_setup.jacobian_getter_qs[area_id],
+                thread_complete_event=furness_setup.complete_events[area_id],
+                all_done_event=furness_setup.all_complete_event,
+                calibrate_params=calibrate_params,
+                diff_step=diff_step,
+                ftol=ftol,
+                xtol=xtol,
+                grav_max_iters=grav_max_iters,
+                verbose=verbose,
+            )
+            calibrator_threads[area_id].start()
+
+        multithreading.wait_for_thread_dict_return_or_error(
+            return_threads=calibrator_threads,
+            error_threads_list=furness_setup.all_threads,
+        )
+
+        return calibrator_threads
 
     def calibrate(
         self,
