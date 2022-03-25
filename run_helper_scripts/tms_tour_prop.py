@@ -5,7 +5,7 @@ Updated on:
 
 Original author: Ben Taylor
 Last update made by: Nirmal Kumar
-Other updates made by:
+Other updates made by: Isaac Scott
 
 File purpose:
 Pre ME tour proportions Generation
@@ -28,12 +28,12 @@ import normits_demand as nd
 from normits_demand.utils import general as du
 
 # ## GLOBALS ## #
-MODES = [6]
+MODES = [nd.MODE.TRAIN.get_mode_values()]
 YEARS = [2018]
 TPS = [1, 2, 3, 4]
-ZONING_SYSTEM = "miranda"
+ZONING_SYSTEM = "miham"
 NOTEM_ITER = '9.6'
-out_folder = r"C:\Users\Kirkland\Documents\MidMITs\Tour Proportions"
+out_folder = r"C:\WSP_Projects\MidMITs\01 Pre-processing\Tour Proportions"
 
 phi_import_folder = r"I:\NorMITs Demand\import\phi_factors"
 notem_import_folder = r"T:\MidMITs Demand\MiTEM\iter%s\SC01_JAM\hb_productions" % NOTEM_ITER
@@ -80,14 +80,18 @@ def tms_tour_prop():
                 values='factor',
             ).reset_index()
 
-            # ## GRAB TP SPLITS BY PURPOSE AND ZONE ## #
+            # ## GRAB TP SPLITS BY PURPOSE AND ZONE ## #  READS IN DATA 
             print("Reading in NoTEM time period split factors...")
             notem_file = prod_vec_fname % year
             notem_dvec = nd.DVector.load(os.path.join(notem_import_folder, notem_file))
 
             # Convert to needed segments and translate
-            week_seg = nd.get_segmentation_level("hb_p_tp_week")
-            wday_seg = nd.get_segmentation_level("hb_p_tp_wday")
+            if MODES==[nd.MODE.TRAIN.get_mode_values()]:
+                week_seg = nd.get_segmentation_level("hb_p_ca_tp_week")
+                wday_seg = nd.get_segmentation_level("hb_p_ca_tp_wday")
+            else:
+                week_seg = nd.get_segmentation_level("hb_p_tp_week")
+                wday_seg = nd.get_segmentation_level("hb_p_tp_wday")
             zoning = nd.get_zoning_system(ZONING_SYSTEM)
 
             notem_dvec = notem_dvec.aggregate(week_seg)
