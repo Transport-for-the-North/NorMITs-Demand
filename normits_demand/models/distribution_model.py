@@ -307,8 +307,8 @@ class DistributionModel(DistributionModelExportPaths):
 
             # Can only handle 9 processes if single area
             else:
-                if os.cpu_count() > 10 and (self.process_count > 9 or self.process_count < 0):
-                    process_count = 9
+                if os.cpu_count() > 10 and (self.process_count > 8 or self.process_count < 0):
+                    process_count = 8
 
         self._logger.info("Initialising the Upper Model")
         upper_model = self.upper_model_method.get_distributor(

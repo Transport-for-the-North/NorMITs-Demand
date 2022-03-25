@@ -34,6 +34,8 @@ import tqdm
 
 # Local Imports
 import normits_demand as nd
+
+from normits_demand import core as nd_core
 from normits_demand import constants
 from normits_demand.cost import utils as cost_utils
 from normits_demand.utils import file_ops
@@ -124,8 +126,8 @@ class DMArgumentBuilderBase(abc.ABC):
 
     def __init__(self,
                  year: int,
-                 trip_origin: str,
-                 running_mode: nd.Mode,
+                 trip_origin: nd_core.TripOrigin,
+                 running_mode: nd_core.Mode,
                  running_segmentation: nd.SegmentationLevel,
                  upper_zoning_system: nd.ZoningSystem,
                  upper_running_zones: List[Any],
@@ -159,7 +161,7 @@ class DMArgumentBuilderBase(abc.ABC):
         fname = self.running_segmentation.generate_file_name(
             segment_params=segment_params,
             file_desc='synthetic_pa',
-            trip_origin=self.trip_origin,
+            trip_origin=self.trip_origin.value,
             year=self.year,
             suffix=self._external_suffix,
             compressed=True
@@ -187,7 +189,7 @@ class DMArgumentBuilderBase(abc.ABC):
 
         # Generate filenames
         kwargs = {
-            'trip_origin': self.trip_origin,
+            'trip_origin': self.trip_origin.value,
             'vec_name': df_name,
             'year': self.year,
         }
@@ -258,7 +260,7 @@ class DMArgumentBuilderBase(abc.ABC):
         for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc, total=total):
             # Read in DF
             fname = self.running_segmentation.generate_file_name(
-                trip_origin=self.trip_origin,
+                trip_origin=self.trip_origin.value,
                 year=str(self.year),
                 file_desc='synthetic_pa',
                 segment_params=segment_params,
@@ -362,7 +364,7 @@ class DMArgumentBuilderBase(abc.ABC):
         for segment_params in self.running_segmentation:
             # Read in DF
             fname = self.running_segmentation.generate_file_name(
-                trip_origin=self.trip_origin,
+                trip_origin=self.trip_origin.value,
                 year=str(self.year),
                 file_desc='synthetic_pa',
                 segment_params=segment_params,
@@ -559,7 +561,7 @@ class DMArgumentBuilderBase(abc.ABC):
 
         # Generate cache_paths
         fname = self._production_base_cache.format(
-            trip_origin=self.trip_origin,
+            trip_origin=self.trip_origin.value,
             zoning=self.lower_zoning_system.name,
             mode=self.running_mode.value,
             tier='lower',
@@ -567,7 +569,7 @@ class DMArgumentBuilderBase(abc.ABC):
         productions_cache = os.path.join(cache_dir, fname)
 
         fname = self._attraction_base_cache.format(
-            trip_origin=self.trip_origin,
+            trip_origin=self.trip_origin.value,
             zoning=self.lower_zoning_system.name,
             mode=self.running_mode.value,
             tier='lower',
@@ -588,7 +590,7 @@ class DMArgumentBuilderBase(abc.ABC):
     def build_distribution_model_init_args(self):
         return {
             'year': self.year,
-            'trip_origin': self.trip_origin,
+            'trip_origin': self.trip_origin.value,
             'running_mode': self.running_mode,
             'running_segmentation': self.running_segmentation,
             'upper_model_zoning': self.upper_zoning_system,
@@ -637,7 +639,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
     def __init__(self,
                  import_home: nd.PathLike,
                  year: int,
-                 trip_origin: str,
+                 trip_origin: nd_core.TripOrigin,
                  trip_end_getter: converters.ToDistributionModel,
                  trip_end_kwargs: Dict[str, Any],
                  running_mode: nd.Mode,
@@ -748,7 +750,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             zoning_system.name,
         )
         fname = self.running_segmentation.generate_file_name(
-            trip_origin=self.trip_origin,
+            trip_origin=self.trip_origin.value,
             file_desc="%s_cost" % zoning_system.name,
             segment_params=segment_params,
             csv=True,
@@ -782,7 +784,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         )
 
         fname = self.running_segmentation.generate_file_name(
-            trip_origin=self.trip_origin,
+            trip_origin=self.trip_origin.value,
             file_desc="tlb",
             segment_params=segment_params,
             csv=True,
@@ -964,7 +966,10 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
     def build_upper_model_arguments(self, cache_dir: pathlib.Path = None) -> Dict[str, Any]:
         # Read and validate trip ends
         self.trip_end_getter.cache_dir = cache_dir
-        productions, attractions = self.trip_end_getter.convert_hb(**self.trip_end_kwargs)
+        productions, attractions = self.trip_end_getter.convert(
+            trip_origin=self.trip_origin,
+            **self.trip_end_kwargs,
+        )
 
         # Read in calibration zones data
         if self.upper_calibration_zones_fname is not None:
